@@ -2,12 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { ConversionHistory } from '../../shared/types';
 import { translations, Language } from '../translations';
 
-declare global {
-  interface Window {
-    electronAPI: any;
-  }
-}
-
 interface HistoryProps {
   language: Language;
 }
@@ -15,14 +9,20 @@ interface HistoryProps {
 const History: React.FC<HistoryProps> = ({ language }) => {
   const t = translations[language];
   const [history, setHistory] = useState<ConversionHistory[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     loadHistory();
   }, []);
 
   const loadHistory = async () => {
-    const historyData = await window.electronAPI.getHistory();
-    setHistory(historyData);
+    setIsLoading(true);
+    try {
+      const historyData = await window.electronAPI.getHistory();
+      setHistory(historyData);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleClearHistory = async () => {
@@ -42,11 +42,7 @@ const History: React.FC<HistoryProps> = ({ language }) => {
   };
 
   return (
-    <>
-      <div className="content-header">
-        <h1>{t.conversionHistory}</h1>
-      </div>
-      <div className="content-body">
+    <div className="content-body">
         <div className="card">
           <div
             style={{
@@ -124,8 +120,7 @@ const History: React.FC<HistoryProps> = ({ language }) => {
             </div>
           )}
         </div>
-      </div>
-    </>
+    </div>
   );
 };
 

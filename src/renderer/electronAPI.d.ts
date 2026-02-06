@@ -1,0 +1,45 @@
+// Type definitions for Electron API exposed via preload
+
+import { Bank, Converter, AppSettings, ConversionHistory } from '../shared/types';
+
+interface ConversionResult {
+  success: boolean;
+  outputPath?: string;
+  duplicateWarning?: boolean;
+  error?: string;
+}
+
+interface ElectronAPI {
+  // Banks
+  getBanks: () => Promise<Bank[]>;
+  addBank: (name: string, converterId: string) => Promise<Bank>;
+  updateBank: (id: number, name: string, converterId: string) => Promise<boolean>;
+  deleteBank: (id: number) => Promise<boolean>;
+
+  // Converters
+  getConverters: () => Promise<Converter[]>;
+
+  // Files
+  selectFiles: () => Promise<{ fileName: string; filePath: string }[]>;
+  selectOutputFolder: () => Promise<string | null>;
+  convertFile: (inputPath: string, bankId: number, fileName: string) => Promise<ConversionResult>;
+  openFile: (filePath: string) => Promise<boolean>;
+
+  // Settings
+  getSettings: () => Promise<AppSettings>;
+  setOutputFolder: (folderPath: string) => Promise<boolean>;
+  setDarkMode: (enabled: boolean) => Promise<boolean>;
+  setLanguage: (language: string) => Promise<boolean>;
+
+  // History
+  getHistory: () => Promise<ConversionHistory[]>;
+  clearHistory: () => Promise<boolean>;
+}
+
+declare global {
+  interface Window {
+    electronAPI: ElectronAPI;
+  }
+}
+
+export { ElectronAPI, ConversionResult };

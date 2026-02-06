@@ -2,12 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Bank, Converter } from '../../shared/types';
 import { translations, Language } from '../translations';
 
-declare global {
-  interface Window {
-    electronAPI: any;
-  }
-}
-
 interface SettingsProps {
   darkMode: boolean;
   language: Language;
@@ -24,6 +18,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
   const [editingBank, setEditingBank] = useState<Bank | null>(null);
   const [newBankName, setNewBankName] = useState('');
   const [newBankConverter, setNewBankConverter] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     console.log('Settings component mounted');
@@ -33,6 +28,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
 
   const loadData = async () => {
     console.log('Loading settings data...');
+    setIsLoading(true);
     try {
       const [banksData, convertersData, settings] = await Promise.all([
         window.electronAPI.getBanks(),
@@ -47,6 +43,8 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
       setOutputFolder(settings.outputFolder);
     } catch (error) {
       console.error('Error loading data:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -84,8 +82,9 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
       setNewBankConverter('');
       setShowAddBank(false);
       loadData();
-    } catch (error: any) {
-      alert(`${t.errorAddingBank}: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`${t.errorAddingBank}: ${errorMessage}`);
     }
   };
 
@@ -101,8 +100,9 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
       setNewBankConverter('');
       setEditingBank(null);
       loadData();
-    } catch (error: any) {
-      alert(`${t.errorUpdatingBank}: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`${t.errorUpdatingBank}: ${errorMessage}`);
     }
   };
 
@@ -111,8 +111,9 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
       try {
         await window.electronAPI.deleteBank(id);
         loadData();
-      } catch (error: any) {
-        alert(`${t.errorDeletingBank}: ${error.message}`);
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        alert(`${t.errorDeletingBank}: ${errorMessage}`);
       }
     }
   };
@@ -131,11 +132,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
   };
 
   return (
-    <>
-      <div className="content-header">
-        <h1>{t.settings}</h1>
-      </div>
-      <div className="content-body">
+    <div className="content-body">
         {/* Appearance Settings */}
         <div className="card">
           <h2 style={{ marginBottom: '15px' }}>{t.appearance}</h2>
@@ -215,7 +212,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
                 />
               </div>
               <div className="form-group">
-                <label>{t.converter}</label>
+                <label>{t.converterType}</label>
                 <select
                   value={newBankConverter}
                   onChange={(e) => setNewBankConverter(e.target.value)}
@@ -247,7 +244,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
               <thead>
                 <tr>
                   <th>{t.bankName}</th>
-                  <th>{t.converter}</th>
+                  <th>{t.converterType}</th>
                   <th>{t.actions}</th>
                 </tr>
               </thead>
@@ -307,8 +304,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
             </tbody>
           </table>
         </div>
-      </div>
-    </>
+    </div>
   );
 };
 

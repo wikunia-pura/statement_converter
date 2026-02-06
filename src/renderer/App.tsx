@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import Converter from './views/Converter';
 import Settings from './views/Settings';
 import History from './views/History';
+import Logo from './components/Logo';
 import { translations, Language } from './translations';
+import { FileEntry } from '../shared/types';
 
 type View = 'converter' | 'settings' | 'history';
 
@@ -10,6 +12,8 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('converter');
   const [darkMode, setDarkMode] = useState(false);
   const [language, setLanguage] = useState<Language>('pl');
+  const [files, setFiles] = useState<FileEntry[]>([]);
+  const [selectedBank, setSelectedBank] = useState<number | null>(null);
 
   useEffect(() => {
     console.log('App mounted, loading settings...');
@@ -52,31 +56,39 @@ const App: React.FC = () => {
   return (
     <div className="app">
       <div className="sidebar">
-        <div className="sidebar-header">Statement Converter</div>
+        <Logo />
         <div className="sidebar-nav">
           <div
             className={`nav-item ${currentView === 'converter' ? 'active' : ''}`}
             onClick={() => setCurrentView('converter')}
           >
-            {t.converter}
+            <span>📁</span> {t.converter}
           </div>
           <div
             className={`nav-item ${currentView === 'settings' ? 'active' : ''}`}
             onClick={() => setCurrentView('settings')}
           >
-            {t.settings}
+            <span>⚙️</span> {t.settings}
           </div>
           <div
             className={`nav-item ${currentView === 'history' ? 'active' : ''}`}
             onClick={() => setCurrentView('history')}
           >
-            {t.history}
+            <span>📜</span> {t.history}
           </div>
         </div>
       </div>
 
       <div className="main-content">
-        {currentView === 'converter' && <Converter language={language} />}
+        {currentView === 'converter' && (
+          <Converter
+            language={language}
+            files={files}
+            setFiles={setFiles}
+            selectedBank={selectedBank}
+            setSelectedBank={setSelectedBank}
+          />
+        )}
         {currentView === 'settings' && (
           <Settings
             darkMode={darkMode}

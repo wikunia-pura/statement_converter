@@ -20,7 +20,8 @@ function createWindow() {
     },
   });
 
-  // Load the app - for now always use dev mode
+  // Development mode: always load from Vite dev server
+  // In production, the URL would be changed by electron-builder
   mainWindow.loadURL('http://localhost:3000');
   mainWindow.webContents.openDevTools();
 
@@ -88,6 +89,11 @@ function setupIpcHandlers() {
     IPC_CHANNELS.CONVERT_FILE,
     async (_, inputPath: string, bankId: number, fileName: string) => {
       try {
+        // Validate input file exists
+        if (!fs.existsSync(inputPath)) {
+          throw new Error('Input file not found');
+        }
+
         const bank = database.getBankById(bankId);
         if (!bank) {
           throw new Error('Bank not found');
@@ -98,7 +104,10 @@ function setupIpcHandlers() {
           throw new Error('Converter not found');
         }
 
-        const outputFolder = database.getSetting('outputFolder')!;
+        const outputFolder = database.getSetting('outputFolder');
+        if (!outputFolder) {
+          throw new Error('Output folder not configured');
+        }
         
         // Ensure output folder exists
         if (!fs.existsSync(outputFolder)) {
@@ -138,8 +147,9 @@ function setupIpcHandlers() {
           outputPath: finalOutputPath,
           duplicateWarning: finalOutputPath !== outputPath,
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Save error to history
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         const bank = database.getBankById(bankId);
         if (bank) {
           const converter = converterRegistry.getConverter(bank.converterId);
@@ -148,7 +158,7 @@ function setupIpcHandlers() {
             bankName: bank.name,
             converterName: converter?.name || 'Unknown',
             status: 'error',
-            errorMessage: error.message,
+            errorMessage,
             inputPath,
             outputPath: '',
           });
@@ -156,7 +166,7 @@ function setupIpcHandlers() {
 
         return {
           success: false,
-          error: error.message,
+          error: errorMessage,
         };
       }
     }

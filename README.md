@@ -122,6 +122,30 @@ statement_converter/
 - Real converter implementations will be added later
 - Each converter type needs to be implemented in the codebase
 
+## Documentation
+
+- 📊 [Optimization Report](OPTIMIZATION_REPORT.md) - Lista zrealizowanych optymalizacji i propozycje dalszych ulepszeń
+- 🤝 [Contributing Guide](CONTRIBUTING.md) - Jak rozwijać aplikację i zgłaszać zmiany
+- 🧪 [Test Data](test-data/README.md) - Przykładowe dane testowe dla konwerterów
+
+## Scripts
+
+```bash
+# Development
+npm run dev              # Start development mode
+npm run build            # Build for production
+
+# Code Quality
+npm run lint             # Check for linting errors
+npm run lint:fix         # Fix linting errors automatically
+npm run format           # Format code with Prettier
+npm run type-check       # TypeScript type checking
+
+# Packaging
+npm run package:win      # Build Windows installer
+npm run package:mac      # Build macOS .dmg
+```
+
 ## License
 
 Wikunia & Pura

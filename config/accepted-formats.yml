@@ -1,0 +1,11 @@
+# Accepted file formats
+# Define which file extensions are accepted for upload
+
+accepted_formats:
+  - .xml
+  - .txt
+  - .940
+  - .mt940
+  - .csv
+  - .xlsx
+  - .xls

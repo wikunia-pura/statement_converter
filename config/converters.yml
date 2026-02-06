@@ -1,0 +1,23 @@
+# Converters configuration
+# Each converter has a unique ID and display name
+
+converters:
+  - id: xml_standard
+    name: XML Standard Converter
+    description: Standard XML bank statement format
+    
+  - id: mt940_standard
+    name: MT940 Standard Converter
+    description: SWIFT MT940 format
+    
+  - id: csv_standard
+    name: CSV Standard Converter
+    description: Standard CSV bank statement format
+    
+  - id: excel_standard
+    name: Excel Standard Converter
+    description: Excel/XLSX bank statement format
+    
+  - id: custom_text
+    name: Custom Text Converter
+    description: Custom text-based bank statement format

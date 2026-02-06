@@ -127,6 +127,25 @@ class DatabaseService {
     this.store.set('settings', { ...settings, [key]: value });
   }
 
+  exportSettings(): { banks: Bank[]; settings: any } {
+    return {
+      banks: this.store.get('banks', []),
+      settings: this.store.get('settings'),
+    };
+  }
+
+  importSettings(data: { banks?: Bank[]; settings?: any }): void {
+    if (data.banks) {
+      this.store.set('banks', data.banks);
+      // Update nextBankId to be higher than any existing ID
+      const maxId = Math.max(0, ...data.banks.map(b => b.id));
+      this.store.set('nextBankId', maxId + 1);
+    }
+    if (data.settings) {
+      this.store.set('settings', { ...this.store.get('settings'), ...data.settings });
+    }
+  }
+
   close(): void {
     // electron-store doesn't need explicit closing
   }

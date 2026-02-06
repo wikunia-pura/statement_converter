@@ -15,6 +15,8 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   const [banks, setBanks] = useState<Bank[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [showDuplicatesModal, setShowDuplicatesModal] = useState(false);
+  const [duplicateFiles, setDuplicateFiles] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<FileEntry[]>(files);
 
@@ -37,10 +39,35 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     }
   };
 
+  const checkForDuplicates = (newFiles: { fileName: string; filePath: string }[]) => {
+    const existingFileNames = files.map(f => f.fileName.toLowerCase());
+    const duplicates: string[] = [];
+    const uniqueFiles: { fileName: string; filePath: string }[] = [];
+
+    newFiles.forEach(file => {
+      if (existingFileNames.includes(file.fileName.toLowerCase())) {
+        duplicates.push(file.fileName);
+      } else {
+        uniqueFiles.push(file);
+      }
+    });
+
+    return { duplicates, uniqueFiles };
+  };
+
   const handleFileSelect = async () => {
     const selectedFiles = await window.electronAPI.selectFiles();
     if (selectedFiles.length > 0 && selectedBank) {
-      addFiles(selectedFiles, selectedBank);
+      const { duplicates, uniqueFiles } = checkForDuplicates(selectedFiles);
+      
+      if (duplicates.length > 0) {
+        setDuplicateFiles(duplicates);
+        setShowDuplicatesModal(true);
+      }
+      
+      if (uniqueFiles.length > 0) {
+        addFiles(uniqueFiles, selectedBank);
+      }
     }
   };
 
@@ -71,7 +98,16 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
       filePath: file.path,
     }));
 
-    addFiles(droppedFiles, selectedBank);
+    const { duplicates, uniqueFiles } = checkForDuplicates(droppedFiles);
+    
+    if (duplicates.length > 0) {
+      setDuplicateFiles(duplicates);
+      setShowDuplicatesModal(true);
+    }
+    
+    if (uniqueFiles.length > 0) {
+      addFiles(uniqueFiles, selectedBank);
+    }
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -106,12 +142,21 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
       prevFiles.map((f) => (f.id === fileId ? { ...f, status: 'processing' as const } : f))
     );
 
+    const startTime = Date.now();
+
     try {
       const result = await window.electronAPI.convertFile(
         currentFile.filePath,
         currentFile.bankId,
         currentFile.fileName
       );
+
+      // Ensure minimum 1 second display time for loader
+      const elapsed = Date.now() - startTime;
+      const remainingTime = Math.max(0, 1000 - elapsed);
+      if (remainingTime > 0) {
+        await new Promise(resolve => setTimeout(resolve, remainingTime));
+      }
 
       if (result.success) {
         setFiles((prevFiles) =>
@@ -138,6 +183,13 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
         alert(`${t.conversionFailed}: ${result.error}\n${t.checkBankConverter}`);
       }
     } catch (error: unknown) {
+      // Ensure minimum 1 second display time for loader even on error
+      const elapsed = Date.now() - startTime;
+      const remainingTime = Math.max(0, 1000 - elapsed);
+      if (remainingTime > 0) {
+        await new Promise(resolve => setTimeout(resolve, remainingTime));
+      }
+
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       setFiles((prevFiles) =>
         prevFiles.map((f) =>
@@ -156,10 +208,8 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
       .filter((f) => (f.status === 'pending' || f.status === 'error') && f.bankId)
       .map((f) => f.id);
     
-    // Convert each file sequentially
-    for (const fileId of fileIds) {
-      await handleConvert(fileId);
-    }
+    // Convert all files in parallel
+    await Promise.all(fileIds.map(fileId => handleConvert(fileId)));
   };
 
   const handleRemoveFile = (fileId: string) => {
@@ -299,75 +349,89 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
               </thead>
               <tbody>
                 {files.map((file, index) => (
-                  <tr key={file.id}>
-                    <td>{index + 1}</td>
-                    <td>{file.fileName}</td>
-                    <td>
-                      <select
-                        value={file.bankId || ''}
-                        onChange={(e) => handleBankChange(file.id, Number(e.target.value))}
-                      >
-                        <option value="">{t.chooseBank}</option>
-                        {banks.map((bank) => (
-                          <option key={bank.id} value={bank.id}>
-                            {bank.name}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <span
-                        className={`status-badge status-${
-                          file.status === 'success'
-                            ? 'success'
-                            : file.status === 'error'
-                            ? 'error'
-                            : 'pending'
-                        }`}
-                      >
-                        {file.status === 'success' ? t.success : file.status === 'error' ? t.error : file.status === 'processing' ? t.processing : t.pending}
-                      </span>
-                      {file.errorMessage && (
-                        <div style={{ fontSize: '12px', color: '#7f8c8d', marginTop: '10px' }}>
-                          {file.errorMessage}
+                  <tr key={file.id} className={file.status === 'processing' ? 'processing-row' : ''}>
+                    {file.status === 'processing' ? (
+                      <td colSpan={5}>
+                        <div className="processing-loader">
+                          <div className="loader-spinner"></div>
+                          <div className="loader-content">
+                            <span className="loader-text">Przetwarzanie pliku: <strong>{file.fileName}</strong></span>
+                            <span className="loader-subtext">Proszę czekać...</span>
+                          </div>
                         </div>
-                      )}
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        {file.status === 'success' && (
-                          <>
-                            <button
-                              className="button button-small button-primary"
-                              onClick={() => handleOpenFile(file.id)}
-                            >
-                              {t.open}
-                            </button>
-                            <button
-                              className="button button-small button-secondary"
-                              onClick={() => handleConvert(file.id)}
-                            >
-                              {t.convertAgain}
-                            </button>
-                          </>
-                        )}
-                        {(file.status === 'pending' || file.status === 'error') && (
-                          <button
-                            className="button button-small button-success"
-                            onClick={() => handleConvert(file.id)}
-                            disabled={!file.bankId}
+                      </td>
+                    ) : (
+                      <>
+                        <td>{index + 1}</td>
+                        <td>{file.fileName}</td>
+                        <td>
+                          <select
+                            value={file.bankId || ''}
+                            onChange={(e) => handleBankChange(file.id, Number(e.target.value))}
                           >
-                            {t.convert}
-                          </button>
-                        )}
-                        <button
-                          className="button button-small button-danger"
-                          onClick={() => handleRemoveFile(file.id)}
-                        >
-                          {t.remove}
-                        </button>
-                      </div>
-                    </td>
+                            <option value="">{t.chooseBank}</option>
+                            {banks.map((bank) => (
+                              <option key={bank.id} value={bank.id}>
+                                {bank.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>
+                          <span
+                            className={`status-badge status-${
+                              file.status === 'success'
+                                ? 'success'
+                                : file.status === 'error'
+                                ? 'error'
+                                : 'pending'
+                            }`}
+                          >
+                            {file.status === 'success' ? t.success : file.status === 'error' ? t.error : t.pending}
+                          </span>
+                          {file.errorMessage && (
+                            <div style={{ fontSize: '12px', color: '#7f8c8d', marginTop: '10px' }}>
+                              {file.errorMessage}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            {file.status === 'success' && (
+                              <>
+                                <button
+                                  className="button button-small button-primary"
+                                  onClick={() => handleOpenFile(file.id)}
+                                >
+                                  {t.open}
+                                </button>
+                                <button
+                                  className="button button-small button-secondary"
+                                  onClick={() => handleConvert(file.id)}
+                                >
+                                  {t.convertAgain}
+                                </button>
+                              </>
+                            )}
+                            {(file.status === 'pending' || file.status === 'error') && (
+                              <button
+                                className="button button-small button-success"
+                                onClick={() => handleConvert(file.id)}
+                                disabled={!file.bankId}
+                              >
+                                {t.convert}
+                              </button>
+                            )}
+                            <button
+                              className="button button-small button-danger"
+                              onClick={() => handleRemoveFile(file.id)}
+                            >
+                              {t.remove}
+                            </button>
+                          </div>
+                        </td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -382,6 +446,54 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
           </div>
         )}
           </>
+        )}
+
+        {/* Duplicates Modal */}
+        {showDuplicatesModal && (
+          <div className="modal-overlay" onClick={() => setShowDuplicatesModal(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2 style={{ margin: 0 }}>⚠️ Wykryto duplikaty</h2>
+              </div>
+              <div className="modal-body" style={{ padding: '20px' }}>
+                <p style={{ marginBottom: '15px', fontSize: '14px', color: '#6c757d' }}>
+                  Następujące pliki zostały już dodane do listy i nie zostaną dodane ponownie:
+                </p>
+                <div style={{
+                  background: '#fff3cd',
+                  border: '1px solid #ffc107',
+                  borderRadius: '8px',
+                  padding: '15px',
+                  maxHeight: '300px',
+                  overflowY: 'auto'
+                }}>
+                  {duplicateFiles.map((fileName, index) => (
+                    <div key={index} style={{
+                      padding: '8px 12px',
+                      marginBottom: '8px',
+                      background: 'white',
+                      borderRadius: '4px',
+                      fontSize: '13px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      <span style={{ fontSize: '16px' }}>📄</span>
+                      <span style={{ fontWeight: '500' }}>{fileName}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="modal-footer" style={{ padding: '15px 20px', borderTop: '1px solid #e8ecf1', display: 'flex', justifyContent: 'flex-end' }}>
+                <button 
+                  className="button button-primary" 
+                  onClick={() => setShowDuplicatesModal(false)}
+                >
+                  Rozumiem
+                </button>
+              </div>
+            </div>
+          </div>
         )}
     </div>
   );

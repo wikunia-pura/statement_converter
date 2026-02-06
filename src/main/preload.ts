@@ -16,6 +16,8 @@ const IPC_CHANNELS = {
   SET_OUTPUT_FOLDER: 'settings:set-output-folder',
   SET_DARK_MODE: 'settings:set-dark-mode',
   SET_LANGUAGE: 'settings:set-language',
+  EXPORT_SETTINGS: 'settings:export',
+  IMPORT_SETTINGS: 'settings:import',
   GET_HISTORY: 'history:get-all',
   CLEAR_HISTORY: 'history:clear',
 } as const;
@@ -49,6 +51,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.SET_DARK_MODE, enabled),
   setLanguage: (language: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_LANGUAGE, language),
+  exportSettings: () => ipcRenderer.invoke(IPC_CHANNELS.EXPORT_SETTINGS),
+  importSettings: () => ipcRenderer.invoke(IPC_CHANNELS.IMPORT_SETTINGS),
 
   // History
   getHistory: () => ipcRenderer.invoke(IPC_CHANNELS.GET_HISTORY),

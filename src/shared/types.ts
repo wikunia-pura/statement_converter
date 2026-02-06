@@ -64,6 +64,8 @@ export const IPC_CHANNELS = {
   SET_OUTPUT_FOLDER: 'settings:set-output-folder',
   SET_DARK_MODE: 'settings:set-dark-mode',
   SET_LANGUAGE: 'settings:set-language',
+  EXPORT_SETTINGS: 'settings:export',
+  IMPORT_SETTINGS: 'settings:import',
   
   // History
   GET_HISTORY: 'history:get-all',

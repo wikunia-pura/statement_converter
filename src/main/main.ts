@@ -201,6 +201,40 @@ function setupIpcHandlers() {
     return true;
   });
 
+  ipcMain.handle(IPC_CHANNELS.EXPORT_SETTINGS, async () => {
+    const result = await dialog.showSaveDialog(mainWindow!, {
+      title: 'Eksportuj ustawienia',
+      defaultPath: `statement-converter-settings-${Date.now()}.json`,
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    });
+
+    if (!result.canceled && result.filePath) {
+      const data = database.exportSettings();
+      fs.writeFileSync(result.filePath, JSON.stringify(data, null, 2));
+      return { success: true, filePath: result.filePath };
+    }
+    return { success: false };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.IMPORT_SETTINGS, async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: 'Importuj ustawienia',
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+      properties: ['openFile'],
+    });
+
+    if (!result.canceled && result.filePaths.length > 0) {
+      try {
+        const data = JSON.parse(fs.readFileSync(result.filePaths[0], 'utf-8'));
+        database.importSettings(data);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: 'Nieprawidłowy format pliku' };
+      }
+    }
+    return { success: false };
+  });
+
   // History
   ipcMain.handle(IPC_CHANNELS.GET_HISTORY, async () => {
     return database.getAllHistory();

@@ -30,6 +30,8 @@ interface ElectronAPI {
   setOutputFolder: (folderPath: string) => Promise<boolean>;
   setDarkMode: (enabled: boolean) => Promise<boolean>;
   setLanguage: (language: string) => Promise<boolean>;
+  exportSettings: () => Promise<{ success: boolean; filePath?: string }>;
+  importSettings: () => Promise<{ success: boolean; error?: string }>;
 
   // History
   getHistory: () => Promise<ConversionHistory[]>;

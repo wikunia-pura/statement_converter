@@ -131,25 +131,62 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
     setNewBankConverter('');
   };
 
+  const handleExportSettings = async () => {
+    try {
+      const result = await window.electronAPI.exportSettings();
+      if (result.success) {
+        alert('Ustawienia zostały wyeksportowane pomyślnie!');
+      }
+    } catch (error) {
+      alert('Błąd podczas eksportu ustawień');
+    }
+  };
+
+  const handleImportSettings = async () => {
+    if (confirm('Zaimportowanie ustawień nadpisze obecną konfigurację. Kontynuować?')) {
+      try {
+        const result = await window.electronAPI.importSettings();
+        if (result.success) {
+          alert('Ustawienia zostały zaimportowane pomyślnie! Przeładuj aplikację.');
+          loadData();
+        } else if (result.error) {
+          alert(`Błąd: ${result.error}`);
+        }
+      } catch (error) {
+        alert('Błąd podczas importu ustawień');
+      }
+    }
+  };
+
   return (
     <div className="content-body">
         {/* Appearance Settings */}
         <div className="card">
-          <h2 style={{ marginBottom: '15px' }}>{t.appearance}</h2>
-          <div className="form-group">
-            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+          <h2 style={{ marginBottom: '20px' }}>{t.appearance}</h2>
+          
+          <div className="settings-row">
+            <div className="settings-label">
+              <span className="settings-label-main">🌙 {t.darkMode}</span>
+              <span className="settings-label-sub">
+                {darkMode ? 'Ciemny motyw jest włączony' : 'Jasny motyw jest włączony'}
+              </span>
+            </div>
+            <label className="toggle-switch">
               <input
                 type="checkbox"
                 checked={darkMode}
                 onChange={handleDarkModeToggle}
-                style={{ marginRight: '10px', width: 'auto', cursor: 'pointer' }}
               />
-              <span>{t.darkMode} 🌙</span>
+              <span className="toggle-slider"></span>
             </label>
           </div>
-          <div className="form-group">
-            <label>{t.language}</label>
-            <select value={language} onChange={handleLanguageChange}>
+
+          <div className="settings-row">
+            <div className="settings-label">
+              <span className="settings-label-main">🌍 {t.language}</span>
+              <span className="settings-label-sub">Wybierz preferowany język</span>
+            </div>
+            <select value={language} onChange={handleLanguageChange} style={{ minWidth: '150px' }}>
               <option value="pl">{t.polish}</option>
               <option value="en">{t.english}</option>
             </select>
@@ -167,6 +204,22 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
                 {t.change}
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Export/Import Settings */}
+        <div className="card">
+          <h2 style={{ marginBottom: '20px' }}>📦 Zarządzanie ustawieniami</h2>
+          <p style={{ color: '#6c757d', fontSize: '14px', marginBottom: '20px' }}>
+            Eksportuj lub importuj swoje ustawienia, w tym listę banków i preferencje aplikacji.
+          </p>
+          <div className="button-group" style={{ marginTop: 0 }}>
+            <button className="button button-primary" onClick={handleExportSettings}>
+              📄 Eksportuj ustawienia
+            </button>
+            <button className="button button-secondary" onClick={handleImportSettings}>
+              📂 Importuj ustawienia
+            </button>
           </div>
         </div>
 
@@ -191,14 +244,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
           </div>
 
           {(showAddBank || editingBank) && (
-            <div
-              style={{
-                background: '#f8f9fa',
-                padding: '15px',
-                borderRadius: '4px',
-                marginBottom: '15px',
-              }}
-            >
+            <div className="bank-form">
               <h3 style={{ marginBottom: '10px' }}>
                 {editingBank ? t.editBank : t.addNewBank}
               </h3>

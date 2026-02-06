@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ConversionHistory } from '../../shared/types';
+import { translations, Language } from '../translations';
 
 declare global {
   interface Window {
@@ -7,7 +8,12 @@ declare global {
   }
 }
 
-const History: React.FC = () => {
+interface HistoryProps {
+  language: Language;
+}
+
+const History: React.FC<HistoryProps> = ({ language }) => {
+  const t = translations[language];
   const [history, setHistory] = useState<ConversionHistory[]>([]);
 
   useEffect(() => {
@@ -20,7 +26,7 @@ const History: React.FC = () => {
   };
 
   const handleClearHistory = async () => {
-    if (confirm('Are you sure you want to clear all history?')) {
+    if (confirm(t.confirmClearHistory)) {
       await window.electronAPI.clearHistory();
       loadHistory();
     }
@@ -38,7 +44,7 @@ const History: React.FC = () => {
   return (
     <>
       <div className="content-header">
-        <h1>Conversion History</h1>
+        <h1>{t.conversionHistory}</h1>
       </div>
       <div className="content-body">
         <div className="card">
@@ -50,10 +56,10 @@ const History: React.FC = () => {
               marginBottom: '15px',
             }}
           >
-            <h2>Recent Conversions</h2>
+            <h2>{t.recentConversions}</h2>
             {history.length > 0 && (
               <button className="button button-danger" onClick={handleClearHistory}>
-                Clear History
+                {t.clearHistory}
               </button>
             )}
           </div>
@@ -62,12 +68,12 @@ const History: React.FC = () => {
             <table>
               <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>File Name</th>
-                  <th>Bank</th>
-                  <th>Converter</th>
-                  <th>Status</th>
-                  <th>Actions</th>
+                  <th>{t.date}</th>
+                  <th>{t.fileName}</th>
+                  <th>{t.bank}</th>
+                  <th>{t.converter}</th>
+                  <th>{t.status}</th>
+                  <th>{t.actions}</th>
                 </tr>
               </thead>
               <tbody>
@@ -87,7 +93,7 @@ const History: React.FC = () => {
                           entry.status === 'success' ? 'success' : 'error'
                         }`}
                       >
-                        {entry.status}
+                        {entry.status === 'success' ? t.success : t.error}
                       </span>
                       {entry.errorMessage && (
                         <div
@@ -103,7 +109,7 @@ const History: React.FC = () => {
                           className="button button-small button-primary"
                           onClick={() => handleOpenFile(entry.outputPath)}
                         >
-                          Open File
+                          {t.open}
                         </button>
                       )}
                     </td>
@@ -114,7 +120,7 @@ const History: React.FC = () => {
           ) : (
             <div className="empty-state">
               <div className="empty-state-icon">📊</div>
-              <div className="empty-state-text">No conversion history yet</div>
+              <div className="empty-state-text">{t.noConversionHistory}</div>
             </div>
           )}
         </div>

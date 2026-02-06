@@ -1,5 +1,24 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { IPC_CHANNELS } from '../shared/types';
+
+// Define IPC channels directly in preload to avoid module resolution issues
+const IPC_CHANNELS = {
+  GET_BANKS: 'db:get-banks',
+  ADD_BANK: 'db:add-bank',
+  UPDATE_BANK: 'db:update-bank',
+  DELETE_BANK: 'db:delete-bank',
+  GET_CONVERTERS: 'converters:get-all',
+  SELECT_FILES: 'files:select',
+  SELECT_OUTPUT_FOLDER: 'files:select-output-folder',
+  CONVERT_FILE: 'files:convert',
+  CONVERT_ALL: 'files:convert-all',
+  OPEN_FILE: 'files:open',
+  GET_SETTINGS: 'settings:get',
+  SET_OUTPUT_FOLDER: 'settings:set-output-folder',
+  SET_DARK_MODE: 'settings:set-dark-mode',
+  SET_LANGUAGE: 'settings:set-language',
+  GET_HISTORY: 'history:get-all',
+  CLEAR_HISTORY: 'history:clear',
+} as const;
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
@@ -26,6 +45,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SETTINGS),
   setOutputFolder: (folderPath: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_OUTPUT_FOLDER, folderPath),
+  setDarkMode: (enabled: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_DARK_MODE, enabled),
+  setLanguage: (language: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_LANGUAGE, language),
 
   // History
   getHistory: () => ipcRenderer.invoke(IPC_CHANNELS.GET_HISTORY),

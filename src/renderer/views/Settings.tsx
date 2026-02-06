@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Bank, Converter } from '../../shared/types';
+import { translations, Language } from '../translations';
 
 declare global {
   interface Window {
@@ -7,7 +8,15 @@ declare global {
   }
 }
 
-const Settings: React.FC = () => {
+interface SettingsProps {
+  darkMode: boolean;
+  language: Language;
+  onDarkModeChange: (enabled: boolean) => void;
+  onLanguageChange: (language: Language) => void;
+}
+
+const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChange, onLanguageChange }) => {
+  const t = translations[language];
   const [banks, setBanks] = useState<Bank[]>([]);
   const [converters, setConverters] = useState<Converter[]>([]);
   const [outputFolder, setOutputFolder] = useState('');
@@ -17,18 +26,28 @@ const Settings: React.FC = () => {
   const [newBankConverter, setNewBankConverter] = useState('');
 
   useEffect(() => {
+    console.log('Settings component mounted');
+    console.log('electronAPI:', window.electronAPI);
     loadData();
   }, []);
 
   const loadData = async () => {
-    const [banksData, convertersData, settings] = await Promise.all([
-      window.electronAPI.getBanks(),
-      window.electronAPI.getConverters(),
-      window.electronAPI.getSettings(),
-    ]);
-    setBanks(banksData);
-    setConverters(convertersData);
-    setOutputFolder(settings.outputFolder);
+    console.log('Loading settings data...');
+    try {
+      const [banksData, convertersData, settings] = await Promise.all([
+        window.electronAPI.getBanks(),
+        window.electronAPI.getConverters(),
+        window.electronAPI.getSettings(),
+      ]);
+      console.log('Banks:', banksData);
+      console.log('Converters:', convertersData);
+      console.log('Settings:', settings);
+      setBanks(banksData);
+      setConverters(convertersData);
+      setOutputFolder(settings.outputFolder);
+    } catch (error) {
+      console.error('Error loading data:', error);
+    }
   };
 
   const handleSelectOutputFolder = async () => {
@@ -39,9 +58,23 @@ const Settings: React.FC = () => {
     }
   };
 
+  const handleDarkModeToggle = async () => {
+    console.log('window.electronAPI:', window.electronAPI);
+    console.log('setDarkMode method:', window.electronAPI?.setDarkMode);
+    const newValue = !darkMode;
+    await window.electronAPI.setDarkMode(newValue);
+    onDarkModeChange(newValue);
+  };
+
+  const handleLanguageChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newLanguage = e.target.value as Language;
+    await window.electronAPI.setLanguage(newLanguage);
+    onLanguageChange(newLanguage);
+  };
+
   const handleAddBank = async () => {
     if (!newBankName || !newBankConverter) {
-      alert('Please fill in all fields');
+      alert(t.fillAllFields);
       return;
     }
 
@@ -52,13 +85,13 @@ const Settings: React.FC = () => {
       setShowAddBank(false);
       loadData();
     } catch (error: any) {
-      alert(`Error adding bank: ${error.message}`);
+      alert(`${t.errorAddingBank}: ${error.message}`);
     }
   };
 
   const handleUpdateBank = async () => {
     if (!editingBank || !newBankName || !newBankConverter) {
-      alert('Please fill in all fields');
+      alert(t.fillAllFields);
       return;
     }
 
@@ -69,17 +102,17 @@ const Settings: React.FC = () => {
       setEditingBank(null);
       loadData();
     } catch (error: any) {
-      alert(`Error updating bank: ${error.message}`);
+      alert(`${t.errorUpdatingBank}: ${error.message}`);
     }
   };
 
   const handleDeleteBank = async (id: number) => {
-    if (confirm('Are you sure you want to delete this bank?')) {
+    if (confirm(t.confirmDeleteBank)) {
       try {
         await window.electronAPI.deleteBank(id);
         loadData();
       } catch (error: any) {
-        alert(`Error deleting bank: ${error.message}`);
+        alert(`${t.errorDeletingBank}: ${error.message}`);
       }
     }
   };
@@ -100,18 +133,41 @@ const Settings: React.FC = () => {
   return (
     <>
       <div className="content-header">
-        <h1>Settings</h1>
+        <h1>{t.settings}</h1>
       </div>
       <div className="content-body">
+        {/* Appearance Settings */}
+        <div className="card">
+          <h2 style={{ marginBottom: '15px' }}>{t.appearance}</h2>
+          <div className="form-group">
+            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={darkMode}
+                onChange={handleDarkModeToggle}
+                style={{ marginRight: '10px', width: 'auto', cursor: 'pointer' }}
+              />
+              <span>{t.darkMode} 🌙</span>
+            </label>
+          </div>
+          <div className="form-group">
+            <label>{t.language}</label>
+            <select value={language} onChange={handleLanguageChange}>
+              <option value="pl">{t.polish}</option>
+              <option value="en">{t.english}</option>
+            </select>
+          </div>
+        </div>
+
         {/* Output Folder Settings */}
         <div className="card">
-          <h2 style={{ marginBottom: '15px' }}>Output Folder</h2>
+          <h2 style={{ marginBottom: '15px' }}>{t.outputFolder}</h2>
           <div className="form-group">
-            <label>Converted files will be saved to:</label>
+            <label>{t.convertedFilesSaved}</label>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
               <input type="text" value={outputFolder} readOnly />
               <button className="button button-primary" onClick={handleSelectOutputFolder}>
-                Change
+                {t.change}
               </button>
             </div>
           </div>
@@ -127,13 +183,13 @@ const Settings: React.FC = () => {
               marginBottom: '15px',
             }}
           >
-            <h2>Banks</h2>
+            <h2>{t.banks}</h2>
             <button
               className="button button-primary"
               onClick={() => setShowAddBank(true)}
               disabled={showAddBank || editingBank !== null}
             >
-              Add Bank
+              {t.addBank}
             </button>
           </div>
 
@@ -147,10 +203,10 @@ const Settings: React.FC = () => {
               }}
             >
               <h3 style={{ marginBottom: '10px' }}>
-                {editingBank ? 'Edit Bank' : 'Add New Bank'}
+                {editingBank ? t.editBank : t.addNewBank}
               </h3>
               <div className="form-group">
-                <label>Bank Name</label>
+                <label>{t.bankName}</label>
                 <input
                   type="text"
                   value={newBankName}
@@ -159,12 +215,12 @@ const Settings: React.FC = () => {
                 />
               </div>
               <div className="form-group">
-                <label>Converter</label>
+                <label>{t.converter}</label>
                 <select
                   value={newBankConverter}
                   onChange={(e) => setNewBankConverter(e.target.value)}
                 >
-                  <option value="">Choose converter...</option>
+                  <option value="">{t.chooseConverter}</option>
                   {converters.map((converter) => (
                     <option key={converter.id} value={converter.id}>
                       {converter.name}
@@ -177,10 +233,10 @@ const Settings: React.FC = () => {
                   className="button button-success"
                   onClick={editingBank ? handleUpdateBank : handleAddBank}
                 >
-                  {editingBank ? 'Update' : 'Add'}
+                  {editingBank ? t.update : t.add}
                 </button>
                 <button className="button button-secondary" onClick={handleCancelEdit}>
-                  Cancel
+                  {t.cancel}
                 </button>
               </div>
             </div>
@@ -190,9 +246,9 @@ const Settings: React.FC = () => {
             <table>
               <thead>
                 <tr>
-                  <th>Bank Name</th>
-                  <th>Converter</th>
-                  <th>Actions</th>
+                  <th>{t.bankName}</th>
+                  <th>{t.converter}</th>
+                  <th>{t.actions}</th>
                 </tr>
               </thead>
               <tbody>
@@ -208,13 +264,13 @@ const Settings: React.FC = () => {
                             className="button button-small button-primary"
                             onClick={() => handleEditBank(bank)}
                           >
-                            Edit
+                            {t.edit}
                           </button>
                           <button
                             className="button button-small button-danger"
                             onClick={() => handleDeleteBank(bank.id)}
                           >
-                            Delete
+                            {t.delete}
                           </button>
                         </div>
                       </td>
@@ -226,19 +282,19 @@ const Settings: React.FC = () => {
           ) : (
             <div className="empty-state">
               <div className="empty-state-icon">🏦</div>
-              <div className="empty-state-text">No banks configured yet</div>
+              <div className="empty-state-text">{t.noBanksConfigured}</div>
             </div>
           )}
         </div>
 
         {/* Available Converters Info */}
         <div className="card">
-          <h2 style={{ marginBottom: '15px' }}>Available Converters</h2>
+          <h2 style={{ marginBottom: '15px' }}>{t.availableConverters}</h2>
           <table>
             <thead>
               <tr>
-                <th>Converter Name</th>
-                <th>Description</th>
+                <th>{t.converterName}</th>
+                <th>{t.description}</th>
               </tr>
             </thead>
             <tbody>

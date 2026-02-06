@@ -37,6 +37,8 @@ export interface ConversionHistory {
 
 export interface AppSettings {
   outputFolder: string;
+  darkMode: boolean;
+  language: 'pl' | 'en';
 }
 
 // IPC Channel names
@@ -60,6 +62,8 @@ export const IPC_CHANNELS = {
   // Settings
   GET_SETTINGS: 'settings:get',
   SET_OUTPUT_FOLDER: 'settings:set-output-folder',
+  SET_DARK_MODE: 'settings:set-dark-mode',
+  SET_LANGUAGE: 'settings:set-language',
   
   // History
   GET_HISTORY: 'history:get-all',

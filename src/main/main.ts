@@ -14,7 +14,7 @@ function createWindow() {
     width: 1200,
     height: 800,
     webPreferences: {
-      preload: path.join(__dirname, 'main', 'preload.js'),
+      preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -171,11 +171,23 @@ function setupIpcHandlers() {
   ipcMain.handle(IPC_CHANNELS.GET_SETTINGS, async () => {
     return {
       outputFolder: database.getSetting('outputFolder') || '',
+      darkMode: database.getSetting('darkMode') === 'true',
+      language: database.getSetting('language') || 'pl',
     };
   });
 
   ipcMain.handle(IPC_CHANNELS.SET_OUTPUT_FOLDER, async (_, folderPath: string) => {
     database.setSetting('outputFolder', folderPath);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SET_DARK_MODE, async (_, enabled: boolean) => {
+    database.setSetting('darkMode', enabled.toString());
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SET_LANGUAGE, async (_, language: string) => {
+    database.setSetting('language', language);
     return true;
   });
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FileEntry, Bank } from '../../shared/types';
+import { translations, Language } from '../translations';
 
 declare global {
   interface Window {
@@ -7,7 +8,12 @@ declare global {
   }
 }
 
-const Converter: React.FC = () => {
+interface ConverterProps {
+  language: Language;
+}
+
+const Converter: React.FC<ConverterProps> = ({ language }) => {
+  const t = translations[language];
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [banks, setBanks] = useState<Bank[]>([]);
   const [selectedBank, setSelectedBank] = useState<number | null>(null);
@@ -48,7 +54,7 @@ const Converter: React.FC = () => {
     setDragOver(false);
 
     if (!selectedBank) {
-      alert('Please select a bank first');
+      alert(t.pleaseSelectBank);
       return;
     }
 
@@ -105,7 +111,7 @@ const Converter: React.FC = () => {
                   ...f,
                   status: 'success' as const,
                   errorMessage: result.duplicateWarning
-                    ? 'File existed - saved with timestamp'
+                    ? t.fileExistsTimestamp
                     : undefined,
                 }
               : f
@@ -113,7 +119,7 @@ const Converter: React.FC = () => {
         );
 
         if (result.duplicateWarning) {
-          alert('A file with this name already exists. Saved with timestamp.');
+          alert(t.fileExistsTimestamp);
         }
       } else {
         setFiles(
@@ -123,7 +129,7 @@ const Converter: React.FC = () => {
               : f
           )
         );
-        alert(`Conversion failed: ${result.error}\nPlease check if the bank/converter is properly assigned.`);
+        alert(`${t.conversionFailed}: ${result.error}\n${t.checkBankConverter}`);
       }
     } catch (error: any) {
       setFiles(
@@ -133,7 +139,7 @@ const Converter: React.FC = () => {
             : f
         )
       );
-      alert(`Conversion failed: ${error.message}`);
+      alert(`${t.conversionFailed}: ${error.message}`);
     }
   };
 
@@ -166,18 +172,18 @@ const Converter: React.FC = () => {
   return (
     <>
       <div className="content-header">
-        <h1>File Converter</h1>
+        <h1>{t.fileConverter}</h1>
       </div>
       <div className="content-body">
         <div className="card">
-          <h2 style={{ marginBottom: '15px' }}>Add Files</h2>
+          <h2 style={{ marginBottom: '15px' }}>{t.addFiles}</h2>
           <div className="form-group">
-            <label>Select Bank</label>
+            <label>{t.selectBank}</label>
             <select
               value={selectedBank || ''}
               onChange={(e) => setSelectedBank(Number(e.target.value))}
             >
-              <option value="">Choose a bank...</option>
+              <option value="">{t.chooseBank}</option>
               {banks.map((bank) => (
                 <option key={bank.id} value={bank.id}>
                   {bank.name}
@@ -195,11 +201,11 @@ const Converter: React.FC = () => {
           >
             <div className="drop-zone-icon">📁</div>
             <div className="drop-zone-text">
-              Drag & drop files here or click to select
+              {t.dragDropFiles}
             </div>
             {!selectedBank && (
               <div style={{ color: '#e74c3c', marginTop: '10px', fontSize: '14px' }}>
-                Please select a bank first
+                {t.pleaseSelectBank}
               </div>
             )}
           </div>
@@ -208,13 +214,13 @@ const Converter: React.FC = () => {
         {files.length > 0 && (
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h2>Files</h2>
+              <h2>{t.files}</h2>
               <div className="button-group" style={{ margin: 0 }}>
                 <button className="button button-success" onClick={handleConvertAll}>
-                  Convert All
+                  {t.convertAll}
                 </button>
                 <button className="button button-secondary" onClick={handleClearAll}>
-                  Clear All
+                  {t.clearAll}
                 </button>
               </div>
             </div>
@@ -223,10 +229,10 @@ const Converter: React.FC = () => {
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>File Name</th>
-                  <th>Bank</th>
-                  <th>Status</th>
-                  <th>Actions</th>
+                  <th>{t.fileName}</th>
+                  <th>{t.bank}</th>
+                  <th>{t.status}</th>
+                  <th>{t.actions}</th>
                 </tr>
               </thead>
               <tbody>
@@ -239,7 +245,7 @@ const Converter: React.FC = () => {
                         value={file.bankId || ''}
                         onChange={(e) => handleBankChange(file.id, Number(e.target.value))}
                       >
-                        <option value="">Choose bank...</option>
+                        <option value="">{t.chooseBank}</option>
                         {banks.map((bank) => (
                           <option key={bank.id} value={bank.id}>
                             {bank.name}
@@ -257,7 +263,7 @@ const Converter: React.FC = () => {
                             : 'pending'
                         }`}
                       >
-                        {file.status}
+                        {file.status === 'success' ? t.success : file.status === 'error' ? t.error : file.status === 'processing' ? t.processing : t.pending}
                       </span>
                       {file.errorMessage && (
                         <div style={{ fontSize: '12px', color: '#7f8c8d', marginTop: '4px' }}>
@@ -273,13 +279,13 @@ const Converter: React.FC = () => {
                               className="button button-small button-primary"
                               onClick={() => handleOpenFile(file.id)}
                             >
-                              Open
+                              {t.open}
                             </button>
                             <button
                               className="button button-small button-secondary"
                               onClick={() => handleConvert(file.id)}
                             >
-                              Convert Again
+                              {t.convertAgain}
                             </button>
                           </>
                         )}
@@ -289,14 +295,14 @@ const Converter: React.FC = () => {
                             onClick={() => handleConvert(file.id)}
                             disabled={!file.bankId}
                           >
-                            Convert
+                            {t.convert}
                           </button>
                         )}
                         <button
                           className="button button-small button-danger"
                           onClick={() => handleRemoveFile(file.id)}
                         >
-                          Remove
+                          {t.remove}
                         </button>
                       </div>
                     </td>
@@ -310,7 +316,7 @@ const Converter: React.FC = () => {
         {files.length === 0 && (
           <div className="empty-state">
             <div className="empty-state-icon">📄</div>
-            <div className="empty-state-text">No files added yet</div>
+            <div className="empty-state-text">{t.noFilesAdded}</div>
           </div>
         )}
       </div>

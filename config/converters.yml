@@ -2,6 +2,14 @@
 # Each converter has a unique ID and display name
 
 converters:
+  - id: ing_converter
+    name: Konwerter dla banku ING
+    description: Converter for ING bank statements
+    
+  - id: millenium_converter
+    name: Konwerter dla banku Millenium
+    description: Converter for Millenium bank statements
+    
   - id: xml_standard
     name: XML Standard Converter
     description: Standard XML bank statement format

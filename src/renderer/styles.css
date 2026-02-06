@@ -11,6 +11,135 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: #f5f5f5;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+/* Dark mode styles */
+body.dark-mode {
+  background: #1a1a1a;
+  color: #e0e0e0;
+}
+
+body.dark-mode .app {
+  background: #1a1a1a;
+}
+
+body.dark-mode .sidebar {
+  background: #0d1117;
+}
+
+body.dark-mode .sidebar-header {
+  background: #010409;
+}
+
+body.dark-mode .nav-item:hover {
+  background: #161b22;
+}
+
+body.dark-mode .nav-item.active {
+  background: #1f6feb;
+}
+
+body.dark-mode .content-header {
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  color: #e0e0e0;
+}
+
+body.dark-mode .content-header h1 {
+  color: #e0e0e0;
+}
+
+body.dark-mode .content-body {
+  background: #0d1117;
+}
+
+body.dark-mode .card {
+  background: #161b22;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+body.dark-mode .button-primary {
+  background: #1f6feb;
+}
+
+body.dark-mode .button-primary:hover {
+  background: #388bfd;
+}
+
+body.dark-mode .button-secondary {
+  background: #6e7681;
+  color: #e0e0e0;
+}
+
+body.dark-mode .button-secondary:hover {
+  background: #8b949e;
+}
+
+body.dark-mode th {
+  background: #0d1117;
+  color: #e0e0e0;
+  border-bottom: 2px solid #30363d;
+}
+
+body.dark-mode td {
+  border-bottom: 1px solid #30363d;
+}
+
+body.dark-mode tr:hover {
+  background: #0d1117;
+}
+
+body.dark-mode .drop-zone {
+  border-color: #1f6feb;
+  background: #0d1117;
+}
+
+body.dark-mode .drop-zone:hover,
+body.dark-mode .drop-zone.drag-over {
+  background: #161b22;
+  border-color: #388bfd;
+}
+
+body.dark-mode .drop-zone-text {
+  color: #8b949e;
+}
+
+body.dark-mode select,
+body.dark-mode input[type='text'] {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  color: #e0e0e0;
+}
+
+body.dark-mode .form-group label {
+  color: #e0e0e0;
+}
+
+body.dark-mode .modal-overlay {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+body.dark-mode .modal {
+  background: #161b22;
+}
+
+body.dark-mode .modal-header {
+  color: #e0e0e0;
+}
+
+body.dark-mode .empty-state {
+  color: #8b949e;
+}
+
+body.dark-mode h2,
+body.dark-mode h3 {
+  color: #e0e0e0;
+}
+
+body.dark-mode option {
+  background: #0d1117;
+  color: #e0e0e0;
 }
 
 .app {

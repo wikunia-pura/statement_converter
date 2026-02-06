@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
+import { app } from 'electron';
 import { Converter } from '../shared/types';
 
 class ConverterRegistry {
@@ -12,8 +13,9 @@ class ConverterRegistry {
 
   private loadConverters() {
     try {
-      // Go up from dist/main/main to reach config/
-      const configPath = path.join(__dirname, '../../../config/converters.yml');
+      // Use app.getAppPath() to get the root directory in both dev and production
+      const appPath = app.getAppPath();
+      const configPath = path.join(appPath, 'config', 'converters.yml');
       const fileContents = fs.readFileSync(configPath, 'utf8');
       const config = yaml.load(fileContents) as { converters: Converter[] };
 

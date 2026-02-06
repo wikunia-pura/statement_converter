@@ -21,6 +21,7 @@ declare global {
       // Settings
       getSettings: () => Promise<any>;
       setOutputFolder: (folderPath: string) => Promise<boolean>;
+      setDarkMode: (enabled: boolean) => Promise<boolean>;
       
       // History
       getHistory: () => Promise<any[]>;

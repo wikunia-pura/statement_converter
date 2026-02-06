@@ -8,6 +8,8 @@ interface StoreSchema {
   history: ConversionHistory[];
   settings: {
     outputFolder: string;
+    darkMode: boolean;
+    language: 'pl' | 'en';
   };
   nextBankId: number;
   nextHistoryId: number;
@@ -23,6 +25,8 @@ class DatabaseService {
         history: [],
         settings: {
           outputFolder: path.join(app.getPath('documents'), 'StatementConverter'),
+          darkMode: false,
+          language: 'pl',
         },
         nextBankId: 1,
         nextHistoryId: 1,

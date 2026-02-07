@@ -207,22 +207,6 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
           </div>
         </div>
 
-        {/* Export/Import Settings */}
-        <div className="card">
-          <h2 style={{ marginBottom: '20px' }}>📦 Zarządzanie ustawieniami</h2>
-          <p style={{ color: '#6c757d', fontSize: '14px', marginBottom: '20px' }}>
-            Eksportuj lub importuj swoje ustawienia, w tym listę banków i preferencje aplikacji.
-          </p>
-          <div className="button-group" style={{ marginTop: 0 }}>
-            <button className="button button-primary" onClick={handleExportSettings}>
-              📄 Eksportuj ustawienia
-            </button>
-            <button className="button button-secondary" onClick={handleImportSettings}>
-              📂 Importuj ustawienia
-            </button>
-          </div>
-        </div>
-
         {/* Banks Management */}
         <div className="card">
           <div
@@ -349,6 +333,22 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Export/Import Settings */}
+        <div className="card">
+          <h2 style={{ marginBottom: '20px' }}>📦 Zarządzanie ustawieniami</h2>
+          <p style={{ color: '#6c757d', fontSize: '14px', marginBottom: '20px' }}>
+            Eksportuj lub importuj swoje ustawienia, w tym listę banków i preferencje aplikacji.
+          </p>
+          <div className="button-group" style={{ marginTop: 0 }}>
+            <button className="button button-primary" onClick={handleExportSettings}>
+              📄 Eksportuj ustawienia
+            </button>
+            <button className="button button-secondary" onClick={handleImportSettings}>
+              📂 Importuj ustawienia
+            </button>
+          </div>
         </div>
     </div>
   );

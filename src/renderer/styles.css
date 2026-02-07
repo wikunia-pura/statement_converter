@@ -60,20 +60,50 @@ body.dark-mode .card {
 }
 
 body.dark-mode .button-primary {
-  background: #1f6feb;
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #58a6ff;
 }
 
 body.dark-mode .button-primary:hover {
-  background: #388bfd;
+  background: #30363d;
+  border-color: #58a6ff;
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
 }
 
 body.dark-mode .button-secondary {
-  background: #6e7681;
-  color: #e0e0e0;
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #8b949e;
 }
 
 body.dark-mode .button-secondary:hover {
-  background: #8b949e;
+  background: #30363d;
+  color: #c9d1d9;
+}
+
+body.dark-mode .button-success {
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #3fb950;
+}
+
+body.dark-mode .button-success:hover {
+  background: #30363d;
+  border-color: #3fb950;
+  box-shadow: 0 0 0 3px rgba(63, 185, 80, 0.15);
+}
+
+body.dark-mode .button-danger {
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #f85149;
+}
+
+body.dark-mode .button-danger:hover {
+  background: #30363d;
+  border-color: #f85149;
+  box-shadow: 0 0 0 3px rgba(248, 81, 73, 0.15);
 }
 
 body.dark-mode th {
@@ -172,27 +202,19 @@ body.dark-mode option {
 
 /* Logo styles */
 .logo-container {
-  padding: 30px 20px;
+  padding: 40px 15px;
   display: flex;
   align-items: center;
-  gap: 15px;
+  justify-content: center;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.logo-animals {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  font-size: 28px;
-}
-
-.logo-llama, .logo-cat {
-  display: block;
+.logo-image {
+  width: 240px;
+  height: auto;
+  max-width: 100%;
+  object-fit: contain;
   animation: float 3s ease-in-out infinite;
-}
-
-.logo-cat {
-  animation-delay: 1.5s;
 }
 
 @keyframes float {
@@ -280,7 +302,7 @@ body.dark-mode option {
 
 .button {
   padding: 10px 20px;
-  border: none;
+  border: 1px solid transparent;
   border-radius: 10px;
   cursor: pointer;
   font-size: 14px;
@@ -801,6 +823,7 @@ body.dark-mode .pagination-ellipsis {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  border: 1px solid transparent;
 }
 
 .status-success {
@@ -816,6 +839,24 @@ body.dark-mode .pagination-ellipsis {
 .status-pending {
   background: #fff4e1;
   color: #e67e22;
+}
+
+body.dark-mode .status-success {
+  background: #1c2d25;
+  color: #3fb950;
+  border-color: #2d4a33;
+}
+
+body.dark-mode .status-error {
+  background: #2d1c1f;
+  color: #f85149;
+  border-color: #4a2a2d;
+}
+
+body.dark-mode .status-pending {
+  background: #2d2818;
+  color: #d29922;
+  border-color: #4a3d1f;
 }
 
 .empty-state {

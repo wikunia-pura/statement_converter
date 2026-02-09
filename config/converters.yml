@@ -2,30 +2,7 @@
 # Each converter has a unique ID and display name
 
 converters:
-  - id: ing_converter
-    name: Konwerter dla banku ING
-    description: Converter for ING bank statements
-    
-  - id: millenium_converter
-    name: Konwerter dla banku Millenium
-    description: Converter for Millenium bank statements
-    
-  - id: xml_standard
-    name: XML Standard Converter
-    description: Standard XML bank statement format
-    
-  - id: mt940_standard
-    name: MT940 Standard Converter
-    description: SWIFT MT940 format
-    
-  - id: csv_standard
-    name: CSV Standard Converter
-    description: Standard CSV bank statement format
-    
-  - id: excel_standard
-    name: Excel Standard Converter
-    description: Excel/XLSX bank statement format
-    
-  - id: custom_text
-    name: Custom Text Converter
-    description: Custom text-based bank statement format
+  - id: santander_xml
+    name: Santander XML (Wyciąg bankowy)
+    description: Santander bank XML statements with AI-powered tenant extraction
+

@@ -13,3 +13,4 @@ release/
 .env.*.local
 coverage/
 test-output/
+config/ai-config.yml

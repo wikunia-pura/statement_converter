@@ -1,0 +1,14 @@
+# AI Configuration for Santander XML Converter
+# Copy this file to ai-config.yml and add your API keys
+
+ai:
+  # Anthropic (Claude) - recommended, cheaper (~$0.0018 per transaction)
+  # Get your key from: https://console.anthropic.com
+  anthropic_api_key: ""
+  
+  # OpenAI (GPT-4) - alternative (~$0.004 per transaction)
+  # Get your key from: https://platform.openai.com/api-keys
+  openai_api_key: ""
+  
+  # Default provider to use (either "anthropic" or "openai")
+  default_provider: "anthropic"

@@ -36,6 +36,14 @@ interface ElectronAPI {
   // History
   getHistory: () => Promise<ConversionHistory[]>;
   clearHistory: () => Promise<boolean>;
+
+  // Auto-updater
+  checkForUpdates: () => Promise<{ available: boolean; info?: any; error?: string; message?: string }>;
+  downloadUpdate: () => Promise<{ success: boolean; error?: string }>;
+  installUpdate: () => Promise<void>;
+  onUpdateAvailable: (callback: (info: any) => void) => void;
+  onUpdateDownloaded: (callback: (info: any) => void) => void;
+  onUpdateError: (callback: (error: string) => void) => void;
 }
 
 declare global {

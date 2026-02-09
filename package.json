@@ -11,8 +11,10 @@
     "build": "npm run build:main && npm run build:renderer",
     "build:main": "tsc -p tsconfig.main.json",
     "build:renderer": "vite build",
-    "package:win": "electron-builder --win",
-    "package:mac": "electron-builder --mac",
+    "package:win": "npm run build && electron-builder --win --publish never",
+    "package:mac": "npm run build && electron-builder --mac --publish never",
+    "publish:win": "npm run build && electron-builder --win --publish always",
+    "publish:mac": "npm run build && electron-builder --mac --publish always",
     "lint": "eslint src --ext .ts,.tsx",
     "lint:fix": "eslint src --ext .ts,.tsx --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
@@ -37,11 +39,18 @@
     },
     "mac": {
       "target": "dmg",
-      "icon": "resources/icon.icns"
+      "icon": "resources/icon.icns",
+      "category": "public.app-category.finance"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "wikunia-pura",
+      "repo": "statement_converter"
     }
   },
   "dependencies": {
     "electron-store": "^8.1.0",
+    "electron-updater": "^6.7.3",
     "js-yaml": "^4.1.0"
   },
   "devDependencies": {

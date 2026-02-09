@@ -80,6 +80,20 @@ export const translations = {
     importInvalidFormat: 'Nieprawidłowy format pliku',
     exportSettings: 'Eksportuj Ustawienia',
     importSettings: 'Importuj Ustawienia',
+    
+    // Updates
+    updateAvailableTitle: 'Dostępna nowa wersja',
+    updateReadyTitle: 'Aktualizacja gotowa',
+    updateReadyMessage: 'Aktualizacja została pobrana. Zrestartuj aplikację aby zainstalować.',
+    newVersion: 'Nowa wersja',
+    download: 'Pobierz',
+    downloading: 'Pobieranie...',
+    installNow: 'Zainstaluj teraz',
+    later: 'Później',
+    skip: 'Pomiń',
+    close: 'Zamknij',
+    updateError: 'Błąd aktualizacji',
+    checkForUpdates: 'Sprawdź aktualizacje',
   },
   en: {
     // Navigation
@@ -162,6 +176,20 @@ export const translations = {
     importInvalidFormat: 'Invalid file format',
     exportSettings: 'Export Settings',
     importSettings: 'Import Settings',
+    
+    // Updates
+    updateAvailableTitle: 'New version available',
+    updateReadyTitle: 'Update ready',
+    updateReadyMessage: 'Update has been downloaded. Restart the app to install.',
+    newVersion: 'New version',
+    download: 'Download',
+    downloading: 'Downloading...',
+    installNow: 'Install now',
+    later: 'Later',
+    skip: 'Skip',
+    close: 'Close',
+    updateError: 'Update error',
+    checkForUpdates: 'Check for updates',
   },
 };
 

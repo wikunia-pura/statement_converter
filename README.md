@@ -15,6 +15,7 @@ A desktop application for converting bank statements from various formats to a u
 - **Dark Mode**: Switch between light and dark themes
 - **Multilingual**: Polish and English language support
 - **Settings Export/Import**: Backup and restore your configuration
+- **Auto-Update**: Automatic updates via GitHub Releases
 - **Cross-platform**: Works on Windows and macOS
 
 ## Installation
@@ -148,6 +149,7 @@ statement_converter/
 - 📊 [Optimization Report](OPTIMIZATION_REPORT.md) - Lista zrealizowanych optymalizacji i propozycje dalszych ulepszeń
 - 🤝 [Contributing Guide](CONTRIBUTING.md) - Jak rozwijać aplikację i zgłaszać zmiany
 - 🧪 [Test Data](test-data/README.md) - Przykładowe dane testowe dla konwerterów
+- 🔄 [Auto-Update Guide](docs/AUTO_UPDATE.md) - How to release updates via GitHub
 
 ## Requirements
 

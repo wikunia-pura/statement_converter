@@ -3,6 +3,7 @@ import Converter from './views/Converter';
 import Settings from './views/Settings';
 import History from './views/History';
 import Logo from './components/Logo';
+import UpdateNotification from './components/UpdateNotification';
 import { translations, Language } from './translations';
 import { FileEntry } from '../shared/types';
 
@@ -51,6 +52,7 @@ const App: React.FC = () => {
 
   return (
     <div className="app">
+      <UpdateNotification language={language} />
       <div className="sidebar">
         <Logo />
         <div className="sidebar-nav">

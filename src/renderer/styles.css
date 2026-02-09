@@ -908,3 +908,110 @@ body.dark-mode .bank-selector-inline select {
   border-color: #30363d;
   color: #e0e0e0;
 }
+
+/* Update Notification Styles */
+.update-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  max-width: 400px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  padding: 20px;
+  z-index: 1000;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.update-content {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.update-icon {
+  font-size: 32px;
+  text-align: center;
+}
+
+.update-text strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #2c3e50;
+  font-size: 16px;
+}
+
+.update-text p {
+  color: #6c757d;
+  font-size: 14px;
+  margin: 0;
+}
+
+.update-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.update-actions .button {
+  padding: 8px 16px;
+  font-size: 14px;
+  min-width: auto;
+}
+
+.update-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #3498db;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e0e0e0;
+  border-top-color: #3498db;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.update-error .update-text strong {
+  color: #e74c3c;
+}
+
+/* Dark mode for update notification */
+body.dark-mode .update-notification {
+  background: #1e1e1e;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+body.dark-mode .update-text strong {
+  color: #e0e0e0;
+}
+
+body.dark-mode .update-text p {
+  color: #a0a0a0;
+}
+
+body.dark-mode .spinner {
+  border-color: #404040;
+  border-top-color: #3498db;
+}
+

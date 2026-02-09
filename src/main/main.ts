@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, nativeImage } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import fs from 'fs';
 import DatabaseService from './database';
@@ -250,6 +251,62 @@ function setupIpcHandlers() {
     database.clearHistory();
     return true;
   });
+
+  // Auto-updater
+  ipcMain.handle('check-for-updates', async () => {
+    if (!app.isPackaged) {
+      return { available: false, message: 'Updates disabled in development mode' };
+    }
+    try {
+      const result = await autoUpdater.checkForUpdates();
+      return { available: true, info: result?.updateInfo };
+    } catch (error) {
+      return { available: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  });
+
+  ipcMain.handle('download-update', async () => {
+    try {
+      await autoUpdater.downloadUpdate();
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  });
+
+  ipcMain.handle('install-update', () => {
+    autoUpdater.quitAndInstall();
+  });
+}
+
+function setupAutoUpdater() {
+  // Configure auto-updater
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  // Check for updates on app start (only in production)
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdatesAndNotify();
+  }
+
+  // Listen for update events
+  autoUpdater.on('update-available', (info) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('update-available', info);
+    }
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('update-downloaded', info);
+    }
+  });
+
+  autoUpdater.on('error', (err) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('update-error', err.message);
+    }
+  });
 }
 
 app.whenReady().then(() => {
@@ -265,6 +322,7 @@ app.whenReady().then(() => {
   database = new DatabaseService();
   converterRegistry = new ConverterRegistry();
   setupIpcHandlers();
+  setupAutoUpdater();
   createWindow();
 
   app.on('activate', () => {

@@ -1,6 +1,6 @@
 // Type definitions for Electron API exposed via preload
 
-import { Bank, Converter, AppSettings, ConversionHistory } from '../shared/types';
+import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary } from '../shared/types';
 
 interface ConversionResult {
   success: boolean;
@@ -23,6 +23,8 @@ interface ElectronAPI {
   selectFiles: () => Promise<{ fileName: string; filePath: string }[]>;
   selectOutputFolder: () => Promise<string | null>;
   convertFile: (inputPath: string, bankId: number, fileName: string) => Promise<ConversionResult>;
+  analyzeFile: (inputPath: string, bankId: number) => Promise<ConversionSummary>;
+  convertFileWithAI: (inputPath: string, bankId: number, fileName: string) => Promise<ConversionResult>;
   openFile: (filePath: string) => Promise<boolean>;
 
   // Settings

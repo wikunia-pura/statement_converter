@@ -11,6 +11,8 @@ const IPC_CHANNELS = {
   SELECT_OUTPUT_FOLDER: 'files:select-output-folder',
   CONVERT_FILE: 'files:convert',
   CONVERT_ALL: 'files:convert-all',
+  ANALYZE_FILE: 'files:analyze',
+  CONVERT_FILE_WITH_AI: 'files:convert-with-ai',
   OPEN_FILE: 'files:open',
   GET_SETTINGS: 'settings:get',
   SET_OUTPUT_FOLDER: 'settings:set-output-folder',
@@ -41,6 +43,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectOutputFolder: () => ipcRenderer.invoke(IPC_CHANNELS.SELECT_OUTPUT_FOLDER),
   convertFile: (inputPath: string, bankId: number, fileName: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.CONVERT_FILE, inputPath, bankId, fileName),
+  analyzeFile: (inputPath: string, bankId: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ANALYZE_FILE, inputPath, bankId),
+  convertFileWithAI: (inputPath: string, bankId: number, fileName: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CONVERT_FILE_WITH_AI, inputPath, bankId, fileName),
   openFile: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.OPEN_FILE, filePath),
 
   // Settings

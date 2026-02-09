@@ -59,17 +59,59 @@ class ConverterRegistry {
     return this.converters.get(id);
   }
 
+  async analyzeWithoutAI(
+    converterId: string,
+    inputPath: string,
+    confidenceThreshold: number = 95
+  ): Promise<{ totalTransactions: number; lowConfidenceCount: number; averageConfidence: number; needsAI: boolean }> {
+    if (converterId === 'santander_xml') {
+      const converter = new SantanderXmlConverter({
+        aiProvider: 'none',
+        apiKey: '',
+        batchSize: 20,
+        confidenceThresholds: {
+          autoApprove: 85,
+          needsReview: 60,
+        },
+      });
+
+      const xmlContent = fs.readFileSync(inputPath, 'latin1');
+      const result = await converter.convert(xmlContent);
+
+      const lowConfidenceTransactions = result.processed.filter(
+        trn => trn.extracted.confidence.overall < confidenceThreshold
+      );
+
+      return {
+        totalTransactions: result.processed.length,
+        lowConfidenceCount: lowConfidenceTransactions.length,
+        averageConfidence: result.statistics.averageConfidence,
+        needsAI: lowConfidenceTransactions.length > 0,
+      };
+    }
+    
+    throw new Error(`Unknown converter: ${converterId}`);
+  }
+
   async convert(
     converterId: string,
     inputPath: string,
-    outputPath: string
+    outputPath: string,
+    useAI: boolean = false
   ): Promise<void> {
     return new Promise(async (resolve, reject) => {
       try {
         if (converterId === 'santander_xml') {
-          // TEMPORARY: Disable AI to test regex only
-          const provider = 'none';
-          const apiKey = '';
+          let provider: 'none' | 'anthropic' | 'openai' = 'none';
+          let apiKey = '';
+
+          // Use AI if requested and config available
+          if (useAI && this.aiConfig) {
+            provider = this.aiConfig.ai.default_provider;
+            apiKey = provider === 'anthropic' 
+              ? this.aiConfig.ai.anthropic_api_key 
+              : this.aiConfig.ai.openai_api_key;
+          }
 
           // Use the real Santander XML converter
           const converter = new SantanderXmlConverter({

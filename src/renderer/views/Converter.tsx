@@ -18,6 +18,8 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   const [isLoading, setIsLoading] = useState(true);
   const [showDuplicatesModal, setShowDuplicatesModal] = useState(false);
   const [duplicateFiles, setDuplicateFiles] = useState<string[]>([]);
+  const [showAIWarningModal, setShowAIWarningModal] = useState(false);
+  const [filesNeedingAI, setFilesNeedingAI] = useState<{fileName: string; fileId: string; totalTransactions: number; lowConfidenceCount: number}[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<FileEntry[]>(files);
 
@@ -138,6 +140,46 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     
     if (!currentFile || !currentFile.bankId) return;
 
+    // First analyze file to check if AI is needed
+    try {
+      const summary = await window.electronAPI.analyzeFile(
+        currentFile.filePath,
+        currentFile.bankId
+      );
+
+      // If AI is needed, show warning modal
+      if (summary.needsAI) {
+        setFilesNeedingAI([{
+          fileName: currentFile.fileName,
+          fileId: currentFile.id,
+          totalTransactions: summary.totalTransactions,
+          lowConfidenceCount: summary.lowConfidenceCount
+        }]);
+        setShowAIWarningModal(true);
+        return;
+      }
+
+      // Otherwise proceed with normal conversion
+      await performConversion(fileId, false);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setFiles((prevFiles) =>
+        prevFiles.map((f) =>
+          f.id === fileId
+            ? { ...f, status: 'error' as const, errorMessage }
+            : f
+        )
+      );
+      alert(`Błąd analizy pliku: ${errorMessage}`);
+    }
+  };
+
+  const performConversion = async (fileId: string, useAI: boolean) => {
+    // Get file from ref to ensure we have latest state
+    const currentFile = filesRef.current.find((f) => f.id === fileId);
+    
+    if (!currentFile || !currentFile.bankId) return;
+
     // Update status to processing
     setFiles((prevFiles) =>
       prevFiles.map((f) => (f.id === fileId ? { ...f, status: 'processing' as const } : f))
@@ -146,11 +188,17 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     const startTime = Date.now();
 
     try {
-      const result = await window.electronAPI.convertFile(
-        currentFile.filePath,
-        currentFile.bankId,
-        currentFile.fileName
-      );
+      const result = useAI
+        ? await window.electronAPI.convertFileWithAI(
+            currentFile.filePath,
+            currentFile.bankId,
+            currentFile.fileName
+          )
+        : await window.electronAPI.convertFile(
+            currentFile.filePath,
+            currentFile.bankId,
+            currentFile.fileName
+          );
 
       // Ensure minimum 1 second display time for loader
       const elapsed = Date.now() - startTime;
@@ -204,13 +252,56 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   };
 
   const handleConvertAll = async () => {
-    // Get IDs of files that need conversion from current ref state
-    const fileIds = filesRef.current
-      .filter((f) => (f.status === 'pending' || f.status === 'error') && f.bankId)
-      .map((f) => f.id);
+    // Get files that need conversion from current ref state
+    const filesToConvert = filesRef.current
+      .filter((f) => (f.status === 'pending' || f.status === 'error') && f.bankId);
     
-    // Convert all files in parallel
-    await Promise.all(fileIds.map(fileId => handleConvert(fileId)));
+    if (filesToConvert.length === 0) return;
+
+    // Analyze all files first
+    const analysisResults: {fileName: string; fileId: string; totalTransactions: number; lowConfidenceCount: number}[] = [];
+    
+    for (const file of filesToConvert) {
+      try {
+        const summary = await window.electronAPI.analyzeFile(
+          file.filePath,
+          file.bankId!
+        );
+
+        if (summary.needsAI) {
+          analysisResults.push({
+            fileName: file.fileName,
+            fileId: file.id,
+            totalTransactions: summary.totalTransactions,
+            lowConfidenceCount: summary.lowConfidenceCount
+          });
+        }
+      } catch (error) {
+        console.error(`Error analyzing ${file.fileName}:`, error);
+      }
+    }
+
+    // If any files need AI, show warning modal
+    if (analysisResults.length > 0) {
+      setFilesNeedingAI(analysisResults);
+      setShowAIWarningModal(true);
+      return;
+    }
+
+    // Otherwise convert all files without AI
+    await Promise.all(filesToConvert.map(file => performConversion(file.id, false)));
+  };
+
+  const handleProceedWithAI = async (fileIds: string[]) => {
+    setShowAIWarningModal(false);
+    // Convert selected files with AI
+    await Promise.all(fileIds.map(fileId => performConversion(fileId, true)));
+  };
+
+  const handleSkipAI = async (fileIds: string[]) => {
+    setShowAIWarningModal(false);
+    // Convert selected files without AI (will have low confidence results)
+    await Promise.all(fileIds.map(fileId => performConversion(fileId, false)));
   };
 
   const handleRemoveFile = (fileId: string) => {
@@ -447,6 +538,75 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
           </div>
         )}
           </>
+        )}
+
+        {/* AI Warning Modal */}
+        {showAIWarningModal && (
+          <div className="modal-overlay" onClick={() => setShowAIWarningModal(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2 style={{ margin: 0 }}>🤖 Potrzebne przetwarzanie AI</h2>
+              </div>
+              <div className="modal-body" style={{ padding: '20px' }}>
+                <p style={{ marginBottom: '15px', fontSize: '14px', color: '#6c757d' }}>
+                  No i huj, niektóre wpłaty są nieczytelne. Zapytaj Olę czy jest kasiora, to przepuszczę przez AI:
+                </p>
+                <div style={{
+                  background: '#fff3cd',
+                  border: '1px solid #ffc107',
+                  borderRadius: '8px',
+                  padding: '15px',
+                  maxHeight: '300px',
+                  overflowY: 'auto'
+                }}>
+                  {filesNeedingAI.map((file, index) => (
+                    <div key={index} style={{
+                      padding: '12px',
+                      marginBottom: '10px',
+                      background: 'white',
+                      borderRadius: '4px',
+                      fontSize: '13px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '16px' }}>📄</span>
+                        <span style={{ fontWeight: '600', fontSize: '14px' }}>{file.fileName}</span>
+                      </div>
+                      <div style={{ paddingLeft: '24px', fontSize: '12px', color: '#6c757d' }}>
+                        <div>Transakcje: {file.totalTransactions}</div>
+                        <div style={{ color: '#dc3545', fontWeight: '500' }}>
+                          Nierozpoznanych: {file.lowConfidenceCount}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ 
+                  marginTop: '15px', 
+                  padding: '12px', 
+                  background: '#f8f9fa', 
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  color: '#6c757d'
+                }}>
+                  💡 AI zwiększy dokładność rozpoznawania, ale może kosztować. Możesz też pominąć i ręcznie poprawić wyniki.
+                </div>
+              </div>
+              <div className="modal-footer" style={{ padding: '15px 20px', borderTop: '1px solid #e8ecf1', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button 
+                  className="button button-secondary" 
+                  onClick={() => handleSkipAI(filesNeedingAI.map(f => f.fileId))}
+                >
+                  Pomiń AI
+                </button>
+                <button 
+                  className="button button-success" 
+                  onClick={() => handleProceedWithAI(filesNeedingAI.map(f => f.fileId))}
+                >
+                  Użyj AI
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Duplicates Modal */}

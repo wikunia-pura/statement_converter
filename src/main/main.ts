@@ -182,6 +182,115 @@ function setupIpcHandlers() {
     }
   );
 
+  // Analyze file without AI to check confidence
+  ipcMain.handle(
+    'files:analyze',
+    async (_, inputPath: string, bankId: number) => {
+      try {
+        const bank = database.getBankById(bankId);
+        if (!bank) {
+          throw new Error('Bank not found');
+        }
+
+        const settings = database.getSettings();
+        const threshold = settings.aiConfidenceThreshold || 95;
+
+        const summary = await converterRegistry.analyzeWithoutAI(
+          bank.converterId,
+          inputPath,
+          threshold
+        );
+
+        return summary;
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        throw new Error(errorMessage);
+      }
+    }
+  );
+
+  // Convert with AI enabled
+  ipcMain.handle(
+    IPC_CHANNELS.CONVERT_FILE_WITH_AI,
+    async (_, inputPath: string, bankId: number, fileName: string) => {
+      try {
+        if (!fs.existsSync(inputPath)) {
+          throw new Error('Input file not found');
+        }
+
+        const bank = database.getBankById(bankId);
+        if (!bank) {
+          throw new Error('Bank not found');
+        }
+
+        const converter = converterRegistry.getConverter(bank.converterId);
+        if (!converter) {
+          throw new Error('Converter not found');
+        }
+
+        const outputFolder = database.getSetting('outputFolder');
+        if (!outputFolder) {
+          throw new Error('Output folder not configured');
+        }
+        
+        if (!fs.existsSync(outputFolder)) {
+          fs.mkdirSync(outputFolder, { recursive: true });
+        }
+
+        const baseFileName = path.parse(fileName).name;
+        const outputFileName = `${baseFileName}.txt`;
+        const outputPath = path.join(outputFolder, outputFileName);
+
+        let finalOutputPath = outputPath;
+        if (fs.existsSync(outputPath)) {
+          const timestamp = Date.now();
+          finalOutputPath = path.join(
+            outputFolder,
+            `${baseFileName}_${timestamp}.txt`
+          );
+        }
+
+        // Perform conversion WITH AI
+        await converterRegistry.convert(bank.converterId, inputPath, finalOutputPath, true);
+
+        database.addConversionHistory({
+          fileName,
+          bankName: bank.name,
+          converterName: converter.name,
+          status: 'success',
+          inputPath,
+          outputPath: finalOutputPath,
+        });
+
+        return {
+          success: true,
+          outputPath: finalOutputPath,
+          duplicateWarning: finalOutputPath !== outputPath,
+        };
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const bank = database.getBankById(bankId);
+        if (bank) {
+          const converter = converterRegistry.getConverter(bank.converterId);
+          database.addConversionHistory({
+            fileName,
+            bankName: bank.name,
+            converterName: converter?.name || 'Unknown',
+            status: 'error',
+            errorMessage,
+            inputPath,
+            outputPath: '',
+          });
+        }
+
+        return {
+          success: false,
+          error: errorMessage,
+        };
+      }
+    }
+  );
+
   ipcMain.handle(IPC_CHANNELS.OPEN_FILE, async (_, filePath: string) => {
     await shell.openPath(filePath);
     return true;

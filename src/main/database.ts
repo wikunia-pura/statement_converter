@@ -1,7 +1,7 @@
 import Store from 'electron-store';
 import path from 'path';
 import { app } from 'electron';
-import { Bank, ConversionHistory } from '../shared/types';
+import { Bank, ConversionHistory, AppSettings } from '../shared/types';
 
 interface StoreSchema {
   banks: Bank[];
@@ -10,6 +10,7 @@ interface StoreSchema {
     outputFolder: string;
     darkMode: boolean;
     language: 'pl' | 'en';
+    aiConfidenceThreshold: number;
   };
   nextBankId: number;
   nextHistoryId: number;
@@ -27,6 +28,7 @@ class DatabaseService {
           outputFolder: path.join(app.getPath('documents'), 'StatementConverter'),
           darkMode: false,
           language: 'pl',
+          aiConfidenceThreshold: 95,
         },
         nextBankId: 1,
         nextHistoryId: 1,
@@ -120,6 +122,10 @@ class DatabaseService {
   getSetting(key: string): string | undefined {
     const settings = this.store.get('settings');
     return (settings as any)[key];
+  }
+
+  getSettings(): AppSettings {
+    return this.store.get('settings');
   }
 
   setSetting(key: string, value: string): void {

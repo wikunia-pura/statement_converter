@@ -59,13 +59,12 @@ export class RegexExtractor {
     }
 
     // Calculate overall confidence
+    // NOTE: Overall confidence based ONLY on apartment number (most critical for accounting system)
     const confidence = extracted.confidence!;
-    confidence.overall = Math.round(
-      (confidence.address + confidence.apartment + confidence.tenantName) / 3
-    );
+    confidence.overall = confidence.apartment;
 
-    // Only return if confidence is high enough
-    if (confidence.overall >= 70) {
+    // Only return if we have apartment number with reasonable confidence
+    if (confidence.apartment >= 70) {
       return extracted as ExtractedData;
     }
 
@@ -113,21 +112,37 @@ export class RegexExtractor {
     const combined = `${descBase} ${descOpt}`;
     
     const patterns = [
-      // Joliot-Curie 3/27 (most common)
+      // Joliot-Curie 3/27 (most common format)
       {
         regex: /(joliot[-\s]?curie)\s+(\d+)\/(\d+)/i,
         extractStreet: (m: RegExpMatchArray) => this.normalizeStreetName(m[1]),
         extractBuilding: (m: RegExpMatchArray) => m[2],
         extractApartment: (m: RegExpMatchArray) => m[3],
-        confidence: 90,
+        confidence: 95,
       },
-      // Joliot-Curie 3 M.11 or M 11
+      // UL. JOLIOT CURIE 3  M.11 (with periods and spaces)
       {
-        regex: /(joliot[-\s]?curie)\s+(\d+)\s+m\.?\s*(\d+)/i,
+        regex: /(joliot[-\s]?curie)\s+(\d+)\s+m\.(\d+)/i,
         extractStreet: (m: RegExpMatchArray) => this.normalizeStreetName(m[1]),
         extractBuilding: (m: RegExpMatchArray) => m[2],
         extractApartment: (m: RegExpMatchArray) => m[3],
-        confidence: 88,
+        confidence: 95,
+      },
+      // JOLIOT CURIE 3 M 11 (without period)
+      {
+        regex: /(joliot[-\s]?curie)\s+(\d+)\s+m\s+(\d+)/i,
+        extractStreet: (m: RegExpMatchArray) => this.normalizeStreetName(m[1]),
+        extractBuilding: (m: RegExpMatchArray) => m[2],
+        extractApartment: (m: RegExpMatchArray) => m[3],
+        confidence: 95,
+      },
+      // JOLIOT CURIE 3 M.33 or M33 (no space before number)
+      {
+        regex: /(joliot[-\s]?curie)\s+(\d+)\s+m\.?(\d+)/i,
+        extractStreet: (m: RegExpMatchArray) => this.normalizeStreetName(m[1]),
+        extractBuilding: (m: RegExpMatchArray) => m[2],
+        extractApartment: (m: RegExpMatchArray) => m[3],
+        confidence: 95,
       },
       // J. CURIE 3/27 (abbreviated)
       {
@@ -135,7 +150,15 @@ export class RegexExtractor {
         extractStreet: () => 'Joliot-Curie',
         extractBuilding: (m: RegExpMatchArray) => m[1],
         extractApartment: (m: RegExpMatchArray) => m[2],
-        confidence: 85,
+        confidence: 90,
+      },
+      // J. CURIE 3 M.11 or M 11 (abbreviated with M)
+      {
+        regex: /j\.?\s*curie\s+(\d+)\s+m\.?\s*(\d+)/i,
+        extractStreet: () => 'Joliot-Curie',
+        extractBuilding: (m: RegExpMatchArray) => m[1],
+        extractApartment: (m: RegExpMatchArray) => m[2],
+        confidence: 90,
       },
       // JCURIE 3/34 (very abbreviated)
       {
@@ -143,7 +166,7 @@ export class RegexExtractor {
         extractStreet: () => 'Joliot-Curie',
         extractBuilding: (m: RegExpMatchArray) => m[1],
         extractApartment: (m: RegExpMatchArray) => m[2],
-        confidence: 82,
+        confidence: 85,
       },
     ];
 

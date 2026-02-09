@@ -67,19 +67,9 @@ class ConverterRegistry {
     return new Promise(async (resolve, reject) => {
       try {
         if (converterId === 'santander_xml') {
-          // Get API key from config file
-          if (!this.aiConfig) {
-            throw new Error('AI configuration not found. Please create config/ai-config.yml with your API keys.');
-          }
-
-          const provider = this.aiConfig.ai.default_provider;
-          const apiKey = provider === 'anthropic' 
-            ? this.aiConfig.ai.anthropic_api_key 
-            : this.aiConfig.ai.openai_api_key;
-
-          if (!apiKey) {
-            throw new Error(`No API key configured for ${provider}. Please add it to config/ai-config.yml`);
-          }
+          // TEMPORARY: Disable AI to test regex only
+          const provider = 'none';
+          const apiKey = '';
 
           // Use the real Santander XML converter
           const converter = new SantanderXmlConverter({
@@ -111,9 +101,11 @@ class ConverterRegistry {
             output += `${idx + 1}. ${trn.original.descBase}\n`;
             output += `   Date: ${trn.original.exeDate}\n`;
             output += `   Amount: ${trn.original.value} PLN\n`;
-            output += `   Address: ${trn.extracted.fullAddress || 'N/A'} (${trn.extracted.confidence.address || 0}%)\n`;
-            output += `   Tenant: ${trn.extracted.tenantName || 'N/A'} (${trn.extracted.confidence.tenantName || 0}%)\n`;
+            output += `   Apartment: ${trn.extracted.apartmentNumber || 'N/A'} (confidence: ${trn.extracted.confidence.apartment || 0}%)\n`;
+            output += `   Full Address: ${trn.extracted.fullAddress || 'N/A'}\n`;
+            output += `   Tenant: ${trn.extracted.tenantName || 'N/A'}\n`;
             output += `   Status: ${trn.status}\n`;
+            output += `   Overall Confidence: ${trn.extracted.confidence.overall}%\n`;
             output += `   Method: ${trn.extracted.extractionMethod || 'N/A'}\n\n`;
           });
 

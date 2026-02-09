@@ -61,27 +61,29 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     
+    permissions:
+      contents: write
+    
     steps:
       - name: Download macOS artifacts
         uses: actions/download-artifact@v4
         with:
           name: macos-dmg
-          path: release-macos
+          path: release-assets
 
       - name: Download Windows artifacts
         uses: actions/download-artifact@v4
         with:
           name: windows-installer
-          path: release-windows
+          path: release-assets
         continue-on-error: true
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            release-macos/*
-            release-windows/*
+          files: release-assets/*
           draft: false
           prerelease: false
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

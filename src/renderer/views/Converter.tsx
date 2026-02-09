@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FileEntry, Bank } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { generateId } from '../../shared/utils';
 
 interface ConverterProps {
   language: Language;
@@ -74,7 +75,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   const addFiles = (newFiles: { fileName: string; filePath: string }[], bankId: number) => {
     const bank = banks.find((b) => b.id === bankId);
     const fileEntries: FileEntry[] = newFiles.map((file) => ({
-      id: Math.random().toString(36).substr(2, 9),
+      id: generateId(),
       fileName: file.fileName,
       filePath: file.filePath,
       bankId: bankId,

@@ -1,6 +1,6 @@
 # Statement Converter
 
-A desktop application for converting bank statements from various formats to a unified format for accounting software.
+A desktop application for converting bank statements from various formats to a unified format for accounting software used by housing communities.
 
 **Developers**: Wikunia & Pura
 
@@ -10,7 +10,11 @@ A desktop application for converting bank statements from various formats to a u
 - **Bank Management**: Configure multiple banks and assign them to appropriate converters
 - **Drag & Drop**: Easy file upload via drag and drop or file selection
 - **Batch Processing**: Convert multiple files at once
-- **Conversion History**: Track all conversions with detailed history
+- **Duplicate Detection**: Automatically detects duplicate files in the list
+- **Conversion History**: Track all conversions with detailed history and pagination (100 entries per page)
+- **Dark Mode**: Switch between light and dark themes
+- **Multilingual**: Polish and English language support
+- **Settings Export/Import**: Backup and restore your configuration
 - **Cross-platform**: Works on Windows and macOS
 
 ## Installation
@@ -48,8 +52,11 @@ The packaged application will be available in the `release/` directory.
 ### 1. Configure Settings
 
 - Go to **Settings** view
-- Set the output folder where converted files will be saved
-- Add banks and assign them to converters
+- **Appearance**: Toggle dark mode and select language (Polish/English)
+- **Output Folder**: Set where converted files will be saved
+- **Banks**: Add banks and assign them to converters
+- **Export/Import**: Backup or restore your settings
+- **Available Converters**: View all configured converter types
 
 ### 2. Convert Files
 
@@ -63,9 +70,10 @@ The packaged application will be available in the `release/` directory.
 ### 3. View History
 
 - Go to **History** view
-- See all past conversions with timestamps
-- Open successfully converted files
-- Clear history if needed
+- See all past conversions with timestamps, status, and error messages
+- Browse through history with pagination (100 entries per page)
+- Open successfully converted files directly
+- Clear entire history if needed
 
 ## Configuration
 
@@ -82,51 +90,72 @@ converters:
 
 ### Accepted File Formats
 
-Edit `config/accepted-formats.yml` to modify accepted file extensions:
-
-```yaml
-accepted_formats:
-  - .xml
-  - .txt
-  - .csv
-```
+The application accepts the following bank statement formats:
+- `.xml` - XML statements
+- `.txt` - Text-based formats
+- `.940`, `.mt940` - MT940 format
+- `.csv` - CSV files
+- `.xlsx`, `.xls` - Excel spreadsheets
 
 ## Architecture
 
 - **Electron**: Main process and window management
-- **React**: User interface
-- **TypeScript**: Type-safe development
-- **SQLite**: Local database for banks and history
-- **YAML**: Configuration files
+- **React**: User interface with modern component architecture
+- **TypeScript**: Type-safe development across the entire codebase
+- **Electron Store**: Persistent local storage for configuration and history
+- **Vite**: Fast development server and optimized production builds
+- **YAML**: Converter configuration files
 
 ## Project Structure
 
 ```
 statement_converter/
 ├── config/              # Configuration files
+│   └── converters.yml   # Converter definitions
+├── resources/           # Application icons
+│   ├── icon.icns       # macOS icon
+│   └── icon.ico        # Windows icon
 ├── src/
 │   ├── main/           # Electron main process
 │   │   ├── main.ts
 │   │   ├── database.ts
-│   │   └── converterRegistry.ts
+│   │   ├── converterRegistry.ts
+│   │   └── preload.ts
 │   ├── renderer/       # React UI
-│   │   ├── views/
-│   │   └── App.tsx
-│   └── shared/         # Shared types
+│   │   ├── views/      # Main application views
+│   │   ├── components/ # Reusable components
+│   │   ├── assets/     # Images and static files
+│   │   ├── App.tsx
+│   │   └── translations.ts
+│   └── shared/         # Shared types and utilities
+│       ├── types.ts
+│       └── utils.ts
 └── package.json
 ```
 
 ## Development Notes
 
-- The converter currently generates mock output ("wikunia i pura")
-- Real converter implementations will be added later
-- Each converter type needs to be implemented in the codebase
+- The application uses **electron-store** for persistent data storage
+- Converter implementations are modular and can be extended via `converterRegistry.ts`
+- Currently generates mock output ("wikunia i pura") for testing - real converters need to be implemented
+- UI supports responsive design with dark mode
+- All user-facing text is internationalized (i18n) via `translations.ts`
+- File icons are automatically generated from the logo with rounded corners
 
 ## Documentation
 
+- 🏗️ [Architecture Guide](ARCHITECTURE.md) - Detailed architecture overview
 - 📊 [Optimization Report](OPTIMIZATION_REPORT.md) - Lista zrealizowanych optymalizacji i propozycje dalszych ulepszeń
 - 🤝 [Contributing Guide](CONTRIBUTING.md) - Jak rozwijać aplikację i zgłaszać zmiany
 - 🧪 [Test Data](test-data/README.md) - Przykładowe dane testowe dla konwerterów
+
+## Requirements
+
+- **Node.js**: 18.x or higher
+- **npm**: 9.x or higher
+- **Operating System**: 
+  - macOS 10.12+ (Sierra or later)
+  - Windows 10 or later
 
 ## Scripts
 

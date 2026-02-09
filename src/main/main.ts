@@ -1,9 +1,12 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, nativeImage } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import DatabaseService from './database';
 import ConverterRegistry from './converterRegistry';
 import { IPC_CHANNELS } from '../shared/types';
+
+const DEV_SERVER_PORT = 3000;
+const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 
 let mainWindow: BrowserWindow | null = null;
 let database: DatabaseService;
@@ -22,8 +25,11 @@ function createWindow() {
 
   // Development mode: always load from Vite dev server
   // In production, the URL would be changed by electron-builder
-  mainWindow.loadURL('http://localhost:3000');
-  mainWindow.webContents.openDevTools();
+  mainWindow.loadURL(DEV_SERVER_URL);
+  
+  if (!app.isPackaged) {
+    mainWindow.webContents.openDevTools();
+  }
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -247,6 +253,15 @@ function setupIpcHandlers() {
 }
 
 app.whenReady().then(() => {
+  // Set dock icon for macOS in development mode
+  if (process.platform === 'darwin' && !app.isPackaged) {
+    const iconPath = path.join(__dirname, '..', '..', '..', 'src', 'renderer', 'assets', 'icon-rounded.png');
+    if (fs.existsSync(iconPath)) {
+      const image = nativeImage.createFromPath(iconPath);
+      app.dock.setIcon(image);
+    }
+  }
+
   database = new DatabaseService();
   converterRegistry = new ConverterRegistry();
   setupIpcHandlers();

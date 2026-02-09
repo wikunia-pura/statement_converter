@@ -72,6 +72,14 @@ export const translations = {
     conversionFailed: 'Konwersja nie powiodła się',
     checkBankConverter: 'Proszę sprawdzić czy bank/konwerter jest prawidłowo przypisany.',
     confirmClearHistory: 'Czy na pewno chcesz wyczyścić całą historię?',
+    exportSuccess: 'Ustawienia zostały wyeksportowane pomyślnie!',
+    exportError: 'Błąd podczas eksportu ustawień',
+    importConfirm: 'Zaimportowanie ustawień nadpisze obecną konfigurację. Kontynuować?',
+    importSuccess: 'Ustawienia zostały zaimportowane pomyślnie! Przeładuj aplikację.',
+    importError: 'Błąd podczas importu ustawień',
+    importInvalidFormat: 'Nieprawidłowy format pliku',
+    exportSettings: 'Eksportuj Ustawienia',
+    importSettings: 'Importuj Ustawienia',
   },
   en: {
     // Navigation
@@ -146,6 +154,14 @@ export const translations = {
     conversionFailed: 'Conversion failed',
     checkBankConverter: 'Please check if the bank/converter is properly assigned.',
     confirmClearHistory: 'Are you sure you want to clear all history?',
+    exportSuccess: 'Settings exported successfully!',
+    exportError: 'Error exporting settings',
+    importConfirm: 'Importing settings will overwrite current configuration. Continue?',
+    importSuccess: 'Settings imported successfully! Reload the application.',
+    importError: 'Error importing settings',
+    importInvalidFormat: 'Invalid file format',
+    exportSettings: 'Export Settings',
+    importSettings: 'Import Settings',
   },
 };
 

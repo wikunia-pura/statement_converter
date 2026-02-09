@@ -16,16 +16,12 @@ const App: React.FC = () => {
   const [selectedBank, setSelectedBank] = useState<number | null>(null);
 
   useEffect(() => {
-    console.log('App mounted, loading settings...');
     loadSettings();
   }, []);
 
   const loadSettings = async () => {
-    console.log('electronAPI available:', !!window.electronAPI);
-    console.log('electronAPI methods:', window.electronAPI);
     try {
       const settings = await window.electronAPI.getSettings();
-      console.log('Settings loaded:', settings);
       setDarkMode(settings.darkMode);
       setLanguage(settings.language || 'pl');
       applyDarkMode(settings.darkMode);

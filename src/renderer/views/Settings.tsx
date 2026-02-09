@@ -21,13 +21,10 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    console.log('Settings component mounted');
-    console.log('electronAPI:', window.electronAPI);
     loadData();
   }, []);
 
   const loadData = async () => {
-    console.log('Loading settings data...');
     setIsLoading(true);
     try {
       const [banksData, convertersData, settings] = await Promise.all([
@@ -35,9 +32,6 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
         window.electronAPI.getConverters(),
         window.electronAPI.getSettings(),
       ]);
-      console.log('Banks:', banksData);
-      console.log('Converters:', convertersData);
-      console.log('Settings:', settings);
       setBanks(banksData);
       setConverters(convertersData);
       setOutputFolder(settings.outputFolder);
@@ -57,8 +51,6 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
   };
 
   const handleDarkModeToggle = async () => {
-    console.log('window.electronAPI:', window.electronAPI);
-    console.log('setDarkMode method:', window.electronAPI?.setDarkMode);
     const newValue = !darkMode;
     await window.electronAPI.setDarkMode(newValue);
     onDarkModeChange(newValue);
@@ -135,25 +127,25 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
     try {
       const result = await window.electronAPI.exportSettings();
       if (result.success) {
-        alert('Ustawienia zostały wyeksportowane pomyślnie!');
+        alert(t.exportSuccess);
       }
     } catch (error) {
-      alert('Błąd podczas eksportu ustawień');
+      alert(t.exportError);
     }
   };
 
   const handleImportSettings = async () => {
-    if (confirm('Zaimportowanie ustawień nadpisze obecną konfigurację. Kontynuować?')) {
+    if (confirm(t.importConfirm)) {
       try {
         const result = await window.electronAPI.importSettings();
         if (result.success) {
-          alert('Ustawienia zostały zaimportowane pomyślnie! Przeładuj aplikację.');
+          alert(t.importSuccess);
           loadData();
         } else if (result.error) {
-          alert(`Błąd: ${result.error}`);
+          alert(`${t.importError}: ${result.error}`);
         }
       } catch (error) {
-        alert('Błąd podczas importu ustawień');
+        alert(t.importError);
       }
     }
   };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ConversionHistory } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { formatDate } from '../../shared/utils';
 
 interface HistoryProps {
   language: Language;
@@ -36,11 +37,6 @@ const History: React.FC<HistoryProps> = ({ language }) => {
 
   const handleOpenFile = async (filePath: string) => {
     await window.electronAPI.openFile(filePath);
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleString();
   };
 
   // Pagination logic

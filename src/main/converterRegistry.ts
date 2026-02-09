@@ -35,7 +35,9 @@ class ConverterRegistry {
     return this.converters.get(id);
   }
 
-  // Mock conversion - will be replaced with actual converters later
+  // TODO: Implement actual converters
+  // This is a placeholder that writes mock data
+  // Replace with real converter implementations based on converter type
   async convert(
     converterId: string,
     inputPath: string,
@@ -43,7 +45,7 @@ class ConverterRegistry {
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        // Mock conversion: write "wikunia i pura" to output file
+        // Mock conversion - writes placeholder content
         const content = 'wikunia i pura';
         fs.writeFileSync(outputPath, content, 'utf8');
         resolve();

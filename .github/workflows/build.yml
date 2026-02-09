@@ -37,5 +37,3 @@ jobs:
         run: npm run publish:win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

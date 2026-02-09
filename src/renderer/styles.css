@@ -271,6 +271,18 @@ body.dark-mode option {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
+}
+
+.app-footer {
+  position: absolute;
+  bottom: 8px;
+  right: 12px;
+  color: #999;
+}
+
+body.dark-mode .app-footer {
+  color: #666;
 }
 
 .content-header {

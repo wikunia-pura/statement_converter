@@ -96,6 +96,9 @@ const App: React.FC = () => {
           />
         )}
         {currentView === 'history' && <History language={language} />}
+        <div className="app-footer">
+          <span style={{ fontSize: '12px', opacity: 0.6 }}>v1.0.2</span>
+        </div>
       </div>
     </div>
   );

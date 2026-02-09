@@ -24,11 +24,13 @@ function createWindow() {
     },
   });
 
-  // Development mode: always load from Vite dev server
-  // In production, the URL would be changed by electron-builder
-  mainWindow.loadURL(DEV_SERVER_URL);
-  
-  if (!app.isPackaged) {
+  // Load from dev server in development, from local files in production
+  if (app.isPackaged) {
+    // Production: load from local files
+    mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  } else {
+    // Development: load from Vite dev server
+    mainWindow.loadURL(DEV_SERVER_URL);
     mainWindow.webContents.openDevTools();
   }
 

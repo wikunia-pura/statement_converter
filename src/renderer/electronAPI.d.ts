@@ -44,6 +44,7 @@ interface ElectronAPI {
   onUpdateAvailable: (callback: (info: any) => void) => void;
   onUpdateDownloaded: (callback: (info: any) => void) => void;
   onUpdateError: (callback: (error: string) => void) => void;
+  onDownloadProgress: (callback: (progress: any) => void) => void;
 }
 
 declare global {

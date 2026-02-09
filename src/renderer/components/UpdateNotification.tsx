@@ -10,6 +10,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDownloaded, setUpdateDownloaded] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
   const [updateInfo, setUpdateInfo] = useState<any>(null);
   const [error, setError] = useState<string>('');
 
@@ -17,34 +18,52 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
     // Listen for update events
     if (typeof window !== 'undefined' && window.electronAPI) {
       window.electronAPI.onUpdateAvailable((info: any) => {
+        console.log('Update available:', info);
         setUpdateAvailable(true);
         setUpdateInfo(info);
       });
 
       window.electronAPI.onUpdateDownloaded((info: any) => {
+        console.log('Update downloaded:', info);
         setUpdateDownloaded(true);
         setDownloading(false);
         setUpdateInfo(info);
       });
 
       window.electronAPI.onUpdateError((err: string) => {
+        console.error('Update error:', err);
         setError(err);
         setDownloading(false);
+      });
+
+      window.electronAPI.onDownloadProgress((progress: any) => {
+        console.log('Download progress:', progress.percent);
+        setDownloadProgress(Math.round(progress.percent || 0));
       });
     }
   }, []);
 
   const handleDownload = async () => {
+    console.log('Starting download...');
     setDownloading(true);
     setError('');
-    const result = await window.electronAPI.downloadUpdate();
-    if (!result.success && result.error) {
-      setError(result.error);
+    setDownloadProgress(0);
+    try {
+      const result = await window.electronAPI.downloadUpdate();
+      console.log('Download result:', result);
+      if (!result.success && result.error) {
+        setError(result.error);
+        setDownloading(false);
+      }
+    } catch (err) {
+      console.error('Download error:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
       setDownloading(false);
     }
   };
 
   const handleInstall = () => {
+    console.log('Installing update...');
     window.electronAPI.installUpdate();
   };
 
@@ -89,7 +108,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
             {downloading ? (
               <div className="update-progress">
                 <div className="spinner"></div>
-                <span>{t.downloading}</span>
+                <span>{t.downloading} {downloadProgress > 0 ? `${downloadProgress}%` : ''}</span>
               </div>
             ) : (
               <>

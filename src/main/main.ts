@@ -289,23 +289,43 @@ function setupAutoUpdater() {
 
   // Check for updates on app start (only in production)
   if (app.isPackaged) {
-    autoUpdater.checkForUpdatesAndNotify();
+    setTimeout(() => {
+      autoUpdater.checkForUpdatesAndNotify();
+    }, 3000);
   }
 
   // Listen for update events
+  autoUpdater.on('checking-for-update', () => {
+    console.log('Checking for updates...');
+  });
+
   autoUpdater.on('update-available', (info) => {
+    console.log('Update available:', info);
     if (mainWindow) {
       mainWindow.webContents.send('update-available', info);
     }
   });
 
+  autoUpdater.on('update-not-available', (info) => {
+    console.log('Update not available:', info);
+  });
+
+  autoUpdater.on('download-progress', (progressObj) => {
+    console.log('Download progress:', progressObj.percent);
+    if (mainWindow) {
+      mainWindow.webContents.send('download-progress', progressObj);
+    }
+  });
+
   autoUpdater.on('update-downloaded', (info) => {
+    console.log('Update downloaded:', info);
     if (mainWindow) {
       mainWindow.webContents.send('update-downloaded', info);
     }
   });
 
   autoUpdater.on('error', (err) => {
+    console.error('Update error:', err);
     if (mainWindow) {
       mainWindow.webContents.send('update-error', err.message);
     }

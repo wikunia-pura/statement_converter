@@ -6,7 +6,7 @@ export const translations = {
     history: 'Historia',
     
     // Converter view
-    fileConverter: 'Konwerter Plików',
+    fileConverter: 'Konwerter Plików v1.0.1',
     addFiles: 'Dodaj Pliki',
     selectBank: 'Wybierz Bank',
     chooseBank: 'Wybierz bank...',

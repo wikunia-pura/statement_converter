@@ -97,7 +97,9 @@ const App: React.FC = () => {
         )}
         {currentView === 'history' && <History language={language} />}
         <div className="app-footer">
-          <span style={{ fontSize: '12px', opacity: 0.6 }}>v1.0.2</span>
+          <span style={{ fontSize: '11px', opacity: 0.6 }}>
+            © 2026 Statement Converter | v1.0.3
+          </span>
         </div>
       </div>
     </div>

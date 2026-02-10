@@ -44,8 +44,6 @@ jobs:
           path: |
             release/*.dmg
             release/*.dmg.blockmap
-            release/*.zip
-            release/*.zip.blockmap
             release/latest-mac.yml
 
       - name: Upload artifacts (Windows)

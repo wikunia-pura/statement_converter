@@ -1,6 +1,6 @@
 {
   "name": "statement-converter",
-  "version": "1.0.20",
+  "version": "1.0.21",
   "description": "Bank statement converter for housing communities",
   "main": "dist/main/main/main.js",
   "scripts": {
@@ -43,7 +43,11 @@
         "arch": "arm64"
       },
       "icon": "resources/icon.icns",
-      "category": "public.app-category.finance"
+      "category": "public.app-category.finance",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "entitlements": null,
+      "entitlementsInherit": null
     },
     "publish": {
       "provider": "github",

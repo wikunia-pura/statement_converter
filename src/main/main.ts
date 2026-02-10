@@ -401,9 +401,12 @@ function setupAutoUpdater() {
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  // Disable signature verification for unsigned builds (development/testing only)
-  // Remove this in production with proper code signing!
+  // CRITICAL: Allow unsigned builds by setting environment variable
+  process.env.ELECTRON_UPDATER_ALLOW_UNVERIFIED = '1';
+  
+  // Additional flags for development/unsigned builds
   (autoUpdater as any).forceDevUpdateConfig = true;
+  (autoUpdater as any).allowDowngrade = true;
 
   // Enable detailed logging
   autoUpdater.logger = console;

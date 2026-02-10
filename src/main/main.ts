@@ -384,22 +384,29 @@ function setupIpcHandlers() {
 
   ipcMain.handle('download-update', async () => {
     try {
-      await autoUpdater.downloadUpdate();
-      return { success: true };
+      const downloadPath = await autoUpdater.downloadUpdate();
+      const downloadsFolder = app.getPath('downloads');
+      return { 
+        success: true, 
+        downloadPath: downloadsFolder,
+        message: 'Update downloaded to Downloads folder'
+      };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   });
 
-  ipcMain.handle('install-update', () => {
-    autoUpdater.quitAndInstall();
+  ipcMain.handle('open-downloads-folder', () => {
+    const downloadsFolder = app.getPath('downloads');
+    shell.openPath(downloadsFolder);
+    return { success: true };
   });
 }
 
 function setupAutoUpdater() {
-  // Configure auto-updater
+  // Configure auto-updater for manual download only
   autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.autoInstallOnAppQuit = false; // User will install manually
 
   // CRITICAL: Allow unsigned builds by setting environment variable
   process.env.ELECTRON_UPDATER_ALLOW_UNVERIFIED = '1';
@@ -449,8 +456,13 @@ function setupAutoUpdater() {
 
   autoUpdater.on('update-downloaded', (info) => {
     console.log('Update downloaded:', info);
+    const downloadsFolder = app.getPath('downloads');
+    console.log('Downloads folder:', downloadsFolder);
     if (mainWindow) {
-      mainWindow.webContents.send('update-downloaded', info);
+      mainWindow.webContents.send('update-downloaded', {
+        ...info,
+        downloadPath: downloadsFolder
+      });
     }
   });
 

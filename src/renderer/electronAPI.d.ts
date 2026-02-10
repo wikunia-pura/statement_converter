@@ -44,8 +44,8 @@ interface ElectronAPI {
 
   // Auto-updater
   checkForUpdates: () => Promise<{ available: boolean; info?: any; error?: string; message?: string }>;
-  downloadUpdate: () => Promise<{ success: boolean; error?: string }>;
-  installUpdate: () => Promise<void>;
+  downloadUpdate: () => Promise<{ success: boolean; downloadPath?: string; message?: string; error?: string }>;
+  openDownloadsFolder: () => Promise<{ success: boolean }>;
   onUpdateAvailable: (callback: (info: any) => void) => void;
   onUpdateDownloaded: (callback: (info: any) => void) => void;
   onUpdateError: (callback: (error: string) => void) => void;

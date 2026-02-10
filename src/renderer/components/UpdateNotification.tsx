@@ -12,6 +12,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [updateInfo, setUpdateInfo] = useState<any>(null);
+  const [downloadPath, setDownloadPath] = useState<string>('');
   const [error, setError] = useState<string>('');
 
   useEffect(() => {
@@ -28,6 +29,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
         setUpdateDownloaded(true);
         setDownloading(false);
         setUpdateInfo(info);
+        setDownloadPath(info.downloadPath || '');
       });
 
       window.electronAPI.onUpdateError((err: string) => {
@@ -51,7 +53,9 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
     try {
       const result = await window.electronAPI.downloadUpdate();
       console.log('Download result:', result);
-      if (!result.success && result.error) {
+      if (result.success) {
+        setDownloadPath(result.downloadPath || '');
+      } else if (result.error) {
         setError(result.error);
         setDownloading(false);
       }
@@ -62,9 +66,9 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
     }
   };
 
-  const handleInstall = () => {
-    console.log('Installing update...');
-    window.electronAPI.installUpdate();
+  const handleOpenDownloads = async () => {
+    console.log('Opening Downloads folder...');
+    await window.electronAPI.openDownloadsFolder();
   };
 
   const handleDismiss = () => {
@@ -83,12 +87,16 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
         <div className="update-content">
           <div className="update-icon">🎉</div>
           <div className="update-text">
-            <strong>{t.updateReadyTitle}</strong>
-            <p>{t.updateReadyMessage}</p>
+            <strong>{language === 'pl' ? 'Aktualizacja pobrana!' : 'Update Downloaded!'}</strong>
+            <p>
+              {language === 'pl' 
+                ? 'Plik instalacyjny został pobrany do folderu Pobrane. Otwórz folder i zainstaluj aktualizację ręcznie.'
+                : 'Installation file has been downloaded to Downloads folder. Open the folder and install the update manually.'}
+            </p>
           </div>
           <div className="update-actions">
-            <button className="button button-primary" onClick={handleInstall}>
-              {t.installNow}
+            <button className="button button-primary" onClick={handleOpenDownloads}>
+              {language === 'pl' ? 'Otwórz folder Pobrane' : 'Open Downloads'}
             </button>
             <button className="button button-secondary" onClick={handleDismiss}>
               {t.later}

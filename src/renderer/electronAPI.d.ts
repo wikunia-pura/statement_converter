@@ -38,6 +38,9 @@ interface ElectronAPI {
   // History
   getHistory: () => Promise<ConversionHistory[]>;
   clearHistory: () => Promise<boolean>;
+  
+  // App info
+  getAppVersion: () => Promise<string>;
 
   // Auto-updater
   checkForUpdates: () => Promise<{ available: boolean; info?: any; error?: string; message?: string }>;

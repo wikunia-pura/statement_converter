@@ -364,6 +364,11 @@ function setupIpcHandlers() {
     return true;
   });
 
+  // App info
+  ipcMain.handle('app:get-version', () => {
+    return app.getVersion();
+  });
+
   // Auto-updater
   ipcMain.handle('check-for-updates', async () => {
     if (!app.isPackaged) {

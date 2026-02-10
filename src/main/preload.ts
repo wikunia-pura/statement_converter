@@ -22,6 +22,7 @@ const IPC_CHANNELS = {
   IMPORT_SETTINGS: 'settings:import',
   GET_HISTORY: 'history:get-all',
   CLEAR_HISTORY: 'history:clear',
+  GET_APP_VERSION: 'app:get-version',
 } as const;
 
 // Expose protected methods that allow the renderer process to use
@@ -63,6 +64,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // History
   getHistory: () => ipcRenderer.invoke(IPC_CHANNELS.GET_HISTORY),
   clearHistory: () => ipcRenderer.invoke(IPC_CHANNELS.CLEAR_HISTORY),
+
+  // App info
+  getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION),
 
   // Auto-updater
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),

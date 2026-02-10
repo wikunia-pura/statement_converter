@@ -15,10 +15,21 @@ const App: React.FC = () => {
   const [language, setLanguage] = useState<Language>('pl');
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [selectedBank, setSelectedBank] = useState<number | null>(null);
+  const [appVersion, setAppVersion] = useState<string>('1.0.0');
 
   useEffect(() => {
     loadSettings();
+    loadAppVersion();
   }, []);
+
+  const loadAppVersion = async () => {
+    try {
+      const version = await window.electronAPI.getAppVersion();
+      setAppVersion(version);
+    } catch (error) {
+      console.error('Error loading app version:', error);
+    }
+  };
 
   const loadSettings = async () => {
     try {
@@ -98,7 +109,7 @@ const App: React.FC = () => {
         {currentView === 'history' && <History language={language} />}
         <div className="app-footer">
           <span style={{ fontSize: '11px', opacity: 0.6 }}>
-            © 2026 Statement Converter | v1.0.7
+            © 2026 FileFunky | v{appVersion}
           </span>
         </div>
       </div>

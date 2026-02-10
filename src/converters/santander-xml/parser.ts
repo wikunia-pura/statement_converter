@@ -8,11 +8,36 @@ import { XmlStatement, XmlTransaction } from './types';
 
 export class SantanderXmlParser {
   /**
+   * Clean XML content by removing BOM and leading/trailing whitespace
+   */
+  private cleanXmlContent(xmlContent: string): string {
+    // Remove BOM (Byte Order Mark) if present - multiple types
+    let cleaned = xmlContent.replace(/^\uFEFF/, ''); // UTF-8 BOM
+    cleaned = cleaned.replace(/^\uFFFE/, ''); // UTF-16 BE BOM
+    cleaned = cleaned.replace(/^\xEF\xBB\xBF/, ''); // UTF-8 BOM as bytes
+    
+    // Find the first '<' character (start of XML)
+    const xmlStart = cleaned.indexOf('<');
+    if (xmlStart > 0) {
+      // Remove everything before the first '<'
+      cleaned = cleaned.substring(xmlStart);
+    } else if (xmlStart < 0) {
+      // No XML found, return original
+      throw new Error('No XML content found in file');
+    }
+    
+    return cleaned.trim();
+  }
+
+  /**
    * Parse XML file content
    */
   async parse(xmlContent: string): Promise<XmlStatement> {
     try {
-      const result = await parseStringPromise(xmlContent, {
+      // Clean the XML content before parsing
+      const cleanedContent = this.cleanXmlContent(xmlContent);
+      
+      const result = await parseStringPromise(cleanedContent, {
         explicitArray: false,
         trim: true,
         normalizeTags: true,

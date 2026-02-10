@@ -482,7 +482,25 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                             {file.status === 'success' ? t.success : file.status === 'error' ? t.error : t.pending}
                           </span>
                           {file.errorMessage && (
-                            <div style={{ fontSize: '12px', color: '#7f8c8d', marginTop: '10px' }}>
+                            <div 
+                              style={{ 
+                                fontSize: '12px', 
+                                color: '#7f8c8d', 
+                                marginTop: '10px',
+                                cursor: 'pointer',
+                                padding: '8px',
+                                backgroundColor: '#f8f9fa',
+                                borderRadius: '4px',
+                                border: '1px solid #dee2e6',
+                                wordBreak: 'break-word'
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigator.clipboard.writeText(file.errorMessage || '');
+                                alert('Błąd skopiowany do schowka');
+                              }}
+                              title="Kliknij aby skopiować błąd"
+                            >
                               {file.errorMessage}
                             </div>
                           )}
@@ -545,11 +563,11 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
           <div className="modal-overlay" onClick={() => setShowAIWarningModal(false)}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h2 style={{ margin: 0 }}>🤖 Potrzebne przetwarzanie AI</h2>
+                <h2 style={{ margin: 0 }}>😱 O Cie Huj</h2>
               </div>
               <div className="modal-body" style={{ padding: '20px' }}>
                 <p style={{ marginBottom: '15px', fontSize: '14px', color: '#6c757d' }}>
-                  No i huj, niektóre wpłaty są nieczytelne. Zapytaj Olę czy jest kasiora, to przepuszczę przez AI:
+                  Niektóre wpłaty są nieczytelne. Zapytaj Olę czy jest kasiora, to przepuszczę przez AI:
                 </p>
                 <div style={{
                   background: '#fff3cd',
@@ -567,9 +585,31 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                       borderRadius: '4px',
                       fontSize: '13px'
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                        <span style={{ fontSize: '16px' }}>📄</span>
-                        <span style={{ fontWeight: '600', fontSize: '14px' }}>{file.fileName}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '16px' }}>📄</span>
+                          <span style={{ fontWeight: '600', fontSize: '14px' }}>{file.fileName}</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button
+                            className="button button-small button-success"
+                            onClick={() => {
+                              setShowAIWarningModal(false);
+                              performConversion(file.fileId, true);
+                            }}
+                          >
+                            🤖 Użyj AI
+                          </button>
+                          <button
+                            className="button button-small button-secondary"
+                            onClick={() => {
+                              setShowAIWarningModal(false);
+                              performConversion(file.fileId, false);
+                            }}
+                          >
+                            Pomiń
+                          </button>
+                        </div>
                       </div>
                       <div style={{ paddingLeft: '24px', fontSize: '12px', color: '#6c757d' }}>
                         <div>Transakcje: {file.totalTransactions}</div>
@@ -591,19 +631,27 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                   💡 AI zwiększy dokładność rozpoznawania, ale może kosztować. Możesz też pominąć i ręcznie poprawić wyniki.
                 </div>
               </div>
-              <div className="modal-footer" style={{ padding: '15px 20px', borderTop: '1px solid #e8ecf1', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <div className="modal-footer" style={{ padding: '15px 20px', borderTop: '1px solid #e8ecf1', display: 'flex', justifyContent: 'space-between' }}>
                 <button 
                   className="button button-secondary" 
-                  onClick={() => handleSkipAI(filesNeedingAI.map(f => f.fileId))}
+                  onClick={() => setShowAIWarningModal(false)}
                 >
-                  Pomiń AI
+                  Zamknij
                 </button>
-                <button 
-                  className="button button-success" 
-                  onClick={() => handleProceedWithAI(filesNeedingAI.map(f => f.fileId))}
-                >
-                  Użyj AI
-                </button>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button 
+                    className="button button-secondary" 
+                    onClick={() => handleSkipAI(filesNeedingAI.map(f => f.fileId))}
+                  >
+                    Pomiń wszystkie
+                  </button>
+                  <button 
+                    className="button button-success" 
+                    onClick={() => handleProceedWithAI(filesNeedingAI.map(f => f.fileId))}
+                  >
+                    Użyj AI dla wszystkich
+                  </button>
+                </div>
               </div>
             </div>
           </div>

@@ -80,6 +80,7 @@ export class RegexExtractor {
       /lokal\s+id\s+(\d+)\/(\d+)/i,        // lokal ID 27/7
       /id[:\s\.]+(\d+)\/(\d+)/i,           // ID.22211201 -> extract digits
       /wspolnotanr\s+(\d+)\s*-\s*identyfikator\s+lokalu\s+(\d+)/i, // Wspolnotanr 27 - Identyfikator lokalu 26
+      /lokal[ua]?[:\s]+(\d+)(?![\d\/])/i,  // lokal 17, lokalu 17 (without building number)
     ];
 
     for (const pattern of patterns) {
@@ -102,6 +103,23 @@ export class RegexExtractor {
       }
     }
 
+    // Check for standalone "lokal X" or "lokalu X" pattern (without building number)
+    const standaloneLokalkMatch = (descBase + ' ' + descOpt).match(/lokal[ua]?[:\s]+(\d+)(?![\d\/])/i);
+    if (standaloneLokalkMatch) {
+      const apartment = standaloneLokalkMatch[1];
+      return {
+        buildingNumber: null,
+        apartmentNumber: apartment,
+        fullAddress: `Lokal ${apartment}`,
+        confidence: {
+          address: 85,
+          apartment: 90,
+          tenantName: 0,
+          overall: 0,
+        },
+      };
+    }
+
     return null;
   }
 
@@ -112,33 +130,33 @@ export class RegexExtractor {
     const combined = `${descBase} ${descOpt}`;
     
     const patterns = [
-      // Joliot-Curie 3/27 (most common format)
+      // Joliot-Curie 3/27 (most common format) - with typo support (JOLIET)
       {
-        regex: /(joliot[-\s]?curie)\s+(\d+)\/(\d+)/i,
+        regex: /(joli[eo]t[-\s]?curie)\s+(\d+)\/(\d+)/i,
         extractStreet: (m: RegExpMatchArray) => this.normalizeStreetName(m[1]),
         extractBuilding: (m: RegExpMatchArray) => m[2],
         extractApartment: (m: RegExpMatchArray) => m[3],
         confidence: 95,
       },
-      // UL. JOLIOT CURIE 3  M.11 (with periods and spaces)
+      // UL. JOLIOT CURIE 3  M.11 (with periods and spaces) - with typo support
       {
-        regex: /(joliot[-\s]?curie)\s+(\d+)\s+m\.(\d+)/i,
+        regex: /(joli[eo]t[-\s]?curie)\s+(\d+)\s+m\.(\d+)/i,
         extractStreet: (m: RegExpMatchArray) => this.normalizeStreetName(m[1]),
         extractBuilding: (m: RegExpMatchArray) => m[2],
         extractApartment: (m: RegExpMatchArray) => m[3],
         confidence: 95,
       },
-      // JOLIOT CURIE 3 M 11 (without period)
+      // JOLIOT CURIE 3 M 11 (without period) - with typo support
       {
-        regex: /(joliot[-\s]?curie)\s+(\d+)\s+m\s+(\d+)/i,
+        regex: /(joli[eo]t[-\s]?curie)\s+(\d+)\s+m\s+(\d+)/i,
         extractStreet: (m: RegExpMatchArray) => this.normalizeStreetName(m[1]),
         extractBuilding: (m: RegExpMatchArray) => m[2],
         extractApartment: (m: RegExpMatchArray) => m[3],
         confidence: 95,
       },
-      // JOLIOT CURIE 3 M.33 or M33 (no space before number)
+      // JOLIOT CURIE 3 M.33 or M33 (no space before number) - with typo support
       {
-        regex: /(joliot[-\s]?curie)\s+(\d+)\s+m\.?(\d+)/i,
+        regex: /(joli[eo]t[-\s]?curie)\s+(\d+)\s+m\.?(\d+)/i,
         extractStreet: (m: RegExpMatchArray) => this.normalizeStreetName(m[1]),
         extractBuilding: (m: RegExpMatchArray) => m[2],
         extractApartment: (m: RegExpMatchArray) => m[3],
@@ -239,7 +257,7 @@ export class RegexExtractor {
    */
   private normalizeStreetName(street: string): string {
     return street
-      .replace(/joliot[-\s]?curie/i, 'Joliot-Curie')
+      .replace(/joli[eo]t[-\s]?curie/i, 'Joliot-Curie')
       .replace(/j\.?\s*curie/i, 'Joliot-Curie')
       .replace(/jcurie/i, 'Joliot-Curie')
       .trim();

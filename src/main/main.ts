@@ -396,6 +396,10 @@ function setupAutoUpdater() {
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
 
+  // Disable signature verification for unsigned builds (development/testing only)
+  // Remove this in production with proper code signing!
+  (autoUpdater as any).forceDevUpdateConfig = true;
+
   // Enable detailed logging
   autoUpdater.logger = console;
 

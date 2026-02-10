@@ -1,6 +1,6 @@
 {
   "name": "statement-converter",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "Bank statement converter for housing communities",
   "main": "dist/main/main/main.js",
   "scripts": {
@@ -23,7 +23,7 @@
   },
   "build": {
     "appId": "com.statementconverter.app",
-    "productName": "Statement Converter",
+    "productName": "Statement-Converter",
     "directories": {
       "output": "release"
     },

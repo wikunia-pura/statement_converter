@@ -488,10 +488,6 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                                 color: '#7f8c8d', 
                                 marginTop: '10px',
                                 cursor: 'pointer',
-                                padding: '8px',
-                                backgroundColor: '#f8f9fa',
-                                borderRadius: '4px',
-                                border: '1px solid #dee2e6',
                                 wordBreak: 'break-word'
                               }}
                               onClick={(e) => {

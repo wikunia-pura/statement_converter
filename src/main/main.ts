@@ -396,6 +396,14 @@ function setupAutoUpdater() {
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
 
+  // Enable detailed logging
+  autoUpdater.logger = console;
+
+  console.log('Auto-updater configuration:');
+  console.log('- App version:', app.getVersion());
+  console.log('- Is packaged:', app.isPackaged);
+  console.log('- Feed URL will be:', 'https://github.com/wikunia-pura/statement_converter');
+
   // Check for updates on app start (only in production)
   if (app.isPackaged) {
     setTimeout(() => {
@@ -406,6 +414,7 @@ function setupAutoUpdater() {
   // Listen for update events
   autoUpdater.on('checking-for-update', () => {
     console.log('Checking for updates...');
+    console.log('Current version:', app.getVersion());
   });
 
   autoUpdater.on('update-available', (info) => {
@@ -435,6 +444,8 @@ function setupAutoUpdater() {
 
   autoUpdater.on('error', (err) => {
     console.error('Update error:', err);
+    console.error('Error stack:', err.stack);
+    console.error('Error details:', JSON.stringify(err, null, 2));
     if (mainWindow) {
       mainWindow.webContents.send('update-error', err.message);
     }

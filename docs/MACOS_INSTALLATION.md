@@ -1,88 +1,84 @@
 # Instalacja na macOS
 
-## Problem: "Aplikacja jest uszkodzona i nie można jej otworzyć"
+## Szybka instalacja (3 kroki)
 
-Jeśli podczas uruchamiania aplikacji na macOS widzisz komunikat:
-```
-"FileFunky.app is damaged and can't be opened. You should move it to the Trash."
-```
+1. **Pobierz** odpowiedni plik ZIP:
+   - Mac z Apple Silicon (M1/M2/M3): `FileFunky-X.X.X-arm64.zip`
+   - Mac z Intel: `FileFunky-X.X.X-x64.zip`
 
-To **NIE oznacza**, że aplikacja jest uszkodzona. To standardowa blokada macOS dla aplikacji spoza App Store, które nie mają podpisu Apple Developer (wymaga $99/rok).
+2. **Rozpakuj** plik ZIP (dwukrotne kliknięcie)
 
-## Rozwiązanie
+3. **Przeciągnij** aplikację FileFunky do folderu **Applications**
 
-### Metoda 1: Terminal (Zalecana) ✅
+4. **Uruchom** aplikację z folderu Applications
 
-1. Otwórz **Terminal** (Finder → Aplikacje → Narzędzia → Terminal)
+Gotowe! ✅
 
-2. Wykonaj następującą komendę:
-```bash
-sudo xattr -cr /Applications/FileFunky.app
-```
+---
 
-3. Wpisz hasło administratora (nie zobaczysz liter podczas pisania - to normalne)
+## Problem: "Aplikacja nie może zostać otwarta"
 
-4. Uruchom aplikację ponownie
+Jeśli podczas PIERWSZEGO uruchomienia widzisz komunikat o nieznanych źródłach:
 
-### Metoda 2: Ustawienia systemowe
+### Rozwiązanie 1: Kliknięcie prawym przyciskiem (NAJŁATWIEJSZE)
 
-1. Otwórz **Preferencje Systemowe** → **Prywatność i Bezpieczeństwo**
-
-2. W zakładce **Ogólne** przewiń w dół
-
-3. Zobaczysz komunikat o zablokowaniu FileFunky - kliknij **"Otwórz mimo to"**
-
-4. Potwierdź w kolejnym oknie
-
-### Metoda 3: Kliknięcie prawym przyciskiem myszy
-
-1. Znajdź aplikację w Finderze (w folderze /Applications lub na DMG)
-
-2. Kliknij prawym przyciskiem myszy (lub Ctrl+klik) na FileFunky.app
-
+1. W Finderze znajdź aplikację FileFunky w folderze Applications
+2. Kliknij **PRAWYM przyciskiem myszy** (lub Ctrl+klik) na FileFunky.app
 3. Wybierz **"Otwórz"** z menu
-
 4. W oknie z ostrzeżeniem kliknij **"Otwórz"**
+5. Przy kolejnych uruchomieniach będzie się uruchamiać normalnie
+
+### Rozwiązanie 2: Ustawienia systemowe
+
+1. Próba uruchomienia aplikacji (zwykłe kliknięcie)
+2. Otwórz **Preferencje Systemowe** → **Prywatność i Bezpieczeństwo**
+3. W zakładce **Ogólne** zobaczysz komunikat o zablokowaniu FileFunky
+4. Kliknij **"Otwórz mimo to"**
+
+### Rozwiązanie 3: Terminal (dla zaawansowanych)
+
+```bash
+xattr -cr /Applications/FileFunky.app
+```
+
+---
 
 ## Dlaczego to się dzieje?
 
 macOS Gatekeeper blokuje aplikacje, które:
 - Nie zostały pobrane z App Store
 - Nie mają podpisu od zarejestrowanego Apple Developer
-- Nie przeszły procesu notaryzacji Apple
 
-Aplikacja FileFunky jest w 100% bezpieczna, ale nie ma komercyjnego podpisu Apple (kosztuje $99/rok).
+Aplikacja FileFunky jest w 100% bezpieczna, ale nie ma komercyjnego podpisu Apple (koszt $99/rok).
 
-## Czy to bezpieczne?
+Po **pierwszym** uruchomieniu przez "Otwórz" z menu prawego przycisku, aplikacja będzie działać normalnie przy każdym kolejnym uruchomieniu.
 
-**TAK!** Kod źródłowy aplikacji jest publiczny na GitHub:
-https://github.com/wikunia-pura/statement_converter
+---
 
-Każda wersja jest budowana automatycznie przez GitHub Actions - możesz sprawdzić dokładnie co zawiera aplikacja.
+## Szczegółowa instrukcja krok po kroku
 
-## Instalacja krok po kroku
+1. Pobierz odpowiedni plik ZIP z [GitHub Releases](https://github.com/wikunia-pura/statement_converter/releases):
+   - Mac z Apple Silicon (M1/M2/M3): `FileFunky-X.X.X-arm64.zip`
+   - Mac z Intel: `FileFunky-X.X.X-x64.zip`
 
-1. Pobierz odpowiedni plik DMG:
-   - Mac z Apple Silicon (M1/M2/M3): `FileFunky-X.X.X-arm64.dmg`
-   - Mac z Intel: `FileFunky-X.X.X-x64.dmg`
+2. **Safari** automatycznie rozpakuje ZIP. Jeśli nie:
+   - Dwukrotnie kliknij plik `.zip`
+   - Zostanie utworzony folder z aplikacją
 
-2. Otwórz plik DMG (dwukrotne kliknięcie)
+3. Otwórz Finder i znajdź folder **Applications**:
+   - Cmd+Shift+A lub
+   - Menu → Idź → Aplikacje
 
-3. Przeciągnij ikonę FileFunky do folderu Applications
+4. **Przeciągnij** FileFunky.app do folderu Applications
 
-4. **PRZED pierwszym uruchomieniem**, wykonaj komendę w terminalu:
-```bash
-sudo xattr -cr /Applications/FileFunky.app
-```
+5. W folderze Applications:
+   - **PRAWY przycisk myszy** na FileFunky.app
+   - Wybierz **"Otwórz"**
+   - Potwierdź **"Otwórz"** w oknie ostrzeżenia
 
-5. Uruchom aplikację z folderu Applications
+6. Gotowe! Przy następnych uruchomieniach wystarczy zwykłe kliknięcie.
 
-## Aktualizacje
-
-Przy każdej aktualizacji (gdy pobierzesz nową wersję ręcznie), musisz ponownie wykonać:
-```bash
-sudo xattr -cr /Applications/FileFunky.app
-```
+---
 
 ## Potrzebujesz pomocy?
 

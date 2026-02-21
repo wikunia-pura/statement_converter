@@ -30,13 +30,14 @@ Download the latest version from [GitHub Releases](https://github.com/wikunia-pu
 3. The application will auto-update when new versions are available
 
 #### macOS
-1. Download the appropriate DMG file:
-   - Apple Silicon (M1/M2/M3): `FileFunky-X.X.X-arm64.dmg`
-   - Intel Mac: `FileFunky-X.X.X-x64.dmg`
-2. Open the DMG and drag FileFunky to Applications folder
-3. **Important**: See [macOS Installation Guide](docs/MACOS_INSTALLATION.md) for first-time setup
-   - macOS will show "damaged" error - this is normal for unsigned apps
-   - Run: `sudo xattr -cr /Applications/FileFunky.app` in Terminal
+1. Download the appropriate ZIP file:
+   - Apple Silicon (M1/M2/M3): `FileFunky-X.X.X-arm64.zip`
+   - Intel Mac: `FileFunky-X.X.X-x64.zip`
+2. Unzip the file (double-click)
+3. Drag FileFunky to Applications folder
+4. **First run**: Right-click → Open → Confirm
+   - See [macOS Installation Guide](docs/MACOS_INSTALLATION.md) for details
+   - Only needed once, then works normally
 
 ### For Developers
 

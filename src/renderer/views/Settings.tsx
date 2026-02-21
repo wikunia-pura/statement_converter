@@ -358,8 +358,10 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
                   alert(result.message);
                 } else if (result.error) {
                   alert(`Błąd: ${result.error}`);
-                } else if (!result.available) {
-                  alert('Masz najnowszą wersję aplikacji');
+                } else if (result.available) {
+                  alert('Dostępna nowa wersja! Pojawi się powiadomienie.');
+                } else {
+                  alert('Nie znaleziono aktualizacji');
                 }
               }}
             >

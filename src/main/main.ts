@@ -373,14 +373,62 @@ function setupIpcHandlers() {
   // Auto-updater
   ipcMain.handle('check-for-updates', async () => {
     if (!app.isPackaged) {
-      return { available: false, message: 'Updates disabled in development mode' };
+      return { available: false, message: 'Aktualizacje wyłączone w trybie deweloperskim' };
     }
-    try {
-      const result = await autoUpdater.checkForUpdates();
-      return { available: true, info: result?.updateInfo };
-    } catch (error) {
-      return { available: false, error: error instanceof Error ? error.message : 'Unknown error' };
-    }
+    
+    return new Promise((resolve) => {
+      // Timeout po 30 sekundach
+      const timeout = setTimeout(() => {
+        resolve({ available: false, error: 'Timeout - brak odpowiedzi z serwera' });
+      }, 30000);
+
+      // Nasłuchuj na dostępność aktualizacji
+      const onUpdateAvailable = (info: any) => {
+        clearTimeout(timeout);
+        autoUpdater.removeListener('update-not-available', onUpdateNotAvailable);
+        autoUpdater.removeListener('error', onError);
+        log.info('Update check: Update available');
+        resolve({ available: true, info });
+      };
+
+      const onUpdateNotAvailable = (info: any) => {
+        clearTimeout(timeout);
+        autoUpdater.removeListener('update-available', onUpdateAvailable);
+        autoUpdater.removeListener('error', onError);
+        log.info('Update check: No update available');
+        resolve({ 
+          available: false, 
+          message: `Masz najnowszą wersję (${info.version})` 
+        });
+      };
+
+      const onError = (error: Error) => {
+        clearTimeout(timeout);
+        autoUpdater.removeListener('update-available', onUpdateAvailable);
+        autoUpdater.removeListener('update-not-available', onUpdateNotAvailable);
+        log.error('Update check error:', error);
+        resolve({ 
+          available: false, 
+          error: error.message 
+        });
+      };
+
+      // Dodaj listenery
+      autoUpdater.once('update-available', onUpdateAvailable);
+      autoUpdater.once('update-not-available', onUpdateNotAvailable);
+      autoUpdater.once('error', onError);
+
+      // Rozpocznij sprawdzanie
+      log.info('Manual update check initiated');
+      autoUpdater.checkForUpdates().catch((error) => {
+        clearTimeout(timeout);
+        autoUpdater.removeAllListeners('update-available');
+        autoUpdater.removeAllListeners('update-not-available');
+        autoUpdater.removeAllListeners('error');
+        log.error('checkForUpdates failed:', error);
+        resolve({ available: false, error: error.message });
+      });
+    });
   });
 
   ipcMain.handle('download-update', async () => {

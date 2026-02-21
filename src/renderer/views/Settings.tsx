@@ -349,21 +349,38 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
           <p style={{ color: '#6c757d', fontSize: '14px', marginBottom: '20px' }}>
             Sprawdź czy dostępna jest nowa wersja aplikacji.
           </p>
-          <button 
-            className="button button-primary" 
-            onClick={async () => {
-              const result = await window.electronAPI.checkForUpdates();
-              if (result.message) {
-                alert(result.message);
-              } else if (result.error) {
-                alert(`Błąd: ${result.error}`);
-              } else if (!result.available) {
-                alert('Masz najnowszą wersję aplikacji');
-              }
-            }}
-          >
-            Sprawdź aktualizacje
-          </button>
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+            <button 
+              className="button button-primary" 
+              onClick={async () => {
+                const result = await window.electronAPI.checkForUpdates();
+                if (result.message) {
+                  alert(result.message);
+                } else if (result.error) {
+                  alert(`Błąd: ${result.error}`);
+                } else if (!result.available) {
+                  alert('Masz najnowszą wersję aplikacji');
+                }
+              }}
+            >
+              Sprawdź aktualizacje
+            </button>
+            <button 
+              className="button button-secondary" 
+              onClick={async () => {
+                const result = await window.electronAPI.openLogsFolder();
+                if (result.success && result.logPath) {
+                  console.log('Log file:', result.logPath);
+                }
+              }}
+              title="Otwórz folder z logami aplikacji - pomaga w diagnozowaniu problemów z aktualizacjami"
+            >
+              📋 Pokaż logi
+            </button>
+          </div>
+          <p style={{ color: '#6c757d', fontSize: '12px', fontStyle: 'italic' }}>
+            💡 Jeśli aktualizacja nie działa, sprawdź logi aby zobaczyć szczegóły błędu.
+          </p>
         </div>
     </div>
   );

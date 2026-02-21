@@ -13,6 +13,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [updateInfo, setUpdateInfo] = useState<any>(null);
   const [downloadPath, setDownloadPath] = useState<string>('');
+  const [platform, setPlatform] = useState<string>('');
   const [error, setError] = useState<string>('');
 
   useEffect(() => {
@@ -30,6 +31,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
         setDownloading(false);
         setUpdateInfo(info);
         setDownloadPath(info.downloadPath || '');
+        setPlatform(info.platform || '');
       });
 
       window.electronAPI.onUpdateError((err: string) => {
@@ -88,16 +90,26 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
           <div className="update-icon">🎉</div>
           <div className="update-text">
             <strong>{language === 'pl' ? 'Aktualizacja pobrana!' : 'Update Downloaded!'}</strong>
-            <p>
-              {language === 'pl' 
-                ? 'Plik instalacyjny został pobrany do folderu Pobrane. Otwórz folder i zainstaluj aktualizację ręcznie.'
-                : 'Installation file has been downloaded to Downloads folder. Open the folder and install the update manually.'}
-            </p>
+            {platform === 'win32' ? (
+              <p>
+                {language === 'pl'
+                  ? 'Aplikacja zostanie automatycznie zaktualizowana i uruchomiona ponownie.'
+                  : 'The app will be automatically updated and restarted.'}
+              </p>
+            ) : (
+              <p>
+                {language === 'pl'
+                  ? 'Plik instalacyjny został pobrany do folderu Pobrane. Otwórz folder i zainstaluj aktualizację ręcznie.'
+                  : 'Installation file has been downloaded to Downloads folder. Open the folder and install the update manually.'}
+              </p>
+            )}
           </div>
           <div className="update-actions">
-            <button className="button button-primary" onClick={handleOpenDownloads}>
-              {language === 'pl' ? 'Otwórz folder Pobrane' : 'Open Downloads'}
-            </button>
+            {platform !== 'win32' && (
+              <button className="button button-primary" onClick={handleOpenDownloads}>
+                {language === 'pl' ? 'Otwórz folder Pobrane' : 'Open Downloads'}
+              </button>
+            )}
             <button className="button button-secondary" onClick={handleDismiss}>
               {t.later}
             </button>

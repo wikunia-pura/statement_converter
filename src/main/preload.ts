@@ -72,6 +72,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
   openDownloadsFolder: () => ipcRenderer.invoke('open-downloads-folder'),
+  openLogsFolder: () => ipcRenderer.invoke('open-logs-folder'),
+  getLogPath: () => ipcRenderer.invoke('get-log-path'),
   onUpdateAvailable: (callback: (info: any) => void) => {
     ipcRenderer.on('update-available', (_event, info) => callback(info));
   },

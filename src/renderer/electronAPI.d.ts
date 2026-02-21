@@ -46,6 +46,8 @@ interface ElectronAPI {
   checkForUpdates: () => Promise<{ available: boolean; info?: any; error?: string; message?: string }>;
   downloadUpdate: () => Promise<{ success: boolean; downloadPath?: string; message?: string; error?: string }>;
   openDownloadsFolder: () => Promise<{ success: boolean }>;
+  openLogsFolder: () => Promise<{ success: boolean; logPath?: string }>;
+  getLogPath: () => Promise<{ path: string }>;
   onUpdateAvailable: (callback: (info: any) => void) => void;
   onUpdateDownloaded: (callback: (info: any) => void) => void;
   onUpdateError: (callback: (error: string) => void) => void;

@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, nativeImage } from 'electron';
 import { autoUpdater } from 'electron-updater';
+import log from 'electron-log';
 import path from 'path';
 import fs from 'fs';
 import DatabaseService from './database';
@@ -401,9 +402,25 @@ function setupIpcHandlers() {
     shell.openPath(downloadsFolder);
     return { success: true };
   });
+
+  // Logs
+  ipcMain.handle('open-logs-folder', () => {
+    const logPath = log.transports.file.getFile().path;
+    const logFolder = path.dirname(logPath);
+    shell.showItemInFolder(logPath);
+    return { success: true, logPath };
+  });
+
+  ipcMain.handle('get-log-path', () => {
+    return { path: log.transports.file.getFile().path };
+  });
 }
 
 function setupAutoUpdater() {
+  // Configure logging to file
+  log.transports.file.level = 'debug';
+  autoUpdater.logger = log;
+  
   // Configure auto-updater for manual download only
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false; // User will install manually
@@ -415,61 +432,87 @@ function setupAutoUpdater() {
   (autoUpdater as any).forceDevUpdateConfig = true;
   (autoUpdater as any).allowDowngrade = true;
 
-  // Enable detailed logging
-  autoUpdater.logger = console;
-
-  console.log('Auto-updater configuration:');
-  console.log('- App version:', app.getVersion());
-  console.log('- Is packaged:', app.isPackaged);
-  console.log('- Feed URL will be:', 'https://github.com/wikunia-pura/statement_converter');
+  log.info('=== Auto-updater configuration ===');
+  log.info('App version:', app.getVersion());
+  log.info('Is packaged:', app.isPackaged);
+  log.info('Platform:', process.platform);
+  log.info('Arch:', process.arch);
+  log.info('Feed URL:', 'https://github.com/wikunia-pura/statement_converter');
+  log.info('Log file location:', log.transports.file.getFile().path);
 
   // Check for updates on app start (only in production)
   if (app.isPackaged) {
+    log.info('App is packaged, will check for updates in 3 seconds');
     setTimeout(() => {
+      log.info('Starting auto-update check...');
       autoUpdater.checkForUpdatesAndNotify();
     }, 3000);
+  } else {
+    log.info('App is not packaged, skipping auto-update check');
   }
 
   // Listen for update events
   autoUpdater.on('checking-for-update', () => {
-    console.log('Checking for updates...');
-    console.log('Current version:', app.getVersion());
+    log.info('=== Checking for updates ===');
+    log.info('Current version:', app.getVersion());
   });
 
   autoUpdater.on('update-available', (info) => {
-    console.log('Update available:', info);
+    log.info('=== Update available ===');
+    log.info('New version:', info.version);
+    log.info('Release date:', info.releaseDate);
+    log.info('Download URL:', info.path || 'N/A');
+    log.info('Full info:', JSON.stringify(info, null, 2));
     if (mainWindow) {
       mainWindow.webContents.send('update-available', info);
     }
   });
 
   autoUpdater.on('update-not-available', (info) => {
-    console.log('Update not available:', info);
+    log.info('=== Update not available ===');
+    log.info('Current version is the latest:', info.version);
   });
 
   autoUpdater.on('download-progress', (progressObj) => {
-    console.log('Download progress:', progressObj.percent);
+    log.info('Download progress:', Math.round(progressObj.percent) + '%', 
+      'Speed:', Math.round(progressObj.bytesPerSecond / 1024) + ' KB/s');
     if (mainWindow) {
       mainWindow.webContents.send('download-progress', progressObj);
     }
   });
 
   autoUpdater.on('update-downloaded', (info) => {
-    console.log('Update downloaded:', info);
+    log.info('=== Update downloaded successfully ===');
+    log.info('Version:', info.version);
     const downloadsFolder = app.getPath('downloads');
-    console.log('Downloads folder:', downloadsFolder);
+    log.info('Downloads folder:', downloadsFolder);
+    log.info('Platform:', process.platform);
     if (mainWindow) {
       mainWindow.webContents.send('update-downloaded', {
         ...info,
-        downloadPath: downloadsFolder
+        downloadPath: downloadsFolder,
+        platform: process.platform
       });
+    }
+    // Windows: automatyczna instalacja
+    if (process.platform === 'win32') {
+      log.info('Windows platform - will quit and install in 2 seconds');
+      setTimeout(() => {
+        log.info('Quitting and installing update now...');
+        autoUpdater.quitAndInstall();
+      }, 2000); // krótka pauza na wyświetlenie info
+    } else {
+      log.info('Non-Windows platform - manual installation required');
     }
   });
 
   autoUpdater.on('error', (err) => {
-    console.error('Update error:', err);
-    console.error('Error stack:', err.stack);
-    console.error('Error details:', JSON.stringify(err, null, 2));
+    log.error('=== Update error ===');
+    log.error('Error message:', err.message);
+    log.error('Error stack:', err.stack);
+    log.error('Error details:', JSON.stringify(err, null, 2));
+    log.error('Platform:', process.platform);
+    log.error('App version:', app.getVersion());
     if (mainWindow) {
       mainWindow.webContents.send('update-error', err.message);
     }

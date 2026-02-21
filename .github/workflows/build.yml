@@ -35,14 +35,19 @@ jobs:
       - name: Build and package (Windows)
         if: matrix.os == 'windows-latest'
         run: npm run package:win
-
+      - name: Remove quarantine attributes (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          find release -name "*.dmg" -exec xattr -cr {} \;
+          find release -name "*.app" -exec xattr -cr {} \;
       - name: Upload artifacts (macOS)
         if: matrix.os == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: macos-zip
+          name: macos-dmg
           path: |
-            release/*.zip
+            release/*.dmg
+            release/*.dmg.blockmap
             release/latest-mac.yml
 
       - name: Upload artifacts (Windows)
@@ -67,7 +72,7 @@ jobs:
       - name: Download macOS artifacts
         uses: actions/download-artifact@v4
         with:
-          name: macos-zip
+          name: macos-dmg
           path: release-assets
 
       - name: Download Windows artifacts

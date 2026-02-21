@@ -1,0 +1,1023 @@
+©vDom Technet »Wzorcowy plan kont
+_______________________________________________« 2026.02.21 17:11
+
+     Plan kont
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       Symbol       Nazwa                                    RO  TS   Bil Wn  Ma  RW   +   -   
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       201          ROZRACHUNKI Z DOSTAWCAMI                  Z   2   D   8  27   N           
+       201-00001    Miasto Stołeczne Warszawa                 Z   1   S           N           
+       201-00002    Inter EJ s.c.                             Z   1   S           N           
+       201-00003    Veolia Energia Warszawa S.A.              Z   1   S           S           
+       201-00004    MPWiK                                     Z   1   S           N           
+       201-00005    URZĄD M.ST. W-WY  MOKOTÓW - ODPADY        Z   1   S           N           
+       201-00006    Polskie Górnictwo Naftowe i Gazownictwo   Z   1   S           N           
+       201-00007    Tech-home Skoczyński Zbigniew             Z   1   N           N           
+       201-00008    CNM-KMD ALARM SERWIS DARIUSZ KONECKI      Z   1   N           N           
+       201-00009    ZAKŁAD USŁUGOWY PIOTR DUDZIŃSKI           Z   1   N           N           
+       201-000091   MARTA DUDA -MUSZYŃSKA KANCELARIA PRAWNA   Z   1   N           N           
+       201-00010    KRYS-MAR                                  Z   1   N           N           
+       201-00011    ROLAND PHU Ryszard Zienkiewicz            Z   1   N           N           
+       201-00012    INSTALATOR SP. J.                         Z   1   N           N           
+       201-00013    E.ON POLSKA S.A.                          Z   1   N           N           
+       201-00014    INSTALATORSTWO SANITARNE I CO K.WĄSAK     Z   1   N           N           
+       201-00015    Kruszewski-TERMOIZO. I RENOW. BUDYNKÓW    Z   1   N           N           
+       201-00016    URZĄD M.ST. W-WY DZIELNICA MOKOTÓW        Z   1   N           N           
+       201-00017    OS-BUD ZAKŁAD BUDOW.-REMONT. W-WA         Z   1   N           N           
+       201-00018    WARTA TUIR S.A.                           Z   1   N           N           
+       201-00019    AMTEL - JACEK AMBROZIAK                   Z   1   N           N           
+       201-00020    SPÓŁDZIELNIA PRACY USŁUG TECH. I BUD.     Z   1   N           N           
+       201-00021    POLSAN PRZEDS. INSTAL - BUD               Z   1   N           N           
+       201-00022    TWÓR -  USŁUGI PROJEKTOWE                 Z   1   N           N           
+       201-000220   GRAŻYNA PSZKIT                            Z   1   N           N           
+       201-00023    THYSSENKRUPP ELEVATOR SP.Z O.O.           Z   1   N           N           
+       201-00024    UNIQA S.A - polisy ubezpieczeniowe        Z   1   N           N           
+       201-00025    USŁUGI WODNO-KAN.-BUDOWL. K.GRANICA       Z   1   N           N           
+       201-00026    WINDA - WARSZAWA SP. Z O.O.               Z   1   N           N           
+       201-00027    TĘCZ - BUD MICHAŁ TĘCZA                   Z   1   N           N           
+       201-00028    PUH AZART Sp. Z o.o.                      Z   1   N           N           
+       201-00029    URZĄD DOZORU TECHNICZNEGO                 Z   1   N           N           
+       201-00030    ORANGE POLSKA S.A.                        Z   1   N           N           
+       201-00031    ATS Robert Modzelewski                    Z   1   N           N           
+       201-00032    ANDRZEJ BABIAK - Zakład Usł. - Handl.     Z   1   N           N           
+       201-00033    OTIS SP. Z O.O.                           Z   1   N           N           
+       201-00034    KOMINO REMONT  E.MISIUN                   Z   1   N           N           
+       201-00035    DEKARSTWO-BLACHARSTWO S.GNIADOWICZ        Z   1   N           N           
+       201-00036    USŁUGI ELEKTRYCZNE-JANUSZ BARTKÓW         Z   1   N           N           
+       201-00037    ODDZIAŁ MAZOWIECKI CENTRALNY TUiR         Z   1   N           N           
+       201-00038    MAG-BUD PELC TADEUSZ GRZEGORZ             Z   1   N           N           
+       201-00039    MUNICIPUM SA                              Z   1   N           N           
+       201-00040    WYDAWNICTWO-"NASZA WSPÓLNOTA"             Z   1   N           N           
+       201-00041    WOJSKOWA AGENCJA MIESZKANIOWA             Z   1   N           N           
+       201-00042    ABCUG - SŁAWOMIR TYCZYŃSKI                Z   1   N           N           
+       201-00044    TELERADIOMECHANIKA domofony-Krawczyk      Z   1   N           N           
+       201-00045    ADNES -  ADAM NESKA                       Z   1   N           N           
+       201-00046    STELMAT  T.STELMASZCZYK                   Z   1   N           N           
+       201-00047    PPB ARTEL CIÓŁKOWSKI ARTUR                Z   1   N           N           
+       201-00048    LECZ - MUR  JÓŹWIAK                       Z   1   N           N           
+       201-00049    K.KOZYRSKI-ELEKTROMECH.CHŁODN.I INSTALAT  Z   1   N           N           
+       201-00050    MAREX - ZAKŁAD ELEKTRONICZNY              Z   1   N           N           
+       201-00051    SZYSZKO - Przedsiębiorsto Wielobranżowe   Z   1   N           N           
+     ----------------------------------------------------------- JOLANTA GONTAREK----- ----Strona 1------------------------------- ------------------------------ 
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       Symbol       Nazwa                                    RO  TS   Bil Wn  Ma  RW   +   -   
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       201-00052    MAGA STUDIO MAGDALENA HALTER-BOGOŁĘBSKA   Z   1   N           N           
+       201-00053    AKANT - BŁYSK                             Z   1   N           N           
+       201-00054    ELEKTROMOR - JÓZEF WYSOCKI                Z   1   N           N           
+       201-00055    ROB-BUD   ROBERT LASKOWSKI                Z   1   N           N           
+       201-00056    T&E BIURO USŁUG BUDOWLANYCH-ZAKRZEWSKI    Z   1   N           N           
+       201-00057    INSTALATORSTWO SANITARNE I CO - OLENDZKI  Z   1   N           N           
+       201-00058    HERK-WYKOŃCZENIE WNĘTRZ K.Hert            Z   1   N           N           
+       201-00059    LEROY MERLIN POLSKA SP. Z O.O.            Z   1   N           N           
+       201-00060    ABK SERWIS GRZEGORZ KOZAK                 Z   1   N           N           
+       201-00061    KOZAK P.U.H Zdzisław Kozak                Z   1   N           N           
+       201-00062    SFERO   WOJCIECH SZCZUBEŁ                 Z   1   N           N           
+       201-00063    CONIVECO                                  Z   1   N           N           
+       201-00064    BUWMAT Sp. z o.o.                         Z   1   N           N           
+       201-00065    CEZAS                                     Z   1   N           N           
+       201-00066    CEDAR POL                                 Z   1   N           N           
+       201-00067    ZENBUD - Żbikowski Zenon                  Z   1   N           N           
+       201-00068    STOLBUD WARSZAWA SP. Z O.O.               Z   1   N           N           
+       201-00069    USŁUGI BUDOWLANO-REMONTOWE - ZGÓRSKI      Z   1   N           N           
+       201-00070    TUiR SIGNA STU S.A                        Z   1   N           N           
+       201-00071    BIURO USŁUG BUDOWLANYCH - GÓRKA           Z   1   S           N           
+       201-00072    RUDYNEK ZBIGNIEW                          Z   1   S           N           
+       201-00073    WENT - ZASUWA MIROSŁAW                    Z   1   N           N           
+       201-00074    WIELGUS - USŁUGI REMONTOWO-BUDOWLANE      Z   1   N           N           
+       201-00075    PZU SA WARSZAWA                           Z   1   S           N           
+       201-00076    EXTA - Iwona Petera                       Z   1   S           N           
+       201-00077    RAD-DOM -Norbert Figarski                 Z   1   S           N           
+       201-00078    ZAKŁAD OGÓLNO-BUDOWLANY Mitkiewicz        Z   1   S           N           
+       201-00079    INSBUD - Sasin Laskowski                  Z   1   S           N           
+       201-00080    PPW ENERGOMAR                             Z   1   S           N           
+       201-00081    PLASTIKON - PAWEŁ PNIEWSKI                Z   1   S           N           
+       201-00082    POL-BUILD PRZEDS. INSTAL.-BUDOWL.         Z   1   S           N           
+       201-00083    ZELBUD - Stanisław Zeliaś                 Z   1   N           N           
+       201-00084    EKOPROJEKT Piotr Chociaj                  Z   1   S           N           
+       201-00085    POLON - BIURO HANDLOWE                    Z   1   S           N           
+       201-00086    TABEDO Włodzimierz Kozłowski              Z   1   N           N           
+       201-00087    TELEKOMUNIKACJA POLSKA S.A                Z   1   S           N           
+       201-00088    SEA Adam Ambroziak-Przedsięb Wielobran.   Z   1   N           N           
+       201-00089    TOM-SANIT Tomasz Wachnik                  Z   1   N           N           
+       201-00090    HENWAR Anna Zagrodzka-Maliszewska         Z   1   N           N           
+       201-00091    ELEKTRO-INSTAL Jan Kłos                   Z   1   S           N           
+       201-000916   LIBRA ELŻBIETA JARMOŁKOWICZ               Z   1   N           N           
+       201-000917   ŁYŚ ANETA                                 Z   1   N           N           
+       201-000918   DARIUSZ WILCZYŃSKI INSTALACJE DOMFONOWE   Z   1   N           N           
+       201-000919   LIMBA                                     Z   1   N           N           
+       201-00092    NOWA FRANCE - Hurtownia Elektrotech.      Z   1   S           N           
+       201-000921   NOVA PRESS                                Z   1   N           N           
+       201-000922   JAPOL JACEK PIKIEWICZ                     Z   1   N           N           
+       201-000923   MAXI CLEAN SERWIS                         Z   1   N           N           
+       201-000924   DUKLIN SŁAWOMIR GŁOWA                     Z   1   N           N           
+       201-000925   PERFECTO MARIUSZ WĘŻOWSKI                 Z   1   N           N           
+       201-000926   IPRO BUDOWA                               Z   1   N           N           
+       201-000927   SAN-EL ANNA MAZUR                         Z   1   N           N           
+       201-000928   PRO CONSTRUCT DOMINIK TRACZYŃSKI          Z   1   N           N           
+       201-00093    AGAS Sp. z o.o                            Z   1   S           N           
+       201-00094    ERA - POLSKA TELEFONIA KOMÓRKOWA          Z   1   N           N           
+       201-000941   DARIUSZ MAZUR METERING SYSTEM             Z   1   N           N           
+       201-00095    GEMMA - Zakład Szklarski                  Z   1   S           N           
+     ----------------------------------------------------------- JOLANTA GONTAREK----- ----Strona 2------------------------------- ------------------------------ 
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       Symbol       Nazwa                                    RO  TS   Bil Wn  Ma  RW   +   -   
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       201-00096    MAR-TRAXX Marek Gołosz                    Z   1   N           N           
+       201-000965   USŁUGI HYDRAULICZNE KRZYSZTOF FILIPENKO   Z   1   N           N           
+       201-00097    IMPULS - Tadusz Piłkowski                 Z   1   S           N           
+       201-00098    INSTALATORSTWO SANITARNE I CO-ŁADUNKIN    Z   1   N           N           
+       201-00099    AKRO - Mirosław Ciesielski                Z   1   S           N           
+       201-00100    FLUGGER - farby                           Z   1   S           N           
+       201-00101    FREIBERGER Sp. z o.o.                     Z   1   S           N           
+       201-00102    MONY - I  Alicja Monardt                  Z   1   S           N           
+       201-00103    Mazowiecka Fabryka Okien i Drzwi          Z   1   S           N           
+       201-00104    MAL-CHEM - Wrotecki Marian                Z   1   S           N           
+       201-00105    PERFEKT - PAWEŁ KRYSIAK                   Z   1   S           N           
+       201-00106    PBM POŁUDNIE S.A.                         Z   1   S           N           
+       201-00107    KORDEK - Zakład Ślusarsko - Zamkarski     Z   1   N           N           
+       201-00108    RIMON - Gizińska - Śniegocka              Z   1   N           N           
+       201-00109    ZYCHORA JERZY - Zakład Bud. Przem.        Z   1   N           N           
+       201-00110    KWIAT - SYSTEMY OCIEPLEŃ Sp. z o.o.       Z   1   N           N           
+       201-00111    MOTGOS - Zbrzeźniak i Synowie             Z   1   N           N           
+       201-00112    SERVICO Zbigniew Kudert                   Z   1   N           N           
+       201-00113    Narodowa Agencja Poszanowania Energii     Z   1   N           N           
+       201-00114    DASAJ - Technika Diamentowa               Z   1   N           N           
+       201-00115    JULEX-BUD - Julian Kucman                 Z   1   N           N           
+       201-00116    PANEK ANNA P.P.H.U                        Z   1   N           N           
+       201-00117    PROEKS - SIKORA JANUSZ                    Z   1   N           N           
+       201-00118    POL-STRADA Pielak Artur                   Z   1   N           N           
+       201-00119    ZARZĄD MIENIA SKARBU PAŃSTWA              Z   1   N           N           
+       201-00120    FRĄCKIEWICZ - USŁUGI BUDOWL. REM.         Z   1   N           N           
+       201-00121    BUDOWA A-Z Bogdan Sudoł                   Z   1   N           N           
+       201-00122    Szkoła Podstawowa nr 271                  Z   1   N           N           
+       201-00123    DRABMET S.Drabarek                        Z   1   N           N           
+       201-00124    AQA-TECH CHRZANOWSKI JÓZEF                Z   1   N           N           
+       201-00125    DOM - SERWIS Jakub Konderko               Z   1   N           N           
+       201-00126    SĄD REJONOWY DLA WARSZAWY MOKOTOWA        Z   1   N           N           
+       201-00127    KRYSTOSIAK I SYN                          Z   1   N           N           
+       201-00128    INSTAL - SYSTEM                           Z   1   N           N           
+       201-00129    ZYCH MAGDALENA - PRZED. USŁUGOWE          Z   1   N           N           
+       201-00130    STELMACH - ZAKŁAD SZKLARSKO-SZLIFIERSKI   Z   1   N           N           
+       201-00131    SPÓŁDZIELNIA PRACY SUROWCÓW WTÓRNYCH      Z   1   N           N           
+       201-00132    GRZESZYKOWSKI - ZAKŁADANIE ZIELEŃCÓW      Z   1   N           N           
+       201-00133    KRAJEWSKA - PROJEKT                       Z   1   N           N           
+       201-00134    MIGDAŁ - ZAKŁAD REMONTOWO-BUDOWLANY       Z   1   N           N           
+       201-00135    SĄD REJONOWY W RZESZOWIE WYDZIAŁ CYWILNY  Z   1   N           N           
+       201-00136    METCOL SKUP SPRZEDAZ METALI               Z   1   N           N           
+       201-00137    USŁUGI PORZĄDKOWE BEATA ZAGRODNIK         Z   1   N           N           
+       201-00138    MAGOOS s.c.                               Z   1   N           N           
+       201-00139    MOTOR-Spółdzielnia Budowl.-Mieszkaniowa   Z   1                           
+       201-00140    APPLE FILM PRODUCT. Sp. z o.o.            Z   1                           
+       201-00141    N-BUD BOROWSKI                            Z   1   N           N           
+       201-00142    LUKARNA.M ANITA PIOTROWSKA                Z   1                           
+       201-00143    OPIA - PETERA ANDRZEJ                     Z   1   N           N           
+       201-00144    PROFIL - USŁUGI SZKLARSKIE                Z   1   N           N           
+       201-00145    INSTALATORSTWO ELEKTRYCZNE - MÓŻDŻYŃSKA   Z   1   N           N           
+       201-00146    JUKA - PALCZYŃSKI                         Z   1   N           N           
+       201-00147    TATREX - ZAKŁAD USŁUG WYSOKOŚCIOWYCH      Z   1   N           N           
+       201-00148    MAX P.H.U Ołdak Ryszard                   Z   1   N           N           
+       201-00149    EL-HURT Sp.Z o.o.                         Z   1   N           N           
+       201-00150    KAISER+KRAFT Sp. z o.o.                   Z   1   N           N           
+       201-00151    Zakład Usług Kominiarskich-M.Antos        Z   1   N           N           
+     ----------------------------------------------------------- JOLANTA GONTAREK----- ----Strona 3------------------------------- ------------------------------ 
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       Symbol       Nazwa                                    RO  TS   Bil Wn  Ma  RW   +   -   
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       201-00152    MASKO Jerzy Mamełka                       Z   1   N           N           
+       201-00153    USŁUGI PORZĄDKOWE Bronisław Krupa         Z   1   N           N           
+       201-00154    ELEKTROINSTALATORSTWO Paweł Sumera        Z   1                           
+       201-00155    BELPLAST-Artur Bielecki                   Z   1                           
+       201-00156    KLUCZYK Pogotowie Zamkowe T.Szpikowski    Z   1                           
+       201-00157    Sklep Sanitarno-Hydrauliczny Cholewińska  Z   1   N           N           
+       201-00158    BOSMAN POLSKA Sp. z o.o.                  Z   1   N           N           
+       201-00159    POLKOMTEL S.A.                            Z   1                           
+       201-00160    KONKRET                                   Z   1                           
+       201-00161    Usługi Hydrauliczne-Mika Grzegorz         Z   1                           
+       201-00162    Instalatorstwo Sanitarne i Ogrz.-GAJEK    Z   1                           
+       201-00163    Usługi Ogólnobudowlane-Stroiński          Z   1                           
+       201-00164    SZYSZ-GAB Szyszkowski Gabriel             Z   1                           
+       201-00165    Rada Rodziców przy Szkole Podstawowej 33  Z   1                           
+       201-00166    PRO-INSBUD Dariusz Protas                 Z   1                           
+       201-00167    Zakład Remontowo-Budowlany  A.Hendel      Z   1   N           N           
+       201-00168    Usługi Remontowo-Budowlane A. Wasiluk     Z   1                           
+       201-00169    Wspólnota Mieszkan. Malczewskiego 48/50   Z   1                           
+       201-00170    Mazowiecki Operator Syst.Dystrybucyjnego  Z   1                           
+       201-00171    Zakład Blacharsko-Termoizol. Pintera      Z   1                           
+       201-00172    Polskie Towarzystwo Ubezpieczeń           Z   1                           
+       201-00173    Mobil-Ekspert T.Kwaśniewski               Z   1                           
+       201-00174    Firma Usługowo-Budowlana Piotr Pocałuj    Z   1                           
+       201-00175    Triada - PPHU                             Z   1                           
+       201-00176    HORTUS PPHU Honorata Gajda                Z   1   N           N           
+       201-00177    LEKARO -  J.Zagórska                      Z   1                           
+       201-00178    HDI ASEKURACJA TU S.A.                    Z   1                           
+       201-00179    Instalatorstwo Elektryczne - "OMEGA"      Z   1                           
+       201-00180    REMAR Rafał Makowski                      Z   1                           
+       201-00181    Ogólnopolskie Towarzystwo Ochrony Ptaków  Z   1                           
+       201-00182    Zakład Budowl.Instal. - Kąkol             Z   1                           
+       201-00183    ZARZĄD DRÓG MIEJSKICH                     Z   1   N           N           
+       201-00184    ZELIAŚ PBUH sp.j. L.Zeliaś i S.Zeliaś     Z   1                           
+       201-00185    SITA Polska sp. z o.o.                    Z   1   S                       
+       201-00186    KRANIK BARBARA KORCZ                      Z   1   N           N           
+       201-00187    RATTUS - Firma Usługowa                   Z   1   N           N           
+       201-00188    MARGOT                                    Z   1                           
+       201-00189    Boryszewski Edward-Firma Sprzątająca      Z   1                           
+       201-00190    Trzebunia Andrzej-Specj.Prace Wysokoś.    Z   1                           
+       201-00191    KOMORNIK SĄDOWY                           Z   1   N           N           
+       201-00192    Usługi Ślusarskie i Ogólnobudow.-L.Gocel  Z   1                           
+       201-00193    DAMORK - OSIATKOWANIA Piotr Mockałło      Z   1   N           N           
+       201-00194    DAL-NET Sp.z o.o.                         Z   1                           
+       201-00195    COMPENSA TU SA VIG                        Z   1                           
+       201-00196    VOLCIK-Instalacje Elektryczne             Z   1                           
+       201-00197    Tryniszewski J.-Usługi Szklarskie         Z   1                           
+       201-00198    Zakład instalacji Sanitarnych i CO skl.1  Z   1                           
+       201-00199    Flesz Sp. z o.o.                          Z   1                           
+       201-00200    Indywidualne konto                        Z   1   N           N           
+       201-00201    KRANIK - Barbara Korcz                    Z   1   N           N           
+       201-00202    Instalatorstwo Sanitarne - B.Sasim        Z   1                           
+       201-00203    INSTALACJE SANIT. Nowosielska, Kłopotek   Z   1   N           N           
+       201-00204    SANBUD - Instalatorstwo Sanitarne         Z   1   N           N           
+       201-00205    INSTALCOMPACT - service Sp. z o.o.        Z   1   N           N           
+       201-00206    Instalatorstwo Elektryczne-Bromiński Jan  Z   1                           
+       201-00207    ELCAD-POMIAR Piotr Kanik                  Z   1                           
+       201-00208    REMKO - Dorota Kopeć                      Z   1                           
+     ----------------------------------------------------------- JOLANTA GONTAREK----- ----Strona 4------------------------------- ------------------------------ 
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       Symbol       Nazwa                                    RO  TS   Bil Wn  Ma  RW   +   -   
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       201-00209    Kancelaria Radcy Prawnego-B.Świątkiewicz  Z   1                           
+       201-00210    Teleradiomechanika domofony-Kaczorowski   Z   1                           
+       201-00211    UPC Polska Sp. z o.o.                     Z   1                           
+       201-00212    Grupa Biznesu "CALMEIN" Sp. z o.o.        Z   1                           
+       201-00213    ZALAS-Pogotowie Instalacji Domowych       Z   1                           
+       201-00214    Spółdzielnia Mieszkaniowa "Służewiec"     Z   1                           
+       201-00215    Lyreco Polska S.A.                        Z   1                           
+       201-00216    R.R. Łukasz Maciągowski                   Z   1                           
+       201-00217    HYDRO-KAN Pogot.Kanal. - K.Drewnowski     Z   1   N           N           
+       201-00218    ELMARK Sp. z o.o.                         Z   1                           
+       201-00219    Lazarski Management Sp. z o.o.            Z   1                           
+       201-00220    SPACE -  Paweł Keller                     Z   1                           
+       201-00221    ATUT-Z.M.                                 Z   1                           
+       201-00222    ALKO - USŁUGI TRANSPORTOWE                Z   1   N           N           
+       201-00223    Hutny Jerzy - usługi ogólnobudowlane      Z   1                           
+       201-00224    MAFON   Wojciech Rogala                   Z   1                           
+       201-00225    Szkoła Podstawowa nr 119                  Z   1                           
+       201-00226    Urząd Dzielnicy Śródmieście               Z   1                           
+       201-00227    Zbigniew Bogusz-nadzór, kosztorysowanie   Z   1                           
+       201-00228    Wspólnota Mieszkaniowa Bachmacka 2        Z   1                           
+       201-00229    Dorabianie kluczy-Tadeusz Jaworski        Z   1                           
+       201-00230    Trzópek Marian                            Z   1                           
+       201-00231    Mazowiecka Spółka Gazownictwa Sp. z o.o.  Z   1                           
+       201-00232    Wspólnota Mieszkaniowa Wołoska 36         Z   1                           
+       201-00233    Towarzystwo Przyrodnicze "Bocian"         Z   1                           
+       201-00234    HYDRAL                                    Z   1   N           N           
+       201-00235    INSANIK - ZAKŁAD USŁUGOWY  WÓJCIK         Z   1   N           N           
+       201-00236    WIRPOMP - Leszek Gortatewicz              Z   1   N           N           
+       201-00237    ECCO KONSORCJUM-Sylwia Naumowicz          Z   1   N           N           
+       201-00238    PERSON-DRUK s.c.                          Z   1   N           N           
+       201-00239    Polska Telefonia Cyfrowa                  Z   1   N           N           
+       201-00240    Wspólnota Mieszkaniowa Marzanny 3         Z   1   N           N           
+       201-00241    Wspólnota Mieszkaniowa Marzanny 5         Z   1   N           N           
+       201-00242    Powiatowa Stacja Sanitarno-Epidemiolog.   Z   1   N           N           
+       201-00243    Zakład Usługowy TMB Maat                  Z   1   N           N           
+       201-00244    Urząd Skarbowy Warszawa - Mokotów         Z   1   N           N           
+       201-00245    Dorabianie kluczy-Marcin Roguski          Z   1   N           N           
+       201-00246    DARKSPIN-Przeds.Wielobr.Dariusz Kmiołek   Z   1   N           N           
+       201-00247    Ogólnopolski Zakład Deratyzacji i Dezys.  Z   1   N           N           
+       201-00248    ZAKŁAD ŚLUSARSKO-BUDOWLANY S.KRZOSEK      Z   1   N           N           
+       201-00249    SAGA T.P. - Tomasz Pigłowski              Z   1   N           N           
+       201-00250    MITAR - Jan Dąbrowa                       Z   1   N           N           
+       201-00251    Rada Rodziców Szkoły Podstawowej nr 202   Z   1   N           N           
+       201-00252    FERB Grzegorz Pięta                       Z   1   N           N           
+       201-00253    InterRisk TU Vienna Insurance Group       Z   1   N           N           
+       201-00254    MROCZEK                                   Z   1   N           N           
+       201-00255    MODUS PRO                                 Z   1   N           N           
+       201-00256    ACCRUS                                    Z   1   N           N           
+       201-00257    AMFORA - Roman Zega                       Z   1   N           N           
+       201-00258    STAN-BUD Stanisław Jachymek               Z   1   N           N           
+       201-00259    MID BRUK Zieliński, Gierasiński           Z   1   N           N           
+       201-00260    ROMA-SANIT Projektowanie,Wykonawstwo      Z   1   N           N           
+       201-00261    BŁYSK-Firma Handlowa Andrzej Kok          Z   1   N           N           
+       201-00262    ARHEAD Sp. z o.o.                         Z   1   N           N           
+       201-00263    Instalacja Sanitar-Nowosielska,Kłopotek   Z   1   N           N           
+       201-00264    Usługi Hydrauliczno-Gazowe Rylski A.      Z   1   N           N           
+       201-00265    GRUPA PROEKS Janusz Sikora                Z   1   N           N           
+     ----------------------------------------------------------- JOLANTA GONTAREK----- ----Strona 5------------------------------- ------------------------------ 
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       Symbol       Nazwa                                    RO  TS   Bil Wn  Ma  RW   +   -   
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       201-00266    Stefan Lasoń-specjal.prace budowlane      Z   1   N           N           
+       201-00267    Sąd Rejonowy-Mokotów ul.Ogrodowa 51A      Z   1   N           N           
+       201-00268    AWAL & SYN Sp. z o.o.                     Z   1   N           N           
+       201-00269    ZAKŁAD OGÓLNOBUDOW.,ul.Jana Pawła 13/1    Z   1   N           N           
+       201-00270    ORTO Dorota Matuszelańska                 Z   1   N           N           
+       201-00271    INTEL-CO JAŹDZIKOWSCY KRYSTYNA I BOGDAN   Z   1   N           N           
+       201-00272    KAMEX KATARZYNA STRZESZEWSKA              Z   1   N           N           
+       201-00273    DOSAN Usługi Projektowe K.Chudziej        Z   1   N           N           
+       201-00274    KOMEL Krzysztof Obrębski                  Z   1   N           N           
+       201-00275    USSURI Adam Tarłowski OCHRONA PRZYRODY    Z   1   N           N           
+       201-00276    MASBUD                                    Z   1   N           N           
+       201-00277    STOLBAU-EKO                               Z   1   N           N           
+       201-00278    APUS Mariusz Grzeniewski                  Z   1   N           N           
+       201-00279    SEGELIA Ilona Prokopczyk                  Z   1   N           N           
+       201-00280    Usługi Ogólnobudowlane-Sobiecki Cezary    Z   1   N           N           
+       201-00281    MODREM PHU W. SKOWROŃSKI                  Z   1   N           N           
+       201-00282    EKO-INŻYNIERIA                            Z   1   N           N           
+       201-00283    PRIMA Sp. z o.o. Spółka Komandytowa       Z   1   N           N           
+       201-00284    AGRAPLAST SP. Z O.O.                      Z   1   N           N           
+       201-00285    USŁUGI ŚLURASKIE - ZDZISŁAW KOZIEŁ        Z   1   N           N           
+       201-00286    ZAKŁAD USŁUG ELEKTRYCZNYCH - ADAMSKI T.   Z   1   N           N           
+       201-00287    Górak Andrzej                             Z   1   N           N           
+       201-00288    EKO-PARTNER Adam Bujakiewicz              Z   1   N           N           
+       201-00289    MYSZAK i SYN                              Z   1   N           N           
+       201-00290    SUPPORT LOGISTIC - ARTUR BARTKOWIAK       Z   1   N           N           
+       201-00291    AGRAN plus Sp. z o.o.                     Z   1   N           N           
+       201-00292    Urząd Skarbowy Warszawa - Wola            Z   1   N           N           
+       201-00293    APPA-INVEST  Artur Piechota               Z   1   N           N           
+       201-00294    Fenix - Robert Trybułowicz                Z   1   N           N           
+       201-00295    ELGLASS - USŁUGI SZKLARSKIE G.BOLEK       Z   1   N           N           
+       201-00296    Piotr Mikołajczyk - Ryczywół,Kozienice    Z   1   N           N           
+       201-00297    USŁUGI HYDR.-GAZOWE POŁAWSKI SYLWESTER    Z   1   N           N           
+       201-00298    EVVA POLSKA                               Z   1   N           N           
+       201-00299    INSTAL-KOB urszula Merkler                Z   1   N           N           
+       201-00300    Urząd Skarbowy Warszawa Mokotów           Z   1   N           N           
+       201-00301    MIRAMAR Andrzej Kulawik                   Z   1   N           N           
+       201-00302    MICROS Zakład Pracy Chronionej            Z   1   N           N           
+       201-00303    REM-KOM                                   Z   1   N           N           
+       201-00304    HERK-usługi remontowo-budowlane           Z   1   N           N           
+       201-00305    GŻEGŻÓŁKA PHU                             Z   1   N           N           
+       201-00306    Boniecki Marek - Usługi Grawerskie        Z   1   N           N           
+       201-00307    LUXIN Sp. z o.o.                          Z   1   N           N           
+       201-00308    P4 Sp. z o.o.                             Z   1   N           N           
+       201-00309    Urząd dzielnicy Ochota                    Z   1   N           N           
+       201-00310    Firma Ogólnobudowlana-Adrian Grzechnik    Z   1   N           N           
+       201-00311    ELECTRIC SYSTEM                           Z   1   N           N           
+       201-00312    MAG INSTAL                                Z   1   N           N           
+       201-00313    USŁUGI REMONTOWO-BUDOWLANE L.SZOSTEK      Z   1   N           N           
+       201-00314    STS elektro Leszek Świerzbin              Z   1   N           N           
+       201-00315    ZGN PRAGA -PÓŁNOC                         Z   1   N           N           
+       201-00316    ATLANT Marek Grzanka                      Z   1   N           N           
+       201-00317    AG-COMPLEXS -MARYWILSKA 44                Z   1   N           N           
+       201-00318    PMR EDEN                                  Z   1   N           N           
+       201-00319    BIURO RACH. MOJE PODATKI                  Z   1   N           N           
+       201-00320    MICHAŁ RZEWUSKI MAGDALENA DOROTA RAJSKA   Z   1   N           N           
+       201-00321    NORMA BOGUSŁAW GOLIŃCZAK                  Z   1   N           N           
+       201-00322    BYŚ - WOJCIECH BYŚKIEWICZ                 Z   1   N           N           
+     ----------------------------------------------------------- JOLANTA GONTAREK----- ----Strona 6------------------------------- ------------------------------ 
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       Symbol       Nazwa                                    RO  TS   Bil Wn  Ma  RW   +   -   
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       201-00323    ALBUD - Krzysztof Ogrodnik                Z   1   N           N           
+       201-00324    Instalatorstwo Elektryczne-Laszczka Z.    Z   1   N           N           
+       201-00325    ANPOL - Anna Nosal                        Z   1   N           N           
+       201-00326    ELEKTROSKŁAD P.H. A.WOŚ, T.KUNA s.c.      Z   1   N           N           
+       201-00327    MARLIP it - Mariusz Lipiński              Z   1   N           N           
+       201-00328    BEM - Sp. z o.o. (Słupno)                 Z   1   N           N           
+       201-00329    ATS - P.H.U. (Ciechomin)                  Z   1   N           N           
+       201-00330    ŚWIATŁOPROJEKT-J.Piotrowski,K.Warzyński   Z   1   N           N           
+       201-00331    METAL-CAR Leszek Karczewski               Z   1   N           N           
+       201-00332    MARIO - TOMASZ KORDYS                     Z   1   N           N           
+       201-00333    KOMINEK - LYUBA KOWALSKA                  Z   1   N           N           
+       201-00334    Autorska Pracownia - Jan Kopeć            Z   1   N           N           
+       201-00335    INTER POLSKA - TOWARZYSTWO UBEZPIECZEŃ    Z   1   N           N           
+       201-00336    AZART - PHU SP. Z O.O.                    Z   1   N           N           
+       201-00337    Pawlak Leszek - Usługi Rem.-Bud.          Z   1   N           N           
+       201-00338    TRANSTAL - BOGUMIŁ DUDZIK                 Z   1   N           N           
+       201-00339    DORADCA TECHNICZNY MGR INŻ. DOROTA HEBDA  Z   1   N           N           
+       201-00340    URZĄD DZIELNICY PRAGA-PÓŁNOC              Z   1   N           N           
+       201-00341    JMACCOUNTING SP.ZOO                       Z   1   N           N           
+       201-00342    NADMA BIURO RACHUNKOWE                    Z   1   N           N           
+       201-00343    AURA Urszula Ciepielewska                 Z   1   N           N           
+       201-00344    HEMAR - PRZEDSIBIORSTWO WIELOBRANŻOWE     Z   1   N           N           
+       201-00345    Sąd okręgowy,Zespół d.s Egzekucyjnych     Z   1   N           N           
+       201-00346    SEGMENT BUDOWNICTWO LEDIX                 Z   1   N           N           
+       201-00347    ERGO HESTIA S.A.                          Z   1   N           N           
+       201-00348    ZBRZEŹNIAK - JACEK ZBRZEŹNIAK             Z   1   N           N           
+       201-00349    FIRMA DARKOS                              Z   1   N           N           
+       201-00350    JURTOM II                                 Z   1   N           N           
+       201-00351    MASTERMANIA - IWONA ĆWIK                  Z   1   N           N           
+       201-00352    DOMINIAK RYSZARD - "GARAŻE" L.185         Z   1   N           N           
+       201-00353    TAB - Biuro Realizacji Inwestycji         Z   1   N           N           
+       201-00354    POLANIT R. Polakowski                     Z   1   N           N           
+       201-00355    KAMEX - Paweł Rogalski                    Z   1   N           N           
+       201-00356    POL-OIL-CORPORATION Sp. z o.o.            Z   1   N           N           
+       201-00357    USŁUGI SPRZĄTAJĄCE - GRZEGORZ WOŹNICKI    Z   1   N           N           
+       201-00358    REMONDIS OTWOCK SP. Z O.O.                Z   1   N           N           
+       201-00359    Kancelaria Radcy Prawnego-Graboś Sylwia   Z   1   N           N           
+       201-00360    TW MEZAR                                  Z   1   N           N           
+       201-00361    TERMO-PLAST - ŚWIDERSKA MARZENA           Z   1   N           N           
+       201-00362    GOTHAER Towarzystwo Ubezpieczeń S.A.      Z   1   N           N           
+       201-00363    PARKARIA Mała Architektura - Paweł Dziki  Z   1   N           N           
+       201-00364    INTEGRA,SERWIS Arkadiusz Kuśmierowski     Z   1   N           N           
+       201-00365    Home.pl S.A.                              Z   1   N           N           
+       201-00366    EURO POL OCHRONA Zdzisław Kazimierski     Z   1   N           N           
+       201-00367    NOVA OIL Sp. z o.o.                       Z   1   N           N           
+       201-00368    MI-COR Zakład Usług Budowlanych           Z   1   N           N           
+       201-00369    AGRAN PLUS Sp. z o.o.                     Z   1   N           N           
+       201-00370    FIDES FUH - Andrzej Pręgowski             Z   1   N           N           
+       201-00371    HYDRO-KAN Pogotowie Kanalizacyjne         Z   1   N           N           
+       201-00372    ARKA - dorabianie kluczy                  Z   1   N           N           
+       201-00373    EMMA                                      Z   1   N           N           
+       201-00374    Zespół Szkół Pywatnych Sp  z o.o.         Z   1   N           N           
+       201-00375    MDBud Mariusz Dusiński                    Z   1   N           N           
+       201-00376    Skorpion Sp. z o.o.                       Z   1   N           N           
+       201-00377    ESPPOL S.A.                               Z   1   N           N           
+       201-00378    BŁYSK - ZAKŁAD USŁUG KOMUNALNYCH          Z   1   N           N           
+       201-00379    Urząd Marszałkowski woj.mazowieckiego     Z   1   N           N           
+     ----------------------------------------------------------- JOLANTA GONTAREK----- ----Strona 7------------------------------- ------------------------------ 
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       Symbol       Nazwa                                    RO  TS   Bil Wn  Ma  RW   +   -   
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       201-00380    CASTORAMA POLSKA Sp. z o.o.               Z   1   N           N           
+       201-00381    TCH SERWICE Marcin Chojnowski             Z   1   N           N           
+       201-00382    INBEST Edward W. Kusy                     Z   1   N           N           
+       201-00383    Zakład budow.ogólnego i sanit-Z.Żytko     Z   1   N           N           
+       201-00384    Kancelaria Prawna Nowicki & Ziemczyk      Z   1   N           N           
+       201-00385    Zakład Stolarski - Ireneusz Zielski       Z   1   N           N           
+       201-00386    MABO - MARIUSZ PLIWKA                     Z   1   N           N           
+       201-00387    ERPOL Eryk Połeć                          Z   1   N           N           
+       201-00388    Wspólnota Mieszkaniowa Wołoska 34         Z   1   N           N           
+       201-00389    Komenda Miejska Państwowej Straży Pożarn  Z   1   N           N           
+       201-00390    WALK ON LINE - Marcin Bednarski           Z   1   N           N           
+       201-00391    ŁUK BUD - Łukasz Żytko                    Z   1   N           N           
+       201-00392    Wspólnota Mieszkaniowa Wołoska 54         Z   1   N           N           
+       201-00393    GLOTTA - Agata Grzeniewska                Z   1   N           N           
+       201-00394    ARTEX - K. Radzowonowicz                  Z   1   N           N           
+       201-00395    Administrator - Żbikowska (WYŚCIGI)       Z   1   N           N           
+       201-00396    WYŚCIGI - remont balkonów                 Z   1   N           N           
+       201-00397    PRIMER - Paweł Sperczyński                Z   1   N           N           
+       201-00398    PERSPEKTYWA P.W. - Barbara Szczepaniec    Z   1   N           N           
+       201-00399    PPMB Pracownia Projektowa-M.Błaszczyk     Z   1   N           N           
+       201-00400    PIF-PAF s.c. W. Opłocki, M.Ciepieniak     Z   1   N           N           
+       201-00401    Klocek Adam - naprawa i kons.urządzeń el  Z   1   N           N           
+       201-00402    AMBIT Daniel Michalczuk                   Z   1   N           N           
+       201-00403    PRO - Z.U.-H. JERZY GAWROŃSKI             Z   1   N           N           
+       201-00404    Przewóz Towarów-Szymczak Zdzisław         Z   1   N           N           
+       201-00405    INVESTIM                                  Z   1   N           N           
+       201-00406    TRINET CORP Sp. z o.o.                    Z   1   N           N           
+       201-00407    ABC-POŻ.    Jarosław Wycech               Z   1   N           N           
+       201-00408    Firma Trans.-Budowl. - SŁUŻEWIEC          Z   1   N           N           
+       201-00409    ATEST K. Chojnowski                       Z   1   N           N           
+       201-00410    GARDENSTAR                                Z   1   N           N           
+       201-00411    Sąd Praga Południe ul. Terespolska 15A    Z   1   N           N           
+       201-00412    Kurczewscy Adam i Anna s.c.               Z   1   N           N           
+       201-00413    KAMKRUSZ - WANDA LANGE                    Z   1   N           N           
+       201-00414    ART-BUD J. Lachowski                      Z   1   N           N           
+       201-00415    HYDROTERM A. Tarnowski                    Z   1   N           N           
+       201-00416    UNITO-L Sławomir Siwa                     Z   1   N           N           
+       201-00417    TORMEX P.H.U. W. Jachowicz-Wróblewski     Z   1   N           N           
+       201-00418    Basiński Ryszard-usługi Ślus.-Hydr. i Bu  Z   1   N           N           
+       201-00419    AKPIA-PURT                                Z   1   N           N           
+       201-00420    USŁUGI ELEKTRYCZNE W. SKWIROWSKI          Z   1   N           N           
+       201-00421    URZĄD M.ST. W-WY DZIELNICA WAWER          Z   1   N           N           
+       201-00422    URZĄD M.ST. W-WY DZIELNICA URSYNÓW        Z   1   N           N           
+       201-00423    FIDES - PIOTR WYPYCHOWSKI                 Z   1   N           N           
+       201-00424    Ewa Życka - Firma sprzątająca             Z   1   N           N           
+       201-00425    POLPOŻ                                    Z   1   N           N           
+       201-00426    GENERALI   T.U.  S.A.                     Z   1   N           N           
+       201-00427    NIAGARA - Kac Mieczysław                  Z   1   N           N           
+       201-00428    CHEMIK P.H.U.P W. Łyszkowski              Z   1   N           N           
+       201-00429    CONTIX RB Robert Boryczka                 Z   1   N           N           
+       201-00430    OMNIBUS P.H.                              Z   1   N           N           
+       201-00431    INTER-GRAF Artur Szafran                  Z   1   N           N           
+       201-00432    ARTCHEM - Piotr Deleska (Gotarda 8/10)    Z   1   N           N           
+       201-00433    INSTALATORSTWO GAZOWE ul. Cieślewskich    Z   1   N           N           
+       201-00434    GOLBA - usługi instal.-bud.               Z   1   N           N           
+       201-00435    ZNAK - ZAKŁAD PROJEKT.-USŁUG.             Z   1   N           N           
+       201-00436    BIERYT M. & W. BIERYT                     Z   1   N           N           
+     ----------------------------------------------------------- JOLANTA GONTAREK----- ----Strona 8------------------------------- ------------------------------ 
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       Symbol       Nazwa                                    RO  TS   Bil Wn  Ma  RW   +   -   
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       201-00437    TECHEM TECHNIKI POMIAROWE                 Z   1   N           N           
+       201-00438    DAMEX                                     Z   1   N           N           
+       201-00439    NENA-CAR SERWIS                           Z   1   N           N           
+       201-00440    AS PARTNER - Adam skwarnicki              Z   1   N           N           
+       201-00441    BERNER POLSKA Sp. z o.o.                  Z   1   N           N           
+       201-00442    ANONS PRESS                               Z   1   N           N           
+       201-00443    Dekarstwo-Blacharstwo B.Kuczyńska         Z   1   N           N           
+       201-00444    AVANTI - J.Barszcz                        Z   1   N           N           
+       201-00445    ZIBITECH                                  Z   1   N           N           
+       201-00446    Teleradio i Mechanika-Mirosław Witkowski  Z   1   N           N           
+       201-00447    TECTIS Paweł Homontowski                  Z   1   N           N           
+       201-00448    OSUCHOWSKI F.-PRZEDSIĘBIORSTWO U.-H.-P.   Z   1   N           N           
+       201-00449    Instalacje Sanitarne i Gaz-Gwiazda Jacek  Z   1   N           N           
+       201-00450    DARKSPIN                                  Z   1   N           N           
+       201-00451    AGORA S.A.                                Z   1   N           N           
+       201-00452    Polska Spółka Gazownictwa Sp. z o.o.      Z   1   N           N           
+       201-00453    MOLIRO Macin Chaciński                    Z   1   N           N           
+       201-00454    KWIACIARNIA - Krzyżanowski W.             Z   1   N           N           
+       201-00455    EL-TEAM Sowiński Patryk                   Z   1   N           N           
+       201-00456    Gronowska Żaneta                          Z   1   N           N           
+       201-00457    ADEKOM                                    Z   1   N           N           
+       201-00458    POŁUDNIE - Andrzej Rogiński               Z   1   N           N           
+       201-00459    PROJECTOR Rafał Wlazeł                    Z   1   N           N           
+       201-00460    Solid Security                            Z   1   N           N           
+       201-00461    SEKRO NIERUCHOMOŚCI                       Z   1   N           N           
+       201-00462    SBM PRASA BLOK                            Z   1   N           N           
+       201-00463    CLEAN SERVICE                             Z   1   N           N           
+       201-00464    DELTA TERM                                Z   1   N           N           
+       201-00465    INSTALATORSTWO SANITARNE I CO-WĄSOWSKI K  Z   1   N           N           
+       201-00466    KANCELARIA ADWOKACKA ULJASZ TOMASZ        Z   1   N           N           
+       201-00467    USŁUGI BUD. I ELEKTRYCZNE - BENTLEJEWSKI  Z   1   N           N           
+       201-00468    Wąsowski Adam - Zak.Inst.sanit.i Robót B  Z   1   N           N           
+       201-00469    Sowa Zbigniew-Usługi Budowlano-Wykończen  Z   1   N           N           
+       201-00470    Przybysz Sławomir                         Z   1   N           N           
+       201-00471    QUICK&PROFESSIONAL S.C.                   Z   1   N           N           
+       201-00472    Składnica nr 17                           Z   1   N           N           
+       201-00473    PAWEL P.H.U. Paweł Pawłowski              Z   1   N           N           
+       201-00474    LESPOL                                    Z   1   N           N           
+       201-00475    PEOPLE INNOVATION POLSKA SP. Z O.O.       Z   1   N           N           
+       201-00476    Krzysztof Zgudka Usługi Ogrodnicze        Z   1   N           N           
+       201-00477    KRYST-BUD Jacek Karaś                     Z   1   N           N           
+       201-00478    Instalatorstwo Elektryczne-K. Kocel       Z   1   N           N           
+       201-00479    AKSON STUDIO                              Z   1   N           N           
+       201-00480    AL TECH    Piotr Typiński                 Z   1   N           N           
+       201-00481    Deltavideo  Paweł Moruń                   Z   1   N           N           
+       201-00482    ESLA Pracownia Drewna i Stali             Z   1   N           N           
+       201-00483    ROWIS - MACIEJ ROWIŃSKI                   Z   1   N           N           
+       201-00484    KOMAX Jacek Kosiorek                      Z   1   N           N           
+       201-00485    OXIDE                                     Z   1   N           N           
+       201-00486    SANTERM - EDYTA LANGNER                   Z   1   N           N           
+       201-00487    CRAWFORD POLSKA SPÓŁKA Z O.O.             Z   1   N           N           
+       201-00488    DACH BUD - Artur Bujniak                  Z   1   N           N           
+       201-00489    JW ßLUSARSTWO - Jerzy Wojciechowski       Z   1   N           N           
+       201-00490    Geodezja Wyc. Audyt Doradz.-Augustynowic  Z   1   N           N           
+       201-00491    Urząd Skarbowy Warszawa Praga Północ      Z   1   N           N           
+       201-00492    ACHET BUD                                 Z   1   N           N           
+       201-00493    AKAN Anna Kania                           Z   1   N           N           
+     ----------------------------------------------------------- JOLANTA GONTAREK----- ----Strona 9------------------------------- ------------------------------ 
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       Symbol       Nazwa                                    RO  TS   Bil Wn  Ma  RW   +   -   
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       201-00494    Kancelaria Radcy Prawnego-Terlecka Małgo  Z   1   N           N           
+       201-00495    STALMET                                   Z   1   N           N           
+       201-00496    TUZ Towarz. Ubezp. Wzajemnych             Z   1   N           N           
+       201-00497    FIRMA DACH BUD                            Z   1   N           N           
+       201-00498    MM SERWIS Marcin Mroczek                  Z   1   N           N           
+       201-00499    Kancelaria Adwokacka - Filipkowska A.     Z   1   N           N           
+       201-00500    ELWOJ Tomasz Wojnar                       Z   1   N           N           
+       201-00501    EWGON S.C.                                Z   1   N           N           
+       201-00502    CHMIELEWSKI USŁ. KONSER. DŹWIGÓW          Z   1   N           N           
+       201-00503    T-MOBILE POLSKA S.A.                      Z   1   N           N           
+       201-00504    KANCELARIA RADCY PRAWNEGO-BAGIŃSKI        Z   1   N           N           
+       201-00505    DEK - ZAK.USŁ.HAND. MAREK MAJ             Z   1   N           N           
+       201-00506    UNIVERSITAS - STUD.SPÓŁDZIELNIA PRACY     Z   1   N           N           
+       201-00507    PRO-CLEAN BOBER DANIEL                    Z   1   N           N           
+       201-00508    USŁUGI TRANSPORTOWE ŚREDNICKI DARIUSZ     Z   1   N           N           
+       201-00509    CLEANEX s.c. M.Bogucka, D.Księżopolska    Z   1   N           N           
+       201-00510    GLOB-SAN SEBASTIAN KISIEL                 Z   1   N           N           
+       201-00511    KAB-ART   Artur Dzieciątko                Z   1   N           N           
+       201-00512    Usługi Budowlane - Janusz Wujciów         Z   1   N           N           
+       201-00513    ITA JULITA STACHEWICZ                     Z   1   N           N           
+       201-00514    EUROTECH ANNA PIWOŃSKA-PRZYDATEK          Z   1   N           N           
+       201-00515    DROG-ZNAK   SABAT SEBASTIAN               Z   1   N           N           
+       201-00516    INSTALATORSTWO-ŚLIWIŃSKI TADEUSZ          Z   1   N           N           
+       201-00517    ARES Sławomir Madziar                     Z   1   N           N           
+       201-00518    ELEKTRO-INSTAL Gruszczyński Jan           Z   1   N           N           
+       201-00519    KAR-BUD Karol Chraniuk                    Z   1   N           N           
+       201-00520    IZI - Firma Usł.-Handl. Bartłomiej Ledwi  Z   1   N           N           
+       201-00521    Stanisław Piątek Usługi Remontowo-Budowl  Z   1   N           N           
+       201-00522    Zakład Pielęgn. Drzewost.-Jerzy Chałupka  Z   1   N           N           
+       201-00523    Mariusz Greliak                           Z   1   N           N           
+       201-00524    BUDAR Dariusz Małowiecki                  Z   1   N           N           
+       201-00525    Projektowanie i Nadzory - A. Borzym       Z   1   N           N           
+       201-00526    KIM Sp. z o.o.                            Z   1   N           N           
+       201-00527    VESPA - Firma Usługowa                    Z   1   N           N           
+       201-00528    Wspólnota Mieszkaniowa GOTARDA 10         Z   1   N           N           
+       201-00529    ARKADIA                                   Z   1   N           N           
+       201-00530    WSPÓLNOTA MIESZKANIOWA GRAŻYNY 12         Z   1   N           N           
+       201-00531    PHU AN-SANIT   ANDRZEJ PĘKAŁA             Z   1   N           N           
+       201-00532    ŚLIWIŃSKI TADEUSZ-INSTALATORSTWO          Z   1   N           N           
+       201-00533    SYLBUD S.C. ROBOTY OGÓLNOBUDOWLANE        Z   1   N           N           
+       201-00534    TITAN GROUP SP. Z O.O.                    Z   1   N           N           
+       201-00535    SAL-WOD P.H.U. s.c.                       Z   1   N           N           
+       201-00536    POTENCJAŁ - Mariusz Drab                  Z   1   N           N           
+       201-00537    ELEKTRO-BUD Henryk Kuźnicki               Z   1   N           N           
+       201-00538    Kancelaria Radcy Prawnego-Ewa Hofman      Z   1   N           N           
+       201-00539    Usługi Ogólnobudowlane Marek Suchenek     Z   1   N           N           
+       201-00540    LATERIS - Joanna Jaroszewicz              Z   1   N           N           
+       201-00541    Usłuugi Rem.-Bud. - Józef Wielgus         Z   1   N           N           
+       201-00542    Spółdzielnia Pracy Usług Kominiarskich    Z   1   N           N           
+       201-00543    Aspiracje Ogrodowe Jan Szymański          Z   1   N           N           
+       201-00544    ZUW REMARK M. Kołodziejczyk               Z   1   N           N           
+       201-00545    Zakład Usług Kominiarskich Janusz Mitas   Z   1   N           N           
+       201-00546    STANKAN Stanisław Frąckiewicz             Z   1   N           N           
+       201-00547    METAL-KAR LESZEK KARCZEWSKI               Z   1   N           N           
+       201-00548    Haerson Bartosz Wiśniewski                Z   1   N           N           
+       201-00549    SEBCON Sebastian Filuba                   Z   1   N           N           
+       201-00550    MASTERKRAFT Magdalena Ciupa               Z   1   N           N           
+     ----------------------------------------------------------- JOLANTA GONTAREK----- ----Strona 10------------------------------ ----------------------------- 
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       Symbol       Nazwa                                    RO  TS   Bil Wn  Ma  RW   +   -   
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       201-00551    UNI-KAN SERWIS                            Z   1   N           N           
+       201-00552    TSW-BUD Truszczyński W., Truszczyński S.  Z   1   N           N           
+       201-00553    TOMI Katarzyna Flont                      Z   1   N           N           
+       201-00554    EUROTECH APP Sp z o.o.                    Z   1   N           N           
+       201-00555    Kuczyński Maciej-naprawa i konser. dźwig  Z   1   N           N           
+       201-00556    Powiatowy Inspektorat Nadzoru Budowlaneg  Z   1   N           N           
+       201-00557    PRB REAL Markiewicz Jacek                 Z   1   N           N           
+       201-00558    BIPROJEKT Budziak Paweł                   Z   1   N           N           
+       201-00559    TURNIP Rzepakowski Leszek                 Z   1   N           N           
+       201-00560    Firma Szymkowiak - Damina Szymkowiak      Z   1   N           N           
+       201-00561    MAXFILM                                   Z   1   N           N           
+       201-00562    Świercz Tadeusz                           Z   1   N           N           
+       201-00563    ARTPIO Usługi Projektowe i Wykonawstwo    Z   1   N           N           
+       201-00564    WM Kolberga 8                             Z   1   N           N           
+       201-00565    WM Curie 10                               Z   1   N           N           
+       201-00566    WM Curie 8                                Z   1   N           N           
+       201-00567    WM Curie 6                                Z   1   N           N           
+       201-00568    WM Curie 12                               Z   1   N           N           
+       201-00569    WM Curie 4                                Z   1   N           N           
+       201-00570    WM Kolberga 10                            Z   1   N           N           
+       201-00571    Marcinkowski Bogusław                     Z   1   N           N           
+       201-00572    AVILA Maria Ołdakowska                    Z   1   N           N           
+       201-00573    MAROBEX                                   Z   1   N           N           
+       201-00574    HOSTICA Pecio Mariusz                     Z   1   N           N           
+       201-00575    ELEKTROINSTALACJE Sobczak Tomasz          Z   1   N           N           
+       201-00576    ZAKŁAD REM-BUD. Grzeszczak Ludwik         Z   1   N           N           
+       201-00577    IDEA SDT Dziedzicki Paweł                 Z   1   N           N           
+       201-00578    WILO Polska Spółka z o.o.                 Z   1   N           N           
+       201-00579    Techmax Wojciech Podraszka                Z   1   N           N           
+       201-00580    CRISTAL MAX Głowacka Grażyna              Z   1   N           N           
+       201-00581    INSTAL-DOM WITKOWSKI PIOTR                Z   1   N           N           
+       201-00582    TOM-INSTAL Kucharek Tomasz                Z   1   N           N           
+       201-00583    AMPLUS                                    Z   1   N           N           
+       201-00584    SECURITY HOME                             Z   1   N           N           
+       201-00585    ELEKTROINSTALATORSTWO-MURANOWICZ RYSZARD  Z   1   N           N           
+       201-00586    Wspólnota Mieszkaniowa Tagore 1           Z   1   N           N           
+       201-00587    PPB KREST Krzysztof Zakrzewski            Z   1   N           N           
+       201-00588    CSN ZBIGNIEW KOMISARCZYK                  Z   1   N           N           
+       201-00589    PUH EL-TERM SC M.R. ŁUNIEWSCY             Z   1   N           N           
+       201-00590    Wspólnota Mieszkaniowa Gandhiego 19       Z   1   N           N           
+       201-00591    OGRODEX KRZYSZTOF MAŁŻ                    Z   1   N           N           
+       201-00592    DOM LUX                                   Z   1   N           N           
+       201-00593    EMPORO SP. Z O.O.                         Z   1   N           N           
+       201-00594    NETIA S.A.                                Z   1   N           N           
+       201-00595    Artbor Sp. z o.o.                         Z   1   N           N           
+       201-00596    PTWS Przemysław Wieczorek                 Z   1   N           N           
+       201-00597    EKSPERT KLUCZ-BUT SC                      Z   1   N           N           
+       201-00598    PUH "RYBKOWSKI"                           Z   1   N           N           
+       201-00599    Vittoria                                  Z   1   N           N           
+       201-00600    GardenEZ                                  Z   1   N           N           
+       201-00601    MASTER SERVICE                            Z   1   N           N           
+       201-00602    TU i R Allianz Polska SA                  Z   1   N           N           
+       201-00603    BOTI C.E.L                                Z   1   N           N           
+       201-00604    Go! Busters Polska sc                     Z   1   N           N           
+       201-00605    Kone Sp. z o.o.                           Z   1   N           N           
+       201-00606    innogy Stoen                              Z   1   N           N           
+       201-00607    Bmeters Polska Sp. z o.o.                 Z   1   N           N           
+     ----------------------------------------------------------- JOLANTA GONTAREK----- ----Strona 11------------------------------ ----------------------------- 
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       Symbol       Nazwa                                    RO  TS   Bil Wn  Ma  RW   +   -   
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       201-00608    MIDEM POLSKA Sp. z o.o.                   Z   1   N           N           
+       201-00609    Eskalo                                    Z   1   N           N           
+       201-00610    taniomeblujemy.pl                         Z   1   N           N           
+       201-00611    Firma Usługowo-Budowlana Wojciech Rolek   Z   1   N           N           
+       201-00612    Bramy dla Ciebie Piotr Rutkowski          Z   1   N           N           
+       201-00613    Usługi Remontowo Budowlane Brysk          Z   1   N           N           
+       201-00614    Wspólnota Mieszkaniowa Orzycka 24         Z   1   N           N           
+       201-00615    Jolanta Figurska-Kanar ZRO                Z   1   N           N           
+       201-00616    Wspólnota Mieszkaniowa Gruszczyńskiego 1  Z   1   N           N           
+       201-00617    Grodno SA                                 Z   1   N           N           
+       201-00618    Orto Marek Matuszelański                  Z   1   N           N           
+       201-00619    Piotr Chociaj                             Z   1   N           N           
+       201-00620    ZAP&GO Sp. z o.o.                         Z   1   N           N           
+       201-00621    Sterbram                                  Z   1   N           N           
+       201-00622    Konserwator Łój Andrzej                   Z   1   N           N           
+       201-00623    Usługi Og.-Bud.  Wod.-Kan. Co Gaz Nowako  Z   1   N           N           
+       201-00624    Usługi ogólno-Budowlane Dariusz Tymiński  Z   1   N           N           
+       201-00625    KOR-POŻ                                   Z   1   N           N           
+       201-00626    Madis Mogdalena Gos                       Z   1   N           N           
+       201-00627    KOB-24                                    Z   1   N           N           
+       201-00628    KTK Brukarstwo Ogrodnictwo Kwiatkowski    Z   1   N           N           
+       201-00629    Padom Skolimowska                         Z   1   N           N           
+       201-00630    Apator Powogaz SA                         Z   1   N           N           
+       201-00631    Miltom Sp. z o.o.                         Z   1   N           N           
+       201-00632    DTS Transport Sp. z o.o.                  Z   1   N           N           
+       201-00633    Agata Spółka Akcyjna                      Z   1   N           N           
+       201-00634    UZŚ  Joanna Dynarzewska-Gronek            Z   1   N           N           
+       201-00635    Zakład Piel. Drzew. Piotr Chałupka        Z   1   N           N           
+       201-00636    FRB Remax Ryszard Walczykowski            Z   1   N           N           
+       201-00637    Kancelaria Adwokacka Świątkiewicz-Pałosz  Z   1   N           N           
+       201-00638    TGXTECH Tomasz Ćwikła                     Z   1   N           N           
+       201-00639    PIAS-KAN SP. Z O.O.                       Z   1   N           N           
+       201-00640    Domus A. Chromik i Wspólnicy Sp. J.       Z   1   N           N           
+       201-00641    WANDARTE Wanda Zawistowska                Z   1   N           N           
+       201-00642    Kancelaria Notarialna                     Z   1   N           N           
+       201-00643    Instal-Plast sc                           Z   1   N           N           
+       201-00644    POLER GRAND                               Z   1   N           N           
+       201-00645    ANCON                                     Z   1   N           N           
+       201-00646    GAZEX Sp. j                               Z   1   N           N           
+       201-00647    KROSSTECH Sp. z o.o. Sp. k.               Z   1   N           N           
+       201-00648    KOZAK Sp. z o.o.                          Z   1   N           N           
+       201-00649    Meblobranie.pl Sp. z o.o.                 Z   1   N           N           
+       201-00650    Usługi Żaneta Winnicka                    Z   1   N           N           
+       201-00651    ARTBAU AUTOMATIC Sp. z o.o.               Z   1   N           N           
+       201-00652    Bud-Serwis                                Z   1   N           N           
+       201-00653    J.R-Garden                                Z   1   N           N           
+       201-00654    HIGIENA SERWIS SP. Z O.O.                 Z   1   N           N           
+       201-00655    MYJEK Sp. z o.o.                          Z   1   N           N           
+       201-00656    PHU DAX                                   Z   1   N           N           
+       201-00657    MARK-BUD                                  Z   1   N           N           
+       201-00658    MALEC                                     Z   1   N           N           
+       201-00659    BUKAR                                     Z   1   N           N           
+       201-00660    ZRB OPALACH                               Z   1   N           N           
+       201-00661    PERFEKT Sp. z o.o.                        Z   1   N           N           
+       201-00662    INTERPLAST S.C.                           Z   1   N           N           
+       201-00663    Mony-I Marek Monardt                      Z   1   N           N           
+       201-00664    Wena                                      Z   1   N           N           
+     ----------------------------------------------------------- JOLANTA GONTAREK----- ----Strona 12------------------------------ ----------------------------- 
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       Symbol       Nazwa                                    RO  TS   Bil Wn  Ma  RW   +   -   
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       201-00665    Moje Bambino                              Z   1   N           N           
+       201-00666    Kancelaria Radcy Prawnego Łukasz Brzozow  Z   1   N           N           
+       201-00667    AURORA                                    Z   1   N           N           
+       201-00668    IKEA                                      Z   1   N           N           
+       201-00669    KRZYŚ-STAL                                Z   1   N           N           
+       201-00670    FalKat                                    Z   1   N           N           
+       201-00671    Evergrip                                  Z   1   N           N           
+       201-00672    FIRE POL                                  Z   1   N           N           
+       201-00673    DAGVA-BIS                                 Z   1   N           N           
+       201-00674    FIEDORCZUK                                Z   1   N           N           
+       201-00675    OGRÓD I LAS                               Z   1   N           N           
+       201-00676    KREMENAROS                                Z   1   N           N           
+       201-00677    MARKOPOL Sp. z o.o.                       Z   1   N           N           
+       201-00678    ADIK                                      Z   1   N           N           
+       201-00679    EMSKIEGO                                  Z   1   N           N           
+       201-00680    myjki.com                                 Z   1   N           N           
+       201-00681    J&J Okucia Sp. cywilna                    Z   1   N           N           
+       201-00682    TAKDOM                                    Z   1   N           N           
+       201-00683    FHU HALINEX                               Z   1   N           N           
+       201-00684    Rejonowa Center                           Z   1   N           N           
+       201-00685    Royal                                     Z   1   N           N           
+       201-00686    GODLEWSKI                                 Z   1   N           N           
+       201-00687    BUDIKEM                                   Z   1   N           N           
+       201-00688    SKOWRONEK                                 Z   1   N           N           
+       201-00689    MAR-STAL                                  Z   1   N           N           
+       201-00690    METRONA POLSKA                            Z   1   N           N           
+       201-00691    TREWIR                                    Z   1   N           N           
+       201-00692    POCZTA POLSKA SA                          Z   1   N           N           
+       201-00693    ELEKARD                                   Z   1   N           N           
+       201-00694    BUDOWN. INWEST. REALIZACJE                Z   1   N           N           
+       201-00695    PROJ-PRZEM                                Z   1   N           N           
+       201-00696    ORIOLUS S.C.                              Z   1   N           N           
+       201-00697    Rzońca                                    Z   1   N           N           
+       201-00698    Ekstra                                    Z   1   N           N           
+       201-00699    OMRO                                      Z   1   N           N           
+       201-00700    TURSKA                                    Z   1   N           N           
+       201-00701    HYDRO-INSTAL                              Z   1   N           N           
+       201-00702    SHIRO LIFT                                Z   1   N           N           
+       201-00703    AQUA MASTER                               Z   1   N           N           
+       201-00704    GREKOS                                    Z   1   N           N           
+       201-00705    VEOX                                      Z   1   N           N           
+       201-00706    ZRB ADAMCZYK                              Z   1   N           N           
+       201-00707    MARA-REM                                  Z   1   N           N           
+       201-00708    ŚLIZEX                                    Z   1   N           N           
+       201-00709    IDEUS Sp. z o.o.                          Z   1   N           N           
+       201-00710    Pocztowe Towarzystwo Ubezpieczeń Wzajemn  Z   1   N           N           
+       201-00711    BUD-REM                                   Z   1   N           N           
+       201-00712    KABIS                                     Z   1   N           N           
+       201-00713    D-3 Janusz Stańczyk                       Z   1   N           N           
+       201-00714    AnFaktoria                                Z   1   N           N           
+       201-00715    ALICJA                                    Z   1   N           N           
+       201-00716    USSURI                                    Z   1   N           N           
+       201-00717    INSEKT-PERFECT MARIUSZ SKÓRKA             Z   1   N           N           
+       201-00718    JRW-INVEST                                Z   1   N           N           
+       201-00719    GAJ TECH                                  Z   1   N           N           
+       201-00720    SMALEC S.C.                               Z   1   N           N           
+       201-00721    MAXIE                                     Z   1   N           N           
+     ----------------------------------------------------------- JOLANTA GONTAREK----- ----Strona 13------------------------------ ----------------------------- 
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       Symbol       Nazwa                                    RO  TS   Bil Wn  Ma  RW   +   -   
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       201-00722    EXCELSIS                                  Z   1   N           N           
+       201-00723    DĄB-POL                                   Z   1   N           N           
+       201-00724    SUPRAPRINT                                Z   1   N           N           
+       201-00725    PRO-PLAST                                 Z   1   N           N           
+       201-00726    ELEKTRYK                                  Z   1   N           N           
+       201-00727    LEVEL UP LIFT                             Z   1   N           N           
+       201-00728    TERG SA                                   Z   1   N           N           
+       201-00729    BGK                                       Z   1   N           N           
+       201-00730    HMC  Internet Solutions                   Z   1   N           N           
+       201-00731    Stefan Kowalski                           Z   1   N           N           
+       201-00732    Plus-Minus                                Z   1   N           N           
+       201-00733    Ozebud Sp. z o.o.                         Z   1   N           N           
+       201-00734    CHEMIA SA                                 Z   1   N           N           
+       201-00735    Urbaniak                                  Z   1   N           N           
+       201-00736    JFK PARTNER                               Z   1   N           N           
+       201-00737    JUSTICAR                                  Z   1   N           N           
+       201-00738    AKORD Sp. jawna                           Z   1   N           N           
+       201-00739    VIRGO                                     Z   1   N           N           
+       201-00740    TOP-DESIGN                                Z   1   N           N           
+       201-00741    HIGROKLIMA                                Z   1   N           N           
+       201-00742    MILTOM                                    Z   1   N           N           
+       201-00743    Medico Hemp                               Z   1   N           N           
+       201-00744    AGMIS                                     Z   1   N           N           
+       201-00745    Wojewódzki Sąd Administracyjny            Z   1   N           N           
+       201-00746    EKSPERT-POŻ BOŻENA WŁODARSKA              Z   1   N           N           
+       201-00747    Ivel Electronics                          Z   1   N           N           
+       201-00748    Borowska                                  Z   1   N           N           
+       201-00749    DEZAR                                     Z   1   N           N           
+       201-00750    TECHMAX II SP. Z O.O.                     Z   1   N           N           
+       201-00751    Ekon Studio                               Z   1   N           N           
+       201-00752    Nestor-Spec-Syn                           Z   1   N           N           
+       201-00753    ISTA                                      Z   1   N           N           
+       201-00754    Ampol                                     Z   1   N           N           
+       201-00755    RAD BUD                                   Z   1   N           N           
+       201-00756    C&G                                       Z   1   N           N           
+       201-00757    G&A Sp. z o.o.                            Z   1   N           N           
+       201-00758    TRUST                                     Z   1   N           N           
+       201-00759    TFA                                       Z   1   N           N           
+       201-00760    COALA                                     Z   1   N           N           
+       201-00761    Kastell                                   Z   1   N           N           
+       201-00762    QUANTUM DISPLAY                           Z   1   N           N           
+       201-00763    Sklep Drogowy Piotr Zalewski              Z   1   N           N           
+       201-00764    BDT SERVICE                               Z   1   N           N           
+       201-00765    EURO-NET Sp. z o.o.                       Z   1   N           N           
+       201-00766    Wide Investments                          Z   1   N           N           
+       201-00767    MK MARTA KUKLEWICZ                        Z   1   N           N           
+       201-00768    CodeFarm                                  Z   1   N           N           
+       201-00769    HYDROSTEL                                 Z   1   N           N           
+       201-00770    Zespół Zarządców Nieruchomości Sp. z o.o  Z   1   N           N           
+       201-00771    X-KOM Sp. z o.o.                          Z   1   N           N           
+       201-00772    Elektromaniacy .pl Sp. z o.o.             Z   1   N           N           
+       201-00773    TFA Andrzej Chojnowski                    Z   1   N           N           
+       201-00774    SZB Mariusz Knap                          Z   1   N           N           
+       201-00775    PARTNER BIS                               Z   1   N           N           
+       201-00776    RYGIEL                                    Z   1   N           N           
+       201-00777    MARBUD                                    Z   1   N           N           
+       201-00778    PRB Polkowski                             Z   1   N           N           
+     ----------------------------------------------------------- JOLANTA GONTAREK----- ----Strona 14------------------------------ ----------------------------- 
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       Symbol       Nazwa                                    RO  TS   Bil Wn  Ma  RW   +   -   
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       201-00779    DISS PARTNER                              Z   1   N           N           
+       201-00780    Donoci s.r.o.                             Z   1   N           N           
+       201-00781    GRAPA SYSTEMS                             Z   1   N           N           
+       201-00782    Wspólnota Mieszkaniowa Śniardwy 5         Z   1   N           N           
+       201-00783    SMALLBUD                                  Z   1   N           N           
+       201-00784    PPUH Artur Sikora                         Z   1   N           N           
+       201-00785    PLATFORMA CZYSTOŚCI S.C.                  Z   1   N           N           
+       201-00786    POSTO Sp. z o.o.                          Z   1   N           N           
+       201-00787    Sarapuk                                   Z   1   N           N           
+       201-00788    BOREX POGOTOWIE KANALIZACYJNE             Z   1   N           N           
+       201-00789    TOP WORK                                  Z   1   N           N           
+       201-00790    PREMIUMLUX M.KLIZA                        Z   1   N           N           
+       201-00792    AGROKOMPLEKS ZALEWSCY                     Z   1   N           N           
+       201-00793    UBUNTU                                    Z   1   N           N           
+       201-00794    ARCON                                     Z   1   N           N           
+       201-00795    SYBEKO  CIECHAŃSKI                        Z   1   N           N           
+       201-00796    REAL JACEK MARKIEWICZ                     Z   1   N           N           
+       201-00797    JACOPIC JAKUB IGNACZEWSKI                 Z   1   N           N           
+       201-00798    Kancelaria Radcy Prawnego Anna Dużyńska-  Z   1   N           N           
+       201-00799    USŁUGI PODNOŚNIKIEM MONTAŻOWYM KOWALSKI   Z   1   N           N           
+       201-00800    ARTIM SP. Z O.O.                          Z   1   N           N           
+       201-00801    KRZYSZTOF WITECKI FONIA                   Z   1   N           N           
+       201-00802    BIG-SACK SOKOŁOWSCY SPÓŁKA JAWNA          Z   1   N           N           
+       201-00803    FOTON TECHNIK SP Z O.O.                   Z   1   N           N           
+       201-00804    KOMORNIK SĄDOWY ŁUKASZ WARCHOŁ            Z   1   N           N           
+       201-00805    FELIS JANUSZ GIERUSZ                      Z   1   N           N           
+       201-00806    PHU JEMRO                                 Z   1   N           N           
+       201-00807    DORYMENA - MATEUSZ CUMAN                  Z   1   N           N           
+       201-00808    IMM CLEANING IGOR MORYTO                  Z   1   N           N           
+       201-00809    ANDRZEJ KACZYŃSKI TRANSPORT WYKOPY ROBOT  Z   1   N           N           
+       201-00810    INSTALATORSTWO ELEKTRYCZNE AS             Z   1   N           N           
+       201-00811    IAMELECTRIC SP.ZO.O.                      Z   1   N           N           
+       201-00812    DEZYNSKECJA DERATYZACJA MIROSŁAW PIĘTA    Z   1   N           N           
+       201-00813    USŁUGI TRANSPORTOWE ANDRZEJ MROCZKOWSKI   Z   1   N           N           
+       201-00814    AL TECH JOANNA ZYŚK                       Z   1   N           N           
+       201-00815    UTB PIELĘGNACJA ZIELENI ANDRZEJ GOTOWIEC  Z   1   N           N           
+       201-00816    HURT. ART. ELEK. ELEKTRA J. BIENIEK M. B  Z   1   N           N           
+       201-00817    HORTICO S.A.                              Z   1   N           N           
+       201-00818    GEOPRAKTYK MGR INŻ. ANNA TURCZYN          Z   1   N           N           
+       201-00819    METALKAS SPÓŁKA AKCYJNA                   Z   1   N           N           
+       201-00820    CAMVOLT MARIUSZ MIŚKIEWICZ                Z   1   N           N           
+       201-00821    USŁUGI BUDOWLANO-PORZĄDKOWE ANMAR         Z   1   N           N           
+       201-00822    MY-SOFT SP. Z O.O.                        Z   1   N           N           
+       201-00823    KANCELARIA RADCY PRAWNEGO MAŁGORZATA ROL  Z   1   N           N           
+       201-00824    USŁ. ELEKT.-CHŁODNICZE ELEKTRO-KLIM       Z   1   N           N           
+       201-00825    INSTALATOR SŁAWOMIR CIZIO                 Z   1   N           N           
+       201-00826    ARPEX                                     Z   1   N           N           
+       201-00827    LINAREM CISOWSKI SP KOM-AKCYJNA           Z   1   N           N           
+       201-00828    FIRMA REMONTOWA HERK                      Z   1   N           N           
+       201-00829    WELCOME, ADAM TOMASZEWSKI                 Z   1   N           N           
+       201-00830    FIRMA USŁ-HAND INSEKT MARIUSZ SZELOCH     Z   1   N           N           
+       201-00831    AGROSIMEX SP. Z O.O.                      Z   1   N           N           
+       201-00832    FHB ELEKTRONARZĘDZIA PIOTR BIEŃKOWSKI     Z   1   N           N           
+       201-00833    ARTYKUŁY PROPAGANDOWE NIEWIADOMSKA        Z   1   N           N           
+       201-00834    PRIMARIO GRANDE SP. ZO.O.                 Z   1   N           N           
+       201-00835    USŁUGI REM-BUD KRYSTIAN WOJTCZAK          Z   1   N           N           
+       201-00836    MASTERCLASS MICHAŁ CIECHOMSKI             Z   1   N           N           
+     ----------------------------------------------------------- JOLANTA GONTAREK----- ----Strona 15------------------------------ ----------------------------- 
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       Symbol       Nazwa                                    RO  TS   Bil Wn  Ma  RW   +   -   
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       201-00837    BRUNATA ZENNER SP. ZO.O.                  Z   1   N           N           
+       201-00838    INSEKT MARIUSZ SZELOCH                    Z   1   N           N           
+       201-00839    ZOTO ROBERT MAGDZIARZ                     Z   1   N           N           
+       201-00840    PROEM SERVICE ANDRZEJ MOŃKO               Z   1   N           N           
+       201-00841    KELTROM KRZYSZTOF MAŁECKI                 Z   1   N           N           
+       201-00842    MINOL ZENNER SP.ZO.O.                     Z   1   N           N           
+       201-00843    RAMO POLSKA SP. ZO.O.                     Z   1   N           N           
+       201-00845    PPH JUKA RAFAŁ ORZECHOWSKI                Z   1   N           N           
+       201-00846    URZĄD M.ST. W-WY DZIELNICA WOLA           Z   1   N           N           
+       201-00847    KOMORNIK SĄDOWY MACIEJ SIMBIEROWICZ       Z   1   N           N           
+       201-00848    BIURO OBSŁUGI INWESTYCJI MICHAŁ MACHNIKO  Z   1   N           N           
+       201-00849    URZĄD M.ST. W-WY  WOLA - ODPADY           Z   1   N           N           
+       201-00850    DDD AUDIT MICHAŁ ŻAK                      Z   1   N           N           
+       201-00851    SKY-SOFT POLSKA SP. Z O.O.                Z   1   N           N           
+       201-00852    GOC BUD ROBERT GOCEL                      Z   1   N           N           
+       201-00853    AUTARKES BARTŁOMIEJ ŚWIERCZYŃSKI          Z   1   N           N           
+       201-00854    MARBUL BUŁKA MARIUSZ                      Z   1   N           N           
+       201-00855    BLACHARSTWO DEKARSTWO HENRYK WOLSKI       Z   1   N           N           
+       201-00856    HYDRO-DAN MARTYNA ZASTAWNA                Z   1   N           N           
+       201-00857    IREN-DOL IRENA DOLECKA                    Z   1   N           N           
+       201-00858    STRAMA PANELS SP. Z O.O.                  Z   1   N           N           
+       201-00859    IREX IRENEUSZ BACZEWSKI                   Z   1   N           N           
+       201-00860    ADAM KOŁOTA                               Z   1   N           N           
+       201-00861    CHEMIA-RZESZÓW PRZED HANDLU CHEMIKALIAMI  Z   1   N           N           
+       201-00862    MARKETER HOUSE SP. ZOO                    Z   1   N           N           
+       201-00863    KANCELARIA ADWOKACKA K. WOŹNICA-KUBAŃSKA  Z   1   N           N           
+       201-00864    ALTA HURTOWNIA AGD SP.J A.W. GOŁ A. ROSŁ  Z   1   N           N           
+       201-00865    INSTALATOR PIOTR ZĄBIK                    Z   1   N           N           
+       201-00866    USŁUGI PORZĄDKOWE KAMIL STULEBIAK         Z   1   N           N           
+       201-00867    WSPÓLNOTA MIESZKANIOWA JADŹWINGÓW 5/7     Z   1   N           N           
+       201-00868    USŁUGI PIOTR STOLARSKI                    Z   1   N           N           
+       201-00869    PROWIL SP. Z O.O.                         Z   1   N           N           
+       201-00870    PRZEDSIĘBIORSWTO HANDLOWE YOGI            Z   1   N           N           
+       201-00871    LOGISOFT SZYMON SAWICKI                   Z   1   N           N           
+       201-00872    FIREFLOW ŁUKASZ DURO                      Z   1   N           N           
+       201-00873    MEDMESS KROPACZEWSKI SPÓŁKA KOMANDYTOWA   Z   1   N           N           
+       201-00874    PHU SILVER BARTŁOMIEJ SREBRO              Z   1   N           N           
+       201-00875    EX-ZONE SZYMON JEZIORSKI                  Z   1   N           N           
+       201-00876    EVERCCLIN EWA KACHNIARZ                   Z   1   N           N           
+       201-00877    SPRZĄTANIE RYSZARD WRZESIEŃ               Z   1   N           N           
+       201-00878    DDD-HIGIENA BEATA TARAPATA                Z   1   N           N           
+       201-00879    BUD-MAX PIOTR MAKSYM                      Z   1   N           N           
+       201-00880    ELEKTRO POWER SŁAWOMIR KORNACKI           Z   1   N           N           
+       201-00881    IWA USŁUGI BUDOWLANO-INWESTYCYJNE         Z   1   N           N           
+       201-00882    HYDRO-AGA-BUD ADAM CHROMIŃSKI             Z   1   N           N           
+       201-00883    HURTOWNIA CERTUS                          Z   1   N           N           
+       201-00884    LEMAT SP. Z O.O.                          Z   1   N           N           
+       201-00885    GREENIC SP. ZOO                           Z   1   N           N           
+       201-00886    EKOPROJEKT WARSZAWA SPZOO                 Z   1   N           N           
+       201-00887    CRISOMA S.C.                              Z   1   N           N           
+       201-00888    ŚLUS. USŁUGI REM. BUD. WIESŁAW GAJEWSKI   Z   1   N           N           
+       201-00889    CLINSERWIS S.C H. LECKA&B. NOREMBERG      Z   1   N           N           
+       201-00890    KA&MA PERFECT USŁUGI SPRZĄTAJĄCE          Z   1   N           N           
+       201-00891    MAR-GAZ WŁODZIMIERZ JÓŹWIAK               Z   1   N           N           
+       201-00892    SAWMUR SP.ZOO                             Z   1   N           N           
+       201-00893    WITKOWSKI SP.ZOO                          Z   1   N           N           
+       201-00894    ZS DDD WOJCIECH GOŁAWSKI                  Z   1   N           N           
+     ----------------------------------------------------------- JOLANTA GONTAREK----- ----Strona 16------------------------------ ----------------------------- 
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       Symbol       Nazwa                                    RO  TS   Bil Wn  Ma  RW   +   -   
+     ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+       201-00895    USŁUGI KAMIL KORPALSKI                    Z   1   N           N           
+       201-00896    USŁUGI BUDOWLANE PIOTR GĘBSKI             Z   1   N           N           
+       201-00897    FOTOENERGIA.PL SZCZEPAN NIKLASZ           Z   1   N           N           
+       201-00898    PWP PRACOWNIA REKLAMY WITOLD SIWEK        Z   1   N           N           
+       201-00899    FIRMA USŁUGOWA MATEUSZ RYCHTA             Z   1   N           N           
+       201-00900    BP TECHEM SP. ZOO                         Z   1   N           N           
+       201-00901    PHU PROFEX BURASIEWICZ WŁODZIMIERZ        Z   1   N           N           
+       201-00902    TERMO-SERWIS JAN MIESZCZAK                Z   1   N           N           
+       201-00903    TERRANEO, KAMIL SZCZEPANIAK               Z   1   N           N           
+       201-00904    MERIDA SP. ZOO                            Z   1   N           N           
+       201-00905    FHU KAMCHEMIA                             Z   1   N           N           
+       201-00906    AGROMARKET MAREK ZABIELSKI                Z   1   N           N           
+       201-00907    K&K ŁUKASZ KLOC                           Z   1   N           N           
+       201-00908    PHU BARTEK BARTŁOMIEJ KUREK               Z   1   N           N           
+       201-00909    CLEANER-SAGANEK JACEK                     Z   1   N           N           
+       201-00910    FHU RAGEN GRZEGORZ GAWRON                 Z   1   N           N           
+       201-00911    SĄD REJONOWY W RADOMIU I WYDZIAŁ CYWILNY  Z   1   N           N           
+       201-00912    PAULINA LANGA MULTI-SERVICE               Z   1   N           N           
+       201-00913    AGAPIT SP. ZOO SP. J.                     Z   1   N           N           
+       201-00914    MAŁA POLIGRAFIA URSZULA CZAPLICKA-SMALEC  Z   1   N           N           
+       201-00915    SAFROX Jacek Sawicki                      Z   1   N           N           
+       201-00916    NADZORY-INVEST PIĘTKA DARIUSZ             Z   1   N           N           
+       201-00917    CRYSTAL EKO TECH EWA SUCHARSKA            Z   1   N           N           
+       201-00924    MATIII MACIEJ DROP                        Z   1   N           N           
+       201-00925    Robert Orlicz Instalatorstwo Sanitarne    Z   1   N           N           
+       201-00926    COP                                       Z   1   N           N           
+       201-00927    BERA Rafał Wilągowski                     Z   1   N           N           
+       201-00928    GRAFITA TADEUSZ SIENKIEWICZ               Z   1   N           N           
+       201-00929    DREWKOM Paweł Waś                         Z   1   N           N           
+       201-00930    ADPOL KNIEĆ ADAM                          Z   1   N           N           
+       201-00931    NETFOX ALEKSY LISOWSKI                    Z   1   N           N           
+       201-00932    TOTAL GREEN SZCZEPANIAK MAKSYMILIAN       Z   1   N           N           
+       201-00933    MEDMESS KROPACZEWSKI SP. K.               Z   1   N           N           
+       201-00934    ARINA OLENA DZHYHA                        Z   1   N           N           
+       201-00935    A.B.G. HAPONIUK ANDRZEJ                   Z   1   N           N           
+       201-00936    ROS-CLEAN SP. Z O.O.                      Z   1   N           N           
+       201-00937    TOTA-LUX SP. Z O.O.                       Z   1   N           N           
+       201-00938    WORLD OF PURITY SP. Z O.O.                Z   1   N           N           
+       201-00939    F.U. AMEL PUTKIEWICZ JANUSZ               Z   1   N           N           
+       201-00940    FIRMA SPRZĄTAJĄCA JOANNA POPŁAWSKI        Z   1   N           N           
+       201-00941    SOSCLEAN SERHII DUBOVYI                   Z   1   N           N           
+       201-00942    TANKK BUSIESS GROUP KISZYCKI TOMASZ       Z   1   N           N           
+       202          ODBIORCY                                  N   1   D  27   8   N           
+     --------------------------------------------------- JOLANTA GONTAREK----- ----Strona 17 ostatna-------------------------- ------------------------- 

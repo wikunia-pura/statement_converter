@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import Converter from './views/Converter';
 import Settings from './views/Settings';
 import History from './views/History';
+import Kontrahenci from './views/Kontrahenci';
 import Logo from './components/Logo';
 import UpdateNotification from './components/UpdateNotification';
 import { translations, Language } from './translations';
 import { FileEntry } from '../shared/types';
 
-type View = 'converter' | 'settings' | 'history';
+type View = 'converter' | 'settings' | 'history' | 'kontrahenci';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('converter');
@@ -74,6 +75,12 @@ const App: React.FC = () => {
             <span>📁</span> {t.converter}
           </div>
           <div
+            className={`nav-item ${currentView === 'kontrahenci' ? 'active' : ''}`}
+            onClick={() => setCurrentView('kontrahenci')}
+          >
+            <span>👥</span> {t.kontrahenci}
+          </div>
+          <div
             className={`nav-item ${currentView === 'settings' ? 'active' : ''}`}
             onClick={() => setCurrentView('settings')}
           >
@@ -98,6 +105,7 @@ const App: React.FC = () => {
             setSelectedBank={setSelectedBank}
           />
         )}
+        {currentView === 'kontrahenci' && <Kontrahenci language={language} />}
         {currentView === 'settings' && (
           <Settings
             darkMode={darkMode}

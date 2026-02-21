@@ -62,6 +62,26 @@ export const translations = {
     date: 'Data',
     noConversionHistory: 'Brak historii konwersji',
     
+    // Kontrahenci view
+    kontrahenci: 'Kontrahenci',
+    addKontrahent: 'Dodaj Kontrahenta',
+    editKontrahent: 'Edytuj Kontrahenta',
+    addNewKontrahent: 'Dodaj Nowego Kontrahenta',
+    nazwa: 'Nazwa',
+    kontoKontrahenta: 'Konto Kontrahenta',
+    noKontrahenciConfigured: 'Nie dodano jeszcze żadnych kontrahentów',
+    importFromFile: 'Importuj z pliku',
+    searchKontrahenci: 'Wyszukaj kontrahenta...',
+    totalKontrahenci: 'Razem',
+    errorAddingKontrahent: 'Błąd dodawania kontrahenta',
+    errorUpdatingKontrahent: 'Błąd aktualizacji kontrahenta',
+    confirmDeleteKontrahent: 'Czy na pewno chcesz usunąć tego kontrahenta?',
+    errorDeletingKontrahent: 'Błąd usuwania kontrahenta',
+    confirmDeleteAllKontrahenci: 'Czy na pewno chcesz usunąć WSZYSTKICH kontrahentów?',
+    deleteAllKontrahenci: 'Usuń wszystkich',
+    importKontrahenciSuccess: 'Zaimportowano {count} kontrahentów pomyślnie!',
+    importKontrahenciError: 'Błąd podczas importu kontrahentów',
+    
     // Alerts
     fillAllFields: 'Proszę wypełnić wszystkie pola',
     errorAddingBank: 'Błąd dodawania banku',
@@ -157,6 +177,26 @@ export const translations = {
     clearHistory: 'Clear History',
     date: 'Date',
     noConversionHistory: 'No conversion history yet',
+    
+    // Kontrahenci view
+    kontrahenci: 'Contractors',
+    addKontrahent: 'Add Contractor',
+    editKontrahent: 'Edit Contractor',
+    addNewKontrahent: 'Add New Contractor',
+    nazwa: 'Name',
+    kontoKontrahenta: 'Contractor Account',
+    noKontrahenciConfigured: 'No contractors added yet',
+    importFromFile: 'Import from file',
+    searchKontrahenci: 'Search contractor...',
+    totalKontrahenci: 'Total',
+    errorAddingKontrahent: 'Error adding contractor',
+    errorUpdatingKontrahent: 'Error updating contractor',
+    confirmDeleteKontrahent: 'Are you sure you want to delete this contractor?',
+    errorDeletingKontrahent: 'Error deleting contractor',
+    confirmDeleteAllKontrahenci: 'Are you sure you want to delete ALL contractors?',
+    deleteAllKontrahenci: 'Delete all',
+    importKontrahenciSuccess: 'Imported {count} contractors successfully!',
+    importKontrahenciError: 'Error importing contractors',
     
     // Alerts
     fillAllFields: 'Please fill in all fields',

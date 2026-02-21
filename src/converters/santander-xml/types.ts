@@ -2,6 +2,9 @@
  * Santander XML Converter - Type Definitions
  */
 
+import { MatchedContractor } from './contractor-matcher';
+import { Kontrahent } from '../../shared/types';
+
 export interface XmlTransaction {
   trnCode: string;
   exeDate: string;
@@ -58,8 +61,14 @@ export interface ProcessedTransaction {
   // Original transaction data
   original: XmlTransaction;
   
-  // Extracted data
+  // Extracted data (for positive amounts - income)
   extracted: ExtractedData;
+  
+  // Matched contractor (for negative amounts - expenses)
+  matchedContractor?: MatchedContractor;
+  
+  // Transaction type
+  transactionType: 'income' | 'expense';
   
   // Status for UI
   status: 'auto-approved' | 'needs-review' | 'needs-manual-input' | 'skipped';
@@ -155,4 +164,7 @@ export interface ConverterConfig {
   useRegexFirst: boolean;
   skipNegativeAmounts: boolean;
   skipBankFees: boolean;
+  
+  // Contractors list for expense matching
+  contractors?: Kontrahent[];
 }

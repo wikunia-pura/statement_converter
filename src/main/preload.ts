@@ -6,6 +6,12 @@ const IPC_CHANNELS = {
   ADD_BANK: 'db:add-bank',
   UPDATE_BANK: 'db:update-bank',
   DELETE_BANK: 'db:delete-bank',
+  GET_KONTRAHENCI: 'db:get-kontrahenci',
+  ADD_KONTRAHENT: 'db:add-kontrahent',
+  UPDATE_KONTRAHENT: 'db:update-kontrahent',
+  DELETE_KONTRAHENT: 'db:delete-kontrahent',
+  DELETE_ALL_KONTRAHENCI: 'db:delete-all-kontrahenci',
+  IMPORT_KONTRAHENCI_FROM_FILE: 'db:import-kontrahenci-from-file',
   GET_CONVERTERS: 'converters:get-all',
   SELECT_FILES: 'files:select',
   SELECT_OUTPUT_FOLDER: 'files:select-output-folder',
@@ -35,6 +41,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateBank: (id: number, name: string, converterId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.UPDATE_BANK, id, name, converterId),
   deleteBank: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_BANK, id),
+
+  // Kontrahenci
+  getKontrahenci: () => ipcRenderer.invoke(IPC_CHANNELS.GET_KONTRAHENCI),
+  addKontrahent: (nazwa: string, kontoKontrahenta: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ADD_KONTRAHENT, nazwa, kontoKontrahenta),
+  updateKontrahent: (id: number, nazwa: string, kontoKontrahenta: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_KONTRAHENT, id, nazwa, kontoKontrahenta),
+  deleteKontrahent: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_KONTRAHENT, id),
+  deleteAllKontrahenci: () => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ALL_KONTRAHENCI),
+  importKontrahenciFromFile: () => ipcRenderer.invoke(IPC_CHANNELS.IMPORT_KONTRAHENCI_FROM_FILE),
 
   // Converters
   getConverters: () => ipcRenderer.invoke(IPC_CHANNELS.GET_CONVERTERS),

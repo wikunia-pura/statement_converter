@@ -75,12 +75,31 @@ export class RegexExtractor {
    * Extract identifier patterns (e.g., "IDENTYFIKATOR: 27/4", "ID 22211214")
    */
   private extractIdentifier(descBase: string, descOpt: string): Partial<ExtractedData> | null {
+    const combined = descBase + ' ' + descOpt;
+    const combinedUpper = combined.toUpperCase();
+    
+    // Check for ZGN pattern first (highest priority)
+    // Just look for "GOSP. NIERUCHOM" anywhere in the text
+    if (combinedUpper.includes('GOSP. NIERUCHOM')) {
+      return {
+        buildingNumber: null,
+        apartmentNumber: 'ZGN',
+        fullAddress: 'ZGN',
+        confidence: {
+          address: 100,
+          apartment: 100,
+          tenantName: 0,
+          overall: 0,
+        },
+      };
+    }
+
     const patterns = [
       /identyfikator[:\s]+(\d+)\/(\d+)/i,  // IDENTYFIKATOR: 27/4
       /lokal\s+id\s+(\d+)\/(\d+)/i,        // lokal ID 27/7
       /id[:\s\.]+(\d+)\/(\d+)/i,           // ID.22211201 -> extract digits
       /wspolnotanr\s+(\d+)\s*-\s*identyfikator\s+lokalu\s+(\d+)/i, // Wspolnotanr 27 - Identyfikator lokalu 26
-      /lokal[ua]?[:\s]+(\d+)(?![\d\/])/i,  // lokal 17, lokalu 17 (without building number)
+      // NOTE: "lokal 17" pattern is handled separately below (standalone)
     ];
 
     for (const pattern of patterns) {
@@ -112,8 +131,8 @@ export class RegexExtractor {
         apartmentNumber: apartment,
         fullAddress: `Lokal ${apartment}`,
         confidence: {
-          address: 85,
-          apartment: 90,
+          address: 95,
+          apartment: 95,
           tenantName: 0,
           overall: 0,
         },
@@ -138,7 +157,31 @@ export class RegexExtractor {
         extractApartment: (m: RegExpMatchArray) => m[3],
         confidence: 95,
       },
-      // UL. JOLIOT CURIE 3  M.11 (with periods and spaces) - with typo support
+      // FRYDERYKA JOLIOT-CURIE 3  19 (full street name with spaces between numbers)
+      {
+        regex: /fryderyka\s+(joli[eo]t[-\s]?curie)\s+(\d+)\s+(\d{1,3})(?:\s|$)/i,
+        extractStreet: (m: RegExpMatchArray) => this.normalizeStreetName(m[1]),
+        extractBuilding: (m: RegExpMatchArray) => m[2],
+        extractApartment: (m: RegExpMatchArray) => m[3],
+        confidence: 95,
+      },
+      // JOLIOT-CURIE 3  19 (without M, just spaces between numbers)
+      {
+        regex: /(joli[eo]t[-\s]?curie)\s+(\d+)\s+(\d{1,3})(?:\s|$)/i,
+        extractStreet: (m: RegExpMatchArray) => this.normalizeStreetName(m[1]),
+        extractBuilding: (m: RegExpMatchArray) => m[2],
+        extractApartment: (m: RegExpMatchArray) => m[3],
+        confidence: 95,
+      },
+      // UL. JOLIOT CURIE 3 M. 23 (with period and space after M) - with typo support
+      {
+        regex: /(joli[eo]t[-\s]?curie)\s+(\d+)\s+m\.\s+(\d+)/i,
+        extractStreet: (m: RegExpMatchArray) => this.normalizeStreetName(m[1]),
+        extractBuilding: (m: RegExpMatchArray) => m[2],
+        extractApartment: (m: RegExpMatchArray) => m[3],
+        confidence: 95,
+      },
+      // UL. JOLIOT CURIE 3  M.11 (with period but no space) - with typo support
       {
         regex: /(joli[eo]t[-\s]?curie)\s+(\d+)\s+m\.(\d+)/i,
         extractStreet: (m: RegExpMatchArray) => this.normalizeStreetName(m[1]),
@@ -168,7 +211,7 @@ export class RegexExtractor {
         extractStreet: () => 'Joliot-Curie',
         extractBuilding: (m: RegExpMatchArray) => m[1],
         extractApartment: (m: RegExpMatchArray) => m[2],
-        confidence: 90,
+        confidence: 95,
       },
       // J. CURIE 3 M.11 or M 11 (abbreviated with M)
       {
@@ -176,7 +219,7 @@ export class RegexExtractor {
         extractStreet: () => 'Joliot-Curie',
         extractBuilding: (m: RegExpMatchArray) => m[1],
         extractApartment: (m: RegExpMatchArray) => m[2],
-        confidence: 90,
+        confidence: 95,
       },
       // JCURIE 3/34 (very abbreviated)
       {
@@ -184,7 +227,7 @@ export class RegexExtractor {
         extractStreet: () => 'Joliot-Curie',
         extractBuilding: (m: RegExpMatchArray) => m[1],
         extractApartment: (m: RegExpMatchArray) => m[2],
-        confidence: 85,
+        confidence: 95,
       },
     ];
 

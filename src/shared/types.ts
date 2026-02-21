@@ -7,6 +7,13 @@ export interface Bank {
   createdAt: string;
 }
 
+export interface Kontrahent {
+  id: number;
+  nazwa: string;
+  kontoKontrahenta: string;
+  createdAt: string;
+}
+
 export interface Converter {
   id: string;
   name: string;
@@ -57,6 +64,14 @@ export const IPC_CHANNELS = {
   ADD_BANK: 'db:add-bank',
   UPDATE_BANK: 'db:update-bank',
   DELETE_BANK: 'db:delete-bank',
+  
+  // Kontrahenci operations
+  GET_KONTRAHENCI: 'db:get-kontrahenci',
+  ADD_KONTRAHENT: 'db:add-kontrahent',
+  UPDATE_KONTRAHENT: 'db:update-kontrahent',
+  DELETE_KONTRAHENT: 'db:delete-kontrahent',
+  DELETE_ALL_KONTRAHENCI: 'db:delete-all-kontrahenci',
+  IMPORT_KONTRAHENCI_FROM_FILE: 'db:import-kontrahenci-from-file',
   
   // Converters
   GET_CONVERTERS: 'converters:get-all',

@@ -1,10 +1,11 @@
 import Store from 'electron-store';
 import path from 'path';
 import { app } from 'electron';
-import { Bank, ConversionHistory, AppSettings } from '../shared/types';
+import { Bank, ConversionHistory, AppSettings, Kontrahent } from '../shared/types';
 
 interface StoreSchema {
   banks: Bank[];
+  kontrahenci: Kontrahent[];
   history: ConversionHistory[];
   settings: {
     outputFolder: string;
@@ -13,6 +14,7 @@ interface StoreSchema {
     aiConfidenceThreshold: number;
   };
   nextBankId: number;
+  nextKontrahentId: number;
   nextHistoryId: number;
 }
 
@@ -23,6 +25,7 @@ class DatabaseService {
     this.store = new Store<StoreSchema>({
       defaults: {
         banks: [],
+        kontrahenci: [],
         history: [],
         settings: {
           outputFolder: path.join(app.getPath('documents'), 'StatementConverter'),
@@ -31,6 +34,7 @@ class DatabaseService {
           aiConfidenceThreshold: 95,
         },
         nextBankId: 1,
+        nextKontrahentId: 1,
         nextHistoryId: 1,
       },
     });
@@ -78,6 +82,54 @@ class DatabaseService {
   getBankById(id: number): Bank | undefined {
     const banks = this.store.get('banks', []);
     return banks.find(b => b.id === id);
+  }
+
+  // Kontrahenci operations
+  getAllKontrahenci(): Kontrahent[] {
+    const kontrahenci = this.store.get('kontrahenci', []);
+    return kontrahenci.sort((a, b) => a.nazwa.localeCompare(b.nazwa));
+  }
+
+  addKontrahent(nazwa: string, kontoKontrahenta: string): Kontrahent {
+    const kontrahenci = this.store.get('kontrahenci', []);
+    const id = this.store.get('nextKontrahentId', 1);
+    
+    const newKontrahent: Kontrahent = {
+      id,
+      nazwa,
+      kontoKontrahenta,
+      createdAt: new Date().toISOString(),
+    };
+    
+    kontrahenci.push(newKontrahent);
+    this.store.set('kontrahenci', kontrahenci);
+    this.store.set('nextKontrahentId', id + 1);
+    
+    return newKontrahent;
+  }
+
+  updateKontrahent(id: number, nazwa: string, kontoKontrahenta: string): void {
+    const kontrahenci = this.store.get('kontrahenci', []);
+    const index = kontrahenci.findIndex(k => k.id === id);
+    
+    if (index !== -1) {
+      kontrahenci[index] = { ...kontrahenci[index], nazwa, kontoKontrahenta };
+      this.store.set('kontrahenci', kontrahenci);
+    }
+  }
+
+  deleteKontrahent(id: number): void {
+    const kontrahenci = this.store.get('kontrahenci', []);
+    this.store.set('kontrahenci', kontrahenci.filter(k => k.id !== id));
+  }
+
+  deleteAllKontrahenci(): void {
+    this.store.set('kontrahenci', []);
+  }
+
+  getKontrahentById(id: number): Kontrahent | undefined {
+    const kontrahenci = this.store.get('kontrahenci', []);
+    return kontrahenci.find(k => k.id === id);
   }
 
   // Conversion history operations

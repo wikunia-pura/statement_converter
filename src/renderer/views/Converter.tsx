@@ -563,7 +563,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
               </div>
               <div className="modal-body" style={{ padding: '20px' }}>
                 <p style={{ marginBottom: '15px', fontSize: '14px', color: '#6c757d' }}>
-                  Niektóre wpłaty są nieczytelne. Zapytaj Olę czy jest kasiora, to przepuszczę przez AI:
+                  Niektóre transakcje (wpłaty lub wydatki) mają niską pewność rozpoznania (poniżej 90%). Zapytaj Olę czy jest kasiora, to przepuszczę przez AI:
                 </p>
                 <div style={{
                   background: '#fff3cd',

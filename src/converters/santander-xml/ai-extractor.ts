@@ -23,6 +23,28 @@ export class AIExtractor {
   }
 
   /**
+   * Clean JSON response from markdown formatting
+   */
+  private cleanJsonResponse(text: string): string {
+    // Remove markdown code blocks (```json ... ``` or ``` ... ```)
+    let cleaned = text.trim();
+    
+    // Remove opening markdown fence
+    if (cleaned.startsWith('```json')) {
+      cleaned = cleaned.slice(7);
+    } else if (cleaned.startsWith('```')) {
+      cleaned = cleaned.slice(3);
+    }
+    
+    // Remove closing markdown fence
+    if (cleaned.endsWith('```')) {
+      cleaned = cleaned.slice(0, -3);
+    }
+    
+    return cleaned.trim();
+  }
+
+  /**
    * Extract data from a single transaction using AI
    */
   async extractSingle(transaction: XmlTransaction): Promise<ExtractedData> {
@@ -44,6 +66,26 @@ export class AIExtractor {
   }
 
   /**
+   * Match contractors for expense transactions using AI
+   * 
+   * @param transactions - Array of transactions to match
+   * @param candidatesPerTransaction - Array of pre-filtered contractor candidates for each transaction
+   *                                   (e.g., top 10 most likely contractors per transaction)
+   */
+  async matchContractorsBatch(
+    transactions: XmlTransaction[],
+    candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string }>>
+  ): Promise<Array<{ contractor: any | null; confidence: number; matchedIn: 'desc-opt' | 'desc-base' | 'none'; matchedText?: string }>> {
+    if (this.config.aiProvider === 'anthropic') {
+      return this.matchContractorsWithClaude(transactions, candidatesPerTransaction);
+    } else if (this.config.aiProvider === 'openai') {
+      return this.matchContractorsWithOpenAI(transactions, candidatesPerTransaction);
+    } else {
+      throw new Error('No AI provider configured');
+    }
+  }
+
+  /**
    * Extract using Claude API (recommended)
    */
   private async extractWithClaude(transactions: XmlTransaction[]): Promise<ExtractedData[]> {
@@ -56,7 +98,7 @@ export class AIExtractor {
 
     try {
       const message = await this.anthropic.messages.create({
-        model: this.config.model || 'claude-3-5-sonnet-20241022',
+        model: this.config.model || 'claude-sonnet-4-6',
         max_tokens: 2000 + (transactions.length * 200),
         temperature: 0,
         system: systemPrompt,
@@ -73,10 +115,23 @@ export class AIExtractor {
         throw new Error('Unexpected response type from Claude');
       }
 
-      const response: AIExtractionResponse = JSON.parse(content.text);
+      const cleanedJson = this.cleanJsonResponse(content.text);
+      const response: AIExtractionResponse = JSON.parse(cleanedJson);
       return this.processAIResponse(response, transactions);
     } catch (error) {
-      console.error('Claude API error:', error);
+      console.error('Claude API error (extract):', error);
+      
+      // Log detailed error info
+      if (error && typeof error === 'object') {
+        console.error('Error details:', JSON.stringify(error, null, 2));
+      }
+      
+      // Check for Anthropic specific error
+      if (error && typeof error === 'object' && 'status' in error) {
+        const apiError = error as any;
+        throw new Error(`Claude API error (${apiError.status}): ${apiError.message || 'Unknown error'}`);
+      }
+      
       throw new Error(`Failed to extract with Claude: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -108,10 +163,17 @@ export class AIExtractor {
         throw new Error('Empty response from OpenAI');
       }
 
-      const response: AIExtractionResponse = JSON.parse(content);
+      const cleanedJson = this.cleanJsonResponse(content);
+      const response: AIExtractionResponse = JSON.parse(cleanedJson);
       return this.processAIResponse(response, transactions);
     } catch (error) {
-      console.error('OpenAI API error:', error);
+      console.error('❌ OpenAI API error (extract):', error);
+      
+      // Log detailed error info
+      if (error && typeof error === 'object') {
+        console.error('Error details:', JSON.stringify(error, null, 2));
+      }
+      
       throw new Error(`Failed to extract with OpenAI: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -280,6 +342,208 @@ Example 3:
           descBase: transaction.descBase,
           descOpt: transaction.descOpt,
         },
+      };
+    });
+  }
+
+  /**
+   * Match contractors using Claude API
+   */
+  private async matchContractorsWithClaude(
+    transactions: XmlTransaction[],
+    candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string }>>
+  ): Promise<Array<{ contractor: any | null; confidence: number; matchedIn: 'desc-opt' | 'desc-base' | 'none'; matchedText?: string }>> {
+    if (!this.anthropic) {
+      throw new Error('Anthropic client not initialized');
+    }
+
+    const systemPrompt = this.getContractorMatchingSystemPrompt();
+    const userPrompt = this.getContractorMatchingUserPrompt(transactions, candidatesPerTransaction);
+
+    try {
+      const message = await this.anthropic.messages.create({
+        model: this.config.model || 'claude-sonnet-4-6',
+        max_tokens: 1000 + (transactions.length * 100), // Reduced from 150
+        temperature: 0,
+        system: systemPrompt,
+        messages: [
+          {
+            role: 'user',
+            content: userPrompt,
+          },
+        ],
+      });
+
+      const content = message.content[0];
+      if (content.type !== 'text') {
+        throw new Error('Unexpected response type from Claude');
+      }
+
+      const cleanedJson = this.cleanJsonResponse(content.text);
+      const response = JSON.parse(cleanedJson);
+      return this.processContractorMatchingResponse(response, candidatesPerTransaction);
+    } catch (error) {
+      console.error('Claude API error (contractor matching):', error);
+      
+      // Log detailed error info  
+      if (error && typeof error === 'object') {
+        console.error('Error details:', JSON.stringify(error, null, 2));
+      }
+      
+      // Check for Anthropic specific error
+      if (error && typeof error === 'object' && 'status' in error) {
+        const apiError = error as any;
+        throw new Error(`Claude API error (${apiError.status}): ${apiError.message || 'Unknown error'}`);
+      }
+      
+      throw new Error(`Failed to match contractors with Claude: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Match contractors using OpenAI API
+   */
+  private async matchContractorsWithOpenAI(
+    transactions: XmlTransaction[],
+    candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string }>>
+  ): Promise<Array<{ contractor: any | null; confidence: number; matchedIn: 'desc-opt' | 'desc-base' | 'none'; matchedText?: string }>> {
+    if (!this.openai) {
+      throw new Error('OpenAI client not initialized');
+    }
+
+    const systemPrompt = this.getContractorMatchingSystemPrompt();
+    const userPrompt = this.getContractorMatchingUserPrompt(transactions, candidatesPerTransaction);
+
+    try {
+      const completion = await this.openai.chat.completions.create({
+        model: this.config.model || 'gpt-4-turbo-preview',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0,
+      });
+
+      const content = completion.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error('No response from OpenAI');
+      }
+
+      const cleanedJson = this.cleanJsonResponse(content);
+      const response = JSON.parse(cleanedJson);
+      return this.processContractorMatchingResponse(response, candidatesPerTransaction);
+    } catch (error) {
+      console.error('OpenAI API error (contractor matching):', error);
+      
+      // Log detailed error info
+      if (error && typeof error === 'object') {
+        console.error('Error details:', JSON.stringify(error, null, 2));
+      }
+      
+      throw new Error(`Failed to match contractors with OpenAI: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Get system prompt for contractor matching
+   */
+  private getContractorMatchingSystemPrompt(): string {
+    return `Dopasuj transakcje bankowe do kontrahentów z listy kandydatów.
+
+ZASADY:
+1. Analizuj DESC-BASE i DESC-OPT (DESC-OPT priorytet)
+2. Szukaj nazw firm, instytucji w opisach
+3. Dopasowanie może być częściowe (akronimy, skróty OK)
+4. Wielkość liter ignoruj
+5. Confidence (0-100):
+   - 90-100: Pełna nazwa w opisie
+   - 70-89: Częściowa nazwa/akronim
+   - 50-69: Prawdopodobne
+   - <50: Zwróć null
+
+JSON format:
+{
+  "results": [
+    {
+      "index": 0,
+      "contractorId": 123 lub null,
+      "confidence": 85,
+      "matchedIn": "desc-opt" | "desc-base" | "none",
+      "reasoning": "Krótkie wyjaśnienie"
+    }
+  ]
+}`;
+  }
+
+  /**
+   * Get user prompt for contractor matching (optimized with pre-filtered candidates)
+   */
+  private getContractorMatchingUserPrompt(
+    transactions: XmlTransaction[],
+    candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string }>>
+  ): string {
+    let prompt = '';
+    
+    transactions.forEach((t, idx) => {
+      const candidates = candidatesPerTransaction[idx] || [];
+      
+      prompt += `\n=== Transakcja ${idx} ===\n`;
+      prompt += `DESC-BASE: "${t.descBase}"\n`;
+      prompt += `DESC-OPT: "${t.descOpt || '(brak)'}"\n`;
+      
+      if (candidates.length > 0) {
+        prompt += `\nKandydaci:\n`;
+        candidates.forEach((c, i) => {
+          prompt += `  ${i + 1}. ID:${c.id} "${c.nazwa}"\n`;
+        });
+      } else {
+        prompt += `\nBrak kandydatów - zwróć null\n`;
+      }
+    });
+
+    prompt += '\n\nZwróć JSON z results dla każdej transakcji.';
+    
+    return prompt;
+  }
+
+  /**
+   * Process contractor matching response
+   */
+  private processContractorMatchingResponse(
+    response: any,
+    candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string }>>
+  ): Array<{ contractor: any | null; confidence: number; matchedIn: 'desc-opt' | 'desc-base' | 'none'; matchedText?: string }> {
+    return response.results.map((result: any, idx: number) => {
+      if (result.contractorId === null || result.confidence < 50) {
+        return {
+          contractor: null,
+          confidence: 0,
+          matchedIn: 'none' as const,
+        };
+      }
+
+      // Find contractor in the candidates for this specific transaction
+      const candidates = candidatesPerTransaction[idx] || [];
+      const contractor = candidates.find(c => c.id === result.contractorId);
+      
+      if (!contractor) {
+        return {
+          contractor: null,
+          confidence: 0,
+          matchedIn: 'none' as const,
+        };
+      }
+
+      return {
+        contractor: {
+          id: contractor.id,
+          nazwa: contractor.nazwa,
+          kontoKontrahenta: contractor.kontoKontrahenta,
+        },
+        confidence: result.confidence,
+        matchedIn: result.matchedIn || 'none',
+        matchedText: contractor.nazwa,
       };
     });
   }

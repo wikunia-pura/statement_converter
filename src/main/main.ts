@@ -4,7 +4,7 @@ import log from 'electron-log';
 import path from 'path';
 import fs from 'fs';
 import DatabaseService from './database';
-import ConverterRegistry from './converterRegistry';
+import ConverterRegistry, { setDatabaseInstance } from './converterRegistry';
 import { IPC_CHANNELS } from '../shared/types';
 
 const DEV_SERVER_PORT = 3000;
@@ -59,6 +59,88 @@ function setupIpcHandlers() {
   ipcMain.handle(IPC_CHANNELS.DELETE_BANK, async (_, id: number) => {
     database.deleteBank(id);
     return true;
+  });
+
+  // Database - Kontrahenci
+  ipcMain.handle(IPC_CHANNELS.GET_KONTRAHENCI, async () => {
+    return database.getAllKontrahenci();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ADD_KONTRAHENT, async (_, nazwa: string, kontoKontrahenta: string) => {
+    return database.addKontrahent(nazwa, kontoKontrahenta);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.UPDATE_KONTRAHENT, async (_, id: number, nazwa: string, kontoKontrahenta: string) => {
+    database.updateKontrahent(id, nazwa, kontoKontrahenta);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_KONTRAHENT, async (_, id: number) => {
+    database.deleteKontrahent(id);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_ALL_KONTRAHENCI, async () => {
+    database.deleteAllKontrahenci();
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.IMPORT_KONTRAHENCI_FROM_FILE, async () => {
+    try {
+      const result = await dialog.showOpenDialog(mainWindow!, {
+        properties: ['openFile'],
+        filters: [
+          { name: 'Text Files', extensions: ['txt'] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false };
+      }
+
+      const filePath = result.filePaths[0];
+      const content = fs.readFileSync(filePath, 'utf-8');
+      
+      // Parse the file
+      const lines = content.split('\n');
+      let count = 0;
+      
+      for (const line of lines) {
+        // Skip header lines and empty lines
+        if (line.trim().length === 0 || line.includes('Plan kont') || line.includes('---') || line.includes('Symbol')) {
+          continue;
+        }
+        
+        // Skip page separator lines
+        if (line.includes('JOLANTA GONTAREK') || line.includes('Strona')) {
+          continue;
+        }
+        
+        // Parse data line - Symbol and Nazwa are separated by spaces
+        // Symbol is in format like "201-00001" and Nazwa follows
+        const match = line.match(/^\s*(\d{3}-\d+)\s+(.+?)\s+[ZN]\s+/);
+        if (match) {
+          const symbol = match[1].trim();
+          const nazwa = match[2].trim();
+          
+          // Check if not already exists
+          const existing = database.getAllKontrahenci().find(
+            k => k.kontoKontrahenta === symbol
+          );
+          
+          if (!existing) {
+            database.addKontrahent(nazwa, symbol);
+            count++;
+          }
+        }
+      }
+      
+      return { success: true, count };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return { success: false, error: errorMessage };
+    }
   });
 
   // Converters
@@ -578,6 +660,7 @@ app.whenReady().then(() => {
   }
 
   database = new DatabaseService();
+  setDatabaseInstance(database);  // Pass database instance to ConverterRegistry
   converterRegistry = new ConverterRegistry();
   setupIpcHandlers();
   setupAutoUpdater();

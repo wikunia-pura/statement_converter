@@ -20,7 +20,25 @@ A desktop application for converting bank statements from various formats to a u
 
 ## Installation
 
-### Development
+### For End Users
+
+Download the latest version from [GitHub Releases](https://github.com/wikunia-pura/statement_converter/releases):
+
+#### Windows
+1. Download `FileFunky-Setup-X.X.X.exe`
+2. Run the installer
+3. The application will auto-update when new versions are available
+
+#### macOS
+1. Download the appropriate DMG file:
+   - Apple Silicon (M1/M2/M3): `FileFunky-X.X.X-arm64.dmg`
+   - Intel Mac: `FileFunky-X.X.X-x64.dmg`
+2. Open the DMG and drag FileFunky to Applications folder
+3. **Important**: See [macOS Installation Guide](docs/MACOS_INSTALLATION.md) for first-time setup
+   - macOS will show "damaged" error - this is normal for unsigned apps
+   - Run: `sudo xattr -cr /Applications/FileFunky.app` in Terminal
+
+### For Developers
 
 1. Install dependencies:
 ```bash

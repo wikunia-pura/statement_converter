@@ -55,6 +55,7 @@
       "category": "public.app-category.finance",
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
+      "identity": null,
       "entitlements": null,
       "entitlementsInherit": null,
       "artifactName": "${productName}-${version}-${arch}.${ext}"

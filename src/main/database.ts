@@ -1,11 +1,12 @@
 import Store from 'electron-store';
 import path from 'path';
 import { app } from 'electron';
-import { Bank, ConversionHistory, AppSettings, Kontrahent } from '../shared/types';
+import { Bank, ConversionHistory, AppSettings, Kontrahent, Adres } from '../shared/types';
 
 interface StoreSchema {
   banks: Bank[];
   kontrahenci: Kontrahent[];
+  adresy: Adres[];
   history: ConversionHistory[];
   settings: {
     outputFolder: string;
@@ -15,6 +16,7 @@ interface StoreSchema {
   };
   nextBankId: number;
   nextKontrahentId: number;
+  nextAdresId: number;
   nextHistoryId: number;
 }
 
@@ -26,15 +28,17 @@ class DatabaseService {
       defaults: {
         banks: [],
         kontrahenci: [],
+        adresy: [],
         history: [],
         settings: {
           outputFolder: path.join(app.getPath('documents'), 'StatementConverter'),
-          darkMode: false,
+          darkMode: true,
           language: 'pl',
           aiConfidenceThreshold: 95,
         },
         nextBankId: 1,
         nextKontrahentId: 1,
+        nextAdresId: 1,
         nextHistoryId: 1,
       },
     });
@@ -90,7 +94,7 @@ class DatabaseService {
     return kontrahenci.sort((a, b) => a.nazwa.localeCompare(b.nazwa));
   }
 
-  addKontrahent(nazwa: string, kontoKontrahenta: string): Kontrahent {
+  addKontrahent(nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[]): Kontrahent {
     const kontrahenci = this.store.get('kontrahenci', []);
     const id = this.store.get('nextKontrahentId', 1);
     
@@ -98,6 +102,8 @@ class DatabaseService {
       id,
       nazwa,
       kontoKontrahenta,
+      nip: nip || undefined,
+      alternativeNames: alternativeNames || [],
       createdAt: new Date().toISOString(),
     };
     
@@ -108,12 +114,18 @@ class DatabaseService {
     return newKontrahent;
   }
 
-  updateKontrahent(id: number, nazwa: string, kontoKontrahenta: string): void {
+  updateKontrahent(id: number, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[]): void {
     const kontrahenci = this.store.get('kontrahenci', []);
     const index = kontrahenci.findIndex(k => k.id === id);
     
     if (index !== -1) {
-      kontrahenci[index] = { ...kontrahenci[index], nazwa, kontoKontrahenta };
+      kontrahenci[index] = { 
+        ...kontrahenci[index], 
+        nazwa, 
+        kontoKontrahenta,
+        nip: nip || kontrahenci[index].nip || undefined,
+        alternativeNames: alternativeNames || kontrahenci[index].alternativeNames || []
+      };
       this.store.set('kontrahenci', kontrahenci);
     }
   }
@@ -130,6 +142,58 @@ class DatabaseService {
   getKontrahentById(id: number): Kontrahent | undefined {
     const kontrahenci = this.store.get('kontrahenci', []);
     return kontrahenci.find(k => k.id === id);
+  }
+
+  // Adresy operations
+  getAllAdresy(): Adres[] {
+    const adresy = this.store.get('adresy', []);
+    return adresy.sort((a, b) => a.nazwa.localeCompare(b.nazwa));
+  }
+
+  addAdres(nazwa: string, alternativeNames?: string[]): Adres {
+    const adresy = this.store.get('adresy', []);
+    const id = this.store.get('nextAdresId', 1);
+    
+    const newAdres: Adres = {
+      id,
+      nazwa,
+      alternativeNames: alternativeNames || [],
+      createdAt: new Date().toISOString(),
+    };
+    
+    adresy.push(newAdres);
+    this.store.set('adresy', adresy);
+    this.store.set('nextAdresId', id + 1);
+    
+    return newAdres;
+  }
+
+  updateAdres(id: number, nazwa: string, alternativeNames?: string[]): void {
+    const adresy = this.store.get('adresy', []);
+    const index = adresy.findIndex(a => a.id === id);
+    
+    if (index !== -1) {
+      adresy[index] = { 
+        ...adresy[index], 
+        nazwa, 
+        alternativeNames: alternativeNames || adresy[index].alternativeNames || []
+      };
+      this.store.set('adresy', adresy);
+    }
+  }
+
+  deleteAdres(id: number): void {
+    const adresy = this.store.get('adresy', []);
+    this.store.set('adresy', adresy.filter(a => a.id !== id));
+  }
+
+  deleteAllAdresy(): void {
+    this.store.set('adresy', []);
+  }
+
+  getAdresById(id: number): Adres | undefined {
+    const adresy = this.store.get('adresy', []);
+    return adresy.find(a => a.id === id);
   }
 
   // Conversion history operations

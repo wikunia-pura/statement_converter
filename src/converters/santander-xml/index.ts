@@ -42,10 +42,11 @@ export class SantanderXmlConverter {
       skipNegativeAmounts: config.skipNegativeAmounts ?? false, // Changed to false - process expenses
       skipBankFees: config.skipBankFees ?? true,
       contractors: config.contractors,
+      addresses: config.addresses,
     };
 
     this.parser = new SantanderXmlParser();
-    this.regexExtractor = new RegexExtractor();
+    this.regexExtractor = new RegexExtractor(this.config.addresses || []);
     this.cache = new ExtractionCache();
 
     // Initialize AI extractor if configured
@@ -551,7 +552,7 @@ export class SantanderXmlConverter {
   }
 
   /**
-   * Export auxiliary file with contractor matching details
+   * Export preview file with transaction details and matching information
    */
   exportAuxiliaryFile(transactions: ProcessedTransaction[]): string {
     const exporter = new CsvExporter({

@@ -1,0 +1,1642 @@
+=== SANTANDER XML CONVERSION RESULTS ===
+
+Summary:
+- Total transactions: 53
+- Auto-approved: 36
+- Needs review: 0
+- Needs manual input: 13
+- Skipped: 4
+- Average confidence: 68.0%
+
+=== TRANSACTIONS ===
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#1
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: S151
+   Execution Date:   01/04/2025
+   Creation Date:    01/04/2025
+   Amount:           678.57 PLN
+   Account Value:    245032.73 PLN
+   Real Value:       245032.73 PLN
+
+   Description (base):
+   FUNDUSZ REMONTOWY
+
+   Description (optional):
+   EWA TERESA OSIECKA-CISOWSKA UL. JOLIOT-CURIE 3/27 02-646 WARSZAWA
+
+🔍 EXTRACTED DATA:
+   Apartment:        27
+   Full Address:     Joliot-Curie 3/27
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      EWA Teresa Osiecka-cisowska
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     75%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#2
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   01/04/2025
+   Creation Date:    01/04/2025
+   Amount:           819.48 PLN
+   Account Value:    245852.21 PLN
+   Real Value:       245852.21 PLN
+
+   Description (base):
+   op³ata mieszkaniowa m-c kwiecieñ2025, joliot curie 3/47, warszawa wtym fundusz remontowy: 145,35
+
+   Description (optional):
+   £ASICA AGNIESZKA MARIA JOLIOT-CURIE F 3/47 02-646 WARSZAWA ELIXIR 01-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        47
+   Full Address:     Joliot-Curie 3/47
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     0%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#3
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   02/04/2025
+   Creation Date:    02/04/2025
+   Amount:           898.16 PLN
+   Account Value:    246750.37 PLN
+   Real Value:       246750.37 PLN
+
+   Description (base):
+   OP£ATA EKSPLOATACYJNA ZA 04 2025 WTYM FUNDUSZ REMONTOWY 145,80 PLNID.22211201
+
+   Description (optional):
+   KRZYSZTOF MIECZYS£AW WA¬BIÑSKI  UL. JOLIOT CURIE 3  M.11 02-646 WARSZAWA ELIXIR 02-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        11
+   Full Address:     Joliot-Curie 3/11
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     0%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#4
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   04/04/2025
+   Creation Date:    04/04/2025
+   Amount:           406.66 PLN
+   Account Value:    247157.03 PLN
+   Real Value:       247157.03 PLN
+
+   Description (base):
+   CZYNSZ JOLIOT CURIE 3/2
+
+   Description (optional):
+   BARBARA MACI¡G  UL.OLCHY 6 04-837 WARSZAWA ELIXIR 04-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        2
+   Full Address:     Joliot-Curie 3/2
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      Czynsz Joliot Curie
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     60%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#5
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   04/04/2025
+   Creation Date:    04/04/2025
+   Amount:           722.69 PLN
+   Account Value:    247879.72 PLN
+   Real Value:       247879.72 PLN
+
+   Description (base):
+   Joliot-Curie 3/28, op³ata eksploatacyjna marzec-kwiecieñ
+
+   Description (optional):
+   Andrzej Fronczak  Joliot-Curie F. 3/28, 02-646 Warsza wa ELIXIR 03-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        28
+   Full Address:     Joliot-Curie 3/28
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      Joliot-curie
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     60%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#6
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   04/04/2025
+   Creation Date:    04/04/2025
+   Amount:           848.94 PLN
+   Account Value:    248728.66 PLN
+   Real Value:       248728.66 PLN
+
+   Description (base):
+   zap³ata za czynsz za lV/2025Maria Mo³odziñska Joliot Curie 3/37
+
+   Description (optional):
+   MO£ODZIÑSKI MICHA£ WOJCIECH RABSZTYÑSKA 4/10 01-140 WARSZAWA ELIXIR 04-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        37
+   Full Address:     Joliot-Curie 3/37
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     0%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#7
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   07/04/2025
+   Creation Date:    07/04/2025
+   Amount:           600 PLN
+   Account Value:    249328.66 PLN
+   Real Value:       249328.66 PLN
+
+   Description (base):
+   OP£ATA EKSPLOATACYJNA NR ID 22211214 ZA MS bie¿±cy W TYM FUN. REMONTOWY 110,10z³
+
+   Description (optional):
+   BEATA KWASEK JOLIOT CURIE 3/24 02-646    WARSZAWA ELIXIR 07-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        24
+   Full Address:     Joliot-Curie 3/24
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      Beata Kwasek Joliot Curie
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     75%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#8
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   07/04/2025
+   Creation Date:    07/04/2025
+   Amount:           700 PLN
+   Account Value:    250028.66 PLN
+   Real Value:       250028.66 PLN
+
+   Description (base):
+   CZYNSZ I FUNDUSZ REMONTOWY ZA LOKALJOLIOT-CURIE 3/4 IDENTYFIKATOR: 27/4
+
+   Description (optional):
+   SYLWESTER ¦CI¦LEWSKI  UL.JOLIOT-CURIE 3 M.4 02-646 WARSZAWA ELIXIR 05-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        4
+   Full Address:     Joliot-Curie 3/4
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      Czynsz I Fundusz Remontowy ZA Lokaljoliot-curie
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     60%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#9
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   07/04/2025
+   Creation Date:    07/04/2025
+   Amount:           988.66 PLN
+   Account Value:    251017.32 PLN
+   Real Value:       251017.32 PLN
+
+   Description (base):
+   Op³ata miesiêczna za Kwiecieñ 2025 lokal ID 27/7 Ewa Katarzyna S³ubicka
+
+   Description (optional):
+   EWA KATARZYNA S£UBICKA UL. FRYDERYKA JOLIOT-CURIE 3 M 7 02-646    WARSZAWA ELIXIR 06-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        7
+   Full Address:     Joliot-Curie 3/7
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     0%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#10
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: S151
+   Execution Date:   08/04/2025
+   Creation Date:    08/04/2025
+   Amount:           711.8 PLN
+   Account Value:    251729.12 PLN
+   Real Value:       251729.12 PLN
+
+   Description (base):
+   OP£ATA CZYNSZOWA ZA LOKAL UL. JOLIET-CURIE 3 M 45
+
+   Description (optional):
+   4START SYLWIA BARTHEL DE WEYDENTHAL
+
+🔍 EXTRACTED DATA:
+   Apartment:        45
+   Full Address:     Joliot-Curie 3/45
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     0%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#11
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC20
+   Execution Date:   09/04/2025
+   Creation Date:    09/04/2025
+   Amount:           332.72 PLN
+   Account Value:    250145.93 PLN
+   Real Value:       250145.93 PLN
+
+   Description (base):
+   op³ata z lokal, identyfikator 27/20 ( M. i J. Mistewicz) m-±c 04. 2025 Nadp³ata za CO i woda 328,37
+
+   Description (optional):
+   MARIOLA MISTEWICZ UL. JOLIOT CURIE 3/20 02-646 WARSZAWA
+
+🔍 EXTRACTED DATA:
+   Apartment:        20
+   Full Address:     Joliot-Curie 3/20
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      Mariola Mistewicz
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     75%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#12
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   10/04/2025
+   Creation Date:    10/04/2025
+   Amount:           250 PLN
+   Account Value:    250794.32 PLN
+   Real Value:       250794.32 PLN
+
+   Description (base):
+   FUNDUSZ REMONTOWY GOSK MAREK UL. JOLIT CURIE 3 M. 33 WARSZAWA
+
+   Description (optional):
+   DARIUSZ MACIEJ GOSK  UL. JOLIOT CURIE 3  M.33 02-646 WARSZAWA ELIXIR 10-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        33
+   Full Address:     Joliot-Curie 3/33
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      Dariusz Maciej Gosk
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     75%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#13
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   10/04/2025
+   Creation Date:    10/04/2025
+   Amount:           431.25 PLN
+   Account Value:    251225.57 PLN
+   Real Value:       251225.57 PLN
+
+   Description (base):
+   Op³aty eksploatacyjne i za funduszremontowy lokalu 17
+
+   Description (optional):
+   KOSKA DANIEL  UL RÓ¯ANA 11 77-100 RZEPNICA ELIXIR 10-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        17
+   Full Address:     Lokal 17
+   Street Name:      N/A
+   Building Number:  N/A
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     0%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#14
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   10/04/2025
+   Creation Date:    10/04/2025
+   Amount:           472.63 PLN
+   Account Value:    251698.2 PLN
+   Real Value:       251698.2 PLN
+
+   Description (base):
+   czynsz  kwiecieñ 2025  /  fund, remontowy145,35 Wanda Strójw±s Joliot Curie 3 m39
+
+   Description (optional):
+   WANDA STRÓJW¡S UL. J. CURIE 3 M. 39 02-646    WARSZAWA ELIXIR 09-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        39
+   Full Address:     Joliot-Curie 3/39
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     0%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#15
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   10/04/2025
+   Creation Date:    10/04/2025
+   Amount:           636.92 PLN
+   Account Value:    252335.12 PLN
+   Real Value:       252335.12 PLN
+
+   Description (base):
+   EKSPLOATACJA FUNDUSZ ¦WIADCZENIA JCURIE 3/34
+
+   Description (optional):
+   MIKO£AJ RUBACH  UL.F.JOLIOT-CURIE 3 M.34 02-646 WARSZAWA ELIXIR 10-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        34
+   Full Address:     Joliot-Curie 3/34
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     0%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#16
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   10/04/2025
+   Creation Date:    10/04/2025
+   Amount:           700 PLN
+   Account Value:    253035.12 PLN
+   Real Value:       253035.12 PLN
+
+   Description (base):
+   CZYNSZ 22211223 GOSK MAREK UL. JOLIOT CURIE 3 M.33 02-646 WARSZAWA
+
+   Description (optional):
+   DARIUSZ MACIEJ GOSK  UL. JOLIOT CURIE 3  M.33 02-646 WARSZAWA ELIXIR 10-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        33
+   Full Address:     Joliot-Curie 3/33
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      Dariusz Maciej Gosk
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     75%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#17
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   10/04/2025
+   Creation Date:    10/04/2025
+   Amount:           742.31 PLN
+   Account Value:    253777.43 PLN
+   Real Value:       253777.43 PLN
+
+   Description (base):
+   CZYNSZ ZA M-C KWIECIEÑ PAULINA MOLENDA
+
+   Description (optional):
+   PAULINA MOLENDA  UL.FRYDERYKA JOLIOT-CURIE 3 M.8 02-646 WARSZAWA ELIXIR 09-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        8
+   Full Address:     Joliot-Curie 3/8
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      Paulina Molenda
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     75%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#18
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   10/04/2025
+   Creation Date:    10/04/2025
+   Amount:           765.26 PLN
+   Account Value:    254542.69 PLN
+   Real Value:       254542.69 PLN
+
+   Description (base):
+   MARCIN ZEGAREK, JOLIOT CURIE 3/43
+
+   Description (optional):
+   MARCIN RAFA£ ZEGAREK ELIXIR 10-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        43
+   Full Address:     Joliot-Curie 3/43
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     0%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#19
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   10/04/2025
+   Creation Date:    10/04/2025
+   Amount:           834.08 PLN
+   Account Value:    255376.77 PLN
+   Real Value:       255376.77 PLN
+
+   Description (base):
+   CZYNSZ ZA KWIECIEÑ 2025
+
+   Description (optional):
+   JOLANTA  TOKAJ  UL. F J CURIE 3  M.3 02-646 WARSZAWA ELIXIR 10-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        3
+   Full Address:     Joliot-Curie 3/3
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      Jolanta Tokaj
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     75%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#20
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC20
+   Execution Date:   10/04/2025
+   Creation Date:    10/04/2025
+   Amount:           965.27 PLN
+   Account Value:    256342.04 PLN
+   Real Value:       256342.04 PLN
+
+   Description (base):
+   Joliot-Curie 3/15, 04/2025, eksploatacja i ¶wiadczenia 819.47 fundusz remontowy 145.80
+
+   Description (optional):
+   JÓZEFINA ANNA SOBIEGRAJ UL. JOLIOT-CURIE 3/15 02-646 WARSZAWA
+
+🔍 EXTRACTED DATA:
+   Apartment:        15
+   Full Address:     Joliot-Curie 3/15
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      Józefina Anna Sobiegraj
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     75%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#21
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   10/04/2025
+   Creation Date:    10/04/2025
+   Amount:           6131.35 PLN
+   Account Value:    262473.39 PLN
+   Real Value:       262473.39 PLN
+
+   Description (base):
+   zaliczka A, B, ¶wiadczenia,odpady komunalne za m-c kwiecien2025
+
+   Description (optional):
+   ZAK£. GOSP. NIERUCHOM. DZ. MOKOTÓW UL.IRYSOWA 19 02-660 WARSZAWA;PL ELIXIR 10-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        ZGN
+   Full Address:     ZGN
+   Street Name:      N/A
+   Building Number:  N/A
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    100%
+   Apartment Confidence:  100%
+   Address Confidence:    100%
+   Tenant Confidence:     0%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#22
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   11/04/2025
+   Creation Date:    11/04/2025
+   Amount:           653.87 PLN
+   Account Value:    263127.26 PLN
+   Real Value:       263127.26 PLN
+
+   Description (base):
+   KICMAN MA£GORZATA, 02-646 WARSZAWA, UL. JOLIOT CURIE 3 M. 23 OP£ATA ¦WIADCZENIA ZA 04.2025
+
+   Description (optional):
+   KICMAN MA£GORZATA  JOLIOT-CURIE F. 3/23 02-646 WARSZAWA ELIXIR 11-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        23
+   Full Address:     Joliot-Curie 3/23
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     0%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#23
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   11/04/2025
+   Creation Date:    11/04/2025
+   Amount:           1017.9 PLN
+   Account Value:    264145.16 PLN
+   Real Value:       264145.16 PLN
+
+   Description (base):
+   CZYNSZ ZA 03.2025. ADRES: UL.JOLIOT-CURIE 3 M. 19.
+
+   Description (optional):
+   KIRYL  KISIALIOU  UL FRYDERYKA JOLIOT-CURIE 3  19 02-652 WARSZAWA ELIXIR 10-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        19
+   Full Address:     Joliot-Curie 3/19
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      Kiryl Kisialiou UL Fryderyka Joliot-curie
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     75%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#24
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC20
+   Execution Date:   14/04/2025
+   Creation Date:    14/04/2025
+   Amount:           311.1 PLN
+   Account Value:    261222.08 PLN
+   Real Value:       261222.08 PLN
+
+   Description (base):
+   op³ata za 04-2025
+
+   Description (optional):
+   MIROS£AW ROSTKOWSKI UL. JOLIOT CURIE 3/31 02-646 WARSZAWA
+
+🔍 EXTRACTED DATA:
+   Apartment:        31
+   Full Address:     Joliot-Curie 3/31
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     0%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#25
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   14/04/2025
+   Creation Date:    14/04/2025
+   Amount:           480.91 PLN
+   Account Value:    261702.99 PLN
+   Real Value:       261702.99 PLN
+
+   Description (base):
+   czynsz za kwiecieñ 2025, Joliot Curie 3 m 1 , Jolanta i Jaros³aw Drzazga
+
+   Description (optional):
+   DRZAZGA JAROS£AW ul. GRÓJECKA 41/8 02-031 WARSZAWA ELIXIR 14-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        1
+   Full Address:     Joliot-Curie 3/1
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     0%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#26
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   14/04/2025
+   Creation Date:    14/04/2025
+   Amount:           582.68 PLN
+   Account Value:    262285.67 PLN
+   Real Value:       262285.67 PLN
+
+   Description (base):
+   W£ GRONCZEWSKI JOLIOT CURIE 3/12 02*646 WARSZAWA OP£ATA EKSPLOATACYJNA, W TYM FUNDUSZ REMONTOWY 108 PLN
+
+   Description (optional):
+   DANIEL CEZARY K£ODA BRY£Y S. 3 M. 62 02-685 WARSZAWA ELIXIR 14-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        12
+   Full Address:     Joliot-Curie 3/12
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     0%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#27
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC20
+   Execution Date:   14/04/2025
+   Creation Date:    14/04/2025
+   Amount:           686.72 PLN
+   Account Value:    262972.39 PLN
+   Real Value:       262972.39 PLN
+
+   Description (base):
+   op³ata za 04-2025
+
+   Description (optional):
+   MIROS£AW ROSTKOWSKI UL. JOLIOT CURIE 3/31 02-646 WARSZAWA
+
+🔍 EXTRACTED DATA:
+   Apartment:        31
+   Full Address:     Joliot-Curie 3/31
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     0%
+   Extraction Method:     cache
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#28
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   14/04/2025
+   Creation Date:    14/04/2025
+   Amount:           800 PLN
+   Account Value:    263772.39 PLN
+   Real Value:       263772.39 PLN
+
+   Description (base):
+   op³aty za lokal ul.Joliot-Curie 3 m.35 identyfikator 27/35 Wspólnota Mieszkaniowa J.Curie3
+
+   Description (optional):
+   RÓ¯A GRA¯YNA GÓRBSKA UL. J. CURIE 3 M. 35  WARSZAWA 02-646 ELIXIR 13-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        35
+   Full Address:     Joliot-Curie 3/35
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     0%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#29
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   16/04/2025
+   Creation Date:    16/04/2025
+   Amount:           785 PLN
+   Account Value:    264189.67 PLN
+   Real Value:       264189.67 PLN
+
+   Description (base):
+   27/32 Goc³awski Krzysztof Joliot Curie 3 m 32
+
+   Description (optional):
+   GOC£AWSKI KRZYSZTOF  UL JOLIOT-CURIE F. 3M32 02-646    WARSZAWA ELIXIR 15-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        32
+   Full Address:     Joliot-Curie 3/32
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     0%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#30
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   18/04/2025
+   Creation Date:    18/04/2025
+   Amount:           863 PLN
+   Account Value:    240352.93 PLN
+   Real Value:       240352.93 PLN
+
+   Description (base):
+   ZALICZKA NA ZARZ¡DZANIE, ¦WIADCZENIA, W TYM FUNDUSZ REMONTOWY 194,58
+
+   Description (optional):
+   IWONA JURAK  UL.JOLIOT-CURIE 3 M.48 02-646 WARSZAWA ELIXIR 18-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        48
+   Full Address:     Joliot-Curie 3/48
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      Iwona Jurak
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     75%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#31
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   22/04/2025
+   Creation Date:    22/04/2025
+   Amount:           919.38 PLN
+   Account Value:    241272.31 PLN
+   Real Value:       241272.31 PLN
+
+   Description (base):
+   22211230 GMITERGRAZYNACZYNSZZALOKALJOLIOTCURIE3M.40+F.REMONTOWY
+
+   Description (optional):
+   GRA¯YNA         KRAK-GMITER  UL. JOLIOT CURIE 3 M.40 02-646 WARSZAWA ELIXIR 22-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        40
+   Full Address:     Joliot-Curie 3/40
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     0%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#32
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   24/04/2025
+   Creation Date:    24/04/2025
+   Amount:           566.4 PLN
+   Account Value:    239929.26 PLN
+   Real Value:       239929.26 PLN
+
+   Description (base):
+   /OPF/X///// PBAJJTJINJER Wspolnotanr 27 - Identyfikator lokalu 26
+
+   Description (optional):
+   AUTOPAY SPÓ£KA AKCYJNA UL.POWSTAÑCÓW WARSZAWY 6 81-718 SOPOT ELIXIR 24-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        26
+   Full Address:     27/26
+   Street Name:      N/A
+   Building Number:  27
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     0%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#33
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   25/04/2025
+   Creation Date:    25/04/2025
+   Amount:           66.35 PLN
+   Account Value:    239939.04 PLN
+   Real Value:       239939.04 PLN
+
+   Description (base):
+   Op³aty mieszkaniowe  kwiecien  2025r. Joliot- Curie 3/41 po odliczeniunadplaty w kwocie 540,80
+
+   Description (optional):
+   BOROWSKA IZABELLA ul. FRYDERYKA JOLIOT-CURIE 3/41 02- 646 WARSZAWA ELIXIR 24-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        41
+   Full Address:     Joliot-Curie 3/41
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      Borowska Izabella
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     75%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#34
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   28/04/2025
+   Creation Date:    28/04/2025
+   Amount:           909.08 PLN
+   Account Value:    241548.12 PLN
+   Real Value:       241548.12 PLN
+
+   Description (base):
+   czynsz V.2025 r. SakowskaMonika, ul. Joliot-Curie 3/30
+
+   Description (optional):
+   SAKOWSKA MONIKA BIELAÑSKA 5/27 00-086 WARSZAWA ELIXIR 26-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        30
+   Full Address:     Joliot-Curie 3/30
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     0%
+   Extraction Method:     regex
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#35
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: S151
+   Execution Date:   30/04/2025
+   Creation Date:    30/04/2025
+   Amount:           678.57 PLN
+   Account Value:    242226.69 PLN
+   Real Value:       242226.69 PLN
+
+   Description (base):
+   FUNDUSZ REMONTOWY
+
+   Description (optional):
+   EWA TERESA OSIECKA-CISOWSKA UL. JOLIOT-CURIE 3/27 02-646 WARSZAWA
+
+🔍 EXTRACTED DATA:
+   Apartment:        27
+   Full Address:     Joliot-Curie 3/27
+   Street Name:      Joliot-Curie
+   Building Number:  3
+   Tenant Name:      EWA Teresa Osiecka-cisowska
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    95%
+   Apartment Confidence:  95%
+   Address Confidence:    95%
+   Tenant Confidence:     75%
+   Extraction Method:     cache
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#36
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   09/04/2025
+   Creation Date:    09/04/2025
+   Amount:           398.39 PLN
+   Account Value:    250544.32 PLN
+   Real Value:       250544.32 PLN
+
+   Description (base):
+   4.2025
+
+   Description (optional):
+   CHACIÑSKA MARZENA WITA STWOSZA 48 M. 403 02-661 WARSZAWA ELIXIR 09-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        NOT FOUND
+   Full Address:     NOT FOUND
+   Street Name:      N/A
+   Building Number:  N/A
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    0%
+   Apartment Confidence:  0%
+   Address Confidence:    0%
+   Tenant Confidence:     0%
+   Extraction Method:     manual
+   Status:                needs-manual-input
+   Warnings:              No AI provider configured
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#37
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   24/04/2025
+   Creation Date:    24/04/2025
+   Amount:           885.72 PLN
+   Account Value:    240814.98 PLN
+   Real Value:       240814.98 PLN
+
+   Description (base):
+   Op³ata eksploatacyjna za IV.2025+ rata do niedop³aty za wodê 400,00
+
+   Description (optional):
+   BORÓWEK ALICJA  UL S£ONIA TR¡BALSKIEGO 9M2 05-800    PRUSZKÓW ELIXIR 23-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        NOT FOUND
+   Full Address:     NOT FOUND
+   Street Name:      N/A
+   Building Number:  N/A
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    0%
+   Apartment Confidence:  0%
+   Address Confidence:    0%
+   Tenant Confidence:     0%
+   Extraction Method:     manual
+   Status:                needs-manual-input
+   Warnings:              No AI provider configured
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#38
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: EC2G
+   Execution Date:   28/04/2025
+   Creation Date:    28/04/2025
+   Amount:           700 PLN
+   Account Value:    240639.04 PLN
+   Real Value:       240639.04 PLN
+
+   Description (base):
+   Op³ata czynszowa.
+
+   Description (optional):
+   AGNIESZKA MA£ECKA KIELECKA 16/21 02-550    WARSZAWA ELIXIR 27-04-2025
+
+🔍 EXTRACTED DATA:
+   Apartment:        NOT FOUND
+   Full Address:     NOT FOUND
+   Street Name:      N/A
+   Building Number:  N/A
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    0%
+   Apartment Confidence:  0%
+   Address Confidence:    0%
+   Tenant Confidence:     0%
+   Extraction Method:     manual
+   Status:                needs-manual-input
+   Warnings:              No AI provider configured
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#39
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: B143
+   Execution Date:   17/04/2025
+   Creation Date:    17/04/2025
+   Amount:           -24699.74 PLN
+   Account Value:    239489.93 PLN
+   Real Value:       239489.93 PLN
+
+   Description (base):
+   /NIP/5250005656/IDP/5-5382/TYT/NRK/SEK/01IDCSRL250417887732794
+
+   Description (optional):
+   VEOLIA ENERGIA WARSZAWA S.A. STEFANA BATOREGO 2 WARSZAWA 02-591 PL
+
+🔍 EXTRACTED DATA:
+   Apartment:        NOT FOUND
+   Full Address:     NOT FOUND
+   Street Name:      N/A
+   Building Number:  N/A
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    0%
+   Apartment Confidence:  0%
+   Address Confidence:    0%
+   Tenant Confidence:     0%
+   Extraction Method:     manual
+   Status:                auto-approved
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#40
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: B4C5
+   Execution Date:   08/04/2025
+   Creation Date:    08/04/2025
+   Amount:           -186.62 PLN
+   Account Value:    251542.5 PLN
+   Real Value:       251542.5 PLN
+
+   Description (base):
+   FV 179/03/2025
+
+   Description (optional):
+   Tech-home   Skoczyñski Zbigniew, ul. Modzelewskiego 46/50/lok. 66A, 02-679 Warszawa
+
+🔍 EXTRACTED DATA:
+   Apartment:        NOT FOUND
+   Full Address:     NOT FOUND
+   Street Name:      N/A
+   Building Number:  N/A
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    0%
+   Apartment Confidence:  0%
+   Address Confidence:    0%
+   Tenant Confidence:     0%
+   Extraction Method:     manual
+   Status:                needs-manual-input
+   Warnings:              No contractor matched - needs manual assignment
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#41
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: B4CC
+   Execution Date:   08/04/2025
+   Creation Date:    08/04/2025
+   Amount:           -1729.29 PLN
+   Account Value:    249813.21 PLN
+   Real Value:       249813.21 PLN
+
+   Description (base):
+   F046/2025
+
+   Description (optional):
+   P.H.U. ROB-BUD   Robert Laskowski, Kartograficzna 73B, 03-290 Warszawa
+
+🔍 EXTRACTED DATA:
+   Apartment:        NOT FOUND
+   Full Address:     NOT FOUND
+   Street Name:      N/A
+   Building Number:  N/A
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    0%
+   Apartment Confidence:  0%
+   Address Confidence:    0%
+   Tenant Confidence:     0%
+   Extraction Method:     manual
+   Status:                needs-manual-input
+   Warnings:              No contractor matched - needs manual assignment
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#42
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: B143
+   Execution Date:   11/04/2025
+   Creation Date:    11/04/2025
+   Amount:           -3234.18 PLN
+   Account Value:    260910.98 PLN
+   Real Value:       260910.98 PLN
+
+   Description (base):
+   /NIP/5250005662/IDP/017737/TYT/00/KTR/ 4925000245999[RACH]017737:245/SEK/01IDCSRL250411884753009
+
+   Description (optional):
+   MIEJSKIE PRZED. WOD. I KANALIZACJI W M.ST.W-WIE SA PL. STARYNKIEWICZA 5 02-015 WARSZAWA
+
+🔍 EXTRACTED DATA:
+   Apartment:        NOT FOUND
+   Full Address:     NOT FOUND
+   Street Name:      N/A
+   Building Number:  N/A
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    0%
+   Apartment Confidence:  0%
+   Address Confidence:    0%
+   Tenant Confidence:     0%
+   Extraction Method:     manual
+   Status:                needs-manual-input
+   Warnings:              No contractor matched - needs manual assignment
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#43
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: B4C5
+   Execution Date:   15/04/2025
+   Creation Date:    15/04/2025
+   Amount:           -173.06 PLN
+   Account Value:    263599.33 PLN
+   Real Value:       263599.33 PLN
+
+   Description (base):
+   DZIER¯AWA J-563 ZA 04/2025
+
+   Description (optional):
+   Urz±d m.st. Warszawy dz.Mokotów, Rakowiecka 25/27, 02-517 Warszawa
+
+🔍 EXTRACTED DATA:
+   Apartment:        NOT FOUND
+   Full Address:     NOT FOUND
+   Street Name:      N/A
+   Building Number:  N/A
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    0%
+   Apartment Confidence:  0%
+   Address Confidence:    0%
+   Tenant Confidence:     0%
+   Extraction Method:     manual
+   Status:                needs-manual-input
+   Warnings:              No contractor matched - needs manual assignment
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#44
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: B4C5
+   Execution Date:   15/04/2025
+   Creation Date:    15/04/2025
+   Amount:           -194.66 PLN
+   Account Value:    263404.67 PLN
+   Real Value:       263404.67 PLN
+
+   Description (base):
+   FV 241750791938
+
+   Description (optional):
+   E.ON POLSKA SA
+
+🔍 EXTRACTED DATA:
+   Apartment:        NOT FOUND
+   Full Address:     NOT FOUND
+   Street Name:      N/A
+   Building Number:  N/A
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    0%
+   Apartment Confidence:  0%
+   Address Confidence:    0%
+   Tenant Confidence:     0%
+   Extraction Method:     manual
+   Status:                needs-manual-input
+   Warnings:              No contractor matched - needs manual assignment
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#45
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: B4C5
+   Execution Date:   23/04/2025
+   Creation Date:    23/04/2025
+   Amount:           -1909.45 PLN
+   Account Value:    239362.86 PLN
+   Real Value:       239362.86 PLN
+
+   Description (base):
+   FV 18/04/2025
+
+   Description (optional):
+   INTER-EJ s.c. E.Laskowska, J.Gon, Blacharska 1/343, 02-660 Warszawa
+
+🔍 EXTRACTED DATA:
+   Apartment:        NOT FOUND
+   Full Address:     NOT FOUND
+   Street Name:      N/A
+   Building Number:  N/A
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    0%
+   Apartment Confidence:  0%
+   Address Confidence:    0%
+   Tenant Confidence:     0%
+   Extraction Method:     manual
+   Status:                needs-manual-input
+   Warnings:              No contractor matched - needs manual assignment
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#46
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: B4CU
+   Execution Date:   24/04/2025
+   Creation Date:    24/04/2025
+   Amount:           -99 PLN
+   Account Value:    240715.98 PLN
+   Real Value:       240715.98 PLN
+
+   Description (base):
+   /TI/N5213308782/OKR/25M04/SFP/PIT-4/TXT/5213308782
+
+   Description (optional):
+   Urz±d Skarbowy
+
+🔍 EXTRACTED DATA:
+   Apartment:        NOT FOUND
+   Full Address:     NOT FOUND
+   Street Name:      N/A
+   Building Number:  N/A
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    0%
+   Apartment Confidence:  0%
+   Address Confidence:    0%
+   Tenant Confidence:     0%
+   Extraction Method:     manual
+   Status:                needs-manual-input
+   Warnings:              No contractor matched - needs manual assignment
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#47
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: B4C5
+   Execution Date:   24/04/2025
+   Creation Date:    24/04/2025
+   Amount:           -843.29 PLN
+   Account Value:    239872.69 PLN
+   Real Value:       239872.69 PLN
+
+   Description (base):
+   PRACE ZLECONE 04/2025
+
+   Description (optional):
+   Konotopski Wojciech, ul. Joliot Curie 9 m 2,  Warszawa
+
+🔍 EXTRACTED DATA:
+   Apartment:        NOT FOUND
+   Full Address:     NOT FOUND
+   Street Name:      N/A
+   Building Number:  N/A
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    0%
+   Apartment Confidence:  0%
+   Address Confidence:    0%
+   Tenant Confidence:     0%
+   Extraction Method:     manual
+   Status:                needs-manual-input
+   Warnings:              No contractor matched - needs manual assignment
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#48
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: B4C5
+   Execution Date:   30/04/2025
+   Creation Date:    30/04/2025
+   Amount:           -980 PLN
+   Account Value:    241207.19 PLN
+   Real Value:       241207.19 PLN
+
+   Description (base):
+   FV 59/03/2025
+
+   Description (optional):
+   Tech-home   Skoczyñski Zbigniew, ul. Modzelewskiego 46/50/lok. 66A, 02-679 Warszawa
+
+🔍 EXTRACTED DATA:
+   Apartment:        NOT FOUND
+   Full Address:     NOT FOUND
+   Street Name:      N/A
+   Building Number:  N/A
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    0%
+   Apartment Confidence:  0%
+   Address Confidence:    0%
+   Tenant Confidence:     0%
+   Extraction Method:     manual
+   Status:                needs-manual-input
+   Warnings:              No contractor matched - needs manual assignment
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#49
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📄 XML DATA:
+   Transaction Code: B4C5
+   Execution Date:   30/04/2025
+   Creation Date:    30/04/2025
+   Amount:           -2820 PLN
+   Account Value:    238387.19 PLN
+   Real Value:       238387.19 PLN
+
+   Description (base):
+   ODPADY 04/2025
+
+   Description (optional):
+   Urz±d m.st. Warszawy dz. Mokotów, ul. Rakowiecka 25/27, 02-517 Warszawa
+
+🔍 EXTRACTED DATA:
+   Apartment:        NOT FOUND
+   Full Address:     NOT FOUND
+   Street Name:      N/A
+   Building Number:  N/A
+   Tenant Name:      N/A
+
+📊 CONFIDENCE & STATUS:
+   Overall Confidence:    0%
+   Apartment Confidence:  0%
+   Address Confidence:    0%
+   Tenant Confidence:     0%
+   Extraction Method:     manual
+   Status:                needs-manual-input
+   Warnings:              No contractor matched - needs manual assignment
+

@@ -74,7 +74,7 @@ export class AIExtractor {
    */
   async matchContractorsBatch(
     transactions: XmlTransaction[],
-    candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string }>>
+    candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string; nip?: string; alternativeNames?: string[] }>>
   ): Promise<Array<{ contractor: any | null; confidence: number; matchedIn: 'desc-opt' | 'desc-base' | 'none'; matchedText?: string }>> {
     if (this.config.aiProvider === 'anthropic') {
       return this.matchContractorsWithClaude(transactions, candidatesPerTransaction);
@@ -182,18 +182,48 @@ export class AIExtractor {
    * System prompt for AI
    */
   private getSystemPrompt(): string {
-    return `You are a data extraction specialist for Polish real estate management software.
-Your job is to extract structured data from messy bank transfer descriptions in Polish.
-
-Extract the following information:
-1. Street name (e.g., "Joliot-Curie")
+    const addresses = this.config.addresses || [];
+    
+    // Build address examples from database
+    let addressExamples = '';
+    if (addresses.length > 0) {
+      const exampleAddr = addresses[0];
+      const altNamesText = exampleAddr.alternativeNames && exampleAddr.alternativeNames.length > 0
+        ? exampleAddr.alternativeNames.join(', ')
+        : '';
+      
+      addressExamples = `1. Street name (e.g., "${exampleAddr.nazwa}"${altNamesText ? ` or variants: ${altNamesText}` : ''})
 2. Building number (e.g., "3")
 3. Apartment/unit number (e.g., "27")
 4. Tenant name (person making the payment)
 
+Known addresses in the system:
+${addresses.map(a => {
+  const alts = a.alternativeNames && a.alternativeNames.length > 0 
+    ? ` (variants: ${a.alternativeNames.join(', ')})` 
+    : '';
+  return `- ${a.nazwa}${alts}`;
+}).join('\n')}
+
 Common patterns:
-- Address format: "Joliot-Curie 3/27" means building 3, apartment 27
-- Variations: "JOLIOT CURIE 3 M.11", "J.CURIE 3/27", "JCURIE 3/34"
+- Address format: "${exampleAddr.nazwa} 3/27" means building 3, apartment 27
+- Variations: "${exampleAddr.nazwa.toUpperCase()} 3 M.11", "${exampleAddr.nazwa.substring(0, 2).toUpperCase()}.${exampleAddr.nazwa.split(' ')[exampleAddr.nazwa.split(' ').length - 1].toUpperCase()} 3/27"`;
+    } else {
+      addressExamples = `1. Street name
+2. Building number
+3. Apartment/unit number
+4. Tenant name (person making the payment)
+
+Common patterns:
+- Address format: "Street 3/27" means building 3, apartment 27
+- Variations: "STREET 3 M.11", "STR 3/27"`;
+    }
+    
+    return `You are a data extraction specialist for Polish real estate management software.
+Your job is to extract structured data from messy bank transfer descriptions in Polish.
+
+Extract the following information:
+${addressExamples}
 - Identifiers: "IDENTYFIKATOR: 27/4" or "ID 22211214" are very reliable
 - Names appear in various formats: "EWA TERESA OSIECKA-CISOWSKA" or "KRZYSZTOF MIECZYSŁAW WAŁBIŃSKI"
 
@@ -203,7 +233,7 @@ IMPORTANT:
 - Provide confidence scores (0-100) for each field
 - Explain your reasoning
 - If you can't find data with confidence, mark it as null
-- Normalize street names to "Joliot-Curie" format
+- Normalize street names to match the primary name from the known addresses list
 - Normalize names to Title Case
 
 Return ONLY valid JSON matching the required schema.`;
@@ -214,6 +244,11 @@ Return ONLY valid JSON matching the required schema.`;
    */
   private getUserPrompt(transactions: XmlTransaction[]): string {
     const examples = this.getExamples();
+    const addresses = this.config.addresses || [];
+    
+    // Use first address for example, or generic if none available
+    const exampleAddr = addresses.length > 0 ? addresses[0].nazwa : 'StreetName';
+    
     const transactionsData = transactions
       .map((t, i) => ({
         index: i,
@@ -243,10 +278,10 @@ Return a JSON object with this exact structure:
   "results": [
     {
       "index": 0,
-      "streetName": "Joliot-Curie" | null,
+      "streetName": "${exampleAddr}" | null,
       "buildingNumber": "3" | null,
       "apartmentNumber": "27" | null,
-      "fullAddress": "Joliot-Curie 3/27" | null,
+      "fullAddress": "${exampleAddr} 3/27" | null,
       "tenantName": "Ewa Teresa Osiecka-Cisowska" | null,
       "confidence": {
         "address": 95,
@@ -263,39 +298,83 @@ Return a JSON object with this exact structure:
    * Few-shot examples for better accuracy
    */
   private getExamples(): string {
-    return `Examples of correct extractions:
+    const addresses = this.config.addresses || [];
+    
+    // Use real addresses from database if available
+    if (addresses.length > 0) {
+      const addr1 = addresses[0];
+      const addr1Upper = addr1.nazwa.toUpperCase();
+      const addr1Alt = addr1.alternativeNames && addr1.alternativeNames.length > 0
+        ? addr1.alternativeNames[0]
+        : addr1Upper;
+      
+      return `Examples of correct extractions:
 
 Example 1:
   DESC-BASE: "FUNDUSZ REMONTOWY"
-  DESC-OPT: "EWA TERESA OSIECKA-CISOWSKA UL. JOLIOT-CURIE 3/27 02-646 WARSZAWA"
+  DESC-OPT: "EWA TERESA OSIECKA-CISOWSKA UL. ${addr1Upper} 3/27 02-646 WARSZAWA"
   
   Extraction:
   {
-    "streetName": "Joliot-Curie",
+    "streetName": "${addr1.nazwa}",
     "buildingNumber": "3",
     "apartmentNumber": "27",
-    "fullAddress": "Joliot-Curie 3/27",
+    "fullAddress": "${addr1.nazwa} 3/27",
     "tenantName": "Ewa Teresa Osiecka-Cisowska",
     "confidence": { "address": 95, "apartment": 95, "tenantName": 90 },
     "reasoning": "Clear address format 3/27 in desc-opt, name before UL."
   }
 
 Example 2:
-  DESC-BASE: "CZYNSZ I FUNDUSZ REMONTOWY ZA LOKALJOLIOT-CURIE 3/4 IDENTYFIKATOR: 27/4"
-  DESC-OPT: "SYLWESTER ŚCIŚLEWSKI  UL.JOLIOT-CURIE 3 M.4 02-646 WARSZAWA"
+  DESC-BASE: "CZYNSZ I FUNDUSZ REMONTOWY ZA LOKAL${addr1Upper} 3/4 IDENTYFIKATOR: 27/4"
+  DESC-OPT: "SYLWESTER ŚCIŚLEWSKI  UL.${addr1Alt} 3 M.4 02-646 WARSZAWA"
   
   Extraction:
   {
-    "streetName": "Joliot-Curie",
+    "streetName": "${addr1.nazwa}",
     "buildingNumber": "3",
     "apartmentNumber": "4",
-    "fullAddress": "Joliot-Curie 3/4",
+    "fullAddress": "${addr1.nazwa} 3/4",
     "tenantName": "Sylwester Ściślewski",
     "confidence": { "address": 98, "apartment": 98, "tenantName": 95 },
     "reasoning": "High confidence: IDENTYFIKATOR confirms 27/4, address confirmed in both fields"
   }
 
 Example 3:
+  DESC-BASE: "Op�aty eksploatacyjne i za funduszremontowy lokalu 17"
+  DESC-OPT: "KOSKA DANIEL  UL RÓŻANA 11 77-100 RZEPNICA"
+  
+  Extraction:
+  {
+    "streetName": null,
+    "buildingNumber": null,
+    "apartmentNumber": "17",
+    "fullAddress": null,
+    "tenantName": "Daniel Koska",
+    "confidence": { "address": 0, "apartment": 70, "tenantName": 85 },
+    "reasoning": "Only apartment number 'lokalu 17' found, different address in desc-opt, name extracted"
+  }`;
+    }
+    
+    // Fallback to generic examples if no addresses configured
+    return `Examples of correct extractions:
+
+Example 1:
+  DESC-BASE: "FUNDUSZ REMONTOWY"
+  DESC-OPT: "EWA TERESA OSIECKA-CISOWSKA UL. EXAMPLE STREET 3/27 02-646 WARSZAWA"
+  
+  Extraction:
+  {
+    "streetName": "Example Street",
+    "buildingNumber": "3",
+    "apartmentNumber": "27",
+    "fullAddress": "Example Street 3/27",
+    "tenantName": "Ewa Teresa Osiecka-Cisowska",
+    "confidence": { "address": 95, "apartment": 95, "tenantName": 90 },
+    "reasoning": "Clear address format 3/27 in desc-opt, name before UL."
+  }
+
+Example 2:
   DESC-BASE: "Op�aty eksploatacyjne i za funduszremontowy lokalu 17"
   DESC-OPT: "KOSKA DANIEL  UL RÓŻANA 11 77-100 RZEPNICA"
   
@@ -351,7 +430,7 @@ Example 3:
    */
   private async matchContractorsWithClaude(
     transactions: XmlTransaction[],
-    candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string }>>
+    candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string; alternativeNames?: string[] }>>
   ): Promise<Array<{ contractor: any | null; confidence: number; matchedIn: 'desc-opt' | 'desc-base' | 'none'; matchedText?: string }>> {
     if (!this.anthropic) {
       throw new Error('Anthropic client not initialized');
@@ -405,7 +484,7 @@ Example 3:
    */
   private async matchContractorsWithOpenAI(
     transactions: XmlTransaction[],
-    candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string }>>
+    candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string; alternativeNames?: string[] }>>
   ): Promise<Array<{ contractor: any | null; confidence: number; matchedIn: 'desc-opt' | 'desc-base' | 'none'; matchedText?: string }>> {
     if (!this.openai) {
       throw new Error('OpenAI client not initialized');
@@ -453,11 +532,22 @@ Example 3:
 
 ZASADY:
 1. Analizuj DESC-BASE i DESC-OPT (DESC-OPT priorytet)
-2. Szukaj nazw firm, instytucji w opisach
-3. Dopasowanie może być częściowe (akronimy, skróty OK)
-4. Wielkość liter ignoruj
-5. Confidence (0-100):
-   - 90-100: Pełna nazwa w opisie
+2. PRIORYTET DOPASOWANIA (od najwyższego):
+   a) NIP - jeśli NIP kontrahenta jest zawarty W CAŁOŚCI w opisie = 100% confidence
+   b) Nazwa główna ORAZ nazwy alternatywne - traktuj RÓWNORZĘDNIE, TEN SAM confidence
+3. Dopasowanie NIP: NIP musi być W CAŁOŚCI zawarty w opisie (ignoruj spacje i myślniki)
+   - Przykład: opis "Zapłata NIP:1234567890" + NIP "1234567890" = DOPASOWANE ✓ (confidence: 100)
+   - Przykład: opis "Zapłata NIP 123-456-78-90" + NIP "1234567890" = DOPASOWANE ✓ (confidence: 100)
+   - Przykład: opis "Zapłata NIP:123456789" + NIP "1234567890" = NIE dopasowane ✗
+4. Dopasowanie nazwa: nazwa główna LUB którakolwiek alternatywna nazwa musi być W CAŁOŚCI zawarta w opisie
+   - WAŻNE: Nazwa główna i alternatywna mają IDENTYCZNY confidence - nie preferuj jednej nad drugą!
+   - Przykład: opis "Zapłata dla MPWIK" + nazwa główna "Miejskie Przedsiębiorstwo Wodociągów i Kanalizacji" = NIE dopasowane ✗
+   - Przykład: opis "Zapłata dla MPWIK" + alternatywna nazwa "MPWIK" = DOPASOWANE ✓ (confidence: 95)
+   - Przykład: opis "Zapłata dla MPWI" + alternatywna nazwa "MPWIK" = NIE dopasowane ✗
+5. Wielkość liter ignoruj
+6. Confidence (0-100):
+   - 100: Pełny NIP w opisie
+   - 95-99: Pełna nazwa główna LUB pełna alt. nazwa w opisie (TEN SAM poziom!)
    - 70-89: Częściowa nazwa/akronim
    - 50-69: Prawdopodobne
    - <50: Zwróć null
@@ -481,7 +571,7 @@ JSON format:
    */
   private getContractorMatchingUserPrompt(
     transactions: XmlTransaction[],
-    candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string }>>
+    candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string; nip?: string; alternativeNames?: string[] }>>
   ): string {
     let prompt = '';
     
@@ -495,7 +585,14 @@ JSON format:
       if (candidates.length > 0) {
         prompt += `\nKandydaci:\n`;
         candidates.forEach((c, i) => {
-          prompt += `  ${i + 1}. ID:${c.id} "${c.nazwa}"\n`;
+          prompt += `  ${i + 1}. ID:${c.id} "${c.nazwa}"`;
+          if (c.nip) {
+            prompt += ` [NIP: ${c.nip}]`;
+          }
+          if (c.alternativeNames && c.alternativeNames.length > 0) {
+            prompt += ` [ALT: ${c.alternativeNames.join(', ')}]`;
+          }
+          prompt += `\n`;
         });
       } else {
         prompt += `\nBrak kandydatów - zwróć null\n`;
@@ -512,7 +609,7 @@ JSON format:
    */
   private processContractorMatchingResponse(
     response: any,
-    candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string }>>
+    candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string; alternativeNames?: string[] }>>
   ): Array<{ contractor: any | null; confidence: number; matchedIn: 'desc-opt' | 'desc-base' | 'none'; matchedText?: string }> {
     return response.results.map((result: any, idx: number) => {
       if (result.contractorId === null || result.confidence < 50) {

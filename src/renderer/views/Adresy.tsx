@@ -1,19 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Kontrahent } from '../../shared/types';
+import { Adres } from '../../shared/types';
 import { translations, Language } from '../translations';
 
-interface KontrahenciProps {
+interface AdresyProps {
   language: Language;
 }
 
-const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
+const Adresy: React.FC<AdresyProps> = ({ language }) => {
   const t = translations[language];
-  const [kontrahenci, setKontrahenci] = useState<Kontrahent[]>([]);
-  const [showAddKontrahent, setShowAddKontrahent] = useState(false);
-  const [editingKontrahent, setEditingKontrahent] = useState<Kontrahent | null>(null);
+  const [adresy, setAdresy] = useState<Adres[]>([]);
+  const [showAddAdres, setShowAddAdres] = useState(false);
+  const [editingAdres, setEditingAdres] = useState<Adres | null>(null);
   const [newNazwa, setNewNazwa] = useState('');
-  const [newKontoKontrahenta, setNewKontoKontrahenta] = useState('');
-  const [newNip, setNewNip] = useState('');
   const [newAlternativeNames, setNewAlternativeNames] = useState<string[]>([]);
   const [newAlternativeName, setNewAlternativeName] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -26,123 +24,115 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const kontrahenciData = await window.electronAPI.getKontrahenci();
-      setKontrahenci(kontrahenciData);
+      const adresyData = await window.electronAPI.getAdresy();
+      setAdresy(adresyData);
     } catch (error) {
-      console.error('Error loading kontrahenci:', error);
+      console.error('Error loading adresy:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleAddKontrahent = async () => {
-    if (!newNazwa || !newKontoKontrahenta) {
+  const handleAddAdres = async () => {
+    if (!newNazwa) {
       alert(t.fillAllFields);
       return;
     }
 
     try {
-      await window.electronAPI.addKontrahent(newNazwa, newKontoKontrahenta, newNip || undefined, newAlternativeNames);
+      await window.electronAPI.addAdres(newNazwa, newAlternativeNames);
       setNewNazwa('');
-      setNewKontoKontrahenta('');
-      setNewNip('');
       setNewAlternativeNames([]);
       setNewAlternativeName('');
-      setShowAddKontrahent(false);
+      setShowAddAdres(false);
       loadData();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      alert(`${t.errorAddingKontrahent}: ${errorMessage}`);
+      alert(`${t.errorAddingAdres}: ${errorMessage}`);
     }
   };
 
-  const handleUpdateKontrahent = async () => {
-    if (!editingKontrahent || !newNazwa || !newKontoKontrahenta) {
+  const handleUpdateAdres = async () => {
+    if (!editingAdres || !newNazwa) {
       alert(t.fillAllFields);
       return;
     }
 
     try {
-      await window.electronAPI.updateKontrahent(editingKontrahent.id, newNazwa, newKontoKontrahenta, newNip || undefined, newAlternativeNames);
+      await window.electronAPI.updateAdres(editingAdres.id, newNazwa, newAlternativeNames);
       setNewNazwa('');
-      setNewKontoKontrahenta('');
-      setNewNip('');
       setNewAlternativeNames([]);
       setNewAlternativeName('');
-      setEditingKontrahent(null);
+      setEditingAdres(null);
       loadData();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      alert(`${t.errorUpdatingKontrahent}: ${errorMessage}`);
+      alert(`${t.errorUpdatingAdres}: ${errorMessage}`);
     }
   };
 
-  const handleDeleteKontrahent = async (id: number) => {
-    if (confirm(t.confirmDeleteKontrahent)) {
+  const handleDeleteAdres = async (id: number) => {
+    if (confirm(t.confirmDeleteAdres)) {
       try {
-        await window.electronAPI.deleteKontrahent(id);
+        await window.electronAPI.deleteAdres(id);
         loadData();
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        alert(`${t.errorDeletingKontrahent}: ${errorMessage}`);
+        alert(`${t.errorDeletingAdres}: ${errorMessage}`);
       }
     }
   };
 
-  const handleEditKontrahent = (kontrahent: Kontrahent) => {
-    setEditingKontrahent(kontrahent);
-    setNewNazwa(kontrahent.nazwa);
-    setNewKontoKontrahenta(kontrahent.kontoKontrahenta);
-    setNewNip(kontrahent.nip || '');
-    setNewAlternativeNames(kontrahent.alternativeNames || []);
+  const handleEditAdres = (adres: Adres) => {
+    setEditingAdres(adres);
+    setNewNazwa(adres.nazwa);
+    setNewAlternativeNames(adres.alternativeNames || []);
     setNewAlternativeName('');
   };
 
   const handleCancelEdit = () => {
-    setEditingKontrahent(null);
-    setShowAddKontrahent(false);
+    setEditingAdres(null);
+    setShowAddAdres(false);
     setNewNazwa('');
-    setNewKontoKontrahenta('');
-    setNewNip('');
     setNewAlternativeNames([]);
     setNewAlternativeName('');
   };
 
   const handleImportFromFile = async () => {
     try {
-      const result = await window.electronAPI.importKontrahenciFromFile();
+      const result = await window.electronAPI.importAdresyFromFile();
       if (result.success) {
-        alert(t.importKontrahenciSuccess.replace('{count}', result.count.toString()));
+        alert(t.importAdresySuccess.replace('{count}', result.count.toString()));
         loadData();
       } else if (result.error) {
-        alert(`${t.importKontrahenciError}: ${result.error}`);
+        alert(`${t.importAdresyError}: ${result.error}`);
       }
     } catch (error) {
-      alert(t.importKontrahenciError);
+      alert(t.importAdresyError);
     }
   };
 
   const handleExportToFile = async () => {
     try {
-      const result = await window.electronAPI.exportKontrahenciToFile();
+      const result = await window.electronAPI.exportAdresyToFile();
       if (result.success) {
-        alert(t.exportKontrahenciSuccess.replace('{count}', result.count.toString()));
+        alert(t.exportAdresySuccess.replace('{count}', result.count.toString()));
       } else if (result.error) {
-        alert(`${t.exportKontrahenciError}: ${result.error}`);
+        alert(`${t.exportAdresyError}: ${result.error}`);
       }
     } catch (error) {
-      alert(t.exportKontrahenciError);
+      alert(t.exportAdresyError);
     }
   };
 
   const handleDeleteAll = async () => {
-    if (confirm(t.confirmDeleteAllKontrahenci)) {
+    if (confirm(t.confirmDeleteAllAdresy)) {
       try {
-        await window.electronAPI.deleteAllKontrahenci();
+        await window.electronAPI.deleteAllAdresy();
         loadData();
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        alert(`${t.errorDeletingKontrahent}: ${errorMessage}`);
+        alert(`${t.errorDeletingAdres}: ${errorMessage}`);
       }
     }
   };
@@ -158,9 +148,8 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
     setNewAlternativeNames(newAlternativeNames.filter((_, i) => i !== index));
   };
 
-  const filteredKontrahenci = kontrahenci.filter(k =>
-    k.nazwa.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    k.kontoKontrahenta.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredAdresy = adresy.filter(a =>
+    a.nazwa.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -174,14 +163,14 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
             marginBottom: '15px',
           }}
         >
-          <h2>{t.kontrahenci}</h2>
+          <h2>{t.adresy}</h2>
           <div style={{ display: 'flex', gap: '10px' }}>
-            {kontrahenci.length > 0 && (
+            {adresy.length > 0 && (
               <button
                 className="button button-danger"
                 onClick={handleDeleteAll}
               >
-                {t.deleteAllKontrahenci}
+                {t.deleteAllAdresy}
               </button>
             )}
             <button
@@ -193,24 +182,24 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
             <button
               className="button button-secondary"
               onClick={handleExportToFile}
-              disabled={kontrahenci.length === 0}
+              disabled={adresy.length === 0}
             >
               {t.exportToFile}
             </button>
             <button
               className="button button-primary"
-              onClick={() => setShowAddKontrahent(true)}
-              disabled={showAddKontrahent || editingKontrahent !== null}
+              onClick={() => setShowAddAdres(true)}
+              disabled={showAddAdres || editingAdres !== null}
             >
-              {t.addKontrahent}
+              {t.addAdres}
             </button>
           </div>
         </div>
 
-        {(showAddKontrahent || editingKontrahent) && (
+        {(showAddAdres || editingAdres) && (
           <div className="bank-form">
             <h3 style={{ marginBottom: '10px' }}>
-              {editingKontrahent ? t.editKontrahent : t.addNewKontrahent}
+              {editingAdres ? t.editAdres : t.addNewAdres}
             </h3>
             <div className="form-group">
               <label>{t.nazwa}</label>
@@ -218,25 +207,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
                 type="text"
                 value={newNazwa}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewNazwa(e.target.value)}
-                placeholder="np. Miasto Stołeczne Warszawa"
-              />
-            </div>
-            <div className="form-group">
-              <label>{t.kontoKontrahenta}</label>
-              <input
-                type="text"
-                value={newKontoKontrahenta}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewKontoKontrahenta(e.target.value)}
-                placeholder="np. 201-00001"
-              />
-            </div>
-            <div className="form-group">
-              <label>{t.nip}</label>
-              <input
-                type="text"
-                value={newNip}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewNip(e.target.value)}
-                placeholder="np. 1234567890"
+                placeholder="np. Joliot-Curie"
               />
             </div>
             <div className="form-group">
@@ -271,7 +242,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
                       handleAddAlternativeName();
                     }
                   }}
-                  placeholder="np. Tech-Home, TECH HOME"
+                  placeholder="np. Joliot Curie, ul. Joliot-Curie"
                   style={{ flex: 1 }}
                 />
                 <button
@@ -287,10 +258,10 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
             <div className="button-group button-group-separator" style={{ marginTop: '20px', paddingTop: '15px' }}>
               <button
                 className="button button-success"
-                onClick={editingKontrahent ? handleUpdateKontrahent : handleAddKontrahent}
+                onClick={editingAdres ? handleUpdateAdres : handleAddAdres}
                 style={{ fontSize: '15px', padding: '10px 24px' }}
               >
-                {editingKontrahent ? t.update : t.add}
+                {editingAdres ? t.update : t.add}
               </button>
               <button 
                 className="button button-secondary" 
@@ -303,55 +274,51 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
           </div>
         )}
 
-        {kontrahenci.length > 0 && (
+        {adresy.length > 0 && (
           <div className="form-group" style={{ marginBottom: '15px' }}>
             <input
               type="text"
-              placeholder={t.searchKontrahenci}
+              placeholder={t.searchAdresy}
               value={searchTerm}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
             />
           </div>
         )}
 
-        {kontrahenci.length > 0 ? (
+        {adresy.length > 0 ? (
           <>
             <div style={{ marginBottom: '10px', fontSize: '14px', opacity: 0.7 }}>
-              {t.totalKontrahenci}: {filteredKontrahenci.length} / {kontrahenci.length}
+              {t.totalAdresy}: {filteredAdresy.length} / {adresy.length}
             </div>
             <table>
               <thead>
                 <tr>
                   <th>{t.nazwa}</th>
-                  <th>{t.kontoKontrahenta}</th>
-                  <th>{t.nip}</th>
                   <th>{t.actions}</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredKontrahenci.map((kontrahent) => (
-                  <tr key={kontrahent.id}>
+                {filteredAdresy.map((adres) => (
+                  <tr key={adres.id}>
                     <td>
-                      <div>{kontrahent.nazwa}</div>
-                      {kontrahent.alternativeNames && kontrahent.alternativeNames.length > 0 && (
+                      <div>{adres.nazwa}</div>
+                      {adres.alternativeNames && adres.alternativeNames.length > 0 && (
                         <div style={{ fontSize: '11px', opacity: 0.6, marginTop: '4px' }}>
-                          {kontrahent.alternativeNames.join(', ')}
+                          {adres.alternativeNames.join(', ')}
                         </div>
                       )}
                     </td>
-                    <td>{kontrahent.kontoKontrahenta}</td>
-                    <td>{kontrahent.nip || '-'}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <button
                           className="button button-small button-primary"
-                          onClick={() => handleEditKontrahent(kontrahent)}
+                          onClick={() => handleEditAdres(adres)}
                         >
                           {t.edit}
                         </button>
                         <button
                           className="button button-small button-danger"
-                          onClick={() => handleDeleteKontrahent(kontrahent.id)}
+                          onClick={() => handleDeleteAdres(adres.id)}
                         >
                           {t.delete}
                         </button>
@@ -363,11 +330,11 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
             </table>
           </>
         ) : (
-          <div className="empty-state">{t.noKontrahenciConfigured}</div>
+          <div className="empty-state">{t.noAdresyConfigured}</div>
         )}
       </div>
     </div>
   );
 };
 
-export default Kontrahenci;
+export default Adresy;

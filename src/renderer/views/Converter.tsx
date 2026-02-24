@@ -1,7 +1,191 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileEntry, Bank } from '../../shared/types';
+import { FileEntry, Bank, Adres } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { generateId } from '../../shared/utils';
+
+interface SearchableAdresSelectProps {
+  adresy: Adres[];
+  selectedAdresId: number | null;
+  onChange: (adresId: number | null) => void;
+  placeholder: string;
+  searchPlaceholder: string;
+}
+
+const SearchableAdresSelect: React.FC<SearchableAdresSelectProps> = ({ 
+  adresy, 
+  selectedAdresId, 
+  onChange, 
+  placeholder,
+  searchPlaceholder 
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isDarkMode, setIsDarkMode] = useState(document.body.classList.contains('dark-mode'));
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Detect dark mode changes
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDarkMode(document.body.classList.contains('dark-mode'));
+    });
+    
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+    
+    return () => observer.disconnect();
+  }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+        setSearchTerm('');
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Theme colors
+  const colors = isDarkMode ? {
+    background: '#161b22',
+    border: '#30363d',
+    text: '#e0e0e0',
+    textMuted: '#8b949e',
+    hover: '#0d1117',
+    selected: '#21262d'
+  } : {
+    background: '#fff',
+    border: '#ddd',
+    text: '#000',
+    textMuted: '#999',
+    hover: '#f8f8f8',
+    selected: '#f0f0f0'
+  };
+
+  const selectedAdres = adresy.find(a => a.id === selectedAdresId);
+
+  const filteredAdresy = adresy.filter(adres => {
+    if (!searchTerm) return true;
+    const search = searchTerm.toLowerCase();
+    return (
+      adres.nazwa.toLowerCase().includes(search) ||
+      (adres.alternativeNames && adres.alternativeNames.some(alt => alt.toLowerCase().includes(search)))
+    );
+  });
+
+  const handleSelect = (adresId: number | null) => {
+    onChange(adresId);
+    setIsOpen(false);
+    setSearchTerm('');
+  };
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          padding: '6px 10px',
+          border: `1px solid ${colors.border}`,
+          borderRadius: '4px',
+          cursor: 'pointer',
+          backgroundColor: colors.background,
+          minHeight: '34px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}
+      >
+        <span style={{ color: selectedAdres ? colors.text : colors.textMuted }}>
+          {selectedAdres ? selectedAdres.nazwa : placeholder}
+        </span>
+        <span style={{ fontSize: '10px', color: colors.textMuted }}>▼</span>
+      </div>
+
+      {isOpen && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            backgroundColor: colors.background,
+            border: `1px solid ${colors.border}`,
+            borderRadius: '4px',
+            marginTop: '2px',
+            maxHeight: '250px',
+            overflow: 'hidden',
+            zIndex: 1000,
+            boxShadow: isDarkMode ? '0 2px 8px rgba(0,0,0,0.5)' : '0 2px 8px rgba(0,0,0,0.15)'
+          }}
+        >
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder={searchPlaceholder}
+            autoFocus
+            style={{
+              width: '100%',
+              padding: '8px',
+              border: 'none',
+              borderBottom: `1px solid ${colors.border}`,
+              outline: 'none',
+              boxSizing: 'border-box',
+              backgroundColor: colors.background,
+              color: colors.text
+            }}
+          />
+          <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+            <div
+              onClick={() => handleSelect(null)}
+              style={{
+                padding: '8px 10px',
+                cursor: 'pointer',
+                backgroundColor: selectedAdresId === null ? colors.selected : colors.background,
+                borderBottom: `1px solid ${colors.border}`
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = colors.hover}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = selectedAdresId === null ? colors.selected : colors.background}
+            >
+              <em style={{ color: colors.textMuted }}>{placeholder}</em>
+            </div>
+            {filteredAdresy.map((adres) => (
+              <div
+                key={adres.id}
+                onClick={() => handleSelect(adres.id)}
+                style={{
+                  padding: '8px 10px',
+                  cursor: 'pointer',
+                  backgroundColor: adres.id === selectedAdresId ? colors.selected : colors.background,
+                  borderBottom: `1px solid ${colors.border}`
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = colors.hover}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = adres.id === selectedAdresId ? colors.selected : colors.background}
+              >
+                <div style={{ color: colors.text }}>{adres.nazwa}</div>
+                {adres.alternativeNames && adres.alternativeNames.length > 0 && (
+                  <div style={{ fontSize: '11px', color: colors.textMuted, marginTop: '2px' }}>
+                    {adres.alternativeNames.join(', ')}
+                  </div>
+                )}
+              </div>
+            ))}
+            {filteredAdresy.length === 0 && (
+              <div style={{ padding: '8px 10px', color: colors.textMuted, textAlign: 'center' }}>
+                Brak wyników
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface ConverterProps {
   language: Language;
@@ -14,6 +198,7 @@ interface ConverterProps {
 const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, selectedBank, setSelectedBank }) => {
   const t = translations[language];
   const [banks, setBanks] = useState<Bank[]>([]);
+  const [adresy, setAdresy] = useState<Adres[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showDuplicatesModal, setShowDuplicatesModal] = useState(false);
@@ -30,6 +215,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
 
   useEffect(() => {
     loadBanks();
+    loadAdresy();
   }, []);
 
   const loadBanks = async () => {
@@ -39,6 +225,15 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
       setBanks(banksData);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadAdresy = async () => {
+    try {
+      const adresyData = await window.electronAPI.getAdresy();
+      setAdresy(adresyData);
+    } catch (error) {
+      console.error('Error loading addresses:', error);
     }
   };
 
@@ -82,6 +277,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
       filePath: file.filePath,
       bankId: bankId,
       bankName: bank?.name || null,
+      adresId: null,
       status: 'pending',
     }));
     setFiles([...files, ...fileEntries]);
@@ -131,6 +327,14 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
         }
         return file;
       })
+    );
+  };
+
+  const handleAdresChange = (fileId: string, adresId: number | null) => {
+    setFiles(
+      files.map((file) => 
+        file.id === fileId ? { ...file, adresId } : file
+      )
     );
   };
 
@@ -435,6 +639,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                   <th>#</th>
                   <th>{t.fileName}</th>
                   <th>{t.bank}</th>
+                  <th>{t.adres}</th>
                   <th>{t.status}</th>
                   <th>{t.actions}</th>
                 </tr>
@@ -443,7 +648,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                 {files.map((file, index) => (
                   <tr key={file.id} className={file.status === 'processing' ? 'processing-row' : ''}>
                     {file.status === 'processing' ? (
-                      <td colSpan={5}>
+                      <td colSpan={6}>
                         <div className="processing-loader">
                           <div className="loader-spinner"></div>
                           <div className="loader-content">
@@ -468,6 +673,15 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                               </option>
                             ))}
                           </select>
+                        </td>
+                        <td>
+                          <SearchableAdresSelect
+                            adresy={adresy}
+                            selectedAdresId={file.adresId}
+                            onChange={(adresId) => handleAdresChange(file.id, adresId)}
+                            placeholder={t.chooseAdres}
+                            searchPlaceholder={t.searchAdres}
+                          />
                         </td>
                         <td>
                           <span

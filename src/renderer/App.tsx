@@ -3,12 +3,13 @@ import Converter from './views/Converter';
 import Settings from './views/Settings';
 import History from './views/History';
 import Kontrahenci from './views/Kontrahenci';
+import Adresy from './views/Adresy';
 import Logo from './components/Logo';
 import UpdateNotification from './components/UpdateNotification';
 import { translations, Language } from './translations';
 import { FileEntry } from '../shared/types';
 
-type View = 'converter' | 'settings' | 'history' | 'kontrahenci';
+type View = 'converter' | 'settings' | 'history' | 'kontrahenci' | 'adresy';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('converter');
@@ -81,6 +82,12 @@ const App: React.FC = () => {
             <span>👥</span> {t.kontrahenci}
           </div>
           <div
+            className={`nav-item ${currentView === 'adresy' ? 'active' : ''}`}
+            onClick={() => setCurrentView('adresy')}
+          >
+            <span>📍</span> {t.adresy}
+          </div>
+          <div
             className={`nav-item ${currentView === 'settings' ? 'active' : ''}`}
             onClick={() => setCurrentView('settings')}
           >
@@ -106,6 +113,7 @@ const App: React.FC = () => {
           />
         )}
         {currentView === 'kontrahenci' && <Kontrahenci language={language} />}
+        {currentView === 'adresy' && <Adresy language={language} />}
         {currentView === 'settings' && (
           <Settings
             darkMode={darkMode}

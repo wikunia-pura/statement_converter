@@ -1,6 +1,6 @@
 // Type definitions for Electron API exposed via preload
 
-import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent } from '../shared/types';
+import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres } from '../shared/types';
 
 interface ConversionResult {
   success: boolean;
@@ -18,11 +18,21 @@ interface ElectronAPI {
 
   // Kontrahenci
   getKontrahenci: () => Promise<Kontrahent[]>;
-  addKontrahent: (nazwa: string, kontoKontrahenta: string) => Promise<Kontrahent>;
-  updateKontrahent: (id: number, nazwa: string, kontoKontrahenta: string) => Promise<boolean>;
+  addKontrahent: (nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[]) => Promise<Kontrahent>;
+  updateKontrahent: (id: number, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[]) => Promise<boolean>;
   deleteKontrahent: (id: number) => Promise<boolean>;
   deleteAllKontrahenci: () => Promise<boolean>;
   importKontrahenciFromFile: () => Promise<{ success: boolean; count?: number; error?: string }>;
+  exportKontrahenciToFile: () => Promise<{ success: boolean; count?: number; filePath?: string; error?: string }>;
+
+  // Adresy
+  getAdresy: () => Promise<Adres[]>;
+  addAdres: (nazwa: string, alternativeNames?: string[]) => Promise<Adres>;
+  updateAdres: (id: number, nazwa: string, alternativeNames?: string[]) => Promise<boolean>;
+  deleteAdres: (id: number) => Promise<boolean>;
+  deleteAllAdresy: () => Promise<boolean>;
+  importAdresyFromFile: () => Promise<{ success: boolean; count?: number; error?: string }>;
+  exportAdresyToFile: () => Promise<{ success: boolean; count?: number; filePath?: string; error?: string }>;
 
   // Converters
   getConverters: () => Promise<Converter[]>;

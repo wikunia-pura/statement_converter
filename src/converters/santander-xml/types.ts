@@ -3,7 +3,7 @@
  */
 
 import { MatchedContractor } from './contractor-matcher';
-import { Kontrahent } from '../../shared/types';
+import { Kontrahent, Adres } from '../../shared/types';
 
 export interface XmlTransaction {
   trnCode: string;
@@ -167,4 +167,7 @@ export interface ConverterConfig {
   
   // Contractors list for expense matching
   contractors?: Kontrahent[];
+  
+  // Addresses list for income transaction matching (with alternative names)
+  addresses?: Adres[];
 }

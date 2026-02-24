@@ -56,6 +56,7 @@ export class ContractorMatcher {
   /**
    * Get top N candidate contractors for a transaction (for AI pre-filtering)
    * Returns the most likely contractors based on fuzzy matching
+   * Score priority: NIP (110) > Main name = Alternative names (100 - EQUAL) > Word-based (0-70)
    */
   getTopCandidates(transaction: XmlTransaction, topN: number = 10): Kontrahent[] {
     // Combine desc-opt and desc-base for searching
@@ -63,14 +64,39 @@ export class ContractorMatcher {
     
     // Score all contractors
     const scored = this.contractors.map(contractor => {
-      const contractorNameLower = contractor.nazwa.toLowerCase();
       let score = 0;
 
-      // Full name match
-      if (searchText.includes(contractorNameLower)) {
-        score = 100;
-      } else {
-        // Word-based matching
+      // HIGHEST PRIORITY: Check NIP (full match required) - Score: 110
+      if (contractor.nip && contractor.nip.trim()) {
+        const nip = contractor.nip.replace(/[\s-]/g, ''); // Remove spaces and dashes
+        const searchNormalized = searchText.replace(/[\s-]/g, '');
+        if (searchNormalized.includes(nip)) {
+          score = 110; // Highest priority
+        }
+      }
+
+      // If NIP not matched, check main name - Score: 100
+      if (score === 0) {
+        const contractorNameLower = contractor.nazwa.toLowerCase();
+        if (searchText.includes(contractorNameLower)) {
+          score = 100;
+        }
+      }
+
+      // If main name not matched, check alternative names - Score: 100 (SAME as main name!)
+      if (score === 0 && contractor.alternativeNames && contractor.alternativeNames.length > 0) {
+        for (const altName of contractor.alternativeNames) {
+          const altNameLower = altName.toLowerCase();
+          if (searchText.includes(altNameLower)) {
+            score = 100; // EQUAL priority with main name
+            break;
+          }
+        }
+      }
+
+      // If no full match, try word-based matching on main name
+      if (score === 0) {
+        const contractorNameLower = contractor.nazwa.toLowerCase();
         const words = contractorNameLower.split(/\s+/).filter(w => w.length > 3);
         let matchedWords = 0;
         
@@ -98,6 +124,8 @@ export class ContractorMatcher {
 
   /**
    * Find best matching contractor in description
+   * Priority order checked: NIP (highest) > Main name = Alternative names (EQUAL) > Word-based
+   * Note: Main name and alternative names have IDENTICAL confidence calculation
    */
   private findBestMatch(description: string): Omit<MatchedContractor, 'matchedIn'> {
     const descLower = description.toLowerCase();
@@ -106,11 +134,26 @@ export class ContractorMatcher {
     let matchedText = '';
 
     for (const contractor of this.contractors) {
+      // FIRST: Check NIP (highest priority - full match required)
+      if (contractor.nip && contractor.nip.trim()) {
+        const nip = contractor.nip.replace(/[\s-]/g, ''); // Remove spaces and dashes
+        const descNormalized = descLower.replace(/[\s-]/g, '');
+        
+        if (descNormalized.includes(nip)) {
+          // NIP match - 100% confidence if exact, 98% if embedded
+          const confidence = descNormalized === nip ? 100 : 98;
+          
+          if (confidence > bestConfidence) {
+            bestMatch = contractor;
+            bestConfidence = confidence;
+            matchedText = `NIP: ${contractor.nip}`;
+          }
+        }
+      }
+
+      // SECOND: Check main name (uses calculateConfidence - 75-100% depending on position)
       const contractorNameLower = contractor.nazwa.toLowerCase();
-      
-      // Check for partial match (contractor name is contained in description)
       if (descLower.includes(contractorNameLower)) {
-        // Full name match - highest confidence
         const confidence = this.calculateConfidence(contractorNameLower, descLower);
         
         if (confidence > bestConfidence) {
@@ -118,8 +161,28 @@ export class ContractorMatcher {
           bestConfidence = confidence;
           matchedText = contractor.nazwa;
         }
-      } else {
-        // Check for word matches (individual words from contractor name)
+      }
+
+      // THIRD: Check alternative names (SAME calculateConfidence as main name - EQUAL priority!)
+      if (contractor.alternativeNames && contractor.alternativeNames.length > 0) {
+        for (const altName of contractor.alternativeNames) {
+          const altNameLower = altName.toLowerCase();
+          
+          if (descLower.includes(altNameLower)) {
+            // Uses SAME confidence calculation as main name
+            const confidence = this.calculateConfidence(altNameLower, descLower);
+            
+            if (confidence > bestConfidence) {
+              bestMatch = contractor;
+              bestConfidence = confidence;
+              matchedText = altName; // Show which alternative name matched
+            }
+          }
+        }
+      }
+
+      // Only if no full match found, try word-based matching on main name
+      if (bestMatch !== contractor) {
         const words = contractorNameLower.split(/\s+/).filter(w => w.length > 3); // Only words > 3 chars
         let matchedWords = 0;
         
@@ -150,6 +213,8 @@ export class ContractorMatcher {
 
   /**
    * Calculate confidence score for a match
+   * Used for BOTH main name and alternative names (ensures EQUAL confidence)
+   * Returns: 75-100 depending on position and length ratio
    */
   private calculateConfidence(contractorName: string, description: string): number {
     // Exact match

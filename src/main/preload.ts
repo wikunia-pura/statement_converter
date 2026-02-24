@@ -12,6 +12,14 @@ const IPC_CHANNELS = {
   DELETE_KONTRAHENT: 'db:delete-kontrahent',
   DELETE_ALL_KONTRAHENCI: 'db:delete-all-kontrahenci',
   IMPORT_KONTRAHENCI_FROM_FILE: 'db:import-kontrahenci-from-file',
+  EXPORT_KONTRAHENCI_TO_FILE: 'db:export-kontrahenci-to-file',
+  GET_ADRESY: 'db:get-adresy',
+  ADD_ADRES: 'db:add-adres',
+  UPDATE_ADRES: 'db:update-adres',
+  DELETE_ADRES: 'db:delete-adres',
+  DELETE_ALL_ADRESY: 'db:delete-all-adresy',
+  IMPORT_ADRESY_FROM_FILE: 'db:import-adresy-from-file',
+  EXPORT_ADRESY_TO_FILE: 'db:export-adresy-to-file',
   GET_CONVERTERS: 'converters:get-all',
   SELECT_FILES: 'files:select',
   SELECT_OUTPUT_FOLDER: 'files:select-output-folder',
@@ -44,13 +52,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Kontrahenci
   getKontrahenci: () => ipcRenderer.invoke(IPC_CHANNELS.GET_KONTRAHENCI),
-  addKontrahent: (nazwa: string, kontoKontrahenta: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.ADD_KONTRAHENT, nazwa, kontoKontrahenta),
-  updateKontrahent: (id: number, nazwa: string, kontoKontrahenta: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_KONTRAHENT, id, nazwa, kontoKontrahenta),
+  addKontrahent: (nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ADD_KONTRAHENT, nazwa, kontoKontrahenta, nip, alternativeNames),
+  updateKontrahent: (id: number, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_KONTRAHENT, id, nazwa, kontoKontrahenta, nip, alternativeNames),
   deleteKontrahent: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_KONTRAHENT, id),
   deleteAllKontrahenci: () => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ALL_KONTRAHENCI),
   importKontrahenciFromFile: () => ipcRenderer.invoke(IPC_CHANNELS.IMPORT_KONTRAHENCI_FROM_FILE),
+  exportKontrahenciToFile: () => ipcRenderer.invoke(IPC_CHANNELS.EXPORT_KONTRAHENCI_TO_FILE),
+
+  // Adresy
+  getAdresy: () => ipcRenderer.invoke(IPC_CHANNELS.GET_ADRESY),
+  addAdres: (nazwa: string, alternativeNames?: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ADD_ADRES, nazwa, alternativeNames),
+  updateAdres: (id: number, nazwa: string, alternativeNames?: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_ADRES, id, nazwa, alternativeNames),
+  deleteAdres: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ADRES, id),
+  deleteAllAdresy: () => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ALL_ADRESY),
+  importAdresyFromFile: () => ipcRenderer.invoke(IPC_CHANNELS.IMPORT_ADRESY_FROM_FILE),
+  exportAdresyToFile: () => ipcRenderer.invoke(IPC_CHANNELS.EXPORT_ADRESY_TO_FILE),
 
   // Converters
   getConverters: () => ipcRenderer.invoke(IPC_CHANNELS.GET_CONVERTERS),

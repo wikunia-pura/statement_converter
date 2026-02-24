@@ -66,12 +66,12 @@ function setupIpcHandlers() {
     return database.getAllKontrahenci();
   });
 
-  ipcMain.handle(IPC_CHANNELS.ADD_KONTRAHENT, async (_, nazwa: string, kontoKontrahenta: string) => {
-    return database.addKontrahent(nazwa, kontoKontrahenta);
+  ipcMain.handle(IPC_CHANNELS.ADD_KONTRAHENT, async (_, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[]) => {
+    return database.addKontrahent(nazwa, kontoKontrahenta, nip, alternativeNames);
   });
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_KONTRAHENT, async (_, id: number, nazwa: string, kontoKontrahenta: string) => {
-    database.updateKontrahent(id, nazwa, kontoKontrahenta);
+  ipcMain.handle(IPC_CHANNELS.UPDATE_KONTRAHENT, async (_, id: number, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[]) => {
+    database.updateKontrahent(id, nazwa, kontoKontrahenta, nip, alternativeNames);
     return true;
   });
 
@@ -105,6 +105,23 @@ function setupIpcHandlers() {
       // Parse the file
       const lines = content.split('\n');
       let count = 0;
+      let lastKontrahent: any = null;
+      let accumulatedNip: string | undefined = undefined;
+      let accumulatedAltNames: string[] = [];
+      
+      const finalizeLastKontrahent = () => {
+        if (lastKontrahent && (accumulatedNip || accumulatedAltNames.length > 0)) {
+          database.updateKontrahent(
+            lastKontrahent.id, 
+            lastKontrahent.nazwa, 
+            lastKontrahent.kontoKontrahenta, 
+            accumulatedNip, 
+            accumulatedAltNames
+          );
+          if (accumulatedNip) lastKontrahent.nip = accumulatedNip;
+          if (accumulatedAltNames.length > 0) lastKontrahent.alternativeNames = accumulatedAltNames;
+        }
+      };
       
       for (const line of lines) {
         // Skip header lines and empty lines
@@ -113,14 +130,41 @@ function setupIpcHandlers() {
         }
         
         // Skip page separator lines
-        if (line.includes('JOLANTA GONTAREK') || line.includes('Strona')) {
+        if (line.includes('JOLANTA GONTAREK') || line.includes('Strona') || line.includes('©vDom')) {
+          continue;
+        }
+        
+        // Check if it's a NIP line
+        const nipMatch = line.match(/^\s*NIP:\s*(.+)$/);
+        if (nipMatch && lastKontrahent) {
+          const nip = nipMatch[1].trim();
+          if (nip) {
+            accumulatedNip = nip;
+          }
+          continue;
+        }
+        
+        // Check if it's an alternative names line
+        const altMatch = line.match(/^\s*ALT:\s*(.+)$/);
+        if (altMatch && lastKontrahent) {
+          // Accumulate alternative name
+          const altName = altMatch[1].trim();
+          if (altName.length > 0) {
+            accumulatedAltNames.push(altName);
+          }
           continue;
         }
         
         // Parse data line - Symbol and Nazwa are separated by spaces
-        // Symbol is in format like "201-00001" and Nazwa follows
-        const match = line.match(/^\s*(\d{3}-\d+)\s+(.+?)\s+[ZN]\s+/);
+        // Symbol is in format like "201-00001" and Nazwa follows, then multiple spaces before Z/N column
+        // Example: "       201-00001    Miasto Stołeczne Warszawa                 Z   1   S"
+        const match = line.match(/^\s*(\d{3}-\d+)\s+(.+?)\s{2,}[ZN]\s+/);
         if (match) {
+          // Finalize previous kontrahent with accumulated data
+          finalizeLastKontrahent();
+          accumulatedNip = undefined;
+          accumulatedAltNames = [];
+          
           const symbol = match[1].trim();
           const nazwa = match[2].trim();
           
@@ -130,13 +174,217 @@ function setupIpcHandlers() {
           );
           
           if (!existing) {
-            database.addKontrahent(nazwa, symbol);
+            lastKontrahent = database.addKontrahent(nazwa, symbol, undefined, []);
             count++;
+          } else {
+            lastKontrahent = null;
           }
         }
       }
       
+      // Finalize last kontrahent in file
+      finalizeLastKontrahent();
+      
       return { success: true, count };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return { success: false, error: errorMessage };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.EXPORT_KONTRAHENCI_TO_FILE, async () => {
+    try {
+      const result = await dialog.showSaveDialog(mainWindow!, {
+        title: 'Export Kontrahenci',
+        defaultPath: 'kontrahenci.txt',
+        filters: [
+          { name: 'Text Files', extensions: ['txt'] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+      });
+
+      if (result.canceled || !result.filePath) {
+        return { success: false };
+      }
+
+      const kontrahenci = database.getAllKontrahenci();
+      
+      // Create text content in the same format as import expects
+      const lines: string[] = [];
+      lines.push('Plan kont - Kontrahenci');
+      lines.push('-'.repeat(100));
+      lines.push('  Symbol       Nazwa                                            RO  TS');
+      lines.push('-'.repeat(100));
+      
+      for (const k of kontrahenci) {
+        // Format: "  Symbol       Nazwa (padded to ~45 chars)  Z   1"
+        const symbol = k.kontoKontrahenta.padEnd(12);
+        const nazwa = k.nazwa.padEnd(45);
+        lines.push(`  ${symbol} ${nazwa}  Z   1`);
+        
+        // Add NIP if present
+        if (k.nip) {
+          lines.push(`    NIP: ${k.nip}`);
+        }
+        
+        // Add alternative names if present
+        if (k.alternativeNames && k.alternativeNames.length > 0) {
+          lines.push(`    ALT: ${k.alternativeNames.join(', ')}`);
+        }
+      }
+      
+      const txtContent = lines.join('\n');
+      
+      fs.writeFileSync(result.filePath, txtContent, 'utf-8');
+      
+      return { success: true, count: kontrahenci.length, filePath: result.filePath };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return { success: false, error: errorMessage };
+    }
+  });
+
+  // Database - Adresy
+  ipcMain.handle(IPC_CHANNELS.GET_ADRESY, async () => {
+    return database.getAllAdresy();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ADD_ADRES, async (_, nazwa: string, alternativeNames?: string[]) => {
+    return database.addAdres(nazwa, alternativeNames);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.UPDATE_ADRES, async (_, id: number, nazwa: string, alternativeNames?: string[]) => {
+    database.updateAdres(id, nazwa, alternativeNames);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_ADRES, async (_, id: number) => {
+    database.deleteAdres(id);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_ALL_ADRESY, async () => {
+    database.deleteAllAdresy();
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.IMPORT_ADRESY_FROM_FILE, async () => {
+    try {
+      const result = await dialog.showOpenDialog(mainWindow!, {
+        properties: ['openFile'],
+        filters: [
+          { name: 'Text Files', extensions: ['txt'] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false };
+      }
+
+      const filePath = result.filePaths[0];
+      const content = fs.readFileSync(filePath, 'utf-8');
+      
+      // Parse the file
+      const lines = content.split('\n');
+      let count = 0;
+      let lastAdres: any = null;
+      let accumulatedAltNames: string[] = [];
+      
+      const finalizeLastAdres = () => {
+        if (lastAdres && accumulatedAltNames.length > 0) {
+          database.updateAdres(lastAdres.id, lastAdres.nazwa, accumulatedAltNames);
+          lastAdres.alternativeNames = accumulatedAltNames;
+        }
+      };
+      
+      for (const line of lines) {
+        // Skip header lines and empty lines
+        if (line.trim().length === 0 || line.includes('Adresy') || line.includes('---')) {
+          continue;
+        }
+        
+        // Check if it's an alternative names line
+        const altMatch = line.match(/^\s*ALT:\s*(.+)$/);
+        if (altMatch && lastAdres) {
+          // Accumulate alternative name
+          const altName = altMatch[1].trim();
+          if (altName.length > 0) {
+            accumulatedAltNames.push(altName);
+          }
+          continue;
+        }
+        
+        // Parse data line - just nazwa (no symbol)
+        const nazwa = line.trim();
+        if (nazwa.length > 0 && !nazwa.startsWith('ALT:')) {
+          // Finalize previous adres with accumulated alt names
+          finalizeLastAdres();
+          accumulatedAltNames = [];
+          
+          // Check if not already exists
+          const existing = database.getAllAdresy().find(
+            a => a.nazwa === nazwa
+          );
+          
+          if (!existing) {
+            lastAdres = database.addAdres(nazwa, []);
+            count++;
+          } else {
+            lastAdres = null;
+          }
+        }
+      }
+      
+      // Finalize last adres in file
+      finalizeLastAdres();
+      
+      return { success: true, count };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return { success: false, error: errorMessage };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.EXPORT_ADRESY_TO_FILE, async () => {
+    try {
+      const result = await dialog.showSaveDialog(mainWindow!, {
+        title: 'Export Adresy',
+        defaultPath: 'adresy.txt',
+        filters: [
+          { name: 'Text Files', extensions: ['txt'] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+      });
+
+      if (result.canceled || !result.filePath) {
+        return { success: false };
+      }
+
+      const adresy = database.getAllAdresy();
+      
+      // Create text content: simple list of nazwy with ALT: lines for alternative names
+      const lines: string[] = [];
+      lines.push('Adresy');
+      lines.push('-'.repeat(50));
+      
+      for (const a of adresy) {
+        // Main nazwa
+        lines.push(a.nazwa);
+        
+        // Add alternative names if present
+        if (a.alternativeNames && a.alternativeNames.length > 0) {
+          for (const altName of a.alternativeNames) {
+            lines.push(`  ALT: ${altName}`);
+          }
+        }
+      }
+      
+      const txtContent = lines.join('\n');
+      
+      fs.writeFileSync(result.filePath, txtContent, 'utf-8');
+      
+      return { success: true, count: adresy.length, filePath: result.filePath };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return { success: false, error: errorMessage };

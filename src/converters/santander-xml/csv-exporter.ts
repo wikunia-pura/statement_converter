@@ -106,30 +106,48 @@ export class CsvExporter {
     }
 
     // ========== EXPENSES SECTION ==========
-    // Process expenses (negative amounts, placed below income)
-    for (let i = 0; i < expenseTransactions.length; i++) {
-      const transaction = expenseTransactions[i];
-      const date = this.formatDate(transaction.original.exeDate);
+    // Separate expenses into unrecognized and recognized
+    const unrecognizedExpenses: ProcessedTransaction[] = [];
+    const recognizedExpenses: ProcessedTransaction[] = [];
+
+    for (const transaction of expenseTransactions) {
       const matchedContractor = transaction.matchedContractor;
-      
-      // Convert negative amount to positive for display
+      if (matchedContractor && matchedContractor.contractor) {
+        recognizedExpenses.push(transaction);
+      } else {
+        unrecognizedExpenses.push(transaction);
+      }
+    }
+
+    // Process unrecognized expenses first
+    for (let i = 0; i < unrecognizedExpenses.length; i++) {
+      const transaction = unrecognizedExpenses[i];
+      const expenseIndex = expenseTransactions.indexOf(transaction) + 1; // Find position in original array
+      const date = this.formatDate(transaction.original.exeDate);
+      const description = `NIEROZPOZNANY KONTRAHENT #${expenseIndex} ` + this.cleanDescription(transaction.original.descBase);
       const amount = this.formatAmount(Math.abs(transaction.original.value));
 
-      let description: string;
-      let contractorAccount: string;
+      // Single line: k_wn = -, k_ma = 131-1
+      lines.push(this.createLine({
+        nr_dok: docNumber,
+        nr_poz: position++,
+        data_p: date,
+        tresc: description,
+        kwota: amount,
+        k_wn: '   -',
+        k_ma: '131-1',
+      }));
+    }
 
-      if (matchedContractor && matchedContractor.contractor) {
-        // Matched contractor
-        description = this.cleanDescription(transaction.original.descBase);
-        contractorAccount = matchedContractor.contractor.kontoKontrahenta;
-      } else {
-        // Unrecognized contractor
-        const expenseIndex = i + 1;
-        description = `NIEROZPOZNANY KONTRAHENT #${expenseIndex} ` + this.cleanDescription(transaction.original.descBase);
-        contractorAccount = '   -'; // No contractor account for unrecognized
-      }
+    // Process recognized expenses with matched contractors
+    for (const transaction of recognizedExpenses) {
+      const date = this.formatDate(transaction.original.exeDate);
+      const matchedContractor = transaction.matchedContractor!;
+      const description = this.cleanDescription(transaction.original.descBase);
+      const amount = this.formatAmount(Math.abs(transaction.original.value));
+      const contractorAccount = matchedContractor.contractor!.kontoKontrahenta;
 
-      // Single line per expense: k_wn = contractor account (or -), k_ma = 131-1
+      // Single line: k_wn = contractor account, k_ma = 131-1
       lines.push(this.createLine({
         nr_dok: docNumber,
         nr_poz: position++,
@@ -145,7 +163,7 @@ export class CsvExporter {
   }
 
   /**
-   * Export auxiliary file with contractor matching details
+   * Export preview file with transaction details and matching information
    */
   exportAuxiliary(transactions: ProcessedTransaction[]): string {
     const lines: string[] = [];
@@ -177,12 +195,16 @@ export class CsvExporter {
         
         if (apartmentNumber) {
           lines.push(`Rozpoznane mieszkanie: ${apartmentNumber}`);
-          lines.push(`Konto: ${this.formatAccountNumber(apartmentNumber)}`);
+          lines.push(`Konto lokalu: ${this.formatAccountNumber(apartmentNumber)}`);
+          lines.push(`Księgowanie:`);
+          lines.push(`  Linia 1: k_wn = 131-1, k_ma = ---`);
+          lines.push(`  Linia 2: k_wn = ---, k_ma = ${this.formatAccountNumber(apartmentNumber)}`);
           if (transaction.extracted?.tenantName) {
             lines.push(`Nazwa najemcy: ${transaction.extracted.tenantName}`);
           }
         } else {
-          lines.push(`Status: NIEROZPOZNANE`);
+          lines.push(`Status: NIEROZPOZNANE #${i + 1}`);
+          lines.push(`Księgowanie: k_wn = 131-1, k_ma = ---`);
         }
 
         if (transaction.extracted?.warnings && transaction.extracted.warnings.length > 0) {
@@ -201,11 +223,24 @@ export class CsvExporter {
       lines.push('='.repeat(80));
       lines.push('');
 
-      for (let i = 0; i < expenseTransactions.length; i++) {
-        const transaction = expenseTransactions[i];
+      // Separate expenses into unrecognized and recognized
+      const unrecognizedExpenses: ProcessedTransaction[] = [];
+      const recognizedExpenses: ProcessedTransaction[] = [];
+
+      for (const transaction of expenseTransactions) {
+        const matchedContractor = transaction.matchedContractor;
+        if (matchedContractor && matchedContractor.contractor) {
+          recognizedExpenses.push(transaction);
+        } else {
+          unrecognizedExpenses.push(transaction);
+        }
+      }
+
+      // Show unrecognized expenses first
+      for (const transaction of unrecognizedExpenses) {
+        const i = expenseTransactions.indexOf(transaction);
         const date = this.formatDate(transaction.original.exeDate);
         const amount = this.formatAmount(Math.abs(transaction.original.value));
-        const matchedContractor = transaction.matchedContractor;
 
         lines.push(`Pozycja #${i + 1}`);
         lines.push(`Data: ${date}`);
@@ -215,17 +250,37 @@ export class CsvExporter {
           lines.push(`Opis opcjonalny: ${transaction.original.descOpt}`);
         }
 
-        if (matchedContractor && matchedContractor.contractor) {
-          lines.push(`Dopasowany kontrahent: ${matchedContractor.contractor.nazwa}`);
-          lines.push(`Konto kontrahenta: ${matchedContractor.contractor.kontoKontrahenta}`);
-          lines.push(`Pewność dopasowania: ${matchedContractor.confidence}%`);
-          lines.push(`Metoda: wynik automatycznego dopasowania`);
-          if (matchedContractor.matchedIn) {
-            lines.push(`Dopasowano w: ${matchedContractor.matchedIn === 'desc-opt' ? 'opis opcjonalny' : 'opis bazowy'}`);
-          }
-        } else {
-          lines.push(`Status: NIEROZPOZNANY KONTRAHENT`);
-          lines.push(`Wymaga ręcznego przypisania kontrahenta`);
+        lines.push(`Status: NIEROZPOZNANY KONTRAHENT #${i + 1}`);
+        lines.push(`Konto kontrahenta (k_wn): ---`);
+        lines.push(`Konto Ma (k_ma): 131-1`);
+        lines.push(`Wymaga ręcznego przypisania kontrahenta`);
+
+        lines.push('-'.repeat(80));
+        lines.push('');
+      }
+
+      // Show recognized expenses
+      for (const transaction of recognizedExpenses) {
+        const i = expenseTransactions.indexOf(transaction);
+        const date = this.formatDate(transaction.original.exeDate);
+        const amount = this.formatAmount(Math.abs(transaction.original.value));
+        const matchedContractor = transaction.matchedContractor!;
+
+        lines.push(`Pozycja #${i + 1}`);
+        lines.push(`Data: ${date}`);
+        lines.push(`Kwota: ${amount}`);
+        lines.push(`Opis bazowy: ${transaction.original.descBase}`);
+        if (transaction.original.descOpt) {
+          lines.push(`Opis opcjonalny: ${transaction.original.descOpt}`);
+        }
+
+        lines.push(`Dopasowany kontrahent: ${matchedContractor.contractor!.nazwa}`);
+        lines.push(`Konto kontrahenta (k_wn): ${matchedContractor.contractor!.kontoKontrahenta}`);
+        lines.push(`Konto Ma (k_ma): 131-1`);
+        lines.push(`Pewność dopasowania: ${matchedContractor.confidence}%`);
+        lines.push(`Metoda: wynik automatycznego dopasowania`);
+        if (matchedContractor.matchedIn) {
+          lines.push(`Dopasowano w: ${matchedContractor.matchedIn === 'desc-opt' ? 'opis opcjonalny' : 'opis bazowy'}`);
         }
 
         lines.push('-'.repeat(80));

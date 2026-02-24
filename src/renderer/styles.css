@@ -10,6 +10,7 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   background: #f7f9fc;
   transition: background-color 0.3s, color 0.3s;
 }
@@ -136,8 +137,10 @@ body.dark-mode .drop-zone-text {
 }
 
 body.dark-mode .bank-form {
-  background: #161b22;
+  background: linear-gradient(135deg, #1a1f2e 0%, #1e1a2e 100%);
   color: #e0e0e0;
+  border: 2px solid #2d3748;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 body.dark-mode select {
@@ -183,6 +186,83 @@ body.dark-mode h3 {
 body.dark-mode option {
   background: #0d1117;
   color: #e0e0e0;
+}
+
+/* Alternative name pills/tags */
+.alternative-name-tag {
+  display: inline-flex;
+  align-items: center;
+  background-color: #e8eaed;
+  color: #202124;
+  padding: 6px 10px;
+  border-radius: 16px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid #dadce0;
+}
+
+body.dark-mode .alternative-name-tag {
+  background-color: #2d333b;
+  color: #adbac7;
+  border: 1px solid #444c56;
+}
+
+.alternative-name-tag span {
+  margin-right: 8px;
+}
+
+.alternative-name-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #5f6368;
+  font-size: 18px;
+  font-weight: 700;
+  padding: 0;
+  line-height: 1;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.alternative-name-remove:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+  color: #202124;
+}
+
+body.dark-mode .alternative-name-remove {
+  color: #768390;
+}
+
+body.dark-mode .alternative-name-remove:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #adbac7;
+}
+
+/* Form separator */
+.form-separator {
+  margin: 30px 0;
+  border: none;
+  border-top: 2px solid #e0e0e0;
+}
+
+body.dark-mode .form-separator {
+  border-top-color: #30363d;
+}
+
+/* Button group separator */
+.button-group-separator {
+  border-top: 1px solid #e0e0e0;
+}
+
+body.dark-mode .button-group-separator {
+  border-top-color: #30363d;
 }
 
 .app {
@@ -320,6 +400,11 @@ body.dark-mode .app-footer {
   font-size: 14px;
   font-weight: 500;
   transition: all 0.2s;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .button-primary {
@@ -472,10 +557,12 @@ input[type='text']:focus {
 }
 
 .bank-form {
-  background: #f8f9fa;
-  padding: 15px;
-  border-radius: 4px;
-  margin-bottom: 15px;
+  background: linear-gradient(135deg, #f0f4ff 0%, #f8f0ff 100%);
+  padding: 25px;
+  border-radius: 12px;
+  margin-bottom: 30px;
+  border: 2px solid #e0e7ff;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.08);
 }
 
 /* Toggle Switch */

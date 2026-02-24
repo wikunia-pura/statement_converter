@@ -11,6 +11,16 @@ export interface Kontrahent {
   id: number;
   nazwa: string;
   kontoKontrahenta: string;
+  nip?: string;
+  alternativeNames?: string[];
+  createdAt: string;
+}
+
+export interface Adres {
+  id: number;
+  nazwa: string;
+
+  alternativeNames?: string[];
   createdAt: string;
 }
 
@@ -26,6 +36,7 @@ export interface FileEntry {
   filePath: string;
   bankId: number | null;
   bankName: string | null;
+  adresId: number | null;
   status: 'pending' | 'processing' | 'success' | 'error' | 'needs-ai';
   errorMessage?: string;
   conversionSummary?: ConversionSummary;
@@ -72,6 +83,16 @@ export const IPC_CHANNELS = {
   DELETE_KONTRAHENT: 'db:delete-kontrahent',
   DELETE_ALL_KONTRAHENCI: 'db:delete-all-kontrahenci',
   IMPORT_KONTRAHENCI_FROM_FILE: 'db:import-kontrahenci-from-file',
+  EXPORT_KONTRAHENCI_TO_FILE: 'db:export-kontrahenci-to-file',
+  
+  // Adresy operations
+  GET_ADRESY: 'db:get-adresy',
+  ADD_ADRES: 'db:add-adres',
+  UPDATE_ADRES: 'db:update-adres',
+  DELETE_ADRES: 'db:delete-adres',
+  DELETE_ALL_ADRESY: 'db:delete-all-adresy',
+  IMPORT_ADRESY_FROM_FILE: 'db:import-adresy-from-file',
+  EXPORT_ADRESY_TO_FILE: 'db:export-adresy-to-file',
   
   // Converters
   GET_CONVERTERS: 'converters:get-all',

@@ -4,8 +4,15 @@
  */
 
 import { ExtractedData, XmlTransaction } from './types';
+import { Adres } from '../../shared/types';
 
 export class RegexExtractor {
+  private addresses: Adres[];
+
+  constructor(addresses: Adres[] = []) {
+    this.addresses = addresses;
+  }
+
   /**
    * Try to extract data using regex patterns
    * Returns null if confidence is too low
@@ -143,113 +150,98 @@ export class RegexExtractor {
   }
 
   /**
-   * Extract address patterns (e.g., "Joliot-Curie 3/27", "JOLIOT CURIE 3 M.11")
+   * Extract address patterns dynamically from configured addresses
+   * Supports main name and alternative names for each address
    */
   private extractAddress(descBase: string, descOpt: string): Partial<ExtractedData> | null {
     const combined = `${descBase} ${descOpt}`;
     
-    const patterns = [
-      // Joliot-Curie 3/27 (most common format) - with typo support (JOLIET)
-      {
-        regex: /(joli[eo]t[-\s]?curie)\s+(\d+)\/(\d+)/i,
-        extractStreet: (m: RegExpMatchArray) => this.normalizeStreetName(m[1]),
-        extractBuilding: (m: RegExpMatchArray) => m[2],
-        extractApartment: (m: RegExpMatchArray) => m[3],
-        confidence: 95,
-      },
-      // FRYDERYKA JOLIOT-CURIE 3  19 (full street name with spaces between numbers)
-      {
-        regex: /fryderyka\s+(joli[eo]t[-\s]?curie)\s+(\d+)\s+(\d{1,3})(?:\s|$)/i,
-        extractStreet: (m: RegExpMatchArray) => this.normalizeStreetName(m[1]),
-        extractBuilding: (m: RegExpMatchArray) => m[2],
-        extractApartment: (m: RegExpMatchArray) => m[3],
-        confidence: 95,
-      },
-      // JOLIOT-CURIE 3  19 (without M, just spaces between numbers)
-      {
-        regex: /(joli[eo]t[-\s]?curie)\s+(\d+)\s+(\d{1,3})(?:\s|$)/i,
-        extractStreet: (m: RegExpMatchArray) => this.normalizeStreetName(m[1]),
-        extractBuilding: (m: RegExpMatchArray) => m[2],
-        extractApartment: (m: RegExpMatchArray) => m[3],
-        confidence: 95,
-      },
-      // UL. JOLIOT CURIE 3 M. 23 (with period and space after M) - with typo support
-      {
-        regex: /(joli[eo]t[-\s]?curie)\s+(\d+)\s+m\.\s+(\d+)/i,
-        extractStreet: (m: RegExpMatchArray) => this.normalizeStreetName(m[1]),
-        extractBuilding: (m: RegExpMatchArray) => m[2],
-        extractApartment: (m: RegExpMatchArray) => m[3],
-        confidence: 95,
-      },
-      // UL. JOLIOT CURIE 3  M.11 (with period but no space) - with typo support
-      {
-        regex: /(joli[eo]t[-\s]?curie)\s+(\d+)\s+m\.(\d+)/i,
-        extractStreet: (m: RegExpMatchArray) => this.normalizeStreetName(m[1]),
-        extractBuilding: (m: RegExpMatchArray) => m[2],
-        extractApartment: (m: RegExpMatchArray) => m[3],
-        confidence: 95,
-      },
-      // JOLIOT CURIE 3 M 11 (without period) - with typo support
-      {
-        regex: /(joli[eo]t[-\s]?curie)\s+(\d+)\s+m\s+(\d+)/i,
-        extractStreet: (m: RegExpMatchArray) => this.normalizeStreetName(m[1]),
-        extractBuilding: (m: RegExpMatchArray) => m[2],
-        extractApartment: (m: RegExpMatchArray) => m[3],
-        confidence: 95,
-      },
-      // JOLIOT CURIE 3 M.33 or M33 (no space before number) - with typo support
-      {
-        regex: /(joli[eo]t[-\s]?curie)\s+(\d+)\s+m\.?(\d+)/i,
-        extractStreet: (m: RegExpMatchArray) => this.normalizeStreetName(m[1]),
-        extractBuilding: (m: RegExpMatchArray) => m[2],
-        extractApartment: (m: RegExpMatchArray) => m[3],
-        confidence: 95,
-      },
-      // J. CURIE 3/27 (abbreviated)
-      {
-        regex: /j\.?\s*curie\s+(\d+)\/(\d+)/i,
-        extractStreet: () => 'Joliot-Curie',
-        extractBuilding: (m: RegExpMatchArray) => m[1],
-        extractApartment: (m: RegExpMatchArray) => m[2],
-        confidence: 95,
-      },
-      // J. CURIE 3 M.11 or M 11 (abbreviated with M)
-      {
-        regex: /j\.?\s*curie\s+(\d+)\s+m\.?\s*(\d+)/i,
-        extractStreet: () => 'Joliot-Curie',
-        extractBuilding: (m: RegExpMatchArray) => m[1],
-        extractApartment: (m: RegExpMatchArray) => m[2],
-        confidence: 95,
-      },
-      // JCURIE 3/34 (very abbreviated)
-      {
-        regex: /jcurie\s+(\d+)\/(\d+)/i,
-        extractStreet: () => 'Joliot-Curie',
-        extractBuilding: (m: RegExpMatchArray) => m[1],
-        extractApartment: (m: RegExpMatchArray) => m[2],
-        confidence: 95,
-      },
-    ];
-
-    for (const pattern of patterns) {
-      const match = combined.match(pattern.regex);
-      if (match) {
-        const street = pattern.extractStreet(match);
-        const building = pattern.extractBuilding(match);
-        const apartment = pattern.extractApartment(match);
+    // If no addresses configured, return null
+    if (!this.addresses || this.addresses.length === 0) {
+      return null;
+    }
+    
+    // For each address, try all pattern variations
+    for (const address of this.addresses) {
+      // Get all name variations (main name + alternative names)
+      const nameVariations = [
+        address.nazwa,
+        ...(address.alternativeNames || [])
+      ];
+      
+      for (const streetName of nameVariations) {
+        // Escape special regex characters and create flexible pattern
+        const escapedName = this.escapeRegex(streetName);
+        // Allow for spaces, hyphens, and missing characters in the name
+        const flexibleName = escapedName
+          .replace(/[-\s]+/g, '[-\\s]?')  // Allow optional spaces/hyphens
+          .replace(/\./g, '\\.?');         // Make dots optional
         
-        return {
-          streetName: street,
-          buildingNumber: building,
-          apartmentNumber: apartment,
-          fullAddress: `${street} ${building}/${apartment}`,
-          confidence: {
-            address: pattern.confidence,
-            apartment: pattern.confidence,
-            tenantName: 0,
-            overall: 0,
+        const patterns = [
+          // Format: "Street 3/27" (most common - slash separator)
+          {
+            regex: new RegExp(`(${flexibleName})\\s+(\\d+)\\/(\\d+)`, 'i'),
+            extractBuilding: (m: RegExpMatchArray) => m[2],
+            extractApartment: (m: RegExpMatchArray) => m[3],
+            confidence: 95,
           },
-        };
+          // Format: "Street 3  19" (spaces between numbers)
+          {
+            regex: new RegExp(`(${flexibleName})\\s+(\\d+)\\s+(\\d{1,3})(?:\\s|$)`, 'i'),
+            extractBuilding: (m: RegExpMatchArray) => m[2],
+            extractApartment: (m: RegExpMatchArray) => m[3],
+            confidence: 95,
+          },
+          // Format: "Street 3 M. 23" (with M. and space)
+          {
+            regex: new RegExp(`(${flexibleName})\\s+(\\d+)\\s+m\\.\\s+(\\d+)`, 'i'),
+            extractBuilding: (m: RegExpMatchArray) => m[2],
+            extractApartment: (m: RegExpMatchArray) => m[3],
+            confidence: 95,
+          },
+          // Format: "Street 3  M.11" (with M. but no space before number)
+          {
+            regex: new RegExp(`(${flexibleName})\\s+(\\d+)\\s+m\\.(\\d+)`, 'i'),
+            extractBuilding: (m: RegExpMatchArray) => m[2],
+            extractApartment: (m: RegExpMatchArray) => m[3],
+            confidence: 95,
+          },
+          // Format: "Street 3 M 11" (with M but no period)
+          {
+            regex: new RegExp(`(${flexibleName})\\s+(\\d+)\\s+m\\s+(\\d+)`, 'i'),
+            extractBuilding: (m: RegExpMatchArray) => m[2],
+            extractApartment: (m: RegExpMatchArray) => m[3],
+            confidence: 95,
+          },
+          // Format: "Street 3 M.33" or "Street 3 M33" (no space before number)
+          {
+            regex: new RegExp(`(${flexibleName})\\s+(\\d+)\\s+m\\.?(\\d+)`, 'i'),
+            extractBuilding: (m: RegExpMatchArray) => m[2],
+            extractApartment: (m: RegExpMatchArray) => m[3],
+            confidence: 95,
+          },
+        ];
+        
+        for (const pattern of patterns) {
+          const match = combined.match(pattern.regex);
+          if (match) {
+            const building = pattern.extractBuilding(match);
+            const apartment = pattern.extractApartment(match);
+            
+            return {
+              streetName: address.nazwa, // Always use the main name from database
+              buildingNumber: building,
+              apartmentNumber: apartment,
+              fullAddress: `${address.nazwa} ${building}/${apartment}`,
+              confidence: {
+                address: pattern.confidence,
+                apartment: pattern.confidence,
+                tenantName: 0,
+                overall: 0,
+              },
+            };
+          }
+        }
       }
     }
 
@@ -257,11 +249,18 @@ export class RegexExtractor {
   }
 
   /**
+   * Escape special regex characters
+   */
+  private escapeRegex(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  /**
    * Extract tenant name from descriptions
    */
   private extractTenantName(descBase: string, descOpt: string): Partial<ExtractedData> | null {
     // Look for name patterns in desc-opt first (more reliable)
-    const namePattern = /^([A-ZĄĆĘŁŃÓŚŹŻ\s-]{3,50}?)\s+(?:UL\.|ul\.|JOLIOT|[0-9])/i;
+    const namePattern = /^([A-ZĄĆĘŁŃÓŚŹŻ\s-]{3,50}?)\s+(?:UL\.|ul\.|[0-9])/i;
     
     const optMatch = descOpt.match(namePattern);
     if (optMatch) {
@@ -293,17 +292,6 @@ export class RegexExtractor {
     }
 
     return null;
-  }
-
-  /**
-   * Normalize street name to consistent format
-   */
-  private normalizeStreetName(street: string): string {
-    return street
-      .replace(/joli[eo]t[-\s]?curie/i, 'Joliot-Curie')
-      .replace(/j\.?\s*curie/i, 'Joliot-Curie')
-      .replace(/jcurie/i, 'Joliot-Curie')
-      .trim();
   }
 
   /**

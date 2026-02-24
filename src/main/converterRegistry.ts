@@ -73,6 +73,9 @@ class ConverterRegistry {
     confidenceThreshold: number = 90
   ): Promise<{ totalTransactions: number; lowConfidenceCount: number; averageConfidence: number; needsAI: boolean }> {
     if (converterId === 'santander_xml') {
+      // Fetch addresses from database
+      const addresses = dbInstance?.getAllAdresy() || [];
+      
       const converter = new SantanderXmlConverter({
         aiProvider: 'none',
         apiKey: '',
@@ -81,6 +84,7 @@ class ConverterRegistry {
           autoApprove: 85,
           needsReview: 60,
         },
+        addresses, // Pass addresses for address matching
       });
 
       const xmlContent = fs.readFileSync(inputPath, 'latin1');
@@ -130,6 +134,9 @@ class ConverterRegistry {
 
           // Fetch contractors from database
           const contractors = dbInstance?.getAllKontrahenci() || [];
+          
+          // Fetch addresses from database
+          const addresses = dbInstance?.getAllAdresy() || [];
 
           // Use the real Santander XML converter
           const converter = new SantanderXmlConverter({
@@ -141,24 +148,34 @@ class ConverterRegistry {
               needsReview: 60,
             },
             contractors, // Pass contractors for expense matching
+            addresses, // Pass addresses for income address matching
           });
 
           const xmlContent = fs.readFileSync(inputPath, 'latin1');
           const result = await converter.convert(xmlContent);
 
+          // Separate transactions into income and expenses
+          const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
+          const expenseTransactions = result.processed.filter(t => t.transactionType === 'expense');
+
           // Format output as text file with transaction details
           let output = '=== SANTANDER XML CONVERSION RESULTS ===\n\n';
           output += `Summary:\n`;
           output += `- Total transactions: ${result.totalTransactions}\n`;
+          output += `- Income transactions: ${incomeTransactions.length}\n`;
+          output += `- Expense transactions: ${expenseTransactions.length}\n`;
           output += `- Auto-approved: ${result.summary.autoApproved}\n`;
           output += `- Needs review: ${result.summary.needsReview}\n`;
           output += `- Needs manual input: ${result.summary.needsManualInput}\n`;
           output += `- Skipped: ${result.summary.skipped}\n`;
           output += `- Average confidence: ${result.statistics.averageConfidence.toFixed(1)}%\n\n`;
 
-          output += '=== TRANSACTIONS ===\n\n';
+          // ========== INCOME SECTION ==========
+          output += '='.repeat(80) + '\n';
+          output += '=== WPŁATY (INCOME) ===\n';
+          output += '='.repeat(80) + '\n\n';
           
-          result.processed.forEach((trn, idx) => {
+          incomeTransactions.forEach((trn, idx) => {
             const num = idx + 1;
             output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
             output += `#${num}\n`;
@@ -208,21 +225,75 @@ class ConverterRegistry {
             output += `\n`;
           });
 
-          fs.writeFileSync(outputPath, output, 'utf8');
+          // ========== EXPENSES SECTION ==========
+          output += '='.repeat(80) + '\n';
+          output += '=== WYDATKI (EXPENSES) ===\n';
+          output += '='.repeat(80) + '\n\n';
+          
+          expenseTransactions.forEach((trn, idx) => {
+            const num = idx + 1;
+            output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            output += `#${num}\n`;
+            output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+            
+            // XML Data
+            output += `📄 XML DATA:\n`;
+            output += `   Transaction Code: ${trn.original.trnCode}\n`;
+            output += `   Execution Date:   ${trn.original.exeDate}\n`;
+            output += `   Creation Date:    ${trn.original.creatDate}\n`;
+            output += `   Amount:           ${trn.original.value} PLN\n`;
+            output += `   Account Value:    ${trn.original.accValue} PLN\n`;
+            output += `   Real Value:       ${trn.original.realValue} PLN\n\n`;
+            
+            output += `   Description (base):\n`;
+            output += `   ${trn.original.descBase}\n\n`;
+            
+            output += `   Description (optional):\n`;
+            output += `   ${trn.original.descOpt || '(empty)'}\n\n`;
+            
+            // Matched Contractor Info (for expenses)
+            if (trn.matchedContractor) {
+              output += `💼 MATCHED CONTRACTOR:\n`;
+              if (trn.matchedContractor.contractor) {
+                output += `   Contractor Name:       ${trn.matchedContractor.contractor.nazwa}\n`;
+                output += `   Contractor Account:    ${trn.matchedContractor.contractor.kontoKontrahenta}\n`;
+                output += `   Match Confidence:      ${trn.matchedContractor.confidence}%\n`;
+                output += `   Matched In:            ${trn.matchedContractor.matchedIn === 'desc-opt' ? 'Description (optional)' : 'Description (base)'}\n`;
+                if (trn.matchedContractor.contractor.nip) {
+                  output += `   NIP:                   ${trn.matchedContractor.contractor.nip}\n`;
+                }
+              } else {
+                output += `   Status:                No contractor matched - needs manual assignment\n`;
+              }
+              output += `\n`;
+            } else {
+              output += `💼 CONTRACTOR:\n`;
+              output += `   Status:                No contractor matched - needs manual assignment\n\n`;
+            }
+            
+            // Confidence & Status
+            output += `📊 STATUS:\n`;
+            output += `   Extraction Method:     ${trn.extracted.extractionMethod}\n`;
+            output += `   Status:                ${trn.status}\n`;
+            
+            if (trn.extracted.warnings && trn.extracted.warnings.length > 0) {
+              output += `   Warnings:              ${trn.extracted.warnings.join(', ')}\n`;
+            }
+            
+            output += `\n`;
+          });
+
+          // Change output path to -podglad.txt instead of .txt
+          const podgladPath = outputPath.replace(/\.(txt|TXT)$/, '-podglad.txt');
+          fs.writeFileSync(podgladPath, output, 'utf8');
 
           // Generate TXT file for accounting system (tab-separated format)
           const csvOutput = converter.exportToCsv(result.processed);
           const txtPath = outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
           fs.writeFileSync(txtPath, csvOutput, 'utf8');
           
-          // Generate auxiliary file with contractor matching details
-          const auxiliaryOutput = converter.exportAuxiliaryFile(result.processed);
-          const auxiliaryPath = outputPath.replace(/\.(txt|TXT)$/, '-auxiliary.txt');
-          fs.writeFileSync(auxiliaryPath, auxiliaryOutput, 'utf8');
-          
-          console.log(`✅ Generated summary: ${outputPath}`);
+          console.log(`✅ Generated preview file: ${podgladPath}`);
           console.log(`✅ Generated accounting file: ${txtPath}`);
-          console.log(`✅ Generated auxiliary file: ${auxiliaryPath}`);
         } else {
           throw new Error(`Unknown converter: ${converterId}`);
         }

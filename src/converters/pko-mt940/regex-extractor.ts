@@ -49,10 +49,33 @@ export class RegexExtractor {
     // Combine all text for searching
     const fullText = `${description} ${counterpartyName}`.toLowerCase();
     
-    // Extract apartment number - try description first, then counterparty as fallback
-    let apartmentNumber = this.extractApartmentNumber(description);
-    if (!apartmentNumber) {
-      apartmentNumber = this.extractApartmentNumber(counterpartyName);
+    // Extract apartment number from both sources
+    // Try BOTH description and counterparty, then pick the best one
+    const apartmentFromDesc = this.extractApartmentNumber(description);
+    const apartmentFromCounterparty = this.extractApartmentNumber(counterpartyName);
+    
+    // Determine which apartment number to use:
+    // - If only one has a value, use that
+    // - If both have values, prefer XX/YY format ONLY if it's in context of our property
+    //   Example: "Lotników 20/33" is good, but "Orzycka 6/6" is not our property
+    let apartmentNumber: string | null = null;
+    if (apartmentFromDesc && apartmentFromCounterparty) {
+      // Both have values - check if counterparty has our address format (Lotników XX/YY)
+      // Only prefer counterparty if it contains our known street name
+      const knownStreetPattern = /lotnik[óo]w\s+\d+\/\d+/i;
+      const counterpartyHasOurAddress = knownStreetPattern.test(counterpartyName);
+      const descHasOurAddress = knownStreetPattern.test(description);
+      
+      if (counterpartyHasOurAddress && !descHasOurAddress) {
+        // Counterparty has our property address format, prefer it
+        apartmentNumber = apartmentFromCounterparty;
+      } else {
+        // Default: prefer description (more relevant to the transaction)
+        apartmentNumber = apartmentFromDesc;
+      }
+    } else {
+      // Use whichever has a value
+      apartmentNumber = apartmentFromDesc || apartmentFromCounterparty;
     }
     
     // Extract address
@@ -60,10 +83,16 @@ export class RegexExtractor {
     
     // IMPORTANT: If we have a known addresses list, validate the extracted address
     // Address validation is ALWAYS required - even with explicit apartment patterns
-    let isValidAddress = true;
-    if (this.addresses.length > 0 && addressResult.streetName) {
+    // If no address was detected in text, it's NOT valid (we require address context)
+    let isValidAddress = false;
+    if (this.addresses.length === 0) {
+      // No addresses configured - accept all (for testing/demo)
+      isValidAddress = !!addressResult.streetName;
+    } else if (addressResult.streetName) {
+      // We have addresses configured AND detected a street - validate it
       isValidAddress = this.isAddressInKnownProperties(addressResult.streetName, addressResult.buildingNumber);
     }
+    // If no streetName detected → isValidAddress stays false (address context required!)
     
     // Track if apartment was explicitly mentioned (for confidence calculation)
     const hasExplicitApartment = !!apartmentNumber;
@@ -119,15 +148,37 @@ export class RegexExtractor {
     
     // ==================== EXPLICIT PATTERNS (HIGHEST PRIORITY) ====================
     
-    // Pattern 1: "ID LOKALU X/XX" - explicit identifier
-    const patternID = /id\s+lokalu\s+\d+\/(\d+)/i;
+    // Pattern 0a: "identyfikator lokalu X/XX" - explicit identifier with prefix/apartment
+    const patternIdentyfikatorSlash = /identyfikator\s+lokalu\s+\d+\/(\d+)/i;
+    const matchIdentyfikatorSlash = normalizedDesc.match(patternIdentyfikatorSlash);
+    if (matchIdentyfikatorSlash) {
+      return matchIdentyfikatorSlash[1]; // Return apartment number after slash
+    }
+    
+    // Pattern 0b: "Identyfikator lokalu XX" - explicit identifier (e.g., "Identyfikator lokalu 92")
+    const patternIdentyfikator = /identyfikator\s+lokalu\s+(\d+)/i;
+    const matchIdentyfikator = normalizedDesc.match(patternIdentyfikator);
+    if (matchIdentyfikator) {
+      return matchIdentyfikator[1];
+    }
+    
+    // Pattern 1: "ID LOKALU X/XX" or "ID. LOKALU X/XX" - explicit identifier
+    const patternID = /id\.?\s+lokalu\s+\d+\/(\d+)/i;
     const matchID = normalizedDesc.match(patternID);
     if (matchID) {
       return matchID[1]; // Return apartment number after slash
     }
     
+    // Pattern 1b: "ID Lokalu X/XX" without the slash in middle (e.g., "ID. LOKALU 1/110")
+    // Also handle "ID LOKALU 110" without prefix number
+    const patternID2 = /id\.?\s+lokalu\s+(\d+)(?!\s*\/\d)/i;
+    const matchID2 = normalizedDesc.match(patternID2);
+    if (matchID2) {
+      return matchID2[1];
+    }
+    
     // Pattern 2: "lokal numer: 111" or "lokal nr: 111" - explicit pattern
-    const pattern2 = /lokal(?:\s+numer|\s+nr)?:?\s*(\d+)/i;
+    const pattern2 = /lokal(?:\s+numer|\s+nr)?\s*:?\s*(\d+)/i;
     const match2 = normalizedDesc.match(pattern2);
     if (match2) {
       return match2[1];
@@ -135,21 +186,39 @@ export class RegexExtractor {
     
     // ==================== ADDRESS-BASED PATTERNS ====================
     
-    // Pattern 3: Address format with known street names "AL. LOTNIKÓW 20/82"
+    // Pattern 3: Address format with known street names "AL. LOTNIKÓW 20/82" or "ALEJA LOTNIKÓW20/51"
     // ONLY match if it's a real address pattern with street names (not dates like "01/2026")
     // This requires street prefix (aleja, al., ulica, ul.) OR known street name
-    const pattern3 = /(?:aleja|al\.|ulica|ul\.)\s*[\wąćęłńóśźż\s]+?\s+(\d{1,3})\/(\d{1,4})/i;
+    // Note: \s* before building number - sometimes there's no space (LOTNIKÓW20/51)
+    const pattern3 = /(?:aleja|al\.|ulica|ul\.)\s*[\wąćęłńóśźż\s]+?\s*(\d{1,3})\/(\d{1,4})/i;
     const match3 = description.match(pattern3);
     if (match3 && match3[2].length <= 3) { // Apartment numbers are typically 1-3 digits, not years
       return match3[2]; // Return the apartment number (after slash)
     }
     
+    // Pattern 3b: Address format WITHOUT street prefix: "Lotników 20/33"
+    // Matches: [StreetName] [BuildingNumber]/[ApartmentNumber]
+    // Street name must be at least 4 chars and contain Polish letters (to avoid matching dates)
+    const pattern3b = /[a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ]{4,}\s+(\d{1,3})\/(\d{1,4})/i;
+    const match3b = description.match(pattern3b);
+    if (match3b && match3b[2].length <= 3) {
+      return match3b[2];
+    }
+    
     // ==================== PREFIX PATTERNS ====================
     
-    // Pattern 4: "mieszkanie 111", "M. 111", "M.111", "M 111", "LOK. 111", "LOK.94"
+    // Pattern 4: "mieszkanie 111", "M. 111", "M.111", "M 111", "LOK. 111", "LOK.94", "LOC121"
     // Use word boundaries to avoid matching "REM." or other words containing "m"
     // Allow optional space after dot: "M.100" or "M. 100"
-    const pattern4 = /\b(?:mieszkanie|lok\.?)\s+(\d+)|\bm\.?\s*(\d+)(?!\s*pln)/i;
+    // Also support "LOC" (English variant of LOK)
+    // IMPORTANT: Handle glued postal codes like "lok. 5602-668" where 56 is apartment, 02-668 is postal code
+    const pattern4Postal = /\b(?:mieszkanie|lok\.?|loc\.?)\s*(\d{1,3})(0[0-9]-\d{3})/i;
+    const match4Postal = normalizedDesc.match(pattern4Postal);
+    if (match4Postal) {
+      return match4Postal[1]; // Return just apartment number, not glued postal code
+    }
+    
+    const pattern4 = /\b(?:mieszkanie|lok\.?|loc\.?)\s*(\d+)|\bm\.?\s*(\d+)(?!\s*pln)/i;
     const match4 = normalizedDesc.match(pattern4);
     if (match4) {
       const apartmentNum = match4[1] || match4[2];
@@ -206,8 +275,9 @@ export class RegexExtractor {
         
         // Check if streets match (allow partial match for encoding issues)
         // Remove spaces for comparison to handle "lo tników" vs "lotników"
-        const streetWithoutSpaces = normalizedExtractedStreet.replace(/\s+/g, '');
-        const knownStreetWithoutSpaces = normalizedKnownStreet.replace(/\s+/g, '');
+        // Also normalize Polish chars to handle "Lotnikow" vs "Lotników"
+        const streetWithoutSpaces = this.normalizePolishChars(normalizedExtractedStreet).replace(/\s+/g, '');
+        const knownStreetWithoutSpaces = this.normalizePolishChars(normalizedKnownStreet).replace(/\s+/g, '');
         
         if (streetWithoutSpaces.includes(knownStreetWithoutSpaces) || 
             knownStreetWithoutSpaces.includes(streetWithoutSpaces)) {
@@ -239,13 +309,20 @@ export class RegexExtractor {
   } {
     // Normalize text for better matching
     // Replace abbreviations with full forms, ensuring proper spacing
-    const normalizedText = text
-      .replace(/\bal\.\s*/gi, 'aleja ')  // "AL." or "AL. " -> "aleja "
-      .replace(/\bul\.\s*/gi, 'ulica ')  // "UL." or "UL. " -> "ulica "
+    // IMPORTANT: Only match "AL." with dot, or "AL " followed by space/end - NOT "ALEJA"!
+    let normalizedText = text
+      .replace(/\bal\.\s*/gi, 'aleja ')   // "AL." -> "aleja " (requires dot)
+      .replace(/\bul\.\s*/gi, 'ulica ')   // "UL." -> "ulica " (requires dot)
       .replace(/\bm\.\s*/gi, ' ')         // "M." or "M. " -> " "
-      .replace(/\blok\.\s*/gi, ' ')       // "LOK." or "LOK. " -> " "
+      .replace(/\blok\.\s*/gi, ' ')       // "LOK." -> " " (requires dot)
+      .replace(/\bloc\.\s*/gi, ' ')       // "LOC." -> " " (requires dot)
+      .replace(/([a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])\.\s/g, '$1 ')  // Remove stray dots after words: "LOTNIKÓW. " -> "LOTNIKÓW "
+      .replace(/([a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ])(\d)/g, '$1 $2')  // Insert space before numbers: LOTNIKÓW20 -> LOTNIKÓW 20
       .replace(/\s+/g, ' ')                // Normalize multiple spaces to single space
       .trim();
+    
+    // Also create ASCII-normalized version for matching without Polish chars
+    const normalizedTextAscii = this.normalizePolishChars(normalizedText.toLowerCase());
     
     // Try to match against known addresses first
     // Check both main name (nazwa) and alternative names (alternativeNames)
@@ -265,13 +342,16 @@ export class RegexExtractor {
         const street = addressMatch[1].toLowerCase();
         const building = addressMatch[2];
         
-        // Check if this address is mentioned in the text
+        // Normalize the street name for comparison (remove diacritics)
+        const streetAscii = this.normalizePolishChars(street);
+        
+        // Check if this address is mentioned in the text (try both with and without Polish chars)
         const streetPattern = new RegExp(
-          `(${this.escapeRegex(street)})\\s*${this.escapeRegex(building)}\\s*[/\\s]?\\s*(?:m\\.?\\s*)?(?:lok\\.?\\s*)?([0-9]+)?`,
+          `(${this.escapeRegex(streetAscii)})\\s*${this.escapeRegex(building)}\\s*[/\\s]?\\s*(?:m\\.?\\s*)?(?:lok\\.?\\s*)?(?:loc\\.?\\s*)?([0-9]+)?`,
           'i'
         );
         
-        const match = normalizedText.match(streetPattern);
+        const match = normalizedTextAscii.match(streetPattern);
         if (match) {
           const apartment = existingApartment || match[2] || null;
           // Return using the MAIN name (nazwa), not the alternative variant
@@ -473,6 +553,22 @@ export class RegexExtractor {
    * Escape regex special characters
    */
   private escapeRegex(str: string): string {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return str.replace(/[.*+?^${}()[\]\\]/g, '\\$&');
+  }
+
+  /**
+   * Normalize Polish diacritics (ą->a, ć->c, ę->e, ł->l, ń->n, ó->o, ś->s, ź->z, ż->z)
+   * This helps match "Lotnikow" with "Lotników"
+   */
+  private normalizePolishChars(str: string): string {
+    return str
+      .replace(/[ąĄ]/g, 'a')
+      .replace(/[ćĆ]/g, 'c')
+      .replace(/[ęĘ]/g, 'e')
+      .replace(/[łŁ]/g, 'l')
+      .replace(/[ńŃ]/g, 'n')
+      .replace(/[óÓ]/g, 'o')
+      .replace(/[śŚ]/g, 's')
+      .replace(/[źŹżŻ]/g, 'z');
   }
 }

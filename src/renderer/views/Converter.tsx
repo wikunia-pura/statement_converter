@@ -208,19 +208,63 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   const [filesNeedingAI, setFilesNeedingAI] = useState<{fileName: string; fileId: string; totalTransactions: number; lowConfidenceCount: number}[]>([]);
   const [reviewData, setReviewData] = useState<ConversionReviewData | null>(null);
   const [conversionQueue, setConversionQueue] = useState<string[]>([]);
+  const [skipUserApproval, setSkipUserApproval] = useState(false);
+  const [outputFolder, setOutputFolder] = useState('');
   const [isProcessingQueue, setIsProcessingQueue] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(document.body.classList.contains('dark-mode'));
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<FileEntry[]>(files);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Keep ref in sync with state
   useEffect(() => {
     filesRef.current = files;
   }, [files]);
 
+  // Detect dark mode changes
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDarkMode(document.body.classList.contains('dark-mode'));
+    });
+    
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+    
+    return () => observer.disconnect();
+  }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpenDropdownId(null);
+      }
+    };
+
+    if (openDropdownId) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [openDropdownId]);
+
   useEffect(() => {
     loadBanks();
     loadAdresy();
+    loadSettings();
   }, []);
+
+  const loadSettings = async () => {
+    try {
+      const settings = await window.electronAPI.getSettings();
+      setSkipUserApproval(settings.skipUserApproval ?? false);
+      setOutputFolder(settings.outputFolder ?? '');
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
+  };
 
   const loadBanks = async () => {
     setIsLoading(true);
@@ -400,6 +444,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
               ? {
                   ...f,
                   status: 'success' as const,
+                  outputPath: result.outputPath,
                   errorMessage: result.duplicateWarning
                     ? t.fileExistsTimestamp
                     : undefined,
@@ -520,6 +565,62 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
 
       // Check if review is needed
       if (result.needsReview && result.reviewData) {
+        // If skipUserApproval is enabled, auto-finalize without showing review screen
+        if (skipUserApproval) {
+          // Auto-approve all transactions
+          const autoDecisions: ReviewDecision[] = result.reviewData.transactions.map(tx => ({
+            transactionId: tx.id,
+            action: 'approve' as const,
+            editedData: tx.extracted,
+          }));
+          
+          try {
+            const finalizeResult = await window.electronAPI.finalizeConversion(
+              result.reviewData.tempConversionId,
+              autoDecisions
+            );
+            
+            if (finalizeResult.success) {
+              setFiles((prevFiles) =>
+                prevFiles.map((f) =>
+                  f.id === fileId
+                    ? {
+                        ...f,
+                        status: 'success' as const,
+                        outputPath: finalizeResult.outputPath,
+                        errorMessage: finalizeResult.duplicateWarning
+                          ? t.fileExistsTimestamp
+                          : undefined,
+                      }
+                    : f
+                )
+              );
+            } else {
+              setFiles((prevFiles) =>
+                prevFiles.map((f) =>
+                  f.id === fileId
+                    ? { ...f, status: 'error' as const, errorMessage: finalizeResult.error }
+                    : f
+                )
+              );
+            }
+            processNextInQueue();
+            return;
+          } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            setFiles((prevFiles) =>
+              prevFiles.map((f) =>
+                f.id === fileId
+                  ? { ...f, status: 'error' as const, errorMessage }
+                  : f
+              )
+            );
+            processNextInQueue();
+            return;
+          }
+        }
+        
+        // Show review screen if skipUserApproval is disabled
         setReviewData(result.reviewData);
         // Keep status as processing to show file is being handled
         return;
@@ -532,6 +633,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
               ? {
                   ...f,
                   status: 'success' as const,
+                  outputPath: result.outputPath,
                   errorMessage: result.duplicateWarning
                     ? t.fileExistsTimestamp
                     : undefined,
@@ -645,14 +747,20 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     setFiles([]);
   };
 
-  const handleOpenFile = async (fileId: string) => {
+  const handleOpenFile = async (fileId: string, type: 'preview' | 'accounting') => {
     const file = files.find((f) => f.id === fileId);
-    if (file && file.status === 'success') {
-      const settings = await window.electronAPI.getSettings();
-      const baseFileName = file.fileName.substring(0, file.fileName.lastIndexOf('.'));
-      const outputPath = `${settings.outputFolder}/${baseFileName}.txt`;
-      await window.electronAPI.openFile(outputPath);
+    if (file && file.status === 'success' && file.outputPath) {
+      const suffix = type === 'preview' ? '-podglad.txt' : '-accounting.txt';
+      const filePath = file.outputPath.replace(/\.txt$/i, suffix);
+      
+      const success = await window.electronAPI.openFile(filePath);
+      if (!success) {
+        alert(t.fileNotFound);
+      }
+    } else {
+      alert(t.fileNotFound);
     }
+    setOpenDropdownId(null);
   };
 
   return (
@@ -744,6 +852,14 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
               <h2>{t.files}</h2>
               <div className="button-group" style={{ margin: 0 }}>
+                <button 
+                  className="button button-secondary"
+                  onClick={() => outputFolder && window.electronAPI.openFile(outputFolder)}
+                  disabled={!outputFolder}
+                  title={outputFolder || 'Folder wyjściowy nie został skonfigurowany'}
+                >
+                  📂 {t.openOutputFolder}
+                </button>
                 <button 
                   className="button button-success" 
                   onClick={handleConvertAll}
@@ -854,12 +970,65 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                           <div style={{ display: 'flex', gap: '8px' }}>
                             {file.status === 'success' && (
                               <>
-                                <button
-                                  className="button button-small button-primary"
-                                  onClick={() => handleOpenFile(file.id)}
-                                >
-                                  {t.open}
-                                </button>
+                                <div style={{ position: 'relative' }} ref={openDropdownId === file.id ? dropdownRef : undefined}>
+                                  <button
+                                    className="button button-small button-primary"
+                                    onClick={() => setOpenDropdownId(openDropdownId === file.id ? null : file.id)}
+                                  >
+                                    {t.open} ▾
+                                  </button>
+                                  {openDropdownId === file.id && (
+                                    <div style={{
+                                      position: 'absolute',
+                                      top: '100%',
+                                      left: 0,
+                                      zIndex: 1000,
+                                      background: isDarkMode ? '#161b22' : '#fff',
+                                      border: `1px solid ${isDarkMode ? '#30363d' : '#ddd'}`,
+                                      borderRadius: '4px',
+                                      boxShadow: isDarkMode ? '0 2px 8px rgba(0,0,0,0.4)' : '0 2px 8px rgba(0,0,0,0.15)',
+                                      minWidth: '120px',
+                                      marginTop: '2px',
+                                    }}>
+                                      <button
+                                        style={{
+                                          display: 'block',
+                                          width: '100%',
+                                          padding: '8px 12px',
+                                          border: 'none',
+                                          background: 'none',
+                                          textAlign: 'left',
+                                          cursor: 'pointer',
+                                          fontSize: '13px',
+                                          color: isDarkMode ? '#c9d1d9' : 'inherit',
+                                        }}
+                                        onClick={() => handleOpenFile(file.id, 'preview')}
+                                        onMouseEnter={(e) => e.currentTarget.style.background = isDarkMode ? '#30363d' : '#f5f5f5'}
+                                        onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                                      >
+                                        📄 {t.openPreview}
+                                      </button>
+                                      <button
+                                        style={{
+                                          display: 'block',
+                                          width: '100%',
+                                          padding: '8px 12px',
+                                          border: 'none',
+                                          background: 'none',
+                                          textAlign: 'left',
+                                          cursor: 'pointer',
+                                          fontSize: '13px',
+                                          color: isDarkMode ? '#c9d1d9' : 'inherit',
+                                        }}
+                                        onClick={() => handleOpenFile(file.id, 'accounting')}
+                                        onMouseEnter={(e) => e.currentTarget.style.background = isDarkMode ? '#30363d' : '#f5f5f5'}
+                                        onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                                      >
+                                        📊 {t.openAccounting}
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
                                 <button
                                   className="button button-small button-secondary"
                                   onClick={() => handleConvert(file.id)}
@@ -926,7 +1095,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
               </div>
               <div className="modal-body" style={{ padding: '20px' }}>
                 <p style={{ marginBottom: '15px', fontSize: '14px', color: '#6c757d' }}>
-                  Niektóre transakcje mają bardzo niską pewność rozpoznania (poniżej 60%) i będą wymagać ręcznej weryfikacji. Zapytaj Olę czy jest kasiora, to przepuszczę przez AI:
+                  Niektóre transakcje mają bardzo niską pewność rozpoznania (poniżej 60%) i będą wymagać ręcznej weryfikacji.
                 </p>
                 <div style={{
                   background: '#fff3cd',
@@ -966,7 +1135,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                               performConversion(file.fileId, false);
                             }}
                           >
-                            Pomiń
+                            Bez AI
                           </button>
                         </div>
                       </div>
@@ -978,16 +1147,6 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                       </div>
                     </div>
                   ))}
-                </div>
-                <div style={{ 
-                  marginTop: '15px', 
-                  padding: '12px', 
-                  background: '#f8f9fa', 
-                  borderRadius: '6px',
-                  fontSize: '12px',
-                  color: '#6c757d'
-                }}>
-                  💡 AI zwiększy dokładność rozpoznawania, ale może kosztować. Możesz też pominąć i ręcznie poprawić wyniki.
                 </div>
               </div>
               <div className="modal-footer" style={{ padding: '15px 20px', borderTop: '1px solid #e8ecf1', display: 'flex', justifyContent: 'space-between' }}>
@@ -1002,7 +1161,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                     className="button button-secondary" 
                     onClick={() => handleSkipAI(filesNeedingAI.map(f => f.fileId))}
                   >
-                    Pomiń wszystkie
+                    Bez AI dla wszystkich
                   </button>
                   <button 
                     className="button button-success" 

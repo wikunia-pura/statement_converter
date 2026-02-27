@@ -14,6 +14,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
   const [banks, setBanks] = useState<Bank[]>([]);
   const [converters, setConverters] = useState<Converter[]>([]);
   const [outputFolder, setOutputFolder] = useState('');
+  const [skipUserApproval, setSkipUserApproval] = useState(false);
   const [showAddBank, setShowAddBank] = useState(false);
   const [editingBank, setEditingBank] = useState<Bank | null>(null);
   const [newBankName, setNewBankName] = useState('');
@@ -35,6 +36,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
       setBanks(banksData);
       setConverters(convertersData);
       setOutputFolder(settings.outputFolder);
+      setSkipUserApproval(settings.skipUserApproval ?? false);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -54,6 +56,12 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
     const newValue = !darkMode;
     await window.electronAPI.setDarkMode(newValue);
     onDarkModeChange(newValue);
+  };
+
+  const handleSkipUserApprovalToggle = async () => {
+    const newValue = !skipUserApproval;
+    await window.electronAPI.setSkipUserApproval(newValue);
+    setSkipUserApproval(newValue);
   };
 
   const handleLanguageChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -168,6 +176,23 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
                 type="checkbox"
                 checked={darkMode}
                 onChange={handleDarkModeToggle}
+              />
+              <span className="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div className="settings-row">
+            <div className="settings-label">
+              <span className="settings-label-main">⚡ {t.skipUserApproval}</span>
+              <span className="settings-label-sub">
+                {t.skipUserApprovalDesc}
+              </span>
+            </div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={skipUserApproval}
+                onChange={handleSkipUserApprovalToggle}
               />
               <span className="toggle-slider"></span>
             </label>

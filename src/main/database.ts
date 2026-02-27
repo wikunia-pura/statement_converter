@@ -13,6 +13,7 @@ interface StoreSchema {
     darkMode: boolean;
     language: 'pl' | 'en';
     aiConfidenceThreshold: number;
+    skipUserApproval: boolean;
   };
   nextBankId: number;
   nextKontrahentId: number;
@@ -35,6 +36,7 @@ class DatabaseService {
           darkMode: true,
           language: 'pl',
           aiConfidenceThreshold: 95,
+          skipUserApproval: false,
         },
         nextBankId: 1,
         nextKontrahentId: 1,

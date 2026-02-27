@@ -14,6 +14,59 @@ let mainWindow: BrowserWindow | null = null;
 let database: DatabaseService;
 let converterRegistry: ConverterRegistry;
 
+/**
+ * Generate timestamp string in format YYYYMMDD_HHMMSS
+ */
+function generateTimestamp(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  return `${year}${month}${day}_${hours}${minutes}${seconds}`;
+}
+
+/**
+ * Sanitize address name for use in filename
+ * Removes or replaces characters that are invalid in filenames
+ */
+function sanitizeForFilename(name: string): string {
+  return name
+    .replace(/[<>:"/\\|?*]/g, '') // Remove invalid filename characters
+    .replace(/\s+/g, '_')          // Replace spaces with underscores
+    .replace(/_+/g, '_')           // Collapse multiple underscores
+    .replace(/^_|_$/g, '')         // Remove leading/trailing underscores
+    .substring(0, 50);             // Limit length
+}
+
+/**
+ * Generate output filename with address and timestamp
+ * Format: {address}_{timestamp}.txt
+ * Example: Aleja_Lotnikow_20_20260227_143025.txt
+ */
+function generateOutputFileName(adresId: number | null | undefined, db: DatabaseService): string {
+  const timestamp = generateTimestamp();
+  
+  // Get address name if adresId provided
+  let addressPart = 'wyciag';
+  if (adresId !== null && adresId !== undefined) {
+    const adres = db.getAdresById(adresId);
+    if (adres) {
+      addressPart = sanitizeForFilename(adres.nazwa);
+    }
+  } else {
+    // Try to get first/default address
+    const allAddresses = db.getAllAdresy();
+    if (allAddresses.length > 0) {
+      addressPart = sanitizeForFilename(allAddresses[0].nazwa);
+    }
+  }
+  
+  return `${addressPart}_${timestamp}.txt`;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -455,20 +508,9 @@ function setupIpcHandlers() {
           fs.mkdirSync(outputFolder, { recursive: true });
         }
 
-        // Change extension to .txt
-        const baseFileName = path.parse(fileName).name;
-        const outputFileName = `${baseFileName}.txt`;
-        const outputPath = path.join(outputFolder, outputFileName);
-
-        // Check if file exists and inform user
-        let finalOutputPath = outputPath;
-        if (fs.existsSync(outputPath)) {
-          const timestamp = Date.now();
-          finalOutputPath = path.join(
-            outputFolder,
-            `${baseFileName}_${timestamp}.txt`
-          );
-        }
+        // Generate output filename with address and timestamp
+        const outputFileName = generateOutputFileName(adresId, database);
+        const finalOutputPath = path.join(outputFolder, outputFileName);
 
         // Perform conversion
         const result = await converterRegistry.convert(
@@ -502,7 +544,6 @@ function setupIpcHandlers() {
         return {
           success: true,
           outputPath: finalOutputPath,
-          duplicateWarning: finalOutputPath !== outputPath,
         };
       } catch (error: unknown) {
         // Save error to history
@@ -585,18 +626,9 @@ function setupIpcHandlers() {
           fs.mkdirSync(outputFolder, { recursive: true });
         }
 
-        const baseFileName = path.parse(fileName).name;
-        const outputFileName = `${baseFileName}.txt`;
-        const outputPath = path.join(outputFolder, outputFileName);
-
-        let finalOutputPath = outputPath;
-        if (fs.existsSync(outputPath)) {
-          const timestamp = Date.now();
-          finalOutputPath = path.join(
-            outputFolder,
-            `${baseFileName}_${timestamp}.txt`
-          );
-        }
+        // Generate output filename with address and timestamp
+        const outputFileName = generateOutputFileName(adresId, database);
+        const finalOutputPath = path.join(outputFolder, outputFileName);
 
         // Perform conversion WITH AI
         const result = await converterRegistry.convert(
@@ -629,7 +661,6 @@ function setupIpcHandlers() {
         return {
           success: true,
           outputPath: finalOutputPath,
-          duplicateWarning: finalOutputPath !== outputPath,
         };
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -662,11 +693,22 @@ function setupIpcHandlers() {
       try {
         const result = await converterRegistry.finalizeConversion(tempConversionId, decisions);
         
-        // TODO: Add to history if needed
+        // Add to history
+        if (result.fileName && result.bankName && result.inputPath && result.outputPath) {
+          const converter = converterRegistry.getConverter(result.converterId || '');
+          database.addConversionHistory({
+            fileName: result.fileName,
+            bankName: result.bankName,
+            converterName: converter?.name || 'Unknown',
+            status: 'success',
+            inputPath: result.inputPath,
+            outputPath: result.outputPath,
+          });
+        }
         
         return {
           success: true,
-          outputPath: result.success ? 'finalized' : undefined,
+          outputPath: result.outputPath,
         };
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -679,8 +721,17 @@ function setupIpcHandlers() {
   );
 
   ipcMain.handle(IPC_CHANNELS.OPEN_FILE, async (_, filePath: string) => {
-    await shell.openPath(filePath);
-    return true;
+    try {
+      // Check if file exists
+      if (!fs.existsSync(filePath)) {
+        return false;
+      }
+      const result = await shell.openPath(filePath);
+      // shell.openPath returns empty string on success, error message on failure
+      return result === '';
+    } catch {
+      return false;
+    }
   });
 
   // Settings
@@ -689,6 +740,7 @@ function setupIpcHandlers() {
       outputFolder: database.getSetting('outputFolder') || '',
       darkMode: database.getSetting('darkMode') === 'true',
       language: database.getSetting('language') || 'pl',
+      skipUserApproval: database.getSetting('skipUserApproval') === 'true',
     };
   });
 
@@ -704,6 +756,11 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.SET_LANGUAGE, async (_, language: string) => {
     database.setSetting('language', language);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SET_SKIP_USER_APPROVAL, async (_, enabled: boolean) => {
+    database.setSetting('skipUserApproval', enabled.toString());
     return true;
   });
 

@@ -39,6 +39,7 @@ export interface FileEntry {
   adresId: number | null;
   status: 'pending' | 'processing' | 'success' | 'error' | 'needs-ai';
   errorMessage?: string;
+  outputPath?: string;  // Base output path (without -podglad or -accounting suffix)
   conversionSummary?: ConversionSummary;
 }
 
@@ -111,6 +112,7 @@ export interface AppSettings {
   darkMode: boolean;
   language: 'pl' | 'en';
   aiConfidenceThreshold: number; // Minimum confidence to skip AI warning (default: 95)
+  skipUserApproval: boolean; // Skip transaction review and generate files directly
 }
 
 // IPC Channel names
@@ -156,6 +158,7 @@ export const IPC_CHANNELS = {
   SET_OUTPUT_FOLDER: 'settings:set-output-folder',
   SET_DARK_MODE: 'settings:set-dark-mode',
   SET_LANGUAGE: 'settings:set-language',
+  SET_SKIP_USER_APPROVAL: 'settings:set-skip-user-approval',
   EXPORT_SETTINGS: 'settings:export',
   IMPORT_SETTINGS: 'settings:import',
   

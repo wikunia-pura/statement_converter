@@ -12,6 +12,11 @@ export interface ConvertResult {
   success: boolean;
   needsReview?: boolean;
   reviewData?: ConversionReviewData;
+  outputPath?: string;
+  fileName?: string;
+  bankName?: string;
+  converterId?: string;
+  inputPath?: string;
 }
 
 // Database instance will be passed from main.ts
@@ -917,7 +922,14 @@ class ConverterRegistry {
       // Clean up cache
       conversionCache.remove(tempConversionId);
       
-      return { success: true };
+      return { 
+        success: true, 
+        outputPath: cached.outputPath,
+        fileName: cached.fileName,
+        bankName: cached.bankName,
+        converterId: cached.converterId,
+        inputPath: cached.inputPath,
+      };
     } catch (error) {
       throw error;
     }

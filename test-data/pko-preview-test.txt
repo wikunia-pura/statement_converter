@@ -154,6 +154,21 @@ Confidence: 95%
 
 Pozycja #11
 Data: 5.01.2026
+Kwota: 475,00
+Opis: Dotyczy lokalu:Aleja Lotnikow 20 lok 94.          ID Lokalu 1/94˙˙
+Kontrahent: KROGULEWSKI MARIUSZ WALDEMAR RUE DE MUHLENBACH 62B
+Rozpoznane mieszkanie: 94
+Konto lokalu: 204-000094
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000094
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #12
+Data: 5.01.2026
 Kwota: 120,00
 Opis: Opłata za zsyp al.lotników20 m57 02-668 Warszawa za rok 2026˙˙˙
 Kontrahent: TOMASZ MAREK MESJASZ AL. LOTNIKÓW 20 M. 57
@@ -167,7 +182,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #12
+Pozycja #13
 Data: 5.01.2026
 Kwota: 888,43
 Opis: 01. 2026  A. KRA¦NICKI˙˙˙˙˙
@@ -182,7 +197,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #13
+Pozycja #14
 Data: 5.01.2026
 Kwota: 21,36
 Opis: Izabella Karpińska ul.al.lotników20m 120 , 02-668 warszawa˙˙˙
@@ -197,7 +212,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #14
+Pozycja #15
 Data: 5.01.2026
 Kwota: 785,20
 Opis: Oplata za czynsz al. lotników 20/84˙˙˙˙
@@ -212,7 +227,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #15
+Pozycja #16
 Data: 6.01.2026
 Kwota: 974,20
 Opis: CZYNSZ 1.2026, MIESZKANIE 45˙˙˙˙
@@ -227,7 +242,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #16
+Pozycja #17
 Data: 7.01.2026
 Kwota: 717,82
 Opis: opłata za lokal przy Al. Lotników 20 m.98˙˙˙˙
@@ -242,7 +257,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #17
+Pozycja #18
 Data: 7.01.2026
 Kwota: 560,64
 Opis: OPŁATA EKSPLOATACYJNA I F.REMONTOWY AL. LOTNIKÓW 20/40, XII.2025˙˙˙
@@ -257,7 +272,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #18
+Pozycja #19
 Data: 7.01.2026
 Kwota: 700,86
 Opis: 01/26, Al. Lotników 20/113,02-668Warszawa˙˙˙˙
@@ -272,7 +287,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #19
+Pozycja #20
 Data: 7.01.2026
 Kwota: 449,00
 Opis: CZYNSZ ZA MIESZKANIE AL.LOTNIKÓW 20LOK.12  ,   02-668WARSZAWA˙˙˙
@@ -287,7 +302,22 @@ Confidence: 92%
 
 --------------------------------------------------------------------------------
 
-Pozycja #20
+Pozycja #21
+Data: 7.01.2026
+Kwota: 768,20
+Opis: ALEJA LOTNIKOW 20/18 ALICJAKRÓL˙˙˙˙
+Kontrahent: ALICJA KRÓL 14-400 PASŁĘK UL. WI¦NIOWA 6
+Rozpoznane mieszkanie: 18
+Konto lokalu: 204-000018
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000018
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #22
 Data: 7.01.2026
 Kwota: 884,80
 Opis: OPŁATA EKSP. ZA 01 2026 W TYM FUNDUSZ REMONTOWY 131.50        ZŁWpłata w UP nr:991938260105TIAP1978
@@ -302,7 +332,7 @@ Confidence: 92%
 
 --------------------------------------------------------------------------------
 
-Pozycja #21
+Pozycja #23
 Data: 7.01.2026
 Kwota: 794,31
 Opis: OPŁATA EKSPLOATACYJNA ZA M-C STYCZEŃ 2026R W TYM FUNDU        SZ REMONTOWY 131.50                Wpłata w UP nr:991938260105XX#P0100
@@ -317,7 +347,7 @@ Confidence: 92%
 
 --------------------------------------------------------------------------------
 
-Pozycja #22
+Pozycja #24
 Data: 7.01.2026
 Kwota: 422,17
 Opis: OPŁ. ZA MC 01 2026  IDENT.1 14˙Wpłata w UP nr:991096260105NKAP6158
@@ -332,7 +362,7 @@ Confidence: 92%
 
 --------------------------------------------------------------------------------
 
-Pozycja #23
+Pozycja #25
 Data: 7.01.2026
 Kwota: 683,98
 Opis: opłata eksploatacyjna za styczeń 2026, Al.Lotników 20/119, 02-668 Warszawa˙˙˙
@@ -347,7 +377,22 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #24
+Pozycja #26
+Data: 7.01.2026
+Kwota: 513,47
+Opis: CZYNSZ_STYCZEŃ_AL LOTNIKÓW20,LOC121˙˙˙˙
+Kontrahent: VIKTORIA MARTICORENA 02-668WARSZAWA AL.LOTNIKÓW 20 M.
+Rozpoznane mieszkanie: 121
+Konto lokalu: 204-000121
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000121
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #27
 Data: 8.01.2026
 Kwota: 812,00
 Opis: 01/2026. MARTA KOSSAKOWSKA,AL.LOTNIKÓW 20 M. 54 02-668 WARSZAWA, IDENTYFIKATOR 1/54˙˙
@@ -362,7 +407,22 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #25
+Pozycja #28
+Data: 8.01.2026
+Kwota: 635,48
+Opis: ID. LOKALU 1/110 2025˙˙˙˙˙
+Kontrahent: KAMIL ŻUŁNOWSKI 02-668 WARSZAWA UL.ALEJA LOTNIKÓW 20 M
+Rozpoznane mieszkanie: 110
+Konto lokalu: 204-000110
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000110
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #29
 Data: 8.01.2026
 Kwota: 728,40
 Opis: OPŁATA EKSPLOATACYJNA ZA 01/2026, ID LOKALU 1/44; AL.LOTNIKÓW 20 M 44˙˙˙
@@ -377,7 +437,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #26
+Pozycja #30
 Data: 8.01.2026
 Kwota: 734,31
 Opis: 01.2026˙˙Wpłata w UP nr:991938260107TEAP3538
@@ -392,7 +452,7 @@ Confidence: 92%
 
 --------------------------------------------------------------------------------
 
-Pozycja #27
+Pozycja #31
 Data: 8.01.2026
 Kwota: 458,32
 Opis: CZYNSZ ZA M-C 01/2026, DOT.AL. LOTNIKÓW 20 M. 122˙˙˙˙
@@ -407,7 +467,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #28
+Pozycja #32
 Data: 9.01.2026
 Kwota: 29858,70
 Opis: zaliczka A, B, ¶wiadczenia,odpady komunalne zam-c styczeń    2026˙˙˙
@@ -422,7 +482,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #29
+Pozycja #33
 Data: 9.01.2026
 Kwota: 700,00
 Opis: CZYNSZ AL. LOTNIKÓW 20/126˙˙˙˙˙
@@ -437,7 +497,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #30
+Pozycja #34
 Data: 9.01.2026
 Kwota: 486,72
 Opis: CZYNSZ, WSPÓLNOTA MIESZKANIOWA AL.LOTNIKÓW 20 M.52˙˙˙˙
@@ -452,7 +512,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #31
+Pozycja #35
 Data: 9.01.2026
 Kwota: 849,85
 Opis: CZYNSZ ZA MIESIˇC STYCZEŃ 2026, UL.ALEJA LOTNIKÓW 20 M59, ANNA RUCIŃ SKA˙˙˙
@@ -467,7 +527,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #32
+Pozycja #36
 Data: 9.01.2026
 Kwota: 800,00
 Opis: AL. LOTNIKÓW 20/82 CZYNSZ -STYCZEŃ, W TYM FUND. REM.78PLN˙˙˙
@@ -482,7 +542,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #33
+Pozycja #37
 Data: 10.01.2026
 Kwota: 622,12
 Opis: GRAŻYNA I WIESŁAW GŁOWACCYAL.LOTNIKÓW 20/63 02-668 WARSZAWA˙˙˙
@@ -497,22 +557,22 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #34
+Pozycja #38
 Data: 11.01.2026
 Kwota: 600,00
 Opis: JAROSŁAW KUS ALEJA LOTNIKÓW20/51  02-668 WARSZAWA OPŁATA ZA          MIESZKANIEI FUNDUSZ REMONTOWY˙˙
 Kontrahent: JAROSŁAW KU¦ 02-676 WARSZAWA UL. POSTĘPU 12C M.205
-Rozpoznane mieszkanie: 205
-Konto lokalu: 204-000205
+Rozpoznane mieszkanie: 51
+Konto lokalu: 204-000051
 Księgowanie:
   Linia 1: k_wn = 131-1, k_ma = ---
-  Linia 2: k_wn = ---, k_ma = 204-000205
+  Linia 2: k_wn = ---, k_ma = 204-000051
 Metoda ekstrakcji: regex
 Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #35
+Pozycja #39
 Data: 12.01.2026
 Kwota: 712,05
 Opis: CZYNSZ˙˙˙˙˙
@@ -527,7 +587,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #36
+Pozycja #40
 Data: 12.01.2026
 Kwota: 40,00
 Opis: DOROTA CHLEBOWSKA OPŁATA ZAPOMIESZCZENIE GOSPODARCZE˙˙˙
@@ -542,7 +602,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #37
+Pozycja #41
 Data: 12.01.2026
 Kwota: 482,59
 Opis: Czynsz za lokal ul. Aleja Lotników 20/76 za miesi±c Styczeń 2026˙˙˙
@@ -557,7 +617,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #38
+Pozycja #42
 Data: 12.01.2026
 Kwota: 626,87
 Opis: Czynsz styczeń 2026 Al. Lotników 20m. 42 Piotr i Franciszek Stachyra˙˙˙
@@ -572,7 +632,7 @@ Confidence: 92%
 
 --------------------------------------------------------------------------------
 
-Pozycja #39
+Pozycja #43
 Data: 12.01.2026
 Kwota: 875,95
 Opis: Monika Milewska, Czynsz Al.Lotników 20/99, DID 1964˙˙˙˙
@@ -587,7 +647,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #40
+Pozycja #44
 Data: 12.01.2026
 Kwota: 764,18
 Opis: OPŁATA ZA CZYNSZ INDEKS 10212265˙˙˙˙
@@ -602,7 +662,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #41
+Pozycja #45
 Data: 12.01.2026
 Kwota: 18,19
 Opis: zsyp, korytarz˙˙˙˙˙
@@ -617,7 +677,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #42
+Pozycja #46
 Data: 12.01.2026
 Kwota: 200,00
 Opis: SCHOWEK ALINA KUCHARSKA WARSZAWA   02-668 UL.AL. LOTNIKOW 20 M 31     OPLATA ZA KORYTARZ I SCHOWEK 2026  ROK˙˙
@@ -632,7 +692,22 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #43
+Pozycja #47
+Data: 12.01.2026
+Kwota: 550,00
+Opis: czynsz Al.Lotnikow 20 m 17ChnackiWojciech˙˙˙˙
+Kontrahent: CHOJNACKI WOJCIECH JANUSZ LANCIEGO 9/M
+Rozpoznane mieszkanie: 17
+Konto lokalu: 204-000017
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000017
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #48
 Data: 12.01.2026
 Kwota: 467,94
 Opis: czynsz I/2026  Wanda Pszczoła Kiljańska al.Lotników 20m 11˙˙˙
@@ -647,7 +722,7 @@ Confidence: 92%
 
 --------------------------------------------------------------------------------
 
-Pozycja #44
+Pozycja #49
 Data: 12.01.2026
 Kwota: 850,00
 Opis: LOKAL AL. LOTNIKÓW 20 M. 13, 02-668WARSZAWA; OPŁATA EKSPLOATACYJNA ZA MIESIˇC: STYCZEŃ 2026˙˙
@@ -662,7 +737,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #45
+Pozycja #50
 Data: 12.01.2026
 Kwota: 920,00
 Opis: CZYNSZ STYCZEN 2026 R.˙˙Wpłata w UP nr:991938260109XX#P2734
@@ -677,7 +752,7 @@ Confidence: 92%
 
 --------------------------------------------------------------------------------
 
-Pozycja #46
+Pozycja #51
 Data: 12.01.2026
 Kwota: 560,00
 Opis: Krogulec Mariusz Al.Lotników 20/43 02-668 Warszawa, Identyfikator 1/43˙˙˙
@@ -692,7 +767,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #47
+Pozycja #52
 Data: 12.01.2026
 Kwota: 687,88
 Opis: Opłata eksploatacyjna za m-c styczeń w tym fundusz remontowy˙˙˙
@@ -707,7 +782,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #48
+Pozycja #53
 Data: 13.01.2026
 Kwota: 10,00
 Opis: Górecka Anna AL LOTNIKÓW 20M 66 OPŁATA EKSPLOATACYJNA˙˙˙˙
@@ -722,7 +797,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #49
+Pozycja #54
 Data: 14.01.2026
 Kwota: 982,52
 Opis: Dot. lokalu Al. Lotników 20m 75 koszty utrzymania nieruchomo¶ci wspólnej + zaliczka na poczet zużycia mediów˙
@@ -737,7 +812,7 @@ Confidence: 92%
 
 --------------------------------------------------------------------------------
 
-Pozycja #50
+Pozycja #55
 Data: 14.01.2026
 Kwota: 1000,00
 Opis: Opłata za czynsz i funduszremontowyMarcin Boćkowski Al.Lotników 20/28 Warszawa 02-668˙˙
@@ -752,7 +827,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #51
+Pozycja #56
 Data: 14.01.2026
 Kwota: 589,75
 Opis: OPLATA EKSPLOATACYJNA ZA MCSTYCZEN 2026 R. W TYM FUND         USZ REMONTOWY 105 ZL I 60GR        Wpłata w UP nr:991938260113XX#P1046
@@ -767,7 +842,7 @@ Confidence: 92%
 
 --------------------------------------------------------------------------------
 
-Pozycja #52
+Pozycja #57
 Data: 14.01.2026
 Kwota: 610,00
 Opis: CZYNSZ +  FUNDUSZ REMONTOWY110,- ZŁ  ZA 01/2026˙˙˙˙
@@ -782,22 +857,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #53
-Data: 14.01.2026
-Kwota: 785,62
-Opis: Czynsz za Styczeń 2026r,  Lokal 60.˙˙˙˙
-Kontrahent: FRˇCKIEWCZ MARIA 02-668 WARSZAWA AL LOTNIKÓW 20M60
-Rozpoznane mieszkanie: 60
-Konto lokalu: 204-000060
-Księgowanie:
-  Linia 1: k_wn = 131-1, k_ma = ---
-  Linia 2: k_wn = ---, k_ma = 204-000060
-Metoda ekstrakcji: regex
-Confidence: 95%
-
---------------------------------------------------------------------------------
-
-Pozycja #54
+Pozycja #58
 Data: 15.01.2026
 Kwota: 784,48
 Opis: Czynsz Paweł Nowak Aleja Lotników 20/116˙˙˙˙
@@ -812,7 +872,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #55
+Pozycja #59
 Data: 15.01.2026
 Kwota: 787,39
 Opis: 01/26Monetia(938:40722854 2026-01-13)˙˙˙
@@ -823,11 +883,11 @@ Księgowanie:
   Linia 1: k_wn = 131-1, k_ma = ---
   Linia 2: k_wn = ---, k_ma = 204-000010
 Metoda ekstrakcji: regex
-Confidence: 92%
+Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #56
+Pozycja #60
 Data: 19.01.2026
 Kwota: 900,15
 Opis: OPŁATA EKSPLOATACYJNA ZA MCSTYCZEN 2026 R. W TYM FUND         USZ REMONTOWY 131 ZŁ I 50 G        Wpłata w UP nr:991938260116XX#P0458
@@ -842,7 +902,52 @@ Confidence: 92%
 
 --------------------------------------------------------------------------------
 
-Pozycja #57
+Pozycja #61
+Data: 20.01.2026
+Kwota: 14,41
+Opis: DOROTA DYLEWSKA UL.LOTNIKOW20 M 3 3 02-668 WARSZAWA OPLATA EXSPLOATACYJNA ZA ZABUDOWE KLATKI SCHODOWEJ˙˙
+Kontrahent: Dorota DYLEWSKA Lotników 20/33, 02-668 Warszawa
+Rozpoznane mieszkanie: 33
+Konto lokalu: 204-000033
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000033
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #62
+Data: 20.01.2026
+Kwota: 395,29
+Opis: I/26 OPLATA EKSPLOATACYJNA- LOK. 115, AL. LOTNIKOW 20, 02-668 WAWA˙˙˙
+Kontrahent: JADWIGA NAGÓRNA 02-661 WARSZAWA UL.MODRA 3 M.20
+Rozpoznane mieszkanie: 115
+Konto lokalu: 204-000115
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000115
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #63
+Data: 20.01.2026
+Kwota: 395,29
+Opis: XII/25 OPLATA EKSPLOATACYJNA LOK. 115, AL. LOTNIKOW 20, 02-668 WAWA˙˙˙
+Kontrahent: JADWIGA NAGÓRNA 02-661 WARSZAWA UL.MODRA 3 M.20
+Rozpoznane mieszkanie: 115
+Konto lokalu: 204-000115
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000115
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #64
 Data: 21.01.2026
 Kwota: 32,00
 Opis: Przelew ¶rodków˙˙˙˙˙
@@ -857,7 +962,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #58
+Pozycja #65
 Data: 27.01.2026
 Kwota: 1000,00
 Opis: czynsz Bożena Zawisza Al. Lotników 20 m 1˙˙˙˙
@@ -872,7 +977,52 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #59
+Pozycja #66
+Data: 27.01.2026
+Kwota: 791,36
+Opis: Rozliczenie za 01.2026˙˙˙˙˙
+Kontrahent: SŁAWOMIR ¦WIˇTKOWSKI AL LOTNIKOW 20 M 7
+Rozpoznane mieszkanie: 7
+Konto lokalu: 204-000007
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000007
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #67
+Data: 28.01.2026
+Kwota: 620,00
+Opis: opłaty mieszkaniowe i fundrem 2026.01 DZIERŻYC LEOKADIA AL.LOTNIKÓW. 20 lok. 5602-668 Warszawa˙˙
+Kontrahent: DZIERZYC-KULHAWIK PIOTR ORZYCKA 6/6 02-695 WARSZAWA
+Rozpoznane mieszkanie: 56
+Konto lokalu: 204-000056
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000056
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #68
+Data: 30.01.2026
+Kwota: 485,92
+Opis: TIOMKIN GRAŻYNA WACŁAWAAL.LOTNIKóW. 20 lok. 20            02-668 Warszawa                    zapa?dziernik 2025˙
+Kontrahent: TIOMKIN IZABELA JOLANTA ZAMIANY 9/18 02-786 WARSZAWA
+Rozpoznane mieszkanie: 20
+Konto lokalu: 204-000020
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000020
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #69
 Data: 30.01.2026
 Kwota: 824,67
 Opis: OPŁATA EKSPLOATACYJNA M-C I2026,W TYM F REMONTOWY 78,93ZŁ EWA RAK    AL.LOTNIKÓW20/49 W-WA˙˙
@@ -887,7 +1037,7 @@ Confidence: 95%
 
 --------------------------------------------------------------------------------
 
-Pozycja #60
+Pozycja #70
 Data: 2.01.2026
 Kwota: 800,00
 Opis: /OPF/X///// PBAVDNGZP6FW Wspolnota nr 1 - Identyfikator lokalu 92˙˙˙
@@ -900,7 +1050,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #61
+Pozycja #71
 Data: 2.01.2026
 Kwota: 577,22
 Opis: lokal numer: 111  GrzegorzPirch, s. Jana˙˙˙˙
@@ -913,7 +1063,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #62
+Pozycja #72
 Data: 3.01.2026
 Kwota: 855,66
 Opis: OPŁATA EKSPLOATACYJNA ZA M-C STYCZEŃ 2026 W TYM FUND.R EMONTOW.Y:133,98 I POM. GOSPODARCZE 10 00 ZŁ˙˙
@@ -926,20 +1076,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #63
-Data: 5.01.2026
-Kwota: 475,00
-Opis: Dotyczy lokalu:Aleja Lotnikow 20 lok 94.          ID Lokalu 1/94˙˙
-Kontrahent: KROGULEWSKI MARIUSZ WALDEMAR RUE DE MUHLENBACH 62B
-Status: NIEROZPOZNANE
-Księgowanie: k_wn = 131-1, k_ma = ---
-Metoda ekstrakcji: manual
-Confidence: 0%
-Ostrzeżenia: No AI provider configured
-
---------------------------------------------------------------------------------
-
-Pozycja #64
+Pozycja #73
 Data: 5.01.2026
 Kwota: 496,72
 Opis: Czynsz˙˙˙˙˙
@@ -952,7 +1089,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #65
+Pozycja #74
 Data: 7.01.2026
 Kwota: 626,98
 Opis: 1/86 Krzysztof Powro?nik˙˙˙˙˙
@@ -965,20 +1102,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #66
-Data: 7.01.2026
-Kwota: 768,20
-Opis: ALEJA LOTNIKOW 20/18 ALICJAKRÓL˙˙˙˙
-Kontrahent: ALICJA KRÓL 14-400 PASŁĘK UL. WI¦NIOWA 6
-Status: NIEROZPOZNANE
-Księgowanie: k_wn = 131-1, k_ma = ---
-Metoda ekstrakcji: manual
-Confidence: 0%
-Ostrzeżenia: No AI provider configured
-
---------------------------------------------------------------------------------
-
-Pozycja #67
+Pozycja #75
 Data: 7.01.2026
 Kwota: 800,00
 Opis: CZYNSZ ZA 01 2026 R.˙˙Wpłata w UP nr:991938260105THAP3687
@@ -991,20 +1115,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #68
-Data: 7.01.2026
-Kwota: 513,47
-Opis: CZYNSZ_STYCZEŃ_AL LOTNIKÓW20,LOC121˙˙˙˙
-Kontrahent: VIKTORIA MARTICORENA 02-668WARSZAWA AL.LOTNIKÓW 20 M.
-Status: NIEROZPOZNANE
-Księgowanie: k_wn = 131-1, k_ma = ---
-Metoda ekstrakcji: manual
-Confidence: 0%
-Ostrzeżenia: No AI provider configured
-
---------------------------------------------------------------------------------
-
-Pozycja #69
+Pozycja #76
 Data: 8.01.2026
 Kwota: 600,00
 Opis: 26˙˙˙˙˙
@@ -1017,20 +1128,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #70
-Data: 8.01.2026
-Kwota: 635,48
-Opis: ID. LOKALU 1/110 2025˙˙˙˙˙
-Kontrahent: KAMIL ŻUŁNOWSKI 02-668 WARSZAWA UL.ALEJA LOTNIKÓW 20 M
-Status: NIEROZPOZNANE
-Księgowanie: k_wn = 131-1, k_ma = ---
-Metoda ekstrakcji: manual
-Confidence: 0%
-Ostrzeżenia: No AI provider configured
-
---------------------------------------------------------------------------------
-
-Pozycja #71
+Pozycja #77
 Data: 8.01.2026
 Kwota: 10,00
 Opis: DUDAR MARZENA I SŁAWOMIROPŁATA ZA NAJEM POMIESZCZENIA      GOSPODARCZEGO                      ALEJA LOTNIKÓW 20˙
@@ -1043,7 +1141,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #72
+Pozycja #78
 Data: 8.01.2026
 Kwota: 582,00
 Opis: Styczeń 2026˙˙˙˙˙
@@ -1056,7 +1154,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #73
+Pozycja #79
 Data: 8.01.2026
 Kwota: 740,48
 Opis: 01/26Monetia(938:40563333 2026-01-05)˙˙˙
@@ -1069,7 +1167,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #74
+Pozycja #80
 Data: 8.01.2026
 Kwota: 34,27
 Opis: EKSPLO 01.2026 W TYM F. REM. 2 ZSYPY I KORYTARZWpłata w UP nr:991938260107SE#P0530
@@ -1082,7 +1180,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #75
+Pozycja #81
 Data: 9.01.2026
 Kwota: 405,02
 Opis: Dodatki mieszkaniowe za m-c1/2026 W/g listy nr 90/2026˙˙˙
@@ -1095,7 +1193,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #76
+Pozycja #82
 Data: 10.01.2026
 Kwota: 718,40
 Opis: ID LOKALU 1/77˙˙˙˙˙
@@ -1108,7 +1206,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #77
+Pozycja #83
 Data: 12.01.2026
 Kwota: 1115,42
 Opis: czynsz, identyfikator lokalu 1/108˙˙˙˙
@@ -1121,7 +1219,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #78
+Pozycja #84
 Data: 12.01.2026
 Kwota: 660,84
 Opis: OPŁATA ZA CZYNSZ ZBIGNIEW KACPRZAK˙˙˙˙
@@ -1134,7 +1232,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #79
+Pozycja #85
 Data: 12.01.2026
 Kwota: 927,80
 Opis: zapłata za czynsz styczeń 2026˙˙˙˙
@@ -1147,20 +1245,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #80
-Data: 12.01.2026
-Kwota: 550,00
-Opis: czynsz Al.Lotnikow 20 m 17ChnackiWojciech˙˙˙˙
-Kontrahent: CHOJNACKI WOJCIECH JANUSZ LANCIEGO 9/M
-Status: NIEROZPOZNANE
-Księgowanie: k_wn = 131-1, k_ma = ---
-Metoda ekstrakcji: manual
-Confidence: 0%
-Ostrzeżenia: No AI provider configured
-
---------------------------------------------------------------------------------
-
-Pozycja #81
+Pozycja #86
 Data: 12.01.2026
 Kwota: 100,00
 Opis: OPLATA EKSPLOATACYJNA ZA MCSTYCZEN 2026 R. KORYTARZ PLUS ZSYPY˙˙˙
@@ -1173,7 +1258,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #82
+Pozycja #87
 Data: 12.01.2026
 Kwota: 613,70
 Opis: opłaty mieszkaniowe za styczeń 2026Lotników 20/95˙˙˙˙
@@ -1186,7 +1271,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #83
+Pozycja #88
 Data: 13.01.2026
 Kwota: 1056,02
 Opis: OPŁATA EKSPLOATACYJNA ORAZFUNDUSZ REMONTOWY 01.2026˙˙˙˙
@@ -1199,7 +1284,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #84
+Pozycja #89
 Data: 13.01.2026
 Kwota: 666,72
 Opis: FUNDUSZ REMONTOWY˙˙˙˙˙
@@ -1212,7 +1297,20 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #85
+Pozycja #90
+Data: 14.01.2026
+Kwota: 785,62
+Opis: Czynsz za Styczeń 2026r,  Lokal 60.˙˙˙˙
+Kontrahent: FRˇCKIEWCZ MARIA 02-668 WARSZAWA AL LOTNIKÓW 20M60
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #91
 Data: 20.01.2026
 Kwota: 469,03
 Opis: 01/26Monetia(938:40819589 2026-01-16)˙˙˙
@@ -1225,46 +1323,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #86
-Data: 20.01.2026
-Kwota: 14,41
-Opis: DOROTA DYLEWSKA UL.LOTNIKOW20 M 3 3 02-668 WARSZAWA OPLATA EXSPLOATACYJNA ZA ZABUDOWE KLATKI SCHODOWEJ˙˙
-Kontrahent: Dorota DYLEWSKA Lotników 20/33, 02-668 Warszawa
-Status: NIEROZPOZNANE
-Księgowanie: k_wn = 131-1, k_ma = ---
-Metoda ekstrakcji: manual
-Confidence: 0%
-Ostrzeżenia: No AI provider configured
-
---------------------------------------------------------------------------------
-
-Pozycja #87
-Data: 20.01.2026
-Kwota: 395,29
-Opis: I/26 OPLATA EKSPLOATACYJNA- LOK. 115, AL. LOTNIKOW 20, 02-668 WAWA˙˙˙
-Kontrahent: JADWIGA NAGÓRNA 02-661 WARSZAWA UL.MODRA 3 M.20
-Status: NIEROZPOZNANE
-Księgowanie: k_wn = 131-1, k_ma = ---
-Metoda ekstrakcji: manual
-Confidence: 0%
-Ostrzeżenia: No AI provider configured
-
---------------------------------------------------------------------------------
-
-Pozycja #88
-Data: 20.01.2026
-Kwota: 395,29
-Opis: XII/25 OPLATA EKSPLOATACYJNA LOK. 115, AL. LOTNIKOW 20, 02-668 WAWA˙˙˙
-Kontrahent: JADWIGA NAGÓRNA 02-661 WARSZAWA UL.MODRA 3 M.20
-Status: NIEROZPOZNANE
-Księgowanie: k_wn = 131-1, k_ma = ---
-Metoda ekstrakcji: manual
-Confidence: 0%
-Ostrzeżenia: No AI provider configured
-
---------------------------------------------------------------------------------
-
-Pozycja #89
+Pozycja #92
 Data: 21.01.2026
 Kwota: 524,01
 Opis: Lok 127 czynsz za mc. 01/26˙˙˙˙˙
@@ -1277,7 +1336,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #90
+Pozycja #93
 Data: 21.01.2026
 Kwota: 908,00
 Opis: czynsz za styczeń i luty 2026˙˙˙˙
@@ -1290,7 +1349,7 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #91
+Pozycja #94
 Data: 26.01.2026
 Kwota: 548,34
 Opis: CZYNSZ ZA  STYCZEŃ 2026˙˙˙˙˙
@@ -1303,50 +1362,11 @@ Ostrzeżenia: No AI provider configured
 
 --------------------------------------------------------------------------------
 
-Pozycja #92
+Pozycja #95
 Data: 26.01.2026
 Kwota: 720,00
 Opis: OPŁ. EKSP. ZA MC STYCZEŃ 26R˙Wpłata w UP nr:991324260123BI#P0797
 Kontrahent: JAKUBOWSKA STANISŁAWA 02-668 WARSZAWA ALEJA LOTNIKÓW
-Status: NIEROZPOZNANE
-Księgowanie: k_wn = 131-1, k_ma = ---
-Metoda ekstrakcji: manual
-Confidence: 0%
-Ostrzeżenia: No AI provider configured
-
---------------------------------------------------------------------------------
-
-Pozycja #93
-Data: 27.01.2026
-Kwota: 791,36
-Opis: Rozliczenie za 01.2026˙˙˙˙˙
-Kontrahent: SŁAWOMIR ¦WIˇTKOWSKI AL LOTNIKOW 20 M 7
-Status: NIEROZPOZNANE
-Księgowanie: k_wn = 131-1, k_ma = ---
-Metoda ekstrakcji: manual
-Confidence: 0%
-Ostrzeżenia: No AI provider configured
-
---------------------------------------------------------------------------------
-
-Pozycja #94
-Data: 28.01.2026
-Kwota: 620,00
-Opis: opłaty mieszkaniowe i fundrem 2026.01 DZIERŻYC LEOKADIA AL.LOTNIKÓW. 20 lok. 5602-668 Warszawa˙˙
-Kontrahent: DZIERZYC-KULHAWIK PIOTR ORZYCKA 6/6 02-695 WARSZAWA
-Status: NIEROZPOZNANE
-Księgowanie: k_wn = 131-1, k_ma = ---
-Metoda ekstrakcji: manual
-Confidence: 0%
-Ostrzeżenia: No AI provider configured
-
---------------------------------------------------------------------------------
-
-Pozycja #95
-Data: 30.01.2026
-Kwota: 485,92
-Opis: TIOMKIN GRAŻYNA WACŁAWAAL.LOTNIKóW. 20 lok. 20            02-668 Warszawa                    zapa?dziernik 2025˙
-Kontrahent: TIOMKIN IZABELA JOLANTA ZAMIANY 9/18 02-786 WARSZAWA
 Status: NIEROZPOZNANE
 Księgowanie: k_wn = 131-1, k_ma = ---
 Metoda ekstrakcji: manual

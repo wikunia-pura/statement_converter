@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ConversionHistory } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { formatDate } from '../../shared/utils';
@@ -12,11 +12,42 @@ const History: React.FC<HistoryProps> = ({ language }) => {
   const [history, setHistory] = useState<ConversionHistory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
+  const [isDarkMode, setIsDarkMode] = useState(document.body.classList.contains('dark-mode'));
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const itemsPerPage = 100;
 
   useEffect(() => {
     loadHistory();
   }, []);
+
+  // Detect dark mode changes
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDarkMode(document.body.classList.contains('dark-mode'));
+    });
+    
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+    
+    return () => observer.disconnect();
+  }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpenDropdownId(null);
+      }
+    };
+
+    if (openDropdownId) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [openDropdownId]);
 
   const loadHistory = async () => {
     setIsLoading(true);
@@ -35,8 +66,14 @@ const History: React.FC<HistoryProps> = ({ language }) => {
     }
   };
 
-  const handleOpenFile = async (filePath: string) => {
-    await window.electronAPI.openFile(filePath);
+  const handleOpenFile = async (outputPath: string, type: 'preview' | 'accounting') => {
+    const suffix = type === 'preview' ? '-podglad.txt' : '-accounting.txt';
+    const filePath = outputPath.replace(/\.txt$/, '') + suffix;
+    const result = await window.electronAPI.openFile(filePath);
+    if (!result) {
+      alert(t.fileNotFound);
+    }
+    setOpenDropdownId(null);
   };
 
   // Pagination logic
@@ -146,12 +183,67 @@ const History: React.FC<HistoryProps> = ({ language }) => {
                     </td>
                     <td>
                       {entry.status === 'success' && entry.outputPath && (
-                        <button
-                          className="button button-small button-primary"
-                          onClick={() => handleOpenFile(entry.outputPath)}
+                        <div 
+                          style={{ position: 'relative', display: 'inline-block' }}
+                          ref={openDropdownId === entry.id ? dropdownRef : undefined}
                         >
-                          {t.open}
-                        </button>
+                          <button
+                            className="button button-small button-primary"
+                            onClick={() => setOpenDropdownId(openDropdownId === entry.id ? null : entry.id)}
+                          >
+                            {t.open} ▾
+                          </button>
+                          {openDropdownId === entry.id && (
+                            <div style={{
+                              position: 'absolute',
+                              top: '100%',
+                              left: 0,
+                              backgroundColor: isDarkMode ? '#161b22' : '#fff',
+                              border: `1px solid ${isDarkMode ? '#30363d' : '#ddd'}`,
+                              borderRadius: '4px',
+                              boxShadow: isDarkMode ? '0 2px 8px rgba(0,0,0,0.4)' : '0 2px 8px rgba(0,0,0,0.15)',
+                              zIndex: 1000,
+                              minWidth: '120px'
+                            }}>
+                              <button
+                                style={{
+                                  display: 'block',
+                                  width: '100%',
+                                  padding: '8px 12px',
+                                  border: 'none',
+                                  background: 'none',
+                                  textAlign: 'left',
+                                  cursor: 'pointer',
+                                  fontSize: '13px',
+                                  color: isDarkMode ? '#c9d1d9' : 'inherit',
+                                }}
+                                onClick={() => handleOpenFile(entry.outputPath, 'preview')}
+                                onMouseEnter={(e) => e.currentTarget.style.background = isDarkMode ? '#30363d' : '#f5f5f5'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                              >
+                                📄 {t.openPreview}
+                              </button>
+                              <button
+                                style={{
+                                  display: 'block',
+                                  width: '100%',
+                                  padding: '8px 12px',
+                                  border: 'none',
+                                  background: 'none',
+                                  textAlign: 'left',
+                                  cursor: 'pointer',
+                                  fontSize: '13px',
+                                  color: isDarkMode ? '#c9d1d9' : 'inherit',
+                                }}
+                                onClick={() => handleOpenFile(entry.outputPath, 'accounting')}
+                                onMouseEnter={(e) => e.currentTarget.style.background = isDarkMode ? '#30363d' : '#f5f5f5'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                              >
+                                📊 {t.openAccounting}
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </td>
                   </tr>

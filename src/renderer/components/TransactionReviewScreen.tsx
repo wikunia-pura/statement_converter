@@ -1,6 +1,171 @@
 import React, { useState } from 'react';
 import { ConversionReviewData, ReviewDecision, TransactionForReview } from '../../shared/types';
 
+// TransactionCard sub-component
+interface TransactionCardProps {
+  trn: TransactionForReview;
+  idx: number;
+  currentDecision: ReviewDecision | undefined;
+  manualInput: string | undefined;
+  handleDecision: (index: number, action: 'accept' | 'reject') => void;
+  handleManualInput: (index: number, value: string) => void;
+}
+
+const TransactionCard: React.FC<TransactionCardProps> = ({
+  trn,
+  idx,
+  currentDecision,
+  manualInput,
+  handleDecision,
+  handleManualInput,
+}) => (
+  <div
+    style={{
+      backgroundColor: '#2d2d30',
+      border: `2px solid ${currentDecision ? '#4EC9B0' : '#3c3c3c'}`,
+      borderRadius: '4px',
+      padding: '15px',
+      marginBottom: '15px',
+    }}
+  >
+    {/* Transaction Header */}
+    <div style={{ 
+      display: 'flex', 
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: '15px',
+      paddingBottom: '10px',
+      borderBottom: '1px solid #3c3c3c',
+    }}>
+      <h3 style={{ margin: 0, color: trn.transactionType === 'income' ? '#4EC9B0' : '#CE9178' }}>
+        Transakcja #{idx + 1} ({trn.transactionType === 'income' ? 'WPŁATA' : 'WYDATEK'})
+      </h3>
+      <span style={{ 
+        color: '#858585', 
+        fontSize: '14px',
+      }}>
+        Confidence: {trn.extracted.confidence}%
+      </span>
+    </div>
+
+    {/* Original Data */}
+    <div style={{ marginBottom: '15px' }}>
+      <h4 style={{ margin: '0 0 10px 0', color: '#569CD6' }}>📄 Dane z wyciągu:</h4>
+      <div style={{ fontSize: '14px', lineHeight: '1.6' }}>
+        <div><strong>Data:</strong> {trn.original.date}</div>
+        <div><strong>Kwota:</strong> {trn.original.amount} PLN</div>
+        <div><strong>Opis:</strong> {trn.original.description}</div>
+        <div><strong>Kontrahent:</strong> {trn.original.counterparty}</div>
+      </div>
+    </div>
+
+    {/* Extracted Data */}
+    {trn.transactionType === 'income' && (
+      <div style={{ marginBottom: '15px' }}>
+        <h4 style={{ margin: '0 0 10px 0', color: '#DCDCAA' }}>🔍 Wyekstrahowane dane:</h4>
+        <div style={{ fontSize: '14px', lineHeight: '1.6', color: '#858585' }}>
+          <div>Adres: {trn.extracted.fullAddress || 'NIE ZNALEZIONO'}</div>
+          <div>Ulica: {trn.extracted.streetName || 'N/A'}</div>
+          <div>Numer budynku: {trn.extracted.buildingNumber || 'N/A'}</div>
+          <div>Numer mieszkania: {trn.extracted.apartmentNumber || 'NIE ZNALEZIONO'}</div>
+          <div>Najemca: {trn.extracted.tenantName || 'N/A'}</div>
+          {trn.extracted.reasoning && (
+            <div style={{ marginTop: '10px', color: '#858585', fontStyle: 'italic' }}>
+              AI: {trn.extracted.reasoning}
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+
+    {/* Contractor Data (for expenses) */}
+    {trn.transactionType === 'expense' && trn.matchedContractor && (
+      <div style={{ marginBottom: '15px' }}>
+        <h4 style={{ margin: '0 0 10px 0', color: '#DCDCAA' }}>💼 Dopasowany kontrahent:</h4>
+        <div style={{ fontSize: '14px', lineHeight: '1.6', color: '#858585' }}>
+          <div>Nazwa: {trn.matchedContractor.contractorName || 'NIE ZNALEZIONO'}</div>
+          <div>Konto: {trn.matchedContractor.contractorAccount || 'N/A'}</div>
+          <div>Confidence: {trn.matchedContractor.confidence}%</div>
+        </div>
+      </div>
+    )}
+
+    {/* Decision Buttons */}
+    <div style={{ marginTop: '15px' }}>
+      <h4 style={{ margin: '0 0 10px 0', color: '#C586C0' }}>✅ Decyzja:</h4>
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+        <button
+          onClick={() => handleDecision(trn.index, 'accept')}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: currentDecision?.action === 'accept' ? '#0e639c' : '#007acc',
+            color: 'white',
+            border: 'none',
+            borderRadius: '3px',
+            cursor: 'pointer',
+            fontWeight: currentDecision?.action === 'accept' ? 'bold' : 'normal',
+          }}
+        >
+          ✓ Akceptuj
+        </button>
+        <button
+          onClick={() => handleDecision(trn.index, 'reject')}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: currentDecision?.action === 'reject' ? '#b71c1c' : '#d32f2f',
+            color: 'white',
+            border: 'none',
+            borderRadius: '3px',
+            cursor: 'pointer',
+            fontWeight: currentDecision?.action === 'reject' ? 'bold' : 'normal',
+          }}
+        >
+          ✗ Odrzuć
+        </button>
+      </div>
+
+      {/* Manual Input (only for income) */}
+      {trn.transactionType === 'income' && (
+        <div>
+          <label style={{ display: 'block', marginBottom: '5px', color: '#C586C0' }}>
+            Lub wpisz numer mieszkania ręcznie:
+          </label>
+          <input
+            type="text"
+            value={manualInput || ''}
+            onChange={(e) => handleManualInput(trn.index, (e.target as HTMLInputElement).value)}
+            placeholder="np. 42, ZGN"
+            style={{
+              padding: '8px',
+              backgroundColor: '#3c3c3c',
+              color: '#d4d4d4',
+              border: '1px solid #555',
+              borderRadius: '3px',
+              width: '200px',
+            }}
+          />
+        </div>
+      )}
+
+      {/* Current Decision Display */}
+      {currentDecision && (
+        <div style={{
+          marginTop: '10px',
+          padding: '8px',
+          backgroundColor: '#1e3a1e',
+          color: '#4EC9B0',
+          borderRadius: '3px',
+          fontSize: '14px',
+        }}>
+          {currentDecision.action === 'accept' && '✓ Zaakceptowano wyekstrahowane dane'}
+          {currentDecision.action === 'reject' && '✗ Odrzucono - będzie oznaczone jako NIEROZPOZNANE'}
+          {currentDecision.action === 'manual' && `✏️  Ręcznie wpisano: ${currentDecision.manualApartmentNumber}`}
+        </div>
+      )}
+    </div>
+  </div>
+);
+
 interface TransactionReviewScreenProps {
   reviewData: ConversionReviewData;
   onFinalize: (decisions: ReviewDecision[]) => Promise<void>;
@@ -15,6 +180,21 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   const [decisions, setDecisions] = useState<Map<number, ReviewDecision>>(new Map());
   const [manualInputs, setManualInputs] = useState<Map<number, string>>(new Map());
   const [isProcessing, setIsProcessing] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'income' | 'expense'>('all');
+
+  // Filter transactions based on selected filter
+  const filteredTransactions = reviewData.transactions.filter(trn => {
+    if (filter === 'all') return true;
+    return trn.transactionType === filter;
+  });
+
+  // Group transactions by type
+  const incomeTransactions = filteredTransactions.filter(trn => trn.transactionType === 'income');
+  const expenseTransactions = filteredTransactions.filter(trn => trn.transactionType === 'expense');
+
+  // Count totals for filter badges
+  const totalIncome = reviewData.transactions.filter(trn => trn.transactionType === 'income').length;
+  const totalExpense = reviewData.transactions.filter(trn => trn.transactionType === 'expense').length;
 
   const handleDecision = (index: number, action: 'accept' | 'reject') => {
     const newDecisions = new Map(decisions);
@@ -107,163 +287,124 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
         <p style={{ margin: '10px 0 0 0', color: '#ffa500' }}>
           {reviewData.transactions.length} transakcji wymaga ręcznej weryfikacji (confidence {'<'} 60%)
         </p>
+        
+        {/* Filter buttons */}
+        <div style={{ marginTop: '15px', display: 'flex', gap: '10px' }}>
+          <button
+            onClick={() => setFilter('all')}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: filter === 'all' ? '#0e639c' : '#3c3c3c',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontWeight: filter === 'all' ? 'bold' : 'normal',
+            }}
+          >
+            Wszystkie ({reviewData.transactions.length})
+          </button>
+          <button
+            onClick={() => setFilter('income')}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: filter === 'income' ? '#4EC9B0' : '#3c3c3c',
+              color: filter === 'income' ? '#1e1e1e' : 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontWeight: filter === 'income' ? 'bold' : 'normal',
+            }}
+          >
+            💰 Wpłaty ({totalIncome})
+          </button>
+          <button
+            onClick={() => setFilter('expense')}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: filter === 'expense' ? '#CE9178' : '#3c3c3c',
+              color: filter === 'expense' ? '#1e1e1e' : 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontWeight: filter === 'expense' ? 'bold' : 'normal',
+            }}
+          >
+            💸 Wydatki ({totalExpense})
+          </button>
+        </div>
       </div>
 
       {/* Transactions list */}
       <div style={{ padding: '20px' }}>
-        {reviewData.transactions.map((trn, idx) => {
-          const currentDecision = decisions.get(trn.index);
-          const manualInput = manualInputs.get(trn.index);
-          
-          return (
-            <div
-              key={trn.index}
-              style={{
-                backgroundColor: '#2d2d30',
-                border: `2px solid ${currentDecision ? '#4EC9B0' : '#3c3c3c'}`,
-                borderRadius: '4px',
-                padding: '15px',
-                marginBottom: '15px',
-              }}
-            >
-              {/* Transaction Header */}
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '15px',
-                paddingBottom: '10px',
-                borderBottom: '1px solid #3c3c3c',
-              }}>
-                <h3 style={{ margin: 0, color: trn.transactionType === 'income' ? '#4EC9B0' : '#CE9178' }}>
-                  Transakcja #{idx + 1} ({trn.transactionType === 'income' ? 'WPŁATA' : 'WYDATEK'})
-                </h3>
-                <span style={{ 
-                  color: '#858585', 
-                  fontSize: '14px',
-                }}>
-                  Confidence: {trn.extracted.confidence}%
-                </span>
-              </div>
-
-              {/* Original Data */}
-              <div style={{ marginBottom: '15px' }}>
-                <h4 style={{ margin: '0 0 10px 0', color: '#569CD6' }}>📄 Dane z wyciągu:</h4>
-                <div style={{ fontSize: '14px', lineHeight: '1.6' }}>
-                  <div><strong>Data:</strong> {trn.original.date}</div>
-                  <div><strong>Kwota:</strong> {trn.original.amount} PLN</div>
-                  <div><strong>Opis:</strong> {trn.original.description}</div>
-                  <div><strong>Kontrahent:</strong> {trn.original.counterparty}</div>
-                </div>
-              </div>
-
-              {/* Extracted Data */}
-              {trn.transactionType === 'income' && (
-                <div style={{ marginBottom: '15px' }}>
-                  <h4 style={{ margin: '0 0 10px 0', color: '#DCDCAA' }}>🔍 Wyekstrahowane dane:</h4>
-                  <div style={{ fontSize: '14px', lineHeight: '1.6', color: '#858585' }}>
-                    <div>Adres: {trn.extracted.fullAddress || 'NIE ZNALEZIONO'}</div>
-                    <div>Ulica: {trn.extracted.streetName || 'N/A'}</div>
-                    <div>Numer budynku: {trn.extracted.buildingNumber || 'N/A'}</div>
-                    <div>Numer mieszkania: {trn.extracted.apartmentNumber || 'NIE ZNALEZIONO'}</div>
-                    <div>Najemca: {trn.extracted.tenantName || 'N/A'}</div>
-                    {trn.extracted.reasoning && (
-                      <div style={{ marginTop: '10px', color: '#858585', fontStyle: 'italic' }}>
-                        AI: {trn.extracted.reasoning}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Contractor Data (for expenses) */}
-              {trn.transactionType === 'expense' && trn.matchedContractor && (
-                <div style={{ marginBottom: '15px' }}>
-                  <h4 style={{ margin: '0 0 10px 0', color: '#DCDCAA' }}>💼 Dopasowany kontrahent:</h4>
-                  <div style={{ fontSize: '14px', lineHeight: '1.6', color: '#858585' }}>
-                    <div>Nazwa: {trn.matchedContractor.contractorName || 'NIE ZNALEZIONO'}</div>
-                    <div>Konto: {trn.matchedContractor.contractorAccount || 'N/A'}</div>
-                    <div>Confidence: {trn.matchedContractor.confidence}%</div>
-                  </div>
-                </div>
-              )}
-
-              {/* Decision Buttons */}
-              <div style={{ marginTop: '15px' }}>
-                <h4 style={{ margin: '0 0 10px 0', color: '#C586C0' }}>✅ Decyzja:</h4>
-                <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-                  <button
-                    onClick={() => handleDecision(trn.index, 'accept')}
-                    style={{
-                      padding: '10px 20px',
-                      backgroundColor: currentDecision?.action === 'accept' ? '#0e639c' : '#007acc',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '3px',
-                      cursor: 'pointer',
-                      fontWeight: currentDecision?.action === 'accept' ? 'bold' : 'normal',
-                    }}
-                  >
-                    ✓ Akceptuj
-                  </button>
-                  <button
-                    onClick={() => handleDecision(trn.index, 'reject')}
-                    style={{
-                      padding: '10px 20px',
-                      backgroundColor: currentDecision?.action === 'reject' ? '#b71c1c' : '#d32f2f',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '3px',
-                      cursor: 'pointer',
-                      fontWeight: currentDecision?.action === 'reject' ? 'bold' : 'normal',
-                    }}
-                  >
-                    ✗ Odrzuć
-                  </button>
-                </div>
-
-                {/* Manual Input (only for income) */}
-                {trn.transactionType === 'income' && (
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '5px', color: '#C586C0' }}>
-                      Lub wpisz numer mieszkania ręcznie:
-                    </label>
-                    <input
-                      type="text"
-                      value={manualInput || ''}
-                      onChange={(e) => handleManualInput(trn.index, (e.target as HTMLInputElement).value)}
-                      placeholder="np. 42, ZGN"
-                      style={{
-                        padding: '8px',
-                        backgroundColor: '#3c3c3c',
-                        color: '#d4d4d4',
-                        border: '1px solid #555',
-                        borderRadius: '3px',
-                        width: '200px',
-                      }}
-                    />
-                  </div>
-                )}
-
-                {/* Current Decision Display */}
-                {currentDecision && (
-                  <div style={{
-                    marginTop: '10px',
-                    padding: '8px',
-                    backgroundColor: '#1e3a1e',
-                    color: '#4EC9B0',
-                    borderRadius: '3px',
-                    fontSize: '14px',
-                  }}>
-                    {currentDecision.action === 'accept' && '✓ Zaakceptowano wyekstrahowane dane'}
-                    {currentDecision.action === 'reject' && '✗ Odrzucono - będzie oznaczone jako NIEROZPOZNANE'}
-                    {currentDecision.action === 'manual' && `✏️  Ręcznie wpisano: ${currentDecision.manualApartmentNumber}`}
-                  </div>
-                )}
-              </div>
+        {/* Income Section */}
+        {(filter === 'all' || filter === 'income') && incomeTransactions.length > 0 && (
+          <>
+            <div style={{
+              backgroundColor: '#1e3a2e',
+              padding: '12px 16px',
+              marginBottom: '15px',
+              borderRadius: '6px',
+              borderLeft: '4px solid #4EC9B0',
+            }}>
+              <h3 style={{ margin: 0, color: '#4EC9B0', fontSize: '18px' }}>
+                💰 WPŁATY ({incomeTransactions.length})
+              </h3>
             </div>
-          );
-        })}
+            {incomeTransactions.map((trn) => {
+              const currentDecision = decisions.get(trn.index);
+              const manualInput = manualInputs.get(trn.index);
+              const idx = reviewData.transactions.indexOf(trn);
+              
+              return (
+                <TransactionCard
+                  key={trn.index}
+                  trn={trn}
+                  idx={idx}
+                  currentDecision={currentDecision}
+                  manualInput={manualInput}
+                  handleDecision={handleDecision}
+                  handleManualInput={handleManualInput}
+                />
+              );
+            })}
+          </>
+        )}
+
+        {/* Expense Section */}
+        {(filter === 'all' || filter === 'expense') && expenseTransactions.length > 0 && (
+          <>
+            <div style={{
+              backgroundColor: '#3a2e1e',
+              padding: '12px 16px',
+              marginBottom: '15px',
+              marginTop: filter === 'all' && incomeTransactions.length > 0 ? '30px' : '0',
+              borderRadius: '6px',
+              borderLeft: '4px solid #CE9178',
+            }}>
+              <h3 style={{ margin: 0, color: '#CE9178', fontSize: '18px' }}>
+                💸 WYDATKI ({expenseTransactions.length})
+              </h3>
+            </div>
+            {expenseTransactions.map((trn) => {
+              const currentDecision = decisions.get(trn.index);
+              const manualInput = manualInputs.get(trn.index);
+              const idx = reviewData.transactions.indexOf(trn);
+              
+              return (
+                <TransactionCard
+                  key={trn.index}
+                  trn={trn}
+                  idx={idx}
+                  currentDecision={currentDecision}
+                  manualInput={manualInput}
+                  handleDecision={handleDecision}
+                  handleManualInput={handleManualInput}
+                />
+              );
+            })}
+          </>
+        )}
       </div>
 
       {/* Footer with actions */}

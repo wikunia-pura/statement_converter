@@ -49,6 +49,51 @@ export interface ConversionSummary {
   needsAI: boolean;
 }
 
+// Transaction review types
+export interface TransactionForReview {
+  index: number; // Index in original transaction list
+  transactionType: 'income' | 'expense';
+  // Original data
+  original: {
+    date: string;
+    amount: number;
+    description: string;
+    counterparty: string;
+  };
+  // AI/Regex extracted data
+  extracted: {
+    apartmentNumber: string | null;
+    fullAddress: string | null;
+    streetName: string | null;
+    buildingNumber: string | null;
+    tenantName: string | null;
+    confidence: number;
+    reasoning?: string;
+  };
+  // For expenses
+  matchedContractor?: {
+    contractorName: string | null;
+    contractorAccount: string | null;
+    confidence: number;
+  };
+}
+
+export interface ReviewDecision {
+  index: number; // Matches TransactionForReview.index
+  action: 'accept' | 'reject' | 'manual';
+  manualApartmentNumber?: string; // Used when action is 'manual'
+}
+
+export interface ConversionReviewData {
+  needsReview: true;
+  tempConversionId: string;
+  fileName: string;
+  bankName: string;
+  adresId: number | null;
+  adresName: string | null;
+  transactions: TransactionForReview[];
+}
+
 export interface ConversionHistory {
   id: number;
   fileName: string;
@@ -102,6 +147,7 @@ export const IPC_CHANNELS = {
   SELECT_OUTPUT_FOLDER: 'files:select-output-folder',
   CONVERT_FILE: 'files:convert',
   CONVERT_FILE_WITH_AI: 'files:convert-with-ai',
+  FINALIZE_CONVERSION: 'files:finalize-conversion',
   CONVERT_ALL: 'files:convert-all',
   OPEN_FILE: 'files:open',
   

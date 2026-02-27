@@ -6,3 +6,6 @@ converters:
     name: Santander XML (Wyciąg bankowy)
     description: Santander bank XML statements with AI-powered tenant extraction
 
+  - id: pko_mt940
+    name: PKO BP (MT940)
+    description: PKO BP bank MT940 format statements with AI-powered tenant extraction

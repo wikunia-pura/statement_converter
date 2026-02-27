@@ -1,25 +1,25 @@
 /**
- * Main Santander XML Converter
- * Orchestrates the extraction process with hybrid approach (regex + AI)
+ * PKO BP MT940 Converter
+ * Main orchestrator for MT940 bank statement processing
  */
 
-import { SantanderXmlParser } from './parser';
+import { PKOBPMT940Parser } from './parser';
 import { RegexExtractor } from './regex-extractor';
-import { AIExtractor } from './ai-extractor';
-import { ExtractionCache } from './cache';
+import { AIExtractor } from '../santander-xml/ai-extractor';
+import { ExtractionCache } from '../santander-xml/cache';
 import { CsvExporter } from './csv-exporter';
-import { ContractorMatcher } from './contractor-matcher';
+import { ContractorMatcher } from '../santander-xml/contractor-matcher';
 import {
-  XmlStatement,
-  XmlTransaction,
+  MT940Statement,
+  MT940Transaction,
   ProcessedTransaction,
   ImportResult,
   ConverterConfig,
   ExtractedData,
 } from './types';
 
-export class SantanderXmlConverter {
-  private parser: SantanderXmlParser;
+export class PKOBPMT940Converter {
+  private parser: PKOBPMT940Parser;
   private regexExtractor: RegexExtractor;
   private aiExtractor?: AIExtractor;
   private cache: ExtractionCache;
@@ -39,13 +39,13 @@ export class SantanderXmlConverter {
       },
       useCache: config.useCache ?? true,
       useRegexFirst: config.useRegexFirst ?? true,
-      skipNegativeAmounts: config.skipNegativeAmounts ?? false, // Changed to false - process expenses
+      skipNegativeAmounts: config.skipNegativeAmounts ?? false,
       skipBankFees: config.skipBankFees ?? true,
       contractors: config.contractors,
       addresses: config.addresses,
     };
 
-    this.parser = new SantanderXmlParser();
+    this.parser = new PKOBPMT940Parser();
     this.regexExtractor = new RegexExtractor(this.config.addresses || []);
     this.cache = new ExtractionCache();
 
@@ -61,16 +61,18 @@ export class SantanderXmlConverter {
   }
 
   /**
-   * Convert XML file
+   * Convert MT940 file
    */
-  async convert(xmlContent: string): Promise<ImportResult> {
-    console.log('🔄 Starting Santander XML conversion...');
+  async convert(mt940Content: string): Promise<ImportResult> {
+    console.log('🔄 Starting PKO BP MT940 conversion...');
 
-    // Parse XML
-    const statement = await this.parser.parse(xmlContent);
+    // Parse MT940
+    const statement = this.parser.parse(mt940Content);
     console.log(`📄 Parsed ${statement.transactions.length} transactions`);
+    console.log(`   Opening balance: ${statement.openingBalance.amount} ${statement.openingBalance.debitCredit}`);
+    console.log(`   Closing balance: ${statement.closingBalance.amount} ${statement.closingBalance.debitCredit}`);
 
-    // Filter transactions (skip expenses, bank fees, etc.)
+    // Filter transactions (skip bank fees, etc.)
     const filteredTransactions = this.parser.filterTransactions(statement.transactions, {
       skipNegative: this.config.skipNegativeAmounts,
       skipBankFees: this.config.skipBankFees,
@@ -98,21 +100,21 @@ export class SantanderXmlConverter {
    * Process transactions using hybrid extraction
    */
   private async processTransactions(
-    transactions: XmlTransaction[]
+    transactions: MT940Transaction[]
   ): Promise<ProcessedTransaction[]> {
     const processed: ProcessedTransaction[] = [];
     
-    // Separate income (positive) and expenses (negative)
-    const incomeTransactions = transactions.filter(t => t.value >= 0);
-    const expenseTransactions = transactions.filter(t => t.value < 0);
+    // Separate income (credit) and expenses (debit)
+    const incomeTransactions = transactions.filter(t => t.debitCredit === 'C');
+    const expenseTransactions = transactions.filter(t => t.debitCredit === 'D');
 
-    // Process income transactions (existing logic)
+    // Process income transactions
     if (incomeTransactions.length > 0) {
       const incomeProcessed = await this.processIncomeTransactions(incomeTransactions);
       processed.push(...incomeProcessed);
     }
 
-    // Process expense transactions (new logic with contractor matching)
+    // Process expense transactions
     if (expenseTransactions.length > 0) {
       const expenseProcessed = await this.processExpenseTransactions(expenseTransactions);
       processed.push(...expenseProcessed);
@@ -122,13 +124,13 @@ export class SantanderXmlConverter {
   }
 
   /**
-   * Process income transactions (positive amounts)
+   * Process income transactions (credit)
    */
   private async processIncomeTransactions(
-    transactions: XmlTransaction[]
+    transactions: MT940Transaction[]
   ): Promise<ProcessedTransaction[]> {
     const processed: ProcessedTransaction[] = [];
-    const needsAI: Array<{ transaction: XmlTransaction; index: number }> = [];
+    const needsAI: Array<{ transaction: MT940Transaction; index: number }> = [];
 
     // Phase 1: Try regex + cache for all transactions
     console.log('🔍 Phase 1: Quick extraction (regex + cache) for income...');
@@ -136,23 +138,10 @@ export class SantanderXmlConverter {
       const transaction = transactions[i];
       let extracted: ExtractedData | null = null;
 
-      // Try cache first
-      if (this.config.useCache) {
-        extracted = this.cache.get(transaction.descBase, transaction.descOpt);
-        if (extracted) {
-          processed.push(this.createProcessedTransaction(transaction, extracted, 'income'));
-          continue;
-        }
-      }
-
       // Try regex extraction
       if (this.config.useRegexFirst) {
         extracted = this.regexExtractor.extract(transaction);
-        if (extracted && extracted.confidence.overall >= 90) {
-          // Cache successful regex extraction
-          if (this.config.useCache) {
-            this.cache.set(transaction.descBase, transaction.descOpt, extracted);
-          }
+        if (extracted && extracted.confidence.overall >= this.config.confidenceThresholds.autoApprove) {
           processed.push(this.createProcessedTransaction(transaction, extracted, 'income'));
           continue;
         }
@@ -188,8 +177,9 @@ export class SantanderXmlConverter {
           extractionMethod: 'manual',
           warnings: ['No AI provider configured'],
           rawData: {
-            descBase: transaction.descBase,
-            descOpt: transaction.descOpt,
+            description: transaction.details.description.join(''),
+            counterpartyName: transaction.details.counterpartyName,
+            counterpartyIBAN: transaction.details.counterpartyIBAN,
           },
         };
         processed.push(this.createProcessedTransaction(transaction, extracted, 'income'));
@@ -200,23 +190,35 @@ export class SantanderXmlConverter {
   }
 
   /**
-   * Process expense transactions (negative amounts)
+   * Process expense transactions (debit)
    */
   private async processExpenseTransactions(
-    transactions: XmlTransaction[]
+    transactions: MT940Transaction[]
   ): Promise<ProcessedTransaction[]> {
     console.log(`💸 Processing ${transactions.length} expense transactions...`);
     const processed: ProcessedTransaction[] = [];
-    const needsAI: Array<{ transaction: XmlTransaction; index: number }> = [];
+    const needsAI: Array<{ transaction: MT940Transaction; index: number }> = [];
 
     // Phase 1: Try partial matching for all expenses
     console.log('🔍 Phase 1: Partial matching with contractors...');
     for (let i = 0; i < transactions.length; i++) {
       const transaction = transactions[i];
       
+      // Convert MT940Transaction to a format that contractor matcher can use
+      const transactionForMatcher = {
+        descBase: transaction.details.description.join(''),
+        descOpt: transaction.details.counterpartyName,
+        trnCode: transaction.transactionType,
+        exeDate: transaction.valueDate,
+        creatDate: transaction.entryDate,
+        value: -transaction.amount, // negative for expenses
+        accValue: -transaction.amount,
+        realValue: -transaction.amount,
+      };
+      
       // Match with contractors
       const matchedContractor = this.contractorMatcher 
-        ? this.contractorMatcher.match(transaction)
+        ? this.contractorMatcher.match(transactionForMatcher)
         : {
             contractor: null,
             confidence: 0,
@@ -240,8 +242,9 @@ export class SantanderXmlConverter {
           extractionMethod: 'manual',
           warnings: [],
           rawData: {
-            descBase: transaction.descBase,
-            descOpt: transaction.descOpt,
+            description: transaction.details.description.join(''),
+            counterpartyName: transaction.details.counterpartyName,
+            counterpartyIBAN: transaction.details.counterpartyIBAN,
           },
         };
         processed.push(this.createProcessedTransaction(transaction, extracted, 'expense', matchedContractor));
@@ -275,8 +278,9 @@ export class SantanderXmlConverter {
           extractionMethod: 'manual',
           warnings: ['No contractor matched - needs manual assignment'],
           rawData: {
-            descBase: transaction.descBase,
-            descOpt: transaction.descOpt,
+            description: transaction.details.description.join(''),
+            counterpartyName: transaction.details.counterpartyName,
+            counterpartyIBAN: transaction.details.counterpartyIBAN,
           },
         };
         const unrecognized = {
@@ -298,7 +302,7 @@ export class SantanderXmlConverter {
    * Process transactions with AI (with batch processing)
    */
   private async processWithAI(
-    needsAI: Array<{ transaction: XmlTransaction; index: number }>,
+    needsAI: Array<{ transaction: MT940Transaction; index: number }>,
     processed: ProcessedTransaction[]
   ): Promise<void> {
     if (!this.aiExtractor) return;
@@ -313,18 +317,33 @@ export class SantanderXmlConverter {
       console.log(`   Batch ${i + 1}/${batches.length}...`);
 
       try {
-        const transactions = batch.map((item) => item.transaction);
-        const extracted = await this.aiExtractor.extractBatch(transactions);
+        // Convert MT940 transactions to format AI extractor expects
+        const transactionsForAI = batch.map((item) => ({
+          descBase: item.transaction.details.description.join(''),
+          descOpt: item.transaction.details.counterpartyName,
+          exeDate: item.transaction.valueDate,
+          value: item.transaction.amount,
+          trnCode: item.transaction.transactionType,
+          creatDate: item.transaction.entryDate,
+          accValue: item.transaction.amount,
+          realValue: item.transaction.amount,
+        }));
+        
+        const extracted = await this.aiExtractor.extractBatch(transactionsForAI);
 
-        // Add to processed and cache
+        // Add to processed
         for (let j = 0; j < batch.length; j++) {
           const { transaction } = batch[j];
-          const extractedData = extracted[j];
-
-          // Cache AI extraction
-          if (this.config.useCache) {
-            this.cache.set(transaction.descBase, transaction.descOpt, extractedData);
-          }
+          // Convert the extracted data from santander format to MT940 format
+          const santanderExtracted = extracted[j];
+          const extractedData: ExtractedData = {
+            ...santanderExtracted,
+            rawData: {
+              description: transaction.details.description.join(''),
+              counterpartyName: transaction.details.counterpartyName,
+              counterpartyIBAN: transaction.details.counterpartyIBAN,
+            },
+          };
 
           processed.push(this.createProcessedTransaction(transaction, extractedData, 'income'));
         }
@@ -348,8 +367,9 @@ export class SantanderXmlConverter {
             extractionMethod: 'manual',
             warnings: [`AI extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`],
             rawData: {
-              descBase: transaction.descBase,
-              descOpt: transaction.descOpt,
+              description: transaction.details.description.join(''),
+              counterpartyName: transaction.details.counterpartyName,
+              counterpartyIBAN: transaction.details.counterpartyIBAN,
             },
           };
           processed.push(this.createProcessedTransaction(transaction, extracted, 'income'));
@@ -362,13 +382,11 @@ export class SantanderXmlConverter {
    * Process expenses with AI contractor matching (with batch processing)
    */
   private async processExpensesWithAI(
-    needsAI: Array<{ transaction: XmlTransaction; index: number }>,
+    needsAI: Array<{ transaction: MT940Transaction; index: number }>,
     processed: ProcessedTransaction[]
   ): Promise<void> {
     if (!this.aiExtractor || !this.contractorMatcher) return;
 
-    // Use larger batch size for contractor matching (50 vs 20 for income)
-    // Contractor matching is simpler than address extraction
     const batchSize = this.config.useBatchProcessing ? 50 : 1;
     const batches = this.createBatches(needsAI, batchSize);
 
@@ -379,18 +397,24 @@ export class SantanderXmlConverter {
       console.log(`   Batch ${i + 1}/${batches.length}...`);
 
       try {
-        const transactions = batch.map((item) => item.transaction);
+        // Convert MT940 transactions to format AI extractor expects
+        const transactionsForAI = batch.map((item) => ({
+          descBase: item.transaction.details.description.join(''),
+          descOpt: item.transaction.details.counterpartyName,
+          exeDate: item.transaction.valueDate,
+          value: item.transaction.amount,
+          trnCode: item.transaction.transactionType,
+          creatDate: item.transaction.entryDate,
+          accValue: item.transaction.amount,
+          realValue: item.transaction.amount,
+        }));
         
-        // 🚀 OPTIMIZATION: Pre-filter contractors for each transaction
-        // Instead of sending ALL contractors (e.g., 940), send only top 10 candidates per transaction
-        // This reduces input tokens by ~95%!
-        const candidatesPerTransaction = transactions.map(t => 
+        const candidatesPerTransaction = transactionsForAI.map(t => 
           this.contractorMatcher!.getTopCandidates(t, 10)
         );
         
-        // Use AI to match contractors (with pre-filtered candidates)
         const matchedContractors = await this.aiExtractor.matchContractorsBatch(
-          transactions, 
+          transactionsForAI, 
           candidatesPerTransaction
         );
 
@@ -414,8 +438,9 @@ export class SantanderXmlConverter {
             extractionMethod: 'ai',
             warnings: matchedContractor.contractor ? [] : ['AI could not match contractor'],
             rawData: {
-              descBase: transaction.descBase,
-              descOpt: transaction.descOpt,
+              description: transaction.details.description.join(''),
+              counterpartyName: transaction.details.counterpartyName,
+              counterpartyIBAN: transaction.details.counterpartyIBAN,
             },
           };
 
@@ -441,8 +466,9 @@ export class SantanderXmlConverter {
             extractionMethod: 'manual',
             warnings: [`AI matching failed: ${error instanceof Error ? error.message : 'Unknown error'}`],
             rawData: {
-              descBase: transaction.descBase,
-              descOpt: transaction.descOpt,
+              description: transaction.details.description.join(''),
+              counterpartyName: transaction.details.counterpartyName,
+              counterpartyIBAN: transaction.details.counterpartyIBAN,
             },
           };
           const unrecognized = {
@@ -471,10 +497,10 @@ export class SantanderXmlConverter {
    * Create ProcessedTransaction from extraction result
    */
   private createProcessedTransaction(
-    transaction: XmlTransaction,
+    transaction: MT940Transaction,
     extracted: ExtractedData,
     transactionType: 'income' | 'expense',
-    matchedContractor?: import('./contractor-matcher').MatchedContractor
+    matchedContractor?: import('../santander-xml/contractor-matcher').MatchedContractor
   ): ProcessedTransaction {
     const confidence = transactionType === 'income' 
       ? extracted.confidence.overall 
@@ -520,7 +546,13 @@ export class SantanderXmlConverter {
       manual: processed.filter((p) => p.extracted.extractionMethod === 'manual').length,
     };
 
-    const totalConfidence = processed.reduce((sum, p) => sum + p.extracted.confidence.overall, 0);
+    const totalConfidence = processed.reduce((sum, p) => {
+      if (p.transactionType === 'income') {
+        return sum + p.extracted.confidence.overall;
+      } else {
+        return sum + (p.matchedContractor?.confidence || 0);
+      }
+    }, 0);
     const averageConfidence = processed.length > 0 ? totalConfidence / processed.length : 0;
 
     return {
@@ -578,8 +610,6 @@ export class SantanderXmlConverter {
 
 // Export everything
 export * from './types';
-export { SantanderXmlParser } from './parser';
+export { PKOBPMT940Parser } from './parser';
 export { RegexExtractor } from './regex-extractor';
-export { AIExtractor } from './ai-extractor';
-export { ExtractionCache } from './cache';
 export { CsvExporter } from './csv-exporter';

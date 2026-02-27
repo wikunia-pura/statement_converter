@@ -428,7 +428,7 @@ function setupIpcHandlers() {
 
   ipcMain.handle(
     IPC_CHANNELS.CONVERT_FILE,
-    async (_, inputPath: string, bankId: number, fileName: string) => {
+    async (_, inputPath: string, bankId: number, fileName: string, adresId?: number | null) => {
       try {
         // Validate input file exists
         if (!fs.existsSync(inputPath)) {
@@ -471,9 +471,25 @@ function setupIpcHandlers() {
         }
 
         // Perform conversion
-        await converterRegistry.convert(bank.converterId, inputPath, finalOutputPath);
+        const result = await converterRegistry.convert(
+          bank.converterId, 
+          inputPath, 
+          finalOutputPath, 
+          false, 
+          adresId,
+          fileName,
+          bank.name
+        );
 
-        // Save to history
+        // Check if review is needed
+        if (result.needsReview && result.reviewData) {
+          return {
+            needsReview: true,
+            reviewData: result.reviewData,
+          };
+        }
+
+        // Save to history (only if no review needed)
         database.addConversionHistory({
           fileName,
           bankName: bank.name,
@@ -516,7 +532,7 @@ function setupIpcHandlers() {
   // Analyze file without AI to check confidence
   ipcMain.handle(
     'files:analyze',
-    async (_, inputPath: string, bankId: number) => {
+    async (_, inputPath: string, bankId: number, adresId?: number | null) => {
       try {
         const bank = database.getBankById(bankId);
         if (!bank) {
@@ -529,7 +545,8 @@ function setupIpcHandlers() {
         const summary = await converterRegistry.analyzeWithoutAI(
           bank.converterId,
           inputPath,
-          threshold
+          threshold,
+          adresId
         );
 
         return summary;
@@ -543,7 +560,7 @@ function setupIpcHandlers() {
   // Convert with AI enabled
   ipcMain.handle(
     IPC_CHANNELS.CONVERT_FILE_WITH_AI,
-    async (_, inputPath: string, bankId: number, fileName: string) => {
+    async (_, inputPath: string, bankId: number, fileName: string, adresId?: number | null) => {
       try {
         if (!fs.existsSync(inputPath)) {
           throw new Error('Input file not found');
@@ -582,7 +599,23 @@ function setupIpcHandlers() {
         }
 
         // Perform conversion WITH AI
-        await converterRegistry.convert(bank.converterId, inputPath, finalOutputPath, true);
+        const result = await converterRegistry.convert(
+          bank.converterId, 
+          inputPath, 
+          finalOutputPath, 
+          true, 
+          adresId,
+          fileName,
+          bank.name
+        );
+
+        // Check if review is needed
+        if (result.needsReview && result.reviewData) {
+          return {
+            needsReview: true,
+            reviewData: result.reviewData,
+          };
+        }
 
         database.addConversionHistory({
           fileName,
@@ -614,6 +647,29 @@ function setupIpcHandlers() {
           });
         }
 
+        return {
+          success: false,
+          error: errorMessage,
+        };
+      }
+    }
+  );
+
+  // Finalize conversion after user review
+  ipcMain.handle(
+    IPC_CHANNELS.FINALIZE_CONVERSION,
+    async (_, tempConversionId: string, decisions: import('../shared/types').ReviewDecision[]) => {
+      try {
+        const result = await converterRegistry.finalizeConversion(tempConversionId, decisions);
+        
+        // TODO: Add to history if needed
+        
+        return {
+          success: true,
+          outputPath: result.success ? 'finalized' : undefined,
+        };
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         return {
           success: false,
           error: errorMessage,

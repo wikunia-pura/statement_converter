@@ -1,12 +1,15 @@
 // Type definitions for Electron API exposed via preload
 
-import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres } from '../shared/types';
+import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ConversionReviewData, ReviewDecision } from '../shared/types';
 
 interface ConversionResult {
-  success: boolean;
+  success?: boolean;
   outputPath?: string;
   duplicateWarning?: boolean;
   error?: string;
+  // Review flow
+  needsReview?: boolean;
+  reviewData?: ConversionReviewData;
 }
 
 interface ElectronAPI {
@@ -40,9 +43,10 @@ interface ElectronAPI {
   // Files
   selectFiles: () => Promise<{ fileName: string; filePath: string }[]>;
   selectOutputFolder: () => Promise<string | null>;
-  convertFile: (inputPath: string, bankId: number, fileName: string) => Promise<ConversionResult>;
-  analyzeFile: (inputPath: string, bankId: number) => Promise<ConversionSummary>;
-  convertFileWithAI: (inputPath: string, bankId: number, fileName: string) => Promise<ConversionResult>;
+  convertFile: (inputPath: string, bankId: number, fileName: string, adresId?: number | null) => Promise<ConversionResult>;
+  analyzeFile: (inputPath: string, bankId: number, adresId?: number | null) => Promise<ConversionSummary>;
+  convertFileWithAI: (inputPath: string, bankId: number, fileName: string, adresId?: number | null) => Promise<ConversionResult>;
+  finalizeConversion: (tempConversionId: string, decisions: ReviewDecision[]) => Promise<ConversionResult>;
   openFile: (filePath: string) => Promise<boolean>;
 
   // Settings

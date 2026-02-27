@@ -404,10 +404,14 @@ Example 2:
         (result.confidence.address + result.confidence.apartment + result.confidence.tenantName) / 3
       );
 
+      // If overall confidence is below threshold, clear ONLY apartmentNumber
+      // This prevents incorrect accounting entries while keeping other data for review/preview
+      const meetsThreshold = overall >= this.config.confidenceThresholds.needsReview;
+      
       return {
         streetName: result.streetName,
         buildingNumber: result.buildingNumber,
-        apartmentNumber: result.apartmentNumber,
+        apartmentNumber: meetsThreshold ? result.apartmentNumber : null,
         fullAddress: result.fullAddress,
         tenantName: result.tenantName,
         confidence: {
@@ -416,7 +420,7 @@ Example 2:
         },
         extractionMethod: 'ai',
         reasoning: result.reasoning,
-        warnings: overall < 60 ? ['Low confidence extraction'] : [],
+        warnings: overall < 60 ? ['Low confidence - apartmentNumber cleared'] : [],
         rawData: {
           descBase: transaction.descBase,
           descOpt: transaction.descOpt,

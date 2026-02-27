@@ -1,0 +1,4635 @@
+====================================================================================================
+PKO BP MT940 - WYCIĄG BANKOWY (PARSED)
+====================================================================================================
+
+INFORMACJE OGÓLNE:
+  Referencja:        MT940
+  Numer rachunku:    /PL49102010260000120201852748
+  Numer wyciągu:     1
+
+SALDO POCZĄTKOWE:
+  Data:              02.01.2026
+  Typ:               CREDIT (Ma)
+  Kwota:             164 406,39 PLN
+
+SALDO KOŃCOWE:
+  Data:              31.01.2026
+  Typ:               CREDIT (Ma)
+  Kwota:             140 166,20 PLN
+
+SALDO DOSTĘPNE:
+  Data:              31.01.2026
+  Typ:               CREDIT (Ma)
+  Kwota:             140 166,20 PLN
+
+
+====================================================================================================
+TRANSAKCJE
+====================================================================================================
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #1
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       01.01.2026
+  Data księgowania:  0101
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             431,14 PLN
+  Typ transakcji:    NU13
+  Referencja:        5010594470002223
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. 110212300 BIELAWSKI WŁADYSŁ
+  2. AW, AL. LOTNIKÓW 20 M.100,
+  3. 02-668 WARSZAWA
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             EWA SZYMCZYK 04-113 WARSZAW A UL. ŁUKOWSKA 3 M.122
+  IBAN:              PL07102011270000110201435817
+  Bank (kod):        10201127
+  Nr rachunku:       0000110201435817
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601010101C431,14NU13NONREF//5010594470002223
+U13 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #2
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       02.01.2026
+  Data księgowania:  0102
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             651,95 PLN
+  Typ transakcji:    NU13
+  Referencja:        5020595600003014
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. OPŁATA EKSPLOATACYJNA M-C 0
+  2. 1/2026 WTYM FUNDUSZ REMONTO
+  3. WY 110,05 ZŁ
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             KRYSTYNA STEPANIAK 02-668 W ARSZAWA AL. LOTNIKÓW 20 M.1
+  IBAN:              PL08102010130000090200850586
+  Bank (kod):        10201013
+  Nr rachunku:       0000090200850586
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601020102C651,95NU13NONREF//5020595600003014
+U13 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #3
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       02.01.2026
+  Data księgowania:  0102
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             860,00 PLN
+  Typ transakcji:    NU12
+  Referencja:        5020599870008501
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. OPŁATA EKSPLOATACYJNA ZA LO
+  2. KAL 19
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             JOANNA MAZIARZ 02-668 WARSZ AWA AL.LOTNIKÓW 20 M.19
+  IBAN:              PL92114020040000350275138574
+  Bank (kod):        11402004
+  Nr rachunku:       0000350275138574
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260102
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601020102C860,00NU12NONREF//5020599870008501
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #4
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       02.01.2026
+  Data księgowania:  0102
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             800,00 PLN
+  Typ transakcji:    NU12
+  Referencja:        5020599870008505
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. /OPF/X///// PBAVDNGZP6FW Ws
+  2. polnota nr 1 - Identyfikato
+  3. r lokalu 92
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             AUTOPAY SPÓŁKA AKCYJNA UL.P OWSTAŃCÓW WARSZAWY 6
+  IBAN:              PL68105000861000009031435986
+  Bank (kod):        10500086
+  Nr rachunku:       1000009031435986
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260102
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601020102C800,00NU12NONREF//5020599870008505
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #5
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       02.01.2026
+  Data księgowania:  0102
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             567,90 PLN
+  Typ transakcji:    NU12
+  Referencja:        5020599870008502
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. AL.LOTNIKÓW 20 M.2
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             MICHAŁ WOJTKOWSKI 02-668 WA RSZAWA AL.LOTNIKÓW 20 M.2
+  IBAN:              PL06114020040000340243053056
+  Bank (kod):        11402004
+  Nr rachunku:       0000340243053056
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260102
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601020102C567,90NU12NONREF//5020599870008502
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #6
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       02.01.2026
+  Data księgowania:  0102
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             532,82 PLN
+  Typ transakcji:    NU12
+  Referencja:        5020599870008503
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Czynsz STYCZEŃ 2026, Al. Lo
+  2. tników 20, lok. 124
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             AGNIESZKA BARTNIKOWSKA AL L OTNIKÓW 20 M. 124
+  IBAN:              PL78124021351111001049697213
+  Bank (kod):        12402135
+  Nr rachunku:       1111001049697213
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260101
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601020102C532,82NU12NONREF//5020599870008503
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #7
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       02.01.2026
+  Data księgowania:  0102
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             577,22 PLN
+  Typ transakcji:    NU12
+  Referencja:        5020599870008500
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. lokal numer: 111  Grzegorz
+  2. Pirch, s. Jana
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             PIRCH GRZEGORZ 83-400 KO¦CI ERZYNA UL CHOJNICKA 42M1
+  IBAN:              PL74116022020000000307908997
+  Bank (kod):        11602202
+  Nr rachunku:       0000000307908997
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260102
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601020102C577,22NU12NONREF//5020599870008500
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #8
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       02.01.2026
+  Data księgowania:  0102
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             671,22 PLN
+  Typ transakcji:    NU12
+  Referencja:        5020599870008504
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. 109
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             JAN GIL AL. LOTNIKÓW 20/109 WARSZAWA 02-668
+  IBAN:              PL29124011121111001124200194
+  Bank (kod):        12401112
+  Nr rachunku:       1111001124200194
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260102
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601020102C671,22NU12NONREF//5020599870008504
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #9
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       02.01.2026
+  Data księgowania:  0102
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             811,52 PLN
+  Typ transakcji:    NU13
+  Referencja:        5020507400291792
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. CZYNSZ ZA LOKAL-ALEJA LOTNI
+  2. KÓW     20/25 STYCZEŃ 2026
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             BERNARD KŁOPOTOWSKI 17-300 SIEMIATYCZE UL. ¦WIERKOWA 2
+  IBAN:              PL66102013320000160205915519
+  Bank (kod):        10201332
+  Nr rachunku:       0000160205915519
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601020102C811,52NU13NONREF//5020507400291792
+U13 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #10
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       03.01.2026
+  Data księgowania:  0103
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             855,66 PLN
+  Typ transakcji:    NU13
+  Referencja:        5030501000047316
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. OPŁATA EKSPLOATACYJNA ZA M-
+  2. C STYCZEŃ 2026 W TYM FUND.
+  3. R EMONTOW.Y:133,98 I POM. G
+  4. OSPODARCZE 10 00 ZŁ
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             GUSTAW WYSOKIŃSKI 02-668 WA RSZAWA UL. ALEJA LOTNIKÓW 2
+  IBAN:              PL03102011690000820203026911
+  Bank (kod):        10201169
+  Nr rachunku:       0000820203026911
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601030103C855,66NU13NONREF//5030501000047316
+U13 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #11
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       05.01.2026
+  Data księgowania:  0105
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             749,99 PLN
+  Typ transakcji:    NU13
+  Referencja:        5050593570032516
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. AL. LOTNIKÓW 20/93, CZYNSZ
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             KARINA GORZELAK-KRUCZYŃSKA ˙
+  IBAN:              PL98102045800000110202059046
+  Bank (kod):        10204580
+  Nr rachunku:       0000110202059046
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601050105C749,99NU13NONREF//5050593570032516
+U13 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #12
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       05.01.2026
+  Data księgowania:  0105
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             1 188,00 PLN
+  Typ transakcji:    NU12
+  Referencja:        5050597920008122
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Al. Lotników 20m22 Czynsz 1
+  2. .2026
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             GERUS ALEKSANDRA 02-797 WAR SZAWA UL KLIMCZAKA 5M69
+  IBAN:              PL35116022020000000356107447
+  Bank (kod):        11602202
+  Nr rachunku:       0000000356107447
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260104
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601050105C1188,00NU12NONREF//5050597920008122
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #13
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       05.01.2026
+  Data księgowania:  0105
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             734,26 PLN
+  Typ transakcji:    NU12
+  Referencja:        5050597920008126
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. OPLATA EKSPLOATACYJNA I FUN
+  2. DUSZ REMONTOWY ZA MIESIˇC
+  3. styczeń 2026 /  AL. LOTNIKÓ
+  4. W 20 m.5
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             JERZY CHOJNACKI ŻUROMINEK 9 9, 06-522 ŻUROMINEK
+  IBAN:              PL70249000050000400453351367
+  Bank (kod):        24900005
+  Nr rachunku:       0000400453351367
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260104
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601050105C734,26NU12NONREF//5050597920008126
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #14
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       05.01.2026
+  Data księgowania:  0105
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             475,00 PLN
+  Typ transakcji:    NU12
+  Referencja:        5050597920008123
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Dotyczy lokalu:
+  2. Aleja Lotnikow 20 l
+  3. ok 94.          ID Lokalu 1
+  4. /94
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             KROGULEWSKI MARIUSZ WALDEMA R RUE DE MUHLENBACH 62B
+  IBAN:              PL39105010251000009129188919
+  Bank (kod):        10501025
+  Nr rachunku:       1000009129188919
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260105
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601050105C475,00NU12NONREF//5050597920008123
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #15
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       05.01.2026
+  Data księgowania:  0105
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             120,00 PLN
+  Typ transakcji:    NU12
+  Referencja:        5050597920008127
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Opłata za zsyp al.lotników
+  2. 20 m57 02-668 Warszawa za r
+  3. ok 2026
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             TOMASZ MAREK MESJASZ AL. LO TNIKÓW 20 M. 57
+  IBAN:              PL92124061751111001088457553
+  Bank (kod):        12406175
+  Nr rachunku:       1111001088457553
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260104
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601050105C120,00NU12NONREF//5050597920008127
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #16
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       05.01.2026
+  Data księgowania:  0105
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             496,72 PLN
+  Typ transakcji:    NU12
+  Referencja:        5050597920008120
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Czynsz
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             MARZENA IWONA WNOROWSKA SON ATY 5 M 86 02-744 WARSZAWA
+  IBAN:              PL88124059181111001026404423
+  Bank (kod):        12405918
+  Nr rachunku:       1111001026404423
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260102
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601050105C496,72NU12NONREF//5050597920008120
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #17
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       05.01.2026
+  Data księgowania:  0105
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             888,43 PLN
+  Typ transakcji:    NU12
+  Referencja:        5050597920008124
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. 01. 2026  A. KRA¦NICKI
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             ANDRZEJ KRA¦NICKI 02-668 WA RSZAWA AL.LOTNIKÓW 20 M.10
+  IBAN:              PL56114020040000360269715418
+  Bank (kod):        11402004
+  Nr rachunku:       0000360269715418
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260102
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601050105C888,43NU12NONREF//5050597920008124
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #18
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       05.01.2026
+  Data księgowania:  0105
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             21,36 PLN
+  Typ transakcji:    NU12
+  Referencja:        5050597920008121
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Izabella Karpińska ul.al.lo
+  2. tników20m 120 , 02-668 wars
+  3. zawa
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             KARPIŃSKA IZABELLA KATARZYN A AL LOTNIKÓW 20 M 120
+  IBAN:              PL85105010251000009093462894
+  Bank (kod):        10501025
+  Nr rachunku:       1000009093462894
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260104
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601050105C21,36NU12NONREF//5050597920008121
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #19
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       05.01.2026
+  Data księgowania:  0105
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             785,20 PLN
+  Typ transakcji:    NU12
+  Referencja:        5050597920008125
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Oplata za czynsz al. lotnik
+  2. ów 20/84
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             GRAŻYNA OLESIŃSKA AL LOTNIK ÓW 20/84, 02-668 WARSZAWA
+  IBAN:              PL81249000050000400418826929
+  Bank (kod):        24900005
+  Nr rachunku:       0000400418826929
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260104
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601050105C785,20NU12NONREF//5050597920008125
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #20
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       06.01.2026
+  Data księgowania:  0106
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             974,20 PLN
+  Typ transakcji:    NU13
+  Referencja:        5060500200001908
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. CZYNSZ 1.2026, MIESZKANIE 4
+  2. 5
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             ALICJA ZAWRZYKRAJ 02-668 WA RSZAWA AL. LOTNIKÓW 20 M.45
+  IBAN:              PL06102049000000800236894625
+  Bank (kod):        10204900
+  Nr rachunku:       0000800236894625
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601060106C974,20NU13NONREF//5060500200001908
+U13 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #21
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       07.01.2026
+  Data księgowania:  0107
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             717,82 PLN
+  Typ transakcji:    NU12
+  Referencja:        5070596160005824
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. opłata za lokal przy Al. Lo
+  2. tników 20 m.98
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             ANNA KOTECKA-LUCIDARME UL. DOMANIEWSKA WARSZAWA 02-672
+  IBAN:              PL47124010371111001066185522
+  Bank (kod):        12401037
+  Nr rachunku:       1111001066185522
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260107
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601070107C717,82NU12NONREF//5070596160005824
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #22
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       07.01.2026
+  Data księgowania:  0107
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             560,64 PLN
+  Typ transakcji:    NU12
+  Referencja:        5070596160005825
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. OPŁATA EKSPLOATACYJNA I F.
+  2. REMONTOWY AL. LOTNIKÓW 20/4
+  3. 0, XII.2025
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             JUSTYNA DUMA 05-420 JÓZEFÓW K. OTWOCKA UL.SIENKIEWICZA
+  IBAN:              PL69114020170000430205782208
+  Bank (kod):        11402017
+  Nr rachunku:       0000430205782208
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260106
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601070107C560,64NU12NONREF//5070596160005825
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #23
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       07.01.2026
+  Data księgowania:  0107
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             700,86 PLN
+  Typ transakcji:    NU12
+  Referencja:        5070596160005826
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. 01/26, Al. Lotników 20/113,
+  2. 02-668Warszawa
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             MAGDALENA RDEST 02-668 WARS ZAWA al. LOTNIKÓW 20 m. 113
+  IBAN:              PL69187010452078126205680001
+  Bank (kod):        18701045
+  Nr rachunku:       2078126205680001
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260107
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601070107C700,86NU12NONREF//5070596160005826
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #24
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       07.01.2026
+  Data księgowania:  0107
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             626,98 PLN
+  Typ transakcji:    NU12
+  Referencja:        5070596160005823
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. 1/86 Krzysztof Powro?nik
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             POWRO¬NIK KRZYSZTOF 02-765 WARSZAWA UL BERGAMOTKI 1M52
+  IBAN:              PL77116022020000000297979247
+  Bank (kod):        11602202
+  Nr rachunku:       0000000297979247
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260105
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601070107C626,98NU12NONREF//5070596160005823
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #25
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       07.01.2026
+  Data księgowania:  0107
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             449,00 PLN
+  Typ transakcji:    NU12
+  Referencja:        5070596160005827
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. CZYNSZ ZA MIESZKANIE AL.LOT
+  2. NIKÓW 20LOK.12  ,   02-668
+  3. WARSZAWA
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             Koza Maciej Cezary 99-423 B ielawy Sobota, ul. Wojdówka
+  IBAN:              PL17928810112601364830000010
+  Bank (kod):        92881011
+  Nr rachunku:       2601364830000010
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260107
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601070107C449,00NU12NONREF//5070596160005827
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #26
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       07.01.2026
+  Data księgowania:  0107
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             768,20 PLN
+  Typ transakcji:    NU13
+  Referencja:        5070500300116617
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. ALEJA LOTNIKOW 20/18 ALICJA
+  2. KRÓL
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             ALICJA KRÓL 14-400 PASŁĘK U L. WI¦NIOWA 6
+  IBAN:              PL91102010130000050203108321
+  Bank (kod):        10201013
+  Nr rachunku:       0000050203108321
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601070107C768,20NU13NONREF//5070500300116617
+U13 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #27
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       07.01.2026
+  Data księgowania:  0107
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             884,80 PLN
+  Typ transakcji:    NG04
+  Referencja:        5070591280004635
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. OPŁATA EKSP. ZA 01 2026 W T
+  2. YM FUNDUSZ REMONTOW
+  3. Y 131.50        ZŁ
+  4. Wpł
+  5. ata w UP nr:991938260105TIA
+  6. P1978
+
+👤 KONTRAHENT:
+  Nazwa:             MARCIN SUCHCICKI 02-668 WAR SZAWA ALEJA LOTNIKÓW 20 11
+  IBAN:              PL59132000190099041520000398
+  Bank (kod):        13200019
+  Nr rachunku:       0099041520000398
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260105
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601070107C884,80NG04NONREF//5070591280004635
+G04 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #28
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       07.01.2026
+  Data księgowania:  0107
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             794,31 PLN
+  Typ transakcji:    NG04
+  Referencja:        5070591280004636
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. OPŁATA EKSPLOATACYJNA ZA M-
+  2. C STYCZEŃ 2026R W T
+  3. YM FUNDU        SZ REMONTOW
+  4. Y 131.50                Wpł
+  5. ata w UP nr:991938260105XX#
+  6. P0100
+
+👤 KONTRAHENT:
+  Nazwa:             JADWIGA WIKTOR 02-668 WARSZ AWA ALEJA LOTNIKÓW 20 78
+  IBAN:              PL59132000190099041520000398
+  Bank (kod):        13200019
+  Nr rachunku:       0099041520000398
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260105
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601070107C794,31NG04NONREF//5070591280004636
+G04 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #29
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       07.01.2026
+  Data księgowania:  0107
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             800,00 PLN
+  Typ transakcji:    NG04
+  Referencja:        5070591280004637
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. CZYNSZ ZA 01 2026 R.
+  2. ˙
+  3. ˙
+  4. Wpł
+  5. ata w UP nr:991938260105THA
+  6. P3687
+
+👤 KONTRAHENT:
+  Nazwa:             BALDACHOWSKA JOLANTA 02-668 WARSZAWA ALEJA LOTNIKÓW 20
+  IBAN:              PL59132000190099041520000398
+  Bank (kod):        13200019
+  Nr rachunku:       0099041520000398
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260105
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601070107C800,00NG04NONREF//5070591280004637
+G04 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #30
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       07.01.2026
+  Data księgowania:  0107
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             422,17 PLN
+  Typ transakcji:    NG04
+  Referencja:        5070591280004638
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. OPŁ. ZA MC 01 2026  IDENT.
+  2. 1 14
+  3. ˙
+  4. Wpł
+  5. ata w UP nr:991096260105NKA
+  6. P6158
+
+👤 KONTRAHENT:
+  Nazwa:             PRZYBYLSKI KAROL 02-668 WAR SZAWA AL. LOTNIKÓW 20 14
+  IBAN:              PL59132000190099041520000398
+  Bank (kod):        13200019
+  Nr rachunku:       0099041520000398
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260105
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601070107C422,17NG04NONREF//5070591280004638
+G04 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #31
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       07.01.2026
+  Data księgowania:  0107
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             683,98 PLN
+  Typ transakcji:    NU12
+  Referencja:        5070597780001910
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. opłata eksploatacyjna za st
+  2. yczeń 2026, Al.Lotników 20/
+  3. 119, 02-668 Warszawa
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             ZAGOŃCZYK PIOTR 02-372 WARS ZAWA UL OPACZEWSKA 35M17
+  IBAN:              PL33116022020000000288992892
+  Bank (kod):        11602202
+  Nr rachunku:       0000000288992892
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260107
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601070107C683,98NU12NONREF//5070597780001910
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #32
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       07.01.2026
+  Data księgowania:  0107
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             513,47 PLN
+  Typ transakcji:    NU12
+  Referencja:        5070597780001909
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. CZYNSZ_STYCZEŃ_AL LOTNIKÓW
+  2. 20,LOC121
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             VIKTORIA MARTICORENA 02-668 WARSZAWA AL.LOTNIKÓW 20 M.
+  IBAN:              PL68114020040000390285385793
+  Bank (kod):        11402004
+  Nr rachunku:       0000390285385793
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260107
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601070107C513,47NU12NONREF//5070597780001909
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #33
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       08.01.2026
+  Data księgowania:  0108
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             64 776,68 PLN
+  Typ transakcji:    N152
+  Referencja:        5080501000050066
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. FV
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             VEOLIA ENERGIA WARSZAWA S.A .
+  IBAN:              PL97194012109703517300179457
+  Bank (kod):        19401210
+  Nr rachunku:       9703517300179457
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601080108D64776,68N152NONREF//5080501000050066
+152 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #34
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       08.01.2026
+  Data księgowania:  0108
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             239,00 PLN
+  Typ transakcji:    N152
+  Referencja:        5080504000039604
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. FV
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             TECH-HOME SKOCZYŃSKI ZBIGNI EW 02-679 WARSZAWA UL. MODZ
+  IBAN:              PL80116022020000000082826306
+  Bank (kod):        11602202
+  Nr rachunku:       0000000082826306
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601080108D239,00N152NONREF//5080504000039604
+152 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #35
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       08.01.2026
+  Data księgowania:  0108
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             452,22 PLN
+  Typ transakcji:    N152
+  Referencja:        5080502000039151
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. FV
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             WINDA-WARSZAWA SP. Z O.O. W ARSZAWA UL. SUROWIECKIEGO 1
+  IBAN:              PL59102011690000810200096164
+  Bank (kod):        10201169
+  Nr rachunku:       0000810200096164
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601080108D452,22N152NONREF//5080502000039151
+152 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #36
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       08.01.2026
+  Data księgowania:  0108
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             4 992,60 PLN
+  Typ transakcji:    N152
+  Referencja:        5080506000049535
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. FV
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             ROB - BUD ˙
+  IBAN:              PL40102011850000420204077335
+  Bank (kod):        10201185
+  Nr rachunku:       0000420204077335
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601080108D4992,60N152NONREF//5080506000049535
+152 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #37
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       08.01.2026
+  Data księgowania:  0108
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             1 231,87 PLN
+  Typ transakcji:    N152
+  Referencja:        5080504200059820
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. FV NR
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             INSTALATOR PIOTR ZˇBIK ,02- 785 WARSZAWA UL. WAWRZYŃCA
+  IBAN:              PL64102011690000810208458541
+  Bank (kod):        10201169
+  Nr rachunku:       0000810208458541
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601080108D1231,87N152NONREF//5080504200059820
+152 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #38
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       08.01.2026
+  Data księgowania:  0108
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             812,00 PLN
+  Typ transakcji:    NU12
+  Referencja:        5080598170004531
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. 01/2026. MARTA KOSSAKOWSKA,
+  2. AL.LOTNIKÓW 20 M. 54 02-66
+  3. 8 WARSZAWA, IDENTYFIKATOR 1
+  4. /54
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             HANNA KOSSAKOWSKA 00-281 WA RSZAWA UL.JEZUICKA 6/8 M.26
+  IBAN:              PL64114020040000350239269157
+  Bank (kod):        11402004
+  Nr rachunku:       0000350239269157
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260107
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601080108C812,00NU12NONREF//5080598170004531
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #39
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       08.01.2026
+  Data księgowania:  0108
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             600,00 PLN
+  Typ transakcji:    NU12
+  Referencja:        5080598170004532
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. 26
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             EWELINA DY¦KO 96-130 GŁUCHÓ W UL.MIŁOCHNIEWICE 17
+  IBAN:              PL90114020040000370277575928
+  Bank (kod):        11402004
+  Nr rachunku:       0000370277575928
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260108
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601080108C600,00NU12NONREF//5080598170004532
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #40
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       08.01.2026
+  Data księgowania:  0108
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             635,48 PLN
+  Typ transakcji:    NU12
+  Referencja:        5080598170004529
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. ID. LOKALU 1/110 2025
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             KAMIL ŻUŁNOWSKI 02-668 WARS ZAWA UL.ALEJA LOTNIKÓW 20 M
+  IBAN:              PL41114020040000350264953619
+  Bank (kod):        11402004
+  Nr rachunku:       0000350264953619
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260108
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601080108C635,48NU12NONREF//5080598170004529
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #41
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       08.01.2026
+  Data księgowania:  0108
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             10,00 PLN
+  Typ transakcji:    NU12
+  Referencja:        5080598170004533
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. DUDAR MARZENA I SŁAWOMIR
+  2. OPŁATA ZA NAJEM POM
+  3. IESZCZENIA      GOSPODARCZE
+  4. GO                      ALE
+  5. JA LOTNIKÓW 20
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             Sławomir Dudar Marzena Duda r
+  IBAN:              PL42194010764705403800000000
+  Bank (kod):        19401076
+  Nr rachunku:       4705403800000000
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260108
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601080108C10,00NU12NONREF//5080598170004533
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #42
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       08.01.2026
+  Data księgowania:  0108
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             728,40 PLN
+  Typ transakcji:    NU12
+  Referencja:        5080598170004530
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. OPŁATA EKSPLOATACYJNA ZA 01
+  2. /2026, ID LOKALU 1/44; AL.
+  3. LOTNIKÓW 20 M 44
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             EWA MAZURKIEWICZ KUNA 02-65 3 WARSZAWA AL.NIEPODLEGŁO¦C
+  IBAN:              PL65114020040000310211305108
+  Bank (kod):        11402004
+  Nr rachunku:       0000310211305108
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260108
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601080108C728,40NU12NONREF//5080598170004530
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #43
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       08.01.2026
+  Data księgowania:  0108
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             582,00 PLN
+  Typ transakcji:    NU12
+  Referencja:        5080598170004534
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Styczeń 2026
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             PRZEMYSŁAW KORGUL 02-796 WA RSZAWA UL.WˇWOZOWA 35/10
+  IBAN:              PL42194010764716248400000000
+  Bank (kod):        19401076
+  Nr rachunku:       4716248400000000
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260108
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601080108C582,00NU12NONREF//5080598170004534
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #44
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       08.01.2026
+  Data księgowania:  0108
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             740,48 PLN
+  Typ transakcji:    N158
+  Referencja:        5081016000000080
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. 01/26
+  2. Monetia(938:4056333
+  3. 3 2026-01-05)
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             EWA MIODUSZEWSCY LOTNIKÓW 20/123WW A
+  IBAN:              PL07102010260000100202522126
+  Bank (kod):        10201026
+  Nr rachunku:       0000100202522126
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260108
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601080108C740,48N158NONREF//5081016000000080
+158 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #45
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       08.01.2026
+  Data księgowania:  0108
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             734,31 PLN
+  Typ transakcji:    NG04
+  Referencja:        5080595820003303
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. 01.2026
+  2. ˙
+  3. ˙
+  4. Wpł
+  5. ata w UP nr:991938260107TEA
+  6. P3538
+
+👤 KONTRAHENT:
+  Nazwa:             GOTLIB KAZIMIERZ 02-668 WAR SZAWA ALEJA LOTNIKÓW 20 4
+  IBAN:              PL59132000190099041520000398
+  Bank (kod):        13200019
+  Nr rachunku:       0099041520000398
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260107
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601080108C734,31NG04NONREF//5080595820003303
+G04 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #46
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       08.01.2026
+  Data księgowania:  0108
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             34,27 PLN
+  Typ transakcji:    NG04
+  Referencja:        5080595820003302
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. EKSPLO 01.2026 W TYM F. REM
+  2. . 2 ZSYPY I KORYTAR
+  3. Z
+  4. Wpł
+  5. ata w UP nr:991938260107SE#
+  6. P0530
+
+👤 KONTRAHENT:
+  Nazwa:             BARBARA KARASKIEWICZ 02-66 8 WARSZAWA ALEJA LOTNIKÓW 2
+  IBAN:              PL59132000190099041520000398
+  Bank (kod):        13200019
+  Nr rachunku:       0099041520000398
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260107
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601080108C34,27NG04NONREF//5080595820003302
+G04 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #47
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       08.01.2026
+  Data księgowania:  0108
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             458,32 PLN
+  Typ transakcji:    NU12
+  Referencja:        5080596790002658
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. CZYNSZ ZA M-C 01/2026, DOT.
+  2. AL. LOTNIKÓW 20 M. 122
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             JAN KACZMARCZYK 05-410 JÓZE FÓW UL.WESTERPLATTE 14A
+  IBAN:              PL20114020040000390277952577
+  Bank (kod):        11402004
+  Nr rachunku:       0000390277952577
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260108
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601080108C458,32NU12NONREF//5080596790002658
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #48
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       09.01.2026
+  Data księgowania:  0109
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             29 858,70 PLN
+  Typ transakcji:    NU12
+  Referencja:        5090596110008459
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. zaliczka A, B, ¶wiadczenia,
+  2. odpady komunalne za
+  3. m-c styczeń    2026
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             ZAKŁ. GOSP. NIERUCHOM. DZ. MOKOTÓW UL.IRYSOWA 19
+  IBAN:              PL91103015080000000550876078
+  Bank (kod):        10301508
+  Nr rachunku:       0000000550876078
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260109
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601090109C29858,70NU12NONREF//5090596110008459
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #49
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       09.01.2026
+  Data księgowania:  0109
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             700,00 PLN
+  Typ transakcji:    NU12
+  Referencja:        5090596110008460
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. CZYNSZ AL. LOTNIKÓW 20/126
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             SZABLEWSKI MICHAŁ AL. LOTNI KÓW 20/126 02-668 WARSZAWA
+  IBAN:              PL19132015374284715530000001
+  Bank (kod):        13201537
+  Nr rachunku:       4284715530000001
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260109
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601090109C700,00NU12NONREF//5090596110008460
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #50
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       09.01.2026
+  Data księgowania:  0109
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             486,72 PLN
+  Typ transakcji:    NU12
+  Referencja:        5090596110008458
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. CZYNSZ, WSPÓLNOTA MIESZKANI
+  2. OWA AL.LOTNIKÓW 20 M.52
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             IWONA JASTAK-JUREC 6064 MAR ANGAROO, AUSTRALIA HIGHCLER
+  IBAN:              PL92114020040000340230735515
+  Bank (kod):        11402004
+  Nr rachunku:       0000340230735515
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260108
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601090109C486,72NU12NONREF//5090596110008458
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #51
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       09.01.2026
+  Data księgowania:  0109
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             849,85 PLN
+  Typ transakcji:    NU12
+  Referencja:        5090594640005776
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. CZYNSZ ZA MIESIˇC STYCZEŃ 2
+  2. 026, UL.ALEJA LOTNIKÓW 20 M
+  3. 59, ANNA RUCIŃ SKA
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             ANNA RUCIŃSKA 02-668 WARSZA WA AL.LOTNIKÓW 20 M.59
+  IBAN:              PL45114020170000420201893086
+  Bank (kod):        11402017
+  Nr rachunku:       0000420201893086
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260109
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601090109C849,85NU12NONREF//5090594640005776
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #52
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       09.01.2026
+  Data księgowania:  0109
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             405,02 PLN
+  Typ transakcji:    NU12
+  Referencja:        5090594640005777
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Dodatki mieszkaniowe za m-c
+  2. 1/2026 W/g listy nr 90/202
+  3. 6
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             URZˇD DZIELNICY MOKOTÓW UL. RAKOWIECKA 25/27
+  IBAN:              PL18103015080000000550023016
+  Bank (kod):        10301508
+  Nr rachunku:       0000000550023016
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260109
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601090109C405,02NU12NONREF//5090594640005777
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #53
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       09.01.2026
+  Data księgowania:  0109
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             800,00 PLN
+  Typ transakcji:    NU13
+  Referencja:        5090500900289807
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. AL. LOTNIKÓW 20/82 CZYNSZ -
+  2. STYCZEŃ, W TYM FUND. REM.
+  3. 78PLN
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             NORBERT JAKUB KAZIMIERSKI 0 1-140 WARSZAWA UL. RABSZTYŃ
+  IBAN:              PL13102011850000440202427656
+  Bank (kod):        10201185
+  Nr rachunku:       0000440202427656
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601090109C800,00NU13NONREF//5090500900289807
+U13 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #54
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       10.01.2026
+  Data księgowania:  0110
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             718,40 PLN
+  Typ transakcji:    NU13
+  Referencja:        5100506300029188
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. ID LOKALU 1/77
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             KATARZYNA TERESA HIRSZ 83-3 30 ŻUKOWO UL. BRONIEWSKIEGO
+  IBAN:              PL98102018660000150200094573
+  Bank (kod):        10201866
+  Nr rachunku:       0000150200094573
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601100110C718,40NU13NONREF//5100506300029188
+U13 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #55
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       10.01.2026
+  Data księgowania:  0110
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             622,12 PLN
+  Typ transakcji:    NU13
+  Referencja:        5100500200137156
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. GRAŻYNA I WIESŁAW GŁOWACCYA
+  2. L.LOTNIKÓW 20/63 02-668 WAR
+  3. SZAWA
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             MARCIN GŁOWACKI 02-668 WARS ZAWA AL. LOTNIKÓW 20 M.63
+  IBAN:              PL37102011690000810201089937
+  Bank (kod):        10201169
+  Nr rachunku:       0000810201089937
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601100110C622,12NU13NONREF//5100500200137156
+U13 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #56
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       11.01.2026
+  Data księgowania:  0111
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             600,00 PLN
+  Typ transakcji:    NU13
+  Referencja:        5110504500075522
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. JAROSŁAW KUS ALEJA LOTNIKÓW
+  2. 20/51  02-668 WARSZAWA OPŁ
+  3. ATA ZA          MIESZKANIE
+  4. I FUNDUSZ REMONTOWY
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             JAROSŁAW KU¦ 02-676 WARSZAW A UL. POSTĘPU 12C M.205
+  IBAN:              PL48102024980000860200769737
+  Bank (kod):        10202498
+  Nr rachunku:       0000860200769737
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601110111C600,00NU13NONREF//5110504500075522
+U13 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #57
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       12.01.2026
+  Data księgowania:  0112
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             712,05 PLN
+  Typ transakcji:    NU13
+  Referencja:        5120506100002173
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. CZYNSZ
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             TATIANA KOLENDA 02-668 WARS ZAWA AL. LOTNIKÓW 20 M.48
+  IBAN:              PL74102010130000070200695072
+  Bank (kod):        10201013
+  Nr rachunku:       0000070200695072
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601120112C712,05NU13NONREF//5120506100002173
+U13 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #58
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       12.01.2026
+  Data księgowania:  0112
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             40,00 PLN
+  Typ transakcji:    NU13
+  Referencja:        5120504900002223
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. DOROTA CHLEBOWSKA OPŁATA ZA
+  2. POMIESZCZENIE GOSPO
+  3. DARCZE
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             TATIANA KOLENDA 02-668 WARS ZAWA AL. LOTNIKÓW 20 M.48
+  IBAN:              PL74102010130000070200695072
+  Bank (kod):        10201013
+  Nr rachunku:       0000070200695072
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601120112C40,00NU13NONREF//5120504900002223
+U13 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #59
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       12.01.2026
+  Data księgowania:  0112
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             1 115,42 PLN
+  Typ transakcji:    NU12
+  Referencja:        5120597540009840
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. czynsz, identyfikator lokal
+  2. u 1/108
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             KAWALEC JOLANTA BARBARA MIŁ A 6 27-200 STARACHOWICE
+  IBAN:              PL73105014321000009249211922
+  Bank (kod):        10501432
+  Nr rachunku:       1000009249211922
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260110
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601120112C1115,42NU12NONREF//5120597540009840
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #60
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       12.01.2026
+  Data księgowania:  0112
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             482,59 PLN
+  Typ transakcji:    NU12
+  Referencja:        5120597540009844
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Czynsz za lokal ul. Aleja L
+  2. otników 20/76 za miesi±c St
+  3. yczeń 2026
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             SMYK ŁUKASZ FARFAK 43 21-40 0 ŁUKÓW
+  IBAN:              PL10203000451130000016279890
+  Bank (kod):        20300045
+  Nr rachunku:       1130000016279890
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260112
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601120112C482,59NU12NONREF//5120597540009844
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #61
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       12.01.2026
+  Data księgowania:  0112
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             660,84 PLN
+  Typ transakcji:    NU12
+  Referencja:        5120597540009848
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. OPŁATA ZA CZYNSZ ZBIGNIEW K
+  2. ACPRZAK
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             ZBIGNIEW TADEUSZ KACPRZAK L OTNIKÓW AL. WARSZAWA 02-668
+  IBAN:              PL54124041001111001078514116
+  Bank (kod):        12404100
+  Nr rachunku:       1111001078514116
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260112
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601120112C660,84NU12NONREF//5120597540009848
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #62
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       12.01.2026
+  Data księgowania:  0112
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             927,80 PLN
+  Typ transakcji:    NU12
+  Referencja:        5120597540009841
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. zapłata za czynsz styczeń 2
+  2. 026
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             Iwona Smoczkiewicz Żywnego W. 23/77, 02-701 Warszawa
+  IBAN:              PL65249000050000400072868181
+  Bank (kod):        24900005
+  Nr rachunku:       0000400072868181
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260109
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601120112C927,80NU12NONREF//5120597540009841
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #63
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       12.01.2026
+  Data księgowania:  0112
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             626,87 PLN
+  Typ transakcji:    NU12
+  Referencja:        5120597540009845
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Czynsz styczeń 2026 Al. Lot
+  2. ników 20m. 42 Piotr i Franc
+  3. iszek Stachyra
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             STACHYRA PIOTR NOWOURSYNOWS KA 121C 02-797 WARSZAWA
+  IBAN:              PL31105010251000009146107124
+  Bank (kod):        10501025
+  Nr rachunku:       1000009146107124
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260112
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601120112C626,87NU12NONREF//5120597540009845
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #64
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       12.01.2026
+  Data księgowania:  0112
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             875,95 PLN
+  Typ transakcji:    NU12
+  Referencja:        5120597540009849
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Monika Milewska, Czynsz Al.
+  2. Lotników 20/99, DID 1964
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             STURENT GROUP PROSTA SPÓŁKA AKCYJNAUL. KRÓLOWEJ ALDONY
+  IBAN:              PL89114010100000315510001004
+  Bank (kod):        11401010
+  Nr rachunku:       0000315510001004
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260112
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601120112C875,95NU12NONREF//5120597540009849
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #65
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       12.01.2026
+  Data księgowania:  0112
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             764,18 PLN
+  Typ transakcji:    NU12
+  Referencja:        5120597540009842
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. OPŁATA ZA CZYNSZ INDEKS 102
+  2. 12265
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             BANASZEWSKI STANISŁAW AL. L OTNIKÓW 20 M. 65
+  IBAN:              PL92103000190109851802959103
+  Bank (kod):        10300019
+  Nr rachunku:       0109851802959103
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260112
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601120112C764,18NU12NONREF//5120597540009842
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #66
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       12.01.2026
+  Data księgowania:  0112
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             18,19 PLN
+  Typ transakcji:    NU12
+  Referencja:        5120597540009846
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. zsyp, korytarz
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             ANDRZEJ EDMUND FEJFER Al. L otników 20/87 02-668 Warsza
+  IBAN:              PL58249000050000400067779202
+  Bank (kod):        24900005
+  Nr rachunku:       0000400067779202
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260112
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601120112C18,19NU12NONREF//5120597540009846
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #67
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       12.01.2026
+  Data księgowania:  0112
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             200,00 PLN
+  Typ transakcji:    NU13
+  Referencja:        5120503100118989
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. SCHOWEK ALINA KUCHARSKA WAR
+  2. SZAWA   02-668 UL.AL. LOTNI
+  3. KOW 20 M 31     OPLATA ZA K
+  4. ORYTARZ I SCHOWEK 2026  ROK
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             ALINA LIDIA KUCHARSKA 02-66 8 WARSZAWA AL. LOTNIKÓW 20
+  IBAN:              PL73102011690000840201400803
+  Bank (kod):        10201169
+  Nr rachunku:       0000840201400803
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601120112C200,00NU13NONREF//5120503100118989
+U13 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #68
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       12.01.2026
+  Data księgowania:  0112
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             550,00 PLN
+  Typ transakcji:    NU12
+  Referencja:        5120597540009843
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. czynsz Al.Lotnikow 20 m 17
+  2. ChnackiWojciech
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             CHOJNACKI WOJCIECH JANUSZ L ANCIEGO 9/M
+  IBAN:              PL81234000090020404000001068
+  Bank (kod):        23400009
+  Nr rachunku:       0020404000001068
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260112
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601120112C550,00NU12NONREF//5120597540009843
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #69
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       12.01.2026
+  Data księgowania:  0112
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             467,94 PLN
+  Typ transakcji:    NU12
+  Referencja:        5120597540009847
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. czynsz I/2026  Wanda Pszczo
+  2. ła Kiljańska al.Lotników 20
+  3. m 11
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             JOANNA KACPRZAK UL. MOZARTA 3/1016 02-736 WARSZAWA
+  IBAN:              PL45124062501111000045930632
+  Bank (kod):        12406250
+  Nr rachunku:       1111000045930632
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260111
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601120112C467,94NU12NONREF//5120597540009847
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #70
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       12.01.2026
+  Data księgowania:  0112
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             100,00 PLN
+  Typ transakcji:    NT53
+  Referencja:        5120500300178949
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. OPLATA EKSPLOATACYJNA ZA MC
+  2. STYCZEN 2026 R. KORYTARZ P
+  3. LUS ZSYPY
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             JOLANTA DAWICKA BADALSKA ˙
+  IBAN:              PL29132000510099041520000409
+  Bank (kod):        13200051
+  Nr rachunku:       0099041520000409
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260112
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601120112C100,00NT53NONREF//5120500300178949
+T53 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #71
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       12.01.2026
+  Data księgowania:  0112
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             850,00 PLN
+  Typ transakcji:    NU13
+  Referencja:        5120502700140242
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. LOKAL AL. LOTNIKÓW 20 M. 13
+  2. , 02-668WARSZAWA; OPŁATA EK
+  3. SPLOATACYJNA ZA MIESIˇC: ST
+  4. YCZEŃ 2026
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             MAŁGORZATA KNY¦-OLBORSKA 24 -100 PUŁAWY UL. POLNA 19 M.
+  IBAN:              PL44102032190000950200563452
+  Bank (kod):        10203219
+  Nr rachunku:       0000950200563452
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601120112C850,00NU13NONREF//5120502700140242
+U13 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #72
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       12.01.2026
+  Data księgowania:  0112
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             3 500,00 PLN
+  Typ transakcji:    N152
+  Referencja:        5120505900153507
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. FV 010/12/2025
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             ROS CLEAN ˙
+  IBAN:              PL21109018830000000148667823
+  Bank (kod):        10901883
+  Nr rachunku:       0000000148667823
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601120112D3500,00N152NONREF//5120505900153507
+152 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #73
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       12.01.2026
+  Data księgowania:  0112
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             10 732,19 PLN
+  Typ transakcji:    N152
+  Referencja:        5120501100203619
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. FV 191257/166
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             MIEJSKIE PRZEDSIĘBIORSTWO W ODOCIˇGÓW I KANALIZACJI S.A
+  IBAN:              PL26102010552003191257000000
+  Bank (kod):        10201055
+  Nr rachunku:       2003191257000000
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601120112D10732,19N152NONREF//5120501100203619
+152 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #74
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       12.01.2026
+  Data księgowania:  0112
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             920,00 PLN
+  Typ transakcji:    NG04
+  Referencja:        5120596340003007
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. CZYNSZ STYCZEN 2026 R.
+  2. ˙
+  3. ˙
+  4. Wpł
+  5. ata w UP nr:991938260109XX#
+  6. P2734
+
+👤 KONTRAHENT:
+  Nazwa:             IWONA GROMEK 02-668 WARSZAW A ALEJA LOTNIKÓW 20 81
+  IBAN:              PL59132000190099041520000398
+  Bank (kod):        13200019
+  Nr rachunku:       0099041520000398
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260109
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601120112C920,00NG04NONREF//5120596340003007
+G04 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #75
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       12.01.2026
+  Data księgowania:  0112
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             613,70 PLN
+  Typ transakcji:    NU12
+  Referencja:        5120596340003008
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. opłaty mieszkaniowe za styc
+  2. zeń 2026Lotników 20/95
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             MIKOŁAJEWSKA BEATA ELŻBIETA SOLIPSKA 33/63
+  IBAN:              PL53203000451130000014318940
+  Bank (kod):        20300045
+  Nr rachunku:       1130000014318940
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260112
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601120112C613,70NU12NONREF//5120596340003008
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #76
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       12.01.2026
+  Data księgowania:  0112
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             560,00 PLN
+  Typ transakcji:    NU12
+  Referencja:        5120596340003009
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Krogulec Mariusz Al.Lotnikó
+  2. w 20/43 02-668 Warszawa, Id
+  3. entyfikator 1/43
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             MARIUSZ KROGULEC AL. LOTNIK ÓW 20 M 43 02-668 WARSZAWA
+  IBAN:              PL46124059501111001035137851
+  Bank (kod):        12405950
+  Nr rachunku:       1111001035137851
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260112
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601120112C560,00NU12NONREF//5120596340003009
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #77
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       12.01.2026
+  Data księgowania:  0112
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             687,88 PLN
+  Typ transakcji:    NU12
+  Referencja:        5120596340003010
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Opłata eksploatacyjna za m-
+  2. c styczeń w tym fundusz rem
+  3. ontowy
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             ZUZANNA JULIA KACZYŃSKA AL. LOTNIKÓW 20 M 107
+  IBAN:              PL17124060581111000047603583
+  Bank (kod):        12406058
+  Nr rachunku:       1111000047603583
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260112
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601120112C687,88NU12NONREF//5120596340003010
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #78
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       13.01.2026
+  Data księgowania:  0113
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             168,26 PLN
+  Typ transakcji:    N152
+  Referencja:        5130507400026567
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. DZIERŻAWA
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             URZˇD M.ST WARSZAWY DZ. MOK OTÓW WARSZAWA UL. RAKOWIECK
+  IBAN:              PL40103015080000000550023008
+  Bank (kod):        10301508
+  Nr rachunku:       0000000550023008
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601130113D168,26N152NONREF//5130507400026567
+152 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #79
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       13.01.2026
+  Data księgowania:  0113
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             1 056,02 PLN
+  Typ transakcji:    NU12
+  Referencja:        5130593940003640
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. OPŁATA EKSPLOATACYJNA ORAZ
+  2. FUNDUSZ REMONTOWY 01.2026
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             MARCIN WASILEWSKI 02-679 WA RSZAWA UL.ZYGMUNTA MODZELEW
+  IBAN:              PL23114020040000330203364570
+  Bank (kod):        11402004
+  Nr rachunku:       0000330203364570
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260112
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601130113C1056,02NU12NONREF//5130593940003640
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #80
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       13.01.2026
+  Data księgowania:  0113
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             10,00 PLN
+  Typ transakcji:    NU12
+  Referencja:        5130593940003638
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Górecka Anna AL LOTNIKÓW 20
+  2. M 66 OPŁATA EKSPLOATACYJNA
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             AGNIESZKA R BOGACZ AL. LOTN IKÓW 20/66 02-668 WARSZAWA
+  IBAN:              PL36109016940000000123704099
+  Bank (kod):        10901694
+  Nr rachunku:       0000000123704099
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260112
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601130113C10,00NU12NONREF//5130593940003638
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #81
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       13.01.2026
+  Data księgowania:  0113
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             666,72 PLN
+  Typ transakcji:    NU12
+  Referencja:        5130593940003639
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. FUNDUSZ REMONTOWY
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             WIATR MAGDALENA 03-982 WARS ZAWA UL BARTOSIKA S. 10M48
+  IBAN:              PL90116022020000000011844921
+  Bank (kod):        11602202
+  Nr rachunku:       0000000011844921
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260112
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601130113C666,72NU12NONREF//5130593940003639
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #82
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       13.01.2026
+  Data księgowania:  0113
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             732,94 PLN
+  Typ transakcji:    N152
+  Referencja:        5130502800028324
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. FV
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             E.ON POLSKA S.A. 00-347 WAR SZAWA UL. WYBRZEŻE KO¦CIUSZ
+  IBAN:              PL09124069601701082000038768
+  Bank (kod):        12406960
+  Nr rachunku:       1701082000038768
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601130113D732,94N152NONREF//5130502800028324
+152 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #83
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       13.01.2026
+  Data księgowania:  0113
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             453,73 PLN
+  Typ transakcji:    N152
+  Referencja:        5130504200032069
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. FV
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             E.ON POLSKA S.A. 00-347 WAR SZAWA UL. WYBRZEŻE KO¦CIUSZ
+  IBAN:              PL36124069601701082000038767
+  Bank (kod):        12406960
+  Nr rachunku:       1701082000038767
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601130113D453,73N152NONREF//5130504200032069
+152 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #84
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       13.01.2026
+  Data księgowania:  0113
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             453,73 PLN
+  Typ transakcji:    N152
+  Referencja:        5130506600030442
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. FV
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             E.ON POLSKA S.A. 00-347 WAR SZAWA UL. WYBRZEŻE KO¦CIUSZ
+  IBAN:              PL63124069601701082000038766
+  Bank (kod):        12406960
+  Nr rachunku:       1701082000038766
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601130113D453,73N152NONREF//5130506600030442
+152 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #85
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       13.01.2026
+  Data księgowania:  0113
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             1 208,39 PLN
+  Typ transakcji:    N152
+  Referencja:        5130503400035038
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. FV
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             WINDA-WARSZAWA SP. Z O.O. W ARSZAWA UL. SUROWIECKIEGO 1
+  IBAN:              PL59102011690000810200096164
+  Bank (kod):        10201169
+  Nr rachunku:       0000810200096164
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601130113D1208,39N152NONREF//5130503400035038
+152 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #86
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       14.01.2026
+  Data księgowania:  0114
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             6 700,00 PLN
+  Typ transakcji:    N500
+  Referencja:        5140597620003559
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. PRZELEW ¦RODKÓW
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             AL. LOTNIKÓW 20 ˙
+  IBAN:              PL97102010260000160201852755
+  Bank (kod):        10201026
+  Nr rachunku:       0000160201852755
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601140114D6700,00N500NONREF//5140597620003559
+500 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #87
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       14.01.2026
+  Data księgowania:  0114
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             1,10 PLN
+  Typ transakcji:    N763
+  Referencja:        5140597620003559
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. OPŁ.R.ZL.ST.WE
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             ˙ ˙
+  IBAN:              ˙
+  Bank (kod):        ˙
+  Nr rachunku:       ˙
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601140114D1,10N763NONREF//5140597620003559
+763 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #88
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       14.01.2026
+  Data księgowania:  0114
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             129,00 PLN
+  Typ transakcji:    N152
+  Referencja:        5140502200024827
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. FV
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             TECH-HOME SKOCZYŃSKI ZBIGNI EW 02-679 WARSZAWA UL. MODZ
+  IBAN:              PL80116022020000000082826306
+  Bank (kod):        11602202
+  Nr rachunku:       0000000082826306
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601140114D129,00N152NONREF//5140502200024827
+152 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #89
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       14.01.2026
+  Data księgowania:  0114
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             982,52 PLN
+  Typ transakcji:    NU12
+  Referencja:        5140596280003324
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Dot. lokalu Al. Lotników 20
+  2. m 75 koszty utrzymania nie
+  3. ruchomo¶ci wspólnej + zalic
+  4. zka na poczet zużycia medió
+  5. w
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             WOJCIECH TARASIK UL. POKRĘT NA 38 05 *500 NOWA IWICZNA
+  IBAN:              PL82109010560000000119487340
+  Bank (kod):        10901056
+  Nr rachunku:       0000000119487340
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260113
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601140114C982,52NU12NONREF//5140596280003324
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #90
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       14.01.2026
+  Data księgowania:  0114
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             1 000,00 PLN
+  Typ transakcji:    NU12
+  Referencja:        5140596280003323
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Opłata za czynsz i funduszr
+  2. emontowyMarcin Boćkowski Al
+  3. .Lotników 20/28 Warszawa 02
+  4. -668
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             BOĆKOWSKA SYLWIA MAŁGORZATA AL..LOTNIKÓW 20/28
+  IBAN:              PL51105010251000009091886771
+  Bank (kod):        10501025
+  Nr rachunku:       1000009091886771
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260113
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601140114C1000,00NU12NONREF//5140596280003323
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #91
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       14.01.2026
+  Data księgowania:  0114
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             240,05 PLN
+  Typ transakcji:    N152
+  Referencja:        5140502600108753
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. DZIERŻAWA
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             URZˇD M.ST WARSZAWY DZ. MOK OTÓW WARSZAWA UL. RAKOWIECK
+  IBAN:              PL40103015080000000550023008
+  Bank (kod):        10301508
+  Nr rachunku:       0000000550023008
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601140114D240,05N152NONREF//5140502600108753
+152 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #92
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       14.01.2026
+  Data księgowania:  0114
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             589,75 PLN
+  Typ transakcji:    NG04
+  Referencja:        5140596650002449
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. OPLATA EKSPLOATACYJNA ZA MC
+  2. STYCZEN 2026 R. W T
+  3. YM FUND         USZ REMONTO
+  4. WY 105 ZL I 60GR        Wpł
+  5. ata w UP nr:991938260113XX#
+  6. P1046
+
+👤 KONTRAHENT:
+  Nazwa:             KOSTRZYNSKA IRENA 02-668 WA RSZAWA ALEJA LOTNIKÓW 20 2
+  IBAN:              PL59132000190099041520000398
+  Bank (kod):        13200019
+  Nr rachunku:       0099041520000398
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260113
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601140114C589,75NG04NONREF//5140596650002449
+G04 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #93
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       14.01.2026
+  Data księgowania:  0114
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             610,00 PLN
+  Typ transakcji:    NU12
+  Referencja:        5140591300001465
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. CZYNSZ +  FUNDUSZ REMONTOWY
+  2. 110,- ZŁ  ZA 01/2026
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             ELŻBIETA MAZUROWSKA AL. LOT NIKÓW 20 M 104 WARSZAWA 02-
+  IBAN:              PL62124064101111000045992962
+  Bank (kod):        12406410
+  Nr rachunku:       1111000045992962
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260114
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601140114C610,00NU12NONREF//5140591300001465
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #94
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       14.01.2026
+  Data księgowania:  0114
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             785,62 PLN
+  Typ transakcji:    NU12
+  Referencja:        5140591300001466
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Czynsz za Styczeń 2026r,  L
+  2. okal 60.
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             FRˇCKIEWCZ MARIA 02-668 WAR SZAWA AL LOTNIKÓW 20M60
+  IBAN:              PL70116022020000000543475800
+  Bank (kod):        11602202
+  Nr rachunku:       0000000543475800
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260114
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601140114C785,62NU12NONREF//5140591300001466
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #95
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       15.01.2026
+  Data księgowania:  0115
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             784,48 PLN
+  Typ transakcji:    NU12
+  Referencja:        5150594260003712
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Czynsz Paweł Nowak Aleja Lo
+  2. tników 20/116
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             NOWAK PAWEŁ 02-495 WARSZAWA UL KOMPANII AK GOPLANA 9AM
+  IBAN:              PL02116022020000000081793302
+  Bank (kod):        11602202
+  Nr rachunku:       0000000081793302
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260115
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601150115C784,48NU12NONREF//5150594260003712
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #96
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       15.01.2026
+  Data księgowania:  0115
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             787,39 PLN
+  Typ transakcji:    N158
+  Referencja:        5151081100000089
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. 01/26
+  2. Monetia(938:4072285
+  3. 4 2026-01-13)
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             ROMAN KASPROWICZ AL LOTNIKÓ W 20/10 5WWA
+  IBAN:              PL07102010260000100202522126
+  Bank (kod):        10201026
+  Nr rachunku:       0000100202522126
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260115
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601150115C787,39N158NONREF//5151081100000089
+158 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #97
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       19.01.2026
+  Data księgowania:  0119
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             5 063,90 PLN
+  Typ transakcji:    N500
+  Referencja:        5190591890012497
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. FV ZARZˇDZANIE
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             INTER-EJ S.C. JOLANTA GONTA REK, ELŻBIETA LASKOWSKA
+  IBAN:              PL47249000050000452014090460
+  Bank (kod):        24900005
+  Nr rachunku:       0000452014090460
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601190119D5063,90N500NONREF//5190591890012497
+500 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #98
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       19.01.2026
+  Data księgowania:  0119
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             1,10 PLN
+  Typ transakcji:    N775
+  Referencja:        5190591890012497
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. OPŁ.R.ZL.ST.ZW
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             ˙ ˙
+  IBAN:              ˙
+  Bank (kod):        ˙
+  Nr rachunku:       ˙
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601190119D1,10N775NONREF//5190591890012497
+775 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #99
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       19.01.2026
+  Data księgowania:  0119
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             939,60 PLN
+  Typ transakcji:    N152
+  Referencja:        5190501100015856
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. FV 0
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             HYDRAL ˙
+  IBAN:              PL46102010970000790202780294
+  Bank (kod):        10201097
+  Nr rachunku:       0000790202780294
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601190119D939,60N152NONREF//5190501100015856
+152 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #100
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       19.01.2026
+  Data księgowania:  0119
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             900,15 PLN
+  Typ transakcji:    NG04
+  Referencja:        5190593840053658
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. OPŁATA EKSPLOATACYJNA ZA MC
+  2. STYCZEN 2026 R. W T
+  3. YM FUND         USZ REMONTO
+  4. WY 131 ZŁ I 50 G        Wpł
+  5. ata w UP nr:991938260116XX#
+  6. P0458
+
+👤 KONTRAHENT:
+  Nazwa:             KAMIL PIˇTKOWSKI 02-668 WAR SZAWA ALEJA LOTNIKÓW 20 90
+  IBAN:              PL59132000190099041520000398
+  Bank (kod):        13200019
+  Nr rachunku:       0099041520000398
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260116
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601190119C900,15NG04NONREF//5190593840053658
+G04 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #101
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       20.01.2026
+  Data księgowania:  0120
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             469,03 PLN
+  Typ transakcji:    N158
+  Referencja:        5201087100000073
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. 01/26
+  2. Monetia(938:4081958
+  3. 9 2026-01-16)
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             ANNA MARIA NYCEK PROMIENNA 25 05-54 0 ZALESIE GÓRNE
+  IBAN:              PL07102010260000100202522126
+  Bank (kod):        10201026
+  Nr rachunku:       0000100202522126
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260120
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601200120C469,03N158NONREF//5201087100000073
+158 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #102
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       20.01.2026
+  Data księgowania:  0120
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             14,41 PLN
+  Typ transakcji:    NU12
+  Referencja:        5200592470001913
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. DOROTA DYLEWSKA UL.LOTNIKOW
+  2. 20 M 3 3 02-668 WARSZAWA O
+  3. PLATA EXSPLOATACYJNA ZA ZAB
+  4. UDOWE KLATKI SCHODOWEJ
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             Dorota DYLEWSKA Lotników 20 /33, 02-668 Warszawa
+  IBAN:              PL81249000050000400076822777
+  Bank (kod):        24900005
+  Nr rachunku:       0000400076822777
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260120
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601200120C14,41NU12NONREF//5200592470001913
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #103
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       20.01.2026
+  Data księgowania:  0120
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             395,29 PLN
+  Typ transakcji:    NU12
+  Referencja:        5200597640001256
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. I/26 OPLATA EKSPLOATACYJNA
+  2. - LOK. 115, AL. LOTNIKOW 20
+  3. , 02-668 WAWA
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             JADWIGA NAGÓRNA 02-661 WARS ZAWA UL.MODRA 3 M.20
+  IBAN:              PL02114020040000300275195535
+  Bank (kod):        11402004
+  Nr rachunku:       0000300275195535
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260120
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601200120C395,29NU12NONREF//5200597640001256
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #104
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       20.01.2026
+  Data księgowania:  0120
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             395,29 PLN
+  Typ transakcji:    NU12
+  Referencja:        5200597640001255
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. XII/25 OPLATA EKSPLOATACYJN
+  2. A LOK. 115, AL. LOTNIKOW 20
+  3. , 02-668 WAWA
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             JADWIGA NAGÓRNA 02-661 WARS ZAWA UL.MODRA 3 M.20
+  IBAN:              PL02114020040000300275195535
+  Bank (kod):        11402004
+  Nr rachunku:       0000300275195535
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260120
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601200120C395,29NU12NONREF//5200597640001255
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #105
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       21.01.2026
+  Data księgowania:  0121
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             32,00 PLN
+  Typ transakcji:    NU12
+  Referencja:        5210597830002878
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Przelew ¶rodków
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             RUBOWICZ CZESŁAWA ANTONINA AL. LOTNIKÓW 20/32
+  IBAN:              PL02160014621714032480000334
+  Bank (kod):        16001462
+  Nr rachunku:       1714032480000334
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260120
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601210121C32,00NU12NONREF//5210597830002878
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #106
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       21.01.2026
+  Data księgowania:  0121
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             524,01 PLN
+  Typ transakcji:    NU12
+  Referencja:        5210597830002879
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Lok 127 czynsz za mc. 01/26
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             TROJANOWSKI PIOTR ANDRZEJ ¦ RÓDZIEMNOMORSKA 55/9
+  IBAN:              PL02203000451130000006346070
+  Bank (kod):        20300045
+  Nr rachunku:       1130000006346070
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260121
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601210121C524,01NU12NONREF//5210597830002879
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #107
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       21.01.2026
+  Data księgowania:  0121
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             908,00 PLN
+  Typ transakcji:    NU12
+  Referencja:        5210591860001050
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. czynsz za styczeń i luty 20
+  2. 26
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             JABŁOŃSKA EWA 02-777 WARSZA WA UL STEFANA KOPCIŃSKIEGO
+  IBAN:              PL37147000022011220250000001
+  Bank (kod):        14700002
+  Nr rachunku:       2011220250000001
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260121
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601210121C908,00NU12NONREF//5210591860001050
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #108
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       26.01.2026
+  Data księgowania:  0126
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             3 500,00 PLN
+  Typ transakcji:    N152
+  Referencja:        5260505600015466
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. FV 003/01/2026
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             ROS CLEAN ˙
+  IBAN:              PL21109018830000000148667823
+  Bank (kod):        10901883
+  Nr rachunku:       0000000148667823
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601260126D3500,00N152NONREF//5260505600015466
+152 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #109
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       26.01.2026
+  Data księgowania:  0126
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             548,34 PLN
+  Typ transakcji:    NU12
+  Referencja:        5260595270005118
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. CZYNSZ ZA  STYCZEŃ 2026
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             JERZY ORUŃ 02-668 WARSZAWA AL.LOTNIKÓW 20 M.8
+  IBAN:              PL90114020040000330268901899
+  Bank (kod):        11402004
+  Nr rachunku:       0000330268901899
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260125
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601260126C548,34NU12NONREF//5260595270005118
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #110
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       26.01.2026
+  Data księgowania:  0126
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             720,00 PLN
+  Typ transakcji:    NG04
+  Referencja:        5260596260002742
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. OPŁ. EKSP. ZA MC STYCZEŃ 26
+  2. R
+  3. ˙
+  4. Wpł
+  5. ata w UP nr:991324260123BI#
+  6. P0797
+
+👤 KONTRAHENT:
+  Nazwa:             JAKUBOWSKA STANISŁAWA 02-66 8 WARSZAWA ALEJA LOTNIKÓW
+  IBAN:              PL59132000190099041520000398
+  Bank (kod):        13200019
+  Nr rachunku:       0099041520000398
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260123
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601260126C720,00NG04NONREF//5260596260002742
+G04 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #111
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       27.01.2026
+  Data księgowania:  0127
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             7 260,00 PLN
+  Typ transakcji:    N500
+  Referencja:        5270594940002680
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. ODPADY
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             URZˇD M. ST. WARSZAWA ˙
+  IBAN:              PL54103019997702240100063127
+  Bank (kod):        10301999
+  Nr rachunku:       7702240100063127
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601270127D7260,00N500NONREF//5270594940002680
+500 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #112
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       27.01.2026
+  Data księgowania:  0127
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             1,10 PLN
+  Typ transakcji:    N775
+  Referencja:        5270594940002680
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. OPŁ.R.ZL.ST.ZW
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             ˙ ˙
+  IBAN:              ˙
+  Bank (kod):        ˙
+  Nr rachunku:       ˙
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601270127D1,10N775NONREF//5270594940002680
+775 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #113
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       27.01.2026
+  Data księgowania:  0127
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             1 000,00 PLN
+  Typ transakcji:    NU12
+  Referencja:        5270597080004383
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. czynsz Bożena Zawisza Al. L
+  2. otników 20 m 1
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             Pani BOŻENA ZAWISZA AL. LOT NIKÓW 20/1 02-668 WARSZAWA
+  IBAN:              PL50109018830000000107652403
+  Bank (kod):        10901883
+  Nr rachunku:       0000000107652403
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260126
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601270127C1000,00NU12NONREF//5270597080004383
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #114
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       27.01.2026
+  Data księgowania:  0127
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             791,36 PLN
+  Typ transakcji:    NU12
+  Referencja:        5270597080004384
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. Rozliczenie za 01.2026
+  2. ˙
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             SŁAWOMIR ¦WIˇTKOWSKI AL LOT NIKOW 20 M 7
+  IBAN:              PL49124010371111000006065890
+  Bank (kod):        12401037
+  Nr rachunku:       1111000006065890
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260127
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601270127C791,36NU12NONREF//5270597080004384
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #115
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       28.01.2026
+  Data księgowania:  0128
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             620,00 PLN
+  Typ transakcji:    NU12
+  Referencja:        5280599460005124
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. opłaty mieszkaniowe i fund
+  2. rem 2026.01 DZIERŻYC LEOKAD
+  3. IA AL.LOTNIKÓW. 20 lok. 56
+  4. 02-668 Warszawa
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             DZIERZYC-KULHAWIK PIOTR ORZ YCKA 6/6 02-695 WARSZAWA
+  IBAN:              PL53203000451130000010557280
+  Bank (kod):        20300045
+  Nr rachunku:       1130000010557280
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260127
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601280128C620,00NU12NONREF//5280599460005124
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #116
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       30.01.2026
+  Data księgowania:  0130
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             485,92 PLN
+  Typ transakcji:    NU12
+  Referencja:        5300591930005373
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. TIOMKIN GRAŻYNA WACŁAWA
+  2. AL.LOTNIKóW. 20 lok
+  3. . 20            02-668 Wars
+  4. zawa                    za
+  5. pa?dziernik 2025
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             TIOMKIN IZABELA JOLANTA ZAM IANY 9/18 02-786 WARSZAWA
+  IBAN:              PL37105010251000002275735435
+  Bank (kod):        10501025
+  Nr rachunku:       1000002275735435
+
+📅 DODATKOWE DATY:
+  Data transakcji:   20260130
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601300130C485,92NU12NONREF//5300591930005373
+U12 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #117
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       30.01.2026
+  Data księgowania:  0130
+  Typ operacji:      WPŁATA (Credit)
+  Kwota:             824,67 PLN
+  Typ transakcji:    NU13
+  Referencja:        5300507700088463
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. OPŁATA EKSPLOATACYJNA M-C I
+  2. 2026,W TYM F REMONTOWY 78,
+  3. 93ZŁ EWA RAK    AL.LOTNIKÓW
+  4. 20/49 W-WA
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             EWA RAK 02-668 WARSZAWA AL. LOTNIKÓW 20 M.49
+  IBAN:              PL86102011690000830200209361
+  Bank (kod):        10201169
+  Nr rachunku:       0000830200209361
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601300130C824,67NU13NONREF//5300507700088463
+U13 0...
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+TRANSAKCJA #118
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📋 PODSTAWOWE INFORMACJE:
+  Data waluty:       31.01.2026
+  Data księgowania:  0130
+  Typ operacji:      WYPŁATA (Debit)
+  Kwota:             28,00 PLN
+  Typ transakcji:    N188
+  Referencja:        5310298250012446
+
+🏦 SZCZEGÓŁY TRANSAKCJI:
+  Kod transakcji:    
+
+📝 OPIS:
+  1. OPŁATA ZA PROWADZENIE RACHU
+  2. NKU
+  3. ˙
+  4. ˙
+  5. ˙
+  6. ˙
+
+👤 KONTRAHENT:
+  Nazwa:             ˙ ˙
+  IBAN:              ˙
+  Bank (kod):        ˙
+  Nr rachunku:       ˙
+
+📅 DODATKOWE DATY:
+  Data transakcji:   ˙
+
+ℹ️  INFORMACJE DODATKOWE:
+  ˙
+
+🔍 RAW DATA (dla debugowania):
+  Field :61: 2601310130D28,00N188NONREF//5310298250012446
+188 0...
+
+
+====================================================================================================
+KONIEC WYCIĄGU
+====================================================================================================

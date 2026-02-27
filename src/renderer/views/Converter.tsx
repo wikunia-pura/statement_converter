@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileEntry, Bank, Adres } from '../../shared/types';
+import { FileEntry, Bank, Adres, ConversionReviewData, ReviewDecision } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { generateId } from '../../shared/utils';
+import { TransactionReviewScreen } from '../components/TransactionReviewScreen';
 
 interface SearchableAdresSelectProps {
   adresy: Adres[];
@@ -205,6 +206,9 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   const [duplicateFiles, setDuplicateFiles] = useState<string[]>([]);
   const [showAIWarningModal, setShowAIWarningModal] = useState(false);
   const [filesNeedingAI, setFilesNeedingAI] = useState<{fileName: string; fileId: string; totalTransactions: number; lowConfidenceCount: number}[]>([]);
+  const [reviewData, setReviewData] = useState<ConversionReviewData | null>(null);
+  const [conversionQueue, setConversionQueue] = useState<string[]>([]);
+  const [isProcessingQueue, setIsProcessingQueue] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<FileEntry[]>(files);
 
@@ -342,13 +346,14 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     // Get file from ref to ensure we have latest state
     const currentFile = filesRef.current.find((f) => f.id === fileId);
     
-    if (!currentFile || !currentFile.bankId) return;
+    if (!currentFile || !currentFile.bankId || !currentFile.adresId) return;
 
     // First analyze file to check if AI is needed
     try {
       const summary = await window.electronAPI.analyzeFile(
         currentFile.filePath,
-        currentFile.bankId
+        currentFile.bankId,
+        currentFile.adresId
       );
 
       // If AI is needed, show warning modal
@@ -378,11 +383,111 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     }
   };
 
+  const handleFinalize = async (decisions: ReviewDecision[]) => {
+    if (!reviewData) return;
+    
+    try {
+      const result = await window.electronAPI.finalizeConversion(
+        reviewData.tempConversionId,
+        decisions
+      );
+
+      if (result.success) {
+        // Find the file that was being reviewed and update its status
+        setFiles((prevFiles) =>
+          prevFiles.map((f) =>
+            f.fileName === reviewData.fileName
+              ? {
+                  ...f,
+                  status: 'success' as const,
+                  errorMessage: result.duplicateWarning
+                    ? t.fileExistsTimestamp
+                    : undefined,
+                }
+              : f
+          )
+        );
+        setReviewData(null);
+        
+        // After finalizing, process next file in queue if any
+        processNextInQueue();
+      } else {
+        alert(`${t.conversionFailed}: ${result.error}\n${t.checkBankConverter}`);
+        setReviewData(null);
+        
+        // Update file status to error
+        setFiles((prevFiles) =>
+          prevFiles.map((f) =>
+            f.fileName === reviewData.fileName
+              ? { ...f, status: 'error' as const, errorMessage: result.error }
+              : f
+          )
+        );
+        
+        // Continue with next file even on error
+        processNextInQueue();
+      }
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`${t.conversionFailed}: ${errorMessage}`);
+      setReviewData(null);
+      
+      // Update file status to error
+      setFiles((prevFiles) =>
+        prevFiles.map((f) =>
+          f.fileName === reviewData.fileName
+            ? { ...f, status: 'error' as const, errorMessage }
+            : f
+        )
+      );
+      
+      // Continue with next file even on error
+      processNextInQueue();
+    }
+  };
+
+  const handleCancelReview = () => {
+    if (!reviewData) return;
+    
+    // Revert file status back to pending so user can try again
+    setFiles((prevFiles) =>
+      prevFiles.map((f) =>
+        f.fileName === reviewData.fileName
+          ? { ...f, status: 'pending' as const, errorMessage: undefined }
+          : f
+      )
+    );
+    
+    setReviewData(null);
+    
+    // Clear queue and stop processing
+    setConversionQueue([]);
+    setIsProcessingQueue(false);
+  };
+
+  const processNextInQueue = () => {
+    setConversionQueue((prevQueue) => {
+      if (prevQueue.length === 0) {
+        setIsProcessingQueue(false);
+        return [];
+      }
+      
+      const [nextFileId, ...remainingQueue] = prevQueue;
+      
+      // Process next file in background
+      setTimeout(() => {
+        performConversion(nextFileId, false);
+      }, 100);
+      
+      return remainingQueue;
+    });
+  };
+
   const performConversion = async (fileId: string, useAI: boolean) => {
     // Get file from ref to ensure we have latest state
     const currentFile = filesRef.current.find((f) => f.id === fileId);
     
-    if (!currentFile || !currentFile.bankId) return;
+    if (!currentFile || !currentFile.bankId || !currentFile.adresId) return;
 
     // Update status to processing
     setFiles((prevFiles) =>
@@ -396,12 +501,14 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
         ? await window.electronAPI.convertFileWithAI(
             currentFile.filePath,
             currentFile.bankId,
-            currentFile.fileName
+            currentFile.fileName,
+            currentFile.adresId
           )
         : await window.electronAPI.convertFile(
             currentFile.filePath,
             currentFile.bankId,
-            currentFile.fileName
+            currentFile.fileName,
+            currentFile.adresId
           );
 
       // Ensure minimum 1 second display time for loader
@@ -409,6 +516,13 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
       const remainingTime = Math.max(0, 1000 - elapsed);
       if (remainingTime > 0) {
         await new Promise(resolve => setTimeout(resolve, remainingTime));
+      }
+
+      // Check if review is needed
+      if (result.needsReview && result.reviewData) {
+        setReviewData(result.reviewData);
+        // Keep status as processing to show file is being handled
+        return;
       }
 
       if (result.success) {
@@ -425,6 +539,9 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
               : f
           )
         );
+        
+        // Process next file in queue if no review was needed
+        processNextInQueue();
       } else {
         setFiles((prevFiles) =>
           prevFiles.map((f) =>
@@ -434,6 +551,9 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
           )
         );
         alert(`${t.conversionFailed}: ${result.error}\n${t.checkBankConverter}`);
+        
+        // Process next file even on error
+        processNextInQueue();
       }
     } catch (error: unknown) {
       // Ensure minimum 1 second display time for loader even on error
@@ -452,6 +572,9 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
         )
       );
       alert(`${t.conversionFailed}: ${errorMessage}`);
+      
+      // Process next file even on error
+      processNextInQueue();
     }
   };
 
@@ -469,7 +592,8 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
       try {
         const summary = await window.electronAPI.analyzeFile(
           file.filePath,
-          file.bankId!
+          file.bankId!,
+          file.adresId
         );
 
         if (summary.needsAI) {
@@ -492,8 +616,13 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
       return;
     }
 
-    // Otherwise convert all files without AI
-    await Promise.all(filesToConvert.map(file => performConversion(file.id, false)));
+    // Convert files sequentially - start with first, rest go to queue
+    setIsProcessingQueue(true);
+    if (filesToConvert.length > 0) {
+      const [firstFile, ...restFiles] = filesToConvert;
+      setConversionQueue(restFiles.map(f => f.id));
+      await performConversion(firstFile.id, false);
+    }
   };
 
   const handleProceedWithAI = async (fileIds: string[]) => {
@@ -618,9 +747,15 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                 <button 
                   className="button button-success" 
                   onClick={handleConvertAll}
-                  disabled={files.every(f => f.status === 'success')}
-                  title={files.every(f => f.status === 'success') ? 'Wszystkie pliki są już skonwertowane' : ''}
-                  style={files.every(f => f.status === 'success') ? { 
+                  disabled={files.every(f => f.status === 'success') || files.some(f => !f.adresId)}
+                  title={
+                    files.every(f => f.status === 'success') 
+                      ? 'Wszystkie pliki są już skonwertowane' 
+                      : files.some(f => !f.adresId) 
+                      ? 'Niektóre pliki nie mają wybranego adresu' 
+                      : ''
+                  }
+                  style={(files.every(f => f.status === 'success') || files.some(f => !f.adresId)) ? { 
                     opacity: 0.5, 
                     cursor: 'not-allowed' 
                   } : {}}
@@ -737,7 +872,12 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                               <button
                                 className="button button-small button-success"
                                 onClick={() => handleConvert(file.id)}
-                                disabled={!file.bankId}
+                                disabled={!file.bankId || !file.adresId}
+                                title={!file.bankId ? 'Wybierz bank' : !file.adresId ? 'Wybierz adres' : ''}
+                                style={(!file.bankId || !file.adresId) ? { 
+                                  opacity: 0.5, 
+                                  cursor: 'not-allowed' 
+                                } : {}}
                               >
                                 {t.convert}
                               </button>
@@ -768,6 +908,15 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
           </>
         )}
 
+        {/* Transaction Review Screen */}
+        {reviewData && (
+          <TransactionReviewScreen
+            reviewData={reviewData}
+            onFinalize={handleFinalize}
+            onCancel={handleCancelReview}
+          />
+        )}
+
         {/* AI Warning Modal */}
         {showAIWarningModal && (
           <div className="modal-overlay" onClick={() => setShowAIWarningModal(false)}>
@@ -777,7 +926,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
               </div>
               <div className="modal-body" style={{ padding: '20px' }}>
                 <p style={{ marginBottom: '15px', fontSize: '14px', color: '#6c757d' }}>
-                  Niektóre transakcje (wpłaty lub wydatki) mają niską pewność rozpoznania (poniżej 90%). Zapytaj Olę czy jest kasiora, to przepuszczę przez AI:
+                  Niektóre transakcje mają bardzo niską pewność rozpoznania (poniżej 60%) i będą wymagać ręcznej weryfikacji. Zapytaj Olę czy jest kasiora, to przepuszczę przez AI:
                 </p>
                 <div style={{
                   background: '#fff3cd',
@@ -824,7 +973,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                       <div style={{ paddingLeft: '24px', fontSize: '12px', color: '#6c757d' }}>
                         <div>Transakcje: {file.totalTransactions}</div>
                         <div style={{ color: '#dc3545', fontWeight: '500' }}>
-                          Nierozpoznanych: {file.lowConfidenceCount}
+                          Wymaga weryfikacji (confidence {'<'} 60%): {file.lowConfidenceCount}
                         </div>
                       </div>
                     </div>

@@ -1,0 +1,1625 @@
+================================================================================
+WPŁATY (INCOME)
+================================================================================
+
+Pozycja #1
+Data: 1.01.2026
+Kwota: 431,14
+Opis: 110212300 BIELAWSKI WŁADYSŁAW, AL. LOTNIKÓW 20 M.100,02-668 WARSZAWA˙˙˙
+Kontrahent: EWA SZYMCZYK 04-113 WARSZAWA UL. ŁUKOWSKA 3 M.122
+Rozpoznane mieszkanie: 100
+Konto lokalu: 204-000100
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000100
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #2
+Data: 2.01.2026
+Kwota: 651,95
+Opis: OPŁATA EKSPLOATACYJNA M-C 01/2026 WTYM FUNDUSZ REMONTOWY 110,05 ZŁ˙˙˙
+Kontrahent: KRYSTYNA STEPANIAK 02-668 WARSZAWA AL. LOTNIKÓW 20 M.1
+Rozpoznane mieszkanie: 1
+Konto lokalu: 204-000001
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000001
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #3
+Data: 2.01.2026
+Kwota: 860,00
+Opis: OPŁATA EKSPLOATACYJNA ZA LOKAL 19˙˙˙˙
+Kontrahent: JOANNA MAZIARZ 02-668 WARSZAWA AL.LOTNIKÓW 20 M.19
+Rozpoznane mieszkanie: 19
+Konto lokalu: 204-000019
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000019
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #4
+Data: 2.01.2026
+Kwota: 567,90
+Opis: AL.LOTNIKÓW 20 M.2˙˙˙˙˙
+Kontrahent: MICHAŁ WOJTKOWSKI 02-668 WARSZAWA AL.LOTNIKÓW 20 M.2
+Rozpoznane mieszkanie: 2
+Konto lokalu: 204-000002
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000002
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #5
+Data: 2.01.2026
+Kwota: 532,82
+Opis: Czynsz STYCZEŃ 2026, Al. Lotników 20, lok. 124˙˙˙˙
+Kontrahent: AGNIESZKA BARTNIKOWSKA AL LOTNIKÓW 20 M. 124
+Rozpoznane mieszkanie: 124
+Konto lokalu: 204-000124
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000124
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #6
+Data: 2.01.2026
+Kwota: 671,22
+Opis: 109˙˙˙˙˙
+Kontrahent: JAN GIL AL. LOTNIKÓW 20/109WARSZAWA 02-668
+Rozpoznane mieszkanie: 109
+Konto lokalu: 204-000109
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000109
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #7
+Data: 2.01.2026
+Kwota: 811,52
+Opis: CZYNSZ ZA LOKAL-ALEJA LOTNIKÓW     20/25 STYCZEŃ 2026˙˙˙˙
+Kontrahent: BERNARD KŁOPOTOWSKI 17-300SIEMIATYCZE UL. ¦WIERKOWA 2
+Rozpoznane mieszkanie: 25
+Konto lokalu: 204-000025
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000025
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #8
+Data: 5.01.2026
+Kwota: 749,99
+Opis: AL. LOTNIKÓW 20/93, CZYNSZ˙˙˙˙˙
+Kontrahent: KARINA GORZELAK-KRUCZYŃSKA˙
+Rozpoznane mieszkanie: 93
+Konto lokalu: 204-000093
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000093
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #9
+Data: 5.01.2026
+Kwota: 1188,00
+Opis: Al. Lotników 20m22 Czynsz 1.2026˙˙˙˙
+Kontrahent: GERUS ALEKSANDRA 02-797 WARSZAWA UL KLIMCZAKA 5M69
+Rozpoznane mieszkanie: 22
+Konto lokalu: 204-000022
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000022
+Metoda ekstrakcji: regex
+Confidence: 92%
+
+--------------------------------------------------------------------------------
+
+Pozycja #10
+Data: 5.01.2026
+Kwota: 734,26
+Opis: OPLATA EKSPLOATACYJNA I FUNDUSZ REMONTOWY ZA MIESIˇCstyczeń 2026 /  AL. LOTNIKÓW 20 m.5˙˙
+Kontrahent: JERZY CHOJNACKI ŻUROMINEK 99, 06-522 ŻUROMINEK
+Rozpoznane mieszkanie: 5
+Konto lokalu: 204-000005
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000005
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #11
+Data: 5.01.2026
+Kwota: 120,00
+Opis: Opłata za zsyp al.lotników20 m57 02-668 Warszawa za rok 2026˙˙˙
+Kontrahent: TOMASZ MAREK MESJASZ AL. LOTNIKÓW 20 M. 57
+Rozpoznane mieszkanie: 57
+Konto lokalu: 204-000057
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000057
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #12
+Data: 5.01.2026
+Kwota: 888,43
+Opis: 01. 2026  A. KRA¦NICKI˙˙˙˙˙
+Kontrahent: ANDRZEJ KRA¦NICKI 02-668 WARSZAWA AL.LOTNIKÓW 20 M.10
+Rozpoznane mieszkanie: 10
+Konto lokalu: 204-000010
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000010
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #13
+Data: 5.01.2026
+Kwota: 21,36
+Opis: Izabella Karpińska ul.al.lotników20m 120 , 02-668 warszawa˙˙˙
+Kontrahent: KARPIŃSKA IZABELLA KATARZYNA AL LOTNIKÓW 20 M 120
+Rozpoznane mieszkanie: 120
+Konto lokalu: 204-000120
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000120
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #14
+Data: 5.01.2026
+Kwota: 785,20
+Opis: Oplata za czynsz al. lotników 20/84˙˙˙˙
+Kontrahent: GRAŻYNA OLESIŃSKA AL LOTNIKÓW 20/84, 02-668 WARSZAWA
+Rozpoznane mieszkanie: 84
+Konto lokalu: 204-000084
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000084
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #15
+Data: 6.01.2026
+Kwota: 974,20
+Opis: CZYNSZ 1.2026, MIESZKANIE 45˙˙˙˙
+Kontrahent: ALICJA ZAWRZYKRAJ 02-668 WARSZAWA AL. LOTNIKÓW 20 M.45
+Rozpoznane mieszkanie: 45
+Konto lokalu: 204-000045
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000045
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #16
+Data: 7.01.2026
+Kwota: 717,82
+Opis: opłata za lokal przy Al. Lotników 20 m.98˙˙˙˙
+Kontrahent: ANNA KOTECKA-LUCIDARME UL.DOMANIEWSKA WARSZAWA 02-672
+Rozpoznane mieszkanie: 98
+Konto lokalu: 204-000098
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000098
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #17
+Data: 7.01.2026
+Kwota: 560,64
+Opis: OPŁATA EKSPLOATACYJNA I F.REMONTOWY AL. LOTNIKÓW 20/40, XII.2025˙˙˙
+Kontrahent: JUSTYNA DUMA 05-420 JÓZEFÓWK. OTWOCKA UL.SIENKIEWICZA
+Rozpoznane mieszkanie: 40
+Konto lokalu: 204-000040
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000040
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #18
+Data: 7.01.2026
+Kwota: 700,86
+Opis: 01/26, Al. Lotników 20/113,02-668Warszawa˙˙˙˙
+Kontrahent: MAGDALENA RDEST 02-668 WARSZAWA al. LOTNIKÓW 20 m. 113
+Rozpoznane mieszkanie: 113
+Konto lokalu: 204-000113
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000113
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #19
+Data: 7.01.2026
+Kwota: 449,00
+Opis: CZYNSZ ZA MIESZKANIE AL.LOTNIKÓW 20LOK.12  ,   02-668WARSZAWA˙˙˙
+Kontrahent: Koza Maciej Cezary 99-423 Bielawy Sobota, ul. Wojdówka
+Rozpoznane mieszkanie: 12
+Konto lokalu: 204-000012
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000012
+Metoda ekstrakcji: regex
+Confidence: 92%
+
+--------------------------------------------------------------------------------
+
+Pozycja #20
+Data: 7.01.2026
+Kwota: 884,80
+Opis: OPŁATA EKSP. ZA 01 2026 W TYM FUNDUSZ REMONTOWY 131.50        ZŁWpłata w UP nr:991938260105TIAP1978
+Kontrahent: MARCIN SUCHCICKI 02-668 WARSZAWA ALEJA LOTNIKÓW 20 11
+Rozpoznane mieszkanie: 11
+Konto lokalu: 204-000011
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000011
+Metoda ekstrakcji: regex
+Confidence: 92%
+
+--------------------------------------------------------------------------------
+
+Pozycja #21
+Data: 7.01.2026
+Kwota: 794,31
+Opis: OPŁATA EKSPLOATACYJNA ZA M-C STYCZEŃ 2026R W TYM FUNDU        SZ REMONTOWY 131.50                Wpłata w UP nr:991938260105XX#P0100
+Kontrahent: JADWIGA WIKTOR 02-668 WARSZAWA ALEJA LOTNIKÓW 20 78
+Rozpoznane mieszkanie: 78
+Konto lokalu: 204-000078
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000078
+Metoda ekstrakcji: regex
+Confidence: 92%
+
+--------------------------------------------------------------------------------
+
+Pozycja #22
+Data: 7.01.2026
+Kwota: 422,17
+Opis: OPŁ. ZA MC 01 2026  IDENT.1 14˙Wpłata w UP nr:991096260105NKAP6158
+Kontrahent: PRZYBYLSKI KAROL 02-668 WARSZAWA AL. LOTNIKÓW 20 14
+Rozpoznane mieszkanie: 14
+Konto lokalu: 204-000014
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000014
+Metoda ekstrakcji: regex
+Confidence: 92%
+
+--------------------------------------------------------------------------------
+
+Pozycja #23
+Data: 7.01.2026
+Kwota: 683,98
+Opis: opłata eksploatacyjna za styczeń 2026, Al.Lotników 20/119, 02-668 Warszawa˙˙˙
+Kontrahent: ZAGOŃCZYK PIOTR 02-372 WARSZAWA UL OPACZEWSKA 35M17
+Rozpoznane mieszkanie: 119
+Konto lokalu: 204-000119
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000119
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #24
+Data: 8.01.2026
+Kwota: 812,00
+Opis: 01/2026. MARTA KOSSAKOWSKA,AL.LOTNIKÓW 20 M. 54 02-668 WARSZAWA, IDENTYFIKATOR 1/54˙˙
+Kontrahent: HANNA KOSSAKOWSKA 00-281 WARSZAWA UL.JEZUICKA 6/8 M.26
+Rozpoznane mieszkanie: 54
+Konto lokalu: 204-000054
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000054
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #25
+Data: 8.01.2026
+Kwota: 728,40
+Opis: OPŁATA EKSPLOATACYJNA ZA 01/2026, ID LOKALU 1/44; AL.LOTNIKÓW 20 M 44˙˙˙
+Kontrahent: EWA MAZURKIEWICZ KUNA 02-653 WARSZAWA AL.NIEPODLEGŁO¦C
+Rozpoznane mieszkanie: 44
+Konto lokalu: 204-000044
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000044
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #26
+Data: 8.01.2026
+Kwota: 734,31
+Opis: 01.2026˙˙Wpłata w UP nr:991938260107TEAP3538
+Kontrahent: GOTLIB KAZIMIERZ 02-668 WARSZAWA ALEJA LOTNIKÓW 20 4
+Rozpoznane mieszkanie: 4
+Konto lokalu: 204-000004
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000004
+Metoda ekstrakcji: regex
+Confidence: 92%
+
+--------------------------------------------------------------------------------
+
+Pozycja #27
+Data: 8.01.2026
+Kwota: 458,32
+Opis: CZYNSZ ZA M-C 01/2026, DOT.AL. LOTNIKÓW 20 M. 122˙˙˙˙
+Kontrahent: JAN KACZMARCZYK 05-410 JÓZEFÓW UL.WESTERPLATTE 14A
+Rozpoznane mieszkanie: 122
+Konto lokalu: 204-000122
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000122
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #28
+Data: 9.01.2026
+Kwota: 29858,70
+Opis: zaliczka A, B, ¶wiadczenia,odpady komunalne zam-c styczeń    2026˙˙˙
+Kontrahent: ZAKŁ. GOSP. NIERUCHOM. DZ.MOKOTÓW UL.IRYSOWA 19
+Rozpoznane mieszkanie: ZGN
+Konto lokalu: 204-000000
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000000
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #29
+Data: 9.01.2026
+Kwota: 700,00
+Opis: CZYNSZ AL. LOTNIKÓW 20/126˙˙˙˙˙
+Kontrahent: SZABLEWSKI MICHAŁ AL. LOTNIKÓW 20/126 02-668 WARSZAWA
+Rozpoznane mieszkanie: 126
+Konto lokalu: 204-000126
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000126
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #30
+Data: 9.01.2026
+Kwota: 486,72
+Opis: CZYNSZ, WSPÓLNOTA MIESZKANIOWA AL.LOTNIKÓW 20 M.52˙˙˙˙
+Kontrahent: IWONA JASTAK-JUREC 6064 MARANGAROO, AUSTRALIA HIGHCLER
+Rozpoznane mieszkanie: 52
+Konto lokalu: 204-000052
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000052
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #31
+Data: 9.01.2026
+Kwota: 849,85
+Opis: CZYNSZ ZA MIESIˇC STYCZEŃ 2026, UL.ALEJA LOTNIKÓW 20 M59, ANNA RUCIŃ SKA˙˙˙
+Kontrahent: ANNA RUCIŃSKA 02-668 WARSZAWA AL.LOTNIKÓW 20 M.59
+Rozpoznane mieszkanie: 59
+Konto lokalu: 204-000059
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000059
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #32
+Data: 9.01.2026
+Kwota: 800,00
+Opis: AL. LOTNIKÓW 20/82 CZYNSZ -STYCZEŃ, W TYM FUND. REM.78PLN˙˙˙
+Kontrahent: NORBERT JAKUB KAZIMIERSKI 01-140 WARSZAWA UL. RABSZTYŃ
+Rozpoznane mieszkanie: 82
+Konto lokalu: 204-000082
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000082
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #33
+Data: 10.01.2026
+Kwota: 622,12
+Opis: GRAŻYNA I WIESŁAW GŁOWACCYAL.LOTNIKÓW 20/63 02-668 WARSZAWA˙˙˙
+Kontrahent: MARCIN GŁOWACKI 02-668 WARSZAWA AL. LOTNIKÓW 20 M.63
+Rozpoznane mieszkanie: 63
+Konto lokalu: 204-000063
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000063
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #34
+Data: 11.01.2026
+Kwota: 600,00
+Opis: JAROSŁAW KUS ALEJA LOTNIKÓW20/51  02-668 WARSZAWA OPŁATA ZA          MIESZKANIEI FUNDUSZ REMONTOWY˙˙
+Kontrahent: JAROSŁAW KU¦ 02-676 WARSZAWA UL. POSTĘPU 12C M.205
+Rozpoznane mieszkanie: 205
+Konto lokalu: 204-000205
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000205
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #35
+Data: 12.01.2026
+Kwota: 712,05
+Opis: CZYNSZ˙˙˙˙˙
+Kontrahent: TATIANA KOLENDA 02-668 WARSZAWA AL. LOTNIKÓW 20 M.48
+Rozpoznane mieszkanie: 48
+Konto lokalu: 204-000048
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000048
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #36
+Data: 12.01.2026
+Kwota: 40,00
+Opis: DOROTA CHLEBOWSKA OPŁATA ZAPOMIESZCZENIE GOSPODARCZE˙˙˙
+Kontrahent: TATIANA KOLENDA 02-668 WARSZAWA AL. LOTNIKÓW 20 M.48
+Rozpoznane mieszkanie: 48
+Konto lokalu: 204-000048
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000048
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #37
+Data: 12.01.2026
+Kwota: 482,59
+Opis: Czynsz za lokal ul. Aleja Lotników 20/76 za miesi±c Styczeń 2026˙˙˙
+Kontrahent: SMYK ŁUKASZ FARFAK 43 21-400 ŁUKÓW
+Rozpoznane mieszkanie: 76
+Konto lokalu: 204-000076
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000076
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #38
+Data: 12.01.2026
+Kwota: 626,87
+Opis: Czynsz styczeń 2026 Al. Lotników 20m. 42 Piotr i Franciszek Stachyra˙˙˙
+Kontrahent: STACHYRA PIOTR NOWOURSYNOWSKA 121C 02-797 WARSZAWA
+Rozpoznane mieszkanie: 42
+Konto lokalu: 204-000042
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000042
+Metoda ekstrakcji: regex
+Confidence: 92%
+
+--------------------------------------------------------------------------------
+
+Pozycja #39
+Data: 12.01.2026
+Kwota: 875,95
+Opis: Monika Milewska, Czynsz Al.Lotników 20/99, DID 1964˙˙˙˙
+Kontrahent: STURENT GROUP PROSTA SPÓŁKAAKCYJNAUL. KRÓLOWEJ ALDONY
+Rozpoznane mieszkanie: 99
+Konto lokalu: 204-000099
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000099
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #40
+Data: 12.01.2026
+Kwota: 764,18
+Opis: OPŁATA ZA CZYNSZ INDEKS 10212265˙˙˙˙
+Kontrahent: BANASZEWSKI STANISŁAW AL. LOTNIKÓW 20 M. 65
+Rozpoznane mieszkanie: 65
+Konto lokalu: 204-000065
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000065
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #41
+Data: 12.01.2026
+Kwota: 18,19
+Opis: zsyp, korytarz˙˙˙˙˙
+Kontrahent: ANDRZEJ EDMUND FEJFER Al. Lotników 20/87 02-668 Warsza
+Rozpoznane mieszkanie: 87
+Konto lokalu: 204-000087
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000087
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #42
+Data: 12.01.2026
+Kwota: 200,00
+Opis: SCHOWEK ALINA KUCHARSKA WARSZAWA   02-668 UL.AL. LOTNIKOW 20 M 31     OPLATA ZA KORYTARZ I SCHOWEK 2026  ROK˙˙
+Kontrahent: ALINA LIDIA KUCHARSKA 02-668 WARSZAWA AL. LOTNIKÓW 20
+Rozpoznane mieszkanie: 31
+Konto lokalu: 204-000031
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000031
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #43
+Data: 12.01.2026
+Kwota: 467,94
+Opis: czynsz I/2026  Wanda Pszczoła Kiljańska al.Lotników 20m 11˙˙˙
+Kontrahent: JOANNA KACPRZAK UL. MOZARTA3/1016 02-736 WARSZAWA
+Rozpoznane mieszkanie: 11
+Konto lokalu: 204-000011
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000011
+Metoda ekstrakcji: regex
+Confidence: 92%
+
+--------------------------------------------------------------------------------
+
+Pozycja #44
+Data: 12.01.2026
+Kwota: 850,00
+Opis: LOKAL AL. LOTNIKÓW 20 M. 13, 02-668WARSZAWA; OPŁATA EKSPLOATACYJNA ZA MIESIˇC: STYCZEŃ 2026˙˙
+Kontrahent: MAŁGORZATA KNY¦-OLBORSKA 24-100 PUŁAWY UL. POLNA 19 M.
+Rozpoznane mieszkanie: 13
+Konto lokalu: 204-000013
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000013
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #45
+Data: 12.01.2026
+Kwota: 920,00
+Opis: CZYNSZ STYCZEN 2026 R.˙˙Wpłata w UP nr:991938260109XX#P2734
+Kontrahent: IWONA GROMEK 02-668 WARSZAWA ALEJA LOTNIKÓW 20 81
+Rozpoznane mieszkanie: 81
+Konto lokalu: 204-000081
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000081
+Metoda ekstrakcji: regex
+Confidence: 92%
+
+--------------------------------------------------------------------------------
+
+Pozycja #46
+Data: 12.01.2026
+Kwota: 560,00
+Opis: Krogulec Mariusz Al.Lotników 20/43 02-668 Warszawa, Identyfikator 1/43˙˙˙
+Kontrahent: MARIUSZ KROGULEC AL. LOTNIKÓW 20 M 43 02-668 WARSZAWA
+Rozpoznane mieszkanie: 43
+Konto lokalu: 204-000043
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000043
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #47
+Data: 12.01.2026
+Kwota: 687,88
+Opis: Opłata eksploatacyjna za m-c styczeń w tym fundusz remontowy˙˙˙
+Kontrahent: ZUZANNA JULIA KACZYŃSKA AL.LOTNIKÓW 20 M 107
+Rozpoznane mieszkanie: 107
+Konto lokalu: 204-000107
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000107
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #48
+Data: 13.01.2026
+Kwota: 10,00
+Opis: Górecka Anna AL LOTNIKÓW 20M 66 OPŁATA EKSPLOATACYJNA˙˙˙˙
+Kontrahent: AGNIESZKA R BOGACZ AL. LOTNIKÓW 20/66 02-668 WARSZAWA
+Rozpoznane mieszkanie: 66
+Konto lokalu: 204-000066
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000066
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #49
+Data: 14.01.2026
+Kwota: 982,52
+Opis: Dot. lokalu Al. Lotników 20m 75 koszty utrzymania nieruchomo¶ci wspólnej + zaliczka na poczet zużycia mediów˙
+Kontrahent: WOJCIECH TARASIK UL. POKRĘTNA 38 05 *500 NOWA IWICZNA
+Rozpoznane mieszkanie: 75
+Konto lokalu: 204-000075
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000075
+Metoda ekstrakcji: regex
+Confidence: 92%
+
+--------------------------------------------------------------------------------
+
+Pozycja #50
+Data: 14.01.2026
+Kwota: 1000,00
+Opis: Opłata za czynsz i funduszremontowyMarcin Boćkowski Al.Lotników 20/28 Warszawa 02-668˙˙
+Kontrahent: BOĆKOWSKA SYLWIA MAŁGORZATAAL..LOTNIKÓW 20/28
+Rozpoznane mieszkanie: 28
+Konto lokalu: 204-000028
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000028
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #51
+Data: 14.01.2026
+Kwota: 589,75
+Opis: OPLATA EKSPLOATACYJNA ZA MCSTYCZEN 2026 R. W TYM FUND         USZ REMONTOWY 105 ZL I 60GR        Wpłata w UP nr:991938260113XX#P1046
+Kontrahent: KOSTRZYNSKA IRENA 02-668 WARSZAWA ALEJA LOTNIKÓW 20 2
+Rozpoznane mieszkanie: 2
+Konto lokalu: 204-000002
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000002
+Metoda ekstrakcji: regex
+Confidence: 92%
+
+--------------------------------------------------------------------------------
+
+Pozycja #52
+Data: 14.01.2026
+Kwota: 610,00
+Opis: CZYNSZ +  FUNDUSZ REMONTOWY110,- ZŁ  ZA 01/2026˙˙˙˙
+Kontrahent: ELŻBIETA MAZUROWSKA AL. LOTNIKÓW 20 M 104 WARSZAWA 02-
+Rozpoznane mieszkanie: 104
+Konto lokalu: 204-000104
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000104
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #53
+Data: 14.01.2026
+Kwota: 785,62
+Opis: Czynsz za Styczeń 2026r,  Lokal 60.˙˙˙˙
+Kontrahent: FRˇCKIEWCZ MARIA 02-668 WARSZAWA AL LOTNIKÓW 20M60
+Rozpoznane mieszkanie: 60
+Konto lokalu: 204-000060
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000060
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #54
+Data: 15.01.2026
+Kwota: 784,48
+Opis: Czynsz Paweł Nowak Aleja Lotników 20/116˙˙˙˙
+Kontrahent: NOWAK PAWEŁ 02-495 WARSZAWAUL KOMPANII AK GOPLANA 9AM
+Rozpoznane mieszkanie: 116
+Konto lokalu: 204-000116
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000116
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #55
+Data: 15.01.2026
+Kwota: 787,39
+Opis: 01/26Monetia(938:40722854 2026-01-13)˙˙˙
+Kontrahent: ROMAN KASPROWICZ AL LOTNIKÓW 20/10 5WWA
+Rozpoznane mieszkanie: 10
+Konto lokalu: 204-000010
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000010
+Metoda ekstrakcji: regex
+Confidence: 92%
+
+--------------------------------------------------------------------------------
+
+Pozycja #56
+Data: 19.01.2026
+Kwota: 900,15
+Opis: OPŁATA EKSPLOATACYJNA ZA MCSTYCZEN 2026 R. W TYM FUND         USZ REMONTOWY 131 ZŁ I 50 G        Wpłata w UP nr:991938260116XX#P0458
+Kontrahent: KAMIL PIˇTKOWSKI 02-668 WARSZAWA ALEJA LOTNIKÓW 20 90
+Rozpoznane mieszkanie: 90
+Konto lokalu: 204-000090
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000090
+Metoda ekstrakcji: regex
+Confidence: 92%
+
+--------------------------------------------------------------------------------
+
+Pozycja #57
+Data: 21.01.2026
+Kwota: 32,00
+Opis: Przelew ¶rodków˙˙˙˙˙
+Kontrahent: RUBOWICZ CZESŁAWA ANTONINAAL. LOTNIKÓW 20/32
+Rozpoznane mieszkanie: 32
+Konto lokalu: 204-000032
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000032
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #58
+Data: 27.01.2026
+Kwota: 1000,00
+Opis: czynsz Bożena Zawisza Al. Lotników 20 m 1˙˙˙˙
+Kontrahent: Pani BOŻENA ZAWISZA AL. LOTNIKÓW 20/1 02-668 WARSZAWA
+Rozpoznane mieszkanie: 1
+Konto lokalu: 204-000001
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000001
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #59
+Data: 30.01.2026
+Kwota: 824,67
+Opis: OPŁATA EKSPLOATACYJNA M-C I2026,W TYM F REMONTOWY 78,93ZŁ EWA RAK    AL.LOTNIKÓW20/49 W-WA˙˙
+Kontrahent: EWA RAK 02-668 WARSZAWA AL.LOTNIKÓW 20 M.49
+Rozpoznane mieszkanie: 49
+Konto lokalu: 204-000049
+Księgowanie:
+  Linia 1: k_wn = 131-1, k_ma = ---
+  Linia 2: k_wn = ---, k_ma = 204-000049
+Metoda ekstrakcji: regex
+Confidence: 95%
+
+--------------------------------------------------------------------------------
+
+Pozycja #60
+Data: 2.01.2026
+Kwota: 800,00
+Opis: /OPF/X///// PBAVDNGZP6FW Wspolnota nr 1 - Identyfikator lokalu 92˙˙˙
+Kontrahent: AUTOPAY SPÓŁKA AKCYJNA UL.POWSTAŃCÓW WARSZAWY 6
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #61
+Data: 2.01.2026
+Kwota: 577,22
+Opis: lokal numer: 111  GrzegorzPirch, s. Jana˙˙˙˙
+Kontrahent: PIRCH GRZEGORZ 83-400 KO¦CIERZYNA UL CHOJNICKA 42M1
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #62
+Data: 3.01.2026
+Kwota: 855,66
+Opis: OPŁATA EKSPLOATACYJNA ZA M-C STYCZEŃ 2026 W TYM FUND.R EMONTOW.Y:133,98 I POM. GOSPODARCZE 10 00 ZŁ˙˙
+Kontrahent: GUSTAW WYSOKIŃSKI 02-668 WARSZAWA UL. ALEJA LOTNIKÓW 2
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #63
+Data: 5.01.2026
+Kwota: 475,00
+Opis: Dotyczy lokalu:Aleja Lotnikow 20 lok 94.          ID Lokalu 1/94˙˙
+Kontrahent: KROGULEWSKI MARIUSZ WALDEMAR RUE DE MUHLENBACH 62B
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #64
+Data: 5.01.2026
+Kwota: 496,72
+Opis: Czynsz˙˙˙˙˙
+Kontrahent: MARZENA IWONA WNOROWSKA SONATY 5 M 86 02-744 WARSZAWA
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #65
+Data: 7.01.2026
+Kwota: 626,98
+Opis: 1/86 Krzysztof Powro?nik˙˙˙˙˙
+Kontrahent: POWRO¬NIK KRZYSZTOF 02-765WARSZAWA UL BERGAMOTKI 1M52
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #66
+Data: 7.01.2026
+Kwota: 768,20
+Opis: ALEJA LOTNIKOW 20/18 ALICJAKRÓL˙˙˙˙
+Kontrahent: ALICJA KRÓL 14-400 PASŁĘK UL. WI¦NIOWA 6
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #67
+Data: 7.01.2026
+Kwota: 800,00
+Opis: CZYNSZ ZA 01 2026 R.˙˙Wpłata w UP nr:991938260105THAP3687
+Kontrahent: BALDACHOWSKA JOLANTA 02-668WARSZAWA ALEJA LOTNIKÓW 20
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #68
+Data: 7.01.2026
+Kwota: 513,47
+Opis: CZYNSZ_STYCZEŃ_AL LOTNIKÓW20,LOC121˙˙˙˙
+Kontrahent: VIKTORIA MARTICORENA 02-668WARSZAWA AL.LOTNIKÓW 20 M.
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #69
+Data: 8.01.2026
+Kwota: 600,00
+Opis: 26˙˙˙˙˙
+Kontrahent: EWELINA DY¦KO 96-130 GŁUCHÓW UL.MIŁOCHNIEWICE 17
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #70
+Data: 8.01.2026
+Kwota: 635,48
+Opis: ID. LOKALU 1/110 2025˙˙˙˙˙
+Kontrahent: KAMIL ŻUŁNOWSKI 02-668 WARSZAWA UL.ALEJA LOTNIKÓW 20 M
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #71
+Data: 8.01.2026
+Kwota: 10,00
+Opis: DUDAR MARZENA I SŁAWOMIROPŁATA ZA NAJEM POMIESZCZENIA      GOSPODARCZEGO                      ALEJA LOTNIKÓW 20˙
+Kontrahent: Sławomir Dudar Marzena Dudar
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #72
+Data: 8.01.2026
+Kwota: 582,00
+Opis: Styczeń 2026˙˙˙˙˙
+Kontrahent: PRZEMYSŁAW KORGUL 02-796 WARSZAWA UL.WˇWOZOWA 35/10
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #73
+Data: 8.01.2026
+Kwota: 740,48
+Opis: 01/26Monetia(938:40563333 2026-01-05)˙˙˙
+Kontrahent: EWA MIODUSZEWSCY LOTNIKÓW20/123WW A
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #74
+Data: 8.01.2026
+Kwota: 34,27
+Opis: EKSPLO 01.2026 W TYM F. REM. 2 ZSYPY I KORYTARZWpłata w UP nr:991938260107SE#P0530
+Kontrahent: BARBARA KARASKIEWICZ 02-668 WARSZAWA ALEJA LOTNIKÓW 2
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #75
+Data: 9.01.2026
+Kwota: 405,02
+Opis: Dodatki mieszkaniowe za m-c1/2026 W/g listy nr 90/2026˙˙˙
+Kontrahent: URZˇD DZIELNICY MOKOTÓW UL.RAKOWIECKA 25/27
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #76
+Data: 10.01.2026
+Kwota: 718,40
+Opis: ID LOKALU 1/77˙˙˙˙˙
+Kontrahent: KATARZYNA TERESA HIRSZ 83-330 ŻUKOWO UL. BRONIEWSKIEGO
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #77
+Data: 12.01.2026
+Kwota: 1115,42
+Opis: czynsz, identyfikator lokalu 1/108˙˙˙˙
+Kontrahent: KAWALEC JOLANTA BARBARA MIŁA 6 27-200 STARACHOWICE
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #78
+Data: 12.01.2026
+Kwota: 660,84
+Opis: OPŁATA ZA CZYNSZ ZBIGNIEW KACPRZAK˙˙˙˙
+Kontrahent: ZBIGNIEW TADEUSZ KACPRZAK LOTNIKÓW AL. WARSZAWA 02-668
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #79
+Data: 12.01.2026
+Kwota: 927,80
+Opis: zapłata za czynsz styczeń 2026˙˙˙˙
+Kontrahent: Iwona Smoczkiewicz ŻywnegoW. 23/77, 02-701 Warszawa
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #80
+Data: 12.01.2026
+Kwota: 550,00
+Opis: czynsz Al.Lotnikow 20 m 17ChnackiWojciech˙˙˙˙
+Kontrahent: CHOJNACKI WOJCIECH JANUSZ LANCIEGO 9/M
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #81
+Data: 12.01.2026
+Kwota: 100,00
+Opis: OPLATA EKSPLOATACYJNA ZA MCSTYCZEN 2026 R. KORYTARZ PLUS ZSYPY˙˙˙
+Kontrahent: JOLANTA DAWICKA BADALSKA˙
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #82
+Data: 12.01.2026
+Kwota: 613,70
+Opis: opłaty mieszkaniowe za styczeń 2026Lotników 20/95˙˙˙˙
+Kontrahent: MIKOŁAJEWSKA BEATA ELŻBIETASOLIPSKA 33/63
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #83
+Data: 13.01.2026
+Kwota: 1056,02
+Opis: OPŁATA EKSPLOATACYJNA ORAZFUNDUSZ REMONTOWY 01.2026˙˙˙˙
+Kontrahent: MARCIN WASILEWSKI 02-679 WARSZAWA UL.ZYGMUNTA MODZELEW
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #84
+Data: 13.01.2026
+Kwota: 666,72
+Opis: FUNDUSZ REMONTOWY˙˙˙˙˙
+Kontrahent: WIATR MAGDALENA 03-982 WARSZAWA UL BARTOSIKA S. 10M48
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #85
+Data: 20.01.2026
+Kwota: 469,03
+Opis: 01/26Monetia(938:40819589 2026-01-16)˙˙˙
+Kontrahent: ANNA MARIA NYCEK PROMIENNA25 05-54 0 ZALESIE GÓRNE
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #86
+Data: 20.01.2026
+Kwota: 14,41
+Opis: DOROTA DYLEWSKA UL.LOTNIKOW20 M 3 3 02-668 WARSZAWA OPLATA EXSPLOATACYJNA ZA ZABUDOWE KLATKI SCHODOWEJ˙˙
+Kontrahent: Dorota DYLEWSKA Lotników 20/33, 02-668 Warszawa
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #87
+Data: 20.01.2026
+Kwota: 395,29
+Opis: I/26 OPLATA EKSPLOATACYJNA- LOK. 115, AL. LOTNIKOW 20, 02-668 WAWA˙˙˙
+Kontrahent: JADWIGA NAGÓRNA 02-661 WARSZAWA UL.MODRA 3 M.20
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #88
+Data: 20.01.2026
+Kwota: 395,29
+Opis: XII/25 OPLATA EKSPLOATACYJNA LOK. 115, AL. LOTNIKOW 20, 02-668 WAWA˙˙˙
+Kontrahent: JADWIGA NAGÓRNA 02-661 WARSZAWA UL.MODRA 3 M.20
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #89
+Data: 21.01.2026
+Kwota: 524,01
+Opis: Lok 127 czynsz za mc. 01/26˙˙˙˙˙
+Kontrahent: TROJANOWSKI PIOTR ANDRZEJ ¦RÓDZIEMNOMORSKA 55/9
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #90
+Data: 21.01.2026
+Kwota: 908,00
+Opis: czynsz za styczeń i luty 2026˙˙˙˙
+Kontrahent: JABŁOŃSKA EWA 02-777 WARSZAWA UL STEFANA KOPCIŃSKIEGO
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #91
+Data: 26.01.2026
+Kwota: 548,34
+Opis: CZYNSZ ZA  STYCZEŃ 2026˙˙˙˙˙
+Kontrahent: JERZY ORUŃ 02-668 WARSZAWAAL.LOTNIKÓW 20 M.8
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #92
+Data: 26.01.2026
+Kwota: 720,00
+Opis: OPŁ. EKSP. ZA MC STYCZEŃ 26R˙Wpłata w UP nr:991324260123BI#P0797
+Kontrahent: JAKUBOWSKA STANISŁAWA 02-668 WARSZAWA ALEJA LOTNIKÓW
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #93
+Data: 27.01.2026
+Kwota: 791,36
+Opis: Rozliczenie za 01.2026˙˙˙˙˙
+Kontrahent: SŁAWOMIR ¦WIˇTKOWSKI AL LOTNIKOW 20 M 7
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #94
+Data: 28.01.2026
+Kwota: 620,00
+Opis: opłaty mieszkaniowe i fundrem 2026.01 DZIERŻYC LEOKADIA AL.LOTNIKÓW. 20 lok. 5602-668 Warszawa˙˙
+Kontrahent: DZIERZYC-KULHAWIK PIOTR ORZYCKA 6/6 02-695 WARSZAWA
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+Pozycja #95
+Data: 30.01.2026
+Kwota: 485,92
+Opis: TIOMKIN GRAŻYNA WACŁAWAAL.LOTNIKóW. 20 lok. 20            02-668 Warszawa                    zapa?dziernik 2025˙
+Kontrahent: TIOMKIN IZABELA JOLANTA ZAMIANY 9/18 02-786 WARSZAWA
+Status: NIEROZPOZNANE
+Księgowanie: k_wn = 131-1, k_ma = ---
+Metoda ekstrakcji: manual
+Confidence: 0%
+Ostrzeżenia: No AI provider configured
+
+--------------------------------------------------------------------------------
+
+
+================================================================================
+WYDATKI (EXPENSES)
+================================================================================
+
+Pozycja #1
+Data: 8.01.2026
+Kwota: 64776,68
+Opis: FV˙˙˙˙˙
+Kontrahent (z wyciągu): VEOLIA ENERGIA WARSZAWA S.A.
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------
+
+Pozycja #2
+Data: 8.01.2026
+Kwota: 239,00
+Opis: FV˙˙˙˙˙
+Kontrahent (z wyciągu): TECH-HOME SKOCZYŃSKI ZBIGNIEW 02-679 WARSZAWA UL. MODZ
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------
+
+Pozycja #3
+Data: 8.01.2026
+Kwota: 452,22
+Opis: FV˙˙˙˙˙
+Kontrahent (z wyciągu): WINDA-WARSZAWA SP. Z O.O. WARSZAWA UL. SUROWIECKIEGO 1
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------
+
+Pozycja #4
+Data: 8.01.2026
+Kwota: 4992,60
+Opis: FV˙˙˙˙˙
+Kontrahent (z wyciągu): ROB - BUD˙
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------
+
+Pozycja #5
+Data: 8.01.2026
+Kwota: 1231,87
+Opis: FV NR˙˙˙˙˙
+Kontrahent (z wyciągu): INSTALATOR PIOTR ZˇBIK ,02-785 WARSZAWA UL. WAWRZYŃCA
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------
+
+Pozycja #6
+Data: 12.01.2026
+Kwota: 3500,00
+Opis: FV 010/12/2025˙˙˙˙˙
+Kontrahent (z wyciągu): ROS CLEAN˙
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------
+
+Pozycja #7
+Data: 12.01.2026
+Kwota: 10732,19
+Opis: FV 191257/166˙˙˙˙˙
+Kontrahent (z wyciągu): MIEJSKIE PRZEDSIĘBIORSTWO WODOCIˇGÓW I KANALIZACJI S.A
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------
+
+Pozycja #8
+Data: 13.01.2026
+Kwota: 168,26
+Opis: DZIERŻAWA˙˙˙˙˙
+Kontrahent (z wyciągu): URZˇD M.ST WARSZAWY DZ. MOKOTÓW WARSZAWA UL. RAKOWIECK
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------
+
+Pozycja #9
+Data: 13.01.2026
+Kwota: 732,94
+Opis: FV˙˙˙˙˙
+Kontrahent (z wyciągu): E.ON POLSKA S.A. 00-347 WARSZAWA UL. WYBRZEŻE KO¦CIUSZ
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------
+
+Pozycja #10
+Data: 13.01.2026
+Kwota: 453,73
+Opis: FV˙˙˙˙˙
+Kontrahent (z wyciągu): E.ON POLSKA S.A. 00-347 WARSZAWA UL. WYBRZEŻE KO¦CIUSZ
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------
+
+Pozycja #11
+Data: 13.01.2026
+Kwota: 453,73
+Opis: FV˙˙˙˙˙
+Kontrahent (z wyciągu): E.ON POLSKA S.A. 00-347 WARSZAWA UL. WYBRZEŻE KO¦CIUSZ
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------
+
+Pozycja #12
+Data: 13.01.2026
+Kwota: 1208,39
+Opis: FV˙˙˙˙˙
+Kontrahent (z wyciągu): WINDA-WARSZAWA SP. Z O.O. WARSZAWA UL. SUROWIECKIEGO 1
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------
+
+Pozycja #13
+Data: 14.01.2026
+Kwota: 6700,00
+Opis: PRZELEW ¦RODKÓW˙˙˙˙˙
+Kontrahent (z wyciągu): AL. LOTNIKÓW 20˙
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------
+
+Pozycja #14
+Data: 14.01.2026
+Kwota: 1,10
+Opis: OPŁ.R.ZL.ST.WE˙˙˙˙˙
+Kontrahent (z wyciągu): ˙˙
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------
+
+Pozycja #15
+Data: 14.01.2026
+Kwota: 129,00
+Opis: FV˙˙˙˙˙
+Kontrahent (z wyciągu): TECH-HOME SKOCZYŃSKI ZBIGNIEW 02-679 WARSZAWA UL. MODZ
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------
+
+Pozycja #16
+Data: 14.01.2026
+Kwota: 240,05
+Opis: DZIERŻAWA˙˙˙˙˙
+Kontrahent (z wyciągu): URZˇD M.ST WARSZAWY DZ. MOKOTÓW WARSZAWA UL. RAKOWIECK
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------
+
+Pozycja #17
+Data: 19.01.2026
+Kwota: 5063,90
+Opis: FV ZARZˇDZANIE˙˙˙˙˙
+Kontrahent (z wyciągu): INTER-EJ S.C. JOLANTA GONTAREK, ELŻBIETA LASKOWSKA
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------
+
+Pozycja #18
+Data: 19.01.2026
+Kwota: 1,10
+Opis: OPŁ.R.ZL.ST.ZW˙˙˙˙˙
+Kontrahent (z wyciągu): ˙˙
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------
+
+Pozycja #19
+Data: 19.01.2026
+Kwota: 939,60
+Opis: FV 0˙˙˙˙˙
+Kontrahent (z wyciągu): HYDRAL˙
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------
+
+Pozycja #20
+Data: 26.01.2026
+Kwota: 3500,00
+Opis: FV 003/01/2026˙˙˙˙˙
+Kontrahent (z wyciągu): ROS CLEAN˙
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------
+
+Pozycja #21
+Data: 27.01.2026
+Kwota: 7260,00
+Opis: ODPADY˙˙˙˙˙
+Kontrahent (z wyciągu): URZˇD M. ST. WARSZAWA˙
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------
+
+Pozycja #22
+Data: 27.01.2026
+Kwota: 1,10
+Opis: OPŁ.R.ZL.ST.ZW˙˙˙˙˙
+Kontrahent (z wyciągu): ˙˙
+Status: NIEROZPOZNANY KONTRAHENT
+Księgowanie: k_wn = ---, k_ma = 131-1
+Metoda ekstrakcji: manual
+Ostrzeżenia: No contractor matched - needs manual assignment
+
+--------------------------------------------------------------------------------

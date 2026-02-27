@@ -80,6 +80,14 @@ export interface ProcessedTransaction {
     correctedBy: 'user';
     correctedAt: Date;
   };
+  
+  // User review decision (if reviewed)
+  reviewedByUser?: {
+    action: 'accept' | 'reject' | 'manual';
+    originalValue?: string | null;
+    manualValue?: string;
+    extractedFrom?: string;
+  };
 }
 
 export interface ImportResult {

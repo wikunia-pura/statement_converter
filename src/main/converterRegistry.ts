@@ -3,6 +3,7 @@ import path from 'path';
 import yaml from 'js-yaml';
 import { app } from 'electron';
 import { Converter, TransactionForReview, ConversionReviewData } from '../shared/types';
+import { readFileWithEncoding } from '../shared/encoding';
 import { SantanderXmlConverter } from '../converters/santander-xml';
 import { PKOBPMT940Converter } from '../converters/pko-mt940';
 import DatabaseService from './database';
@@ -87,6 +88,9 @@ class ConverterRegistry {
     adresId?: number | null
   ): Promise<{ totalTransactions: number; lowConfidenceCount: number; averageConfidence: number; needsAI: boolean }> {
     if (converterId === 'santander_xml') {
+      // Fetch contractors from database
+      const contractors = dbInstance?.getAllKontrahenci() || [];
+      
       // Fetch addresses from database
       const addresses = dbInstance?.getAllAdresy() || [];
       
@@ -98,10 +102,11 @@ class ConverterRegistry {
           autoApprove: 85,
           needsReview: 60,
         },
+        contractors, // Pass contractors for expense matching
         addresses, // Pass addresses for address matching
       });
 
-      const xmlContent = fs.readFileSync(inputPath, 'latin1');
+      const xmlContent = readFileWithEncoding(inputPath);
       const result = await converter.convert(xmlContent);
 
       // Count only INCOME transactions that will need manual review (< 60%)
@@ -121,11 +126,11 @@ class ConverterRegistry {
 
       const incomeCount = result.processed.filter(t => t.transactionType === 'income' && t.extracted.confidence.overall < 60).length;
       const expenseCount = result.processed.filter(t => t.transactionType === 'expense' && (t.matchedContractor?.confidence || 0) < 60).length;
-      console.log(`[Santander] Total: ${result.processed.length}, Low confidence (<60%): ${allLowConfidence.length} (income: ${incomeCount}, expenses: ${expenseCount}). AI needed: ${lowConfidenceIncomeTransactions.length > 0}`);
+      console.log(`[Santander] Total: ${result.processed.length}, All low confidence (<60%): ${allLowConfidence.length} (income: ${incomeCount}, expenses: ${expenseCount}). AI will process: ${lowConfidenceIncomeTransactions.length}`);
 
       return {
         totalTransactions: result.processed.length,
-        lowConfidenceCount: allLowConfidence.length,
+        lowConfidenceCount: allLowConfidence.length, // All transactions needing review
         averageConfidence: result.statistics.averageConfidence,
         needsAI: lowConfidenceIncomeTransactions.length > 0, // Only income triggers AI
       };
@@ -154,7 +159,7 @@ class ConverterRegistry {
         addresses, // Pass addresses for address matching
       });
 
-      const mt940Content = fs.readFileSync(inputPath, 'latin1');
+      const mt940Content = readFileWithEncoding(inputPath);
       const result = await converter.convert(mt940Content);
 
       // Count only INCOME transactions that will need manual review (< 60%)
@@ -174,11 +179,11 @@ class ConverterRegistry {
 
       const incomeCount = result.processed.filter(t => t.transactionType === 'income' && t.extracted.confidence.overall < 60).length;
       const expenseCount = result.processed.filter(t => t.transactionType === 'expense' && (t.matchedContractor?.confidence || 0) < 60).length;
-      console.log(`[PKO BP] Total: ${result.processed.length}, Low confidence (<60%): ${allLowConfidence.length} (income: ${incomeCount}, expenses: ${expenseCount}). AI needed: ${lowConfidenceIncomeTransactions.length > 0}`);
+      console.log(`[PKO BP] Total: ${result.processed.length}, All low confidence (<60%): ${allLowConfidence.length} (income: ${incomeCount}, expenses: ${expenseCount}). AI will process: ${lowConfidenceIncomeTransactions.length}`);
 
       return {
         totalTransactions: result.processed.length,
-        lowConfidenceCount: allLowConfidence.length,
+        lowConfidenceCount: allLowConfidence.length, // All transactions needing review
         averageConfidence: result.statistics.averageConfidence,
         needsAI: lowConfidenceIncomeTransactions.length > 0, // Only income triggers AI
       };
@@ -366,7 +371,7 @@ class ConverterRegistry {
             addresses, // Pass addresses for income address matching
           });
 
-          const xmlContent = fs.readFileSync(inputPath, 'latin1');
+          const xmlContent = readFileWithEncoding(inputPath);
           const result = await converter.convert(xmlContent);
 
           // Separate transactions into income and expenses
@@ -609,7 +614,7 @@ class ConverterRegistry {
             addresses, // Pass addresses for income address matching
           });
 
-          const mt940Content = fs.readFileSync(inputPath, 'latin1');
+          const mt940Content = readFileWithEncoding(inputPath);
           const result = await converter.convert(mt940Content);
 
           // Separate transactions into income and expenses

@@ -813,6 +813,33 @@ function setupIpcHandlers() {
     return app.getVersion();
   });
 
+  // Zoom controls
+  ipcMain.handle('app:zoom-in', () => {
+    if (mainWindow) {
+      const currentZoom = mainWindow.webContents.getZoomLevel();
+      mainWindow.webContents.setZoomLevel(currentZoom + 0.5);
+      return true;
+    }
+    return false;
+  });
+
+  ipcMain.handle('app:zoom-out', () => {
+    if (mainWindow) {
+      const currentZoom = mainWindow.webContents.getZoomLevel();
+      mainWindow.webContents.setZoomLevel(currentZoom - 0.5);
+      return true;
+    }
+    return false;
+  });
+
+  ipcMain.handle('app:zoom-reset', () => {
+    if (mainWindow) {
+      mainWindow.webContents.setZoomLevel(0);
+      return true;
+    }
+    return false;
+  });
+
   // Auto-updater
   ipcMain.handle('check-for-updates', async () => {
     if (!app.isPackaged) {

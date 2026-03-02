@@ -65,6 +65,11 @@ interface ElectronAPI {
   // App info
   getAppVersion: () => Promise<string>;
 
+  // Zoom controls
+  zoomIn: () => Promise<boolean>;
+  zoomOut: () => Promise<boolean>;
+  zoomReset: () => Promise<boolean>;
+
   // Auto-updater
   checkForUpdates: () => Promise<{ available: boolean; info?: any; error?: string; message?: string }>;
   downloadUpdate: () => Promise<{ success: boolean; downloadPath?: string; message?: string; error?: string }>;

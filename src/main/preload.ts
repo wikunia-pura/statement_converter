@@ -110,6 +110,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // App info
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION),
 
+  // Zoom controls
+  zoomIn: () => ipcRenderer.invoke('app:zoom-in'),
+  zoomOut: () => ipcRenderer.invoke('app:zoom-out'),
+  zoomReset: () => ipcRenderer.invoke('app:zoom-reset'),
+
   // Auto-updater
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),

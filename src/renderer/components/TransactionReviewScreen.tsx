@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ConversionReviewData, ReviewDecision, TransactionForReview } from '../../shared/types';
+import { translations, Language } from '../translations';
 
 // TransactionCard sub-component
 interface TransactionCardProps {
@@ -37,15 +38,35 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
       paddingBottom: '10px',
       borderBottom: '1px solid #3c3c3c',
     }}>
-      <h3 style={{ margin: 0, color: trn.transactionType === 'income' ? '#4EC9B0' : '#CE9178' }}>
-        Transakcja #{idx + 1} ({trn.transactionType === 'income' ? 'WPŁATA' : 'WYDATEK'})
-      </h3>
-      <span style={{ 
-        color: '#858585', 
-        fontSize: '14px',
-      }}>
-        Confidence: {trn.extracted.confidence}%
-      </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <h3 style={{ margin: 0, color: trn.transactionType === 'income' ? '#4EC9B0' : '#CE9178' }}>
+          Transakcja #{idx + 1} ({trn.transactionType === 'income' ? 'WPŁATA' : 'WYDATEK'})
+        </h3>
+        {(() => {
+          // Get confidence based on transaction type
+          const conf = trn.transactionType === 'income' 
+            ? trn.extracted.confidence 
+            : (trn.matchedContractor?.confidence || 0);
+          
+          const color = conf >= 85 ? '#4EC9B0' : conf >= 60 ? '#DCDCAA' : '#F44747';
+          const bgColor = conf >= 85 ? 'rgba(78, 201, 176, 0.15)' : conf >= 60 ? 'rgba(220, 220, 170, 0.15)' : 'rgba(244, 71, 71, 0.15)';
+          const borderColor = conf >= 85 ? 'rgba(78, 201, 176, 0.4)' : conf >= 60 ? 'rgba(220, 220, 170, 0.4)' : 'rgba(244, 71, 71, 0.4)';
+          
+          return (
+            <span style={{
+              color,
+              backgroundColor: bgColor,
+              border: `1px solid ${borderColor}`,
+              borderRadius: '12px',
+              padding: '3px 10px',
+              fontSize: '13px',
+              fontWeight: 600,
+            }}>
+              {trn.transactionType === 'income' ? 'Pewność' : 'Dopasowanie'}: {conf}%
+            </span>
+          );
+        })()}
+      </div>
     </div>
 
     {/* Original Data */}
@@ -94,35 +115,47 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
     <div style={{ marginTop: '15px' }}>
       <h4 style={{ margin: '0 0 10px 0', color: '#C586C0' }}>✅ Decyzja:</h4>
       <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-        <button
-          onClick={() => handleDecision(trn.index, 'accept')}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: currentDecision?.action === 'accept' ? '#0e639c' : '#007acc',
-            color: 'white',
-            border: 'none',
-            borderRadius: '3px',
-            cursor: 'pointer',
-            fontWeight: currentDecision?.action === 'accept' ? 'bold' : 'normal',
-          }}
-        >
-          ✓ Akceptuj
-        </button>
+        {/* Show Accept only when there's meaningful extracted data to accept */}
+        {(trn.transactionType === 'expense' || (trn.transactionType === 'income' && trn.extracted.apartmentNumber)) && (
+          <button
+            onClick={() => handleDecision(trn.index, 'accept')}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: currentDecision?.action === 'accept' ? '#0e639c' : '#007acc',
+              color: 'white',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              fontWeight: currentDecision?.action === 'accept' ? 'bold' : 'normal',
+            }}
+          >
+            ✓ Akceptuj
+          </button>
+        )}
         <button
           onClick={() => handleDecision(trn.index, 'reject')}
+          disabled={!!(manualInput && manualInput.trim().length > 0)}
           style={{
             padding: '10px 20px',
-            backgroundColor: currentDecision?.action === 'reject' ? '#b71c1c' : '#d32f2f',
-            color: 'white',
+            backgroundColor: (manualInput && manualInput.trim().length > 0)
+              ? '#555'
+              : currentDecision?.action === 'reject' ? '#b71c1c' : '#d32f2f',
+            color: (manualInput && manualInput.trim().length > 0) ? '#888' : 'white',
             border: 'none',
             borderRadius: '3px',
-            cursor: 'pointer',
+            cursor: (manualInput && manualInput.trim().length > 0) ? 'not-allowed' : 'pointer',
             fontWeight: currentDecision?.action === 'reject' ? 'bold' : 'normal',
+            opacity: (manualInput && manualInput.trim().length > 0) ? 0.5 : 1,
           }}
         >
-          ✗ Odrzuć
+          ✗ Oznacz jako nierozpoznane
         </button>
       </div>
+      {manualInput && manualInput.trim().length > 0 && (
+        <div style={{ fontSize: '12px', color: '#DCDCAA', marginBottom: '10px', fontStyle: 'italic' }}>
+          ⚠ Usuń wpisany numer mieszkania, aby oznaczyć jako nierozpoznane
+        </div>
+      )}
 
       {/* Manual Input (only for income) */}
       {trn.transactionType === 'income' && (
@@ -158,7 +191,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
           fontSize: '14px',
         }}>
           {currentDecision.action === 'accept' && '✓ Zaakceptowano wyekstrahowane dane'}
-          {currentDecision.action === 'reject' && '✗ Odrzucono - będzie oznaczone jako NIEROZPOZNANE'}
+          {currentDecision.action === 'reject' && '✗ Oznaczono jako NIEROZPOZNANE'}
           {currentDecision.action === 'manual' && `✏️  Ręcznie wpisano: ${currentDecision.manualApartmentNumber}`}
         </div>
       )}
@@ -168,15 +201,26 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
 
 interface TransactionReviewScreenProps {
   reviewData: ConversionReviewData;
-  onFinalize: (decisions: ReviewDecision[]) => Promise<void>;
+  language: Language;
+  hasMoreFiles: boolean;
+  remainingCount: number;
+  onFinalizeAndNext: (decisions: ReviewDecision[]) => Promise<void>;
+  onFinalizeAndStop: (decisions: ReviewDecision[]) => Promise<void>;
+  onSkip: () => void;
   onCancel: () => void;
 }
 
 export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = ({
   reviewData,
-  onFinalize,
+  language,
+  hasMoreFiles,
+  remainingCount,
+  onFinalizeAndNext,
+  onFinalizeAndStop,
+  onSkip,
   onCancel,
 }) => {
+  const t = translations[language];
   const [decisions, setDecisions] = useState<Map<number, ReviewDecision>>(new Map());
   const [manualInputs, setManualInputs] = useState<Map<number, string>>(new Map());
   const [isProcessing, setIsProcessing] = useState(false);
@@ -224,15 +268,45 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
     setDecisions(newDecisions);
   };
 
-  const handleFinalize = async () => {
+  const handleFinalizeAndNext = async () => {
     setIsProcessing(true);
     try {
-      // Convert decisions map to array
       const decisionsArray = Array.from(decisions.values());
-      await onFinalize(decisionsArray);
+      await onFinalizeAndNext(decisionsArray);
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleFinalizeAndStop = async () => {
+    setIsProcessing(true);
+    try {
+      const decisionsArray = Array.from(decisions.values());
+      await onFinalizeAndStop(decisionsArray);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleMarkAllExpensesAsUnrecognized = () => {
+    const newDecisions = new Map(decisions);
+    const expenseTransactionsAll = reviewData.transactions.filter(trn => trn.transactionType === 'expense');
+    
+    expenseTransactionsAll.forEach(trn => {
+      newDecisions.set(trn.index, {
+        index: trn.index,
+        action: 'reject',
+      });
+    });
+    
+    setDecisions(newDecisions);
+    
+    // Clear any manual inputs for expenses
+    const newManualInputs = new Map(manualInputs);
+    expenseTransactionsAll.forEach(trn => {
+      newManualInputs.delete(trn.index);
+    });
+    setManualInputs(newManualInputs);
   };
 
   const allDecided = decisions.size === reviewData.transactions.length;
@@ -289,7 +363,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
         </p>
         
         {/* Filter buttons */}
-        <div style={{ marginTop: '15px', display: 'flex', gap: '10px' }}>
+        <div style={{ marginTop: '15px', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
             onClick={() => setFilter('all')}
             style={{
@@ -381,10 +455,27 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
               marginTop: filter === 'all' && incomeTransactions.length > 0 ? '30px' : '0',
               borderRadius: '6px',
               borderLeft: '4px solid #CE9178',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
             }}>
               <h3 style={{ margin: 0, color: '#CE9178', fontSize: '18px' }}>
                 💸 WYDATKI ({expenseTransactions.length})
               </h3>
+              <button
+                onClick={handleMarkAllExpensesAsUnrecognized}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#d32f2f',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                }}
+              >
+                ✗ {t.markAllExpensesAsUnrecognized}
+              </button>
             </div>
             {expenseTransactions.map((trn) => {
               const currentDecision = decisions.get(trn.index);
@@ -422,6 +513,11 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
           <span style={{ color: '#858585' }}>
             Podjęto decyzje: {decisions.size} / {reviewData.transactions.length}
           </span>
+          {hasMoreFiles && (
+            <span style={{ color: '#DCDCAA', marginLeft: '15px', fontSize: '14px' }}>
+              {t.filesRemaining}: {remainingCount}
+            </span>
+          )}
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button
@@ -437,24 +533,75 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
               opacity: isProcessing ? 0.5 : 1,
             }}
           >
-            Anuluj
+            {t.cancel}
           </button>
-          <button
-            onClick={handleFinalize}
-            disabled={!allDecided || isProcessing}
-            style={{
-              padding: '12px 24px',
-              backgroundColor: allDecided && !isProcessing ? '#0e639c' : '#3c3c3c',
-              color: 'white',
-              border: 'none',
-              borderRadius: '3px',
-              cursor: allDecided && !isProcessing ? 'pointer' : 'not-allowed',
-              opacity: allDecided && !isProcessing ? 1 : 0.5,
-              fontWeight: 'bold',
-            }}
-          >
-            {isProcessing ? 'Przetwarzanie...' : 'Zakończ i Generuj Pliki'}
-          </button>
+          {hasMoreFiles ? (
+            <>
+              <button
+                onClick={onSkip}
+                disabled={isProcessing}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: '#3c3c3c',
+                  color: '#d4d4d4',
+                  border: 'none',
+                  borderRadius: '3px',
+                  cursor: isProcessing ? 'not-allowed' : 'pointer',
+                  opacity: isProcessing ? 0.5 : 1,
+                }}
+              >
+                {t.skipFile}
+              </button>
+              <button
+                onClick={handleFinalizeAndStop}
+                disabled={!allDecided || isProcessing}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: allDecided && !isProcessing ? '#d32f2f' : '#3c3c3c',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '3px',
+                  cursor: allDecided && !isProcessing ? 'pointer' : 'not-allowed',
+                  opacity: allDecided && !isProcessing ? 1 : 0.5,
+                }}
+              >
+                {isProcessing ? 'Przetwarzanie...' : t.finalizeAndStop}
+              </button>
+              <button
+                onClick={handleFinalizeAndNext}
+                disabled={!allDecided || isProcessing}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: allDecided && !isProcessing ? '#0e639c' : '#3c3c3c',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '3px',
+                  cursor: allDecided && !isProcessing ? 'pointer' : 'not-allowed',
+                  opacity: allDecided && !isProcessing ? 1 : 0.5,
+                  fontWeight: 'bold',
+                }}
+              >
+                {isProcessing ? 'Przetwarzanie...' : t.finalizeAndNext}
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={handleFinalizeAndNext}
+              disabled={!allDecided || isProcessing}
+              style={{
+                padding: '12px 24px',
+                backgroundColor: allDecided && !isProcessing ? '#0e639c' : '#3c3c3c',
+                color: 'white',
+                border: 'none',
+                borderRadius: '3px',
+                cursor: allDecided && !isProcessing ? 'pointer' : 'not-allowed',
+                opacity: allDecided && !isProcessing ? 1 : 0.5,
+                fontWeight: 'bold',
+              }}
+            >
+              {isProcessing ? 'Przetwarzanie...' : t.finalizeFile}
+            </button>
+          )}
         </div>
       </div>
     </div>

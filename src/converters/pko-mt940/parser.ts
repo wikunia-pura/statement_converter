@@ -1,6 +1,9 @@
 /**
  * PKO BP MT940 Parser
  * Parses MT940 bank statement format into structured data
+ * 
+ * Note: Encoding is handled by the shared encoding utility (src/shared/encoding.ts).
+ * This parser expects properly decoded UTF-8 strings.
  */
 
 import * as iconv from 'iconv-lite';
@@ -9,24 +12,17 @@ import { MT940Statement, MT940Transaction } from './types';
 export class PKOBPMT940Parser {
   /**
    * Parse MT940 file content
-   * @param mt940Content - File content as string or Buffer
+   * @param mt940Content - File content as string (already decoded) or Buffer
    */
   parse(mt940Content: string | Buffer): MT940Statement {
-    // Convert from Windows-1250 to UTF-8 if needed
     let cleanedContent: string;
+    
     if (Buffer.isBuffer(mt940Content)) {
-      // If buffer, decode from Windows-1250
+      // If buffer, try to decode from Windows-1250 (legacy support)
       cleanedContent = iconv.decode(mt940Content, 'win1250');
     } else if (typeof mt940Content === 'string') {
-      // If string, check if it needs conversion
-      // Try to detect if it's already UTF-8 or needs conversion
-      if (this.hasCorruptedChars(mt940Content)) {
-        // Convert latin1 string back to buffer, then decode as win1250
-        const buffer = Buffer.from(mt940Content, 'latin1');
-        cleanedContent = iconv.decode(buffer, 'win1250');
-      } else {
-        cleanedContent = mt940Content;
-      }
+      // String already decoded by shared encoding utility
+      cleanedContent = mt940Content;
     } else {
       cleanedContent = String(mt940Content);
     }
@@ -62,14 +58,6 @@ export class PKOBPMT940Parser {
       availableBalance,
       transactions,
     };
-  }
-
-  /**
-   * Check if string has corrupted characters (indicating wrong encoding)
-   */
-  private hasCorruptedChars(content: string): boolean {
-    // Check for common corrupted characters from Windows-1250 read as latin1
-    return /[¦£ÿ±³]/.test(content);
   }
 
   /**

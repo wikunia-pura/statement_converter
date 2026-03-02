@@ -5,6 +5,7 @@ import History from './views/History';
 import Kontrahenci from './views/Kontrahenci';
 import Adresy from './views/Adresy';
 import Logo from './components/Logo';
+import ZoomControls from './components/ZoomControls';
 import UpdateNotification from './components/UpdateNotification';
 import { translations, Language } from './translations';
 import { FileEntry } from '../shared/types';
@@ -100,6 +101,7 @@ const App: React.FC = () => {
             <span>📜</span> {t.history}
           </div>
         </div>
+        <ZoomControls language={language} />
       </div>
 
       <div className="main-content">

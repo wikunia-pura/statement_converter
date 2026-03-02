@@ -342,7 +342,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
 
     const droppedFiles = Array.from(e.dataTransfer.files).map((file) => ({
       fileName: file.name,
-      filePath: file.path,
+      filePath: (file as any).path,
     }));
 
     const { duplicates, uniqueFiles } = checkForDuplicates(droppedFiles);
@@ -427,7 +427,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     }
   };
 
-  const handleFinalize = async (decisions: ReviewDecision[]) => {
+  const handleFinalizeAndNext = async (decisions: ReviewDecision[]) => {
     if (!reviewData) return;
     
     try {
@@ -437,7 +437,6 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
       );
 
       if (result.success) {
-        // Find the file that was being reviewed and update its status
         setFiles((prevFiles) =>
           prevFiles.map((f) =>
             f.fileName === reviewData.fileName
@@ -453,14 +452,10 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
           )
         );
         setReviewData(null);
-        
-        // After finalizing, process next file in queue if any
         processNextInQueue();
       } else {
         alert(`${t.conversionFailed}: ${result.error}\n${t.checkBankConverter}`);
         setReviewData(null);
-        
-        // Update file status to error
         setFiles((prevFiles) =>
           prevFiles.map((f) =>
             f.fileName === reviewData.fileName
@@ -468,16 +463,12 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
               : f
           )
         );
-        
-        // Continue with next file even on error
         processNextInQueue();
       }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       alert(`${t.conversionFailed}: ${errorMessage}`);
       setReviewData(null);
-      
-      // Update file status to error
       setFiles((prevFiles) =>
         prevFiles.map((f) =>
           f.fileName === reviewData.fileName
@@ -485,10 +476,81 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
             : f
         )
       );
-      
-      // Continue with next file even on error
       processNextInQueue();
     }
+  };
+
+  const handleFinalizeAndStop = async (decisions: ReviewDecision[]) => {
+    if (!reviewData) return;
+    
+    try {
+      const result = await window.electronAPI.finalizeConversion(
+        reviewData.tempConversionId,
+        decisions
+      );
+
+      if (result.success) {
+        setFiles((prevFiles) =>
+          prevFiles.map((f) =>
+            f.fileName === reviewData.fileName
+              ? {
+                  ...f,
+                  status: 'success' as const,
+                  outputPath: result.outputPath,
+                  errorMessage: result.duplicateWarning
+                    ? t.fileExistsTimestamp
+                    : undefined,
+                }
+              : f
+          )
+        );
+        setReviewData(null);
+        // Stop processing - clear queue
+        setConversionQueue([]);
+        setIsProcessingQueue(false);
+      } else {
+        alert(`${t.conversionFailed}: ${result.error}\n${t.checkBankConverter}`);
+        setReviewData(null);
+        setFiles((prevFiles) =>
+          prevFiles.map((f) =>
+            f.fileName === reviewData.fileName
+              ? { ...f, status: 'error' as const, errorMessage: result.error }
+              : f
+          )
+        );
+        setConversionQueue([]);
+        setIsProcessingQueue(false);
+      }
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`${t.conversionFailed}: ${errorMessage}`);
+      setReviewData(null);
+      setFiles((prevFiles) =>
+        prevFiles.map((f) =>
+          f.fileName === reviewData.fileName
+            ? { ...f, status: 'error' as const, errorMessage }
+            : f
+        )
+      );
+      setConversionQueue([]);
+      setIsProcessingQueue(false);
+    }
+  };
+
+  const handleSkipFile = () => {
+    if (!reviewData) return;
+    
+    // Mark file as pending so user can try again later
+    setFiles((prevFiles) =>
+      prevFiles.map((f) =>
+        f.fileName === reviewData.fileName
+          ? { ...f, status: 'pending' as const, errorMessage: undefined }
+          : f
+      )
+    );
+    
+    setReviewData(null);
+    processNextInQueue();
   };
 
   const handleCancelReview = () => {
@@ -569,9 +631,8 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
         if (skipUserApproval) {
           // Auto-approve all transactions
           const autoDecisions: ReviewDecision[] = result.reviewData.transactions.map(tx => ({
-            transactionId: tx.id,
-            action: 'approve' as const,
-            editedData: tx.extracted,
+            index: tx.index,
+            action: 'accept' as const,
           }));
           
           try {
@@ -729,14 +790,24 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
 
   const handleProceedWithAI = async (fileIds: string[]) => {
     setShowAIWarningModal(false);
-    // Convert selected files with AI
-    await Promise.all(fileIds.map(fileId => performConversion(fileId, true)));
+    // Convert files sequentially - start with first, rest go to queue
+    setIsProcessingQueue(true);
+    if (fileIds.length > 0) {
+      const [firstFile, ...restFiles] = fileIds;
+      setConversionQueue(restFiles);
+      await performConversion(firstFile, true);
+    }
   };
 
   const handleSkipAI = async (fileIds: string[]) => {
     setShowAIWarningModal(false);
-    // Convert selected files without AI (will have low confidence results)
-    await Promise.all(fileIds.map(fileId => performConversion(fileId, false)));
+    // Convert files sequentially without AI
+    setIsProcessingQueue(true);
+    if (fileIds.length > 0) {
+      const [firstFile, ...restFiles] = fileIds;
+      setConversionQueue(restFiles);
+      await performConversion(firstFile, false);
+    }
   };
 
   const handleRemoveFile = (fileId: string) => {
@@ -1081,7 +1152,12 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
         {reviewData && (
           <TransactionReviewScreen
             reviewData={reviewData}
-            onFinalize={handleFinalize}
+            language={language}
+            hasMoreFiles={conversionQueue.length > 0}
+            remainingCount={conversionQueue.length}
+            onFinalizeAndNext={handleFinalizeAndNext}
+            onFinalizeAndStop={handleFinalizeAndStop}
+            onSkip={handleSkipFile}
             onCancel={handleCancelReview}
           />
         )}

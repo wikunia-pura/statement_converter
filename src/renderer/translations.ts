@@ -43,6 +43,9 @@ export const translations = {
     skipUserApproval: 'Pomiń akceptację transakcji',
     skipUserApprovalDesc: 'Generuj pliki bezpośrednio bez etapu weryfikacji',
     language: 'Język',
+    zoomIn: 'Powiększ',
+    zoomOut: 'Pomniejsz',
+    zoomReset: 'Resetuj powiększenie',
     polish: 'Polski',
     english: 'English',
     outputFolder: 'Folder Wyjściowy',
@@ -151,6 +154,14 @@ export const translations = {
     close: 'Zamknij',
     updateError: 'Błąd aktualizacji',
     checkForUpdates: 'Sprawdź aktualizacje',
+    
+    // Transaction Review
+    finalizeAndNext: 'Wygeneruj i przejdź dalej',
+    finalizeAndStop: 'Wygeneruj i zakończ',
+    skipFile: 'Pomiń plik',
+    finalizeFile: 'Zapisz i wygeneruj',
+    filesRemaining: 'Pozostało plików',
+    markAllExpensesAsUnrecognized: 'Oznacz wszystkie wydatki jako nierozpoznane',
   },
   en: {
     // Navigation
@@ -196,6 +207,9 @@ export const translations = {
     skipUserApproval: 'Skip transaction approval',
     skipUserApprovalDesc: 'Generate files directly without review step',
     language: 'Language',
+    zoomIn: 'Zoom In',
+    zoomOut: 'Zoom Out',
+    zoomReset: 'Reset Zoom',
     polish: 'Polski',
     english: 'English',
     outputFolder: 'Output Folder',
@@ -304,6 +318,14 @@ export const translations = {
     close: 'Close',
     updateError: 'Update error',
     checkForUpdates: 'Check for updates',
+    
+    // Transaction Review
+    finalizeAndNext: 'Generate & next',
+    finalizeAndStop: 'Generate & finish',
+    skipFile: 'Skip file',
+    finalizeFile: 'Save & generate',
+    filesRemaining: 'Files remaining',
+    markAllExpensesAsUnrecognized: 'Mark all expenses as unrecognized',
   },
 };
 

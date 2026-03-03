@@ -454,7 +454,12 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
         setReviewData(null);
         processNextInQueue();
       } else {
-        alert(`${t.conversionFailed}: ${result.error}\n${t.checkBankConverter}`);
+        // Don't show "check bank/converter" for billing errors
+        const isBillingError = result.error?.includes('💸') || result.error?.includes('Brak kasiory');
+        const errorMsg = isBillingError 
+          ? `${t.conversionFailed}: ${result.error}`
+          : `${t.conversionFailed}: ${result.error}\n${t.checkBankConverter}`;
+        alert(errorMsg);
         setReviewData(null);
         setFiles((prevFiles) =>
           prevFiles.map((f) =>
@@ -509,7 +514,12 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
         setConversionQueue([]);
         setIsProcessingQueue(false);
       } else {
-        alert(`${t.conversionFailed}: ${result.error}\n${t.checkBankConverter}`);
+        // Don't show "check bank/converter" for billing errors
+        const isBillingError = result.error?.includes('💸') || result.error?.includes('Brak kasiory');
+        const errorMsg = isBillingError 
+          ? `${t.conversionFailed}: ${result.error}`
+          : `${t.conversionFailed}: ${result.error}\n${t.checkBankConverter}`;
+        alert(errorMsg);
         setReviewData(null);
         setFiles((prevFiles) =>
           prevFiles.map((f) =>
@@ -723,7 +733,12 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
               : f
           )
         );
-        alert(`${t.conversionFailed}: ${result.error}\n${t.checkBankConverter}`);
+        // Don't show "check bank/converter" for billing errors
+        const isBillingError = result.error?.includes('💸') || result.error?.includes('Brak kasiory');
+        const errorMsg = isBillingError 
+          ? `${t.conversionFailed}: ${result.error}`
+          : `${t.conversionFailed}: ${result.error}\n${t.checkBankConverter}`;
+        alert(errorMsg);
         
         // Process next file even on error
         processNextInQueue();
@@ -1206,15 +1221,6 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                         </div>
                         <div style={{ display: 'flex', gap: '6px' }}>
                           <button
-                            className="button button-small button-success"
-                            onClick={() => {
-                              setShowAIWarningModal(false);
-                              performConversion(file.fileId, true);
-                            }}
-                          >
-                            🤖 Użyj AI
-                          </button>
-                          <button
                             className="button button-small button-secondary"
                             onClick={() => {
                               setShowAIWarningModal(false);
@@ -1222,6 +1228,15 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                             }}
                           >
                             Bez AI
+                          </button>
+                          <button
+                            className="button button-small button-success"
+                            onClick={() => {
+                              setShowAIWarningModal(false);
+                              performConversion(file.fileId, true);
+                            }}
+                          >
+                            🤖 Użyj AI
                           </button>
                         </div>
                       </div>

@@ -1,6 +1,164 @@
-import React, { useState } from 'react';
-import { ConversionReviewData, ReviewDecision, TransactionForReview } from '../../shared/types';
+import React, { useState, useEffect, useRef } from 'react';
+import { ConversionReviewData, ReviewDecision, TransactionForReview, Kontrahent } from '../../shared/types';
 import { translations, Language } from '../translations';
+
+// SearchableContractorSelect component
+interface SearchableContractorSelectProps {
+  kontrahenci: Kontrahent[];
+  selectedContractorId: number | null;
+  onChange: (contractorId: number | null) => void;
+  placeholder: string;
+  searchPlaceholder: string;
+}
+
+const SearchableContractorSelect: React.FC<SearchableContractorSelectProps> = ({
+  kontrahenci,
+  selectedContractorId,
+  onChange,
+  placeholder,
+  searchPlaceholder
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+        setSearchTerm('');
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedContractor = kontrahenci.find(k => k.id === selectedContractorId);
+
+  const filteredKontrahenci = kontrahenci.filter(kontrahent => {
+    if (!searchTerm) return true;
+    const search = searchTerm.toLowerCase();
+    const nameMatch = kontrahent.nazwa.toLowerCase().includes(search);
+    const altNamesMatch = kontrahent.alternativeNames && kontrahent.alternativeNames.some(alt => alt.toLowerCase().includes(search));
+    const nipMatch = kontrahent.nip && kontrahent.nip.includes(searchTerm);
+    return nameMatch || altNamesMatch || nipMatch;
+  });
+
+  const handleSelect = (contractorId: number | null) => {
+    onChange(contractorId);
+    setIsOpen(false);
+    setSearchTerm('');
+  };
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          padding: '6px 10px',
+          border: '1px solid #3c3c3c',
+          borderRadius: '4px',
+          cursor: 'pointer',
+          backgroundColor: '#1e1e1e',
+          minHeight: '34px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}
+      >
+        <span style={{ color: selectedContractor ? '#e0e0e0' : '#888' }}>
+          {selectedContractor ? selectedContractor.nazwa : placeholder}
+        </span>
+        <span style={{ fontSize: '10px', color: '#888' }}>▼</span>
+      </div>
+
+      {isOpen && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            backgroundColor: '#1e1e1e',
+            border: '1px solid #3c3c3c',
+            borderRadius: '4px',
+            marginTop: '2px',
+            maxHeight: '250px',
+            overflow: 'hidden',
+            zIndex: 1000,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.5)'
+          }}
+        >
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder={searchPlaceholder}
+            autoFocus
+            style={{
+              width: '100%',
+              padding: '8px',
+              border: 'none',
+              borderBottom: '1px solid #3c3c3c',
+              outline: 'none',
+              boxSizing: 'border-box',
+              backgroundColor: '#1e1e1e',
+              color: '#e0e0e0'
+            }}
+          />
+          <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+            <div
+              onClick={() => handleSelect(null)}
+              style={{
+                padding: '8px 10px',
+                cursor: 'pointer',
+                backgroundColor: selectedContractorId === null ? '#21262d' : '#1e1e1e',
+                borderBottom: '1px solid #3c3c3c'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0d1117'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = selectedContractorId === null ? '#21262d' : '#1e1e1e'}
+            >
+              <em style={{ color: '#888' }}>{placeholder}</em>
+            </div>
+            {filteredKontrahenci.map((kontrahent) => (
+              <div
+                key={kontrahent.id}
+                onClick={() => handleSelect(kontrahent.id)}
+                style={{
+                  padding: '8px 10px',
+                  cursor: 'pointer',
+                  backgroundColor: kontrahent.id === selectedContractorId ? '#21262d' : '#1e1e1e',
+                  borderBottom: '1px solid #3c3c3c'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0d1117'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = kontrahent.id === selectedContractorId ? '#21262d' : '#1e1e1e'}
+              >
+                <div style={{ color: '#e0e0e0' }}>{kontrahent.nazwa}</div>
+                {kontrahent.nip && (
+                  <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>
+                    NIP: {kontrahent.nip}
+                  </div>
+                )}
+                {kontrahent.alternativeNames && kontrahent.alternativeNames.length > 0 && (
+                  <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>
+                    {kontrahent.alternativeNames.join(', ')}
+                  </div>
+                )}
+              </div>
+            ))}
+            {filteredKontrahenci.length === 0 && (
+              <div style={{ padding: '8px 10px', color: '#888', textAlign: 'center' }}>
+                Brak kontrahentów
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 // TransactionCard sub-component
 interface TransactionCardProps {
@@ -8,8 +166,11 @@ interface TransactionCardProps {
   idx: number;
   currentDecision: ReviewDecision | undefined;
   manualInput: string | undefined;
+  manualContractorId: number | undefined;
+  kontrahenci: Kontrahent[];
   handleDecision: (index: number, action: 'accept' | 'reject') => void;
   handleManualInput: (index: number, value: string) => void;
+  handleManualContractorSelect: (index: number, contractorId: number | null) => void;
   language: Language;
 }
 
@@ -18,14 +179,38 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
   idx,
   currentDecision,
   manualInput,
+  manualContractorId,
+  kontrahenci,
   handleDecision,
   handleManualInput,
+  handleManualContractorSelect,
   language,
-}) => (
+}) => {
+  // Determine card colors based on decision
+  const getCardColors = () => {
+    if (!currentDecision) {
+      return { bg: '#2d2d30', border: '#3c3c3c' };
+    }
+    
+    switch (currentDecision.action) {
+      case 'accept':
+        return { bg: 'rgba(76, 175, 80, 0.1)', border: '#4CAF50' }; // green
+      case 'reject':
+        return { bg: 'rgba(244, 67, 54, 0.1)', border: '#f44336' }; // red
+      case 'manual':
+        return { bg: 'rgba(156, 39, 176, 0.1)', border: '#9C27B0' }; // purple
+      default:
+        return { bg: '#2d2d30', border: '#3c3c3c' };
+    }
+  };
+  
+  const cardColors = getCardColors();
+  
+  return (
   <div
     style={{
-      backgroundColor: '#2d2d30',
-      border: `2px solid ${currentDecision ? '#4EC9B0' : '#3c3c3c'}`,
+      backgroundColor: cardColors.bg,
+      border: `2px solid ${cardColors.border}`,
       borderRadius: '4px',
       padding: '15px',
       marginBottom: '15px',
@@ -202,17 +387,21 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
       <h4 style={{ margin: '0 0 10px 0', color: '#C586C0' }}>✅ Decyzja:</h4>
       <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
         {/* Show Accept only when there's meaningful extracted data to accept */}
-        {(trn.transactionType === 'expense' || (trn.transactionType === 'income' && trn.extracted.apartmentNumber)) && (
+        {((trn.transactionType === 'expense' && trn.matchedContractor?.contractorName) || (trn.transactionType === 'income' && trn.extracted.apartmentNumber)) && (
           <button
             onClick={() => handleDecision(trn.index, 'accept')}
+            disabled={!!(manualInput && manualInput.trim().length > 0) || manualContractorId !== undefined}
             style={{
               padding: '10px 20px',
-              backgroundColor: currentDecision?.action === 'accept' ? '#0e639c' : '#007acc',
-              color: 'white',
+              backgroundColor: ((manualInput && manualInput.trim().length > 0) || manualContractorId !== undefined)
+                ? '#555'
+                : currentDecision?.action === 'accept' ? '#2e7d32' : '#4CAF50',
+              color: ((manualInput && manualInput.trim().length > 0) || manualContractorId !== undefined) ? '#888' : 'white',
               border: 'none',
               borderRadius: '3px',
-              cursor: 'pointer',
+              cursor: ((manualInput && manualInput.trim().length > 0) || manualContractorId !== undefined) ? 'not-allowed' : 'pointer',
               fontWeight: currentDecision?.action === 'accept' ? 'bold' : 'normal',
+              opacity: ((manualInput && manualInput.trim().length > 0) || manualContractorId !== undefined) ? 0.5 : 1,
             }}
           >
             ✓ Akceptuj
@@ -220,26 +409,31 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
         )}
         <button
           onClick={() => handleDecision(trn.index, 'reject')}
-          disabled={!!(manualInput && manualInput.trim().length > 0 && manualInput !== trn.extracted.apartmentNumber)}
+          disabled={!!(manualInput && manualInput.trim().length > 0) || manualContractorId !== undefined}
           style={{
             padding: '10px 20px',
-            backgroundColor: (manualInput && manualInput.trim().length > 0 && manualInput !== trn.extracted.apartmentNumber)
+            backgroundColor: ((manualInput && manualInput.trim().length > 0) || manualContractorId !== undefined)
               ? '#555'
               : currentDecision?.action === 'reject' ? '#b71c1c' : '#d32f2f',
-            color: (manualInput && manualInput.trim().length > 0 && manualInput !== trn.extracted.apartmentNumber) ? '#888' : 'white',
+            color: ((manualInput && manualInput.trim().length > 0) || manualContractorId !== undefined) ? '#888' : 'white',
             border: 'none',
             borderRadius: '3px',
-            cursor: (manualInput && manualInput.trim().length > 0 && manualInput !== trn.extracted.apartmentNumber) ? 'not-allowed' : 'pointer',
+            cursor: ((manualInput && manualInput.trim().length > 0) || manualContractorId !== undefined) ? 'not-allowed' : 'pointer',
             fontWeight: currentDecision?.action === 'reject' ? 'bold' : 'normal',
-            opacity: (manualInput && manualInput.trim().length > 0 && manualInput !== trn.extracted.apartmentNumber) ? 0.5 : 1,
+            opacity: ((manualInput && manualInput.trim().length > 0) || manualContractorId !== undefined) ? 0.5 : 1,
           }}
         >
           ✗ Oznacz jako nierozpoznane
         </button>
       </div>
-      {manualInput && manualInput.trim().length > 0 && manualInput !== trn.extracted.apartmentNumber && (
+      {(manualInput && manualInput.trim().length > 0) && (
         <div style={{ fontSize: '12px', color: '#DCDCAA', marginBottom: '10px', fontStyle: 'italic' }}>
-          ⚠ Usuń lub przywróć wartość sugerowaną, aby oznaczyć jako nierozpoznane
+          ⚠ Wyczyść pole ręcznego wprowadzania, aby użyć przycisków akceptuj/odrzuć
+        </div>
+      )}
+      {manualContractorId !== undefined && (
+        <div style={{ fontSize: '12px', color: '#DCDCAA', marginBottom: '10px', fontStyle: 'italic' }}>
+          ⚠ Resetuj wybór kontrahenta ("Brak przypisania"), aby użyć przycisków akceptuj/odrzuć
         </div>
       )}
 
@@ -251,7 +445,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
           </label>
           <input
             type="text"
-            value={manualInput !== undefined ? manualInput : (trn.extracted.apartmentNumber || '')}
+            value={manualInput || ''}
             onChange={(e) => handleManualInput(trn.index, (e.target as HTMLInputElement).value)}
             placeholder="np. 42, ZGN"
             style={{
@@ -262,6 +456,22 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
               borderRadius: '3px',
               width: '200px',
             }}
+          />
+        </div>
+      )}
+
+      {/* Manual Contractor Selection (only for expense) */}
+      {trn.transactionType === 'expense' && (
+        <div>
+          <label style={{ display: 'block', marginBottom: '5px', color: '#C586C0' }}>
+            Wybierz kontrahenta {trn.matchedContractor?.contractorName ? '(możesz zmienić)' : '(wybierz ręcznie)'}:
+          </label>
+          <SearchableContractorSelect
+            kontrahenci={kontrahenci}
+            selectedContractorId={manualContractorId !== undefined ? manualContractorId : null}
+            onChange={(contractorId) => handleManualContractorSelect(trn.index, contractorId)}
+            placeholder="Brak przypisania"
+            searchPlaceholder="Szukaj kontrahenta po nazwie lub NIP..."
           />
         </div>
       )}
@@ -278,12 +488,21 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
         }}>
           {currentDecision.action === 'accept' && '✓ Zaakceptowano wyekstrahowane dane'}
           {currentDecision.action === 'reject' && '✗ Oznaczono jako NIEROZPOZNANE'}
-          {currentDecision.action === 'manual' && `✏️  Ręcznie wpisano: ${currentDecision.manualApartmentNumber}`}
+          {currentDecision.action === 'manual' && (() => {
+            if (trn.transactionType === 'income' && currentDecision.manualApartmentNumber) {
+              return `✏️  Ręcznie wpisano mieszkanie: ${currentDecision.manualApartmentNumber}`;
+            } else if (trn.transactionType === 'expense' && currentDecision.manualContractorId) {
+              const selectedContractor = kontrahenci.find(k => k.id === currentDecision.manualContractorId);
+              return `✏️  Ręcznie wybrano kontrahenta: ${selectedContractor?.nazwa || 'Nieznany'}`;
+            }
+            return '✏️  Ręcznie edytowano';
+          })()}
         </div>
       )}
     </div>
   </div>
-);
+  );
+};
 
 interface TransactionReviewScreenProps {
   reviewData: ConversionReviewData;
@@ -311,9 +530,20 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   
   // Manual inputs start empty - extracted values are shown in the input field as default
   const [manualInputs, setManualInputs] = useState<Map<number, string>>(new Map());
+  const [manualContractorIds, setManualContractorIds] = useState<Map<number, number | null>>(new Map());
   
+  const [kontrahenci, setKontrahenci] = useState<Kontrahent[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'income' | 'expense'>('all');
+
+  // Load kontrahenci on mount
+  useEffect(() => {
+    const loadKontrahenci = async () => {
+      const result = await window.electronAPI.getKontrahenci();
+      setKontrahenci(result);
+    };
+    loadKontrahenci();
+  }, []);
 
   // Filter transactions based on selected filter
   const filteredTransactions = reviewData.transactions.filter(trn => {
@@ -340,6 +570,13 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
       newManualInputs.delete(index);
       setManualInputs(newManualInputs);
     }
+    
+    // Clear manual contractor selection if switching away from manual
+    if (manualContractorIds.has(index)) {
+      const newManualContractorIds = new Map(manualContractorIds);
+      newManualContractorIds.delete(index);
+      setManualContractorIds(newManualContractorIds);
+    }
   };
 
   const handleManualInput = (index: number, value: string) => {
@@ -361,6 +598,28 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
     }
     
     setManualInputs(newManualInputs);
+    setDecisions(newDecisions);
+  };
+
+  const handleManualContractorSelect = (index: number, contractorId: number | null) => {
+    const newManualContractorIds = new Map(manualContractorIds);
+    const newDecisions = new Map(decisions);
+    
+    // If contractorId is null, remove from manual selections and clear decision
+    if (contractorId === null) {
+      newManualContractorIds.delete(index);
+      newDecisions.delete(index);
+    } else {
+      // Set manual contractor selection and create manual decision
+      newManualContractorIds.set(index, contractorId);
+      newDecisions.set(index, {
+        index,
+        action: 'manual',
+        manualContractorId: contractorId,
+      });
+    }
+    
+    setManualContractorIds(newManualContractorIds);
     setDecisions(newDecisions);
   };
 
@@ -577,6 +836,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
             {expenseTransactions.map((trn) => {
               const currentDecision = decisions.get(trn.index);
               const manualInput = manualInputs.get(trn.index);
+              const manualContractorId = manualContractorIds.get(trn.index);
               const idx = reviewData.transactions.indexOf(trn);
               
               return (
@@ -586,8 +846,11 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                   idx={idx}
                   currentDecision={currentDecision}
                   manualInput={manualInput}
+                  manualContractorId={manualContractorId}
+                  kontrahenci={kontrahenci}
                   handleDecision={handleDecision}
                   handleManualInput={handleManualInput}
+                  handleManualContractorSelect={handleManualContractorSelect}
                   language={language}
                 />
               );

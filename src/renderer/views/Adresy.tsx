@@ -158,6 +158,38 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
 
   return (
     <div className="content-body">
+      {isImporting && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999,
+        }}>
+          <div style={{
+            width: '60px',
+            height: '60px',
+            border: '6px solid #f3f3f3',
+            borderTop: '6px solid #3498db',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+          }} />
+          <div style={{
+            marginTop: '20px',
+            color: 'white',
+            fontSize: '18px',
+            fontWeight: 'bold',
+          }}>
+            {t.importing}
+          </div>
+        </div>
+      )}
       <div className="card">
         <div
           style={{
@@ -182,7 +214,7 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
               onClick={handleImportFromFile}
               disabled={isImporting}
             >
-              {isImporting ? t.importing : t.importFromFile}
+              {t.importFromFile}
             </button>
             <button
               className="button button-secondary"

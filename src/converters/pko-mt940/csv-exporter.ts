@@ -202,8 +202,11 @@ export class CsvExporter {
           lines.push(`Księgowanie: k_wn = 131-1, k_ma = ---`);
         }
         
-        lines.push(`Metoda ekstrakcji: ${transaction.extracted.extractionMethod}`);
-        lines.push(`Confidence: ${transaction.extracted.confidence.overall}%`);
+        // Confidence and status in one readable line
+        const conf = transaction.extracted.confidence;
+        lines.push(`Pewność: Overall: ${conf.overall}% | Adres: ${conf.address}% | Mieszkanie: ${conf.apartment}% | Najemca: ${conf.tenantName}%`);
+        lines.push(`Status: ${transaction.status} | Metoda ekstrakcji: ${transaction.extracted.extractionMethod}`);
+        
         if (transaction.extracted.warnings.length > 0) {
           lines.push(`Ostrzeżenia: ${transaction.extracted.warnings.join(', ')}`);
         }

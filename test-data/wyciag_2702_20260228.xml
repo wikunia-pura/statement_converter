@@ -1,0 +1,552 @@
+<?xml version="1.0" encoding="ISO-8859-2"?><statement>
+    <bank-unit>
+        <bank-name>SANTANDER BANK POLSKA S.A.</bank-name>
+        <name>8 W WARSZAWIE</name>
+        <address>PL. ZBAWICIELA 2  Tel.19999, +48 61 81 1 9999</address>
+        <post-code>00-642</post-code>
+        <locality>WARSZAWA</locality>
+        <phone/>
+        <nbp-no/>
+    </bank-unit>
+    <customer>
+        <cif>1000645713</cif>
+        <name>INTER-EJ S.C. ZARZĄDZANIE I ADMIN. NIERUCHOMOŚCIAMI</name>
+        <address-line1>AL. WILANOWSKA 363/57</address-line1>
+        <address-line2>02-665</address-line2>
+        <address-line3>WARSZAWA</address-line3>
+        <country/>
+    </customer>
+    <account>
+        <account-no/>
+        <iban>46109018700000000104092702</iban>
+        <product-desc>Rachunek bieżący podstawowy</product-desc>
+        <currency>PLN</currency>
+        <value>266913.88</value>
+        <limit-value/>
+        <interest-rate/>
+        <interest-date/>
+        <thresholds-interest-rate>
+            <threshold id="1">
+                <threshold-amount>0.01</threshold-amount>
+                <interest-rate>0.0000</interest-rate>
+            </threshold>
+            <threshold id="2">
+                <threshold-amount>500000.01</threshold-amount>
+                <interest-rate>0.0000</interest-rate>
+            </threshold>
+            <threshold id="3">
+                <threshold-amount>1000000.01</threshold-amount>
+                <interest-rate>0.0000</interest-rate>
+            </threshold>
+        </thresholds-interest-rate>
+    </account>
+    <stmt>
+        <stmt-no>2026/002</stmt-no>
+        <begin>01/02/2026</begin>
+        <begin-value>292396.85</begin-value>
+        <end>28/02/2026</end>
+        <end-value>266913.88</end-value>
+    </stmt>
+    <transactions>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>31/01/2026</exe-date>
+            <creat-date>02/02/2026</creat-date>
+            <value>478.48</value>
+            <acc-value>292875.33</acc-value>
+            <real-value>292875.33</real-value>
+            <desc-base>tytułem  opłata eksploatacyjna + fundusz remont. ID27/5 Joliot Curie 3m 5 Warszawa ZA LUTY 2026</desc-base>
+            <desc-opt>ANNA MARIA KRYCKA UL. SOŁTANA 4 M. 62 01-494 WARSZAWA ELIXIR 31-01-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>01/02/2026</exe-date>
+            <creat-date>02/02/2026</creat-date>
+            <value>524.40</value>
+            <acc-value>293399.73</acc-value>
+            <real-value>293399.73</real-value>
+            <desc-base>Joliot-Curie 3/28, opłata eksploatacyjna luty 2026</desc-base>
+            <desc-opt>Andrzej Fronczak Joliot-Curie F. 3/28, 02-646 Warsza wa ELIXIR 01-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>01/02/2026</exe-date>
+            <creat-date>02/02/2026</creat-date>
+            <value>684.00</value>
+            <acc-value>294083.73</acc-value>
+            <real-value>294083.73</real-value>
+            <desc-base>Czynsz luty 2026 F.Jolio t Cu rie 3/42 WARSZAWA</desc-base>
+            <desc-opt>Katarzyna Pecko FRYDERYKA JOLIOT-CURIE 3/42, 02-646 WARSZAWA ELIXIR 01-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>01/02/2026</exe-date>
+            <creat-date>02/02/2026</creat-date>
+            <value>826.90</value>
+            <acc-value>294910.63</acc-value>
+            <real-value>294910.63</real-value>
+            <desc-base>opłata mieszkaniowa m-c luty2026, joliot curie 3/47, warszawa wtym fundusz remontowy: 145,35</desc-base>
+            <desc-opt>ŁASICA AGNIESZKA MARIA JOLIOT-CURIE F 3/47 02-646 WARSZAWA ELIXIR 01-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>B4C5</trn-code>
+            <exe-date>03/02/2026</exe-date>
+            <creat-date>03/02/2026</creat-date>
+            <value>-300.00</value>
+            <acc-value>294610.63</acc-value>
+            <real-value>294610.63</real-value>
+            <desc-base>zwrot za salę na zebranie</desc-base>
+            <desc-opt>Jolanta Gontarek, ul. Blacharska 1/343, 02-660 Warszawa</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>B4C5</trn-code>
+            <exe-date>03/02/2026</exe-date>
+            <creat-date>03/02/2026</creat-date>
+            <value>-2639.00</value>
+            <acc-value>291971.63</acc-value>
+            <real-value>291971.63</real-value>
+            <desc-base>POLISA NR 645500337229 UNIQA /NIP/1070006155</desc-base>
+            <desc-opt>UNIQA Towarzystwo Ubezpie czeniowe S.A., 00-867 WARSZAWA UL. CHŁOD, NA 51</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC20</trn-code>
+            <exe-date>04/02/2026</exe-date>
+            <creat-date>04/02/2026</creat-date>
+            <value>689.34</value>
+            <acc-value>292660.97</acc-value>
+            <real-value>292660.97</real-value>
+            <desc-base>Opłata za 2026-02</desc-base>
+            <desc-opt>MIROSŁAW ROSTKOWSKI UL. JOLIOT CURIE 3/31 02-646 WARSZAWA</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>03/02/2026</exe-date>
+            <creat-date>04/02/2026</creat-date>
+            <value>850.84</value>
+            <acc-value>293511.81</acc-value>
+            <real-value>293511.81</real-value>
+            <desc-base>zapłata za czynsz za l/2026 MariaMołodzińska Joliot Curie 3/37</desc-base>
+            <desc-opt>MOŁODZIŃSKI MICHAŁ WOJCIECH RABSZTYŃSKA 4/10 01-140 WARSZAWA ELIXIR 03-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>04/02/2026</exe-date>
+            <creat-date>04/02/2026</creat-date>
+            <value>907.28</value>
+            <acc-value>294419.09</acc-value>
+            <real-value>294419.09</real-value>
+            <desc-base>OPŁATA EKSPLOATACYJNA ZA 02 2026 WTYM FUNDUSZ REMONTOWY 145,80 PLNID.22211201</desc-base>
+            <desc-opt>KRZYSZTOF MIECZYSŁAW WAŹBIŃSKI UL. JOLIOT CURIE 3 M.11 02-646 WARSZAWA ELIXIR 04-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>04/02/2026</exe-date>
+            <creat-date>04/02/2026</creat-date>
+            <value>1055.84</value>
+            <acc-value>295474.93</acc-value>
+            <real-value>295474.93</real-value>
+            <desc-base>CZYNSZ ZA 01.2026. ADRES: UL.JOLIOT-CURIE 3 M. 19.</desc-base>
+            <desc-opt>KIRYL KISIALIOU UL FRYDERYKA JOLIOT-CURIE 3 19 02-652 WARSZAWA ELIXIR 04-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>05/02/2026</exe-date>
+            <creat-date>05/02/2026</creat-date>
+            <value>765.32</value>
+            <acc-value>296240.25</acc-value>
+            <real-value>296240.25</real-value>
+            <desc-base>Opłata za mieszkanie</desc-base>
+            <desc-opt>DANUTA BRZEZIŃSKA UL.JANA SEBASTIANA BACHA 14/23 02-743 WARSZAWA WARSZAWA ELIXIR 05-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>09/02/2026</exe-date>
+            <creat-date>09/02/2026</creat-date>
+            <value>612.52</value>
+            <acc-value>296852.77</acc-value>
+            <real-value>296852.77</real-value>
+            <desc-base>Opłaty mieszkaniowe : luty 2026r..Dotyczy adresu joliot-Curie 3/41</desc-base>
+            <desc-opt>BOROWSKA IZABELLA ul. FRYDERYKA JOLIOT-CURIE 3/41 02- 646 WARSZAWA ELIXIR 09-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>09/02/2026</exe-date>
+            <creat-date>09/02/2026</creat-date>
+            <value>655.93</value>
+            <acc-value>297508.70</acc-value>
+            <real-value>297508.70</real-value>
+            <desc-base>KICMAN MAŁGORZATA, 02-646 WARSZAWA,UL. JOLIOT CURIE 3 M. 23 OPŁATA ŚWIADCZENIA ZA 02.2026</desc-base>
+            <desc-opt>KICMAN MAŁGORZATA Fryderyka Joliot-Curie 3/23 02-646 Warszawa ELIXIR 09-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC20</trn-code>
+            <exe-date>09/02/2026</exe-date>
+            <creat-date>09/02/2026</creat-date>
+            <value>669.90</value>
+            <acc-value>298178.60</acc-value>
+            <real-value>298178.60</real-value>
+            <desc-base>opłata z lokal, identyfikator 27/20 ( M. i J. Mistewicz) m-ąc 02. 2026</desc-base>
+            <desc-opt>MARIOLA URSZULA MISTEWICZ UL. JOLIOT CURIE 3/20 02-646 WARSZAWA</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>S151</trn-code>
+            <exe-date>08/02/2026</exe-date>
+            <creat-date>09/02/2026</creat-date>
+            <value>711.80</value>
+            <acc-value>298890.40</acc-value>
+            <real-value>298890.40</real-value>
+            <desc-base>OPŁATA CZYNSZOWA ZA LOKAL UL. JOLIET-CURIE 3 M 45</desc-base>
+            <desc-opt>4START SYLWIA BARTHEL DE WEYDENTHAL</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>09/02/2026</exe-date>
+            <creat-date>09/02/2026</creat-date>
+            <value>841.75</value>
+            <acc-value>299732.15</acc-value>
+            <real-value>299732.15</real-value>
+            <desc-base>CZYNSZ ZA LUTY 2026</desc-base>
+            <desc-opt>JOLANTA TOKAJ UL. F J CURIE 3 M.3 02-646 WARSZAWA ELIXIR 09-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>06/02/2026</exe-date>
+            <creat-date>09/02/2026</creat-date>
+            <value>998.10</value>
+            <acc-value>300730.25</acc-value>
+            <real-value>300730.25</real-value>
+            <desc-base>Opłata miesięczna za luty 2026 lokal ID 27/7 Ewa Katarzyna Słubicka</desc-base>
+            <desc-opt>EWA KATARZYNA SŁUBICKA UL. FRYDERYKA JOLIOT-CURIE 3 M 7 02-646 WARSZAWA ELIXIR 06-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>10/02/2026</exe-date>
+            <creat-date>10/02/2026</creat-date>
+            <value>250.00</value>
+            <acc-value>300980.25</acc-value>
+            <real-value>300980.25</real-value>
+            <desc-base>FUNDUSZ REMONTOWY GOSK MAREK UL. JOLIT CURIE 3 M. 33 WARSZAWA</desc-base>
+            <desc-opt>DARIUSZ MACIEJ GOSK UL. JOLIOT CURIE 3 M.33 02-646 WARSZAWA ELIXIR 10-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>09/02/2026</exe-date>
+            <creat-date>10/02/2026</creat-date>
+            <value>401.55</value>
+            <acc-value>301381.80</acc-value>
+            <real-value>301381.80</real-value>
+            <desc-base>2.2026</desc-base>
+            <desc-opt>CHACIŃSKA MARZENA MARIA WITA STWOSZA 48 M. 403 02-661 WARSZAWA ELIXIR 09-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>10/02/2026</exe-date>
+            <creat-date>10/02/2026</creat-date>
+            <value>409.02</value>
+            <acc-value>301790.82</acc-value>
+            <real-value>301790.82</real-value>
+            <desc-base>CZYNSZ JOLIOT CURIE 3/2</desc-base>
+            <desc-opt>BARBARA MACIĄG UL.OLCHY 6 04-837 WARSZAWA ELIXIR 10-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>10/02/2026</exe-date>
+            <creat-date>10/02/2026</creat-date>
+            <value>431.25</value>
+            <acc-value>302222.07</acc-value>
+            <real-value>302222.07</real-value>
+            <desc-base>Opłaty eksploatacyjne i za funduszremontowy lokalu 17</desc-base>
+            <desc-opt>KOSKA DANIEL UL RÓŻANA 11 77-100 RZEPNICA ELIXIR 10-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>10/02/2026</exe-date>
+            <creat-date>10/02/2026</creat-date>
+            <value>636.92</value>
+            <acc-value>302858.99</acc-value>
+            <real-value>302858.99</real-value>
+            <desc-base>EKSPLOATACJA FUNDUSZ ŚWIADCZENIA JCURIE 3/34</desc-base>
+            <desc-opt>MIKOŁAJ RUBACH UL.F.JOLIOT-CURIE 3 M.34 02-646 WARSZAWA ELIXIR 10-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>10/02/2026</exe-date>
+            <creat-date>10/02/2026</creat-date>
+            <value>700.00</value>
+            <acc-value>303558.99</acc-value>
+            <real-value>303558.99</real-value>
+            <desc-base>CZYNSZ 22211223 GOSK MAREK UL. JOLIOT CURIE 3 M.33 02-646 WARSZAWA</desc-base>
+            <desc-opt>DARIUSZ MACIEJ GOSK UL. JOLIOT CURIE 3 M.33 02-646 WARSZAWA ELIXIR 10-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>10/02/2026</exe-date>
+            <creat-date>10/02/2026</creat-date>
+            <value>735.26</value>
+            <acc-value>304294.25</acc-value>
+            <real-value>304294.25</real-value>
+            <desc-base>MARCIN ZEGAREK, JOLIOT CURIE 3/43</desc-base>
+            <desc-opt>MARCIN ZEGAREK UL. PODOLANY PIERWSZE 23 17-230 BIAŁOWIEŻA ELIXIR 10-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>09/02/2026</exe-date>
+            <creat-date>10/02/2026</creat-date>
+            <value>738.34</value>
+            <acc-value>305032.59</acc-value>
+            <real-value>305032.59</real-value>
+            <desc-base>czynsz luty 2026 /  fund, remontowy145,35 Wanda Strójwąs Joliot Curie3 m39</desc-base>
+            <desc-opt>WANDA STRÓJWĄS UL. J. CURIE 3 M. 39 02-646 WARSZAWA ELIXIR 09-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>10/02/2026</exe-date>
+            <creat-date>10/02/2026</creat-date>
+            <value>753.82</value>
+            <acc-value>305786.41</acc-value>
+            <real-value>305786.41</real-value>
+            <desc-base>CZYNSZ ZA M-C LUTY PAULINA MOLENDA</desc-base>
+            <desc-opt>PAULINA MOLENDA UL.FRYDERYKA JOLIOT-CURIE 3 M.8 02-646 WARSZAWA ELIXIR 10-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>09/02/2026</exe-date>
+            <creat-date>10/02/2026</creat-date>
+            <value>900.00</value>
+            <acc-value>306686.41</acc-value>
+            <real-value>306686.41</real-value>
+            <desc-base>CZYNSZ I FUNDUSZ REMONTOWY ZA LOKALJOLIOT-CURIE 3/4 IDENTYFIKATOR: 27/4</desc-base>
+            <desc-opt>SYLWESTER ŚCIŚLEWSKI UL.JOLIOT-CURIE 3 M.4 02-646 WARSZAWA ELIXIR 09-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>10/02/2026</exe-date>
+            <creat-date>10/02/2026</creat-date>
+            <value>6075.09</value>
+            <acc-value>312761.50</acc-value>
+            <real-value>312761.50</real-value>
+            <desc-base>zaliczka A, B, świadczenia,odpady komunalne za m-c luty2026</desc-base>
+            <desc-opt>ZAKŁ. GOSP. NIERUCHOM. DZ. MOKOTÓW UL.IRYSOWA 19 02-660 WARSZAWA;PL ELIXIR 10-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>X_06</trn-code>
+            <exe-date>10/02/2026</exe-date>
+            <creat-date>10/02/2026</creat-date>
+            <value>-25.00</value>
+            <acc-value>312736.50</acc-value>
+            <real-value>312736.50</real-value>
+            <desc-base>Opłata za prowadzenie rachunku od 01.01.2026 do 31.01.2026</desc-base>
+            <desc-opt/>
+        </trn>
+        <trn>
+            <trn-code>B4C5</trn-code>
+            <exe-date>10/02/2026</exe-date>
+            <creat-date>10/02/2026</creat-date>
+            <value>-741.44</value>
+            <acc-value>311995.06</acc-value>
+            <real-value>311995.06</real-value>
+            <desc-base>FV 18/01/2026 INSTALATOR ZĄBIK /NIP/5222888158</desc-base>
+            <desc-opt>INSTALATOR PIOTR ZĄBIK, UL. WAWRZYŃCA SUROWIECKIE, GO 1214, 02-785 WARSZAW</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>11/02/2026</exe-date>
+            <creat-date>11/02/2026</creat-date>
+            <value>923.31</value>
+            <acc-value>312918.37</acc-value>
+            <real-value>312918.37</real-value>
+            <desc-base>22211230 GMITERGRAZYNACZYNSZZALOKALJOLIOTCURIE3M.40+F.REMONTOWY</desc-base>
+            <desc-opt>GRAŻYNA KRAK-GMITER UL. JOLIOT CURIE 3 M.40 02-646 WARSZAWA ELIXIR 11-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>B143</trn-code>
+            <exe-date>11/02/2026</exe-date>
+            <creat-date>11/02/2026</creat-date>
+            <value>-4134.50</value>
+            <acc-value>308783.87</acc-value>
+            <real-value>308783.87</real-value>
+            <desc-base>/NIP/5250005662/IDP/017737/TYT/00/KTR/ 1726000255999[RACH]017737:255/SEK/01IDCSRL260211881940994</desc-base>
+            <desc-opt>MIEJSKIE PRZED. WOD. I KANALIZACJI W M.ST.W-WIE SA PL. STARYNKIEWICZA 5 02-015 WARSZAWA</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>12/02/2026</exe-date>
+            <creat-date>12/02/2026</creat-date>
+            <value>583.51</value>
+            <acc-value>309367.38</acc-value>
+            <real-value>309367.38</real-value>
+            <desc-base>WŁ GRONCZEWSKI JOLIOT CURIE 3/12 02*646 WARSZAWA OPŁATA EKSPLOATACYJNA, W TYM FUNDUSZ REMONTOWY 108 PLN</desc-base>
+            <desc-opt>DANIEL CEZARY KŁODA BRYŁY S. 3 M. 62 02-685 WARSZAWA ELIXIR 12-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>B4C5</trn-code>
+            <exe-date>12/02/2026</exe-date>
+            <creat-date>12/02/2026</creat-date>
+            <value>-186.62</value>
+            <acc-value>309180.76</acc-value>
+            <real-value>309180.76</real-value>
+            <desc-base>FA 157/01/2026 TECH-HOME /NIP/5211129710</desc-base>
+            <desc-opt>Tech-home Skoczyński Zbig niew, 02-679 WARSZAWA, UL. MODZ, ELEWSKIEGO 4650 LOK.66A</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>13/02/2026</exe-date>
+            <creat-date>13/02/2026</creat-date>
+            <value>485.54</value>
+            <acc-value>309666.30</acc-value>
+            <real-value>309666.30</real-value>
+            <desc-base>czynsz za luty 2026, Joliot Curie 3m 1, Jolanta i Jarosław Drzazga</desc-base>
+            <desc-opt>DRZAZGA JAROSŁAW ul. GRÓJECKA 41/8 02-031 WARSZAWA ELIXIR 13-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>13/02/2026</exe-date>
+            <creat-date>13/02/2026</creat-date>
+            <value>800.00</value>
+            <acc-value>310466.30</acc-value>
+            <real-value>310466.30</real-value>
+            <desc-base>opłaty za lokal ul.Joliot-Curie 3 m.35 identyfikator 27/35 Wspólnota Mieszkaniowa J.Curie3</desc-base>
+            <desc-opt>RÓŻA GRAŻYNA GÓRBSKA UL. J. CURIE 3 M. 35 WARSZAWA 02-646 ELIXIR 13-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>13/02/2026</exe-date>
+            <creat-date>16/02/2026</creat-date>
+            <value>833.00</value>
+            <acc-value>311299.30</acc-value>
+            <real-value>311299.30</real-value>
+            <desc-base>UL. JOLIOT CURIE 3 M 32,</desc-base>
+            <desc-opt>BOGUSŁAWA GOCŁAWSKA UL.KABACKI DUKT 4 M.105 02-798 WARSZAWA ELIXIR 13-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>B143</trn-code>
+            <exe-date>17/02/2026</exe-date>
+            <creat-date>17/02/2026</creat-date>
+            <value>-44112.63</value>
+            <acc-value>267186.67</acc-value>
+            <real-value>267186.67</real-value>
+            <desc-base>/NIP/5250005656/IDP/5-5382/TYT/NRK/SEK/01IDCSRL260217882143931</desc-base>
+            <desc-opt>VEOLIA ENERGIA WARSZAWA S.A. STEFANA BATOREGO 2 WARSZAWA 02-591 PL</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC20</trn-code>
+            <exe-date>18/02/2026</exe-date>
+            <creat-date>18/02/2026</creat-date>
+            <value>976.96</value>
+            <acc-value>268163.63</acc-value>
+            <real-value>268163.63</real-value>
+            <desc-base>Joliot-Curie 3/15, 02/2026, eksploatacja i świadczenia 831,16 fundusz remontowy 145.80</desc-base>
+            <desc-opt>JÓZEFINA ANNA SOBIEGRAJ UL. JOLIOT-CURIE 3/15 02-646 WARSZAWA</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>B143</trn-code>
+            <exe-date>20/02/2026</exe-date>
+            <creat-date>20/02/2026</creat-date>
+            <value>-239.06</value>
+            <acc-value>267924.57</acc-value>
+            <real-value>267924.57</real-value>
+            <desc-base>/NIP/5250000794/IDP/082000005741/TXT/082000005741/NRR223013309277ZAN8148194598/SEK/01IDCSRL260220882264873</desc-base>
+            <desc-opt>E.ON Polska S.A.   Warszawa</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>21/02/2026</exe-date>
+            <creat-date>23/02/2026</creat-date>
+            <value>865.62</value>
+            <acc-value>268790.19</acc-value>
+            <real-value>268790.19</real-value>
+            <desc-base>ZALICZKA NA ZARZĄDZANIE, ŚWIADCZENIA, W TYM FUNDUSZ REMONTOWY 194,58</desc-base>
+            <desc-opt>IWONA JURAK UL.JOLIOT-CURIE 3 M.48 02-646 WARSZAWA ELIXIR 21-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>22/02/2026</exe-date>
+            <creat-date>23/02/2026</creat-date>
+            <value>1210.00</value>
+            <acc-value>270000.19</acc-value>
+            <real-value>270000.19</real-value>
+            <desc-base>opłata za czynsz</desc-base>
+            <desc-opt>Jolanta Wiączek Chojeczno Cesarze 26, 07-110 Grębkó w ELIXIR 22-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>B4C5</trn-code>
+            <exe-date>23/02/2026</exe-date>
+            <creat-date>23/02/2026</creat-date>
+            <value>-1909.45</value>
+            <acc-value>268090.74</acc-value>
+            <real-value>268090.74</real-value>
+            <desc-base>ZARZĄDZANIE NIERUCH. M-C 02/2026 20100002 ___________/NIP/</desc-base>
+            <desc-opt>INTER EJ S.C. ELŻBIETA LA SKOWSKA JOLANTA GONTAREK, 02-660 WARSZAWA UL.BLACHA, RSKA 1/343</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>B4C5</trn-code>
+            <exe-date>23/02/2026</exe-date>
+            <creat-date>23/02/2026</creat-date>
+            <value>-2820.00</value>
+            <acc-value>265270.74</acc-value>
+            <real-value>265270.74</real-value>
+            <desc-base>WYWÓZ ODPADÓW M-C 02/2026 20100005 ___________/NIP/5272391342</desc-base>
+            <desc-opt>URZĄD M.ST. W-WY  MOKOTÓW, - ODPADY</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>23/02/2026</exe-date>
+            <creat-date>24/02/2026</creat-date>
+            <value>486.49</value>
+            <acc-value>265757.23</acc-value>
+            <real-value>265757.23</real-value>
+            <desc-base>Opłata eksploatacyjna za II.2026 Z.Borówek ul Fr,J.Curie 3/16</desc-base>
+            <desc-opt>BORÓWEK ALICJA UL SŁONIA TRĄBALSKIEGO 9M2 05-800 PRUSZKÓW ELIXIR 23-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>B4C5</trn-code>
+            <exe-date>24/02/2026</exe-date>
+            <creat-date>24/02/2026</creat-date>
+            <value>-180.04</value>
+            <acc-value>265577.19</acc-value>
+            <real-value>265577.19</real-value>
+            <desc-base>5252248481-20260209-1501A0419C9B-D4 20100001 ___________/NIP/5252248481</desc-base>
+            <desc-opt>MIASTO STOŁECZNE WARSZAWA, PLAC BANKOWY 3/5       00, -950 WARSZAWA</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>EC2G</trn-code>
+            <exe-date>26/02/2026</exe-date>
+            <creat-date>26/02/2026</creat-date>
+            <value>694.12</value>
+            <acc-value>266271.31</acc-value>
+            <real-value>266271.31</real-value>
+            <desc-base>/OPF/X///// PBAMZIHA3YGJ Wspolnotanr 27 - Identyfikator lokalu 25</desc-base>
+            <desc-opt>AUTOPAY SPÓŁKA AKCYJNA UL.POWSTAŃCÓW WARSZAWY 6 81-718 SOPOT ELIXIR 26-02-2026</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>S151</trn-code>
+            <exe-date>27/02/2026</exe-date>
+            <creat-date>27/02/2026</creat-date>
+            <value>678.57</value>
+            <acc-value>266949.88</acc-value>
+            <real-value>266949.88</real-value>
+            <desc-base>FUNDUSZ REMONTOWY</desc-base>
+            <desc-opt>EWA TERESA OSIECKA-CISOWSKA UL. JOLIOT-CURIE 3/27 02-646 WARSZAWA</desc-opt>
+        </trn>
+        <trn>
+            <trn-code>X_06</trn-code>
+            <exe-date>28/02/2026</exe-date>
+            <creat-date>28/02/2026</creat-date>
+            <value>-6.00</value>
+            <acc-value>266943.88</acc-value>
+            <real-value>266943.88</real-value>
+            <desc-base>Opłata za realizację PZ na r-k w innym banku od 01.02.2026 do 28.02.2026 szt. 3</desc-base>
+            <desc-opt/>
+        </trn>
+        <trn>
+            <trn-code>X_06</trn-code>
+            <exe-date>28/02/2026</exe-date>
+            <creat-date>28/02/2026</creat-date>
+            <value>-30.00</value>
+            <acc-value>266913.88</acc-value>
+            <real-value>266913.88</real-value>
+            <desc-base>Opłata za wyciągi od 01.02.2026 do 28.02.2026 szt. 1</desc-base>
+            <desc-opt/>
+        </trn>
+    </transactions>
+</statement>

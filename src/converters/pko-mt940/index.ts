@@ -18,6 +18,30 @@ import {
   ExtractedData,
 } from './types';
 
+/**
+ * Check if error is a billing/quota error that should stop processing
+ */
+function isBillingError(error: any): boolean {
+  if (!error) return false;
+  
+  const errorMessage = error.message || '';
+  
+  // Check for our custom billing error message
+  if (errorMessage.includes('💸')) return true;
+  
+  // Check for quota/billing keywords
+  if (errorMessage.toLowerCase().includes('quota') || 
+      errorMessage.toLowerCase().includes('billing') ||
+      errorMessage.toLowerCase().includes('payment required')) {
+    return true;
+  }
+  
+  // Check for API error status codes
+  if (error.status === 402 || error.status === 429) return true;
+  
+  return false;
+}
+
 export class PKOBPMT940Converter {
   private parser: PKOBPMT940Parser;
   private regexExtractor: RegexExtractor;
@@ -351,7 +375,13 @@ export class PKOBPMT940Converter {
       } catch (error) {
         console.error(`   ❌ Batch ${i + 1} failed:`, error);
         
-        // Add as low-confidence entries
+        // If this is a billing/quota error, re-throw it to stop processing
+        if (isBillingError(error)) {
+          console.error(`   💰 Billing error detected, stopping processing`);
+          throw error;
+        }
+        
+        // For other errors, add as low-confidence entries
         for (const { transaction } of batch) {
           const extracted: ExtractedData = {
             streetName: null,
@@ -450,7 +480,13 @@ export class PKOBPMT940Converter {
       } catch (error) {
         console.error(`   ❌ Batch ${i + 1} failed:`, error);
         
-        // Add as unrecognized entries
+        // If this is a billing/quota error, re-throw it to stop processing
+        if (isBillingError(error)) {
+          console.error(`   💰 Billing error detected, stopping processing`);
+          throw error;
+        }
+        
+        // For other errors, add as unrecognized entries
         for (const { transaction } of batch) {
           const extracted: ExtractedData = {
             streetName: null,

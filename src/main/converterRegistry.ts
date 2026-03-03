@@ -18,6 +18,8 @@ export interface ConvertResult {
   bankName?: string;
   converterId?: string;
   inputPath?: string;
+  warningMessage?: string;
+  error?: string;
 }
 
 // Database instance will be passed from main.ts
@@ -287,7 +289,8 @@ class ConverterRegistry {
    */
   private applyReviewDecisions(
     transactions: any[],
-    decisions: import('../shared/types').ReviewDecision[]
+    decisions: import('../shared/types').ReviewDecision[],
+    contractors: import('../shared/types').Kontrahent[]
   ): any[] {
     const updatedTransactions = [...transactions];
     
@@ -340,19 +343,48 @@ class ConverterRegistry {
           action: 'reject',
           originalValue: originalApartmentNumber
         };
-      } else if (decision.action === 'manual' && decision.manualApartmentNumber) {
-        // Use user-provided apartmentNumber
-        trn.extracted.apartmentNumber = decision.manualApartmentNumber;
-        // Boost confidence since user manually entered it
-        trn.extracted.confidence.overall = 100;
-        trn.extracted.confidence.apartment = 100;
+      } else if (decision.action === 'manual') {
+        if (decision.manualApartmentNumber) {
+          // Use user-provided apartmentNumber (for income)
+          trn.extracted.apartmentNumber = decision.manualApartmentNumber;
+          // Boost confidence since user manually entered it
+          trn.extracted.confidence.overall = 100;
+          trn.extracted.confidence.apartment = 100;
+          
+          // Mark as reviewed by user
+          trn.reviewedByUser = {
+            action: 'manual',
+            originalValue: originalApartmentNumber,
+            manualValue: decision.manualApartmentNumber
+          };
+        }
         
-        // Mark as reviewed by user
-        trn.reviewedByUser = {
-          action: 'manual',
-          originalValue: originalApartmentNumber,
-          manualValue: decision.manualApartmentNumber
-        };
+        if (decision.manualContractorId && trn.matchedContractor) {
+          // Use user-selected contractor (for expense)
+          const originalContractorName = trn.matchedContractor.contractor?.nazwa || null;
+          const originalContractorAccount = trn.matchedContractor.contractor?.kontoKontrahenta || null;
+          
+          // Find the contractor by ID
+          const selectedContractor = contractors.find(k => k.id === decision.manualContractorId);
+          
+          if (selectedContractor) {
+            // Update matchedContractor with the manually selected one
+            trn.matchedContractor.contractor = selectedContractor;
+            trn.matchedContractor.confidence = 100; // Max confidence for manual selection
+            trn.matchedContractor.matchedIn = 'manual' as any; // Mark as manually selected
+            
+            // Mark as reviewed by user
+            trn.reviewedByUser = {
+              ...trn.reviewedByUser,
+              action: 'manual',
+              originalContractorValue: {
+                name: originalContractorName,
+                account: originalContractorAccount
+              },
+              manualContractorId: decision.manualContractorId
+            };
+          }
+        }
       }
     });
     
@@ -567,6 +599,14 @@ class ConverterRegistry {
           const reviewTransactions = this.extractReviewTransactions(result.processed, 'santander_xml');
           
           if (reviewTransactions.length > 0) {
+            // Check if any transactions have AI failure warnings
+            const hasAIFailures = result.processed.some(trn => 
+              trn.extracted.warnings?.some(w => 
+                w.includes('AI extraction failed') || 
+                w.includes('AI matching failed')
+              )
+            );
+            
             // Store in cache and return review data
             const tempConversionId = conversionCache.store(
               fileName || path.basename(inputPath),
@@ -587,7 +627,7 @@ class ConverterRegistry {
             
             console.log(`⚠️  ${reviewTransactions.length} transactions need review`);
             
-            resolve({
+            const convertResult: ConvertResult = {
               success: true,
               needsReview: true,
               reviewData: {
@@ -599,7 +639,14 @@ class ConverterRegistry {
                 adresName,
                 transactions: reviewTransactions,
               },
-            });
+            };
+            
+            // Add warning message if AI failed
+            if (hasAIFailures) {
+              convertResult.warningMessage = 'Nie udało się użyć AI. Przeprowadzono standardową konwersję.';
+            }
+            
+            resolve(convertResult);
             return;
           }
 
@@ -814,6 +861,14 @@ class ConverterRegistry {
           const reviewTransactions = this.extractReviewTransactions(result.processed, 'pko_mt940');
           
           if (reviewTransactions.length > 0) {
+            // Check if any transactions have AI failure warnings
+            const hasAIFailures = result.processed.some(trn => 
+              trn.extracted.warnings?.some(w => 
+                w.includes('AI extraction failed') || 
+                w.includes('AI matching failed')
+              )
+            );
+            
             // Store in cache and return review data
             const tempConversionId = conversionCache.store(
               fileName || path.basename(inputPath),
@@ -834,7 +889,7 @@ class ConverterRegistry {
             
             console.log(`⚠️  ${reviewTransactions.length} transactions need review`);
             
-            resolve({
+            const convertResult: ConvertResult = {
               success: true,
               needsReview: true,
               reviewData: {
@@ -846,7 +901,14 @@ class ConverterRegistry {
                 adresName,
                 transactions: reviewTransactions,
               },
-            });
+            };
+            
+            // Add warning message if AI failed
+            if (hasAIFailures) {
+              convertResult.warningMessage = 'Nie udało się użyć AI. Przeprowadzono standardową konwersję.';
+            }
+            
+            resolve(convertResult);
             return;
           }
 
@@ -888,8 +950,11 @@ class ConverterRegistry {
         throw new Error('Conversion not found or expired. Please try again.');
       }
       
+      // Load contractors from database (needed for manual selections and export)
+      const kontrahenci = dbInstance ? await dbInstance.getAllKontrahenci() : [];
+      
       // Apply user decisions to transactions
-      const updatedTransactions = this.applyReviewDecisions(cached.processedTransactions, decisions);
+      const updatedTransactions = this.applyReviewDecisions(cached.processedTransactions, decisions, kontrahenci);
       
       // Now generate files with updated transactions
       const converter = cached.converterId === 'santander_xml' 
@@ -898,7 +963,7 @@ class ConverterRegistry {
             apiKey: '',
             batchSize: 20,
             confidenceThresholds: { autoApprove: 85, needsReview: 60 },
-            contractors: [],
+            contractors: kontrahenci,
             addresses: [],
           })
         : new PKOBPMT940Converter({
@@ -906,7 +971,7 @@ class ConverterRegistry {
             apiKey: '',
             batchSize: 20,
             confidenceThresholds: { autoApprove: 85, needsReview: 60 },
-            contractors: [],
+            contractors: kontrahenci,
             addresses: [],
           });
       
@@ -930,35 +995,88 @@ class ConverterRegistry {
         newPreviewOutput += '=== 👤 USER REVIEW SUMMARY ===\n';
         newPreviewOutput += '='.repeat(80) + '\n\n';
         
-        newPreviewOutput += `Total reviewed transactions: ${reviewedTransactions.length}\n\n`;
+        // Separate into income and expenses
+        const reviewedIncome = reviewedTransactions.filter((t: any) => t.transactionType === 'income');
+        const reviewedExpenses = reviewedTransactions.filter((t: any) => t.transactionType === 'expense');
         
-        reviewedTransactions.forEach((trn: any, idx: number) => {
-          const transactionIndex = updatedTransactions.indexOf(trn) + 1;
-          newPreviewOutput += `Transaction #${transactionIndex}:\n`;
+        newPreviewOutput += `Całkowita liczba przejrzanych transakcji: ${reviewedTransactions.length}\n`;
+        newPreviewOutput += `  Wpłaty: ${reviewedIncome.length}\n`;
+        newPreviewOutput += `  Wydatki: ${reviewedExpenses.length}\n\n`;
+        
+        // ========== INCOME SECTION ==========
+        if (reviewedIncome.length > 0) {
+          newPreviewOutput += '─'.repeat(80) + '\n';
+          newPreviewOutput += '💰 WPŁATY (INCOME)\n';
+          newPreviewOutput += '─'.repeat(80) + '\n\n';
           
-          if (trn.reviewedByUser.action === 'accept') {
-            newPreviewOutput += `  ✅ ZAAKCEPTOWANO\n`;
-            if (trn.reviewedByUser.extractedFrom) {
-              newPreviewOutput += `     Apartment number wyekstrahowany z: ${trn.reviewedByUser.extractedFrom}\n`;
+          reviewedIncome.forEach((trn: any) => {
+            const transactionIndex = updatedTransactions.indexOf(trn) + 1;
+            newPreviewOutput += `Pozycja #${transactionIndex}:\n`;
+            
+            if (trn.reviewedByUser.action === 'accept') {
+              newPreviewOutput += `  ✅ ZAAKCEPTOWANO\n`;
+              if (trn.reviewedByUser.extractedFrom) {
+                newPreviewOutput += `     Wyekstrahowano z: ${trn.reviewedByUser.extractedFrom}\n`;
+              }
+              newPreviewOutput += `     Numer mieszkania: ${trn.extracted.apartmentNumber}\n`;
+            } else if (trn.reviewedByUser.action === 'reject') {
+              newPreviewOutput += `  ❌ ODRZUCONO - NIEROZPOZNANE\n`;
+              if (trn.reviewedByUser.originalValue) {
+                newPreviewOutput += `     Oryginalna wartość: ${trn.reviewedByUser.originalValue}\n`;
+              }
+              newPreviewOutput += `     Finalna wartość: NIEROZPOZNANE\n`;
+            } else if (trn.reviewedByUser.action === 'manual') {
+              newPreviewOutput += `  ✏️  WPISANO RĘCZNIE\n`;
+              if (trn.reviewedByUser.originalValue !== undefined) {
+                newPreviewOutput += `     Oryginalna wartość: ${trn.reviewedByUser.originalValue || 'NIE ZNALEZIONO'}\n`;
+              }
+              newPreviewOutput += `     Ręcznie wpisano: ${trn.reviewedByUser.manualValue}\n`;
+              newPreviewOutput += `     Finalna wartość: ${trn.extracted.apartmentNumber}\n`;
             }
-            newPreviewOutput += `     Final value: ${trn.extracted.apartmentNumber}\n`;
-          } else if (trn.reviewedByUser.action === 'reject') {
-            newPreviewOutput += `  ❌ ODRZUCONO\n`;
-            if (trn.reviewedByUser.originalValue) {
-              newPreviewOutput += `     Original value: ${trn.reviewedByUser.originalValue}\n`;
-            }
-            newPreviewOutput += `     Final value: NOT RECOGNIZED\n`;
-          } else if (trn.reviewedByUser.action === 'manual') {
-            newPreviewOutput += `  ✏️  WPISANO RĘCZNIE\n`;
-            if (trn.reviewedByUser.originalValue !== undefined) {
-              newPreviewOutput += `     Original value: ${trn.reviewedByUser.originalValue || 'NOT FOUND'}\n`;
-            }
-            newPreviewOutput += `     Manual value: ${trn.reviewedByUser.manualValue}\n`;
-            newPreviewOutput += `     Final value: ${trn.extracted.apartmentNumber}\n`;
-          }
+            
+            newPreviewOutput += `\n`;
+          });
+        }
+        
+        // ========== EXPENSES SECTION ==========
+        if (reviewedExpenses.length > 0) {
+          newPreviewOutput += '─'.repeat(80) + '\n';
+          newPreviewOutput += '💸 WYDATKI (EXPENSES)\n';
+          newPreviewOutput += '─'.repeat(80) + '\n\n';
           
-          newPreviewOutput += `\n`;
-        });
+          reviewedExpenses.forEach((trn: any) => {
+            const transactionIndex = updatedTransactions.indexOf(trn) + 1;
+            newPreviewOutput += `Pozycja #${transactionIndex}:\n`;
+            
+            if (trn.reviewedByUser.action === 'accept') {
+              newPreviewOutput += `  ✅ ZAAKCEPTOWANO\n`;
+              if (trn.matchedContractor?.contractor) {
+                newPreviewOutput += `     Kontrahent: ${trn.matchedContractor.contractor.nazwa}\n`;
+                newPreviewOutput += `     Konto: ${trn.matchedContractor.contractor.kontoKontrahenta}\n`;
+              }
+            } else if (trn.reviewedByUser.action === 'reject') {
+              newPreviewOutput += `  ❌ ODRZUCONO - NIEROZPOZNANY KONTRAHENT\n`;
+              if (trn.reviewedByUser.originalContractorValue) {
+                newPreviewOutput += `     Oryginalna wartość: ${trn.reviewedByUser.originalContractorValue.name || 'NIE ZNALEZIONO'}\n`;
+              }
+              newPreviewOutput += `     Finalna wartość: NIEROZPOZNANY\n`;
+            } else if (trn.reviewedByUser.action === 'manual') {
+              newPreviewOutput += `  ✏️  WYBRANO RĘCZNIE\n`;
+              if (trn.reviewedByUser.originalContractorValue) {
+                newPreviewOutput += `     Oryginalna wartość: ${trn.reviewedByUser.originalContractorValue.name || 'NIE ZNALEZIONO'}\n`;
+              }
+              
+              // Show the manually selected contractor
+              if (trn.reviewedByUser.manualContractorId && trn.matchedContractor?.contractor) {
+                newPreviewOutput += `     Ręcznie wybrano: ${trn.matchedContractor.contractor.nazwa}\n`;
+                newPreviewOutput += `     Konto kontrahenta: ${trn.matchedContractor.contractor.kontoKontrahenta}\n`;
+                newPreviewOutput += `     NIP: ${trn.matchedContractor.contractor.nip || 'N/A'}\n`;
+              }
+            }
+            
+            newPreviewOutput += `\n`;
+          });
+        }
       }
       
       fs.writeFileSync(podgladPath, newPreviewOutput, 'utf8');

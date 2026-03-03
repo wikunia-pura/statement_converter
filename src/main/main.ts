@@ -7,12 +7,53 @@ import DatabaseService from './database';
 import ConverterRegistry, { setDatabaseInstance } from './converterRegistry';
 import { IPC_CHANNELS } from '../shared/types';
 
+// Log environment variable for testing
+console.log('[MAIN] TEST_AI_BILLING_ERROR =', process.env.TEST_AI_BILLING_ERROR);
+console.log('[MAIN] TEST_AI_GENERIC_ERROR =', process.env.TEST_AI_GENERIC_ERROR);
+
 const DEV_SERVER_PORT = 3000;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 
 let mainWindow: BrowserWindow | null = null;
 let database: DatabaseService;
 let converterRegistry: ConverterRegistry;
+
+/**
+ * Check if error is a billing/quota error that should stop processing
+ */
+function isBillingError(error: any): boolean {
+  if (!error) return false;
+  
+  const errorMessage = error.message || '';
+  
+  // Check for our custom billing error message
+  if (errorMessage.includes('💸') || errorMessage.includes('Brak kasiory')) {
+    return true;
+  }
+  
+  // Check for quota/billing keywords
+  if (errorMessage.toLowerCase().includes('quota') || 
+      errorMessage.toLowerCase().includes('billing') ||
+      errorMessage.toLowerCase().includes('payment required')) {
+    return true;
+  }
+  
+  // Check for API error status codes
+  if (error.status === 402 || error.status === 429) return true;
+  
+  return false;
+}
+
+/**
+ * Extract error message from any error type (Error instance, object with message, etc.)
+ */
+function getErrorMessage(error: any): string {
+  if (!error) return 'Unknown error';
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  if (error.message) return error.message;
+  return 'Unknown error';
+}
 
 /**
  * Generate timestamp string in format YYYYMMDD_HHMMSS
@@ -157,8 +198,10 @@ function setupIpcHandlers() {
       
       // Parse the file
       const lines = content.split('\n');
-      let count = 0;
+      let added = 0;
+      let updated = 0;
       let lastKontrahent: any = null;
+      let wasNewlyAdded = false; // Track if lastKontrahent was just added
       let accumulatedNip: string | undefined = undefined;
       let accumulatedAltNames: string[] = [];
       
@@ -173,6 +216,11 @@ function setupIpcHandlers() {
           );
           if (accumulatedNip) lastKontrahent.nip = accumulatedNip;
           if (accumulatedAltNames.length > 0) lastKontrahent.alternativeNames = accumulatedAltNames;
+          
+          // Count as updated only if it wasn't just added (to avoid double counting)
+          if (!wasNewlyAdded) {
+            updated++;
+          }
         }
       };
       
@@ -199,10 +247,12 @@ function setupIpcHandlers() {
         // Check if it's an alternative names line
         const altMatch = line.match(/^\s*ALT:\s*(.+)$/);
         if (altMatch && lastKontrahent) {
-          // Accumulate alternative name
-          const altName = altMatch[1].trim();
-          if (altName.length > 0) {
-            accumulatedAltNames.push(altName);
+          // Parse alternative names - they can be comma-separated in one line
+          const altNamesRaw = altMatch[1].trim();
+          if (altNamesRaw.length > 0) {
+            // Split by comma and trim each name
+            const names = altNamesRaw.split(',').map(n => n.trim()).filter(n => n.length > 0);
+            accumulatedAltNames.push(...names);
           }
           continue;
         }
@@ -220,16 +270,19 @@ function setupIpcHandlers() {
           const symbol = match[1].trim();
           const nazwa = match[2].trim();
           
-          // Check if not already exists
+          // Check if already exists
           const existing = database.getAllKontrahenci().find(
             k => k.kontoKontrahenta === symbol
           );
           
           if (!existing) {
             lastKontrahent = database.addKontrahent(nazwa, symbol, undefined, []);
-            count++;
+            added++;
+            wasNewlyAdded = true;
           } else {
-            lastKontrahent = null;
+            // Update existing contractor - keep reference for NIP and ALT updates
+            lastKontrahent = existing;
+            wasNewlyAdded = false;
           }
         }
       }
@@ -237,9 +290,11 @@ function setupIpcHandlers() {
       // Finalize last kontrahent in file
       finalizeLastKontrahent();
       
-      return { success: true, count };
+      console.log(`[IMPORT] FileFunky import completed: added=${added}, updated=${updated}`);
+      return { success: true, added, updated };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('[IMPORT] FileFunky import error:', errorMessage);
       return { success: false, error: errorMessage };
     }
   });
@@ -767,10 +822,10 @@ function setupIpcHandlers() {
             outputPath: finalOutputPath,
           };
         } catch (aiError: unknown) {
-          const aiErrorMessage = aiError instanceof Error ? aiError.message : 'Unknown error';
+          const aiErrorMessage = getErrorMessage(aiError);
           
-          // Check if this is a "no money" error - if so, don't fallback, just fail
-          if (aiErrorMessage.includes('Brak kasiory') || aiErrorMessage.includes('💸')) {
+          // Check if this is a billing/quota error - if so, don't fallback, just fail
+          if (isBillingError(aiError)) {
             console.error('[AI Error - No Money]:', aiErrorMessage);
             throw aiError; // Re-throw to outer catch
           }
@@ -821,7 +876,7 @@ function setupIpcHandlers() {
           }
         }
       } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const errorMessage = getErrorMessage(error);
         const bank = database.getBankById(bankId);
         if (bank) {
           const converter = converterRegistry.getConverter(bank.converterId);

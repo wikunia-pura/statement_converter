@@ -54,6 +54,10 @@ export class AIExtractor {
    * Extract data from multiple transactions in a single API call (batch processing)
    */
   async extractBatch(transactions: AITransaction[]): Promise<AIExtractedData[]> {
+    console.log('[AI-EXTRACTOR] extractBatch called with', transactions.length, 'transactions');
+    console.log('[AI-EXTRACTOR] Provider:', this.config.aiProvider);
+    console.log('[AI-EXTRACTOR] TEST_AI_BILLING_ERROR env var =', process.env.TEST_AI_BILLING_ERROR);
+    
     if (this.config.aiProvider === 'anthropic') {
       return this.extractWithClaude(transactions);
     } else if (this.config.aiProvider === 'openai') {
@@ -91,6 +95,25 @@ export class AIExtractor {
     const userPrompt = this.getUserPrompt(transactions);
 
     try {
+      // TEST MODE: Simulate billing error if TEST_AI_BILLING_ERROR is set
+      console.log('[AI-EXTRACTOR] TEST_AI_BILLING_ERROR =', process.env.TEST_AI_BILLING_ERROR);
+      if (process.env.TEST_AI_BILLING_ERROR === 'true') {
+        console.log('[AI-EXTRACTOR] 🧪 TEST MODE: Simulating billing error');
+        const testError = {
+          status: 429,
+          error: { type: 'insufficient_quota' },
+          message: 'TEST: Simulating insufficient quota error'
+        };
+        throw testError;
+      }
+
+      // TEST MODE: Simulate generic AI error if TEST_AI_GENERIC_ERROR is set
+      console.log('[AI-EXTRACTOR] TEST_AI_GENERIC_ERROR =', process.env.TEST_AI_GENERIC_ERROR);
+      if (process.env.TEST_AI_GENERIC_ERROR === 'true') {
+        console.log('[AI-EXTRACTOR] 🧪 TEST MODE: Simulating generic AI error');
+        throw new Error('TEST: Simulating network timeout error');
+      }
+
       const message = await this.anthropic.messages.create({
         model: this.config.model || 'claude-sonnet-4-6',
         max_tokens: 2000 + (transactions.length * 200),
@@ -114,10 +137,6 @@ export class AIExtractor {
       return this.processAIResponse(response, transactions);
     } catch (error) {
       console.error('Claude API error (extract):', error);
-      
-      if (error && typeof error === 'object') {
-        console.error('Error details:', JSON.stringify(error, null, 2));
-      }
       
       // Check for billing/quota errors
       if (error && typeof error === 'object' && 'status' in error) {
@@ -146,6 +165,25 @@ export class AIExtractor {
    * Extract using OpenAI API
    */
   private async extractWithOpenAI(transactions: AITransaction[]): Promise<AIExtractedData[]> {
+    // TEST MODE: Simulate billing error if TEST_AI_BILLING_ERROR is set
+    console.log('[AI-EXTRACTOR] TEST_AI_BILLING_ERROR =', process.env.TEST_AI_BILLING_ERROR);
+    if (process.env.TEST_AI_BILLING_ERROR === 'true') {
+      console.log('[AI-EXTRACTOR] 🧪 TEST MODE: Simulating billing error');
+      const testError = {
+        status: 429,
+        code: 'insufficient_quota',
+        message: 'TEST: Simulating insufficient quota error'
+      };
+      throw testError;
+    }
+
+    // TEST MODE: Simulate generic AI error if TEST_AI_GENERIC_ERROR is set
+    console.log('[AI-EXTRACTOR] TEST_AI_GENERIC_ERROR =', process.env.TEST_AI_GENERIC_ERROR);
+    if (process.env.TEST_AI_GENERIC_ERROR === 'true') {
+      console.log('[AI-EXTRACTOR] 🧪 TEST MODE: Simulating generic AI error');
+      throw new Error('TEST: Simulating network timeout error');
+    }
+    
     if (!this.openai) {
       throw new Error('OpenAI client not initialized');
     }

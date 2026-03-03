@@ -26,7 +26,7 @@ interface ElectronAPI {
   updateKontrahent: (id: number, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[]) => Promise<boolean>;
   deleteKontrahent: (id: number) => Promise<boolean>;
   deleteAllKontrahenci: () => Promise<boolean>;
-  importKontrahenciFromFile: () => Promise<{ success: boolean; count?: number; error?: string }>;
+  importKontrahenciFromFile: () => Promise<{ success: boolean; added?: number; updated?: number; error?: string }>;
   importKontrahenciFromDOM: () => Promise<{ success: boolean; added?: number; updated?: number; error?: string }>;
   exportKontrahenciToFile: () => Promise<{ success: boolean; count?: number; filePath?: string; error?: string }>;
 

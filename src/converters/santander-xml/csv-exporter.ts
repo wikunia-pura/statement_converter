@@ -207,6 +207,15 @@ export class CsvExporter {
           lines.push(`Księgowanie: k_wn = 131-1, k_ma = ---`);
         }
 
+        // Confidence and status in one readable line
+        if (transaction.extracted?.confidence) {
+          const conf = transaction.extracted.confidence;
+          lines.push(`Pewność: Overall: ${conf.overall}% | Adres: ${conf.address}% | Mieszkanie: ${conf.apartment}% | Najemca: ${conf.tenantName}%`);
+        }
+        if (transaction.extracted?.extractionMethod) {
+          lines.push(`Status: ${transaction.status} | Metoda ekstrakcji: ${transaction.extracted.extractionMethod}`);
+        }
+
         if (transaction.extracted?.warnings && transaction.extracted.warnings.length > 0) {
           lines.push(`Ostrzeżenia: ${transaction.extracted.warnings.join(', ')}`);
         }

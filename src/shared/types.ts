@@ -76,13 +76,15 @@ export interface TransactionForReview {
     contractorName: string | null;
     contractorAccount: string | null;
     confidence: number;
+    manuallySelectedId?: number; // ID of contractor manually selected by user
   };
 }
 
 export interface ReviewDecision {
   index: number; // Matches TransactionForReview.index
   action: 'accept' | 'reject' | 'manual';
-  manualApartmentNumber?: string; // Used when action is 'manual'
+  manualApartmentNumber?: string; // Used when action is 'manual' for income
+  manualContractorId?: number; // Used when action is 'manual' for expense
 }
 
 export interface ConversionReviewData {

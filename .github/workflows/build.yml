@@ -28,6 +28,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Create AI config file
+        run: |
+          cat > config/ai-config.yml << 'EOF'
+          # AI Configuration for Statement Converter
+          ai:
+            anthropic_api_key: "${{ secrets.ANTHROPIC_API_KEY }}"
+            openai_api_key: ""
+            default_provider: "anthropic"
+          EOF
+        shell: bash
+
       - name: Build and package (macOS)
         if: matrix.os == 'macos-latest'
         run: npm run package:mac

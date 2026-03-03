@@ -2,7 +2,7 @@
  * PKO BP MT940 Converter - Type Definitions
  */
 
-import { MatchedContractor } from '../santander-xml/contractor-matcher';
+import { MatchedContractor } from '../../shared/contractor-matcher';
 import { Kontrahent, Adres } from '../../shared/types';
 
 /**
@@ -177,4 +177,7 @@ export interface ConverterConfig {
   skipBankFees: boolean;
   contractors?: Kontrahent[];
   addresses?: Adres[];
+  
+  // Application language for AI reasoning output
+  language?: 'pl' | 'en';
 }

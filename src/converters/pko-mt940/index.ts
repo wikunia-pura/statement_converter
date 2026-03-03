@@ -5,10 +5,10 @@
 
 import { PKOBPMT940Parser } from './parser';
 import { RegexExtractor } from './regex-extractor';
-import { AIExtractor } from '../santander-xml/ai-extractor';
-import { ExtractionCache } from '../santander-xml/cache';
+import { AIExtractor } from '../../shared/ai-extractor';
+import { ExtractionCache } from '../../shared/extraction-cache';
 import { CsvExporter } from './csv-exporter';
-import { ContractorMatcher } from '../santander-xml/contractor-matcher';
+import { ContractorMatcher } from '../../shared/contractor-matcher';
 import {
   MT940Statement,
   MT940Transaction,
@@ -43,6 +43,7 @@ export class PKOBPMT940Converter {
       skipBankFees: config.skipBankFees ?? true,
       contractors: config.contractors,
       addresses: config.addresses,
+      language: config.language,
     };
 
     this.parser = new PKOBPMT940Parser();

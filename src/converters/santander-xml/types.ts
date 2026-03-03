@@ -178,4 +178,7 @@ export interface ConverterConfig {
   
   // Addresses list for income transaction matching (with alternative names)
   addresses?: Adres[];
+  
+  // Application language for AI reasoning output
+  language?: 'pl' | 'en';
 }

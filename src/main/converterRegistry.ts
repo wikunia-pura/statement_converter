@@ -46,14 +46,40 @@ class ConverterRegistry {
 
   private loadAIConfig() {
     try {
+      // Priority 1: Try to load from bundled config file (works in both dev and production)
       const appPath = app.getAppPath();
       const configPath = path.join(appPath, 'config', 'ai-config.yml');
+      
       if (fs.existsSync(configPath)) {
         const fileContents = fs.readFileSync(configPath, 'utf8');
         this.aiConfig = yaml.load(fileContents) as AIConfig;
+        console.log('[AI Config] Loaded from bundled config:', configPath);
+        return;
       }
+      
+      // Priority 2: Try environment variables (useful for deployment)
+      const anthropicKey = process.env.ANTHROPIC_API_KEY;
+      const openaiKey = process.env.OPENAI_API_KEY;
+      
+      if (anthropicKey || openaiKey) {
+        this.aiConfig = {
+          ai: {
+            anthropic_api_key: anthropicKey || '',
+            openai_api_key: openaiKey || '',
+            default_provider: anthropicKey ? 'anthropic' : 'openai',
+          }
+        };
+        console.log('[AI Config] Loaded from environment variables');
+        return;
+      }
+      
+      console.warn('[AI Config] No configuration found. AI features will be disabled.');
+      console.warn('[AI Config] To enable AI:');
+      console.warn('[AI Config]   1. Add config/ai-config.yml with your API keys, or');
+      console.warn('[AI Config]   2. Set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable');
     } catch (error) {
-      console.warn('AI config not found or invalid, AI features will be disabled');
+      console.error('[AI Config] Error loading configuration:', error);
+      console.warn('[AI Config] AI features will be disabled');
     }
   }
 
@@ -94,6 +120,9 @@ class ConverterRegistry {
       // Fetch addresses from database
       const addresses = dbInstance?.getAllAdresy() || [];
       
+      // Get app language
+      const language = (dbInstance?.getSetting('language') || 'pl') as 'pl' | 'en';
+      
       const converter = new SantanderXmlConverter({
         aiProvider: 'none',
         apiKey: '',
@@ -104,6 +133,7 @@ class ConverterRegistry {
         },
         contractors, // Pass contractors for expense matching
         addresses, // Pass addresses for address matching
+        language,
       });
 
       const xmlContent = readFileWithEncoding(inputPath);
@@ -147,6 +177,9 @@ class ConverterRegistry {
         addresses = addresses.filter(a => a.id === adresId);
       }
       
+      // Get app language
+      const language = (dbInstance?.getSetting('language') || 'pl') as 'pl' | 'en';
+      
       const converter = new PKOBPMT940Converter({
         aiProvider: 'none',
         apiKey: '',
@@ -157,6 +190,7 @@ class ConverterRegistry {
         },
         contractors, // Pass contractors for expense matching
         addresses, // Pass addresses for address matching
+        language,
       });
 
       const mt940Content = readFileWithEncoding(inputPath);
@@ -358,6 +392,9 @@ class ConverterRegistry {
             addresses = addresses.filter(a => a.id === adresId);
           }
 
+          // Get app language
+          const language = (dbInstance?.getSetting('language') || 'pl') as 'pl' | 'en';
+
           // Use the real Santander XML converter
           const converter = new SantanderXmlConverter({
             aiProvider: provider,
@@ -369,6 +406,7 @@ class ConverterRegistry {
             },
             contractors, // Pass contractors for expense matching
             addresses, // Pass addresses for income address matching
+            language,
           });
 
           const xmlContent = readFileWithEncoding(inputPath);
@@ -417,50 +455,50 @@ class ConverterRegistry {
             output += `   ${trn.original.descOpt || '(empty)'}\n\n`;
             
             // Extracted Data
-            output += `🔍 EXTRACTED DATA:\n`;
-            output += `   Apartment:        ${trn.extracted.apartmentNumber || 'NOT FOUND'}\n`;
-            output += `   Full Address:     ${trn.extracted.fullAddress || 'NOT FOUND'}\n`;
-            output += `   Street Name:      ${trn.extracted.streetName || 'N/A'}\n`;
-            output += `   Building Number:  ${trn.extracted.buildingNumber || 'N/A'}\n`;
-            output += `   Tenant Name:      ${trn.extracted.tenantName || 'N/A'}\n\n`;
+            output += `🔍 ${language === 'pl' ? 'WYEKSTRAHOWANE DANE' : 'EXTRACTED DATA'}:\n`;
+            output += `   ${language === 'pl' ? 'Mieszkanie' : 'Apartment'}:        ${trn.extracted.apartmentNumber || (language === 'pl' ? 'NIE ZNALEZIONO' : 'NOT FOUND')}\n`;
+            output += `   ${language === 'pl' ? 'Pełny adres' : 'Full Address'}:     ${trn.extracted.fullAddress || (language === 'pl' ? 'NIE ZNALEZIONO' : 'NOT FOUND')}\n`;
+            output += `   ${language === 'pl' ? 'Ulica' : 'Street Name'}:      ${trn.extracted.streetName || 'N/A'}\n`;
+            output += `   ${language === 'pl' ? 'Nr budynku' : 'Building Number'}:  ${trn.extracted.buildingNumber || 'N/A'}\n`;
+            output += `   ${language === 'pl' ? 'Najemca' : 'Tenant Name'}:      ${trn.extracted.tenantName || 'N/A'}\n\n`;
             
             // Confidence & Status
-            output += `📊 CONFIDENCE & STATUS:\n`;
-            output += `   Overall Confidence:    ${trn.extracted.confidence.overall}%\n`;
-            output += `   Apartment Confidence:  ${trn.extracted.confidence.apartment}%\n`;
-            output += `   Address Confidence:    ${trn.extracted.confidence.address}%\n`;
-            output += `   Tenant Confidence:     ${trn.extracted.confidence.tenantName}%\n`;
-            output += `   Extraction Method:     ${trn.extracted.extractionMethod}\n`;
+            output += `📊 ${language === 'pl' ? 'PEWNOŚĆ I STATUS' : 'CONFIDENCE & STATUS'}:\n`;
+            output += `   ${language === 'pl' ? 'Pewność ogólna' : 'Overall Confidence'}:    ${trn.extracted.confidence.overall}%\n`;
+            output += `   ${language === 'pl' ? 'Pewność mieszkania' : 'Apartment Confidence'}:  ${trn.extracted.confidence.apartment}%\n`;
+            output += `   ${language === 'pl' ? 'Pewność adresu' : 'Address Confidence'}:    ${trn.extracted.confidence.address}%\n`;
+            output += `   ${language === 'pl' ? 'Pewność najemcy' : 'Tenant Confidence'}:     ${trn.extracted.confidence.tenantName}%\n`;
+            output += `   ${language === 'pl' ? 'Metoda ekstrakcji' : 'Extraction Method'}:     ${trn.extracted.extractionMethod}\n`;
             output += `   Status:                ${trn.status}\n`;
             
             if (trn.extracted.warnings && trn.extracted.warnings.length > 0) {
-              output += `   Warnings:              ${trn.extracted.warnings.join(', ')}\n`;
+              output += `   ${language === 'pl' ? 'Ostrzeżenia' : 'Warnings'}:              ${trn.extracted.warnings.join(', ')}\n`;
             }
             
             // User Review Info (if applicable)
             if (trn.reviewedByUser) {
-              output += `\n👤 USER REVIEW:\n`;
+              output += `\n👤 ${language === 'pl' ? 'WERYFIKACJA UŻYTKOWNIKA' : 'USER REVIEW'}:\n`;
               if (trn.reviewedByUser.action === 'accept') {
-                output += `   Action:                ZAAKCEPTOWANO\n`;
+                output += `   ${language === 'pl' ? 'Akcja' : 'Action'}:                ${language === 'pl' ? 'ZAAKCEPTOWANO' : 'ACCEPTED'}\n`;
                 if (trn.reviewedByUser.extractedFrom) {
-                  output += `   Source:                Wyekstrahowano z ${trn.reviewedByUser.extractedFrom}\n`;
+                  output += `   ${language === 'pl' ? 'Źródło' : 'Source'}:                ${language === 'pl' ? 'Wyekstrahowano z' : 'Extracted from'} ${trn.reviewedByUser.extractedFrom}\n`;
                 }
               } else if (trn.reviewedByUser.action === 'reject') {
-                output += `   Action:                ODRZUCONO\n`;
+                output += `   ${language === 'pl' ? 'Akcja' : 'Action'}:                ${language === 'pl' ? 'ODRZUCONO' : 'REJECTED'}\n`;
                 if (trn.reviewedByUser.originalValue) {
-                  output += `   Original Value:        ${trn.reviewedByUser.originalValue}\n`;
+                  output += `   ${language === 'pl' ? 'Oryginalna wartość' : 'Original Value'}:        ${trn.reviewedByUser.originalValue}\n`;
                 }
               } else if (trn.reviewedByUser.action === 'manual') {
-                output += `   Action:                WPISANO RĘCZNIE\n`;
-                output += `   Manual Value:          ${trn.reviewedByUser.manualValue}\n`;
+                output += `   ${language === 'pl' ? 'Akcja' : 'Action'}:                ${language === 'pl' ? 'WPISANO RĘCZNIE' : 'MANUAL INPUT'}\n`;
+                output += `   ${language === 'pl' ? 'Wpisana wartość' : 'Manual Value'}:          ${trn.reviewedByUser.manualValue}\n`;
                 if (trn.reviewedByUser.originalValue !== undefined) {
-                  output += `   Original Value:        ${trn.reviewedByUser.originalValue || 'NOT FOUND'}\n`;
+                  output += `   ${language === 'pl' ? 'Oryginalna wartość' : 'Original Value'}:        ${trn.reviewedByUser.originalValue || (language === 'pl' ? 'NIE ZNALEZIONO' : 'NOT FOUND')}\n`;
                 }
               }
             }
             
             if (trn.extracted.reasoning) {
-              output += `\n   AI Reasoning:\n`;
+              output += `\n   ${language === 'pl' ? 'Uzasadnienie AI' : 'AI Reasoning'}:\n`;
               output += `   ${trn.extracted.reasoning}\n`;
             }
             
@@ -601,6 +639,9 @@ class ConverterRegistry {
             addresses = addresses.filter(a => a.id === adresId);
           }
 
+          // Get app language
+          const language = (dbInstance?.getSetting('language') || 'pl') as 'pl' | 'en';
+
           // Use the PKO BP MT940 converter
           const converter = new PKOBPMT940Converter({
             aiProvider: provider,
@@ -612,6 +653,7 @@ class ConverterRegistry {
             },
             contractors, // Pass contractors for expense matching
             addresses, // Pass addresses for income address matching
+            language,
           });
 
           const mt940Content = readFileWithEncoding(inputPath);
@@ -660,50 +702,50 @@ class ConverterRegistry {
             output += `   IBAN: ${trn.original.details.counterpartyIBAN}\n\n`;
             
             // Extracted Data
-            output += `🔍 EXTRACTED DATA:\n`;
-            output += `   Apartment:        ${trn.extracted.apartmentNumber || 'NOT FOUND'}\n`;
-            output += `   Full Address:     ${trn.extracted.fullAddress || 'NOT FOUND'}\n`;
-            output += `   Street Name:      ${trn.extracted.streetName || 'N/A'}\n`;
-            output += `   Building Number:  ${trn.extracted.buildingNumber || 'N/A'}\n`;
-            output += `   Tenant Name:      ${trn.extracted.tenantName || 'N/A'}\n\n`;
+            output += `🔍 ${language === 'pl' ? 'WYEKSTRAHOWANE DANE' : 'EXTRACTED DATA'}:\n`;
+            output += `   ${language === 'pl' ? 'Mieszkanie' : 'Apartment'}:        ${trn.extracted.apartmentNumber || (language === 'pl' ? 'NIE ZNALEZIONO' : 'NOT FOUND')}\n`;
+            output += `   ${language === 'pl' ? 'Pełny adres' : 'Full Address'}:     ${trn.extracted.fullAddress || (language === 'pl' ? 'NIE ZNALEZIONO' : 'NOT FOUND')}\n`;
+            output += `   ${language === 'pl' ? 'Ulica' : 'Street Name'}:      ${trn.extracted.streetName || 'N/A'}\n`;
+            output += `   ${language === 'pl' ? 'Nr budynku' : 'Building Number'}:  ${trn.extracted.buildingNumber || 'N/A'}\n`;
+            output += `   ${language === 'pl' ? 'Najemca' : 'Tenant Name'}:      ${trn.extracted.tenantName || 'N/A'}\n\n`;
             
             // Confidence & Status
-            output += `📊 CONFIDENCE & STATUS:\n`;
-            output += `   Overall Confidence:    ${trn.extracted.confidence.overall}%\n`;
-            output += `   Apartment Confidence:  ${trn.extracted.confidence.apartment}%\n`;
-            output += `   Address Confidence:    ${trn.extracted.confidence.address}%\n`;
-            output += `   Tenant Confidence:     ${trn.extracted.confidence.tenantName}%\n`;
-            output += `   Extraction Method:     ${trn.extracted.extractionMethod}\n`;
+            output += `📊 ${language === 'pl' ? 'PEWNOŚĆ I STATUS' : 'CONFIDENCE & STATUS'}:\n`;
+            output += `   ${language === 'pl' ? 'Pewność ogólna' : 'Overall Confidence'}:    ${trn.extracted.confidence.overall}%\n`;
+            output += `   ${language === 'pl' ? 'Pewność mieszkania' : 'Apartment Confidence'}:  ${trn.extracted.confidence.apartment}%\n`;
+            output += `   ${language === 'pl' ? 'Pewność adresu' : 'Address Confidence'}:    ${trn.extracted.confidence.address}%\n`;
+            output += `   ${language === 'pl' ? 'Pewność najemcy' : 'Tenant Confidence'}:     ${trn.extracted.confidence.tenantName}%\n`;
+            output += `   ${language === 'pl' ? 'Metoda ekstrakcji' : 'Extraction Method'}:     ${trn.extracted.extractionMethod}\n`;
             output += `   Status:                ${trn.status}\n`;
             
             if (trn.extracted.warnings && trn.extracted.warnings.length > 0) {
-              output += `   Warnings:              ${trn.extracted.warnings.join(', ')}\n`;
+              output += `   ${language === 'pl' ? 'Ostrzeżenia' : 'Warnings'}:              ${trn.extracted.warnings.join(', ')}\n`;
             }
             
             // User Review Info (if applicable)
             if (trn.reviewedByUser) {
-              output += `\n👤 USER REVIEW:\n`;
+              output += `\n👤 ${language === 'pl' ? 'WERYFIKACJA UŻYTKOWNIKA' : 'USER REVIEW'}:\n`;
               if (trn.reviewedByUser.action === 'accept') {
-                output += `   Action:                ZAAKCEPTOWANO\n`;
+                output += `   ${language === 'pl' ? 'Akcja' : 'Action'}:                ${language === 'pl' ? 'ZAAKCEPTOWANO' : 'ACCEPTED'}\n`;
                 if (trn.reviewedByUser.extractedFrom) {
-                  output += `   Source:                Wyekstrahowano z ${trn.reviewedByUser.extractedFrom}\n`;
+                  output += `   ${language === 'pl' ? 'Źródło' : 'Source'}:                ${language === 'pl' ? 'Wyekstrahowano z' : 'Extracted from'} ${trn.reviewedByUser.extractedFrom}\n`;
                 }
               } else if (trn.reviewedByUser.action === 'reject') {
-                output += `   Action:                ODRZUCONO\n`;
+                output += `   ${language === 'pl' ? 'Akcja' : 'Action'}:                ${language === 'pl' ? 'ODRZUCONO' : 'REJECTED'}\n`;
                 if (trn.reviewedByUser.originalValue) {
-                  output += `   Original Value:        ${trn.reviewedByUser.originalValue}\n`;
+                  output += `   ${language === 'pl' ? 'Oryginalna wartość' : 'Original Value'}:        ${trn.reviewedByUser.originalValue}\n`;
                 }
               } else if (trn.reviewedByUser.action === 'manual') {
-                output += `   Action:                WPISANO RĘCZNIE\n`;
-                output += `   Manual Value:          ${trn.reviewedByUser.manualValue}\n`;
+                output += `   ${language === 'pl' ? 'Akcja' : 'Action'}:                ${language === 'pl' ? 'WPISANO RĘCZNIE' : 'MANUAL INPUT'}\n`;
+                output += `   ${language === 'pl' ? 'Wpisana wartość' : 'Manual Value'}:          ${trn.reviewedByUser.manualValue}\n`;
                 if (trn.reviewedByUser.originalValue !== undefined) {
-                  output += `   Original Value:        ${trn.reviewedByUser.originalValue || 'NOT FOUND'}\n`;
+                  output += `   ${language === 'pl' ? 'Oryginalna wartość' : 'Original Value'}:        ${trn.reviewedByUser.originalValue || (language === 'pl' ? 'NIE ZNALEZIONO' : 'NOT FOUND')}\n`;
                 }
               }
             }
             
             if (trn.extracted.reasoning) {
-              output += `\n   AI Reasoning:\n`;
+              output += `\n   ${language === 'pl' ? 'Uzasadnienie AI' : 'AI Reasoning'}:\n`;
               output += `   ${trn.extracted.reasoning}\n`;
             }
             
@@ -938,6 +980,24 @@ class ConverterRegistry {
     } catch (error) {
       throw error;
     }
+  }
+
+  /**
+   * Check if AI is configured and ready to use
+   */
+  isAIConfigured(): boolean {
+    if (!this.aiConfig || !this.aiConfig.ai) {
+      return false;
+    }
+    
+    const provider = this.aiConfig.ai.default_provider;
+    if (provider === 'anthropic') {
+      return !!this.aiConfig.ai.anthropic_api_key && this.aiConfig.ai.anthropic_api_key.length > 0;
+    } else if (provider === 'openai') {
+      return !!this.aiConfig.ai.openai_api_key && this.aiConfig.ai.openai_api_key.length > 0;
+    }
+    
+    return false;
   }
 }
 

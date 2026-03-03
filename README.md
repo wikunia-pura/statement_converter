@@ -196,6 +196,34 @@ npm run package:win      # Build Windows installer
 npm run package:mac      # Build macOS .dmg
 ```
 
+## Building with GitHub Actions
+
+The application uses GitHub Actions for automated building and releasing:
+
+### Quick Start
+
+1. **Add API Key to GitHub Secrets**:
+   - Go to your repository → Settings → Secrets and variables → Actions
+   - Add secret: `ANTHROPIC_API_KEY` with your API key
+
+2. **Create a Release**:
+   ```bash
+   git tag v2.0.4
+   git push origin v2.0.4
+   ```
+
+3. **Download artifacts** from the Actions tab or from the GitHub Release
+
+📚 **Full Guide**: See [GitHub Actions Setup](docs/GITHUB_ACTIONS_SETUP.md) for detailed instructions
+
+### What Gets Built
+
+- **macOS**: `.dmg` installer with auto-update support
+- **Windows**: `.exe` installer with auto-update support
+- **Artifacts**: Automatically uploaded to GitHub Releases
+
+The AI configuration is automatically injected during the build process from GitHub Secrets, so end users don't need to configure anything.
+
 ## License
 
 Wikunia & Pura

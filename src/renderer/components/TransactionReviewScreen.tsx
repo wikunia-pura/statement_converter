@@ -10,6 +10,7 @@ interface TransactionCardProps {
   manualInput: string | undefined;
   handleDecision: (index: number, action: 'accept' | 'reject') => void;
   handleManualInput: (index: number, value: string) => void;
+  language: Language;
 }
 
 const TransactionCard: React.FC<TransactionCardProps> = ({
@@ -19,6 +20,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
   manualInput,
   handleDecision,
   handleManualInput,
+  language,
 }) => (
   <div
     style={{
@@ -83,16 +85,16 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
     {/* Extracted Data */}
     {trn.transactionType === 'income' && (
       <div style={{ marginBottom: '15px' }}>
-        <h4 style={{ margin: '0 0 10px 0', color: '#DCDCAA' }}>🔍 Wyekstrahowane dane:</h4>
+        <h4 style={{ margin: '0 0 10px 0', color: '#DCDCAA' }}>🔍 {language === 'pl' ? 'Wyekstrahowane dane' : 'Extracted data'}:</h4>
         <div style={{ fontSize: '14px', lineHeight: '1.6', color: '#858585' }}>
-          <div>Adres: {trn.extracted.fullAddress || 'NIE ZNALEZIONO'}</div>
-          <div>Ulica: {trn.extracted.streetName || 'N/A'}</div>
-          <div>Numer budynku: {trn.extracted.buildingNumber || 'N/A'}</div>
-          <div>Numer mieszkania: {trn.extracted.apartmentNumber || 'NIE ZNALEZIONO'}</div>
-          <div>Najemca: {trn.extracted.tenantName || 'N/A'}</div>
+          <div>{language === 'pl' ? 'Adres' : 'Address'}: {trn.extracted.fullAddress || (language === 'pl' ? 'NIE ZNALEZIONO' : 'NOT FOUND')}</div>
+          <div>{language === 'pl' ? 'Ulica' : 'Street'}: {trn.extracted.streetName || 'N/A'}</div>
+          <div>{language === 'pl' ? 'Numer budynku' : 'Building number'}: {trn.extracted.buildingNumber || 'N/A'}</div>
+          <div>{language === 'pl' ? 'Numer mieszkania' : 'Apartment number'}: {trn.extracted.apartmentNumber || (language === 'pl' ? 'NIE ZNALEZIONO' : 'NOT FOUND')}</div>
+          <div>{language === 'pl' ? 'Najemca' : 'Tenant'}: {trn.extracted.tenantName || 'N/A'}</div>
           {trn.extracted.reasoning && (
             <div style={{ marginTop: '10px', color: '#858585', fontStyle: 'italic' }}>
-              AI: {trn.extracted.reasoning}
+              {language === 'pl' ? 'Uzasadnienie AI' : 'AI Reasoning'}: {trn.extracted.reasoning}
             </div>
           )}
         </div>
@@ -439,6 +441,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                   manualInput={manualInput}
                   handleDecision={handleDecision}
                   handleManualInput={handleManualInput}
+                  language={language}
                 />
               );
             })}
@@ -491,6 +494,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                   manualInput={manualInput}
                   handleDecision={handleDecision}
                   handleManualInput={handleManualInput}
+                  language={language}
                 />
               );
             })}

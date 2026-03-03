@@ -5,10 +5,10 @@
 
 import { SantanderXmlParser } from './parser';
 import { RegexExtractor } from './regex-extractor';
-import { AIExtractor } from './ai-extractor';
-import { ExtractionCache } from './cache';
+import { AIExtractor } from '../../shared/ai-extractor';
+import { ExtractionCache } from '../../shared/extraction-cache';
 import { CsvExporter } from './csv-exporter';
-import { ContractorMatcher } from './contractor-matcher';
+import { ContractorMatcher } from '../../shared/contractor-matcher';
 import {
   XmlStatement,
   XmlTransaction,
@@ -43,6 +43,7 @@ export class SantanderXmlConverter {
       skipBankFees: config.skipBankFees ?? true,
       contractors: config.contractors,
       addresses: config.addresses,
+      language: config.language,
     };
 
     this.parser = new SantanderXmlParser();
@@ -580,6 +581,6 @@ export class SantanderXmlConverter {
 export * from './types';
 export { SantanderXmlParser } from './parser';
 export { RegexExtractor } from './regex-extractor';
-export { AIExtractor } from './ai-extractor';
-export { ExtractionCache } from './cache';
+export { AIExtractor } from '../../shared/ai-extractor';
+export { ExtractionCache } from '../../shared/extraction-cache';
 export { CsvExporter } from './csv-exporter';

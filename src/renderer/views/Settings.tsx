@@ -60,6 +60,28 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
 
   const handleSkipUserApprovalToggle = async () => {
     const newValue = !skipUserApproval;
+    
+    // If enabling, show warning dialogs
+    if (newValue) {
+      // First warning
+      const firstConfirm = window.confirm(
+        `${t.skipApprovalWarningTitle}\n\n${t.skipApprovalWarningMessage}\n\nKliknij OK aby kontynuować lub Anuluj aby wrócić.`
+      );
+      
+      if (!firstConfirm) {
+        return; // User cancelled
+      }
+      
+      // Second confirmation
+      const secondConfirm = window.confirm(
+        `${t.skipApprovalConfirmTitle}\n\n${t.skipApprovalConfirmMessage}`
+      );
+      
+      if (!secondConfirm) {
+        return; // User cancelled again
+      }
+    }
+    
     await window.electronAPI.setSkipUserApproval(newValue);
     setSkipUserApproval(newValue);
   };
@@ -148,7 +170,26 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
         const result = await window.electronAPI.importSettings();
         if (result.success) {
           alert(t.importSuccess);
-          loadData();
+          
+          // Reload all data and settings
+          await loadData();
+          
+          // Explicitly sync settings with parent component
+          const settings = await window.electronAPI.getSettings();
+          
+          // Sync darkMode
+          if (settings.darkMode !== darkMode) {
+            onDarkModeChange(settings.darkMode);
+          }
+          
+          // Sync language
+          if (settings.language !== language) {
+            onLanguageChange(settings.language);
+          }
+          
+          // Explicitly update outputFolder in local state
+          setOutputFolder(settings.outputFolder || '');
+          setSkipUserApproval(settings.skipUserApproval ?? false);
         } else if (result.error) {
           alert(`${t.importError}: ${result.error}`);
         }
@@ -160,6 +201,48 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
 
   return (
     <div className="content-body">
+        {/* Updates */}
+        <div className="card">
+          <h2 style={{ marginBottom: '20px' }}>🔄 {t.checkForUpdates}</h2>
+          <p style={{ color: '#6c757d', fontSize: '14px', marginBottom: '20px' }}>
+            Sprawdź czy dostępna jest nowa wersja aplikacji.
+          </p>
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+            <button 
+              className="button button-primary" 
+              onClick={async () => {
+                const result = await window.electronAPI.checkForUpdates();
+                if (result.message) {
+                  alert(result.message);
+                } else if (result.error) {
+                  alert(`Błąd: ${result.error}`);
+                } else if (result.available) {
+                  alert('Dostępna nowa wersja! Pojawi się powiadomienie.');
+                } else {
+                  alert('Nie znaleziono aktualizacji');
+                }
+              }}
+            >
+              Sprawdź aktualizacje
+            </button>
+            <button 
+              className="button button-secondary" 
+              onClick={async () => {
+                const result = await window.electronAPI.openLogsFolder();
+                if (result.success && result.logPath) {
+                  console.log('Log file:', result.logPath);
+                }
+              }}
+              title="Otwórz folder z logami aplikacji - pomaga w diagnozowaniu problemów z aktualizacjami"
+            >
+              📋 Pokaż logi
+            </button>
+          </div>
+          <p style={{ color: '#6c757d', fontSize: '12px', fontStyle: 'italic' }}>
+            💡 Jeśli aktualizacja nie działa, sprawdź logi aby zobaczyć szczegóły błędu.
+          </p>
+        </div>
+
         {/* Appearance Settings */}
         <div className="card">
           <h2 style={{ marginBottom: '20px' }}>{t.appearance}</h2>
@@ -176,23 +259,6 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
                 type="checkbox"
                 checked={darkMode}
                 onChange={handleDarkModeToggle}
-              />
-              <span className="toggle-slider"></span>
-            </label>
-          </div>
-
-          <div className="settings-row">
-            <div className="settings-label">
-              <span className="settings-label-main">⚡ {t.skipUserApproval}</span>
-              <span className="settings-label-sub">
-                {t.skipUserApprovalDesc}
-              </span>
-            </div>
-            <label className="toggle-switch">
-              <input
-                type="checkbox"
-                checked={skipUserApproval}
-                onChange={handleSkipUserApprovalToggle}
               />
               <span className="toggle-slider"></span>
             </label>
@@ -368,46 +434,28 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
           </div>
         </div>
 
-        {/* Updates */}
-        <div className="card">
-          <h2 style={{ marginBottom: '20px' }}>🔄 {t.checkForUpdates}</h2>
-          <p style={{ color: '#6c757d', fontSize: '14px', marginBottom: '20px' }}>
-            Sprawdź czy dostępna jest nowa wersja aplikacji.
+        {/* Developer-only section - Skip Approval */}
+        <div className="card" style={{ borderColor: '#dc3545', backgroundColor: 'rgba(220, 53, 69, 0.05)' }}>
+          <h2 style={{ marginBottom: '20px', color: '#dc3545' }}>⚠️ {t.doNotUseSkipApproval}</h2>
+          <p style={{ color: '#dc3545', fontSize: '14px', marginBottom: '15px', fontWeight: 'bold' }}>
+            {t.skipApprovalWarningMessage}
           </p>
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-            <button 
-              className="button button-primary" 
-              onClick={async () => {
-                const result = await window.electronAPI.checkForUpdates();
-                if (result.message) {
-                  alert(result.message);
-                } else if (result.error) {
-                  alert(`Błąd: ${result.error}`);
-                } else if (result.available) {
-                  alert('Dostępna nowa wersja! Pojawi się powiadomienie.');
-                } else {
-                  alert('Nie znaleziono aktualizacji');
-                }
-              }}
-            >
-              Sprawdź aktualizacje
-            </button>
-            <button 
-              className="button button-secondary" 
-              onClick={async () => {
-                const result = await window.electronAPI.openLogsFolder();
-                if (result.success && result.logPath) {
-                  console.log('Log file:', result.logPath);
-                }
-              }}
-              title="Otwórz folder z logami aplikacji - pomaga w diagnozowaniu problemów z aktualizacjami"
-            >
-              📋 Pokaż logi
-            </button>
+          <div className="settings-row">
+            <div className="settings-label">
+              <span className="settings-label-main" style={{ color: '#dc3545' }}>🚨 {t.skipUserApproval}</span>
+              <span className="settings-label-sub" style={{ color: '#6c757d' }}>
+                {t.skipUserApprovalDesc}
+              </span>
+            </div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={skipUserApproval}
+                onChange={handleSkipUserApprovalToggle}
+              />
+              <span className="toggle-slider"></span>
+            </label>
           </div>
-          <p style={{ color: '#6c757d', fontSize: '12px', fontStyle: 'italic' }}>
-            💡 Jeśli aktualizacja nie działa, sprawdź logi aby zobaczyć szczegóły błędu.
-          </p>
         </div>
     </div>
   );

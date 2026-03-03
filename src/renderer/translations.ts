@@ -87,7 +87,9 @@ export const translations = {
     addAlternativeName: 'Dodaj alternatywną nazwę',
     alternativeNamesHint: 'Np. różne warianty nazwy występujące na wyciągach bankowych',
     noKontrahenciConfigured: 'Nie dodano jeszcze żadnych kontrahentów',
-    importFromFile: 'Importuj z pliku',
+    importing: 'Importowanie...',
+    importFromFileFunky: 'Import z FileFunky',
+    importFromDOM: 'Import z DOM',
     exportToFile: 'Eksportuj do pliku',
     searchKontrahenci: 'Wyszukaj kontrahenta...',
     totalKontrahenci: 'Razem',
@@ -98,6 +100,7 @@ export const translations = {
     confirmDeleteAllKontrahenci: 'Czy na pewno chcesz usunąć WSZYSTKICH kontrahentów?',
     deleteAllKontrahenci: 'Usuń wszystkich',
     importKontrahenciSuccess: 'Zaimportowano {count} kontrahentów pomyślnie!',
+    importKontrahenciFromDOMSuccess: 'Import z DOM: dodano {added}, zaktualizowano {updated}',
     importKontrahenciError: 'Błąd podczas importu kontrahentów',
     exportKontrahenciSuccess: 'Wyeksportowano {count} kontrahentów pomyślnie!',
     exportKontrahenciError: 'Błąd podczas eksportu kontrahentów',
@@ -140,6 +143,14 @@ export const translations = {
     importInvalidFormat: 'Nieprawidłowy format pliku',
     exportSettings: 'Eksportuj Ustawienia',
     importSettings: 'Importuj Ustawienia',
+    
+    // Skip approval warnings
+    skipApprovalWarningTitle: '⚠️ OSTRZEŻENIE',
+    skipApprovalWarningMessage: 'Pominięcie akceptacji jest tylko dla Wiktora. Nie włączaj tego.',
+    skipApprovalConfirmTitle: 'Czy na pewno?',
+    skipApprovalConfirmMessage: 'Ta funkcja jest przeznaczona TYLKO dla developera. Włączenie może spowodować błędy w danych. Czy NA PEWNO chcesz kontynuować?',
+    enableAnyway: 'Włącz mimo wszystko',
+    doNotUseSkipApproval: 'NIE UŻYWAĆ - POMIŃ AKCEPTACJĘ',
     
     // Updates
     updateAvailableTitle: 'Dostępna nowa wersja',
@@ -251,7 +262,9 @@ export const translations = {
     addAlternativeName: 'Add alternative name',
     alternativeNamesHint: 'E.g. different name variations appearing on bank statements',
     noKontrahenciConfigured: 'No contractors added yet',
-    importFromFile: 'Import from file',
+    importing: 'Importing...',
+    importFromFileFunky: 'Import from FileFunky',
+    importFromDOM: 'Import from DOM',
     exportToFile: 'Export to file',
     searchKontrahenci: 'Search contractor...',
     totalKontrahenci: 'Total',
@@ -264,6 +277,7 @@ export const translations = {
     exportKontrahenciError: 'Error exporting contractors',
     deleteAllKontrahenci: 'Delete all',
     importKontrahenciSuccess: 'Imported {count} contractors successfully!',
+    importKontrahenciFromDOMSuccess: 'DOM import: added {added}, updated {updated}',
     importKontrahenciError: 'Error importing contractors',
     
     // Adresy view
@@ -304,6 +318,14 @@ export const translations = {
     importInvalidFormat: 'Invalid file format',
     exportSettings: 'Export Settings',
     importSettings: 'Import Settings',
+    
+    // Skip approval warnings
+    skipApprovalWarningTitle: '⚠️ WARNING',
+    skipApprovalWarningMessage: 'Skip approval is only for Wiktor. Do not enable this.',
+    skipApprovalConfirmTitle: 'Are you sure?',
+    skipApprovalConfirmMessage: 'This feature is ONLY for the developer. Enabling it may cause data errors. Are you SURE you want to continue?',
+    enableAnyway: 'Enable anyway',
+    doNotUseSkipApproval: 'DO NOT USE - SKIP APPROVAL',
     
     // Updates
     updateAvailableTitle: 'New version available',

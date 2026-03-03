@@ -15,6 +15,7 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
   const [newAlternativeNames, setNewAlternativeNames] = useState<string[]>([]);
   const [newAlternativeName, setNewAlternativeName] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isImporting, setIsImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
@@ -99,6 +100,7 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
   };
 
   const handleImportFromFile = async () => {
+    setIsImporting(true);
     try {
       const result = await window.electronAPI.importAdresyFromFile();
       if (result.success) {
@@ -109,6 +111,8 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
       }
     } catch (error) {
       alert(t.importAdresyError);
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -176,8 +180,9 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
             <button
               className="button button-secondary"
               onClick={handleImportFromFile}
+              disabled={isImporting}
             >
-              {t.importFromFile}
+              {isImporting ? t.importing : t.importFromFile}
             </button>
             <button
               className="button button-secondary"

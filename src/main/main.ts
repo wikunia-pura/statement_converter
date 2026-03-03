@@ -187,13 +187,12 @@ function setupIpcHandlers() {
           continue;
         }
         
-        // Check if it's a NIP line
-        const nipMatch = line.match(/^\s*NIP:\s*(.+)$/);
+        // Check if it's a NIP line (including empty ones)
+        const nipMatch = line.match(/^\s*NIP:\s*(.*)$/);
         if (nipMatch && lastKontrahent) {
           const nip = nipMatch[1].trim();
-          if (nip) {
-            accumulatedNip = nip;
-          }
+          // Set to value if non-empty, or undefined to clear if empty
+          accumulatedNip = nip.length > 0 ? nip : undefined;
           continue;
         }
         
@@ -239,6 +238,110 @@ function setupIpcHandlers() {
       finalizeLastKontrahent();
       
       return { success: true, count };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return { success: false, error: errorMessage };
+    }
+  });
+
+  // Import from DOM - updates existing entries by name, doesn't modify alternative names
+  ipcMain.handle(IPC_CHANNELS.IMPORT_KONTRAHENCI_FROM_DOM, async () => {
+    try {
+      const result = await dialog.showOpenDialog(mainWindow!, {
+        properties: ['openFile'],
+        filters: [
+          { name: 'Text Files', extensions: ['txt'] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false };
+      }
+
+      const filePath = result.filePaths[0];
+      const content = fs.readFileSync(filePath, 'utf-8');
+      
+      // Parse the file
+      const lines = content.split('\n');
+      let added = 0;
+      let updated = 0;
+      let lastKontrahent: any = null;
+      let lastNazwa: string | null = null;
+      let lastSymbol: string | null = null;
+      let accumulatedNip: string | undefined = undefined;
+      
+      const finalizeLastKontrahent = () => {
+        if (lastNazwa && lastSymbol) {
+          // Match by nazwa (main name), not by symbol
+          const existing = database.getAllKontrahenci().find(
+            k => k.nazwa.toLowerCase() === lastNazwa!.toLowerCase()
+          );
+          
+          if (existing) {
+            // Update existing: nazwa, kontoKontrahenta, nip can change
+            // BUT keep existing alternativeNames
+            database.updateKontrahent(
+              existing.id,
+              lastNazwa,
+              lastSymbol,
+              accumulatedNip,
+              existing.alternativeNames || []
+            );
+            updated++;
+          } else {
+            // Add new
+            database.addKontrahent(lastNazwa, lastSymbol, accumulatedNip, []);
+            added++;
+          }
+        }
+        lastNazwa = null;
+        lastSymbol = null;
+        accumulatedNip = undefined;
+      };
+      
+      for (const line of lines) {
+        // Skip header lines and empty lines
+        if (line.trim().length === 0 || line.includes('Plan kont') || line.includes('---') || line.includes('Symbol')) {
+          continue;
+        }
+        
+        // Skip page separator lines
+        if (line.includes('JOLANTA GONTAREK') || line.includes('Strona') || line.includes('©vDom')) {
+          continue;
+        }
+        
+        // Check if it's a NIP line (including empty ones)
+        const nipMatch = line.match(/^\s*NIP:\s*(.*)$/);
+        if (nipMatch && lastNazwa) {
+          const nip = nipMatch[1].trim();
+          // Set to value if non-empty, or undefined to clear if empty
+          accumulatedNip = nip.length > 0 ? nip : undefined;
+          continue;
+        }
+        
+        // Skip alternative names lines - we don't import them in DOM mode
+        const altMatch = line.match(/^\s*ALT:\s*(.+)$/);
+        if (altMatch) {
+          continue;
+        }
+        
+        // Parse data line - Symbol and Nazwa are separated by spaces
+        const match = line.match(/^\s*(\d{3}-\d+)\s+(.+?)\s{2,}[ZN]\s+/);
+        if (match) {
+          // Finalize previous kontrahent
+          finalizeLastKontrahent();
+          
+          lastSymbol = match[1].trim();
+          lastNazwa = match[2].trim();
+          accumulatedNip = undefined;
+        }
+      }
+      
+      // Finalize last kontrahent in file
+      finalizeLastKontrahent();
+      
+      return { success: true, added, updated };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return { success: false, error: errorMessage };
@@ -630,38 +733,93 @@ function setupIpcHandlers() {
         const outputFileName = generateOutputFileName(adresId, database);
         const finalOutputPath = path.join(outputFolder, outputFileName);
 
-        // Perform conversion WITH AI
-        const result = await converterRegistry.convert(
-          bank.converterId, 
-          inputPath, 
-          finalOutputPath, 
-          true, 
-          adresId,
-          fileName,
-          bank.name
-        );
+        try {
+          // Perform conversion WITH AI
+          const result = await converterRegistry.convert(
+            bank.converterId, 
+            inputPath, 
+            finalOutputPath, 
+            true, 
+            adresId,
+            fileName,
+            bank.name
+          );
 
-        // Check if review is needed
-        if (result.needsReview && result.reviewData) {
+          // Check if review is needed
+          if (result.needsReview && result.reviewData) {
+            return {
+              needsReview: true,
+              reviewData: result.reviewData,
+            };
+          }
+
+          database.addConversionHistory({
+            fileName,
+            bankName: bank.name,
+            converterName: converter.name,
+            status: 'success',
+            inputPath,
+            outputPath: finalOutputPath,
+          });
+
           return {
-            needsReview: true,
-            reviewData: result.reviewData,
+            success: true,
+            outputPath: finalOutputPath,
           };
+        } catch (aiError: unknown) {
+          const aiErrorMessage = aiError instanceof Error ? aiError.message : 'Unknown error';
+          
+          // Check if this is a "no money" error - if so, don't fallback, just fail
+          if (aiErrorMessage.includes('Brak kasiory') || aiErrorMessage.includes('💸')) {
+            console.error('[AI Error - No Money]:', aiErrorMessage);
+            throw aiError; // Re-throw to outer catch
+          }
+          
+          // For other AI errors, log and fallback to standard conversion
+          console.warn('[AI Error - Falling back to standard conversion]:', aiErrorMessage);
+          console.log('[Fallback] Attempting standard conversion without AI...');
+          
+          try {
+            // Perform conversion WITHOUT AI (fallback)
+            const fallbackResult = await converterRegistry.convert(
+              bank.converterId, 
+              inputPath, 
+              finalOutputPath, 
+              false,  // useAI = false
+              adresId,
+              fileName,
+              bank.name
+            );
+
+            // Check if review is needed
+            if (fallbackResult.needsReview && fallbackResult.reviewData) {
+              return {
+                needsReview: true,
+                reviewData: fallbackResult.reviewData,
+                warningMessage: 'Nie udało się użyć AI. Przeprowadzono standardową konwersję.',
+              };
+            }
+
+            database.addConversionHistory({
+              fileName,
+              bankName: bank.name,
+              converterName: converter.name,
+              status: 'success',
+              inputPath,
+              outputPath: finalOutputPath,
+            });
+
+            return {
+              success: true,
+              outputPath: finalOutputPath,
+              warningMessage: 'Nie udało się użyć AI. Przeprowadzono standardową konwersję.',
+            };
+          } catch (fallbackError: unknown) {
+            // If even standard conversion fails, throw original AI error
+            console.error('[Fallback Failed]:', fallbackError);
+            throw new Error(`AI failed: ${aiErrorMessage}. Standard conversion also failed.`);
+          }
         }
-
-        database.addConversionHistory({
-          fileName,
-          bankName: bank.name,
-          converterName: converter.name,
-          status: 'success',
-          inputPath,
-          outputPath: finalOutputPath,
-        });
-
-        return {
-          success: true,
-          outputPath: finalOutputPath,
-        };
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         const bank = database.getBankById(bankId);

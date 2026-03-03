@@ -7,6 +7,7 @@ interface ConversionResult {
   outputPath?: string;
   duplicateWarning?: boolean;
   error?: string;
+  warningMessage?: string;  // Info message (not an error, but user should know)
   // Review flow
   needsReview?: boolean;
   reviewData?: ConversionReviewData;
@@ -26,6 +27,7 @@ interface ElectronAPI {
   deleteKontrahent: (id: number) => Promise<boolean>;
   deleteAllKontrahenci: () => Promise<boolean>;
   importKontrahenciFromFile: () => Promise<{ success: boolean; count?: number; error?: string }>;
+  importKontrahenciFromDOM: () => Promise<{ success: boolean; added?: number; updated?: number; error?: string }>;
   exportKontrahenciToFile: () => Promise<{ success: boolean; count?: number; filePath?: string; error?: string }>;
 
   // Adresy

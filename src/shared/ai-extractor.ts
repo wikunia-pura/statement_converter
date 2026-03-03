@@ -119,9 +119,23 @@ export class AIExtractor {
         console.error('Error details:', JSON.stringify(error, null, 2));
       }
       
+      // Check for billing/quota errors
       if (error && typeof error === 'object' && 'status' in error) {
         const apiError = error as any;
-        throw new Error(`Claude API error (${apiError.status}): ${apiError.message || 'Unknown error'}`);
+        const status = apiError.status;
+        const message = apiError.message || '';
+        const errorType = apiError.error?.type || '';
+        
+        // 402 = payment required, 429 = rate limit/quota exceeded
+        if (status === 402 || status === 429 || 
+            errorType === 'insufficient_quota' || 
+            message.toLowerCase().includes('quota') ||
+            message.toLowerCase().includes('billing') ||
+            message.toLowerCase().includes('payment required')) {
+          throw new Error('💸 Brak kasiory. Pogadaj z Olą');
+        }
+        
+        throw new Error(`Claude API error (${status}): ${message || 'Unknown error'}`);
       }
       
       throw new Error(`Failed to extract with Claude: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -163,6 +177,23 @@ export class AIExtractor {
       
       if (error && typeof error === 'object') {
         console.error('Error details:', JSON.stringify(error, null, 2));
+      }
+      
+      // Check for billing/quota errors
+      if (error && typeof error === 'object' && 'status' in error) {
+        const apiError = error as any;
+        const status = apiError.status;
+        const code = apiError.code || '';
+        const message = apiError.message || '';
+        
+        // Check for quota/billing errors
+        if (status === 429 || 
+            code === 'insufficient_quota' ||
+            message.toLowerCase().includes('quota') ||
+            message.toLowerCase().includes('billing') ||
+            message.toLowerCase().includes('payment required')) {
+          throw new Error('💸 Brak kasiory. Pogadaj z Olą');
+        }
       }
       
       throw new Error(`Failed to extract with OpenAI: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -390,13 +421,11 @@ Example 2:
       const overall = Math.round(
         (result.confidence.address + result.confidence.apartment + result.confidence.tenantName) / 3
       );
-
-      const meetsThreshold = overall >= this.config.confidenceThresholds.needsReview;
       
       return {
         streetName: result.streetName,
         buildingNumber: result.buildingNumber,
-        apartmentNumber: meetsThreshold ? result.apartmentNumber : null,
+        apartmentNumber: result.apartmentNumber,
         fullAddress: result.fullAddress,
         tenantName: result.tenantName,
         confidence: {
@@ -405,7 +434,7 @@ Example 2:
         },
         extractionMethod: 'ai' as const,
         reasoning: result.reasoning,
-        warnings: overall < 60 ? ['Low confidence - apartmentNumber cleared'] : [],
+        warnings: overall < 60 ? ['Low confidence - review required'] : [],
         rawData: {
           descBase: transaction.descBase,
           descOpt: transaction.descOpt,
@@ -457,9 +486,23 @@ Example 2:
         console.error('Error details:', JSON.stringify(error, null, 2));
       }
       
+      // Check for billing/quota errors
       if (error && typeof error === 'object' && 'status' in error) {
         const apiError = error as any;
-        throw new Error(`Claude API error (${apiError.status}): ${apiError.message || 'Unknown error'}`);
+        const status = apiError.status;
+        const message = apiError.message || '';
+        const errorType = apiError.error?.type || '';
+        
+        // 402 = payment required, 429 = rate limit/quota exceeded
+        if (status === 402 || status === 429 || 
+            errorType === 'insufficient_quota' || 
+            message.toLowerCase().includes('quota') ||
+            message.toLowerCase().includes('billing') ||
+            message.toLowerCase().includes('payment required')) {
+          throw new Error('💸 Brak kasiory. Pogadaj z Olą');
+        }
+        
+        throw new Error(`Claude API error (${status}): ${message || 'Unknown error'}`);
       }
       
       throw new Error(`Failed to match contractors with Claude: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -504,6 +547,23 @@ Example 2:
       
       if (error && typeof error === 'object') {
         console.error('Error details:', JSON.stringify(error, null, 2));
+      }
+      
+      // Check for billing/quota errors
+      if (error && typeof error === 'object' && 'status' in error) {
+        const apiError = error as any;
+        const status = apiError.status;
+        const code = apiError.code || '';
+        const message = apiError.message || '';
+        
+        // Check for quota/billing errors
+        if (status === 429 || 
+            code === 'insufficient_quota' ||
+            message.toLowerCase().includes('quota') ||
+            message.toLowerCase().includes('billing') ||
+            message.toLowerCase().includes('payment required')) {
+          throw new Error('💸 Brak kasiory. Pogadaj z Olą');
+        }
       }
       
       throw new Error(`Failed to match contractors with OpenAI: ${error instanceof Error ? error.message : 'Unknown error'}`);

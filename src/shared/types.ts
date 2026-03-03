@@ -130,6 +130,7 @@ export const IPC_CHANNELS = {
   DELETE_KONTRAHENT: 'db:delete-kontrahent',
   DELETE_ALL_KONTRAHENCI: 'db:delete-all-kontrahenci',
   IMPORT_KONTRAHENCI_FROM_FILE: 'db:import-kontrahenci-from-file',
+  IMPORT_KONTRAHENCI_FROM_DOM: 'db:import-kontrahenci-from-dom',
   EXPORT_KONTRAHENCI_TO_FILE: 'db:export-kontrahenci-to-file',
   
   // Adresy operations

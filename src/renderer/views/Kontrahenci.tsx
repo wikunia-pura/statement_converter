@@ -17,6 +17,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
   const [newAlternativeNames, setNewAlternativeNames] = useState<string[]>([]);
   const [newAlternativeName, setNewAlternativeName] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isImporting, setIsImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
@@ -108,7 +109,8 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
     setNewAlternativeName('');
   };
 
-  const handleImportFromFile = async () => {
+  const handleImportFromFileFunky = async () => {
+    setIsImporting(true);
     try {
       const result = await window.electronAPI.importKontrahenciFromFile();
       if (result.success) {
@@ -119,6 +121,30 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
       }
     } catch (error) {
       alert(t.importKontrahenciError);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleImportFromDOM = async () => {
+    setIsImporting(true);
+    try {
+      const result = await window.electronAPI.importKontrahenciFromDOM();
+      if (result.success) {
+        const message = t.importKontrahenciFromDOMSuccess
+          .replace('{added}', result.added?.toString() || '0')
+          .replace('{updated}', result.updated?.toString() || '0');
+        alert(message);
+        loadData();
+      } else if (result.error) {
+        alert(`${t.importKontrahenciError}: ${result.error}`);
+      }
+      // If success is false but no error, user canceled - do nothing
+    } catch (error) {
+      console.error('Error importing from DOM:', error);
+      alert(`${t.importKontrahenciError}: ${error}`);
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -186,9 +212,17 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
             )}
             <button
               className="button button-secondary"
-              onClick={handleImportFromFile}
+              onClick={handleImportFromFileFunky}
+              disabled={isImporting}
             >
-              {t.importFromFile}
+              {isImporting ? t.importing : t.importFromFileFunky}
+            </button>
+            <button
+              className="button button-secondary"
+              onClick={handleImportFromDOM}
+              disabled={isImporting}
+            >
+              {isImporting ? t.importing : t.importFromDOM}
             </button>
             <button
               className="button button-secondary"

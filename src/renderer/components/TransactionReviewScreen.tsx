@@ -93,8 +93,18 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
           <div>{language === 'pl' ? 'Numer mieszkania' : 'Apartment number'}: {trn.extracted.apartmentNumber || (language === 'pl' ? 'NIE ZNALEZIONO' : 'NOT FOUND')}</div>
           <div>{language === 'pl' ? 'Najemca' : 'Tenant'}: {trn.extracted.tenantName || 'N/A'}</div>
           {trn.extracted.reasoning && (
-            <div style={{ marginTop: '10px', color: '#858585', fontStyle: 'italic' }}>
-              {language === 'pl' ? 'Uzasadnienie AI' : 'AI Reasoning'}: {trn.extracted.reasoning}
+            <div style={{ 
+              marginTop: '12px',
+              padding: '10px 12px',
+              backgroundColor: 'rgba(220, 220, 170, 0.15)',
+              border: '1px solid rgba(220, 220, 170, 0.3)',
+              borderRadius: '4px',
+              color: '#DCDCAA',
+              fontSize: '13px',
+              fontStyle: 'italic',
+              lineHeight: '1.5',
+            }}>
+              <strong style={{ color: '#DCDCAA' }}>💡 {language === 'pl' ? 'Uzasadnienie AI' : 'AI Reasoning'}:</strong> {trn.extracted.reasoning}
             </div>
           )}
         </div>
@@ -112,6 +122,80 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
         </div>
       </div>
     )}
+
+    {/* Highlighted Apartment Number Box (for income) */}
+    {trn.transactionType === 'income' && (() => {
+      const extractedApt = trn.extracted.apartmentNumber;
+      const manualApt = manualInput?.trim();
+      const isManuallyEdited = manualApt && manualApt.length > 0 && manualApt !== extractedApt;
+      const displayValue = isManuallyEdited ? manualApt : extractedApt;
+      
+      if (displayValue && displayValue.length > 0) {
+        return (
+          <div style={{ marginBottom: '15px' }}>
+            <div style={{ 
+              padding: '12px 16px',
+              backgroundColor: isManuallyEdited ? 'rgba(197, 134, 192, 0.2)' : 'rgba(78, 201, 176, 0.2)',
+              border: isManuallyEdited ? '2px solid #C586C0' : '2px solid #4EC9B0',
+              borderRadius: '6px',
+            }}>
+              <div style={{ 
+                fontSize: '11px', 
+                color: isManuallyEdited ? '#C586C0' : '#4EC9B0',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                marginBottom: '6px',
+              }}>
+                {isManuallyEdited 
+                  ? (language === 'pl' ? '✏️ Numer lokalu (ręcznie wpisany)' : '✏️ Apartment number (manually entered)')
+                  : (language === 'pl' ? '🏠 Zmatchowany numer lokalu' : '🏠 Matched apartment number')
+                }
+              </div>
+              <div style={{ 
+                fontSize: '24px', 
+                fontWeight: 700,
+                color: isManuallyEdited ? '#C586C0' : '#4EC9B0',
+                letterSpacing: '1px',
+              }}>
+                {displayValue}
+              </div>
+            </div>
+          </div>
+        );
+      } else {
+        // Show "NOT FOUND" box when no apartment number is available
+        return (
+          <div style={{ marginBottom: '15px' }}>
+            <div style={{ 
+              padding: '12px 16px',
+              backgroundColor: 'rgba(244, 71, 71, 0.2)',
+              border: '2px solid #F44747',
+              borderRadius: '6px',
+            }}>
+              <div style={{ 
+                fontSize: '11px', 
+                color: '#F44747',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                marginBottom: '6px',
+              }}>
+                {language === 'pl' ? '⚠️ Numer lokalu' : '⚠️ Apartment number'}
+              </div>
+              <div style={{ 
+                fontSize: '24px', 
+                fontWeight: 700,
+                color: '#F44747',
+                letterSpacing: '1px',
+              }}>
+                {language === 'pl' ? 'NIE ZNALEZIONO' : 'NOT FOUND'}
+              </div>
+            </div>
+          </div>
+        );
+      }
+    })()}
 
     {/* Decision Buttons */}
     <div style={{ marginTop: '15px' }}>
@@ -136,26 +220,26 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
         )}
         <button
           onClick={() => handleDecision(trn.index, 'reject')}
-          disabled={!!(manualInput && manualInput.trim().length > 0)}
+          disabled={!!(manualInput && manualInput.trim().length > 0 && manualInput !== trn.extracted.apartmentNumber)}
           style={{
             padding: '10px 20px',
-            backgroundColor: (manualInput && manualInput.trim().length > 0)
+            backgroundColor: (manualInput && manualInput.trim().length > 0 && manualInput !== trn.extracted.apartmentNumber)
               ? '#555'
               : currentDecision?.action === 'reject' ? '#b71c1c' : '#d32f2f',
-            color: (manualInput && manualInput.trim().length > 0) ? '#888' : 'white',
+            color: (manualInput && manualInput.trim().length > 0 && manualInput !== trn.extracted.apartmentNumber) ? '#888' : 'white',
             border: 'none',
             borderRadius: '3px',
-            cursor: (manualInput && manualInput.trim().length > 0) ? 'not-allowed' : 'pointer',
+            cursor: (manualInput && manualInput.trim().length > 0 && manualInput !== trn.extracted.apartmentNumber) ? 'not-allowed' : 'pointer',
             fontWeight: currentDecision?.action === 'reject' ? 'bold' : 'normal',
-            opacity: (manualInput && manualInput.trim().length > 0) ? 0.5 : 1,
+            opacity: (manualInput && manualInput.trim().length > 0 && manualInput !== trn.extracted.apartmentNumber) ? 0.5 : 1,
           }}
         >
           ✗ Oznacz jako nierozpoznane
         </button>
       </div>
-      {manualInput && manualInput.trim().length > 0 && (
+      {manualInput && manualInput.trim().length > 0 && manualInput !== trn.extracted.apartmentNumber && (
         <div style={{ fontSize: '12px', color: '#DCDCAA', marginBottom: '10px', fontStyle: 'italic' }}>
-          ⚠ Usuń wpisany numer mieszkania, aby oznaczyć jako nierozpoznane
+          ⚠ Usuń lub przywróć wartość sugerowaną, aby oznaczyć jako nierozpoznane
         </div>
       )}
 
@@ -163,11 +247,11 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
       {trn.transactionType === 'income' && (
         <div>
           <label style={{ display: 'block', marginBottom: '5px', color: '#C586C0' }}>
-            Lub wpisz numer mieszkania ręcznie:
+            Numer mieszkania {trn.extracted.apartmentNumber ? '(możesz edytować)' : '(wpisz ręcznie)'}:
           </label>
           <input
             type="text"
-            value={manualInput || ''}
+            value={manualInput !== undefined ? manualInput : (trn.extracted.apartmentNumber || '')}
             onChange={(e) => handleManualInput(trn.index, (e.target as HTMLInputElement).value)}
             placeholder="np. 42, ZGN"
             style={{
@@ -224,7 +308,10 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
 }) => {
   const t = translations[language];
   const [decisions, setDecisions] = useState<Map<number, ReviewDecision>>(new Map());
+  
+  // Manual inputs start empty - extracted values are shown in the input field as default
   const [manualInputs, setManualInputs] = useState<Map<number, string>>(new Map());
+  
   const [isProcessing, setIsProcessing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'income' | 'expense'>('all');
 
@@ -257,16 +344,23 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
 
   const handleManualInput = (index: number, value: string) => {
     const newManualInputs = new Map(manualInputs);
-    newManualInputs.set(index, value);
-    setManualInputs(newManualInputs);
-    
-    // Update decision
     const newDecisions = new Map(decisions);
-    newDecisions.set(index, {
-      index,
-      action: 'manual',
-      manualApartmentNumber: value,
-    });
+    
+    // If value is empty or only whitespace, remove from manual inputs and clear decision
+    if (!value || value.trim().length === 0) {
+      newManualInputs.delete(index);
+      newDecisions.delete(index);
+    } else {
+      // Set manual input and create manual decision
+      newManualInputs.set(index, value);
+      newDecisions.set(index, {
+        index,
+        action: 'manual',
+        manualApartmentNumber: value,
+      });
+    }
+    
+    setManualInputs(newManualInputs);
     setDecisions(newDecisions);
   };
 

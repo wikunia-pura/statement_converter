@@ -627,6 +627,11 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
 
       // Check if review is needed
       if (result.needsReview && result.reviewData) {
+        // Show warning message if AI fallback occurred (before review)
+        if (result.warningMessage) {
+          alert(`⚠️ ${result.warningMessage}`);
+        }
+        
         // If skipUserApproval is enabled, auto-finalize without showing review screen
         if (skipUserApproval) {
           // Auto-approve all transactions
@@ -702,6 +707,11 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
               : f
           )
         );
+        
+        // Show warning message if AI fallback occurred
+        if (result.warningMessage) {
+          alert(`⚠️ ${result.warningMessage}`);
+        }
         
         // Process next file in queue if no review was needed
         processNextInQueue();

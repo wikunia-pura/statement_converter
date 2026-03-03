@@ -7,6 +7,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { AITransaction, AIExtractedData, AIExtractionResponse, AIConfig } from './ai-types';
+import logger from './logger';
 
 export class AIExtractor {
   private anthropic?: Anthropic;
@@ -21,6 +22,85 @@ export class AIExtractor {
     } else if (config.aiProvider === 'openai' && config.apiKey) {
       this.openai = new OpenAI({ apiKey: config.apiKey });
     }
+  }
+
+  /**
+   * Retry logic with exponential backoff for transient errors
+   */
+  private async retryWithBackoff<T>(
+    operation: () => Promise<T>,
+    operationName: string,
+    maxRetries: number = 3
+  ): Promise<T> {
+    let lastError: any;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // 1s, 2s, 4s, max 10s
+          logger.debug(`[AI-EXTRACTOR] Retry attempt ${attempt}/${maxRetries} after ${delay}ms for ${operationName}`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+        
+        return await operation();
+      } catch (error) {
+        lastError = error;
+        
+        // Check if error is retryable
+        const isRetryable = this.isRetryableError(error);
+        
+        if (!isRetryable) {
+          logger.debug(`[AI-EXTRACTOR] Non-retryable error for ${operationName}, failing immediately`);
+          throw error;
+        }
+        
+        if (attempt === maxRetries) {
+          logger.error(`[AI-EXTRACTOR] Max retries (${maxRetries}) reached for ${operationName}`);
+          throw error;
+        }
+        
+        logger.warn(`[AI-EXTRACTOR] Retryable error for ${operationName} (attempt ${attempt + 1}/${maxRetries + 1}):`, 
+          error instanceof Error ? error.message : error);
+      }
+    }
+    
+    throw lastError;
+  }
+
+  /**
+   * Check if error is retryable (transient errors like 529, 503, timeouts)
+   */
+  private isRetryableError(error: any): boolean {
+    if (!error || typeof error !== 'object') {
+      return false;
+    }
+    
+    // Check for HTTP status codes that are retryable
+    const status = error.status || error.statusCode;
+    if (status === 429 || status === 500 || status === 502 || status === 503 || status === 504 || status === 529) {
+      return true;
+    }
+    
+    // Check for quota/billing errors (NOT retryable)
+    const errorType = error.error?.type || '';
+    const message = (error.message || '').toLowerCase();
+    const code = (error.code || '').toLowerCase();
+    
+    if (status === 402 || 
+        errorType === 'insufficient_quota' || 
+        code === 'insufficient_quota' ||
+        message.includes('quota') ||
+        message.includes('billing') ||
+        message.includes('payment required')) {
+      return false; // Don't retry quota errors
+    }
+    
+    // Check for network timeouts (retryable)
+    if (message.includes('timeout') || message.includes('econnreset') || message.includes('network')) {
+      return true;
+    }
+    
+    return false;
   }
 
   /**
@@ -43,6 +123,46 @@ export class AIExtractor {
   }
 
   /**
+   * Parse JSON with better error handling
+   */
+  private parseJsonResponse(text: string): any {
+    let cleaned = this.cleanJsonResponse(text);
+    
+    try {
+      return JSON.parse(cleaned);
+    } catch (error) {
+      // First attempt failed - try to extract JSON from text
+      // Sometimes Claude adds text after JSON or JSON is incomplete
+      logger.warn('[AI-EXTRACTOR] Initial JSON parse failed, trying to extract valid JSON...');
+      
+      // Try to find JSON object boundaries
+      const firstBrace = cleaned.indexOf('{');
+      const lastBrace = cleaned.lastIndexOf('}');
+      
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        const extracted = cleaned.substring(firstBrace, lastBrace + 1);
+        try {
+          logger.debug('[AI-EXTRACTOR] Attempting to parse extracted JSON (between first { and last })');
+          return JSON.parse(extracted);
+        } catch (extractError) {
+          logger.error('[AI-EXTRACTOR] Extraction also failed');
+        }
+      }
+      
+      // If extraction failed, log detailed error
+      logger.error('[AI-EXTRACTOR] Failed to parse JSON response');
+      logger.error('[AI-EXTRACTOR] Raw text (first 500 chars):', text.substring(0, 500));
+      logger.error('[AI-EXTRACTOR] Cleaned text (first 500 chars):', cleaned.substring(0, 500));
+      logger.error('[AI-EXTRACTOR] Cleaned text (last 200 chars):', cleaned.substring(Math.max(0, cleaned.length - 200)));
+      
+      if (error instanceof Error) {
+        throw new Error(`JSON parse error: ${error.message}. Response preview: ${cleaned.substring(0, 100)}...`);
+      }
+      throw new Error(`JSON parse error. Response preview: ${cleaned.substring(0, 100)}...`);
+    }
+  }
+
+  /**
    * Extract data from a single transaction using AI
    */
   async extractSingle(transaction: AITransaction): Promise<AIExtractedData> {
@@ -54,9 +174,9 @@ export class AIExtractor {
    * Extract data from multiple transactions in a single API call (batch processing)
    */
   async extractBatch(transactions: AITransaction[]): Promise<AIExtractedData[]> {
-    console.log('[AI-EXTRACTOR] extractBatch called with', transactions.length, 'transactions');
-    console.log('[AI-EXTRACTOR] Provider:', this.config.aiProvider);
-    console.log('[AI-EXTRACTOR] TEST_AI_BILLING_ERROR env var =', process.env.TEST_AI_BILLING_ERROR);
+    logger.debug('[AI-EXTRACTOR] extractBatch called with', transactions.length, 'transactions');
+    logger.debug('[AI-EXTRACTOR] Provider:', this.config.aiProvider);
+    logger.debug('[AI-EXTRACTOR] TEST_AI_BILLING_ERROR env var =', process.env.TEST_AI_BILLING_ERROR);
     
     if (this.config.aiProvider === 'anthropic') {
       return this.extractWithClaude(transactions);
@@ -73,7 +193,7 @@ export class AIExtractor {
   async matchContractorsBatch(
     transactions: AITransaction[],
     candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string; nip?: string; alternativeNames?: string[] }>>
-  ): Promise<Array<{ contractor: any | null; confidence: number; matchedIn: 'desc-opt' | 'desc-base' | 'none'; matchedText?: string }>> {
+  ): Promise<Array<{ contractor: any | null; confidence: number; matchedIn: 'desc-opt' | 'desc-base' | 'none'; matchedText?: string; reasoning?: string }>> {
     if (this.config.aiProvider === 'anthropic') {
       return this.matchContractorsWithClaude(transactions, candidatesPerTransaction);
     } else if (this.config.aiProvider === 'openai') {
@@ -84,7 +204,7 @@ export class AIExtractor {
   }
 
   /**
-   * Extract using Claude API
+   * Extract using Claude API (with retry logic)
    */
   private async extractWithClaude(transactions: AITransaction[]): Promise<AIExtractedData[]> {
     if (!this.anthropic) {
@@ -94,96 +214,79 @@ export class AIExtractor {
     const systemPrompt = this.getSystemPrompt();
     const userPrompt = this.getUserPrompt(transactions);
 
-    try {
-      // TEST MODE: Simulate billing error if TEST_AI_BILLING_ERROR is set
-      console.log('[AI-EXTRACTOR] TEST_AI_BILLING_ERROR =', process.env.TEST_AI_BILLING_ERROR);
-      if (process.env.TEST_AI_BILLING_ERROR === 'true') {
-        console.log('[AI-EXTRACTOR] 🧪 TEST MODE: Simulating billing error');
-        const testError = {
-          status: 429,
-          error: { type: 'insufficient_quota' },
-          message: 'TEST: Simulating insufficient quota error'
-        };
-        throw testError;
-      }
+    return this.retryWithBackoff(async () => {
+      try {
+        // TEST MODE: Simulate billing error if TEST_AI_BILLING_ERROR is set
+        logger.debug('[AI-EXTRACTOR] TEST_AI_BILLING_ERROR =', process.env.TEST_AI_BILLING_ERROR);
+        if (process.env.TEST_AI_BILLING_ERROR === 'true') {
+          logger.info('[AI-EXTRACTOR] 🧪 TEST MODE: Simulating billing error');
+          const testError = {
+            status: 429,
+            error: { type: 'insufficient_quota' },
+            message: 'TEST: Simulating insufficient quota error'
+          };
+          throw testError;
+        }
 
-      // TEST MODE: Simulate generic AI error if TEST_AI_GENERIC_ERROR is set
-      console.log('[AI-EXTRACTOR] TEST_AI_GENERIC_ERROR =', process.env.TEST_AI_GENERIC_ERROR);
-      if (process.env.TEST_AI_GENERIC_ERROR === 'true') {
-        console.log('[AI-EXTRACTOR] 🧪 TEST MODE: Simulating generic AI error');
-        throw new Error('TEST: Simulating network timeout error');
-      }
+        // TEST MODE: Simulate generic AI error if TEST_AI_GENERIC_ERROR is set
+        logger.debug('[AI-EXTRACTOR] TEST_AI_GENERIC_ERROR =', process.env.TEST_AI_GENERIC_ERROR);
+        if (process.env.TEST_AI_GENERIC_ERROR === 'true') {
+          logger.info('[AI-EXTRACTOR] 🧪 TEST MODE: Simulating generic AI error');
+          throw new Error('TEST: Simulating network timeout error');
+        }
 
-      const message = await this.anthropic.messages.create({
-        model: this.config.model || 'claude-sonnet-4-6',
-        max_tokens: 2000 + (transactions.length * 200),
-        temperature: 0,
-        system: systemPrompt,
-        messages: [
-          {
-            role: 'user',
-            content: userPrompt,
-          },
-        ],
-      });
+        const message = await this.anthropic!.messages.create({
+          model: this.config.model || 'claude-sonnet-4-6',
+          max_tokens: 2000 + (transactions.length * 200),
+          temperature: 0,
+          system: systemPrompt,
+          messages: [
+            {
+              role: 'user',
+              content: userPrompt,
+            },
+          ],
+        });
 
-      const content = message.content[0];
-      if (content.type !== 'text') {
-        throw new Error('Unexpected response type from Claude');
-      }
+        const content = message.content[0];
+        if (content.type !== 'text') {
+          throw new Error('Unexpected response type from Claude');
+        }
 
-      const cleanedJson = this.cleanJsonResponse(content.text);
-      const response: AIExtractionResponse = JSON.parse(cleanedJson);
-      return this.processAIResponse(response, transactions);
-    } catch (error) {
-      console.error('Claude API error (extract):', error);
-      
-      // Check for billing/quota errors
-      if (error && typeof error === 'object' && 'status' in error) {
-        const apiError = error as any;
-        const status = apiError.status;
-        const message = apiError.message || '';
-        const errorType = apiError.error?.type || '';
+        const response: AIExtractionResponse = this.parseJsonResponse(content.text);
+        return this.processAIResponse(response, transactions);
+      } catch (error) {
+        logger.error('Claude API error (extract):', error);
         
-        // 402 = payment required, 429 = rate limit/quota exceeded
-        if (status === 402 || status === 429 || 
-            errorType === 'insufficient_quota' || 
-            message.toLowerCase().includes('quota') ||
-            message.toLowerCase().includes('billing') ||
-            message.toLowerCase().includes('payment required')) {
-          throw new Error('💸 Brak kasiory. Pogadaj z Olą');
+        // Check for billing/quota errors - throw with special message
+        if (error && typeof error === 'object' && 'status' in error) {
+          const apiError = error as any;
+          const status = apiError.status;
+          const message = apiError.message || '';
+          const errorType = apiError.error?.type || '';
+          
+          // 402 = payment required, quota errors
+          if (status === 402 || 
+              errorType === 'insufficient_quota' || 
+              message.toLowerCase().includes('quota') ||
+              message.toLowerCase().includes('billing') ||
+              message.toLowerCase().includes('payment required')) {
+            throw new Error('💸 Brak kasiory. Pogadaj z Olą');
+          }
+          
+          // For other status errors, throw with status code
+          throw new Error(`Claude API error (${status}): ${message || 'Unknown error'}`);
         }
         
-        throw new Error(`Claude API error (${status}): ${message || 'Unknown error'}`);
+        throw new Error(`Failed to extract with Claude: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
-      
-      throw new Error(`Failed to extract with Claude: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    }, 'Claude extraction');
   }
 
   /**
-   * Extract using OpenAI API
+   * Extract using OpenAI API (with retry logic)
    */
   private async extractWithOpenAI(transactions: AITransaction[]): Promise<AIExtractedData[]> {
-    // TEST MODE: Simulate billing error if TEST_AI_BILLING_ERROR is set
-    console.log('[AI-EXTRACTOR] TEST_AI_BILLING_ERROR =', process.env.TEST_AI_BILLING_ERROR);
-    if (process.env.TEST_AI_BILLING_ERROR === 'true') {
-      console.log('[AI-EXTRACTOR] 🧪 TEST MODE: Simulating billing error');
-      const testError = {
-        status: 429,
-        code: 'insufficient_quota',
-        message: 'TEST: Simulating insufficient quota error'
-      };
-      throw testError;
-    }
-
-    // TEST MODE: Simulate generic AI error if TEST_AI_GENERIC_ERROR is set
-    console.log('[AI-EXTRACTOR] TEST_AI_GENERIC_ERROR =', process.env.TEST_AI_GENERIC_ERROR);
-    if (process.env.TEST_AI_GENERIC_ERROR === 'true') {
-      console.log('[AI-EXTRACTOR] 🧪 TEST MODE: Simulating generic AI error');
-      throw new Error('TEST: Simulating network timeout error');
-    }
-    
     if (!this.openai) {
       throw new Error('OpenAI client not initialized');
     }
@@ -191,51 +294,74 @@ export class AIExtractor {
     const systemPrompt = this.getSystemPrompt();
     const userPrompt = this.getUserPrompt(transactions);
 
-    try {
-      const completion = await this.openai.chat.completions.create({
-        model: this.config.model || 'gpt-4-turbo-preview',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.1,
-      });
-
-      const content = completion.choices[0].message.content;
-      if (!content) {
-        throw new Error('Empty response from OpenAI');
-      }
-
-      const cleanedJson = this.cleanJsonResponse(content);
-      const response: AIExtractionResponse = JSON.parse(cleanedJson);
-      return this.processAIResponse(response, transactions);
-    } catch (error) {
-      console.error('OpenAI API error (extract):', error);
-      
-      if (error && typeof error === 'object') {
-        console.error('Error details:', JSON.stringify(error, null, 2));
-      }
-      
-      // Check for billing/quota errors
-      if (error && typeof error === 'object' && 'status' in error) {
-        const apiError = error as any;
-        const status = apiError.status;
-        const code = apiError.code || '';
-        const message = apiError.message || '';
-        
-        // Check for quota/billing errors
-        if (status === 429 || 
-            code === 'insufficient_quota' ||
-            message.toLowerCase().includes('quota') ||
-            message.toLowerCase().includes('billing') ||
-            message.toLowerCase().includes('payment required')) {
-          throw new Error('💸 Brak kasiory. Pogadaj z Olą');
+    return this.retryWithBackoff(async () => {
+      try {
+        // TEST MODE: Simulate billing error if TEST_AI_BILLING_ERROR is set
+        logger.debug('[AI-EXTRACTOR] TEST_AI_BILLING_ERROR =', process.env.TEST_AI_BILLING_ERROR);
+        if (process.env.TEST_AI_BILLING_ERROR === 'true') {
+          logger.info('[AI-EXTRACTOR] 🧪 TEST MODE: Simulating billing error');
+          const testError = {
+            status: 429,
+            code: 'insufficient_quota',
+            message: 'TEST: Simulating insufficient quota error'
+          };
+          throw testError;
         }
+
+        // TEST MODE: Simulate generic AI error if TEST_AI_GENERIC_ERROR is set
+        logger.debug('[AI-EXTRACTOR] TEST_AI_GENERIC_ERROR =', process.env.TEST_AI_GENERIC_ERROR);
+        if (process.env.TEST_AI_GENERIC_ERROR === 'true') {
+          logger.info('[AI-EXTRACTOR] 🧪 TEST MODE: Simulating generic AI error');
+          throw new Error('TEST: Simulating network timeout error');
+        }
+
+        const completion = await this.openai!.chat.completions.create({
+          model: this.config.model || 'gpt-4-turbo-preview',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.1,
+        });
+
+        const content = completion.choices[0].message.content;
+        if (!content) {
+          throw new Error('Empty response from OpenAI');
+        }
+
+        const response: AIExtractionResponse = this.parseJsonResponse(content);
+        return this.processAIResponse(response, transactions);
+      } catch (error) {
+        logger.error('OpenAI API error (extract):', error);
+        
+        if (error && typeof error === 'object') {
+          logger.error('Error details:', JSON.stringify(error, null, 2));
+        }
+        
+        // Check for billing/quota errors - throw with special message
+        if (error && typeof error === 'object' && 'status' in error) {
+          const apiError = error as any;
+          const status = apiError.status;
+          const code = apiError.code || '';
+          const message = apiError.message || '';
+          
+          // Check for quota/billing errors
+          if (status === 402 || 
+              code === 'insufficient_quota' ||
+              message.toLowerCase().includes('quota') ||
+              message.toLowerCase().includes('billing') ||
+              message.toLowerCase().includes('payment required')) {
+            throw new Error('💸 Brak kasiory. Pogadaj z Olą');
+          }
+          
+          // For other status errors, throw with status code
+          throw new Error(`OpenAI API error (${status}): ${message || 'Unknown error'}`);
+        }
+        
+        throw new Error(`Failed to extract with OpenAI: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
-      
-      throw new Error(`Failed to extract with OpenAI: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    }, 'OpenAI extraction');
   }
 
   /**
@@ -482,12 +608,12 @@ Example 2:
   }
 
   /**
-   * Match contractors using Claude API
+   * Match contractors using Claude API (with retry logic)
    */
   private async matchContractorsWithClaude(
     transactions: AITransaction[],
     candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string; alternativeNames?: string[] }>>
-  ): Promise<Array<{ contractor: any | null; confidence: number; matchedIn: 'desc-opt' | 'desc-base' | 'none'; matchedText?: string }>> {
+  ): Promise<Array<{ contractor: any | null; confidence: number; matchedIn: 'desc-opt' | 'desc-base' | 'none'; matchedText?: string; reasoning?: string }>> {
     if (!this.anthropic) {
       throw new Error('Anthropic client not initialized');
     }
@@ -495,65 +621,67 @@ Example 2:
     const systemPrompt = this.getContractorMatchingSystemPrompt();
     const userPrompt = this.getContractorMatchingUserPrompt(transactions, candidatesPerTransaction);
 
-    try {
-      const message = await this.anthropic.messages.create({
-        model: this.config.model || 'claude-sonnet-4-6',
-        max_tokens: 1000 + (transactions.length * 100),
-        temperature: 0,
-        system: systemPrompt,
-        messages: [
-          {
-            role: 'user',
-            content: userPrompt,
-          },
-        ],
-      });
+    return this.retryWithBackoff(async () => {
+      try {
+        const message = await this.anthropic!.messages.create({
+          model: this.config.model || 'claude-sonnet-4-6',
+          max_tokens: 2000 + (transactions.length * 300),
+          temperature: 0,
+          system: systemPrompt,
+          messages: [
+            {
+              role: 'user',
+              content: userPrompt,
+            },
+          ],
+        });
 
-      const content = message.content[0];
-      if (content.type !== 'text') {
-        throw new Error('Unexpected response type from Claude');
-      }
+        const content = message.content[0];
+        if (content.type !== 'text') {
+          throw new Error('Unexpected response type from Claude');
+        }
 
-      const cleanedJson = this.cleanJsonResponse(content.text);
-      const response = JSON.parse(cleanedJson);
-      return this.processContractorMatchingResponse(response, candidatesPerTransaction);
-    } catch (error) {
-      console.error('Claude API error (contractor matching):', error);
-      
-      if (error && typeof error === 'object') {
-        console.error('Error details:', JSON.stringify(error, null, 2));
-      }
-      
-      // Check for billing/quota errors
-      if (error && typeof error === 'object' && 'status' in error) {
-        const apiError = error as any;
-        const status = apiError.status;
-        const message = apiError.message || '';
-        const errorType = apiError.error?.type || '';
+        const response = this.parseJsonResponse(content.text);
+        return this.processContractorMatchingResponse(response, candidatesPerTransaction);
+      } catch (error) {
+        logger.error('Claude API error (contractor matching):', error);
         
-        // 402 = payment required, 429 = rate limit/quota exceeded
-        if (status === 402 || status === 429 || 
-            errorType === 'insufficient_quota' || 
-            message.toLowerCase().includes('quota') ||
-            message.toLowerCase().includes('billing') ||
-            message.toLowerCase().includes('payment required')) {
-          throw new Error('💸 Brak kasiory. Pogadaj z Olą');
+        if (error && typeof error === 'object') {
+          logger.error('Error details:', JSON.stringify(error, null, 2));
         }
         
-        throw new Error(`Claude API error (${status}): ${message || 'Unknown error'}`);
+        // Check for billing/quota errors - throw with special message
+        if (error && typeof error === 'object' && 'status' in error) {
+          const apiError = error as any;
+          const status = apiError.status;
+          const message = apiError.message || '';
+          const errorType = apiError.error?.type || '';
+          
+          // 402 = payment required, quota errors
+          if (status === 402 || 
+              errorType === 'insufficient_quota' || 
+              message.toLowerCase().includes('quota') ||
+              message.toLowerCase().includes('billing') ||
+              message.toLowerCase().includes('payment required')) {
+            throw new Error('💸 Brak kasiory. Pogadaj z Olą');
+          }
+          
+          // For other status errors, throw with status code
+          throw new Error(`Claude API error (${status}): ${message || 'Unknown error'}`);
+        }
+        
+        throw new Error(`Failed to match contractors with Claude: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
-      
-      throw new Error(`Failed to match contractors with Claude: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    }, 'Claude contractor matching');
   }
 
   /**
-   * Match contractors using OpenAI API
+   * Match contractors using OpenAI API (with retry logic)
    */
   private async matchContractorsWithOpenAI(
     transactions: AITransaction[],
     candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string; alternativeNames?: string[] }>>
-  ): Promise<Array<{ contractor: any | null; confidence: number; matchedIn: 'desc-opt' | 'desc-base' | 'none'; matchedText?: string }>> {
+  ): Promise<Array<{ contractor: any | null; confidence: number; matchedIn: 'desc-opt' | 'desc-base' | 'none'; matchedText?: string; reasoning?: string }>> {
     if (!this.openai) {
       throw new Error('OpenAI client not initialized');
     }
@@ -561,64 +689,76 @@ Example 2:
     const systemPrompt = this.getContractorMatchingSystemPrompt();
     const userPrompt = this.getContractorMatchingUserPrompt(transactions, candidatesPerTransaction);
 
-    try {
-      const completion = await this.openai.chat.completions.create({
-        model: this.config.model || 'gpt-4-turbo-preview',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0,
-      });
+    return this.retryWithBackoff(async () => {
+      try {
+        const completion = await this.openai!.chat.completions.create({
+          model: this.config.model || 'gpt-4-turbo-preview',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0,
+          max_tokens: 2000 + (transactions.length * 300),
+        });
 
-      const content = completion.choices[0]?.message?.content;
-      if (!content) {
-        throw new Error('No response from OpenAI');
-      }
-
-      const cleanedJson = this.cleanJsonResponse(content);
-      const response = JSON.parse(cleanedJson);
-      return this.processContractorMatchingResponse(response, candidatesPerTransaction);
-    } catch (error) {
-      console.error('OpenAI API error (contractor matching):', error);
-      
-      if (error && typeof error === 'object') {
-        console.error('Error details:', JSON.stringify(error, null, 2));
-      }
-      
-      // Check for billing/quota errors
-      if (error && typeof error === 'object' && 'status' in error) {
-        const apiError = error as any;
-        const status = apiError.status;
-        const code = apiError.code || '';
-        const message = apiError.message || '';
-        
-        // Check for quota/billing errors
-        if (status === 429 || 
-            code === 'insufficient_quota' ||
-            message.toLowerCase().includes('quota') ||
-            message.toLowerCase().includes('billing') ||
-            message.toLowerCase().includes('payment required')) {
-          throw new Error('💸 Brak kasiory. Pogadaj z Olą');
+        const content = completion.choices[0]?.message?.content;
+        if (!content) {
+          throw new Error('No response from OpenAI');
         }
+
+        const response = this.parseJsonResponse(content);
+        return this.processContractorMatchingResponse(response, candidatesPerTransaction);
+      } catch (error) {
+        logger.error('OpenAI API error (contractor matching):', error);
+        
+        if (error && typeof error === 'object') {
+          logger.error('Error details:', JSON.stringify(error, null, 2));
+        }
+        
+        // Check for billing/quota errors - throw with special message
+        if (error && typeof error === 'object' && 'status' in error) {
+          const apiError = error as any;
+          const status = apiError.status;
+          const code = apiError.code || '';
+          const message = apiError.message || '';
+          
+          // Check for quota/billing errors
+          if (status === 402 || 
+              code === 'insufficient_quota' ||
+              message.toLowerCase().includes('quota') ||
+              message.toLowerCase().includes('billing') ||
+              message.toLowerCase().includes('payment required')) {
+            throw new Error('💸 Brak kasiory. Pogadaj z Olą');
+          }
+          
+          // For other status errors, throw with status code
+          throw new Error(`OpenAI API error (${status}): ${message || 'Unknown error'}`);
+        }
+        
+        throw new Error(`Failed to match contractors with OpenAI: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
-      
-      throw new Error(`Failed to match contractors with OpenAI: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    }, 'OpenAI contractor matching');
   }
 
   /**
    * Get system prompt for contractor matching
    */
   private getContractorMatchingSystemPrompt(): string {
-    return `Dopasuj transakcje bankowe do kontrahentów z listy kandydatów.
+    return `Dopasuj transakcje bankowe do kontrahentów z BAZY UŻYTKOWNIKA.
 
-ZASADY:
+🔒 KRYTYCZNE: Lista kandydatów dla każdej transakcji to PRE-FILTROWANE kontrahenty z bazy użytkownika.
+- MOŻESZ TYLKO wybrać ID z dostarczonych kandydatów lub zwrócić null
+- NIE WOLNO Ci wymyślać/sugerować innych kontrahentów
+- Jeśli żaden kandydat nie pasuje → zwróć null
+- ℹ️ Lista kandydatów zawiera: exact matches + podobne nazwy (fuzzy match) - może zawierać typo/literówki
+
+ZASADY DOPASOWANIA:
 1. Analizuj DESC-BASE i DESC-OPT (DESC-OPT priorytet)
 2. PRIORYTET DOPASOWANIA (od najwyższego):
    a) NIP - jeśli NIP kontrahenta jest zawarty W CAŁOŚCI w opisie = 100% confidence
    b) Nazwa główna ORAZ nazwy alternatywne - traktuj RÓWNORZĘDNIE, TEN SAM confidence
+   c) Podobne nazwy (typo/literówki) - jeśli nazwa jest bardzo podobna do opisu (np. "Guntarek" vs "Gontarek")
 3. Dopasowanie NIP: NIP musi być W CAŁOŚCI zawarty w opisie (ignoruj spacje i myślniki)
    - Przykład: opis "Zapłata NIP:1234567890" + NIP "1234567890" = DOPASOWANE ✓ (confidence: 100)
    - Przykład: opis "Zapłata NIP 123-456-78-90" + NIP "1234567890" = DOPASOWANE ✓ (confidence: 100)
@@ -628,13 +768,23 @@ ZASADY:
    - Przykład: opis "Zapłata dla MPWIK" + nazwa główna "Miejskie Przedsiębiorstwo Wodociągów i Kanalizacji" = NIE dopasowane ✗
    - Przykład: opis "Zapłata dla MPWIK" + alternatywna nazwa "MPWIK" = DOPASOWANE ✓ (confidence: 95)
    - Przykład: opis "Zapłata dla MPWI" + alternatywna nazwa "MPWIK" = NIE dopasowane ✗
-5. Wielkość liter ignoruj
-6. Confidence (0-100):
+5. Dopasowanie fuzzy (podobne nazwy):
+   - Jeśli nazwa kontrahenta jest BARDZO PODOBNA do nazwy w opisie (1-2 litery różnicy), uznaj za dopasowanie
+   - Przykład: opis "Jolanta Gontarek" + nazwa "Jolanta Guntarek" = DOPASOWANE (typo: o→u) ✓ (confidence: 90-95)
+   - Przykład: opis "MPWIK Warszawa" + nazwa "MPWICK Warszawa" = DOPASOWANE (typo: I→IC) ✓ (confidence: 90-95)
+6. Wielkość liter ignoruj
+7. Confidence (0-100):
    - 100: Pełny NIP w opisie
    - 95-99: Pełna nazwa główna LUB pełna alt. nazwa w opisie (TEN SAM poziom!)
+   - 90-94: Bardzo podobna nazwa (fuzzy match z 1-2 literami różnicy)
    - 70-89: Częściowa nazwa/akronim
    - 50-69: Prawdopodobne
    - <50: Zwróć null
+
+📝 REASONING:
+- Maksymalnie 150 znaków
+- Zwięzłe, bez powtarzania opisu transakcji
+- Załóż że czytający widzi już opis transakcji i kandydatów
 
 JSON format:
 {
@@ -667,7 +817,7 @@ JSON format:
       prompt += `DESC-OPT: "${t.descOpt || '(brak)'}"\n`;
       
       if (candidates.length > 0) {
-        prompt += `\nKandydaci:\n`;
+        prompt += `\n🏦 DOSTĘPNI KONTRAHENCI (z bazy użytkownika - pre-filtrowane top ${candidates.length}):\n`;
         candidates.forEach((c, i) => {
           prompt += `  ${i + 1}. ID:${c.id} "${c.nazwa}"`;
           if (c.nip) {
@@ -678,12 +828,17 @@ JSON format:
           }
           prompt += `\n`;
         });
+        prompt += `\n⚠️ Wybierz TYLKO z powyższej listy (ID) lub null jeśli żaden nie pasuje\n`;
       } else {
-        prompt += `\nBrak kandydatów - zwróć null\n`;
+        prompt += `\n❌ Brak kandydatów dla tej transakcji - zwróć contractorId: null\n`;
       }
     });
 
-    prompt += '\n\nZwróć JSON z results dla każdej transakcji.';
+    prompt += '\n\n📋 PODSUMOWANIE:';
+    prompt += '\n- Zwróć JSON z "results" zawierającym dokładnie ' + transactions.length + ' elementów';
+    prompt += '\n- Dla każdej transakcji: wybierz ID z listy kandydatów LUB null (jeśli żaden nie pasuje)';
+    prompt += '\n- NIE wymyślaj nowych kontrahentów - tylko ID z listy!';
+    prompt += '\n- W "reasoning" wyjaśnij ZWIĘŹLE dlaczego wybrałeś tego kontrahenta lub dlaczego null';
     
     return prompt;
   }
@@ -694,13 +849,14 @@ JSON format:
   private processContractorMatchingResponse(
     response: any,
     candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string; alternativeNames?: string[] }>>
-  ): Array<{ contractor: any | null; confidence: number; matchedIn: 'desc-opt' | 'desc-base' | 'none'; matchedText?: string }> {
+  ): Array<{ contractor: any | null; confidence: number; matchedIn: 'desc-opt' | 'desc-base' | 'none'; matchedText?: string; reasoning?: string }> {
     return response.results.map((result: any, idx: number) => {
       if (result.contractorId === null || result.confidence < 50) {
         return {
           contractor: null,
           confidence: 0,
           matchedIn: 'none' as const,
+          reasoning: result.reasoning,
         };
       }
 
@@ -708,10 +864,13 @@ JSON format:
       const contractor = candidates.find(c => c.id === result.contractorId);
       
       if (!contractor) {
+        logger.warn(`[AI-EXTRACTOR] AI returned contractorId ${result.contractorId} for transaction ${idx}, but it's NOT in candidate list! Returning null.`);
+        logger.warn(`[AI-EXTRACTOR] Available candidate IDs: ${candidates.map(c => c.id).join(', ')}`);
         return {
           contractor: null,
           confidence: 0,
           matchedIn: 'none' as const,
+          reasoning: `AI error: Wybrano ID:${result.contractorId} spoza listy kandydatów`,
         };
       }
 
@@ -724,6 +883,7 @@ JSON format:
         confidence: result.confidence,
         matchedIn: result.matchedIn || 'none',
         matchedText: contractor.nazwa,
+        reasoning: result.reasoning,
       };
     });
   }

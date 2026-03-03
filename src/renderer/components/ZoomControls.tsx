@@ -1,6 +1,9 @@
 import React from 'react';
 import { translations, Language } from '../translations';
 
+// Ensure Window interface is available with electronAPI
+/// <reference types="../electronAPI.d.ts" />
+
 interface ZoomControlsProps {
   language: Language;
 }
@@ -9,47 +12,32 @@ const ZoomControls: React.FC<ZoomControlsProps> = ({ language }) => {
   const t = translations[language];
 
   const handleZoomIn = async () => {
-    console.log('=== ZOOM IN BUTTON CLICKED ===');
     try {
-      if (typeof window !== 'undefined' && window.electronAPI) {
-        console.log('Calling window.electronAPI.zoomIn()');
-        const result = await window.electronAPI.zoomIn();
-        console.log('Zoom in result:', result);
-      } else {
-        console.error('window.electronAPI not available');
+      if (window.electronAPI) {
+        await window.electronAPI.zoomIn();
       }
     } catch (error) {
-      console.error('Error zooming in:', error);
+      // Silently fail - zoom is non-critical feature
     }
   };
 
   const handleZoomOut = async () => {
-    console.log('=== ZOOM OUT BUTTON CLICKED ===');
     try {
-      if (typeof window !== 'undefined' && window.electronAPI) {
-        console.log('Calling window.electronAPI.zoomOut()');
-        const result = await window.electronAPI.zoomOut();
-        console.log('Zoom out result:', result);
-      } else {
-        console.error('window.electronAPI not available');
+      if (window.electronAPI) {
+        await window.electronAPI.zoomOut();
       }
     } catch (error) {
-      console.error('Error zooming out:', error);
+      // Silently fail - zoom is non-critical feature
     }
   };
 
   const handleZoomReset = async () => {
-    console.log('=== ZOOM RESET BUTTON CLICKED ===');
     try {
-      if (typeof window !== 'undefined' && window.electronAPI) {
-        console.log('Calling window.electronAPI.zoomReset()');
-        const result = await window.electronAPI.zoomReset();
-        console.log('Zoom reset result:', result);
-      } else {
-        console.error('window.electronAPI not available');
+      if (window.electronAPI) {
+        await window.electronAPI.zoomReset();
       }
     } catch (error) {
-      console.error('Error resetting zoom:', error);
+      // Silently fail - zoom is non-critical feature
     }
   };
 

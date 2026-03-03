@@ -2,7 +2,7 @@
  * Santander XML Converter - Type Definitions
  */
 
-import { MatchedContractor } from './contractor-matcher';
+import { MatchedContractor } from '../../shared/contractor-matcher';
 import { Kontrahent, Adres } from '../../shared/types';
 
 export interface XmlTransaction {
@@ -172,6 +172,7 @@ export interface ConverterConfig {
   useRegexFirst: boolean;
   skipNegativeAmounts: boolean;
   skipBankFees: boolean;
+  useAIForExpenses: boolean; // Whether to use AI for contractor matching in expenses
   
   // Contractors list for expense matching
   contractors?: Kontrahent[];

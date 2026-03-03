@@ -304,6 +304,21 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
           <div>Nazwa: {trn.matchedContractor.contractorName || 'NIE ZNALEZIONO'}</div>
           <div>Konto: {trn.matchedContractor.contractorAccount || 'N/A'}</div>
           <div>Confidence: {trn.matchedContractor.confidence}%</div>
+          {trn.extracted.reasoning && (
+            <div style={{ 
+              marginTop: '12px',
+              padding: '10px 12px',
+              backgroundColor: 'rgba(220, 220, 170, 0.15)',
+              border: '1px solid rgba(220, 220, 170, 0.3)',
+              borderRadius: '4px',
+              color: '#DCDCAA',
+              fontSize: '13px',
+              fontStyle: 'italic',
+              lineHeight: '1.5',
+            }}>
+              <strong style={{ color: '#DCDCAA' }}>💡 {language === 'pl' ? 'Uzasadnienie AI' : 'AI Reasoning'}:</strong> {trn.extracted.reasoning}
+            </div>
+          )}
         </div>
       </div>
     )}

@@ -250,8 +250,9 @@ export class PKOBPMT940Converter {
             matchedIn: 'none' as const,
           };
 
-      // If recognized with high confidence (>= 90%), add to processed
-      if (matchedContractor.contractor !== null && matchedContractor.confidence >= 90) {
+      // If recognized with ANY confidence, add to processed (regex is reliable)
+      // Only send to AI if NO match found (confidence = 0)
+      if (matchedContractor.contractor !== null && matchedContractor.confidence > 0) {
         const extracted: ExtractedData = {
           streetName: null,
           buildingNumber: null,
@@ -264,8 +265,8 @@ export class PKOBPMT940Converter {
             tenantName: 0,
             overall: 0,
           },
-          extractionMethod: 'manual',
-          warnings: [],
+          extractionMethod: matchedContractor.confidence >= 90 ? 'manual' : 'regex',
+          warnings: matchedContractor.confidence < 60 ? ['Low confidence match - may need review'] : [],
           rawData: {
             description: transaction.details.description.join(''),
             counterpartyName: transaction.details.counterpartyName,
@@ -274,47 +275,18 @@ export class PKOBPMT940Converter {
         };
         processed.push(this.createProcessedTransaction(transaction, extracted, 'expense', matchedContractor));
       } else {
-        // Mark for AI matching
+        // Mark for AI matching - ONLY if regex found nothing
         needsAI.push({ transaction, index: i });
       }
     }
 
     const matchedCount = processed.length;
     console.log(`   ✅ Partial matching: ${matchedCount}/${transactions.length}`);
-    console.log(`   🤖 Needs AI: ${needsAI.length} (SKIPPED - AI not used for expenses)`);
+    console.log(`   🤖 Needs AI: ${needsAI.length}`);
 
-    // Phase 2: AI matching DISABLED for expenses - create unrecognized entries instead
+    // Phase 2: AI matching for remaining expenses
     if (needsAI.length > 0) {
-      console.warn('⚠️  AI not used for expenses, creating unrecognized entries');
-      // Create entries for unrecognized contractors
-      for (const { transaction } of needsAI) {
-        const extracted: ExtractedData = {
-          streetName: null,
-          buildingNumber: null,
-          apartmentNumber: null,
-          fullAddress: null,
-          tenantName: null,
-          confidence: {
-            address: 0,
-            apartment: 0,
-            tenantName: 0,
-            overall: 0,
-          },
-          extractionMethod: 'manual',
-          warnings: ['No contractor matched - needs manual assignment'],
-          rawData: {
-            description: transaction.details.description.join(''),
-            counterpartyName: transaction.details.counterpartyName,
-            counterpartyIBAN: transaction.details.counterpartyIBAN,
-          },
-        };
-        const unrecognized = {
-          contractor: null,
-          confidence: 0,
-          matchedIn: 'none' as const,
-        };
-        processed.push(this.createProcessedTransaction(transaction, extracted, 'expense', unrecognized));
-      }
+      await this.processExpensesWithAI(needsAI, processed);
     }
 
     const finalMatchedCount = processed.filter(p => p.matchedContractor?.contractor !== null).length;
@@ -375,36 +347,9 @@ export class PKOBPMT940Converter {
       } catch (error) {
         console.error(`   ❌ Batch ${i + 1} failed:`, error);
         
-        // If this is a billing/quota error, re-throw it to stop processing
-        if (isBillingError(error)) {
-          console.error(`   💰 Billing error detected, stopping processing`);
-          throw error;
-        }
-        
-        // For other errors, add as low-confidence entries
-        for (const { transaction } of batch) {
-          const extracted: ExtractedData = {
-            streetName: null,
-            buildingNumber: null,
-            apartmentNumber: null,
-            fullAddress: null,
-            tenantName: null,
-            confidence: {
-              address: 0,
-              apartment: 0,
-              tenantName: 0,
-              overall: 0,
-            },
-            extractionMethod: 'manual',
-            warnings: [`AI extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`],
-            rawData: {
-              description: transaction.details.description.join(''),
-              counterpartyName: transaction.details.counterpartyName,
-              counterpartyIBAN: transaction.details.counterpartyIBAN,
-            },
-          };
-          processed.push(this.createProcessedTransaction(transaction, extracted, 'income'));
-        }
+        // For ANY AI error (billing or general), re-throw to trigger fallback in main.ts
+        // Main.ts will attempt standard conversion without AI and show warning to user
+        throw error;
       }
     }
   }
@@ -416,7 +361,39 @@ export class PKOBPMT940Converter {
     needsAI: Array<{ transaction: MT940Transaction; index: number }>,
     processed: ProcessedTransaction[]
   ): Promise<void> {
-    if (!this.aiExtractor || !this.contractorMatcher) return;
+    // If AI is not available, add all as unrecognized
+    if (!this.aiExtractor || !this.contractorMatcher) {
+      console.warn('   ⚠️  AI not available, marking expenses as unrecognized');
+      for (const { transaction } of needsAI) {
+        const extracted: ExtractedData = {
+          streetName: null,
+          buildingNumber: null,
+          apartmentNumber: null,
+          fullAddress: null,
+          tenantName: null,
+          confidence: {
+            address: 0,
+            apartment: 0,
+            tenantName: 0,
+            overall: 0,
+          },
+          extractionMethod: 'manual',
+          warnings: ['No contractor matched - needs manual assignment'],
+          rawData: {
+            description: transaction.details.description.join(''),
+            counterpartyName: transaction.details.counterpartyName,
+            counterpartyIBAN: transaction.details.counterpartyIBAN,
+          },
+        };
+        const unrecognized = {
+          contractor: null,
+          confidence: 0,
+          matchedIn: 'none' as const,
+        };
+        processed.push(this.createProcessedTransaction(transaction, extracted, 'expense', unrecognized));
+      }
+      return;
+    }
 
     const batchSize = this.config.useBatchProcessing ? 50 : 1;
     const batches = this.createBatches(needsAI, batchSize);
@@ -467,6 +444,7 @@ export class PKOBPMT940Converter {
               overall: 0,
             },
             extractionMethod: 'ai',
+            reasoning: matchedContractor.reasoning, // Copy AI reasoning for display
             warnings: matchedContractor.contractor ? [] : ['AI could not match contractor'],
             rawData: {
               description: transaction.details.description.join(''),
@@ -480,41 +458,9 @@ export class PKOBPMT940Converter {
       } catch (error) {
         console.error(`   ❌ Batch ${i + 1} failed:`, error);
         
-        // If this is a billing/quota error, re-throw it to stop processing
-        if (isBillingError(error)) {
-          console.error(`   💰 Billing error detected, stopping processing`);
-          throw error;
-        }
-        
-        // For other errors, add as unrecognized entries
-        for (const { transaction } of batch) {
-          const extracted: ExtractedData = {
-            streetName: null,
-            buildingNumber: null,
-            apartmentNumber: null,
-            fullAddress: null,
-            tenantName: null,
-            confidence: {
-              address: 0,
-              apartment: 0,
-              tenantName: 0,
-              overall: 0,
-            },
-            extractionMethod: 'manual',
-            warnings: [`AI matching failed: ${error instanceof Error ? error.message : 'Unknown error'}`],
-            rawData: {
-              description: transaction.details.description.join(''),
-              counterpartyName: transaction.details.counterpartyName,
-              counterpartyIBAN: transaction.details.counterpartyIBAN,
-            },
-          };
-          const unrecognized = {
-            contractor: null,
-            confidence: 0,
-            matchedIn: 'none' as const,
-          };
-          processed.push(this.createProcessedTransaction(transaction, extracted, 'expense', unrecognized));
-        }
+        // For ANY AI error (billing or general), re-throw to trigger fallback in main.ts
+        // Main.ts will attempt standard conversion without AI and show warning to user
+        throw error;
       }
     }
   }
@@ -537,7 +483,7 @@ export class PKOBPMT940Converter {
     transaction: MT940Transaction,
     extracted: ExtractedData,
     transactionType: 'income' | 'expense',
-    matchedContractor?: import('../santander-xml/contractor-matcher').MatchedContractor
+    matchedContractor?: import('../../shared/contractor-matcher').MatchedContractor
   ): ProcessedTransaction {
     const confidence = transactionType === 'income' 
       ? extracted.confidence.overall 

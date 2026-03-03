@@ -141,14 +141,8 @@ class ConverterRegistry {
       const xmlContent = readFileWithEncoding(inputPath);
       const result = await converter.convert(xmlContent);
 
-      // Count only INCOME transactions that will need manual review (< 60%)
-      // AI is not used for expenses, so they don't trigger AI modal
-      const lowConfidenceIncomeTransactions = result.processed.filter(trn => {
-        return trn.transactionType === 'income' && trn.extracted.confidence.overall < 60;
-      });
-
-      // But still count all transactions needing review for display purposes
-      const allLowConfidence = result.processed.filter(trn => {
+      // Count all transactions that will need AI (both income and expenses < 60%)
+      const lowConfidenceTransactions = result.processed.filter(trn => {
         if (trn.transactionType === 'income') {
           return trn.extracted.confidence.overall < 60;
         } else {
@@ -158,13 +152,13 @@ class ConverterRegistry {
 
       const incomeCount = result.processed.filter(t => t.transactionType === 'income' && t.extracted.confidence.overall < 60).length;
       const expenseCount = result.processed.filter(t => t.transactionType === 'expense' && (t.matchedContractor?.confidence || 0) < 60).length;
-      console.log(`[Santander] Total: ${result.processed.length}, All low confidence (<60%): ${allLowConfidence.length} (income: ${incomeCount}, expenses: ${expenseCount}). AI will process: ${lowConfidenceIncomeTransactions.length}`);
+      console.log(`[Santander] Total: ${result.processed.length}, Low confidence (<60%): ${lowConfidenceTransactions.length} (income: ${incomeCount}, expenses: ${expenseCount})`);
 
       return {
         totalTransactions: result.processed.length,
-        lowConfidenceCount: allLowConfidence.length, // All transactions needing review
+        lowConfidenceCount: lowConfidenceTransactions.length,
         averageConfidence: result.statistics.averageConfidence,
-        needsAI: lowConfidenceIncomeTransactions.length > 0, // Only income triggers AI
+        needsAI: lowConfidenceTransactions.length > 0, // Both income and expenses trigger AI
       };
     }
     
@@ -198,14 +192,8 @@ class ConverterRegistry {
       const mt940Content = readFileWithEncoding(inputPath);
       const result = await converter.convert(mt940Content);
 
-      // Count only INCOME transactions that will need manual review (< 60%)
-      // AI is not used for expenses, so they don't trigger AI modal
-      const lowConfidenceIncomeTransactions = result.processed.filter(trn => {
-        return trn.transactionType === 'income' && trn.extracted.confidence.overall < 60;
-      });
-
-      // But still count all transactions needing review for display purposes
-      const allLowConfidence = result.processed.filter(trn => {
+      // Count all transactions that will need AI (both income and expenses < 60%)
+      const lowConfidenceTransactions = result.processed.filter(trn => {
         if (trn.transactionType === 'income') {
           return trn.extracted.confidence.overall < 60;
         } else {
@@ -215,13 +203,13 @@ class ConverterRegistry {
 
       const incomeCount = result.processed.filter(t => t.transactionType === 'income' && t.extracted.confidence.overall < 60).length;
       const expenseCount = result.processed.filter(t => t.transactionType === 'expense' && (t.matchedContractor?.confidence || 0) < 60).length;
-      console.log(`[PKO BP] Total: ${result.processed.length}, All low confidence (<60%): ${allLowConfidence.length} (income: ${incomeCount}, expenses: ${expenseCount}). AI will process: ${lowConfidenceIncomeTransactions.length}`);
+      console.log(`[PKO BP] Total: ${result.processed.length}, Low confidence (<60%): ${lowConfidenceTransactions.length} (income: ${incomeCount}, expenses: ${expenseCount})`);
 
       return {
         totalTransactions: result.processed.length,
-        lowConfidenceCount: allLowConfidence.length, // All transactions needing review
+        lowConfidenceCount: lowConfidenceTransactions.length,
         averageConfidence: result.statistics.averageConfidence,
-        needsAI: lowConfidenceIncomeTransactions.length > 0, // Only income triggers AI
+        needsAI: lowConfidenceTransactions.length > 0, // Both income and expenses trigger AI
       };
     }
     

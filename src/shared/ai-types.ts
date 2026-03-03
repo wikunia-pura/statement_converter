@@ -102,8 +102,9 @@ export interface CacheEntry {
 export interface MatchedContractor {
   contractor: Kontrahent | null;
   confidence: number;
-  matchedIn: 'desc-opt' | 'desc-base' | 'none';
+  matchedIn: 'desc-opt' | 'desc-base' | 'none' | 'manual';
   matchedText?: string;
+  reasoning?: string; // AI reasoning for why this contractor was matched
 }
 
 /**

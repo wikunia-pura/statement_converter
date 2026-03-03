@@ -8,8 +8,8 @@ import ConverterRegistry, { setDatabaseInstance } from './converterRegistry';
 import { IPC_CHANNELS } from '../shared/types';
 
 // Log environment variable for testing
-console.log('[MAIN] TEST_AI_BILLING_ERROR =', process.env.TEST_AI_BILLING_ERROR);
-console.log('[MAIN] TEST_AI_GENERIC_ERROR =', process.env.TEST_AI_GENERIC_ERROR);
+log.debug('[MAIN] TEST_AI_BILLING_ERROR =', process.env.TEST_AI_BILLING_ERROR);
+log.debug('[MAIN] TEST_AI_GENERIC_ERROR =', process.env.TEST_AI_GENERIC_ERROR);
 
 const DEV_SERVER_PORT = 3000;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
@@ -290,11 +290,11 @@ function setupIpcHandlers() {
       // Finalize last kontrahent in file
       finalizeLastKontrahent();
       
-      console.log(`[IMPORT] FileFunky import completed: added=${added}, updated=${updated}`);
+      log.info(`[IMPORT] FileFunky import completed: added=${added}, updated=${updated}`);
       return { success: true, added, updated };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[IMPORT] FileFunky import error:', errorMessage);
+      log.error('[IMPORT] FileFunky import error:', errorMessage);
       return { success: false, error: errorMessage };
     }
   });
@@ -826,13 +826,13 @@ function setupIpcHandlers() {
           
           // Check if this is a billing/quota error - if so, don't fallback, just fail
           if (isBillingError(aiError)) {
-            console.error('[AI Error - No Money]:', aiErrorMessage);
+            log.error('[AI Error - No Money]:', aiErrorMessage);
             throw aiError; // Re-throw to outer catch
           }
           
           // For other AI errors, log and fallback to standard conversion
-          console.warn('[AI Error - Falling back to standard conversion]:', aiErrorMessage);
-          console.log('[Fallback] Attempting standard conversion without AI...');
+          log.warn('[AI Error - Falling back to standard conversion]:', aiErrorMessage);
+          log.info('[Fallback] Attempting standard conversion without AI...');
           
           try {
             // Perform conversion WITHOUT AI (fallback)
@@ -871,7 +871,7 @@ function setupIpcHandlers() {
             };
           } catch (fallbackError: unknown) {
             // If even standard conversion fails, throw original AI error
-            console.error('[Fallback Failed]:', fallbackError);
+            log.error('[Fallback Failed]:', fallbackError);
             throw new Error(`AI failed: ${aiErrorMessage}. Standard conversion also failed.`);
           }
         }

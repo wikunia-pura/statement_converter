@@ -17,6 +17,81 @@ export class ContractorMatcher {
   }
 
   /**
+   * Normalize text for fuzzy matching
+   * Removes punctuation and normalizes whitespace
+   */
+  private normalizeText(text: string): string {
+    return text
+      .replace(/[.,;:\-_]/g, ' ')  // Replace punctuation with spaces
+      .replace(/\s+/g, ' ')          // Normalize multiple spaces to single space
+      .trim();                        // Remove leading/trailing spaces
+  }
+
+  /**
+   * Calculate Levenshtein distance between two strings (edit distance)
+   * Used for fuzzy matching when exact substring match fails
+   */
+  private levenshteinDistance(str1: string, str2: string): number {
+    const m = str1.length;
+    const n = str2.length;
+    const dp: number[][] = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        if (str1[i - 1] === str2[j - 1]) {
+          dp[i][j] = dp[i - 1][j - 1];
+        } else {
+          dp[i][j] = Math.min(
+            dp[i - 1][j - 1] + 1, // substitution
+            dp[i - 1][j] + 1,     // deletion
+            dp[i][j - 1] + 1      // insertion
+          );
+        }
+      }
+    }
+
+    return dp[m][n];
+  }
+
+  /**
+   * Check fuzzy match between contractor name and transaction text
+   * Returns score based on similarity (0 = no match, 85-95 = fuzzy match)
+   * 
+   * Compares words from contractor name against words in transaction text.
+   * If any word pair has >75% similarity (Levenshtein-based), returns fuzzy match score.
+   */
+  private fuzzyMatch(contractorName: string, searchText: string): number {
+    const contractorWords = contractorName.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+    const searchWords = searchText.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+
+    let bestScore = 0;
+
+    // Check each contractor word against search words
+    for (const cWord of contractorWords) {
+      for (const sWord of searchWords) {
+        // Skip if length difference is too large (optimization)
+        if (Math.abs(cWord.length - sWord.length) > 3) continue;
+
+        const distance = this.levenshteinDistance(cWord, sWord);
+        const maxLen = Math.max(cWord.length, sWord.length);
+        const similarity = 1 - (distance / maxLen);
+
+        // If similarity > 75%, consider it a fuzzy match
+        if (similarity > 0.75) {
+          // Score: 85-95 based on similarity (0.75 -> 85, 1.0 -> 95)
+          const score = 85 + Math.floor((similarity - 0.75) * 40);
+          bestScore = Math.max(bestScore, score);
+        }
+      }
+    }
+
+    return bestScore;
+  }
+
+  /**
    * Match transaction with contractor
    * Priority: desc-opt > desc-base
    */
@@ -51,12 +126,13 @@ export class ContractorMatcher {
 
   /**
    * Get top N candidate contractors for a transaction (for AI pre-filtering)
-   * Returns the most likely contractors based on fuzzy matching
-   * Score priority: NIP (110) > Main name = Alternative names (100 - EQUAL) > Word-based (0-70)
+   * Returns the most likely contractors based on matching (exact and fuzzy)
+   * Score priority: NIP (110) > Main name = Alternative names (100 - EQUAL) > Fuzzy match (85-95)
    */
   getTopCandidates(transaction: AITransaction, topN: number = 10): Kontrahent[] {
     // Combine desc-opt and desc-base for searching
     const searchText = `${transaction.descOpt || ''} ${transaction.descBase}`.toLowerCase();
+    const searchTextNormalized = this.normalizeText(searchText);
     
     // Score all contractors
     const scored = this.contractors.map(contractor => {
@@ -74,7 +150,8 @@ export class ContractorMatcher {
       // If NIP not matched, check main name - Score: 100
       if (score === 0) {
         const contractorNameLower = contractor.nazwa.toLowerCase();
-        if (searchText.includes(contractorNameLower)) {
+        const contractorNameNormalized = this.normalizeText(contractorNameLower);
+        if (searchTextNormalized.includes(contractorNameNormalized)) {
           score = 100;
         }
       }
@@ -83,27 +160,27 @@ export class ContractorMatcher {
       if (score === 0 && contractor.alternativeNames && contractor.alternativeNames.length > 0) {
         for (const altName of contractor.alternativeNames) {
           const altNameLower = altName.toLowerCase();
-          if (searchText.includes(altNameLower)) {
+          const altNameNormalized = this.normalizeText(altNameLower);
+          if (searchTextNormalized.includes(altNameNormalized)) {
             score = 100;
             break;
           }
         }
       }
 
-      // If no full match, try word-based matching on main name
+      // If exact match not found, try fuzzy matching - Score: 85-95
+      // This catches typos and similar names (e.g., "Gontarek" vs "Guntarek")
       if (score === 0) {
-        const contractorNameLower = contractor.nazwa.toLowerCase();
-        const words = contractorNameLower.split(/\s+/).filter(w => w.length > 3);
-        let matchedWords = 0;
-        
-        for (const word of words) {
-          if (searchText.includes(word)) {
-            matchedWords++;
+        // Try fuzzy match on main name
+        score = this.fuzzyMatch(contractor.nazwa, searchText);
+
+        // If main name fuzzy match weak, try alternative names
+        if (score < 90 && contractor.alternativeNames && contractor.alternativeNames.length > 0) {
+          for (const altName of contractor.alternativeNames) {
+            const altScore = this.fuzzyMatch(altName, searchText);
+            score = Math.max(score, altScore);
+            if (score >= 90) break; // Good enough, stop checking
           }
-        }
-        
-        if (words.length > 0) {
-          score = (matchedWords / words.length) * 70;
         }
       }
 
@@ -124,6 +201,7 @@ export class ContractorMatcher {
    */
   private findBestMatch(description: string): Omit<MatchedContractor, 'matchedIn'> {
     const descLower = description.toLowerCase();
+    const descNormalizedText = this.normalizeText(descLower);
     let bestMatch: Kontrahent | null = null;
     let bestConfidence = 0;
     let matchedText = '';
@@ -145,10 +223,11 @@ export class ContractorMatcher {
         }
       }
 
-      // SECOND: Check main name
+      // SECOND: Check main name (with normalization)
       const contractorNameLower = contractor.nazwa.toLowerCase();
-      if (descLower.includes(contractorNameLower)) {
-        const confidence = this.calculateConfidence(contractorNameLower, descLower);
+      const contractorNameNormalized = this.normalizeText(contractorNameLower);
+      if (descNormalizedText.includes(contractorNameNormalized)) {
+        const confidence = this.calculateConfidence(contractorNameNormalized, descNormalizedText);
         
         if (confidence > bestConfidence) {
           bestMatch = contractor;
@@ -157,13 +236,14 @@ export class ContractorMatcher {
         }
       }
 
-      // THIRD: Check alternative names (SAME confidence as main name)
+      // THIRD: Check alternative names (SAME confidence as main name, with normalization)
       if (contractor.alternativeNames && contractor.alternativeNames.length > 0) {
         for (const altName of contractor.alternativeNames) {
           const altNameLower = altName.toLowerCase();
+          const altNameNormalized = this.normalizeText(altNameLower);
           
-          if (descLower.includes(altNameLower)) {
-            const confidence = this.calculateConfidence(altNameLower, descLower);
+          if (descNormalizedText.includes(altNameNormalized)) {
+            const confidence = this.calculateConfidence(altNameNormalized, descNormalizedText);
             
             if (confidence > bestConfidence) {
               bestMatch = contractor;
@@ -174,27 +254,8 @@ export class ContractorMatcher {
         }
       }
 
-      // Only if no full match found, try word-based matching on main name
-      if (bestMatch !== contractor) {
-        const words = contractorNameLower.split(/\s+/).filter(w => w.length > 3);
-        let matchedWords = 0;
-        
-        for (const word of words) {
-          if (descLower.includes(word)) {
-            matchedWords++;
-          }
-        }
-        
-        if (matchedWords > 0 && words.length > 0) {
-          const confidence = Math.floor((matchedWords / words.length) * 70);
-          
-          if (confidence > bestConfidence) {
-            bestMatch = contractor;
-            bestConfidence = confidence;
-            matchedText = contractor.nazwa;
-          }
-        }
-      }
+      // Word-based matching DISABLED - too aggressive and unreliable
+      // Only exact matches (NIP, full name, alternative names) are used
     }
 
     return {

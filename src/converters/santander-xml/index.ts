@@ -65,6 +65,7 @@ export class SantanderXmlConverter {
       useRegexFirst: config.useRegexFirst ?? true,
       skipNegativeAmounts: config.skipNegativeAmounts ?? false, // Changed to false - process expenses
       skipBankFees: config.skipBankFees ?? true,
+      useAIForExpenses: config.useAIForExpenses ?? false, // AI disabled for expenses by default
       contractors: config.contractors,
       addresses: config.addresses,
       language: config.language,
@@ -248,8 +249,9 @@ export class SantanderXmlConverter {
             matchedIn: 'none' as const,
           };
 
-      // If recognized with high confidence (>= 90%), add to processed
-      if (matchedContractor.contractor !== null && matchedContractor.confidence >= 90) {
+      // If recognized with ANY confidence, add to processed (regex is reliable)
+      // Only send to AI if NO match found (confidence = 0)
+      if (matchedContractor.contractor !== null && matchedContractor.confidence > 0) {
         const extracted: ExtractedData = {
           streetName: null,
           buildingNumber: null,
@@ -262,8 +264,8 @@ export class SantanderXmlConverter {
             tenantName: 0,
             overall: 0,
           },
-          extractionMethod: 'manual',
-          warnings: [],
+          extractionMethod: matchedContractor.confidence >= 90 ? 'manual' : 'regex',
+          warnings: matchedContractor.confidence < 60 ? ['Low confidence match - may need review'] : [],
           rawData: {
             descBase: transaction.descBase,
             descOpt: transaction.descOpt,
@@ -271,45 +273,49 @@ export class SantanderXmlConverter {
         };
         processed.push(this.createProcessedTransaction(transaction, extracted, 'expense', matchedContractor));
       } else {
-        // Mark for AI matching
+        // Mark for AI matching - ONLY if regex found nothing
         needsAI.push({ transaction, index: i });
       }
     }
 
     const matchedCount = processed.length;
     console.log(`   ✅ Partial matching: ${matchedCount}/${transactions.length}`);
-    console.log(`   🤖 Needs AI: ${needsAI.length} (SKIPPED - AI not used for expenses)`);
+    console.log(`   🤖 Needs AI: ${needsAI.length}`);
 
-    // Phase 2: AI matching DISABLED for expenses - create unrecognized entries instead
+    // Phase 2: AI matching for remaining expenses (if enabled)
     if (needsAI.length > 0) {
-      console.warn('⚠️  AI not used for expenses, creating unrecognized entries');
-      // Create entries for unrecognized contractors
-      for (const { transaction } of needsAI) {
-        const extracted: ExtractedData = {
-          streetName: null,
-          buildingNumber: null,
-          apartmentNumber: null,
-          fullAddress: null,
-          tenantName: null,
-          confidence: {
-            address: 0,
-            apartment: 0,
-            tenantName: 0,
-            overall: 0,
-          },
-          extractionMethod: 'manual',
-          warnings: ['No contractor matched - needs manual assignment'],
-          rawData: {
-            descBase: transaction.descBase,
-            descOpt: transaction.descOpt,
-          },
-        };
-        const unrecognized = {
-          contractor: null,
-          confidence: 0,
-          matchedIn: 'none' as const,
-        };
-        processed.push(this.createProcessedTransaction(transaction, extracted, 'expense', unrecognized));
+      if (this.config.useAIForExpenses) {
+        await this.processExpensesWithAI(needsAI, processed);
+      } else {
+        console.log(`   ⚠️  AI disabled for expenses, marking as unrecognized`);
+        // Mark all unmatched expenses as needing manual assignment
+        for (const { transaction } of needsAI) {
+          const extracted: ExtractedData = {
+            streetName: null,
+            buildingNumber: null,
+            apartmentNumber: null,
+            fullAddress: null,
+            tenantName: null,
+            confidence: {
+              address: 0,
+              apartment: 0,
+              tenantName: 0,
+              overall: 0,
+            },
+            extractionMethod: 'manual',
+            warnings: ['AI disabled for expenses - manual assignment required'],
+            rawData: {
+              descBase: transaction.descBase,
+              descOpt: transaction.descOpt,
+            },
+          };
+          const unrecognized = {
+            contractor: null,
+            confidence: 0,
+            matchedIn: 'none' as const,
+          };
+          processed.push(this.createProcessedTransaction(transaction, extracted, 'expense', unrecognized));
+        }
       }
     }
 
@@ -356,35 +362,9 @@ export class SantanderXmlConverter {
       } catch (error) {
         console.error(`   ❌ Batch ${i + 1} failed:`, error);
         
-        // If this is a billing/quota error, re-throw it to stop processing
-        if (isBillingError(error)) {
-          console.error(`   💰 Billing error detected, stopping processing`);
-          throw error;
-        }
-        
-        // For other errors, add as low-confidence entries
-        for (const { transaction } of batch) {
-          const extracted: ExtractedData = {
-            streetName: null,
-            buildingNumber: null,
-            apartmentNumber: null,
-            fullAddress: null,
-            tenantName: null,
-            confidence: {
-              address: 0,
-              apartment: 0,
-              tenantName: 0,
-              overall: 0,
-            },
-            extractionMethod: 'manual',
-            warnings: [`AI extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`],
-            rawData: {
-              descBase: transaction.descBase,
-              descOpt: transaction.descOpt,
-            },
-          };
-          processed.push(this.createProcessedTransaction(transaction, extracted, 'income'));
-        }
+        // For ANY AI error (billing or general), re-throw to trigger fallback in main.ts
+        // Main.ts will attempt standard conversion without AI and show warning to user
+        throw error;
       }
     }
   }
@@ -396,7 +376,38 @@ export class SantanderXmlConverter {
     needsAI: Array<{ transaction: XmlTransaction; index: number }>,
     processed: ProcessedTransaction[]
   ): Promise<void> {
-    if (!this.aiExtractor || !this.contractorMatcher) return;
+    // If AI is not available, add all as unrecognized
+    if (!this.aiExtractor || !this.contractorMatcher) {
+      console.warn('   ⚠️  AI not available, marking expenses as unrecognized');
+      for (const { transaction } of needsAI) {
+        const extracted: ExtractedData = {
+          streetName: null,
+          buildingNumber: null,
+          apartmentNumber: null,
+          fullAddress: null,
+          tenantName: null,
+          confidence: {
+            address: 0,
+            apartment: 0,
+            tenantName: 0,
+            overall: 0,
+          },
+          extractionMethod: 'manual',
+          warnings: ['No contractor matched - needs manual assignment'],
+          rawData: {
+            descBase: transaction.descBase,
+            descOpt: transaction.descOpt,
+          },
+        };
+        const unrecognized = {
+          contractor: null,
+          confidence: 0,
+          matchedIn: 'none' as const,
+        };
+        processed.push(this.createProcessedTransaction(transaction, extracted, 'expense', unrecognized));
+      }
+      return;
+    }
 
     // Use larger batch size for contractor matching (50 vs 20 for income)
     // Contractor matching is simpler than address extraction
@@ -443,6 +454,7 @@ export class SantanderXmlConverter {
               overall: 0,
             },
             extractionMethod: 'ai',
+            reasoning: matchedContractor.reasoning, // Copy AI reasoning for display
             warnings: matchedContractor.contractor ? [] : ['AI could not match contractor'],
             rawData: {
               descBase: transaction.descBase,
@@ -455,45 +467,16 @@ export class SantanderXmlConverter {
       } catch (error) {
         console.error(`   ❌ Batch ${i + 1} failed:`, error);
         
-        // If this is a billing/quota error, re-throw it to stop processing
-        if (isBillingError(error)) {
-          console.error(`   💰 Billing error detected, stopping processing`);
-          throw error;
-        }
-        
-        // For other errors, add as unrecognized entries
-        for (const { transaction } of batch) {
-          const extracted: ExtractedData = {
-            streetName: null,
-            buildingNumber: null,
-            apartmentNumber: null,
-            fullAddress: null,
-            tenantName: null,
-            confidence: {
-              address: 0,
-              apartment: 0,
-              tenantName: 0,
-              overall: 0,
-            },
-            extractionMethod: 'manual',
-            warnings: [`AI matching failed: ${error instanceof Error ? error.message : 'Unknown error'}`],
-            rawData: {
-              descBase: transaction.descBase,
-              descOpt: transaction.descOpt,
-            },
-          };
-          const unrecognized = {
-            contractor: null,
-            confidence: 0,
-            matchedIn: 'none' as const,
-          };
-          processed.push(this.createProcessedTransaction(transaction, extracted, 'expense', unrecognized));
-        }
+        // For ANY AI error (billing or general), re-throw to trigger fallback in main.ts
+        // Main.ts will attempt standard conversion without AI and show warning to user
+        throw error;
       }
     }
   }
 
   /**
+   * Create batches for batch processing
+   */  /**
    * Create batches for batch processing
    */
   private createBatches<T>(items: T[], batchSize: number): T[][] {
@@ -511,7 +494,7 @@ export class SantanderXmlConverter {
     transaction: XmlTransaction,
     extracted: ExtractedData,
     transactionType: 'income' | 'expense',
-    matchedContractor?: import('./contractor-matcher').MatchedContractor
+    matchedContractor?: import('../../shared/contractor-matcher').MatchedContractor
   ): ProcessedTransaction {
     const confidence = transactionType === 'income' 
       ? extracted.confidence.overall 

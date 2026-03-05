@@ -190,7 +190,8 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
 
   const filteredKontrahenci = kontrahenci.filter(k =>
     k.nazwa.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    k.kontoKontrahenta.toLowerCase().includes(searchTerm.toLowerCase())
+    k.kontoKontrahenta.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (k.nip && k.nip.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   return (

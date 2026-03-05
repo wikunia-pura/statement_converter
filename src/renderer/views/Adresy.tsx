@@ -40,6 +40,15 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
       return;
     }
 
+    // Check for duplicate name (case-insensitive)
+    const duplicateExists = adresy.some(
+      a => a.nazwa.toLowerCase() === newNazwa.toLowerCase()
+    );
+    if (duplicateExists) {
+      alert(t.duplicateAdresName);
+      return;
+    }
+
     try {
       await window.electronAPI.addAdres(newNazwa, newAlternativeNames);
       setNewNazwa('');
@@ -56,6 +65,15 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
   const handleUpdateAdres = async () => {
     if (!editingAdres || !newNazwa) {
       alert(t.fillAllFields);
+      return;
+    }
+
+    // Check for duplicate name (case-insensitive), excluding current adres
+    const duplicateExists = adresy.some(
+      a => a.id !== editingAdres.id && a.nazwa.toLowerCase() === newNazwa.toLowerCase()
+    );
+    if (duplicateExists) {
+      alert(t.duplicateAdresName);
       return;
     }
 

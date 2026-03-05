@@ -42,6 +42,15 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
       return;
     }
 
+    // Check for duplicate name (case-insensitive)
+    const duplicateExists = kontrahenci.some(
+      k => k.nazwa.toLowerCase() === newNazwa.toLowerCase()
+    );
+    if (duplicateExists) {
+      alert(t.duplicateKontrahentName);
+      return;
+    }
+
     try {
       await window.electronAPI.addKontrahent(newNazwa, newKontoKontrahenta, newNip || undefined, newAlternativeNames);
       setNewNazwa('');
@@ -60,6 +69,15 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
   const handleUpdateKontrahent = async () => {
     if (!editingKontrahent || !newNazwa || !newKontoKontrahenta) {
       alert(t.fillAllFields);
+      return;
+    }
+
+    // Check for duplicate name (case-insensitive), excluding current kontrahent
+    const duplicateExists = kontrahenci.some(
+      k => k.id !== editingKontrahent.id && k.nazwa.toLowerCase() === newNazwa.toLowerCase()
+    );
+    if (duplicateExists) {
+      alert(t.duplicateKontrahentName);
       return;
     }
 

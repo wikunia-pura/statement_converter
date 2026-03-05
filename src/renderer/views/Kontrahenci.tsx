@@ -302,21 +302,23 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
               {editingKontrahent ? t.editKontrahent : t.addNewKontrahent}
             </h3>
             <div className="form-group">
-              <label>{t.nazwa}</label>
+              <label>{t.nazwa} <span style={{ color: 'red' }}>*</span></label>
               <input
                 type="text"
                 value={newNazwa}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewNazwa(e.target.value)}
                 placeholder="np. Miasto Stołeczne Warszawa"
+                required
               />
             </div>
             <div className="form-group">
-              <label>{t.kontoKontrahenta}</label>
+              <label>{t.kontoKontrahenta} <span style={{ color: 'red' }}>*</span></label>
               <input
                 type="text"
                 value={newKontoKontrahenta}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewKontoKontrahenta(e.target.value)}
                 placeholder="np. 201-00001"
+                required
               />
             </div>
             <div className="form-group">

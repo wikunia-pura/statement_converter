@@ -257,12 +257,13 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
               {editingAdres ? t.editAdres : t.addNewAdres}
             </h3>
             <div className="form-group">
-              <label>{t.nazwa}</label>
+              <label>{t.nazwa} <span style={{ color: 'red' }}>*</span></label>
               <input
                 type="text"
                 value={newNazwa}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewNazwa(e.target.value)}
                 placeholder="np. Joliot-Curie"
+                required
               />
             </div>
             <div className="form-group">

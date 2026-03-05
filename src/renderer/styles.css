@@ -368,62 +368,7 @@ body.dark-mode .button-group-separator {
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
 }
 
-/* Zoom controls */
-.zoom-controls {
-  display: flex;
-  gap: 6px;
-  padding: 15px 20px;
-  margin: 0 15px 15px;
-  border-top: 1px solid rgba(255, 255, 255, 0.15);
-  justify-content: center;
-  flex-shrink: 0;
-  position: sticky;
-  bottom: 0;
-  z-index: 10;
-}
-
-.zoom-button {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: white;
-  padding: 10px 14px;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 14px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 44px;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  letter-spacing: 0.3px;
-}
-
-.zoom-button:hover {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.2) 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-  border-color: rgba(255, 255, 255, 0.4);
-}
-
-.zoom-button:active {
-  transform: translateY(0px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-}
-
-body.dark-mode .zoom-button {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%);
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-body.dark-mode .zoom-button:hover {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.15) 100%);
-  border-color: rgba(255, 255, 255, 0.3);
-}
-
+/* Main Content Layout */
 .main-content {
   flex: 1;
   display: flex;
@@ -432,11 +377,159 @@ body.dark-mode .zoom-button:hover {
   position: relative;
 }
 
+/* New Footer Styles */
 .app-footer {
-  position: absolute;
-  bottom: 8px;
-  right: 12px;
-  color: #999;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 24px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(245, 247, 250, 0.98) 100%);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.03);
+  position: sticky;
+  bottom: 0;
+  z-index: 100;
+  flex-shrink: 0;
+  gap: 20px;
+}
+
+body.dark-mode .app-footer {
+  background: linear-gradient(180deg, rgba(30, 32, 35, 0.98) 0%, rgba(24, 26, 27, 0.98) 100%);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.footer-left,
+.footer-center,
+.footer-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.footer-left {
+  justify-content: flex-start;
+}
+
+.footer-center {
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.footer-right {
+  justify-content: flex-end;
+}
+
+.footer-copyright,
+.footer-version {
+  font-size: 11px;
+  color: #666;
+  font-weight: 500;
+}
+
+body.dark-mode .footer-copyright,
+body.dark-mode .footer-version {
+  color: #888;
+}
+
+.footer-version {
+  padding: 2px 8px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+}
+
+body.dark-mode .footer-version {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.footer-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(37, 99, 235, 0.05) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.footer-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(37, 99, 235, 0.1) 100%);
+  border-color: rgba(59, 130, 246, 0.5);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+}
+
+.footer-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.footer-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+body.dark-mode .footer-button {
+  color: #ddd;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.08) 100%);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+body.dark-mode .footer-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.25) 0%, rgba(37, 99, 235, 0.15) 100%);
+  border-color: rgba(59, 130, 246, 0.6);
+}
+
+.footer-zoom-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.footer-zoom-button {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0.02) 100%);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: #333;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+}
+
+.footer-zoom-button:hover {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.08) 0%, rgba(0, 0, 0, 0.04) 100%);
+  border-color: rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.footer-zoom-button:active {
+  transform: translateY(0);
+}
+
+body.dark-mode .footer-zoom-button {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.04) 100%);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #ddd;
+}
+
+body.dark-mode .footer-zoom-button:hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.06) 100%);
+  border-color: rgba(255, 255, 255, 0.25);
 }
 
 body.dark-mode .app-footer {

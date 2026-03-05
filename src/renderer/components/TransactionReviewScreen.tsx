@@ -949,23 +949,33 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
               💸 Wydatki ({totalExpense})
             </button>
           </div>
-          
-          {hasMoreFiles && (
-            <div style={{
-              padding: '6px 12px',
-              backgroundColor: '#2a2d3a',
-              border: '1px solid #DCDCAA',
-              borderRadius: '6px',
-            }}>
-              <span style={{ color: '#DCDCAA', fontSize: '12px', fontWeight: 600 }}>
-                📁 {t.filesRemaining}: {remainingCount}
-              </span>
-            </div>
-          )}
         </div>
         
         {/* Right: Decision status and action buttons */}
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexShrink: 0 }}>
+          {/* Files remaining badge */}
+          {hasMoreFiles && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '10px 18px',
+              backgroundColor: '#2a2d3a',
+              border: '1px solid #DCDCAA',
+              borderRadius: '3px',
+              boxSizing: 'border-box',
+            }}>
+              <span style={{ 
+                color: '#DCDCAA', 
+                fontSize: '14px', 
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+                lineHeight: 1,
+              }}>
+                📁 {t.filesRemaining}: {remainingCount}
+              </span>
+            </div>
+          )}
           {/* Decision status badge */}
           <div style={{
             display: 'flex',

@@ -1192,7 +1192,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
           <div className="modal-overlay" onClick={() => setShowAIWarningModal(false)}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h2 style={{ margin: 0 }}>😱 O Cie Huj</h2>
+                <h2 style={{ margin: 0 }}>😱 Co Ci ludzie...</h2>
               </div>
               <div className="modal-body" style={{ padding: '20px' }}>
                 <p style={{ marginBottom: '15px', fontSize: '14px', color: '#6c757d' }}>
@@ -1215,11 +1215,11 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                       fontSize: '13px'
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '16px' }}>📄</span>
-                          <span style={{ fontWeight: '600', fontSize: '14px' }}>{file.fileName}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                          <span style={{ fontSize: '16px', flexShrink: 0 }}>📄</span>
+                          <span style={{ fontWeight: '600', fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.fileName}</span>
                         </div>
-                        <div style={{ display: 'flex', gap: '6px' }}>
+                        <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
                           <button
                             className="button button-small button-secondary"
                             onClick={() => {
@@ -1236,7 +1236,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                               performConversion(file.fileId, true);
                             }}
                           >
-                            🤖 Użyj AI
+                            🤖 Napierdalaj z AI
                           </button>
                         </div>
                       </div>
@@ -1268,7 +1268,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                     className="button button-success" 
                     onClick={() => handleProceedWithAI(filesNeedingAI.map(f => f.fileId))}
                   >
-                    Użyj AI dla wszystkich
+                    Napierdalaj z AI dla wszystkich
                   </button>
                 </div>
               </div>

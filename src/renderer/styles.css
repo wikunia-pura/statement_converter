@@ -833,7 +833,7 @@ body.dark-mode .settings-label-sub {
   border-radius: 12px;
   padding: 0;
   min-width: 400px;
-  max-width: 600px;
+  max-width: 800px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
   animation: modalSlideIn 0.3s ease-out;
 }

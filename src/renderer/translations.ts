@@ -4,6 +4,7 @@ export const translations = {
     converter: 'Konwerter',
     settings: 'Ustawienia',
     history: 'Historia',
+    goBack: 'Powrót',
     
     // Converter view
     fileConverter: 'Konwerter Plików v1.0.1',
@@ -183,6 +184,7 @@ export const translations = {
     converter: 'Converter',
     settings: 'Settings',
     history: 'History',
+    goBack: 'Go Back',
     
     // Converter view
     fileConverter: 'File Converter',

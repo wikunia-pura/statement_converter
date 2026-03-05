@@ -938,8 +938,9 @@ class ConverterRegistry {
         throw new Error('Conversion not found or expired. Please try again.');
       }
       
-      // Load contractors from database (needed for manual selections and export)
+      // Load contractors and addresses from database (needed for manual selections and export)
       const kontrahenci = dbInstance ? await dbInstance.getAllKontrahenci() : [];
+      const adresy = dbInstance ? await dbInstance.getAllAdresy() : [];
       
       // Apply user decisions to transactions
       const updatedTransactions = this.applyReviewDecisions(cached.processedTransactions, decisions, kontrahenci);
@@ -952,7 +953,7 @@ class ConverterRegistry {
             batchSize: 20,
             confidenceThresholds: { autoApprove: 85, needsReview: 60 },
             contractors: kontrahenci,
-            addresses: [],
+            addresses: adresy,
           })
         : new PKOBPMT940Converter({
             aiProvider: 'none',
@@ -960,7 +961,7 @@ class ConverterRegistry {
             batchSize: 20,
             confidenceThresholds: { autoApprove: 85, needsReview: 60 },
             contractors: kontrahenci,
-            addresses: [],
+            addresses: adresy,
           });
       
       // Generate accounting file

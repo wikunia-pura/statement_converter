@@ -76,7 +76,7 @@ const Footer: React.FC<FooterProps> = ({ language, appVersion }) => {
           title={t.checkForUpdates}
           aria-label={t.checkForUpdates}
         >
-          {checkingUpdate ? '🔄' : '⬇️'} {t.checkForUpdates}
+          {checkingUpdate ? '⟳ ' : ''}{t.checkForUpdates}
         </button>
       </div>
 

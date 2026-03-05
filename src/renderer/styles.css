@@ -382,12 +382,11 @@ body.dark-mode .button-group-separator {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 24px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(245, 247, 250, 0.98) 100%);
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.03);
+  padding: 6px 24px;
+  background: rgba(250, 250, 250, 0.6);
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   position: sticky;
   bottom: 0;
   z-index: 100;
@@ -396,9 +395,8 @@ body.dark-mode .button-group-separator {
 }
 
 body.dark-mode .app-footer {
-  background: linear-gradient(180deg, rgba(30, 32, 35, 0.98) 0%, rgba(24, 26, 27, 0.98) 100%);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
+  background: rgba(25, 27, 30, 0.7);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .footer-left,
@@ -425,68 +423,59 @@ body.dark-mode .app-footer {
 
 .footer-copyright,
 .footer-version {
-  font-size: 11px;
-  color: #666;
-  font-weight: 500;
+  font-size: 10px;
+  color: #888;
+  font-weight: 400;
 }
 
 body.dark-mode .footer-copyright,
 body.dark-mode .footer-version {
-  color: #888;
+  color: #666;
 }
 
 .footer-version {
-  padding: 2px 8px;
-  background: rgba(0, 0, 0, 0.05);
-  border-radius: 4px;
+  padding: 1px 6px;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 3px;
   font-family: 'Courier New', monospace;
 }
 
 body.dark-mode .footer-version {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .footer-button {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #333;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(37, 99, 235, 0.05) 100%);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  border-radius: 8px;
+  gap: 4px;
+  padding: 2px 4px;
+  font-size: 10px;
+  font-weight: 400;
+  color: #666;
+  background: transparent;
+  border: none;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   white-space: nowrap;
+  text-decoration: none;
 }
 
 .footer-button:hover:not(:disabled) {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(37, 99, 235, 0.1) 100%);
-  border-color: rgba(59, 130, 246, 0.5);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
-}
-
-.footer-button:active:not(:disabled) {
-  transform: translateY(0);
+  color: #3b82f6;
+  text-decoration: underline;
 }
 
 .footer-button:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 body.dark-mode .footer-button {
-  color: #ddd;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.08) 100%);
-  border-color: rgba(59, 130, 246, 0.4);
+  color: #666;
 }
 
 body.dark-mode .footer-button:hover:not(:disabled) {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.25) 0%, rgba(37, 99, 235, 0.15) 100%);
-  border-color: rgba(59, 130, 246, 0.6);
+  color: #60a5fa;
 }
 
 .footer-zoom-controls {
@@ -495,41 +484,37 @@ body.dark-mode .footer-button:hover:not(:disabled) {
 }
 
 .footer-zoom-button {
-  background: linear-gradient(135deg, rgba(0, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0.02) 100%);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  color: #333;
-  padding: 6px 10px;
-  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  color: #555;
+  padding: 3px 7px;
+  border-radius: 4px;
   cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 12px;
-  font-weight: 600;
+  transition: all 0.2s ease;
+  font-size: 10px;
+  font-weight: 500;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 38px;
+  min-width: 32px;
 }
 
 .footer-zoom-button:hover {
-  background: linear-gradient(135deg, rgba(0, 0, 0, 0.08) 0%, rgba(0, 0, 0, 0.04) 100%);
-  border-color: rgba(0, 0, 0, 0.2);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-}
-
-.footer-zoom-button:active {
-  transform: translateY(0);
+  background: rgba(0, 0, 0, 0.06);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: #333;
 }
 
 body.dark-mode .footer-zoom-button {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.04) 100%);
-  border-color: rgba(255, 255, 255, 0.15);
-  color: #ddd;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #888;
 }
 
 body.dark-mode .footer-zoom-button:hover {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.06) 100%);
-  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #aaa;
 }
 
 body.dark-mode .app-footer {

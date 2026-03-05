@@ -690,97 +690,111 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
       bottom: 0,
       backgroundColor: '#1e1e1e',
       color: '#d4d4d4',
-      overflow: 'auto',
+      display: 'flex',
+      flexDirection: 'column',
       zIndex: 1000,
+      overflow: 'hidden',
     }}>
       {/* Header */}
       <div style={{
-        padding: '20px',
+        padding: '12px 20px',
         borderBottom: '1px solid #3c3c3c',
         backgroundColor: '#252526',
+        flexShrink: 0,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
       }}>
-        <h2 style={{ margin: '0 0 10px 0' }}>Przegląd Transakcji</h2>
-        <p style={{ margin: '0 0 10px 0', color: '#858585' }}>
-          Plik: <strong>{reviewData.fileName}</strong> | Bank: <strong>{reviewData.bankName}</strong>
-        </p>
-        {reviewData.adresName && (
-          <div style={{
-            marginTop: '12px',
-            padding: '12px 16px',
-            backgroundColor: '#1e3a5f',
-            border: '2px solid #3b82f6',
-            borderRadius: '8px',
-          }}>
-            <div style={{
-              fontSize: '14px',
-              color: '#93c5fd',
-              marginBottom: '4px',
+        {/* Breadcrumbs */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            onClick={onCancel}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#858585',
+              cursor: 'pointer',
+              fontSize: '16px',
               fontWeight: 500,
-            }}>
-              🏢 Wybrany adres:
-            </div>
-            <div style={{
-              fontSize: '18px',
-              color: '#ffffff',
-              fontWeight: 700,
-            }}>
-              {reviewData.adresName}
-            </div>
-          </div>
-        )}
-        <p style={{ margin: '10px 0 0 0', color: '#ffa500' }}>
-          {reviewData.transactions.length} transakcji wymaga ręcznej weryfikacji (confidence {'<'} 60%)
-        </p>
-        
-        {/* Filter buttons */}
-        <div style={{ marginTop: '15px', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => setFilter('all')}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: filter === 'all' ? '#0e639c' : '#3c3c3c',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontWeight: filter === 'all' ? 'bold' : 'normal',
+              padding: 0,
+              textDecoration: 'none',
+              transition: 'color 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = '#b0b0b0';
+              e.currentTarget.style.textDecoration = 'underline';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = '#858585';
+              e.currentTarget.style.textDecoration = 'none';
             }}
           >
-            Wszystkie ({reviewData.transactions.length})
+            Konwerter
           </button>
-          <button
-            onClick={() => setFilter('income')}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: filter === 'income' ? '#4EC9B0' : '#3c3c3c',
-              color: filter === 'income' ? '#1e1e1e' : 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontWeight: filter === 'income' ? 'bold' : 'normal',
-            }}
-          >
-            💰 Wpłaty ({totalIncome})
-          </button>
-          <button
-            onClick={() => setFilter('expense')}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: filter === 'expense' ? '#CE9178' : '#3c3c3c',
-              color: filter === 'expense' ? '#1e1e1e' : 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontWeight: filter === 'expense' ? 'bold' : 'normal',
-            }}
-          >
-            💸 Wydatki ({totalExpense})
-          </button>
+          <span style={{ color: '#555', fontSize: '16px', userSelect: 'none' }}>/</span>
+          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 500, color: '#e0e0e0' }}>Przegląd transakcji</h2>
         </div>
+        
+        {/* Close button */}
+        <button
+          onClick={onCancel}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#858585',
+            cursor: 'pointer',
+            fontSize: '20px',
+            padding: '4px 8px',
+            transition: 'color 0.2s ease',
+            lineHeight: 1,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = '#e0e0e0';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = '#858585';
+          }}
+          title="Zamknij"
+        >
+          ✕
+        </button>
+      </div>
+      
+      {/* Selected address */}
+      {reviewData.adresName && (
+        <div style={{
+          padding: '14px 20px',
+          borderBottom: '1px solid #4a4a4a',
+          backgroundColor: '#373738',
+          textAlign: 'center',
+          fontSize: '16px',
+          color: '#e0e0e0',
+          fontWeight: 600,
+          letterSpacing: '0.3px',
+          flexShrink: 0,
+        }}>
+          {reviewData.adresName}
+        </div>
+      )}
+      
+      {/* File info */}
+      <div style={{
+        padding: '8px 20px',
+        borderBottom: '1px solid #3c3c3c',
+        backgroundColor: '#252526',
+        flexShrink: 0,
+      }}>
+        <p style={{ margin: 0, color: '#858585', fontSize: '13px' }}>
+          Plik: <strong>{reviewData.fileName}</strong> | Bank: <strong>{reviewData.bankName}</strong> | <span style={{ color: '#ffa500' }}>{reviewData.transactions.length} transakcji do zaakceptowania</span>
+        </p>
       </div>
 
       {/* Transactions list */}
-      <div style={{ padding: '20px' }}>
+      <div style={{ 
+        padding: '20px',
+        flex: 1,
+        overflowY: 'auto',
+      }}>
         {/* Income Section */}
         {(filter === 'all' || filter === 'income') && incomeTransactions.length > 0 && (
           <>
@@ -874,43 +888,110 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
         )}
       </div>
 
-      {/* Footer with actions */}
+      {/* Footer with filters and actions */}
       <div style={{
-        position: 'sticky',
-        bottom: 0,
-        padding: '20px',
+        padding: '10px 20px',
         borderTop: '1px solid #3c3c3c',
         backgroundColor: '#252526',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
+        flexShrink: 0,
+        gap: '16px',
       }}>
-        <div>
-          <span style={{ color: '#858585' }}>
-            Podjęto decyzje: {decisions.size} / {reviewData.transactions.length}
-          </span>
+        {/* Left: Filter buttons */}
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <span style={{ color: '#858585', fontSize: '12px', marginRight: '4px' }}>Filtruj:</span>
+            <button
+              onClick={() => setFilter('all')}
+              style={{
+                padding: '5px 10px',
+                fontSize: '12px',
+                backgroundColor: filter === 'all' ? '#0e639c' : '#3c3c3c',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: filter === 'all' ? 'bold' : 'normal',
+              }}
+            >
+              Wszystkie ({reviewData.transactions.length})
+            </button>
+            <button
+              onClick={() => setFilter('income')}
+              style={{
+                padding: '5px 10px',
+                fontSize: '12px',
+                backgroundColor: filter === 'income' ? '#4EC9B0' : '#3c3c3c',
+                color: filter === 'income' ? '#1e1e1e' : 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: filter === 'income' ? 'bold' : 'normal',
+              }}
+            >
+              💰 Wpłaty ({totalIncome})
+            </button>
+            <button
+              onClick={() => setFilter('expense')}
+              style={{
+                padding: '5px 10px',
+                fontSize: '12px',
+                backgroundColor: filter === 'expense' ? '#CE9178' : '#3c3c3c',
+                color: filter === 'expense' ? '#1e1e1e' : 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: filter === 'expense' ? 'bold' : 'normal',
+              }}
+            >
+              💸 Wydatki ({totalExpense})
+            </button>
+          </div>
+          
           {hasMoreFiles && (
-            <span style={{ color: '#DCDCAA', marginLeft: '15px', fontSize: '14px' }}>
-              {t.filesRemaining}: {remainingCount}
-            </span>
+            <div style={{
+              padding: '6px 12px',
+              backgroundColor: '#2a2d3a',
+              border: '1px solid #DCDCAA',
+              borderRadius: '6px',
+            }}>
+              <span style={{ color: '#DCDCAA', fontSize: '12px', fontWeight: 600 }}>
+                📁 {t.filesRemaining}: {remainingCount}
+              </span>
+            </div>
           )}
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button
-            onClick={onCancel}
-            disabled={isProcessing}
-            style={{
-              padding: '12px 24px',
-              backgroundColor: '#3c3c3c',
-              color: '#d4d4d4',
-              border: 'none',
-              borderRadius: '3px',
-              cursor: isProcessing ? 'not-allowed' : 'pointer',
-              opacity: isProcessing ? 0.5 : 1,
-            }}
-          >
-            {t.cancel}
-          </button>
+        
+        {/* Right: Decision status and action buttons */}
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexShrink: 0 }}>
+          {/* Decision status badge */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '10px 18px',
+            backgroundColor: allDecided ? '#1e4620' : '#3c2a1e',
+            border: allDecided ? '1px solid #4EC9B0' : '1px solid #CE9178',
+            borderRadius: '3px',
+            minWidth: '150px',
+            boxSizing: 'border-box',
+          }}>
+            <span style={{ fontSize: '16px', lineHeight: 1 }}>
+              {allDecided ? '✅' : '⏳'}
+            </span>
+            <span style={{ 
+              color: '#e0e0e0', 
+              fontSize: '14px',
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+              lineHeight: 1,
+            }}>
+              {allDecided ? 'Gotowe' : 'Decyzje'}: {decisions.size}/{reviewData.transactions.length}
+            </span>
+          </div>
+          
           {hasMoreFiles ? (
             <>
               <button

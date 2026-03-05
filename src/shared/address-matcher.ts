@@ -65,10 +65,6 @@ export class AddressMatcher {
    *                          For Santander: pass descOpt. For PKO: pass counterpartyName.
    */
   match(combinedText: string, counterpartyName?: string): AddressMatchResult {
-    // DEBUG: Log input for troubleshooting
-    console.log(`[AddressMatcher] Input: "${combinedText.substring(0, 120)}..."`);
-    console.log(`[AddressMatcher] Configured addresses: ${this.addresses.length}`, this.addresses.map(a => a.nazwa));
-
     // 1. Check for ZGN (Zakład Gospodarki Nieruchomościami)
     if (combinedText.toUpperCase().includes('GOSP. NIERUCHOM')) {
       return {
@@ -85,14 +81,12 @@ export class AddressMatcher {
 
     // 2. Extract apartment/identifier from text (merged patterns from both converters)
     const apartmentResult = this.extractApartmentNumber(combinedText);
-    console.log(`[AddressMatcher] apartmentResult:`, apartmentResult);
 
     // 3. Match address against known properties
     const addressResult = this.extractAddress(
       combinedText,
       apartmentResult?.apartment || null
     );
-    console.log(`[AddressMatcher] addressResult:`, addressResult);
 
     // 4. Validate address against configured properties
     let isValidAddress = false;
@@ -105,26 +99,30 @@ export class AddressMatcher {
         addressResult.buildingNumber
       );
     }
-    console.log(`[AddressMatcher] isValidAddress: ${isValidAddress}`);
 
     // 5. Determine data trust level
     //    Identifiers (IDENTYFIKATOR: X/Y, etc.) are trusted even without address validation
     //    Address/prefix patterns require address validation
     const hasIdentifier = apartmentResult?.source === 'identifier';
-    const hasExplicitApartment = !!apartmentResult;
     const useData = isValidAddress || hasIdentifier;
+
+    // 5a. Determine apartment source quality
+    //     "confirmed" = apartment number came from known address match (extractAddress with match[2])
+    //     "unconfirmed" = apartment came from extractApartmentNumber (may be tenant's home address)
+    const apartmentFromKnownAddress = isValidAddress && !!addressResult.apartmentNumber;
+    const apartmentFromIdentifier = hasIdentifier && !!apartmentResult?.apartment;
+    const apartmentConfirmed = apartmentFromKnownAddress || apartmentFromIdentifier;
 
     // 6. Extract tenant name (from counterparty if provided, else from combined text)
     const tenantName = this.extractTenantName(counterpartyName || combinedText);
 
-    // 7. Calculate confidence scores
+    // 7. Calculate confidence scores (CONSERVATIVE policy)
     const confidence = this.calculateConfidence(
       addressResult,
       tenantName,
-      apartmentResult?.apartment || null,
       isValidAddress,
-      hasExplicitApartment,
-      hasIdentifier
+      hasIdentifier,
+      apartmentConfirmed
     );
 
     // 8. Build warnings
@@ -140,6 +138,11 @@ export class AddressMatcher {
         `Address "${addressResult.streetName} ${addressResult.buildingNumber}" does not match managed properties`
       );
     }
+    if (!apartmentConfirmed && apartmentResult?.apartment) {
+      warnings.push(
+        `Apartment "${apartmentResult.apartment}" extracted from generic pattern (not from known address) — needs verification`
+      );
+    }
 
     // 9. Build result
     let streetName: string | null = null;
@@ -150,13 +153,24 @@ export class AddressMatcher {
     if (useData) {
       streetName = addressResult.streetName;
       buildingNumber = addressResult.buildingNumber || apartmentResult?.building || null;
+
       // When we matched a known address from the database, prefer its apartment number
       // over the one extracted by extractApartmentNumber (which may come from tenant's home address)
-      apartmentNumber = (isValidAddress && addressResult.apartmentNumber)
-        ? addressResult.apartmentNumber
-        : (apartmentResult?.apartment || addressResult.apartmentNumber);
+      if (apartmentFromKnownAddress) {
+        apartmentNumber = addressResult.apartmentNumber;
+      } else if (apartmentFromIdentifier) {
+        apartmentNumber = apartmentResult!.apartment;
+      } else {
+        // Fallback: use whatever we have, but confidence will be low
+        apartmentNumber = apartmentResult?.apartment || addressResult.apartmentNumber;
+      }
+
       fullAddress = addressResult.fullAddress;
-      console.log(`[AddressMatcher] FINAL: useData=true, streetName="${streetName}", apt from apartmentResult="${apartmentResult?.apartment}", apt from addressResult="${addressResult.apartmentNumber}", isValidAddress=${isValidAddress}, chosen="${apartmentNumber}"`);
+
+      // If apartment was overridden from addressResult, update fullAddress too
+      if (apartmentFromKnownAddress && addressResult.streetName && addressResult.buildingNumber) {
+        fullAddress = `${addressResult.streetName} ${addressResult.buildingNumber}/${addressResult.apartmentNumber}`;
+      }
 
       // If we got identifier data but no address context, build fullAddress from identifier
       if (!fullAddress && hasIdentifier && apartmentResult) {
@@ -367,13 +381,11 @@ export class AddressMatcher {
         );
 
         const match = normalizedTextAscii.match(streetPattern);
-        console.log(`[AddressMatcher] Known addr "${addrName}" pattern: ${streetPattern} → match: ${!!match}`, match ? `groups: [${match[1]}, ${match[2]}]` : '');
         if (match) {
           // IMPORTANT: If the known address pattern itself captured an apartment number (match[2]),
           // prefer it over existingApartment which may come from an unrelated address
           // (e.g., tenant's home address like "Belwederska 5/7" vs managed property "Głogowa 26/9")
           const apartment = match[2] || existingApartment || null;
-          console.log(`[AddressMatcher] Known addr MATCHED! match[2]="${match[2]}", existingApartment="${existingApartment}" → apartment="${apartment}"`);
 
           return {
             streetName: mainStreet,
@@ -518,71 +530,67 @@ export class AddressMatcher {
 
   // ============================================================
   // CONFIDENCE CALCULATION
-  // Uses PKO-style model: overall = (address + apartment + tenantName) / 3
+  // CONSERVATIVE POLICY: High confidence (≥60) ONLY when:
+  //   1. Identifier found (source='identifier') — always trusted
+  //   2. Known address matched AND apartment from that same match
+  //   3. ZGN marker (handled separately in match())
+  // Everything else → <60 → requires manual review.
+  // This prevents producing wrong output from tenant home addresses.
+  //
+  // To revert to old behavior: git checkout 8d07ece -- src/shared/address-matcher.ts
   // ============================================================
 
   private calculateConfidence(
     addressResult: AddressExtraction,
     tenantName: string | null,
-    extractedApartment: string | null,
     isValidAddress: boolean,
-    hasExplicitApartment: boolean,
-    hasIdentifier: boolean
+    hasIdentifier: boolean,
+    apartmentConfirmed: boolean
   ): ConfidenceScores {
     let addressConfidence = 0;
     let apartmentConfidence = 0;
     let tenantNameConfidence = 0;
 
-    // CRITICAL: If user configured properties but we found NO street name → low confidence
-    // This indicates address extraction failed despite having known properties to match against
-    const hasConfiguredProperties = this.addresses.length > 0;
-    const noStreetFound = !addressResult.streetName;
-    
-    if (hasConfiguredProperties && noStreetFound && !hasIdentifier) {
-      // User has properties configured, but we couldn't find any matching street
-      // This suggests the extraction failed - require manual review
-      const overall = Math.round((20 + (extractedApartment ? 40 : 20) + (tenantName ? 30 : 0)) / 3);
-      return {
-        address: 20,
-        apartment: extractedApartment ? 40 : 20,
-        tenantName: tenantName ? 30 : 0,
-        overall,
-      };
-    }
-
-    if (hasIdentifier && extractedApartment) {
-      // Identifier-based: high apartment confidence
-      // Address confidence depends on whether we also found a valid address
-      apartmentConfidence = 95;
-      addressConfidence = isValidAddress ? 95 : 50;
-    } else if (!isValidAddress && addressResult.streetName) {
-      // Address detected but NOT in known properties → very low confidence
-      const overall = Math.round((10 + 10 + (tenantName ? 30 : 0)) / 3);
-      return {
-        address: 10,
-        apartment: 10,
-        tenantName: tenantName ? 30 : 0,
-        overall,
-      };
-    } else {
-      // Valid address or no address validation needed
-      if (extractedApartment) {
-        apartmentConfidence = 95;
-      } else if (addressResult.apartmentNumber) {
-        apartmentConfidence = 85;
-      }
-
-      if (addressResult.fullAddress) {
-        addressConfidence =
-          addressResult.streetName && addressResult.buildingNumber ? 95 : 60;
-      } else if (extractedApartment) {
-        addressConfidence = 50;
-      }
-    }
-
-    // Tenant name confidence
+    // Tenant name confidence (independent of address/apartment)
     if (tenantName) {
       tenantNameConfidence = tenantName.split(' ').length >= 2 ? 95 : 70;
+    }
+
+    const hasConfiguredProperties = this.addresses.length > 0;
+
+    // === CASE 1: Identifier found (e.g., "identyfikator lokalu 27/9") ===
+    if (hasIdentifier && apartmentConfirmed) {
+      apartmentConfidence = 95;
+      addressConfidence = isValidAddress ? 95 : 50;
+    }
+    // === CASE 2: Known address matched + apartment from that match ===
+    else if (isValidAddress && apartmentConfirmed) {
+      addressConfidence = 95;
+      apartmentConfidence = 95;
+    }
+    // === CASE 3: Known address matched but apartment from elsewhere (or missing) ===
+    else if (isValidAddress && !apartmentConfirmed) {
+      addressConfidence = 90;
+      apartmentConfidence = 30; // Low — apartment source is unverified or missing
+    }
+    // === CASE 4: User has properties configured but no known address found ===
+    else if (hasConfiguredProperties && !isValidAddress) {
+      if (addressResult.streetName) {
+        // Found a street but it's not in the database
+        addressConfidence = 10;
+        apartmentConfidence = 10;
+      } else {
+        // No street found at all
+        addressConfidence = 20;
+        apartmentConfidence = 20;
+      }
+    }
+    // === CASE 5: No properties configured (demo/testing mode) ===
+    else {
+      if (addressResult.fullAddress) {
+        addressConfidence = addressResult.streetName && addressResult.buildingNumber ? 80 : 50;
+      }
+      apartmentConfidence = apartmentConfirmed ? 80 : 40;
     }
 
     const overall = Math.round(

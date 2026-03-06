@@ -6,6 +6,7 @@ import fs from 'fs';
 import DatabaseService from './database';
 import ConverterRegistry, { setDatabaseInstance } from './converterRegistry';
 import { IPC_CHANNELS } from '../shared/types';
+import { extractPdfText } from '../shared/pdf-utils';
 
 // Log environment variable for testing
 log.debug('[MAIN] TEST_AI_BILLING_ERROR =', process.env.TEST_AI_BILLING_ERROR);
@@ -612,7 +613,7 @@ function setupIpcHandlers() {
     const result = await dialog.showOpenDialog(mainWindow!, {
       properties: ['openFile', 'multiSelections'],
       filters: [
-        { name: 'Bank Statements', extensions: ['xml', 'txt', '940', 'mt940', 'csv', 'xlsx', 'xls'] },
+        { name: 'Bank Statements + PDF', extensions: ['xml', 'txt', '940', 'mt940', 'csv', 'xlsx', 'xls', 'pdf'] },
         { name: 'All Files', extensions: ['*'] },
       ],
     });
@@ -635,6 +636,35 @@ function setupIpcHandlers() {
       return result.filePaths[0];
     }
     return null;
+  });
+
+  // PDF operations
+  ipcMain.handle(IPC_CHANNELS.SELECT_PDF, async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openFile'],
+      filters: [
+        { name: 'PDF Files', extensions: ['pdf'] },
+      ],
+    });
+
+    if (!result.canceled && result.filePaths.length > 0) {
+      const filePath = result.filePaths[0];
+      return {
+        fileName: path.basename(filePath),
+        filePath,
+      };
+    }
+    return null;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.EXTRACT_PDF_TEXT, async (_event, filePath: string) => {
+    try {
+      const result = await extractPdfText(filePath);
+      return result;
+    } catch (error) {
+      console.error('Error extracting PDF text:', error);
+      return null;
+    }
   });
 
   ipcMain.handle(

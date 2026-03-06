@@ -37,6 +37,7 @@ export interface FileEntry {
   bankId: number | null;
   bankName: string | null;
   adresId: number | null;
+  pdfPath?: string;  // Optional PDF bank statement for cross-reference
   status: 'pending' | 'processing' | 'success' | 'error' | 'needs-ai';
   errorMessage?: string;
   outputPath?: string;  // Base output path (without -podglad or -accounting suffix)
@@ -95,6 +96,7 @@ export interface ConversionReviewData {
   adresId: number | null;
   adresName: string | null;
   transactions: TransactionForReview[];
+  pdfLines?: string[];  // Extracted PDF text lines for cross-reference
 }
 
 export interface ConversionHistory {
@@ -149,6 +151,8 @@ export const IPC_CHANNELS = {
   
   // File operations
   SELECT_FILES: 'files:select',
+  SELECT_PDF: 'files:select-pdf',
+  EXTRACT_PDF_TEXT: 'files:extract-pdf-text',
   SELECT_OUTPUT_FOLDER: 'files:select-output-folder',
   CONVERT_FILE: 'files:convert',
   CONVERT_FILE_WITH_AI: 'files:convert-with-ai',

@@ -259,10 +259,14 @@ export class PKOBPMT940Parser {
     }
     
     // Combine description fields (~20-25)
+    // Empty fields contain 0xFF byte which decodes to:
+    //   U+02D9 (˙ dot above) in ISO-8859-2
+    //   U+FFFD (� replacement char) if mis-decoded
+    const EMPTY_FIELD_MARKERS = ['\u02D9', '\uFFFD'];
     const descriptionParts: string[] = [];
     for (let i = 20; i <= 25; i++) {
       const tag = i.toString();
-      if (details[tag] && details[tag] !== '�') {
+      if (details[tag] && !EMPTY_FIELD_MARKERS.includes(details[tag].trim())) {
         descriptionParts.push(details[tag].trim());
       }
     }

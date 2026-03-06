@@ -44,6 +44,8 @@ interface ElectronAPI {
 
   // Files
   selectFiles: () => Promise<{ fileName: string; filePath: string }[]>;
+  selectPdf: () => Promise<{ fileName: string; filePath: string } | null>;
+  extractPdfText: (filePath: string) => Promise<{ text: string; lines: string[]; numPages: number } | null>;
   selectOutputFolder: () => Promise<string | null>;
   convertFile: (inputPath: string, bankId: number, fileName: string, adresId?: number | null) => Promise<ConversionResult>;
   analyzeFile: (inputPath: string, bankId: number, adresId?: number | null) => Promise<ConversionSummary>;

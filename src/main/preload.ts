@@ -29,6 +29,8 @@ const IPC_CHANNELS = {
   ANALYZE_FILE: 'files:analyze',
   CONVERT_FILE_WITH_AI: 'files:convert-with-ai',
   FINALIZE_CONVERSION: 'files:finalize-conversion',
+  SELECT_PDF: 'files:select-pdf',
+  EXTRACT_PDF_TEXT: 'files:extract-pdf-text',
   OPEN_FILE: 'files:open',
   GET_SETTINGS: 'settings:get',
   SET_OUTPUT_FOLDER: 'settings:set-output-folder',
@@ -81,6 +83,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Files
   selectFiles: () => ipcRenderer.invoke(IPC_CHANNELS.SELECT_FILES),
+  selectPdf: () => ipcRenderer.invoke(IPC_CHANNELS.SELECT_PDF),
+  extractPdfText: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.EXTRACT_PDF_TEXT, filePath),
   selectOutputFolder: () => ipcRenderer.invoke(IPC_CHANNELS.SELECT_OUTPUT_FOLDER),
   convertFile: (inputPath: string, bankId: number, fileName: string, adresId?: number | null) =>
     ipcRenderer.invoke(IPC_CHANNELS.CONVERT_FILE, inputPath, bankId, fileName, adresId),

@@ -319,16 +319,61 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
 
   const addFiles = (newFiles: { fileName: string; filePath: string }[], bankId: number) => {
     const bank = banks.find((b) => b.id === bankId);
-    const fileEntries: FileEntry[] = newFiles.map((file) => ({
-      id: generateId(),
-      fileName: file.fileName,
-      filePath: file.filePath,
-      bankId: bankId,
-      bankName: bank?.name || null,
-      adresId: null,
-      status: 'pending',
-    }));
-    setFiles([...files, ...fileEntries]);
+    
+    // Separate PDFs from conversion files
+    const pdfFiles: { fileName: string; filePath: string }[] = [];
+    const conversionFiles: { fileName: string; filePath: string }[] = [];
+    
+    for (const file of newFiles) {
+      if (file.fileName.toLowerCase().endsWith('.pdf')) {
+        pdfFiles.push(file);
+      } else {
+        conversionFiles.push(file);
+      }
+    }
+    
+    // Build a map of PDF base names for quick lookup
+    const pdfByBaseName = new Map<string, string>();
+    for (const pdf of pdfFiles) {
+      const baseName = pdf.fileName.replace(/\.pdf$/i, '').toLowerCase();
+      pdfByBaseName.set(baseName, pdf.filePath);
+    }
+    
+    // Create file entries, auto-pairing PDFs by matching base name
+    const fileEntries: FileEntry[] = conversionFiles.map((file) => {
+      const baseName = file.fileName.replace(/\.[^.]+$/, '').toLowerCase();
+      const matchedPdf = pdfByBaseName.get(baseName);
+      
+      // Remove matched PDF from the map so we know which are unmatched
+      if (matchedPdf) {
+        pdfByBaseName.delete(baseName);
+      }
+      
+      return {
+        id: generateId(),
+        fileName: file.fileName,
+        filePath: file.filePath,
+        bankId: bankId,
+        bankName: bank?.name || null,
+        adresId: null,
+        status: 'pending',
+        ...(matchedPdf ? { pdfPath: matchedPdf } : {}),
+      };
+    });
+    
+    // Also try to match remaining PDFs to already-existing files without a PDF
+    const updatedExisting = files.map(f => {
+      if (f.pdfPath) return f; // already has PDF
+      const baseName = f.fileName.replace(/\.[^.]+$/, '').toLowerCase();
+      const matchedPdf = pdfByBaseName.get(baseName);
+      if (matchedPdf) {
+        pdfByBaseName.delete(baseName);
+        return { ...f, pdfPath: matchedPdf };
+      }
+      return f;
+    });
+    
+    setFiles([...updatedExisting, ...fileEntries]);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -382,6 +427,25 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     setFiles(
       files.map((file) => 
         file.id === fileId ? { ...file, adresId } : file
+      )
+    );
+  };
+
+  const handlePdfUpload = async (fileId: string) => {
+    const pdfFile = await window.electronAPI.selectPdf();
+    if (pdfFile) {
+      setFiles(
+        files.map((file) =>
+          file.id === fileId ? { ...file, pdfPath: pdfFile.filePath } : file
+        )
+      );
+    }
+  };
+
+  const handlePdfRemove = (fileId: string) => {
+    setFiles(
+      files.map((file) =>
+        file.id === fileId ? { ...file, pdfPath: undefined } : file
       )
     );
   };
@@ -697,6 +761,18 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
         }
         
         // Show review screen if skipUserApproval is disabled
+        // If file has PDF attached, extract text and include in reviewData
+        const currentFileForPdf = filesRef.current.find(f => f.id === fileId);
+        if (currentFileForPdf?.pdfPath) {
+          try {
+            const pdfResult = await window.electronAPI.extractPdfText(currentFileForPdf.pdfPath);
+            if (pdfResult && pdfResult.lines.length > 0) {
+              result.reviewData.pdfLines = pdfResult.lines;
+            }
+          } catch (err) {
+            console.error('Error extracting PDF text:', err);
+          }
+        }
         setReviewData(result.reviewData);
         // Keep status as processing to show file is being handled
         return;
@@ -987,6 +1063,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                   <th>{t.fileName}</th>
                   <th>{t.bank}</th>
                   <th>{t.adres}</th>
+                  <th>PDF</th>
                   <th>{t.status}</th>
                   <th>{t.actions}</th>
                 </tr>
@@ -995,7 +1072,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                 {files.map((file, index) => (
                   <tr key={file.id} className={file.status === 'processing' ? 'processing-row' : ''}>
                     {file.status === 'processing' ? (
-                      <td colSpan={6}>
+                      <td colSpan={7}>
                         <div className="processing-loader">
                           <div className="loader-spinner"></div>
                           <div className="loader-content">
@@ -1029,6 +1106,61 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                             placeholder={t.chooseAdres}
                             searchPlaceholder={t.searchAdres}
                           />
+                        </td>
+                        <td>
+                          {file.pdfPath ? (
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', maxWidth: '160px' }}>
+                              <span style={{ fontSize: '14px', flexShrink: 0, color: '#e55' }}>📕</span>
+                              <span
+                                style={{
+                                  fontSize: '11px',
+                                  color: '#aaa',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                  minWidth: 0,
+                                }}
+                                title={file.pdfPath}
+                              >
+                                {file.pdfPath.split('/').pop() || 'PDF'}
+                              </span>
+                              <button
+                                className="button button-small"
+                                onClick={() => handlePdfRemove(file.id)}
+                                style={{ 
+                                  padding: '2px 5px', 
+                                  fontSize: '10px',
+                                  backgroundColor: 'transparent',
+                                  border: '1px solid #555',
+                                  color: '#888',
+                                  cursor: 'pointer',
+                                  borderRadius: '3px',
+                                  flexShrink: 0,
+                                }}
+                                title="Usuń PDF"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              className="button button-small"
+                              onClick={() => handlePdfUpload(file.id)}
+                              style={{ 
+                                padding: '4px 8px', 
+                                fontSize: '12px',
+                                backgroundColor: 'transparent',
+                                border: '1px dashed #666',
+                                color: '#999',
+                                cursor: 'pointer',
+                                borderRadius: '3px',
+                                whiteSpace: 'nowrap',
+                              }}
+                              title="Dodaj PDF wyciągu bankowego (opcjonalne)"
+                            >
+                              + PDF
+                            </button>
+                          )}
                         </td>
                         <td>
                           <span

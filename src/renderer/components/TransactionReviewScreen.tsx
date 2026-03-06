@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ConversionReviewData, ReviewDecision, TransactionForReview, Kontrahent } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { searchTransactionInPdf, PdfSearchMatch } from '../../shared/pdf-search';
 
 // SearchableContractorSelect component
 interface SearchableContractorSelectProps {
@@ -160,6 +161,197 @@ const SearchableContractorSelect: React.FC<SearchableContractorSelectProps> = ({
   );
 };
 
+// PdfPanel sub-component - shows PDF search result
+interface PdfPanelProps {
+  searchResult: PdfSearchMatch | null;
+  searching: boolean;
+  searchField: string; // which field triggered the search
+  onClose: () => void;
+  highlightTokens: string[];
+}
+
+const PdfPanel: React.FC<PdfPanelProps> = ({ searchResult, searching, searchField, onClose, highlightTokens }) => {
+  if (searching) {
+    return (
+      <div style={{
+        padding: '15px',
+        backgroundColor: '#1a2332',
+        border: '1px solid #2a5a8a',
+        borderRadius: '6px',
+        marginTop: '10px',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+          <span style={{ color: '#5B9BD5', fontWeight: 600, fontSize: '13px' }}>📄 Szukam w PDF...</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: '14px' }}>✕</button>
+        </div>
+        <div style={{ color: '#888', fontSize: '13px' }}>Proszę czekać...</div>
+      </div>
+    );
+  }
+
+  if (!searchResult) {
+    return (
+      <div style={{
+        padding: '15px',
+        backgroundColor: '#2a1a1a',
+        border: '1px solid #8a2a2a',
+        borderRadius: '6px',
+        marginTop: '10px',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+          <span style={{ color: '#F44747', fontWeight: 600, fontSize: '13px' }}>📄 Nie znaleziono w PDF</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: '14px' }}>✕</button>
+        </div>
+        <div style={{ color: '#888', fontSize: '13px' }}>Nie znaleziono pasującej transakcji w dokumencie PDF.</div>
+      </div>
+    );
+  }
+
+  // Highlight matching tokens in the text
+  const highlightText = (text: string): React.ReactNode => {
+    if (highlightTokens.length === 0) return text;
+    
+    const escapedTokens = highlightTokens.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const regex = new RegExp(`(${escapedTokens.join('|')})`, 'gi');
+    const parts = text.split(regex);
+    
+    return parts.map((part, i) => {
+      if (regex.test(part)) {
+        return <span key={i} style={{ backgroundColor: 'rgba(255, 213, 79, 0.3)', color: '#FFD54F', fontWeight: 600, padding: '0 2px', borderRadius: '2px' }}>{part}</span>;
+      }
+      return part;
+    });
+  };
+
+  const lines = searchResult.matchedText.split('\n');
+  const { coreLineStart, coreLineEnd } = searchResult;
+
+  // Detect transaction boundaries — lines starting with DD.MM.YYYY followed by ID+type
+  const isTransactionStart = (line: string): boolean => {
+    return /^\d{2}\.\d{2}\.\d{4}[A-Z0-9]{10,}/.test(line.trim());
+  };
+
+  // Split lines into: before-context, core match, after-context
+  const beforeLines = lines.slice(0, coreLineStart);
+  const coreLines = lines.slice(coreLineStart, coreLineEnd + 1);
+  const afterLines = lines.slice(coreLineEnd + 1);
+
+  // Render a set of lines with transaction separators
+  const renderLinesWithSeparators = (
+    lineArr: string[],
+    prefix: string,
+    style: React.CSSProperties,
+    highlight: boolean,
+  ) => {
+    const elements: React.ReactNode[] = [];
+    lineArr.forEach((line, i) => {
+      // Add separator before transaction starts (but not the very first line)
+      if (i > 0 && isTransactionStart(line)) {
+        elements.push(
+          <div key={`${prefix}-sep-${i}`} style={{
+            borderTop: '1px solid #30363d',
+            margin: '6px 0',
+            opacity: 0.6,
+          }} />
+        );
+      }
+      elements.push(
+        <div key={`${prefix}-${i}`} style={style}>
+          {highlight ? (highlightText(line) || '\u00A0') : (line || '\u00A0')}
+        </div>
+      );
+    });
+    return elements;
+  };
+
+  const contextLineStyle: React.CSSProperties = {
+    color: '#666',
+    fontSize: '12px',
+    lineHeight: '1.5',
+    fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
+  };
+
+  return (
+    <div style={{
+      padding: '15px',
+      backgroundColor: '#1a2332',
+      border: '1px solid #2a5a8a',
+      borderRadius: '6px',
+      marginTop: '10px',
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ color: '#5B9BD5', fontWeight: 600, fontSize: '13px' }}>
+            📄 Dane z PDF ({searchField})
+          </span>
+          <span style={{
+            color: searchResult.score >= 60 ? '#4EC9B0' : '#DCDCAA',
+            fontSize: '12px',
+            backgroundColor: searchResult.score >= 60 ? 'rgba(78, 201, 176, 0.15)' : 'rgba(220, 220, 170, 0.15)',
+            padding: '2px 8px',
+            borderRadius: '10px',
+          }}>
+            trafność: {searchResult.score}%
+          </span>
+        </div>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: '14px' }}>✕</button>
+      </div>
+
+      <div style={{
+        backgroundColor: '#0d1117',
+        borderRadius: '6px',
+        maxHeight: '300px',
+        overflowY: 'auto',
+        border: '1px solid #21262d',
+      }}>
+        {/* Before context */}
+        {beforeLines.length > 0 && (
+          <div style={{ padding: '8px 12px', borderBottom: '1px dashed #30363d' }}>
+            {renderLinesWithSeparators(beforeLines, 'before', contextLineStyle, false)}
+          </div>
+        )}
+
+        {/* Core match — highlighted block */}
+        <div style={{
+          padding: '10px 12px',
+          backgroundColor: 'rgba(91, 155, 213, 0.08)',
+          borderLeft: '3px solid #5B9BD5',
+          position: 'relative',
+        }}>
+          <div style={{
+            position: 'absolute',
+            top: '4px',
+            right: '8px',
+            fontSize: '10px',
+            color: '#5B9BD5',
+            opacity: 0.7,
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+          }}>
+            znaleziony wpis
+          </div>
+          {renderLinesWithSeparators(coreLines, 'core', {
+              fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
+              fontSize: '13px',
+              lineHeight: '1.7',
+              color: '#e0e0e0',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }, true)}
+        </div>
+
+        {/* After context */}
+        {afterLines.length > 0 && (
+          <div style={{ padding: '8px 12px', borderTop: '1px dashed #30363d' }}>
+            {renderLinesWithSeparators(afterLines, 'after', contextLineStyle, false)}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // TransactionCard sub-component
 interface TransactionCardProps {
   trn: TransactionForReview;
@@ -172,6 +364,7 @@ interface TransactionCardProps {
   handleManualInput: (index: number, value: string) => void;
   handleManualContractorSelect: (index: number, contractorId: number | null) => void;
   language: Language;
+  pdfLines?: string[];
 }
 
 const TransactionCard: React.FC<TransactionCardProps> = ({
@@ -185,7 +378,47 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
   handleManualInput,
   handleManualContractorSelect,
   language,
+  pdfLines,
 }) => {
+  const [pdfResult, setPdfResult] = useState<PdfSearchMatch | null>(null);
+  const [pdfSearching, setPdfSearching] = useState(false);
+  const [pdfVisible, setPdfVisible] = useState(false);
+  const [pdfSearchField, setPdfSearchField] = useState('');
+  const [pdfHighlightTokens, setPdfHighlightTokens] = useState<string[]>([]);
+
+  const handlePdfLookup = (field: 'opis' | 'kontrahent') => {
+    if (!pdfLines || pdfLines.length === 0) return;
+    
+    // If already showing for the same field, toggle off
+    if (pdfVisible && pdfSearchField === field) {
+      setPdfVisible(false);
+      return;
+    }
+    
+    setPdfSearching(true);
+    setPdfVisible(true);
+    setPdfSearchField(field);
+    
+    // Build highlight tokens from the field
+    const text = field === 'opis' ? trn.original.description : trn.original.counterparty;
+    const tokens = text.replace(/[˙�]/g, '').split(/\s+/).filter(w => w.length >= 3).slice(0, 6);
+    // Also add amount as highlight
+    tokens.push(trn.original.amount.toFixed(2).replace('.', ','));
+    setPdfHighlightTokens(tokens);
+    
+    // Run search (synchronous but wrap in setTimeout to show loading state)
+    setTimeout(() => {
+      const result = searchTransactionInPdf(pdfLines, {
+        amount: trn.original.amount,
+        description: trn.original.description,
+        counterparty: trn.original.counterparty,
+        date: trn.original.date,
+      });
+      setPdfResult(result);
+      setPdfSearching(false);
+    }, 50);
+  };
+
   // Determine card colors based on decision
   const getCardColors = () => {
     if (!currentDecision) {
@@ -258,13 +491,67 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
 
     {/* Original Data */}
     <div style={{ marginBottom: '15px' }}>
-      <h4 style={{ margin: '0 0 10px 0', color: '#569CD6' }}>📄 Dane z wyciągu:</h4>
+      <h4 style={{ margin: '0 0 10px 0', color: '#569CD6' }}>
+        📄 Dane z wyciągu:
+        {pdfLines && pdfLines.length > 0 && (
+          <span style={{ fontSize: '11px', color: '#5B9BD5', marginLeft: '10px', fontWeight: 400 }}>
+            (kliknij opis lub kontrahenta aby sprawdzić w PDF)
+          </span>
+        )}
+      </h4>
       <div style={{ fontSize: '14px', lineHeight: '1.6' }}>
         <div><strong>Data:</strong> {trn.original.date}</div>
         <div><strong>Kwota:</strong> {trn.original.amount} PLN</div>
-        <div><strong>Opis:</strong> {trn.original.description}</div>
-        <div><strong>Kontrahent:</strong> {trn.original.counterparty}</div>
+        <div>
+          <strong>Opis:</strong>{' '}
+          {pdfLines && pdfLines.length > 0 ? (
+            <span
+              onClick={() => handlePdfLookup('opis')}
+              style={{
+                cursor: 'pointer',
+                borderBottom: '1px dashed #5B9BD5',
+                color: pdfVisible && pdfSearchField === 'opis' ? '#5B9BD5' : undefined,
+                transition: 'color 0.2s',
+              }}
+              title="Kliknij aby wyszukać w PDF"
+            >
+              {trn.original.description}
+            </span>
+          ) : (
+            trn.original.description
+          )}
+        </div>
+        <div>
+          <strong>Kontrahent:</strong>{' '}
+          {pdfLines && pdfLines.length > 0 ? (
+            <span
+              onClick={() => handlePdfLookup('kontrahent')}
+              style={{
+                cursor: 'pointer',
+                borderBottom: '1px dashed #5B9BD5',
+                color: pdfVisible && pdfSearchField === 'kontrahent' ? '#5B9BD5' : undefined,
+                transition: 'color 0.2s',
+              }}
+              title="Kliknij aby wyszukać w PDF"
+            >
+              {trn.original.counterparty}
+            </span>
+          ) : (
+            trn.original.counterparty
+          )}
+        </div>
       </div>
+      
+      {/* PDF Search Result Panel */}
+      {pdfVisible && (
+        <PdfPanel
+          searchResult={pdfSearching ? null : pdfResult}
+          searching={pdfSearching}
+          searchField={pdfSearchField}
+          onClose={() => setPdfVisible(false)}
+          highlightTokens={pdfHighlightTokens}
+        />
+      )}
     </div>
 
     {/* Extracted Data */}
@@ -824,6 +1111,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                   handleDecision={handleDecision}
                   handleManualInput={handleManualInput}
                   language={language}
+                  pdfLines={reviewData.pdfLines}
                 />
               );
             })}
@@ -881,6 +1169,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                   handleManualInput={handleManualInput}
                   handleManualContractorSelect={handleManualContractorSelect}
                   language={language}
+                  pdfLines={reviewData.pdfLines}
                 />
               );
             })}

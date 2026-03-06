@@ -1328,7 +1328,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
               </div>
               <div className="modal-body" style={{ padding: '20px' }}>
                 <p style={{ marginBottom: '15px', fontSize: '14px', color: '#6c757d' }}>
-                  Niektóre transakcje mają bardzo niską pewność rozpoznania (poniżej 60%) i będą wymagać ręcznej weryfikacji.
+                  Niektóre transakcje mają bardzo niską pewność rozpoznania (poniżej 70%) i będą wymagać ręcznej weryfikacji.
                 </p>
                 <div style={{
                   background: '#fff3cd',
@@ -1375,7 +1375,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                       <div style={{ paddingLeft: '24px', fontSize: '12px', color: '#6c757d' }}>
                         <div>Transakcje: {file.totalTransactions}</div>
                         <div style={{ color: '#dc3545', fontWeight: '500' }}>
-                          Wymaga weryfikacji (confidence {'<'} 60%): {file.lowConfidenceCount}
+                          Wymaga weryfikacji (confidence {'<'} 70%): {file.lowConfidenceCount}
                         </div>
                       </div>
                     </div>

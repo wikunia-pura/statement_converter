@@ -89,6 +89,7 @@ export interface BaseExtractedData {
  */
 export interface BaseProcessedTransaction<TRaw> {
   original: TRaw;
+  normalized: NormalizedTransaction;
   extracted: BaseExtractedData;
   matchedContractor?: MatchedContractor;
   transactionType: 'income' | 'expense';
@@ -195,7 +196,7 @@ export abstract class BaseConverter<TRaw> {
       batchSize: config.batchSize || 20,
       confidenceThresholds: config.confidenceThresholds || {
         autoApprove: 85,
-        needsReview: 60,
+        needsReview: 70,
       },
       useCache: config.useCache ?? true,
       useRegexFirst: config.useRegexFirst ?? true,
@@ -439,7 +440,7 @@ export abstract class BaseConverter<TRaw> {
         const extracted = this.buildExpenseExtracted(
           transaction,
           matchedContractor.confidence >= 90 ? 'manual' : 'regex',
-          matchedContractor.confidence < 60
+          matchedContractor.confidence < 70
             ? ['Low confidence match - may need review']
             : []
         );
@@ -660,6 +661,7 @@ export abstract class BaseConverter<TRaw> {
 
     return {
       original: transaction,
+      normalized: this.normalize(transaction),
       extracted,
       transactionType,
       matchedContractor,

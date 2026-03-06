@@ -598,7 +598,7 @@ Example 2:
         },
         extractionMethod: 'ai' as const,
         reasoning: result.reasoning,
-        warnings: overall < 60 ? ['Low confidence - review required'] : [],
+        warnings: overall < 70 ? ['Low confidence - review required'] : [],
         rawData: {
           descBase: transaction.descBase,
           descOpt: transaction.descOpt,

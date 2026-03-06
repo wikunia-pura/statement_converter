@@ -9,3 +9,11 @@ converters:
   - id: pko_mt940
     name: PKO BP (MT940)
     description: PKO BP bank MT940 format statements with AI-powered tenant extraction
+
+  - id: bnp_xml
+    name: BNP Paribas XML (CAMT.053)
+    description: BNP Paribas bank XML statements (ISO 20022 camt.053) with AI-powered tenant extraction
+
+  - id: alior
+    name: Alior Bank (MT940)
+    description: Alior Bank MT940 format statements with AI-powered tenant extraction

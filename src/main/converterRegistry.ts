@@ -6,6 +6,8 @@ import { Converter, TransactionForReview, ConversionReviewData } from '../shared
 import { readFileWithEncoding } from '../shared/encoding';
 import { SantanderXmlConverter } from '../converters/santander-xml';
 import { PKOBPMT940Converter } from '../converters/pko-mt940';
+import { BnpXmlConverter } from '../converters/bnp-xml';
+import { AliorConverter } from '../converters/alior';
 import DatabaseService from './database';
 import { conversionCache } from './conversionCache';
 
@@ -131,7 +133,7 @@ class ConverterRegistry {
         batchSize: 20,
         confidenceThresholds: {
           autoApprove: 85,
-          needsReview: 60,
+          needsReview: 70,
         },
         contractors, // Pass contractors for expense matching
         addresses, // Pass addresses for address matching
@@ -141,18 +143,18 @@ class ConverterRegistry {
       const xmlContent = readFileWithEncoding(inputPath);
       const result = await converter.convert(xmlContent);
 
-      // Count all transactions that will need AI (both income and expenses < 60%)
+      // Count all transactions that will need AI (both income and expenses < 70%)
       const lowConfidenceTransactions = result.processed.filter(trn => {
         if (trn.transactionType === 'income') {
-          return trn.extracted.confidence.overall < 60;
+          return trn.extracted.confidence.overall < 70;
         } else {
-          return (trn.matchedContractor?.confidence || 0) < 60;
+          return (trn.matchedContractor?.confidence || 0) < 70;
         }
       });
 
-      const incomeCount = result.processed.filter(t => t.transactionType === 'income' && t.extracted.confidence.overall < 60).length;
-      const expenseCount = result.processed.filter(t => t.transactionType === 'expense' && (t.matchedContractor?.confidence || 0) < 60).length;
-      console.log(`[Santander] Total: ${result.processed.length}, Low confidence (<60%): ${lowConfidenceTransactions.length} (income: ${incomeCount}, expenses: ${expenseCount})`);
+      const incomeCount = result.processed.filter(t => t.transactionType === 'income' && t.extracted.confidence.overall < 70).length;
+      const expenseCount = result.processed.filter(t => t.transactionType === 'expense' && (t.matchedContractor?.confidence || 0) < 70).length;
+      console.log(`[Santander] Total: ${result.processed.length}, Low confidence (<70%): ${lowConfidenceTransactions.length} (income: ${incomeCount}, expenses: ${expenseCount})`);
 
       return {
         totalTransactions: result.processed.length,
@@ -182,7 +184,7 @@ class ConverterRegistry {
         batchSize: 20,
         confidenceThresholds: {
           autoApprove: 85,
-          needsReview: 60,
+          needsReview: 70,
         },
         contractors, // Pass contractors for expense matching
         addresses, // Pass addresses for address matching
@@ -192,18 +194,18 @@ class ConverterRegistry {
       const mt940Content = readFileWithEncoding(inputPath);
       const result = await converter.convert(mt940Content);
 
-      // Count all transactions that will need AI (both income and expenses < 60%)
+      // Count all transactions that will need AI (both income and expenses < 70%)
       const lowConfidenceTransactions = result.processed.filter(trn => {
         if (trn.transactionType === 'income') {
-          return trn.extracted.confidence.overall < 60;
+          return trn.extracted.confidence.overall < 70;
         } else {
-          return (trn.matchedContractor?.confidence || 0) < 60;
+          return (trn.matchedContractor?.confidence || 0) < 70;
         }
       });
 
-      const incomeCount = result.processed.filter(t => t.transactionType === 'income' && t.extracted.confidence.overall < 60).length;
-      const expenseCount = result.processed.filter(t => t.transactionType === 'expense' && (t.matchedContractor?.confidence || 0) < 60).length;
-      console.log(`[PKO BP] Total: ${result.processed.length}, Low confidence (<60%): ${lowConfidenceTransactions.length} (income: ${incomeCount}, expenses: ${expenseCount})`);
+      const incomeCount = result.processed.filter(t => t.transactionType === 'income' && t.extracted.confidence.overall < 70).length;
+      const expenseCount = result.processed.filter(t => t.transactionType === 'expense' && (t.matchedContractor?.confidence || 0) < 70).length;
+      console.log(`[PKO BP] Total: ${result.processed.length}, Low confidence (<70%): ${lowConfidenceTransactions.length} (income: ${incomeCount}, expenses: ${expenseCount})`);
 
       return {
         totalTransactions: result.processed.length,
@@ -212,12 +214,94 @@ class ConverterRegistry {
         needsAI: lowConfidenceTransactions.length > 0, // Both income and expenses trigger AI
       };
     }
+
+    if (converterId === 'bnp_xml') {
+      const contractors = dbInstance?.getAllKontrahenci() || [];
+      let addresses = dbInstance?.getAllAdresy() || [];
+      if (adresId !== null && adresId !== undefined) {
+        addresses = addresses.filter(a => a.id === adresId);
+      }
+      const language = (dbInstance?.getSetting('language') || 'pl') as 'pl' | 'en';
+
+      const converter = new BnpXmlConverter({
+        aiProvider: 'none',
+        apiKey: '',
+        batchSize: 20,
+        confidenceThresholds: { autoApprove: 85, needsReview: 70 },
+        contractors,
+        addresses,
+        language,
+      });
+
+      const xmlContent = readFileWithEncoding(inputPath);
+      const result = await converter.convert(xmlContent);
+
+      const lowConfidenceTransactions = result.processed.filter(trn => {
+        if (trn.transactionType === 'income') {
+          return trn.extracted.confidence.overall < 70;
+        } else {
+          return (trn.matchedContractor?.confidence || 0) < 70;
+        }
+      });
+
+      const incomeCount = result.processed.filter(t => t.transactionType === 'income' && t.extracted.confidence.overall < 70).length;
+      const expenseCount = result.processed.filter(t => t.transactionType === 'expense' && (t.matchedContractor?.confidence || 0) < 70).length;
+      console.log(`[BNP] Total: ${result.processed.length}, Low confidence (<70%): ${lowConfidenceTransactions.length} (income: ${incomeCount}, expenses: ${expenseCount})`);
+
+      return {
+        totalTransactions: result.processed.length,
+        lowConfidenceCount: lowConfidenceTransactions.length,
+        averageConfidence: result.statistics.averageConfidence,
+        needsAI: lowConfidenceTransactions.length > 0,
+      };
+    }
+
+    if (converterId === 'alior') {
+      const contractors = dbInstance?.getAllKontrahenci() || [];
+      let addresses = dbInstance?.getAllAdresy() || [];
+      if (adresId !== null && adresId !== undefined) {
+        addresses = addresses.filter(a => a.id === adresId);
+      }
+      const language = (dbInstance?.getSetting('language') || 'pl') as 'pl' | 'en';
+
+      const converter = new AliorConverter({
+        aiProvider: 'none',
+        apiKey: '',
+        batchSize: 20,
+        confidenceThresholds: { autoApprove: 85, needsReview: 70 },
+        contractors,
+        addresses,
+        language,
+      });
+
+      const mt940Content = readFileWithEncoding(inputPath);
+      const result = await converter.convert(mt940Content);
+
+      const lowConfidenceTransactions = result.processed.filter(trn => {
+        if (trn.transactionType === 'income') {
+          return trn.extracted.confidence.overall < 70;
+        } else {
+          return (trn.matchedContractor?.confidence || 0) < 70;
+        }
+      });
+
+      const incomeCount = result.processed.filter(t => t.transactionType === 'income' && t.extracted.confidence.overall < 70).length;
+      const expenseCount = result.processed.filter(t => t.transactionType === 'expense' && (t.matchedContractor?.confidence || 0) < 70).length;
+      console.log(`[Alior] Total: ${result.processed.length}, Low confidence (<70%): ${lowConfidenceTransactions.length} (income: ${incomeCount}, expenses: ${expenseCount})`);
+
+      return {
+        totalTransactions: result.processed.length,
+        lowConfidenceCount: lowConfidenceTransactions.length,
+        averageConfidence: result.statistics.averageConfidence,
+        needsAI: lowConfidenceTransactions.length > 0,
+      };
+    }
     
     throw new Error(`Unknown converter: ${converterId}`);
   }
 
   /**
-   * Extract transactions that need review (confidence < 60%)
+   * Extract transactions that need review (confidence < 70%)
    */
   private extractReviewTransactions(
     transactions: any[], // ProcessedTransaction from either converter
@@ -230,20 +314,21 @@ class ConverterRegistry {
         ? trn.extracted.confidence.overall 
         : (trn.matchedContractor?.confidence || 0);
       
-      // Only include transactions with confidence < 60%
-      if (confidence < 60) {
+      // Include in review if:
+      // 1. Confidence below threshold (<70%), OR
+      // 2. Income transaction without apartment number (regardless of confidence)
+      const needsReview = confidence < 70 
+        || (trn.transactionType === 'income' && !trn.extracted.apartmentNumber);
+      
+      if (needsReview) {
         const review: TransactionForReview = {
           index,
           transactionType: trn.transactionType,
           original: {
-            date: converterId === 'santander_xml' ? trn.original.exeDate : trn.original.valueDate,
-            amount: converterId === 'santander_xml' ? trn.original.value : trn.original.amount,
-            description: converterId === 'santander_xml' 
-              ? trn.original.descBase 
-              : trn.original.details.description.join(''),
-            counterparty: converterId === 'santander_xml' 
-              ? trn.original.descOpt 
-              : trn.original.details.counterpartyName,
+            date: trn.normalized.exeDate,
+            amount: trn.normalized.realValue,
+            description: trn.normalized.descBase,
+            counterparty: trn.normalized.descOpt,
           },
           extracted: {
             apartmentNumber: trn.extracted.apartmentNumber,
@@ -422,7 +507,7 @@ class ConverterRegistry {
             batchSize: 20,
             confidenceThresholds: {
               autoApprove: 85,
-              needsReview: 60,
+              needsReview: 70,
             },
             contractors, // Pass contractors for expense matching
             addresses, // Pass addresses for income address matching
@@ -684,7 +769,7 @@ class ConverterRegistry {
             batchSize: 20,
             confidenceThresholds: {
               autoApprove: 85,
-              needsReview: 60,
+              needsReview: 70,
             },
             contractors, // Pass contractors for expense matching
             addresses, // Pass addresses for income address matching
@@ -914,6 +999,466 @@ class ConverterRegistry {
           console.log(`✅ Generated accounting file: ${txtPath}`);
           
           resolve({ success: true });
+        } else if (converterId === 'bnp_xml') {
+          let provider: 'none' | 'anthropic' | 'openai' = 'none';
+          let apiKey = '';
+
+          if (useAI && this.aiConfig) {
+            provider = this.aiConfig.ai.default_provider;
+            apiKey = provider === 'anthropic'
+              ? this.aiConfig.ai.anthropic_api_key
+              : this.aiConfig.ai.openai_api_key;
+          }
+
+          const contractors = dbInstance?.getAllKontrahenci() || [];
+          let addresses = dbInstance?.getAllAdresy() || [];
+          if (adresId !== null && adresId !== undefined) {
+            addresses = addresses.filter(a => a.id === adresId);
+          }
+          const language = (dbInstance?.getSetting('language') || 'pl') as 'pl' | 'en';
+
+          const converter = new BnpXmlConverter({
+            aiProvider: provider,
+            apiKey,
+            batchSize: 20,
+            confidenceThresholds: { autoApprove: 85, needsReview: 70 },
+            contractors,
+            addresses,
+            language,
+          });
+
+          const xmlContent = readFileWithEncoding(inputPath);
+          const result = await converter.convert(xmlContent);
+
+          const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
+          const expenseTransactions = result.processed.filter(t => t.transactionType === 'expense');
+
+          let output = '=== BNP PARIBAS XML CONVERSION RESULTS ===\n\n';
+          output += `Summary:\n`;
+          output += `- Total transactions: ${result.totalTransactions}\n`;
+          output += `- Income transactions: ${incomeTransactions.length}\n`;
+          output += `- Expense transactions: ${expenseTransactions.length}\n`;
+          output += `- Auto-approved: ${result.summary.autoApproved}\n`;
+          output += `- Needs review: ${result.summary.needsReview}\n`;
+          output += `- Needs manual input: ${result.summary.needsManualInput}\n`;
+          output += `- Skipped: ${result.summary.skipped}\n`;
+          output += `- Average confidence: ${result.statistics.averageConfidence.toFixed(1)}%\n\n`;
+
+          // INCOME SECTION
+          output += '='.repeat(80) + '\n';
+          output += '=== WPŁATY (INCOME) ===\n';
+          output += '='.repeat(80) + '\n\n';
+
+          incomeTransactions.forEach((trn, idx) => {
+            const num = idx + 1;
+            output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            output += `#${num}\n`;
+            output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+            output += `📄 BNP DATA:\n`;
+            output += `   Booking Date:     ${trn.original.bookingDate}\n`;
+            output += `   Value Date:       ${trn.original.valueDate}\n`;
+            output += `   Amount:           ${trn.original.amount} ${trn.original.currency}\n`;
+            output += `   TX Code:          ${trn.original.txCode}\n`;
+            output += `   Reference:        ${trn.original.instrId}\n\n`;
+
+            output += `   Description:\n`;
+            output += `   ${trn.original.description || '(empty)'}\n\n`;
+
+            output += `   Counterparty:\n`;
+            output += `   ${trn.original.counterpartyName || '(empty)'}\n`;
+            output += `   ${trn.original.counterpartyAddress || '(empty)'}\n`;
+            output += `   Account: ${trn.original.counterpartyAccount || '(empty)'}\n\n`;
+
+            output += `🔍 ${language === 'pl' ? 'WYEKSTRAHOWANE DANE' : 'EXTRACTED DATA'}:\n`;
+            output += `   ${language === 'pl' ? 'Mieszkanie' : 'Apartment'}:        ${trn.extracted.apartmentNumber || (language === 'pl' ? 'NIE ZNALEZIONO' : 'NOT FOUND')}\n`;
+            output += `   ${language === 'pl' ? 'Pełny adres' : 'Full Address'}:     ${trn.extracted.fullAddress || (language === 'pl' ? 'NIE ZNALEZIONO' : 'NOT FOUND')}\n`;
+            output += `   ${language === 'pl' ? 'Ulica' : 'Street Name'}:      ${trn.extracted.streetName || 'N/A'}\n`;
+            output += `   ${language === 'pl' ? 'Nr budynku' : 'Building Number'}:  ${trn.extracted.buildingNumber || 'N/A'}\n`;
+            output += `   ${language === 'pl' ? 'Najemca' : 'Tenant Name'}:      ${trn.extracted.tenantName || 'N/A'}\n\n`;
+
+            output += `📊 ${language === 'pl' ? 'PEWNOŚĆ I STATUS' : 'CONFIDENCE & STATUS'}:\n`;
+            output += `   ${language === 'pl' ? 'Pewność ogólna' : 'Overall Confidence'}:    ${trn.extracted.confidence.overall}%\n`;
+            output += `   ${language === 'pl' ? 'Pewność mieszkania' : 'Apartment Confidence'}:  ${trn.extracted.confidence.apartment}%\n`;
+            output += `   ${language === 'pl' ? 'Pewność adresu' : 'Address Confidence'}:    ${trn.extracted.confidence.address}%\n`;
+            output += `   ${language === 'pl' ? 'Pewność najemcy' : 'Tenant Confidence'}:     ${trn.extracted.confidence.tenantName}%\n`;
+            output += `   ${language === 'pl' ? 'Metoda ekstrakcji' : 'Extraction Method'}:     ${trn.extracted.extractionMethod}\n`;
+            output += `   Status:                ${trn.status}\n`;
+
+            if (trn.extracted.warnings?.length) {
+              output += `   ${language === 'pl' ? 'Ostrzeżenia' : 'Warnings'}:              ${trn.extracted.warnings.join(', ')}\n`;
+            }
+
+            if (trn.reviewedByUser) {
+              output += `\n👤 ${language === 'pl' ? 'WERYFIKACJA UŻYTKOWNIKA' : 'USER REVIEW'}:\n`;
+              if (trn.reviewedByUser.action === 'accept') {
+                output += `   ${language === 'pl' ? 'Akcja' : 'Action'}:                ${language === 'pl' ? 'ZAAKCEPTOWANO' : 'ACCEPTED'}\n`;
+              } else if (trn.reviewedByUser.action === 'reject') {
+                output += `   ${language === 'pl' ? 'Akcja' : 'Action'}:                ${language === 'pl' ? 'ODRZUCONO' : 'REJECTED'}\n`;
+              } else if (trn.reviewedByUser.action === 'manual') {
+                output += `   ${language === 'pl' ? 'Akcja' : 'Action'}:                ${language === 'pl' ? 'WPISANO RĘCZNIE' : 'MANUAL INPUT'}\n`;
+                output += `   ${language === 'pl' ? 'Wpisana wartość' : 'Manual Value'}:          ${trn.reviewedByUser.manualValue}\n`;
+              }
+            }
+
+            if (trn.extracted.reasoning) {
+              output += `\n   ${language === 'pl' ? 'Uzasadnienie AI' : 'AI Reasoning'}:\n`;
+              output += `   ${trn.extracted.reasoning}\n`;
+            }
+
+            output += `\n`;
+          });
+
+          // EXPENSES SECTION
+          output += '='.repeat(80) + '\n';
+          output += '=== WYDATKI (EXPENSES) ===\n';
+          output += '='.repeat(80) + '\n\n';
+
+          expenseTransactions.forEach((trn, idx) => {
+            const num = idx + 1;
+            output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            output += `#${num}\n`;
+            output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+            output += `📄 BNP DATA:\n`;
+            output += `   Booking Date:     ${trn.original.bookingDate}\n`;
+            output += `   Value Date:       ${trn.original.valueDate}\n`;
+            output += `   Amount:           ${trn.original.amount} ${trn.original.currency}\n`;
+            output += `   TX Code:          ${trn.original.txCode}\n`;
+            output += `   Reference:        ${trn.original.instrId}\n\n`;
+
+            output += `   Description:\n`;
+            output += `   ${trn.original.description || '(empty)'}\n\n`;
+
+            output += `   Counterparty:\n`;
+            output += `   ${trn.original.counterpartyName || '(empty)'}\n`;
+            output += `   ${trn.original.counterpartyAddress || '(empty)'}\n`;
+            output += `   Account: ${trn.original.counterpartyAccount || '(empty)'}\n\n`;
+
+            if (trn.matchedContractor) {
+              output += `💼 MATCHED CONTRACTOR:\n`;
+              if (trn.matchedContractor.contractor) {
+                output += `   Contractor Name:       ${trn.matchedContractor.contractor.nazwa}\n`;
+                output += `   Contractor Account:    ${trn.matchedContractor.contractor.kontoKontrahenta}\n`;
+                output += `   Match Confidence:      ${trn.matchedContractor.confidence}%\n`;
+                output += `   Matched In:            ${trn.matchedContractor.matchedIn === 'desc-opt' ? 'Counterparty name' : 'Description'}\n`;
+                if (trn.matchedContractor.contractor.nip) {
+                  output += `   NIP:                   ${trn.matchedContractor.contractor.nip}\n`;
+                }
+              } else {
+                output += `   Status:                No contractor matched - needs manual assignment\n`;
+              }
+              output += `\n`;
+            } else {
+              output += `💼 CONTRACTOR:\n`;
+              output += `   Status:                No contractor matched - needs manual assignment\n\n`;
+            }
+
+            output += `📊 STATUS:\n`;
+            output += `   Extraction Method:     ${trn.extracted.extractionMethod}\n`;
+            output += `   Status:                ${trn.status}\n`;
+
+            if (trn.extracted.warnings?.length) {
+              output += `   Warnings:              ${trn.extracted.warnings.join(', ')}\n`;
+            }
+
+            output += `\n`;
+          });
+
+          // Check if transactions need review
+          const reviewTransactions = this.extractReviewTransactions(result.processed, 'bnp_xml');
+
+          if (reviewTransactions.length > 0) {
+            const hasAIFailures = result.processed.some(trn =>
+              trn.extracted.warnings?.some(w =>
+                w.includes('AI extraction failed') ||
+                w.includes('AI matching failed')
+              )
+            );
+
+            const tempConversionId = conversionCache.store(
+              fileName || path.basename(inputPath),
+              bankName || 'BNP Paribas',
+              converterId,
+              inputPath,
+              outputPath,
+              result.processed,
+              output
+            );
+
+            let adresName: string | null = null;
+            if (adresId !== null && adresId !== undefined) {
+              const adres = dbInstance?.getAdresById(adresId);
+              adresName = adres?.nazwa || null;
+            }
+
+            console.log(`⚠️  ${reviewTransactions.length} transactions need review`);
+
+            const convertResult: ConvertResult = {
+              success: true,
+              needsReview: true,
+              reviewData: {
+                needsReview: true,
+                tempConversionId,
+                fileName: fileName || path.basename(inputPath),
+                bankName: bankName || 'BNP Paribas',
+                adresId: adresId || null,
+                adresName,
+                transactions: reviewTransactions,
+              },
+            };
+
+            if (hasAIFailures) {
+              convertResult.warningMessage = 'Nie udało się użyć AI. Przeprowadzono standardową konwersję.';
+            }
+
+            resolve(convertResult);
+            return;
+          }
+
+          const podgladPath = outputPath.replace(/\.(txt|TXT)$/, '-podglad.txt');
+          fs.writeFileSync(podgladPath, output, 'utf8');
+
+          const csvOutput = converter.exportToCsv(result.processed);
+          const txtPath = outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
+          fs.writeFileSync(txtPath, csvOutput, 'utf8');
+
+          console.log(`✅ Generated preview file: ${podgladPath}`);
+          console.log(`✅ Generated accounting file: ${txtPath}`);
+
+          resolve({ success: true });
+        } else if (converterId === 'alior') {
+          let provider: 'none' | 'anthropic' | 'openai' = 'none';
+          let apiKey = '';
+
+          if (useAI && this.aiConfig) {
+            provider = this.aiConfig.ai.default_provider;
+            apiKey = provider === 'anthropic'
+              ? this.aiConfig.ai.anthropic_api_key
+              : this.aiConfig.ai.openai_api_key;
+          }
+
+          const contractors = dbInstance?.getAllKontrahenci() || [];
+          let addresses = dbInstance?.getAllAdresy() || [];
+          if (adresId !== null && adresId !== undefined) {
+            addresses = addresses.filter(a => a.id === adresId);
+          }
+          const language = (dbInstance?.getSetting('language') || 'pl') as 'pl' | 'en';
+
+          const converter = new AliorConverter({
+            aiProvider: provider,
+            apiKey,
+            batchSize: 20,
+            confidenceThresholds: { autoApprove: 85, needsReview: 70 },
+            contractors,
+            addresses,
+            language,
+          });
+
+          const mt940Content = readFileWithEncoding(inputPath);
+          const result = await converter.convert(mt940Content);
+
+          const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
+          const expenseTransactions = result.processed.filter(t => t.transactionType === 'expense');
+
+          let output = '=== ALIOR BANK MT940 CONVERSION RESULTS ===\n\n';
+          output += `Summary:\n`;
+          output += `- Total transactions: ${result.totalTransactions}\n`;
+          output += `- Income transactions: ${incomeTransactions.length}\n`;
+          output += `- Expense transactions: ${expenseTransactions.length}\n`;
+          output += `- Auto-approved: ${result.summary.autoApproved}\n`;
+          output += `- Needs review: ${result.summary.needsReview}\n`;
+          output += `- Needs manual input: ${result.summary.needsManualInput}\n`;
+          output += `- Skipped: ${result.summary.skipped}\n`;
+          output += `- Average confidence: ${result.statistics.averageConfidence.toFixed(1)}%\n\n`;
+
+          // INCOME SECTION
+          output += '='.repeat(80) + '\n';
+          output += '=== WPŁATY (INCOME) ===\n';
+          output += '='.repeat(80) + '\n\n';
+
+          incomeTransactions.forEach((trn, idx) => {
+            const num = idx + 1;
+            output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            output += `#${num}\n`;
+            output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+            output += `📄 ALIOR DATA:\n`;
+            output += `   Value Date:       ${trn.original.valueDate}\n`;
+            output += `   Entry Date:       ${trn.original.entryDate}\n`;
+            output += `   Transaction Type: ${trn.original.transactionType}\n`;
+            output += `   Amount:           ${trn.original.amount} PLN\n`;
+            output += `   Reference:        ${trn.original.reference}\n\n`;
+
+            output += `   Description:\n`;
+            output += `   ${trn.original.details.description.join(' ')}\n\n`;
+
+            output += `   Counterparty:\n`;
+            output += `   ${trn.original.details.counterpartyName}\n`;
+            if (trn.original.details.counterpartyAddress) {
+              output += `   ${trn.original.details.counterpartyAddress}\n`;
+            }
+            output += `   IBAN: ${trn.original.details.counterpartyIBAN}\n\n`;
+
+            output += `🔍 ${language === 'pl' ? 'WYEKSTRAHOWANE DANE' : 'EXTRACTED DATA'}:\n`;
+            output += `   ${language === 'pl' ? 'Mieszkanie' : 'Apartment'}:        ${trn.extracted.apartmentNumber || (language === 'pl' ? 'NIE ZNALEZIONO' : 'NOT FOUND')}\n`;
+            output += `   ${language === 'pl' ? 'Pełny adres' : 'Full Address'}:     ${trn.extracted.fullAddress || (language === 'pl' ? 'NIE ZNALEZIONO' : 'NOT FOUND')}\n`;
+            output += `   ${language === 'pl' ? 'Ulica' : 'Street Name'}:      ${trn.extracted.streetName || 'N/A'}\n`;
+            output += `   ${language === 'pl' ? 'Nr budynku' : 'Building Number'}:  ${trn.extracted.buildingNumber || 'N/A'}\n`;
+            output += `   ${language === 'pl' ? 'Najemca' : 'Tenant Name'}:      ${trn.extracted.tenantName || 'N/A'}\n\n`;
+
+            output += `📊 ${language === 'pl' ? 'PEWNOŚĆ I STATUS' : 'CONFIDENCE & STATUS'}:\n`;
+            output += `   ${language === 'pl' ? 'Pewność ogólna' : 'Overall Confidence'}:    ${trn.extracted.confidence.overall}%\n`;
+            output += `   ${language === 'pl' ? 'Pewność mieszkania' : 'Apartment Confidence'}:  ${trn.extracted.confidence.apartment}%\n`;
+            output += `   ${language === 'pl' ? 'Pewność adresu' : 'Address Confidence'}:    ${trn.extracted.confidence.address}%\n`;
+            output += `   ${language === 'pl' ? 'Pewność najemcy' : 'Tenant Confidence'}:     ${trn.extracted.confidence.tenantName}%\n`;
+            output += `   ${language === 'pl' ? 'Metoda ekstrakcji' : 'Extraction Method'}:     ${trn.extracted.extractionMethod}\n`;
+            output += `   Status:                ${trn.status}\n`;
+
+            if (trn.extracted.warnings?.length) {
+              output += `   ${language === 'pl' ? 'Ostrzeżenia' : 'Warnings'}:              ${trn.extracted.warnings.join(', ')}\n`;
+            }
+
+            if (trn.reviewedByUser) {
+              output += `\n👤 ${language === 'pl' ? 'WERYFIKACJA UŻYTKOWNIKA' : 'USER REVIEW'}:\n`;
+              if (trn.reviewedByUser.action === 'accept') {
+                output += `   ${language === 'pl' ? 'Akcja' : 'Action'}:                ${language === 'pl' ? 'ZAAKCEPTOWANO' : 'ACCEPTED'}\n`;
+              } else if (trn.reviewedByUser.action === 'reject') {
+                output += `   ${language === 'pl' ? 'Akcja' : 'Action'}:                ${language === 'pl' ? 'ODRZUCONO' : 'REJECTED'}\n`;
+              } else if (trn.reviewedByUser.action === 'manual') {
+                output += `   ${language === 'pl' ? 'Akcja' : 'Action'}:                ${language === 'pl' ? 'WPISANO RĘCZNIE' : 'MANUAL INPUT'}\n`;
+                output += `   ${language === 'pl' ? 'Wpisana wartość' : 'Manual Value'}:          ${trn.reviewedByUser.manualValue}\n`;
+              }
+            }
+
+            if (trn.extracted.reasoning) {
+              output += `\n   ${language === 'pl' ? 'Uzasadnienie AI' : 'AI Reasoning'}:\n`;
+              output += `   ${trn.extracted.reasoning}\n`;
+            }
+
+            output += `\n`;
+          });
+
+          // EXPENSES SECTION
+          output += '='.repeat(80) + '\n';
+          output += '=== WYDATKI (EXPENSES) ===\n';
+          output += '='.repeat(80) + '\n\n';
+
+          expenseTransactions.forEach((trn, idx) => {
+            const num = idx + 1;
+            output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+            output += `#${num}\n`;
+            output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+            output += `📄 ALIOR DATA:\n`;
+            output += `   Value Date:       ${trn.original.valueDate}\n`;
+            output += `   Entry Date:       ${trn.original.entryDate}\n`;
+            output += `   Transaction Type: ${trn.original.transactionType}\n`;
+            output += `   Amount:           ${trn.original.amount} PLN\n`;
+            output += `   Reference:        ${trn.original.reference}\n\n`;
+
+            output += `   Description:\n`;
+            output += `   ${trn.original.details.description.join(' ')}\n\n`;
+
+            output += `   Counterparty:\n`;
+            output += `   ${trn.original.details.counterpartyName}\n`;
+            if (trn.original.details.counterpartyAddress) {
+              output += `   ${trn.original.details.counterpartyAddress}\n`;
+            }
+            output += `   IBAN: ${trn.original.details.counterpartyIBAN}\n\n`;
+
+            if (trn.matchedContractor) {
+              output += `💼 MATCHED CONTRACTOR:\n`;
+              if (trn.matchedContractor.contractor) {
+                output += `   Contractor Name:       ${trn.matchedContractor.contractor.nazwa}\n`;
+                output += `   Contractor Account:    ${trn.matchedContractor.contractor.kontoKontrahenta}\n`;
+                output += `   Match Confidence:      ${trn.matchedContractor.confidence}%\n`;
+                output += `   Matched In:            ${trn.matchedContractor.matchedIn === 'desc-opt' ? 'Counterparty name' : 'Description'}\n`;
+                if (trn.matchedContractor.contractor.nip) {
+                  output += `   NIP:                   ${trn.matchedContractor.contractor.nip}\n`;
+                }
+              } else {
+                output += `   Status:                No contractor matched - needs manual assignment\n`;
+              }
+              output += `\n`;
+            } else {
+              output += `💼 CONTRACTOR:\n`;
+              output += `   Status:                No contractor matched - needs manual assignment\n\n`;
+            }
+
+            output += `📊 STATUS:\n`;
+            output += `   Extraction Method:     ${trn.extracted.extractionMethod}\n`;
+            output += `   Status:                ${trn.status}\n`;
+
+            if (trn.extracted.warnings?.length) {
+              output += `   Warnings:              ${trn.extracted.warnings.join(', ')}\n`;
+            }
+
+            output += `\n`;
+          });
+
+          // Check if transactions need review
+          const reviewTransactions = this.extractReviewTransactions(result.processed, 'alior');
+
+          if (reviewTransactions.length > 0) {
+            const hasAIFailures = result.processed.some(trn =>
+              trn.extracted.warnings?.some(w =>
+                w.includes('AI extraction failed') ||
+                w.includes('AI matching failed')
+              )
+            );
+
+            const tempConversionId = conversionCache.store(
+              fileName || path.basename(inputPath),
+              bankName || 'Alior Bank',
+              converterId,
+              inputPath,
+              outputPath,
+              result.processed,
+              output
+            );
+
+            let adresName: string | null = null;
+            if (adresId !== null && adresId !== undefined) {
+              const adres = dbInstance?.getAdresById(adresId);
+              adresName = adres?.nazwa || null;
+            }
+
+            console.log(`⚠️  ${reviewTransactions.length} transactions need review`);
+
+            const convertResult: ConvertResult = {
+              success: true,
+              needsReview: true,
+              reviewData: {
+                needsReview: true,
+                tempConversionId,
+                fileName: fileName || path.basename(inputPath),
+                bankName: bankName || 'Alior Bank',
+                adresId: adresId || null,
+                adresName,
+                transactions: reviewTransactions,
+              },
+            };
+
+            if (hasAIFailures) {
+              convertResult.warningMessage = 'Nie udało się użyć AI. Przeprowadzono standardową konwersję.';
+            }
+
+            resolve(convertResult);
+            return;
+          }
+
+          const podgladPath = outputPath.replace(/\.(txt|TXT)$/, '-podglad.txt');
+          fs.writeFileSync(podgladPath, output, 'utf8');
+
+          const csvOutput = converter.exportToCsv(result.processed);
+          const txtPath = outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
+          fs.writeFileSync(txtPath, csvOutput, 'utf8');
+
+          console.log(`✅ Generated preview file: ${podgladPath}`);
+          console.log(`✅ Generated accounting file: ${txtPath}`);
+
+          resolve({ success: true });
         } else {
           throw new Error(`Unknown converter: ${converterId}`);
         }
@@ -951,7 +1496,25 @@ class ConverterRegistry {
             aiProvider: 'none',
             apiKey: '',
             batchSize: 20,
-            confidenceThresholds: { autoApprove: 85, needsReview: 60 },
+            confidenceThresholds: { autoApprove: 85, needsReview: 70 },
+            contractors: kontrahenci,
+            addresses: adresy,
+          })
+        : cached.converterId === 'bnp_xml'
+        ? new BnpXmlConverter({
+            aiProvider: 'none',
+            apiKey: '',
+            batchSize: 20,
+            confidenceThresholds: { autoApprove: 85, needsReview: 70 },
+            contractors: kontrahenci,
+            addresses: adresy,
+          })
+        : cached.converterId === 'alior'
+        ? new AliorConverter({
+            aiProvider: 'none',
+            apiKey: '',
+            batchSize: 20,
+            confidenceThresholds: { autoApprove: 85, needsReview: 70 },
             contractors: kontrahenci,
             addresses: adresy,
           })
@@ -959,7 +1522,7 @@ class ConverterRegistry {
             aiProvider: 'none',
             apiKey: '',
             batchSize: 20,
-            confidenceThresholds: { autoApprove: 85, needsReview: 60 },
+            confidenceThresholds: { autoApprove: 85, needsReview: 70 },
             contractors: kontrahenci,
             addresses: adresy,
           });

@@ -677,9 +677,13 @@ function setupIpcHandlers() {
           throw new Error('Bank not found');
         }
 
+        log.info(`[CONVERT] Processing file with bank: ${bank.name}, converterId: ${bank.converterId}`);
+
         const converter = converterRegistry.getConverter(bank.converterId);
         if (!converter) {
-          throw new Error('Converter not found');
+          const availableConverters = converterRegistry.getAllConverters().map(c => c.id).join(', ');
+          log.error(`[CONVERT] Converter '${bank.converterId}' not found. Available: ${availableConverters}`);
+          throw new Error(`Konwerter '${bank.converterId}' nie został znaleziony. Bank: '${bank.name}'. Dostępne konwertery: ${availableConverters}`);
         }
 
         const outputFolder = database.getSetting('outputFolder');
@@ -796,9 +800,13 @@ function setupIpcHandlers() {
           throw new Error('Bank not found');
         }
 
+        log.info(`[CONVERT_AI] Processing file with bank: ${bank.name}, converterId: ${bank.converterId}`);
+
         const converter = converterRegistry.getConverter(bank.converterId);
         if (!converter) {
-          throw new Error('Converter not found');
+          const availableConverters = converterRegistry.getAllConverters().map(c => c.id).join(', ');
+          log.error(`[CONVERT_AI] Converter '${bank.converterId}' not found. Available: ${availableConverters}`);
+          throw new Error(`Konwerter '${bank.converterId}' nie został znaleziony. Bank: '${bank.name}'. Dostępne konwertery: ${availableConverters}`);
         }
 
         const outputFolder = database.getSetting('outputFolder');
@@ -1289,6 +1297,11 @@ app.whenReady().then(() => {
   database = new DatabaseService();
   setDatabaseInstance(database);  // Pass database instance to ConverterRegistry
   converterRegistry = new ConverterRegistry();
+  
+  // Log loaded converters for debugging
+  const loadedConverters = converterRegistry.getAllConverters();
+  log.info(`[MAIN] Loaded ${loadedConverters.length} converters: ${loadedConverters.map(c => c.id).join(', ')}`);
+  
   setupIpcHandlers();
   setupAutoUpdater();
   createWindow();

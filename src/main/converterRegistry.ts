@@ -94,14 +94,32 @@ class ConverterRegistry {
       // Use app.getAppPath() to get the root directory in both dev and production
       const appPath = app.getAppPath();
       const configPath = path.join(appPath, 'config', 'converters.yml');
+      
+      console.log('[ConverterRegistry] Loading converters from:', configPath);
+      
+      if (!fs.existsSync(configPath)) {
+        console.error('[ConverterRegistry] Config file not found:', configPath);
+        throw new Error(`Converters config file not found at: ${configPath}`);
+      }
+      
       const fileContents = fs.readFileSync(configPath, 'utf8');
       const config = yaml.load(fileContents) as { converters: Converter[] };
 
+      if (!config || !config.converters || !Array.isArray(config.converters)) {
+        console.error('[ConverterRegistry] Invalid config structure');
+        throw new Error('Invalid converters config structure');
+      }
+
       config.converters.forEach((converter) => {
         this.converters.set(converter.id, converter);
+        console.log('[ConverterRegistry] Loaded converter:', converter.id, '-', converter.name);
       });
+      
+      console.log(`[ConverterRegistry] Successfully loaded ${this.converters.size} converters`);
     } catch (error) {
-      console.error('Error loading converters config:', error);
+      console.error('[ConverterRegistry] Error loading converters config:', error);
+      // Re-throw to make it visible that converters failed to load
+      throw error;
     }
   }
 
@@ -1836,9 +1854,9 @@ class ConverterRegistry {
             output += `   Amount:           ${trn.original.value} PLN\n`;
             output += `   Transaction Code: ${trn.original.trnCode}\n`;
             output += `   Raw Data:\n`;
-            output += `     Description:    ${trn.rawData.description}\n`;
-            output += `     Counterparty:   ${trn.rawData.counterparty}\n`;
-            output += `     Account:        ${trn.rawData.accountNumber}\n\n`;
+            output += `     Description:    ${trn.extracted.rawData.description}\n`;
+            output += `     Counterparty:   ${trn.extracted.rawData.counterparty}\n`;
+            output += `     Account:        ${trn.extracted.rawData.accountNumber}\n\n`;
 
             output += `🔍 ${language === 'pl' ? 'WYEKSTRAHOWANE DANE' : 'EXTRACTED DATA'}:\n`;
             output += `   ${language === 'pl' ? 'Mieszkanie' : 'Apartment'}:        ${trn.extracted.apartmentNumber || (language === 'pl' ? 'NIE ZNALEZIONO' : 'NOT FOUND')}\n`;
@@ -1895,9 +1913,9 @@ class ConverterRegistry {
             output += `   Amount:           ${trn.original.value} PLN\n`;
             output += `   Transaction Code: ${trn.original.trnCode}\n`;
             output += `   Raw Data:\n`;
-            output += `     Description:    ${trn.rawData.description}\n`;
-            output += `     Counterparty:   ${trn.rawData.counterparty}\n`;
-            output += `     Account:        ${trn.rawData.accountNumber}\n\n`;
+            output += `     Description:    ${trn.extracted.rawData.description}\n`;
+            output += `     Counterparty:   ${trn.extracted.rawData.counterparty}\n`;
+            output += `     Account:        ${trn.extracted.rawData.accountNumber}\n\n`;
 
             if (trn.matchedContractor) {
               output += `💼 MATCHED CONTRACTOR:\n`;

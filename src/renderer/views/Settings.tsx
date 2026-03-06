@@ -364,10 +364,24 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
               <tbody>
                 {banks.map((bank) => {
                   const converter = converters.find((c) => c.id === bank.converterId);
+                  const hasInvalidConverter = !converter;
                   return (
-                    <tr key={bank.id}>
-                      <td>{bank.name}</td>
-                      <td>{converter?.name || bank.converterId}</td>
+                    <tr key={bank.id} style={hasInvalidConverter ? { backgroundColor: 'rgba(220, 53, 69, 0.1)' } : {}}>
+                      <td>
+                        {bank.name}
+                        {hasInvalidConverter && (
+                          <span style={{ color: '#dc3545', marginLeft: '8px', fontSize: '12px' }} title="Konwerter nie istnieje">
+                            ⚠️
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        {converter?.name || (
+                          <span style={{ color: '#dc3545' }}>
+                            {bank.converterId} (nie znaleziono)
+                          </span>
+                        )}
+                      </td>
                       <td>
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button
@@ -408,10 +422,10 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
               </tr>
             </thead>
             <tbody>
-              {converters.map((converter) => (
+              {converters.filter(c => c && c.id).map((converter) => (
                 <tr key={converter.id}>
-                  <td>{converter.name}</td>
-                  <td style={{ color: '#7f8c8d' }}>{converter.description}</td>
+                  <td>{converter.name || converter.id}</td>
+                  <td style={{ color: '#7f8c8d' }}>{converter.description || 'No description'}</td>
                 </tr>
               ))}
             </tbody>

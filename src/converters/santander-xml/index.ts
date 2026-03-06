@@ -1,598 +1,124 @@
 /**
- * Main Santander XML Converter
- * Orchestrates the extraction process with hybrid approach (regex + AI)
+ * Santander XML Converter
+ * Extends BaseConverter with XML-specific parsing and extraction.
+ *
+ * Format-specific responsibilities:
+ *   - Parse Santander XML file (via SantanderXmlParser)
+ *   - Normalize XmlTransaction → NormalizedTransaction (trivial — same shape)
+ *   - Regex extraction (returns null when confidence < 70%)
  */
 
 import { SantanderXmlParser } from './parser';
 import { RegexExtractor } from './regex-extractor';
-import { AIExtractor } from '../../shared/ai-extractor';
-import { ExtractionCache } from '../../shared/extraction-cache';
 import { CsvExporter } from './csv-exporter';
-import { ContractorMatcher } from '../../shared/contractor-matcher';
 import {
-  XmlStatement,
   XmlTransaction,
   ProcessedTransaction,
   ImportResult,
   ConverterConfig,
-  ExtractedData,
 } from './types';
+import {
+  BaseConverter,
+  BaseConverterConfig,
+  BaseExtractedData,
+  NormalizedTransaction,
+  ParseResult,
+  ICsvExporter,
+} from '../../shared/base-converter';
 
-/**
- * Check if error is a billing/quota error that should stop processing
- */
-function isBillingError(error: any): boolean {
-  if (!error) return false;
-  
-  const errorMessage = error.message || '';
-  
-  // Check for our custom billing error message
-  if (errorMessage.includes('💸')) return true;
-  
-  // Check for quota/billing keywords
-  if (errorMessage.toLowerCase().includes('quota') || 
-      errorMessage.toLowerCase().includes('billing') ||
-      errorMessage.toLowerCase().includes('payment required')) {
-    return true;
-  }
-  
-  // Check for API error status codes
-  if (error.status === 402 || error.status === 429) return true;
-  
-  return false;
-}
-
-export class SantanderXmlConverter {
+export class SantanderXmlConverter extends BaseConverter<XmlTransaction> {
   private parser: SantanderXmlParser;
   private regexExtractor: RegexExtractor;
-  private aiExtractor?: AIExtractor;
-  private cache: ExtractionCache;
-  private config: ConverterConfig;
-  private contractorMatcher?: ContractorMatcher;
+  private localConfig: ConverterConfig;
 
   constructor(config: Partial<ConverterConfig> = {}) {
-    this.config = {
-      aiProvider: config.aiProvider || 'anthropic',
-      apiKey: config.apiKey,
-      model: config.model,
-      useBatchProcessing: config.useBatchProcessing ?? true,
-      batchSize: config.batchSize || 20,
-      confidenceThresholds: config.confidenceThresholds || {
-        autoApprove: 85,
-        needsReview: 60,
-      },
-      useCache: config.useCache ?? true,
-      useRegexFirst: config.useRegexFirst ?? true,
-      skipNegativeAmounts: config.skipNegativeAmounts ?? false, // Changed to false - process expenses
-      skipBankFees: config.skipBankFees ?? true,
-      useAIForExpenses: config.useAIForExpenses ?? false, // AI disabled for expenses by default
-      contractors: config.contractors,
-      addresses: config.addresses,
-      language: config.language,
-    };
-
+    super(config);
+    // Keep Santander-specific config field
+    this.localConfig = {
+      ...this.config,
+      useAIForExpenses: config.useAIForExpenses ?? false,
+    } as ConverterConfig;
     this.parser = new SantanderXmlParser();
     this.regexExtractor = new RegexExtractor(this.config.addresses || []);
-    this.cache = new ExtractionCache();
-
-    // Initialize AI extractor if configured
-    if (this.config.apiKey && this.config.aiProvider !== 'none') {
-      this.aiExtractor = new AIExtractor(this.config);
-    }
-
-    // Initialize contractor matcher if contractors provided
-    if (this.config.contractors && this.config.contractors.length > 0) {
-      this.contractorMatcher = new ContractorMatcher(this.config.contractors);
-    }
   }
 
-  /**
-   * Convert XML file
-   */
-  async convert(xmlContent: string): Promise<ImportResult> {
-    console.log('🔄 Starting Santander XML conversion...');
+  // ── Abstract method implementations ────────────────────────
 
-    // Parse XML
-    const statement = await this.parser.parse(xmlContent);
-    console.log(`📄 Parsed ${statement.transactions.length} transactions`);
-
-    // Filter transactions (skip expenses, bank fees, etc.)
-    const filteredTransactions = this.parser.filterTransactions(statement.transactions, {
-      skipNegative: this.config.skipNegativeAmounts,
-      skipBankFees: this.config.skipBankFees,
-    });
-
-    const skippedCount = statement.transactions.length - filteredTransactions.length;
-    console.log(`✂️  Filtered to ${filteredTransactions.length} transactions (skipped ${skippedCount})`);
-
-    // Process transactions
-    const processed = await this.processTransactions(filteredTransactions);
-
-    // Generate summary
-    const result = this.generateResult(processed, statement.transactions.length);
-
-    console.log('✅ Conversion complete');
-    console.log(`   Auto-approved: ${result.summary.autoApproved}`);
-    console.log(`   Needs review: ${result.summary.needsReview}`);
-    console.log(`   Needs manual input: ${result.summary.needsManualInput}`);
-    console.log(`   Skipped: ${result.summary.skipped}`);
-
-    return result;
+  protected getConverterName(): string {
+    return 'Santander XML';
   }
 
-  /**
-   * Process transactions using hybrid extraction
-   */
-  private async processTransactions(
-    transactions: XmlTransaction[]
-  ): Promise<ProcessedTransaction[]> {
-    const processed: ProcessedTransaction[] = [];
-    
-    // Separate income (positive) and expenses (negative)
-    const incomeTransactions = transactions.filter(t => t.value >= 0);
-    const expenseTransactions = transactions.filter(t => t.value < 0);
-
-    // Process income transactions (existing logic)
-    if (incomeTransactions.length > 0) {
-      const incomeProcessed = await this.processIncomeTransactions(incomeTransactions);
-      processed.push(...incomeProcessed);
-    }
-
-    // Process expense transactions (new logic with contractor matching)
-    if (expenseTransactions.length > 0) {
-      const expenseProcessed = await this.processExpenseTransactions(expenseTransactions);
-      processed.push(...expenseProcessed);
-    }
-
-    return processed;
-  }
-
-  /**
-   * Process income transactions (positive amounts)
-   */
-  private async processIncomeTransactions(
-    transactions: XmlTransaction[]
-  ): Promise<ProcessedTransaction[]> {
-    const processed: ProcessedTransaction[] = [];
-    const needsAI: Array<{ transaction: XmlTransaction; index: number }> = [];
-
-    // Phase 1: Try regex + cache for all transactions
-    console.log('🔍 Phase 1: Quick extraction (regex + cache) for income...');
-    for (let i = 0; i < transactions.length; i++) {
-      const transaction = transactions[i];
-      let extracted: ExtractedData | null = null;
-
-      // Try cache first
-      if (this.config.useCache) {
-        extracted = this.cache.get(transaction.descBase, transaction.descOpt);
-        if (extracted) {
-          processed.push(this.createProcessedTransaction(transaction, extracted, 'income'));
-          continue;
-        }
-      }
-
-      // Try regex extraction
-      if (this.config.useRegexFirst) {
-        extracted = this.regexExtractor.extract(transaction);
-        if (extracted && extracted.confidence.overall >= 90) {
-          // Cache successful regex extraction
-          if (this.config.useCache) {
-            this.cache.set(transaction.descBase, transaction.descOpt, extracted);
-          }
-          processed.push(this.createProcessedTransaction(transaction, extracted, 'income'));
-          continue;
-        }
-      }
-
-      // Mark for AI extraction
-      needsAI.push({ transaction, index: i });
-    }
-
-    console.log(`   ✅ Quick extraction: ${processed.length}/${transactions.length}`);
-    console.log(`   🤖 Needs AI: ${needsAI.length}`);
-
-    // Phase 2: AI extraction for remaining transactions
-    if (needsAI.length > 0 && this.aiExtractor) {
-      console.log('🤖 Phase 2: AI extraction...');
-      await this.processWithAI(needsAI, processed);
-    } else if (needsAI.length > 0 && !this.aiExtractor) {
-      console.warn('⚠️  No AI provider configured, creating low-confidence entries');
-      // Create low-confidence entries for transactions that need AI
-      for (const { transaction } of needsAI) {
-        const extracted: ExtractedData = {
-          streetName: null,
-          buildingNumber: null,
-          apartmentNumber: null,
-          fullAddress: null,
-          tenantName: null,
-          confidence: {
-            address: 0,
-            apartment: 0,
-            tenantName: 0,
-            overall: 0,
-          },
-          extractionMethod: 'manual',
-          warnings: ['No AI provider configured'],
-          rawData: {
-            descBase: transaction.descBase,
-            descOpt: transaction.descOpt,
-          },
-        };
-        processed.push(this.createProcessedTransaction(transaction, extracted, 'income'));
-      }
-    }
-
-    return processed;
-  }
-
-  /**
-   * Process expense transactions (negative amounts)
-   */
-  private async processExpenseTransactions(
-    transactions: XmlTransaction[]
-  ): Promise<ProcessedTransaction[]> {
-    console.log(`💸 Processing ${transactions.length} expense transactions...`);
-    const processed: ProcessedTransaction[] = [];
-    const needsAI: Array<{ transaction: XmlTransaction; index: number }> = [];
-
-    // Phase 1: Try partial matching for all expenses
-    console.log('🔍 Phase 1: Partial matching with contractors...');
-    for (let i = 0; i < transactions.length; i++) {
-      const transaction = transactions[i];
-      
-      // Match with contractors
-      const matchedContractor = this.contractorMatcher 
-        ? this.contractorMatcher.match(transaction)
-        : {
-            contractor: null,
-            confidence: 0,
-            matchedIn: 'none' as const,
-          };
-
-      // If recognized with ANY confidence, add to processed (regex is reliable)
-      // Only send to AI if NO match found (confidence = 0)
-      if (matchedContractor.contractor !== null && matchedContractor.confidence > 0) {
-        const extracted: ExtractedData = {
-          streetName: null,
-          buildingNumber: null,
-          apartmentNumber: null,
-          fullAddress: null,
-          tenantName: null,
-          confidence: {
-            address: 0,
-            apartment: 0,
-            tenantName: 0,
-            overall: 0,
-          },
-          extractionMethod: matchedContractor.confidence >= 90 ? 'manual' : 'regex',
-          warnings: matchedContractor.confidence < 60 ? ['Low confidence match - may need review'] : [],
-          rawData: {
-            descBase: transaction.descBase,
-            descOpt: transaction.descOpt,
-          },
-        };
-        processed.push(this.createProcessedTransaction(transaction, extracted, 'expense', matchedContractor));
-      } else {
-        // Mark for AI matching - ONLY if regex found nothing
-        needsAI.push({ transaction, index: i });
-      }
-    }
-
-    const matchedCount = processed.length;
-    console.log(`   ✅ Partial matching: ${matchedCount}/${transactions.length}`);
-    console.log(`   🤖 Needs AI: ${needsAI.length}`);
-
-    // Phase 2: AI matching for remaining expenses (if enabled)
-    if (needsAI.length > 0) {
-      if (this.config.useAIForExpenses) {
-        await this.processExpensesWithAI(needsAI, processed);
-      } else {
-        console.log(`   ⚠️  AI disabled for expenses, marking as unrecognized`);
-        // Mark all unmatched expenses as needing manual assignment
-        for (const { transaction } of needsAI) {
-          const extracted: ExtractedData = {
-            streetName: null,
-            buildingNumber: null,
-            apartmentNumber: null,
-            fullAddress: null,
-            tenantName: null,
-            confidence: {
-              address: 0,
-              apartment: 0,
-              tenantName: 0,
-              overall: 0,
-            },
-            extractionMethod: 'manual',
-            warnings: ['AI disabled for expenses - manual assignment required'],
-            rawData: {
-              descBase: transaction.descBase,
-              descOpt: transaction.descOpt,
-            },
-          };
-          const unrecognized = {
-            contractor: null,
-            confidence: 0,
-            matchedIn: 'none' as const,
-          };
-          processed.push(this.createProcessedTransaction(transaction, extracted, 'expense', unrecognized));
-        }
-      }
-    }
-
-    const finalMatchedCount = processed.filter(p => p.matchedContractor?.contractor !== null).length;
-    console.log(`   ✅ Total matched contractors: ${finalMatchedCount}/${transactions.length}`);
-
-    return processed;
-  }
-
-  /**
-   * Process transactions with AI (with batch processing)
-   */
-  private async processWithAI(
-    needsAI: Array<{ transaction: XmlTransaction; index: number }>,
-    processed: ProcessedTransaction[]
-  ): Promise<void> {
-    if (!this.aiExtractor) return;
-
-    const batchSize = this.config.useBatchProcessing ? this.config.batchSize : 1;
-    const batches = this.createBatches(needsAI, batchSize);
-
-    console.log(`   Processing ${batches.length} batches (${batchSize} transactions each)...`);
-
-    for (let i = 0; i < batches.length; i++) {
-      const batch = batches[i];
-      console.log(`   Batch ${i + 1}/${batches.length}...`);
-
-      try {
-        const transactions = batch.map((item) => item.transaction);
-        const extracted = await this.aiExtractor.extractBatch(transactions);
-
-        // Add to processed and cache
-        for (let j = 0; j < batch.length; j++) {
-          const { transaction } = batch[j];
-          const extractedData = extracted[j];
-
-          // Cache AI extraction
-          if (this.config.useCache) {
-            this.cache.set(transaction.descBase, transaction.descOpt, extractedData);
-          }
-
-          processed.push(this.createProcessedTransaction(transaction, extractedData, 'income'));
-        }
-      } catch (error) {
-        console.error(`   ❌ Batch ${i + 1} failed:`, error);
-        
-        // For ANY AI error (billing or general), re-throw to trigger fallback in main.ts
-        // Main.ts will attempt standard conversion without AI and show warning to user
-        throw error;
-      }
-    }
-  }
-
-  /**
-   * Process expenses with AI contractor matching (with batch processing)
-   */
-  private async processExpensesWithAI(
-    needsAI: Array<{ transaction: XmlTransaction; index: number }>,
-    processed: ProcessedTransaction[]
-  ): Promise<void> {
-    // If AI is not available, add all as unrecognized
-    if (!this.aiExtractor || !this.contractorMatcher) {
-      console.warn('   ⚠️  AI not available, marking expenses as unrecognized');
-      for (const { transaction } of needsAI) {
-        const extracted: ExtractedData = {
-          streetName: null,
-          buildingNumber: null,
-          apartmentNumber: null,
-          fullAddress: null,
-          tenantName: null,
-          confidence: {
-            address: 0,
-            apartment: 0,
-            tenantName: 0,
-            overall: 0,
-          },
-          extractionMethod: 'manual',
-          warnings: ['No contractor matched - needs manual assignment'],
-          rawData: {
-            descBase: transaction.descBase,
-            descOpt: transaction.descOpt,
-          },
-        };
-        const unrecognized = {
-          contractor: null,
-          confidence: 0,
-          matchedIn: 'none' as const,
-        };
-        processed.push(this.createProcessedTransaction(transaction, extracted, 'expense', unrecognized));
-      }
-      return;
-    }
-
-    // Use larger batch size for contractor matching (50 vs 20 for income)
-    // Contractor matching is simpler than address extraction
-    const batchSize = this.config.useBatchProcessing ? 50 : 1;
-    const batches = this.createBatches(needsAI, batchSize);
-
-    console.log(`   Processing ${batches.length} batches (${batchSize} expenses each)...`);
-
-    for (let i = 0; i < batches.length; i++) {
-      const batch = batches[i];
-      console.log(`   Batch ${i + 1}/${batches.length}...`);
-
-      try {
-        const transactions = batch.map((item) => item.transaction);
-        
-        // 🚀 OPTIMIZATION: Pre-filter contractors for each transaction
-        // Instead of sending ALL contractors (e.g., 940), send only top 10 candidates per transaction
-        // This reduces input tokens by ~95%!
-        const candidatesPerTransaction = transactions.map(t => 
-          this.contractorMatcher!.getTopCandidates(t, 10)
-        );
-        
-        // Use AI to match contractors (with pre-filtered candidates)
-        const matchedContractors = await this.aiExtractor.matchContractorsBatch(
-          transactions, 
-          candidatesPerTransaction
-        );
-
-        // Add to processed
-        for (let j = 0; j < batch.length; j++) {
-          const { transaction } = batch[j];
-          const matchedContractor = matchedContractors[j];
-
-          const extracted: ExtractedData = {
-            streetName: null,
-            buildingNumber: null,
-            apartmentNumber: null,
-            fullAddress: null,
-            tenantName: null,
-            confidence: {
-              address: 0,
-              apartment: 0,
-              tenantName: 0,
-              overall: 0,
-            },
-            extractionMethod: 'ai',
-            reasoning: matchedContractor.reasoning, // Copy AI reasoning for display
-            warnings: matchedContractor.contractor ? [] : ['AI could not match contractor'],
-            rawData: {
-              descBase: transaction.descBase,
-              descOpt: transaction.descOpt,
-            },
-          };
-
-          processed.push(this.createProcessedTransaction(transaction, extracted, 'expense', matchedContractor));
-        }
-      } catch (error) {
-        console.error(`   ❌ Batch ${i + 1} failed:`, error);
-        
-        // For ANY AI error (billing or general), re-throw to trigger fallback in main.ts
-        // Main.ts will attempt standard conversion without AI and show warning to user
-        throw error;
-      }
-    }
-  }
-
-  /**
-   * Create batches for batch processing
-   */  /**
-   * Create batches for batch processing
-   */
-  private createBatches<T>(items: T[], batchSize: number): T[][] {
-    const batches: T[][] = [];
-    for (let i = 0; i < items.length; i += batchSize) {
-      batches.push(items.slice(i, i + batchSize));
-    }
-    return batches;
-  }
-
-  /**
-   * Create ProcessedTransaction from extraction result
-   */
-  private createProcessedTransaction(
-    transaction: XmlTransaction,
-    extracted: ExtractedData,
-    transactionType: 'income' | 'expense',
-    matchedContractor?: import('../../shared/contractor-matcher').MatchedContractor
-  ): ProcessedTransaction {
-    const confidence = transactionType === 'income' 
-      ? extracted.confidence.overall 
-      : (matchedContractor?.confidence || 0);
-    
-    let status: ProcessedTransaction['status'];
-
-    if (confidence >= this.config.confidenceThresholds.autoApprove) {
-      status = 'auto-approved';
-    } else if (confidence >= this.config.confidenceThresholds.needsReview) {
-      status = 'needs-review';
-    } else {
-      status = 'needs-manual-input';
-    }
-
+  protected async doParse(content: string): Promise<ParseResult<XmlTransaction>> {
+    const statement = await this.parser.parse(content);
     return {
-      original: transaction,
-      extracted,
-      transactionType,
-      matchedContractor,
-      status,
+      transactions: statement.transactions,
     };
   }
 
-  /**
-   * Generate final import result
-   */
-  private generateResult(
-    processed: ProcessedTransaction[],
-    totalTransactions: number
-  ): ImportResult {
-    const summary = {
-      autoApproved: processed.filter((p) => p.status === 'auto-approved').length,
-      needsReview: processed.filter((p) => p.status === 'needs-review').length,
-      needsManualInput: processed.filter((p) => p.status === 'needs-manual-input').length,
-      skipped: totalTransactions - processed.length,
-    };
+  protected doFilter(
+    transactions: XmlTransaction[],
+    opts: { skipNegative: boolean; skipBankFees: boolean }
+  ): XmlTransaction[] {
+    return this.parser.filterTransactions(transactions, {
+      skipNegative: opts.skipNegative,
+      skipBankFees: opts.skipBankFees,
+    });
+  }
 
-    const extractionMethods = {
-      regex: processed.filter((p) => p.extracted.extractionMethod === 'regex').length,
-      ai: processed.filter((p) => p.extracted.extractionMethod === 'ai').length,
-      cache: processed.filter((p) => p.extracted.extractionMethod === 'cache').length,
-      manual: processed.filter((p) => p.extracted.extractionMethod === 'manual').length,
-    };
+  protected isIncome(transaction: XmlTransaction): boolean {
+    return transaction.value >= 0;
+  }
 
-    const totalConfidence = processed.reduce((sum, p) => sum + p.extracted.confidence.overall, 0);
-    const averageConfidence = processed.length > 0 ? totalConfidence / processed.length : 0;
-
+  protected normalize(transaction: XmlTransaction): NormalizedTransaction {
+    // XmlTransaction already has the normalized shape
     return {
-      totalTransactions,
-      processed,
-      summary,
-      statistics: {
-        averageConfidence,
-        extractionMethods,
-      },
-      errors: [],
+      descBase: transaction.descBase,
+      descOpt: transaction.descOpt,
+      exeDate: transaction.exeDate,
+      creatDate: transaction.creatDate,
+      value: transaction.value,
+      accValue: transaction.accValue,
+      realValue: transaction.realValue,
+      trnCode: transaction.trnCode,
     };
   }
 
-  /**
-   * Export transactions to TXT format for accounting system
-   */
-  exportToCsv(transactions: ProcessedTransaction[]): string {
-    const exporter = new CsvExporter({
-      separator: '\t',  // TAB separator
-      dateFormat: 'D.MM.YYYY',
-      decimalSeparator: ',',
-    });
-
-    return exporter.export(transactions);
+  protected extractWithRegex(transaction: XmlTransaction): BaseExtractedData | null {
+    // Santander regex returns null when confidence < 70%
+    return this.regexExtractor.extract(transaction) as unknown as BaseExtractedData | null;
   }
 
-  /**
-   * Export preview file with transaction details and matching information
-   */
-  exportAuxiliaryFile(transactions: ProcessedTransaction[]): string {
-    const exporter = new CsvExporter({
-      separator: '\t',
-      dateFormat: 'D.MM.YYYY',
-      decimalSeparator: ',',
-    });
-
-    return exporter.exportAuxiliary(transactions);
+  protected buildRawData(transaction: XmlTransaction): Record<string, any> {
+    return {
+      descBase: transaction.descBase,
+      descOpt: transaction.descOpt,
+    };
   }
 
-  /**
-   * Get cache statistics
-   */
-  getCacheStats() {
-    return this.cache.getStats();
+  protected createCsvExporter(options?: any): ICsvExporter<XmlTransaction> {
+    return new CsvExporter(options) as unknown as ICsvExporter<XmlTransaction>;
   }
 
-  /**
-   * Clear cache
-   */
-  clearCache() {
-    this.cache.clear();
+  // ── Hook overrides (Santander-specific behavior) ───────────
+
+  /** Santander checks cache before regex. */
+  protected shouldCheckCacheBeforeRegex(): boolean {
+    return this.config.useCache;
+  }
+
+  /** Santander caches successful regex results. */
+  protected shouldCacheRegexResults(): boolean {
+    return this.config.useCache;
+  }
+
+  /** Santander uses 90% threshold for regex acceptance. */
+  protected regexAcceptThreshold(): number {
+    return 90;
+  }
+
+  /** Santander has explicit toggle for AI expenses. */
+  protected shouldUseAIForExpenses(): boolean {
+    return this.localConfig.useAIForExpenses ?? false;
   }
 }
 
@@ -600,6 +126,4 @@ export class SantanderXmlConverter {
 export * from './types';
 export { SantanderXmlParser } from './parser';
 export { RegexExtractor } from './regex-extractor';
-export { AIExtractor } from '../../shared/ai-extractor';
-export { ExtractionCache } from '../../shared/extraction-cache';
 export { CsvExporter } from './csv-exporter';

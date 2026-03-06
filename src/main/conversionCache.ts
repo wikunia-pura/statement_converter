@@ -2,10 +2,6 @@
  * In-memory cache for pending conversions awaiting user review
  */
 
-import { TransactionForReview } from '../shared/types';
-import { ProcessedTransaction } from '../converters/pko-mt940/types';
-import { ProcessedTransaction as SantanderProcessedTransaction } from '../converters/santander-xml/types';
-
 interface CachedConversion {
   id: string;
   fileName: string;
@@ -13,7 +9,7 @@ interface CachedConversion {
   converterId: string;
   inputPath: string;
   outputPath: string;
-  processedTransactions: ProcessedTransaction[] | SantanderProcessedTransaction[];
+  processedTransactions: any[];
   previewOutput: string;
   createdAt: Date;
 }
@@ -38,7 +34,7 @@ class ConversionCache {
     converterId: string,
     inputPath: string,
     outputPath: string,
-    processedTransactions: ProcessedTransaction[] | SantanderProcessedTransaction[],
+    processedTransactions: any[],
     previewOutput: string
   ): string {
     const id = this.generateId();

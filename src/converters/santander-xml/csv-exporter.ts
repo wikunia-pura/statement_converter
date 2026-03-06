@@ -372,14 +372,10 @@ export class CsvExporter {
     if (apartmentNumber.toUpperCase() === 'ZGN') {
       return '204-000000';
     }
-    // If contains a dash, it's already a full account number (e.g. 760-00001 or HWDP)
-    if (apartmentNumber.includes('-')) return apartmentNumber;
-
-    // Remove any non-numeric characters and pad with zeros
-    const numericPart = apartmentNumber.replace(/\D/g, '');
-    const paddedNumber = numericPart.padStart(6, '0');
-    
-    return `204-${paddedNumber}`;
+    // If NOT pure digits (contains letters, dashes, etc), it's an account symbol - use as-is
+    if (!/^\d+$/.test(apartmentNumber)) return apartmentNumber;
+    // Pure digits - it's an apartment number, format as 204-XXXXXX
+    return `204-${apartmentNumber.padStart(6, '0')}`;
   }
 
   /**

@@ -3,6 +3,7 @@ import { FileEntry, Bank, Adres, ConversionReviewData, ReviewDecision } from '..
 import { translations, Language } from '../translations';
 import { generateId } from '../../shared/utils';
 import { TransactionReviewScreen } from '../components/TransactionReviewScreen';
+import bankIcon from '../assets/bank.png';
 
 interface SearchableAdresSelectProps {
   adresy: Adres[];
@@ -945,7 +946,18 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
           </div>
         ) : !selectedBank ? (
           <div className="card" style={{ textAlign: 'center', padding: '60px 40px' }}>
-            <div style={{ fontSize: '48px', marginBottom: '20px' }}>🏦</div>
+            <div style={{ marginBottom: '20px' }}>
+              <img 
+                src={bankIcon} 
+                alt="Bank" 
+                style={{ 
+                  width: '240px', 
+                  height: '240px', 
+                  objectFit: 'contain',
+                  filter: isDarkMode ? 'brightness(0.9)' : 'none'
+                }} 
+              />
+            </div>
             <h2 style={{ marginBottom: '10px', fontSize: '24px', color: '#667eea' }}>
               {t.selectBank}
             </h2>

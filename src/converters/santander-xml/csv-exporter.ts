@@ -372,6 +372,8 @@ export class CsvExporter {
     if (apartmentNumber.toUpperCase() === 'ZGN') {
       return '204-000000';
     }
+    // If already a full account number (e.g. 760-00001), use as-is
+    if (/^\d{3}-\d+$/.test(apartmentNumber)) return apartmentNumber;
 
     // Remove any non-numeric characters and pad with zeros
     const numericPart = apartmentNumber.replace(/\D/g, '');

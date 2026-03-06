@@ -612,10 +612,6 @@ function setupIpcHandlers() {
   ipcMain.handle(IPC_CHANNELS.SELECT_FILES, async () => {
     const result = await dialog.showOpenDialog(mainWindow!, {
       properties: ['openFile', 'multiSelections'],
-      filters: [
-        { name: 'Bank Statements + PDF', extensions: ['xml', 'txt', '940', 'mt940', 'csv', 'xlsx', 'xls', 'pdf'] },
-        { name: 'All Files', extensions: ['*'] },
-      ],
     });
 
     if (!result.canceled) {

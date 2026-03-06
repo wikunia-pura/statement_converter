@@ -268,12 +268,31 @@ export class AddressMatcher {
       return { building: null, apartment: lokaluMatch[1], source: 'identifier' };
     }
 
+    // === PREFIX PATTERNS (higher priority than address patterns) ===
+    // "mieszkanie X", "lok. X", "m. X" etc. - explicit apartment references
+    // These are treated as identifiers (trusted without address validation)
+
+    // "mieszkanie 111", "lok. 111", "lok 111", "loc. 111", "lokal 111", "m. 111", "m.111"
+    const prefixMatch = normalized.match(
+      /\b(?:mieszkanie|lok\.?|loc\.?|lokal)\s*(\d+)|\bm\.?\s*(\d+)(?!\s*pln)/i
+    );
+    if (prefixMatch) {
+      const apt = prefixMatch[1] || prefixMatch[2];
+      if (apt && apt.length <= 4) {
+        return { building: null, apartment: apt, source: 'identifier' };
+      }
+    }
+
     // === ADDRESS-BASED PATTERNS ===
     // Extract apartment from address format: "Street XX/YY"
+    // NOTE: Exclude dates (MM/20XX or XX/19XX patterns)
+    // NOTE: Exclude common non-street words (CZYNSZ, ZALICZKA, FUNDUSZ, REMONTOWY, etc.)
 
     // "AL. LOTNIKÓW 20/82" or "ALEJA LOTNIKÓW20/51" (with street prefix)
+    // Exclude dates: use negative lookahead to prevent matching 19XX or 20XX as apartment
+    // Support building numbers with optional letter: 2A, 2B, etc.
     const addressWithPrefix = text.match(
-      /(?:aleja|al\.|ulica|ul\.)\s*[\wąćęłńóśźżĄĆĘŁŃÓŚŹŻ\s]+?\s*(\d{1,3})\/(\d{1,4})/i
+      /(?:aleja|al\.|ulica|ul\.)\s*[\wąćęłńóśźżĄĆĘŁŃÓŚŹŻ\s]+?\s*(\d{1,3}[A-Z]?)\/(?!(?:19|20)\d{2})(\d{1,4})/i
     );
     if (addressWithPrefix && addressWithPrefix[2].length <= 3) {
       return {
@@ -284,37 +303,28 @@ export class AddressMatcher {
     }
 
     // "Lotników 20/33" (without prefix, street name must be 4+ chars)
+    // Exclude dates: apartment cannot be 19XX or 20XX (years)
+    // Exclude common non-street words with negative lookbehind
+    // Support building numbers with optional letter: 2A, 2B, etc.
     const streetSlash = text.match(
-      /[a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ]{4,}\s+(\d{1,3})\/(\d{1,4})/i
+      /(?<!czynsz|zaliczka|zaliczki|fundusz|remontowy|remontowa|opłata|oplata|rata|wpłata|wplata|przelew|należność|naleznosc)\s+([a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ]{4,})\s+(\d{1,3}[A-Z]?)\/(?!(?:19|20)\d{2})(\d{1,4})/i
     );
-    if (streetSlash && streetSlash[2].length <= 3) {
+    if (streetSlash && streetSlash[3].length <= 3) {
       return {
-        building: streetSlash[1],
-        apartment: streetSlash[2],
+        building: streetSlash[2],
+        apartment: streetSlash[3],
         source: 'address-pattern',
       };
     }
 
-    // === PREFIX PATTERNS ===
-    // "mieszkanie X", "lok. X", "m. X" etc.
+    // === POSTAL CODE PATTERNS ===
 
     // Handle glued postal codes: "lok. 5602-668" → apartment=56, postal=02-668
     const postalGlued = normalized.match(
-      /\b(?:mieszkanie|lok\.?|loc\.?)\s*(\d{1,3})(0[0-9]-\d{3})/i
+      /\b(?:mieszkanie|lok\.?|loc\.|lokal)\s*(\d{1,3})(0[0-9]-\d{3})/i
     );
     if (postalGlued) {
-      return { building: null, apartment: postalGlued[1], source: 'prefix-pattern' };
-    }
-
-    // "mieszkanie 111", "lok. 111", "loc. 111", "m. 111", "m.111"
-    const prefixMatch = normalized.match(
-      /\b(?:mieszkanie|lok\.?|loc\.?)\s*(\d+)|\bm\.?\s*(\d+)(?!\s*pln)/i
-    );
-    if (prefixMatch) {
-      const apt = prefixMatch[1] || prefixMatch[2];
-      if (apt && apt.length <= 4) {
-        return { building: null, apartment: apt, source: 'prefix-pattern' };
-      }
+      return { building: null, apartment: postalGlued[1], source: 'identifier' };
     }
 
     // === FALLBACK ===
@@ -421,22 +431,30 @@ export class AddressMatcher {
     }
 
     // Pattern 2: "LOTNIKÓW 20 100" (street name without prefix)
+    // BUT: Exclude common non-street words (CZYNSZ, FUNDUSZ, etc.)
     const pattern2 =
       /([\wąćęłńóśźż]+(?:\s+[\wąćęłńóśźż]+)?)\s+(\d+)\s*[/\s]?\s*(?:m\.?\s*)?(?:lok\.?\s*)?(\d+)?/i;
     const match2 = normalizedText.match(pattern2);
     if (match2 && match2[1].length > 3) {
-      const streetName = this.capitalizeStreet(match2[1]);
-      const buildingNumber = match2[2];
-      const apartmentNumber = existingApartment || match2[3] || null;
+      // Blacklist: words that are NOT street names
+      const blacklist = /^(czynsz|zaliczka|zaliczki|fundusz|remontowy|remontowa|opłata|oplata|rata|wpłata|wplata|przelew|należność|naleznosc|płatność|platnosc|faktura|rachunek|za\s+)/i;
+      const streetCandidate = match2[1].trim();
+      
+      // Skip if matched word is in blacklist
+      if (!blacklist.test(streetCandidate)) {
+        const streetName = this.capitalizeStreet(match2[1]);
+        const buildingNumber = match2[2];
+        const apartmentNumber = existingApartment || match2[3] || null;
 
-      return {
-        streetName,
-        buildingNumber,
-        apartmentNumber,
-        fullAddress: apartmentNumber
-          ? `${streetName} ${buildingNumber}/${apartmentNumber}`
-          : `${streetName} ${buildingNumber}`,
-      };
+        return {
+          streetName,
+          buildingNumber,
+          apartmentNumber,
+          fullAddress: apartmentNumber
+            ? `${streetName} ${buildingNumber}/${apartmentNumber}`
+            : `${streetName} ${buildingNumber}`,
+        };
+      }
     }
 
     return {

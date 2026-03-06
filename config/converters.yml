@@ -17,3 +17,11 @@ converters:
   - id: alior
     name: Alior Bank (MT940)
     description: Alior Bank MT940 format statements with AI-powered tenant extraction
+
+  - id: pko_biznes
+    name: PKO Biznes (ELIXIR ZIP)
+    description: PKO Biznes ELIXIR CSV files in ZIP archive with AI-powered tenant extraction
+
+  - id: pko_sa
+    name: PKO SA (EXP)
+    description: PKO SA bank export format (.exp) with AI-powered tenant extraction

@@ -561,7 +561,23 @@ class ConverterRegistry {
           originalValue: originalApartmentNumber
         };
       } else if (decision.action === 'manual') {
-        if (decision.manualApartmentNumber) {
+        if (decision.manualRemainingIncomeId) {
+          // Use user-selected "Pozostałe przychody" entry (for income)
+          const selectedEntry = contractors.find(k => k.id === decision.manualRemainingIncomeId);
+          if (selectedEntry) {
+            // Set apartment number to the account of the remaining income entry
+            trn.extracted.apartmentNumber = selectedEntry.kontoKontrahenta;
+            trn.extracted.confidence.overall = 100;
+            trn.extracted.confidence.apartment = 100;
+            
+            trn.reviewedByUser = {
+              action: 'manual',
+              originalValue: originalApartmentNumber,
+              manualValue: selectedEntry.kontoKontrahenta,
+              manualRemainingIncomeId: decision.manualRemainingIncomeId
+            };
+          }
+        } else if (decision.manualApartmentNumber) {
           // Use user-provided apartmentNumber (for income)
           trn.extracted.apartmentNumber = decision.manualApartmentNumber;
           // Boost confidence since user manually entered it
@@ -576,7 +592,25 @@ class ConverterRegistry {
           };
         }
         
-        if (decision.manualContractorId && trn.matchedContractor) {
+        if (decision.manualRemainingCostId && trn.matchedContractor) {
+          // Use user-selected "Pozostałe koszty" entry (for expense)
+          const selectedEntry = contractors.find(k => k.id === decision.manualRemainingCostId);
+          if (selectedEntry) {
+            trn.matchedContractor.contractor = selectedEntry;
+            trn.matchedContractor.confidence = 100;
+            trn.matchedContractor.matchedIn = 'manual' as any;
+            
+            trn.reviewedByUser = {
+              ...trn.reviewedByUser,
+              action: 'manual',
+              originalContractorValue: {
+                name: trn.matchedContractor.contractor?.nazwa || null,
+                account: trn.matchedContractor.contractor?.kontoKontrahenta || null
+              },
+              manualRemainingCostId: decision.manualRemainingCostId
+            };
+          }
+        } else if (decision.manualContractorId && trn.matchedContractor) {
           // Use user-selected contractor (for expense)
           const originalContractorName = trn.matchedContractor.contractor?.nazwa || null;
           const originalContractorAccount = trn.matchedContractor.contractor?.kontoKontrahenta || null;

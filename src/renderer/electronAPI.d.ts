@@ -1,6 +1,6 @@
 // Type definitions for Electron API exposed via preload
 
-import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ConversionReviewData, ReviewDecision } from '../shared/types';
+import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ConversionReviewData, ReviewDecision, KontrahentTyp } from '../shared/types';
 
 interface ConversionResult {
   success?: boolean;
@@ -22,8 +22,8 @@ interface ElectronAPI {
 
   // Kontrahenci
   getKontrahenci: () => Promise<Kontrahent[]>;
-  addKontrahent: (nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[]) => Promise<Kontrahent>;
-  updateKontrahent: (id: number, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[]) => Promise<boolean>;
+  addKontrahent: (nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typ?: KontrahentTyp) => Promise<Kontrahent>;
+  updateKontrahent: (id: number, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typ?: KontrahentTyp) => Promise<boolean>;
   deleteKontrahent: (id: number) => Promise<boolean>;
   deleteAllKontrahenci: () => Promise<boolean>;
   importKontrahenciFromFile: () => Promise<{ success: boolean; added?: number; updated?: number; error?: string }>;

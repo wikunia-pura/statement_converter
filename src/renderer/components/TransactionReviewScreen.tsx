@@ -10,6 +10,7 @@ interface SearchableContractorSelectProps {
   onChange: (contractorId: number | null) => void;
   placeholder: string;
   searchPlaceholder: string;
+  disabled?: boolean;
 }
 
 const SearchableContractorSelect: React.FC<SearchableContractorSelectProps> = ({
@@ -17,7 +18,8 @@ const SearchableContractorSelect: React.FC<SearchableContractorSelectProps> = ({
   selectedContractorId,
   onChange,
   placeholder,
-  searchPlaceholder
+  searchPlaceholder,
+  disabled = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -54,15 +56,15 @@ const SearchableContractorSelect: React.FC<SearchableContractorSelectProps> = ({
   };
 
   return (
-    <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
+    <div ref={containerRef} style={{ position: 'relative', width: '100%', opacity: disabled ? 0.5 : 1 }}>
       <div
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => !disabled && setIsOpen(!isOpen)}
         style={{
           padding: '6px 10px',
           border: '1px solid #3c3c3c',
           borderRadius: '4px',
-          cursor: 'pointer',
-          backgroundColor: '#1e1e1e',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          backgroundColor: disabled ? '#2a2a2a' : '#1e1e1e',
           minHeight: '34px',
           display: 'flex',
           alignItems: 'center',
@@ -359,10 +361,16 @@ interface TransactionCardProps {
   currentDecision: ReviewDecision | undefined;
   manualInput: string | undefined;
   manualContractorId: number | undefined;
+  manualRemainingIncomeId: number | undefined;
+  manualRemainingCostId: number | undefined;
   kontrahenci: Kontrahent[];
+  remainingIncomeEntries: Kontrahent[];
+  remainingCostEntries: Kontrahent[];
   handleDecision: (index: number, action: 'accept' | 'reject') => void;
   handleManualInput: (index: number, value: string) => void;
   handleManualContractorSelect: (index: number, contractorId: number | null) => void;
+  handleManualRemainingIncomeSelect: (index: number, entryId: number | null) => void;
+  handleManualRemainingCostSelect: (index: number, entryId: number | null) => void;
   language: Language;
   pdfLines?: string[];
 }
@@ -373,10 +381,16 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
   currentDecision,
   manualInput,
   manualContractorId,
+  manualRemainingIncomeId,
+  manualRemainingCostId,
   kontrahenci,
+  remainingIncomeEntries,
+  remainingCostEntries,
   handleDecision,
   handleManualInput,
   handleManualContractorSelect,
+  handleManualRemainingIncomeSelect,
+  handleManualRemainingCostSelect,
   language,
   pdfLines,
 }) => {
@@ -687,94 +701,133 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
     {/* Decision Buttons */}
     <div style={{ marginTop: '15px' }}>
       <h4 style={{ margin: '0 0 10px 0', color: '#C586C0' }}>✅ Decyzja:</h4>
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-        {/* Show Accept only when there's meaningful extracted data to accept */}
-        {((trn.transactionType === 'expense' && trn.matchedContractor?.contractorName) || (trn.transactionType === 'income' && trn.extracted.apartmentNumber)) && (
-          <button
-            onClick={() => handleDecision(trn.index, 'accept')}
-            disabled={!!(manualInput && manualInput.trim().length > 0) || manualContractorId !== undefined}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: ((manualInput && manualInput.trim().length > 0) || manualContractorId !== undefined)
-                ? '#555'
-                : currentDecision?.action === 'accept' ? '#2e7d32' : '#4CAF50',
-              color: ((manualInput && manualInput.trim().length > 0) || manualContractorId !== undefined) ? '#888' : 'white',
-              border: 'none',
-              borderRadius: '3px',
-              cursor: ((manualInput && manualInput.trim().length > 0) || manualContractorId !== undefined) ? 'not-allowed' : 'pointer',
-              fontWeight: currentDecision?.action === 'accept' ? 'bold' : 'normal',
-              opacity: ((manualInput && manualInput.trim().length > 0) || manualContractorId !== undefined) ? 0.5 : 1,
-            }}
-          >
-            ✓ Akceptuj
-          </button>
-        )}
-        <button
-          onClick={() => handleDecision(trn.index, 'reject')}
-          disabled={!!(manualInput && manualInput.trim().length > 0) || manualContractorId !== undefined}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: ((manualInput && manualInput.trim().length > 0) || manualContractorId !== undefined)
-              ? '#555'
-              : currentDecision?.action === 'reject' ? '#b71c1c' : '#d32f2f',
-            color: ((manualInput && manualInput.trim().length > 0) || manualContractorId !== undefined) ? '#888' : 'white',
-            border: 'none',
-            borderRadius: '3px',
-            cursor: ((manualInput && manualInput.trim().length > 0) || manualContractorId !== undefined) ? 'not-allowed' : 'pointer',
-            fontWeight: currentDecision?.action === 'reject' ? 'bold' : 'normal',
-            opacity: ((manualInput && manualInput.trim().length > 0) || manualContractorId !== undefined) ? 0.5 : 1,
-          }}
-        >
-          ✗ Oznacz jako nierozpoznane
-        </button>
-      </div>
-      {(manualInput && manualInput.trim().length > 0) && (
-        <div style={{ fontSize: '12px', color: '#DCDCAA', marginBottom: '10px', fontStyle: 'italic' }}>
-          ⚠ Wyczyść pole ręcznego wprowadzania, aby użyć przycisków akceptuj/odrzuć
-        </div>
-      )}
-      {manualContractorId !== undefined && (
-        <div style={{ fontSize: '12px', color: '#DCDCAA', marginBottom: '10px', fontStyle: 'italic' }}>
-          ⚠ Resetuj wybór kontrahenta ("Brak przypisania"), aby użyć przycisków akceptuj/odrzuć
-        </div>
-      )}
+      {(() => {
+        const hasManualOverride = !!(manualInput && manualInput.trim().length > 0) 
+          || manualContractorId !== undefined 
+          || manualRemainingIncomeId !== undefined 
+          || manualRemainingCostId !== undefined;
+        return (
+          <>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+              {/* Show Accept only when there's meaningful extracted data to accept */}
+              {((trn.transactionType === 'expense' && trn.matchedContractor?.contractorName) || (trn.transactionType === 'income' && trn.extracted.apartmentNumber)) && (
+                <button
+                  onClick={() => handleDecision(trn.index, 'accept')}
+                  disabled={hasManualOverride}
+                  style={{
+                    padding: '10px 20px',
+                    backgroundColor: hasManualOverride
+                      ? '#555'
+                      : currentDecision?.action === 'accept' ? '#2e7d32' : '#4CAF50',
+                    color: hasManualOverride ? '#888' : 'white',
+                    border: 'none',
+                    borderRadius: '3px',
+                    cursor: hasManualOverride ? 'not-allowed' : 'pointer',
+                    fontWeight: currentDecision?.action === 'accept' ? 'bold' : 'normal',
+                    opacity: hasManualOverride ? 0.5 : 1,
+                  }}
+                >
+                  ✓ Akceptuj
+                </button>
+              )}
+              <button
+                onClick={() => handleDecision(trn.index, 'reject')}
+                disabled={hasManualOverride}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: hasManualOverride
+                    ? '#555'
+                    : currentDecision?.action === 'reject' ? '#b71c1c' : '#d32f2f',
+                  color: hasManualOverride ? '#888' : 'white',
+                  border: 'none',
+                  borderRadius: '3px',
+                  cursor: hasManualOverride ? 'not-allowed' : 'pointer',
+                  fontWeight: currentDecision?.action === 'reject' ? 'bold' : 'normal',
+                  opacity: hasManualOverride ? 0.5 : 1,
+                }}
+              >
+                ✗ Oznacz jako nierozpoznane
+              </button>
+            </div>
+            {hasManualOverride && (
+              <div style={{ fontSize: '12px', color: '#DCDCAA', marginBottom: '10px', fontStyle: 'italic' }}>
+                ⚠ Wyczyść ręczne przypisanie, aby użyć przycisków akceptuj/odrzuć
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* Manual Input (only for income) */}
       {trn.transactionType === 'income' && (
-        <div>
-          <label style={{ display: 'block', marginBottom: '5px', color: '#C586C0' }}>
-            Numer mieszkania {trn.extracted.apartmentNumber ? '(możesz edytować)' : '(wpisz ręcznie)'}:
-          </label>
-          <input
-            type="text"
-            value={manualInput || ''}
-            onChange={(e) => handleManualInput(trn.index, (e.target as HTMLInputElement).value)}
-            placeholder="np. 42, ZGN"
-            style={{
-              padding: '8px',
-              backgroundColor: '#3c3c3c',
-              color: '#d4d4d4',
-              border: '1px solid #555',
-              borderRadius: '3px',
-              width: '200px',
-            }}
-          />
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div style={{ minWidth: '200px', maxWidth: '220px' }}>
+            <label style={{ display: 'block', marginBottom: '5px', color: '#C586C0' }}>
+              Numer mieszkania {trn.extracted.apartmentNumber ? '(możesz edytować)' : '(wpisz ręcznie)'}:
+            </label>
+            <input
+              type="text"
+              value={manualInput || ''}
+              onChange={(e) => handleManualInput(trn.index, (e.target as HTMLInputElement).value)}
+              placeholder="np. 42, ZGN"
+              disabled={manualRemainingIncomeId !== undefined}
+              style={{
+                padding: '8px',
+                backgroundColor: manualRemainingIncomeId !== undefined ? '#2a2a2a' : '#3c3c3c',
+                color: manualRemainingIncomeId !== undefined ? '#666' : '#d4d4d4',
+                border: '1px solid #555',
+                borderRadius: '3px',
+                width: '100%',
+                boxSizing: 'border-box' as const,
+                opacity: manualRemainingIncomeId !== undefined ? 0.5 : 1,
+              }}
+            />
+          </div>
+          <div style={{ minWidth: '250px', maxWidth: '350px' }}>
+            <label style={{ display: 'block', marginBottom: '5px', color: '#5B9BD5' }}>
+              {language === 'pl' ? 'Pozostałe przychody' : 'Remaining income'}:
+            </label>
+            <SearchableContractorSelect
+              kontrahenci={remainingIncomeEntries}
+              selectedContractorId={manualRemainingIncomeId !== undefined ? manualRemainingIncomeId : null}
+              onChange={(entryId) => handleManualRemainingIncomeSelect(trn.index, entryId)}
+              placeholder={language === 'pl' ? 'Wybierz pozostały przychód...' : 'Select remaining income...'}
+              searchPlaceholder={language === 'pl' ? 'Szukaj po nazwie...' : 'Search by name...'}
+              disabled={!!(manualInput && manualInput.trim().length > 0)}
+            />
+          </div>
         </div>
       )}
 
       {/* Manual Contractor Selection (only for expense) */}
       {trn.transactionType === 'expense' && (
-        <div>
-          <label style={{ display: 'block', marginBottom: '5px', color: '#C586C0' }}>
-            Wybierz kontrahenta {trn.matchedContractor?.contractorName ? '(możesz zmienić)' : '(wybierz ręcznie)'}:
-          </label>
-          <SearchableContractorSelect
-            kontrahenci={kontrahenci}
-            selectedContractorId={manualContractorId !== undefined ? manualContractorId : null}
-            onChange={(contractorId) => handleManualContractorSelect(trn.index, contractorId)}
-            placeholder="Brak przypisania"
-            searchPlaceholder="Szukaj kontrahenta po nazwie lub NIP..."
-          />
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div style={{ flex: '1', minWidth: '250px' }}>
+            <label style={{ display: 'block', marginBottom: '5px', color: '#C586C0' }}>
+              Wybierz kontrahenta {trn.matchedContractor?.contractorName ? '(możesz zmienić)' : '(wybierz ręcznie)'}:
+            </label>
+            <SearchableContractorSelect
+              kontrahenci={kontrahenci}
+              selectedContractorId={manualContractorId !== undefined ? manualContractorId : null}
+              onChange={(contractorId) => handleManualContractorSelect(trn.index, contractorId)}
+              placeholder="Brak przypisania"
+              searchPlaceholder="Szukaj kontrahenta po nazwie lub NIP..."
+              disabled={manualRemainingCostId !== undefined}
+            />
+          </div>
+          <div style={{ flex: '1', minWidth: '250px' }}>
+            <label style={{ display: 'block', marginBottom: '5px', color: '#CE9178' }}>
+              {language === 'pl' ? 'Pozostałe koszty' : 'Remaining costs'}:
+            </label>
+            <SearchableContractorSelect
+              kontrahenci={remainingCostEntries}
+              selectedContractorId={manualRemainingCostId !== undefined ? manualRemainingCostId : null}
+              onChange={(entryId) => handleManualRemainingCostSelect(trn.index, entryId)}
+              placeholder={language === 'pl' ? 'Wybierz pozostały koszt...' : 'Select remaining cost...'}
+              searchPlaceholder={language === 'pl' ? 'Szukaj po nazwie...' : 'Search by name...'}
+              disabled={manualContractorId !== undefined}
+            />
+          </div>
         </div>
       )}
 
@@ -791,8 +844,14 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
           {currentDecision.action === 'accept' && '✓ Zaakceptowano wyekstrahowane dane'}
           {currentDecision.action === 'reject' && '✗ Oznaczono jako NIEROZPOZNANE'}
           {currentDecision.action === 'manual' && (() => {
-            if (trn.transactionType === 'income' && currentDecision.manualApartmentNumber) {
+            if (trn.transactionType === 'income' && currentDecision.manualRemainingIncomeId) {
+              const entry = remainingIncomeEntries.find(k => k.id === currentDecision.manualRemainingIncomeId);
+              return `✏️  Pozostały przychód: ${entry?.nazwa || 'Nieznany'} (${entry?.kontoKontrahenta || ''})`;
+            } else if (trn.transactionType === 'income' && currentDecision.manualApartmentNumber) {
               return `✏️  Ręcznie wpisano mieszkanie: ${currentDecision.manualApartmentNumber}`;
+            } else if (trn.transactionType === 'expense' && currentDecision.manualRemainingCostId) {
+              const entry = remainingCostEntries.find(k => k.id === currentDecision.manualRemainingCostId);
+              return `✏️  Pozostały koszt: ${entry?.nazwa || 'Nieznany'} (${entry?.kontoKontrahenta || ''})`;
             } else if (trn.transactionType === 'expense' && currentDecision.manualContractorId) {
               const selectedContractor = kontrahenci.find(k => k.id === currentDecision.manualContractorId);
               return `✏️  Ręcznie wybrano kontrahenta: ${selectedContractor?.nazwa || 'Nieznany'}`;
@@ -833,10 +892,17 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   // Manual inputs start empty - extracted values are shown in the input field as default
   const [manualInputs, setManualInputs] = useState<Map<number, string>>(new Map());
   const [manualContractorIds, setManualContractorIds] = useState<Map<number, number | null>>(new Map());
+  const [manualRemainingIncomeIds, setManualRemainingIncomeIds] = useState<Map<number, number | null>>(new Map());
+  const [manualRemainingCostIds, setManualRemainingCostIds] = useState<Map<number, number | null>>(new Map());
   
   const [kontrahenci, setKontrahenci] = useState<Kontrahent[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'income' | 'expense'>('all');
+
+  // Filter kontrahenci by type
+  const contractorEntries = kontrahenci.filter(k => (k.typ || 'Kontrahent') === 'Kontrahent');
+  const remainingIncomeEntries = kontrahenci.filter(k => k.typ === 'Pozostałe przychody');
+  const remainingCostEntries = kontrahenci.filter(k => k.typ === 'Pozostałe koszty');
 
   // Load kontrahenci on mount
   useEffect(() => {
@@ -878,6 +944,18 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
       const newManualContractorIds = new Map(manualContractorIds);
       newManualContractorIds.delete(index);
       setManualContractorIds(newManualContractorIds);
+    }
+    
+    // Clear remaining income/cost selections
+    if (manualRemainingIncomeIds.has(index)) {
+      const newIds = new Map(manualRemainingIncomeIds);
+      newIds.delete(index);
+      setManualRemainingIncomeIds(newIds);
+    }
+    if (manualRemainingCostIds.has(index)) {
+      const newIds = new Map(manualRemainingCostIds);
+      newIds.delete(index);
+      setManualRemainingCostIds(newIds);
     }
   };
 
@@ -922,6 +1000,46 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
     }
     
     setManualContractorIds(newManualContractorIds);
+    setDecisions(newDecisions);
+  };
+
+  const handleManualRemainingIncomeSelect = (index: number, entryId: number | null) => {
+    const newIds = new Map(manualRemainingIncomeIds);
+    const newDecisions = new Map(decisions);
+    
+    if (entryId === null) {
+      newIds.delete(index);
+      newDecisions.delete(index);
+    } else {
+      newIds.set(index, entryId);
+      newDecisions.set(index, {
+        index,
+        action: 'manual',
+        manualRemainingIncomeId: entryId,
+      });
+    }
+    
+    setManualRemainingIncomeIds(newIds);
+    setDecisions(newDecisions);
+  };
+
+  const handleManualRemainingCostSelect = (index: number, entryId: number | null) => {
+    const newIds = new Map(manualRemainingCostIds);
+    const newDecisions = new Map(decisions);
+    
+    if (entryId === null) {
+      newIds.delete(index);
+      newDecisions.delete(index);
+    } else {
+      newIds.set(index, entryId);
+      newDecisions.set(index, {
+        index,
+        action: 'manual',
+        manualRemainingCostId: entryId,
+      });
+    }
+    
+    setManualRemainingCostIds(newIds);
     setDecisions(newDecisions);
   };
 
@@ -1099,6 +1217,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
             {incomeTransactions.map((trn) => {
               const currentDecision = decisions.get(trn.index);
               const manualInput = manualInputs.get(trn.index);
+              const manualRemainingIncomeId = manualRemainingIncomeIds.get(trn.index) ?? undefined;
               const idx = reviewData.transactions.indexOf(trn);
               
               return (
@@ -1108,8 +1227,17 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                   idx={idx}
                   currentDecision={currentDecision}
                   manualInput={manualInput}
+                  manualContractorId={undefined}
+                  manualRemainingIncomeId={manualRemainingIncomeId}
+                  manualRemainingCostId={undefined}
+                  kontrahenci={contractorEntries}
+                  remainingIncomeEntries={remainingIncomeEntries}
+                  remainingCostEntries={remainingCostEntries}
                   handleDecision={handleDecision}
                   handleManualInput={handleManualInput}
+                  handleManualContractorSelect={handleManualContractorSelect}
+                  handleManualRemainingIncomeSelect={handleManualRemainingIncomeSelect}
+                  handleManualRemainingCostSelect={handleManualRemainingCostSelect}
                   language={language}
                   pdfLines={reviewData.pdfLines}
                 />
@@ -1153,7 +1281,8 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
             {expenseTransactions.map((trn) => {
               const currentDecision = decisions.get(trn.index);
               const manualInput = manualInputs.get(trn.index);
-              const manualContractorId = manualContractorIds.get(trn.index);
+              const manualContractorId = manualContractorIds.get(trn.index) ?? undefined;
+              const manualRemainingCostId = manualRemainingCostIds.get(trn.index) ?? undefined;
               const idx = reviewData.transactions.indexOf(trn);
               
               return (
@@ -1164,10 +1293,16 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                   currentDecision={currentDecision}
                   manualInput={manualInput}
                   manualContractorId={manualContractorId}
-                  kontrahenci={kontrahenci}
+                  manualRemainingIncomeId={undefined}
+                  manualRemainingCostId={manualRemainingCostId}
+                  kontrahenci={contractorEntries}
+                  remainingIncomeEntries={remainingIncomeEntries}
+                  remainingCostEntries={remainingCostEntries}
                   handleDecision={handleDecision}
                   handleManualInput={handleManualInput}
                   handleManualContractorSelect={handleManualContractorSelect}
+                  handleManualRemainingIncomeSelect={handleManualRemainingIncomeSelect}
+                  handleManualRemainingCostSelect={handleManualRemainingCostSelect}
                   language={language}
                   pdfLines={reviewData.pdfLines}
                 />

@@ -7,11 +7,14 @@ export interface Bank {
   createdAt: string;
 }
 
+export type KontrahentTyp = 'Kontrahent' | 'Pozostałe przychody' | 'Pozostałe koszty';
+
 export interface Kontrahent {
   id: number;
   nazwa: string;
   kontoKontrahenta: string;
   nip?: string;
+  typ: KontrahentTyp;
   alternativeNames?: string[];
   createdAt: string;
 }
@@ -86,6 +89,8 @@ export interface ReviewDecision {
   action: 'accept' | 'reject' | 'manual';
   manualApartmentNumber?: string; // Used when action is 'manual' for income
   manualContractorId?: number; // Used when action is 'manual' for expense
+  manualRemainingIncomeId?: number; // Used when action is 'manual' for income - "Pozostałe przychody" entry
+  manualRemainingCostId?: number; // Used when action is 'manual' for expense - "Pozostałe koszty" entry
 }
 
 export interface ConversionReviewData {

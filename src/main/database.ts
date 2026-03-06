@@ -1,7 +1,7 @@
 import Store from 'electron-store';
 import path from 'path';
 import { app } from 'electron';
-import { Bank, ConversionHistory, AppSettings, Kontrahent, Adres } from '../shared/types';
+import { Bank, ConversionHistory, AppSettings, Kontrahent, Adres, KontrahentTyp } from '../shared/types';
 
 interface StoreSchema {
   banks: Bank[];
@@ -93,10 +93,15 @@ class DatabaseService {
   // Kontrahenci operations
   getAllKontrahenci(): Kontrahent[] {
     const kontrahenci = this.store.get('kontrahenci', []);
-    return kontrahenci.sort((a, b) => a.nazwa.localeCompare(b.nazwa));
+    // Migration: ensure every entry has a 'typ' field
+    const migrated = kontrahenci.map(k => ({
+      ...k,
+      typ: k.typ || 'Kontrahent' as KontrahentTyp,
+    }));
+    return migrated.sort((a, b) => a.nazwa.localeCompare(b.nazwa));
   }
 
-  addKontrahent(nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[]): Kontrahent {
+  addKontrahent(nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typ?: KontrahentTyp): Kontrahent {
     const kontrahenci = this.store.get('kontrahenci', []);
     const id = this.store.get('nextKontrahentId', 1);
     
@@ -105,6 +110,7 @@ class DatabaseService {
       nazwa,
       kontoKontrahenta,
       nip: nip || undefined,
+      typ: typ || 'Kontrahent',
       alternativeNames: alternativeNames || [],
       createdAt: new Date().toISOString(),
     };
@@ -116,7 +122,7 @@ class DatabaseService {
     return newKontrahent;
   }
 
-  updateKontrahent(id: number, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[]): void {
+  updateKontrahent(id: number, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typ?: KontrahentTyp): void {
     const kontrahenci = this.store.get('kontrahenci', []);
     const index = kontrahenci.findIndex(k => k.id === id);
     
@@ -126,6 +132,7 @@ class DatabaseService {
         nazwa, 
         kontoKontrahenta,
         nip: nip || kontrahenci[index].nip || undefined,
+        typ: typ || kontrahenci[index].typ || 'Kontrahent',
         alternativeNames: alternativeNames || kontrahenci[index].alternativeNames || []
       };
       this.store.set('kontrahenci', kontrahenci);

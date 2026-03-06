@@ -5,7 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import DatabaseService from './database';
 import ConverterRegistry, { setDatabaseInstance } from './converterRegistry';
-import { IPC_CHANNELS } from '../shared/types';
+import { IPC_CHANNELS, KontrahentTyp } from '../shared/types';
 import { extractPdfText } from '../shared/pdf-utils';
 
 // Log environment variable for testing
@@ -161,12 +161,12 @@ function setupIpcHandlers() {
     return database.getAllKontrahenci();
   });
 
-  ipcMain.handle(IPC_CHANNELS.ADD_KONTRAHENT, async (_, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[]) => {
-    return database.addKontrahent(nazwa, kontoKontrahenta, nip, alternativeNames);
+  ipcMain.handle(IPC_CHANNELS.ADD_KONTRAHENT, async (_, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typ?: string) => {
+    return database.addKontrahent(nazwa, kontoKontrahenta, nip, alternativeNames, typ as any);
   });
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_KONTRAHENT, async (_, id: number, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[]) => {
-    database.updateKontrahent(id, nazwa, kontoKontrahenta, nip, alternativeNames);
+  ipcMain.handle(IPC_CHANNELS.UPDATE_KONTRAHENT, async (_, id: number, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typ?: string) => {
+    database.updateKontrahent(id, nazwa, kontoKontrahenta, nip, alternativeNames, typ as any);
     return true;
   });
 
@@ -205,18 +205,21 @@ function setupIpcHandlers() {
       let wasNewlyAdded = false; // Track if lastKontrahent was just added
       let accumulatedNip: string | undefined = undefined;
       let accumulatedAltNames: string[] = [];
+      let accumulatedTyp: string | undefined = undefined;
       
       const finalizeLastKontrahent = () => {
-        if (lastKontrahent && (accumulatedNip || accumulatedAltNames.length > 0)) {
+        if (lastKontrahent && (accumulatedNip || accumulatedAltNames.length > 0 || accumulatedTyp)) {
           database.updateKontrahent(
             lastKontrahent.id, 
             lastKontrahent.nazwa, 
             lastKontrahent.kontoKontrahenta, 
             accumulatedNip, 
-            accumulatedAltNames
+            accumulatedAltNames,
+            accumulatedTyp as KontrahentTyp
           );
           if (accumulatedNip) lastKontrahent.nip = accumulatedNip;
           if (accumulatedAltNames.length > 0) lastKontrahent.alternativeNames = accumulatedAltNames;
+          if (accumulatedTyp) lastKontrahent.typ = accumulatedTyp;
           
           // Count as updated only if it wasn't just added (to avoid double counting)
           if (!wasNewlyAdded) {
@@ -258,6 +261,16 @@ function setupIpcHandlers() {
           continue;
         }
         
+        // Check if it's a TYP line
+        const typMatch = line.match(/^\s*TYP:\s*(.+)$/);
+        if (typMatch && lastKontrahent) {
+          const typValue = typMatch[1].trim();
+          if (typValue === 'Pozostałe przychody' || typValue === 'Pozostałe koszty') {
+            accumulatedTyp = typValue;
+          }
+          continue;
+        }
+        
         // Parse data line - Symbol and Nazwa are separated by spaces
         // Symbol is in format like "201-00001" and Nazwa follows, then multiple spaces before Z/N column
         // Example: "       201-00001    Miasto Stołeczne Warszawa                 Z   1   S"
@@ -267,6 +280,7 @@ function setupIpcHandlers() {
           finalizeLastKontrahent();
           accumulatedNip = undefined;
           accumulatedAltNames = [];
+          accumulatedTyp = undefined;
           
           const symbol = match[1].trim();
           const nazwa = match[2].trim();
@@ -382,6 +396,12 @@ function setupIpcHandlers() {
           continue;
         }
         
+        // Skip TYP lines - DOM import doesn't have this data
+        const typMatch = line.match(/^\s*TYP:\s*(.+)$/);
+        if (typMatch) {
+          continue;
+        }
+        
         // Parse data line - Symbol and Nazwa are separated by spaces
         const match = line.match(/^\s*(\d{3}-\d+)\s+(.+?)\s{2,}[ZN]\s+/);
         if (match) {
@@ -442,6 +462,11 @@ function setupIpcHandlers() {
         // Add alternative names if present
         if (k.alternativeNames && k.alternativeNames.length > 0) {
           lines.push(`    ALT: ${k.alternativeNames.join(', ')}`);
+        }
+        
+        // Add typ if not default
+        if (k.typ && k.typ !== 'Kontrahent') {
+          lines.push(`    TYP: ${k.typ}`);
         }
       }
       

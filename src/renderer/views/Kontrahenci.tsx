@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Kontrahent } from '../../shared/types';
+import { Kontrahent, KontrahentTyp } from '../../shared/types';
 import { translations, Language } from '../translations';
 
 interface KontrahenciProps {
@@ -14,6 +14,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
   const [newNazwa, setNewNazwa] = useState('');
   const [newKontoKontrahenta, setNewKontoKontrahenta] = useState('');
   const [newNip, setNewNip] = useState('');
+  const [newTyp, setNewTyp] = useState<KontrahentTyp>('Kontrahent');
   const [newAlternativeNames, setNewAlternativeNames] = useState<string[]>([]);
   const [newAlternativeName, setNewAlternativeName] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -52,10 +53,11 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
     }
 
     try {
-      await window.electronAPI.addKontrahent(newNazwa, newKontoKontrahenta, newNip || undefined, newAlternativeNames);
+      await window.electronAPI.addKontrahent(newNazwa, newKontoKontrahenta, newNip || undefined, newAlternativeNames, newTyp);
       setNewNazwa('');
       setNewKontoKontrahenta('');
       setNewNip('');
+      setNewTyp('Kontrahent');
       setNewAlternativeNames([]);
       setNewAlternativeName('');
       setShowAddKontrahent(false);
@@ -82,10 +84,11 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
     }
 
     try {
-      await window.electronAPI.updateKontrahent(editingKontrahent.id, newNazwa, newKontoKontrahenta, newNip || undefined, newAlternativeNames);
+      await window.electronAPI.updateKontrahent(editingKontrahent.id, newNazwa, newKontoKontrahenta, newNip || undefined, newAlternativeNames, newTyp);
       setNewNazwa('');
       setNewKontoKontrahenta('');
       setNewNip('');
+      setNewTyp('Kontrahent');
       setNewAlternativeNames([]);
       setNewAlternativeName('');
       setEditingKontrahent(null);
@@ -113,6 +116,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
     setNewNazwa(kontrahent.nazwa);
     setNewKontoKontrahenta(kontrahent.kontoKontrahenta);
     setNewNip(kontrahent.nip || '');
+    setNewTyp(kontrahent.typ || 'Kontrahent');
     setNewAlternativeNames(kontrahent.alternativeNames || []);
     setNewAlternativeName('');
   };
@@ -123,6 +127,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
     setNewNazwa('');
     setNewKontoKontrahenta('');
     setNewNip('');
+    setNewTyp('Kontrahent');
     setNewAlternativeNames([]);
     setNewAlternativeName('');
   };
@@ -331,6 +336,18 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
               />
             </div>
             <div className="form-group">
+              <label>{t.typ}</label>
+              <select
+                value={newTyp}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewTyp(e.target.value as KontrahentTyp)}
+                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #3c3c3c', backgroundColor: '#1e1e1e', color: '#e0e0e0', width: '100%', minWidth: '220px' }}
+              >
+                <option value="Kontrahent">{t.typKontrahent}</option>
+                <option value="Pozostałe przychody">{t.typPozostalePrzychody}</option>
+                <option value="Pozostałe koszty">{t.typPozostaleKoszty}</option>
+              </select>
+            </div>
+            <div className="form-group">
               <label>{t.alternativeNames}</label>
               <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
                 {t.alternativeNamesHint}
@@ -416,6 +433,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
                   <th>{t.nazwa}</th>
                   <th>{t.kontoKontrahenta}</th>
                   <th>{t.nip}</th>
+                  <th>{t.typ}</th>
                   <th>{t.actions}</th>
                 </tr>
               </thead>
@@ -432,6 +450,22 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
                     </td>
                     <td>{kontrahent.kontoKontrahenta}</td>
                     <td>{kontrahent.nip || '-'}</td>
+                    <td>
+                      <span style={{
+                        padding: '2px 8px',
+                        borderRadius: '10px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        backgroundColor: kontrahent.typ === 'Kontrahent' ? 'rgba(78, 201, 176, 0.15)' 
+                          : kontrahent.typ === 'Pozostałe przychody' ? 'rgba(91, 155, 213, 0.15)' 
+                          : 'rgba(206, 145, 120, 0.15)',
+                        color: kontrahent.typ === 'Kontrahent' ? '#4EC9B0' 
+                          : kontrahent.typ === 'Pozostałe przychody' ? '#5B9BD5' 
+                          : '#CE9178',
+                      }}>
+                        {kontrahent.typ || 'Kontrahent'}
+                      </span>
+                    </td>
                     <td>
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <button

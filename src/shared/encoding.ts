@@ -5,6 +5,7 @@
  * - UTF-8 (with and without BOM)
  * - ISO-8859-2 (Latin-2, used by Santander XML)
  * - Windows-1250 (CP1250, used by PKO MT940)
+ * - CP852 (DOS Latin-2, used by ING MT940)
  * - ISO-8859-1 (Latin-1, fallback)
  * 
  * Usage:
@@ -209,6 +210,9 @@ function normalizeEncodingName(name: string): string {
     'win1252': 'win1252',
     'windows1252': 'win1252',
     'cp1252': 'win1252',
+    'cp852': 'cp852',
+    'ibm852': 'cp852',
+    'dos852': 'cp852',
   };
 
   return encodingMap[normalized] || name;

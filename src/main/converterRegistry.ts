@@ -465,12 +465,18 @@ class ConverterRegistry {
         || (trn.transactionType === 'income' && !trn.extracted.apartmentNumber);
       
       if (needsReview) {
+        // For Santander, use 'value' (transaction amount) not 'realValue' (account balance)
+        // For other converters, 'realValue' is the absolute transaction amount
+        const amount = converterId === 'santander_xml' 
+          ? Math.abs(trn.normalized.value)
+          : trn.normalized.realValue;
+        
         const review: TransactionForReview = {
           index,
           transactionType: trn.transactionType,
           original: {
             date: trn.normalized.exeDate,
-            amount: trn.normalized.realValue,
+            amount: amount,
             description: trn.normalized.descBase,
             counterparty: trn.normalized.descOpt,
           },

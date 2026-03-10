@@ -118,6 +118,7 @@ export interface ConversionHistory {
 
 export interface AppSettings {
   outputFolder: string;
+  impexFolder: string;
   darkMode: boolean;
   language: 'pl' | 'en';
   aiConfidenceThreshold: number; // Minimum confidence to skip AI warning (default: 95)
@@ -168,6 +169,7 @@ export const IPC_CHANNELS = {
   // Settings
   GET_SETTINGS: 'settings:get',
   SET_OUTPUT_FOLDER: 'settings:set-output-folder',
+  SET_IMPEX_FOLDER: 'settings:set-impex-folder',
   SET_DARK_MODE: 'settings:set-dark-mode',
   SET_LANGUAGE: 'settings:set-language',
   SET_SKIP_USER_APPROVAL: 'settings:set-skip-user-approval',

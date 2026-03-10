@@ -34,6 +34,35 @@ export function setDatabaseInstance(db: DatabaseService) {
   dbInstance = db;
 }
 
+/**
+ * Helper function to save accounting file to IMPEX folder if configured
+ */
+function saveToImpexFolder(accountingFilePath: string, csvOutput: string): void {
+  if (!dbInstance) return;
+  
+  const impexFolder = dbInstance.getSetting('impexFolder');
+  if (!impexFolder) return; // IMPEX folder not configured
+  
+  try {
+    // Ensure IMPEX folder exists
+    if (!fs.existsSync(impexFolder)) {
+      fs.mkdirSync(impexFolder, { recursive: true });
+    }
+    
+    // Get just the filename from the accounting file path
+    const fileName = path.basename(accountingFilePath);
+    
+    // Write the file to IMPEX folder
+    const impexFilePath = path.join(impexFolder, fileName);
+    fs.writeFileSync(impexFilePath, csvOutput, 'utf8');
+    
+    console.log(`✅ Saved accounting file to IMPEX folder: ${impexFilePath}`);
+  } catch (error) {
+    console.error('Error saving to IMPEX folder:', error);
+    // Don't throw - IMPEX is optional, main file save is more important
+  }
+}
+
 interface AIConfig {
   ai: {
     anthropic_api_key: string;
@@ -916,6 +945,7 @@ class ConverterRegistry {
           const csvOutput = converter.exportToCsv(result.processed);
           const txtPath = outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
           fs.writeFileSync(txtPath, csvOutput, 'utf8');
+          saveToImpexFolder(txtPath, csvOutput);
           
           console.log(`✅ Generated preview file: ${podgladPath}`);
           console.log(`✅ Generated accounting file: ${txtPath}`);
@@ -1178,6 +1208,7 @@ class ConverterRegistry {
           const csvOutput = converter.exportToCsv(result.processed);
           const txtPath = outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
           fs.writeFileSync(txtPath, csvOutput, 'utf8');
+          saveToImpexFolder(txtPath, csvOutput);
           
           console.log(`✅ Generated preview file: ${podgladPath}`);
           console.log(`✅ Generated accounting file: ${txtPath}`);
@@ -1406,6 +1437,7 @@ class ConverterRegistry {
           const csvOutput = converter.exportToCsv(result.processed);
           const txtPath = outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
           fs.writeFileSync(txtPath, csvOutput, 'utf8');
+          saveToImpexFolder(txtPath, csvOutput);
 
           console.log(`✅ Generated preview file: ${podgladPath}`);
           console.log(`✅ Generated accounting file: ${txtPath}`);
@@ -1638,6 +1670,7 @@ class ConverterRegistry {
           const csvOutput = converter.exportToCsv(result.processed);
           const txtPath = outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
           fs.writeFileSync(txtPath, csvOutput, 'utf8');
+          saveToImpexFolder(txtPath, csvOutput);
 
           console.log(`✅ Generated preview file: ${podgladPath}`);
           console.log(`✅ Generated accounting file: ${txtPath}`);
@@ -1870,6 +1903,7 @@ class ConverterRegistry {
           const csvOutput = converter.exportToCsv(result.processed);
           const txtPath = outputPath.replace(/\.(txt|TXT|zip|ZIP)$/, '-accounting.txt');
           fs.writeFileSync(txtPath, csvOutput, 'utf8');
+          saveToImpexFolder(txtPath, csvOutput);
 
           console.log(`✅ Generated preview file: ${podgladPath}`);
           console.log(`✅ Generated accounting file: ${txtPath}`);
@@ -2086,6 +2120,7 @@ class ConverterRegistry {
           const csvOutput = converter.exportToCsv(result.processed);
           const txtPath = outputPath.replace(/\.(txt|TXT|exp|EXP)$/, '-accounting.txt');
           fs.writeFileSync(txtPath, csvOutput, 'utf8');
+          saveToImpexFolder(txtPath, csvOutput);
 
           console.log(`✅ Generated preview file: ${podgladPath}`);
           console.log(`✅ Generated accounting file: ${txtPath}`);
@@ -2318,6 +2353,7 @@ class ConverterRegistry {
           const csvOutput = converter.exportToCsv(result.processed);
           const txtPath = outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
           fs.writeFileSync(txtPath, csvOutput, 'utf8');
+          saveToImpexFolder(txtPath, csvOutput);
 
           console.log(`✅ Generated preview file: ${podgladPath}`);
           console.log(`✅ Generated accounting file: ${txtPath}`);
@@ -2422,6 +2458,7 @@ class ConverterRegistry {
       const csvOutput = converter.exportToCsv(updatedTransactions);
       const txtPath = cached.outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
       fs.writeFileSync(txtPath, csvOutput, 'utf8');
+      saveToImpexFolder(txtPath, csvOutput);
       
       // Generate updated preview file with user review information
       const podgladPath = cached.outputPath.replace(/\.(txt|TXT)$/, '-podglad.txt');

@@ -10,6 +10,7 @@ interface StoreSchema {
   history: ConversionHistory[];
   settings: {
     outputFolder: string;
+    impexFolder: string;
     darkMode: boolean;
     language: 'pl' | 'en';
     aiConfidenceThreshold: number;
@@ -33,6 +34,7 @@ class DatabaseService {
         history: [],
         settings: {
           outputFolder: path.join(app.getPath('documents'), 'StatementConverter'),
+          impexFolder: '',
           darkMode: true,
           language: 'pl',
           aiConfidenceThreshold: 95,

@@ -4,6 +4,7 @@ import { translations, Language } from '../translations';
 import { generateId } from '../../shared/utils';
 import { TransactionReviewScreen } from '../components/TransactionReviewScreen';
 import bankIcon from '../assets/bank.png';
+import kapitanBombaImg from '../assets/kapitan_bomba.jpg';
 
 interface SearchableAdresSelectProps {
   adresy: Adres[];
@@ -1336,11 +1337,14 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
           <div className="modal-overlay" onClick={() => setShowAIWarningModal(false)}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h2 style={{ margin: 0 }}>😱 Co Ci ludzie...</h2>
+                <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <span>Tempe Huje</span>
+                  <img src={kapitanBombaImg} alt="Kapitan Bomba" style={{ width: '80px', height: '80px', borderRadius: '8px' }} />
+                </h2>
               </div>
               <div className="modal-body" style={{ padding: '20px' }}>
                 <p style={{ marginBottom: '15px', fontSize: '14px', color: '#6c757d' }}>
-                  Niektóre transakcje mają bardzo niską pewność rozpoznania (poniżej 70%) i będą wymagać ręcznej weryfikacji.
+                  Galaktyka Kurvix została opanowana przez złych kosmitów. Pokonać ich może tylko załoga Gwiezdnego Patrolu, na czele której stoi... File Funky!
                 </p>
                 <div style={{
                   background: '#fff3cd',
@@ -1371,7 +1375,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                               performConversion(file.fileId, false);
                             }}
                           >
-                            Bez AI
+                            Bez AI (nie polecam)
                           </button>
                           <button
                             className="button button-small button-success"
@@ -1380,7 +1384,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                               performConversion(file.fileId, true);
                             }}
                           >
-                            🤖 Napierdalaj z AI
+                            🤖 Napierdalamy!
                           </button>
                         </div>
                       </div>
@@ -1406,13 +1410,13 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                     className="button button-secondary" 
                     onClick={() => handleSkipAI(filesNeedingAI.map(f => f.fileId))}
                   >
-                    Bez AI dla wszystkich
+                    Bez AI dla wszystkich (nie polecam)
                   </button>
                   <button 
                     className="button button-success" 
                     onClick={() => handleProceedWithAI(filesNeedingAI.map(f => f.fileId))}
                   >
-                    Napierdalaj z AI dla wszystkich
+                    Napierdalamy wszystko!
                   </button>
                 </div>
               </div>

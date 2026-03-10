@@ -14,6 +14,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
   const [banks, setBanks] = useState<Bank[]>([]);
   const [converters, setConverters] = useState<Converter[]>([]);
   const [outputFolder, setOutputFolder] = useState('');
+  const [impexFolder, setImpexFolder] = useState('');
   const [skipUserApproval, setSkipUserApproval] = useState(false);
   const [showAddBank, setShowAddBank] = useState(false);
   const [editingBank, setEditingBank] = useState<Bank | null>(null);
@@ -36,6 +37,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
       setBanks(banksData);
       setConverters(convertersData);
       setOutputFolder(settings.outputFolder);
+      setImpexFolder(settings.impexFolder || '');
       setSkipUserApproval(settings.skipUserApproval ?? false);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -49,6 +51,14 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
     if (folder) {
       await window.electronAPI.setOutputFolder(folder);
       setOutputFolder(folder);
+    }
+  };
+
+  const handleSelectImpexFolder = async () => {
+    const folder = await window.electronAPI.selectOutputFolder();
+    if (folder) {
+      await window.electronAPI.setImpexFolder(folder);
+      setImpexFolder(folder);
     }
   };
 
@@ -189,6 +199,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
           
           // Explicitly update outputFolder in local state
           setOutputFolder(settings.outputFolder || '');
+          setImpexFolder(settings.impexFolder || '');
           setSkipUserApproval(settings.skipUserApproval ?? false);
         } else if (result.error) {
           alert(`${t.importError}: ${result.error}`);
@@ -286,6 +297,42 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
               <button className="button button-primary" onClick={handleSelectOutputFolder}>
                 {t.change}
               </button>
+            </div>
+          </div>
+        </div>
+
+        {/* IMPEX Folder Settings */}
+        <div className="card">
+          <h2 style={{ marginBottom: '15px' }}>📁 Folder IMPEX</h2>
+          <div className="form-group">
+            <label>
+              Opcjonalna ścieżka dla dodatkowej kopii plików accounting
+              <span style={{ display: 'block', fontSize: '12px', color: '#6c757d', marginTop: '5px' }}>
+                Jeśli ustawiona, każdy plik accounting będzie dodatkowo zapisany w tym folderze
+              </span>
+            </label>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <input 
+                type="text" 
+                value={impexFolder} 
+                readOnly 
+                placeholder="Nie ustawiono (opcjonalnie)"
+              />
+              <button className="button button-primary" onClick={handleSelectImpexFolder}>
+                {t.change}
+              </button>
+              {impexFolder && (
+                <button 
+                  className="button button-secondary" 
+                  onClick={async () => {
+                    await window.electronAPI.setImpexFolder('');
+                    setImpexFolder('');
+                  }}
+                  title="Wyczyść ścieżkę IMPEX"
+                >
+                  ✕
+                </button>
+              )}
             </div>
           </div>
         </div>

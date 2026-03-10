@@ -34,6 +34,7 @@ const IPC_CHANNELS = {
   OPEN_FILE: 'files:open',
   GET_SETTINGS: 'settings:get',
   SET_OUTPUT_FOLDER: 'settings:set-output-folder',
+  SET_IMPEX_FOLDER: 'settings:set-impex-folder',
   SET_DARK_MODE: 'settings:set-dark-mode',
   SET_LANGUAGE: 'settings:set-language',
   SET_SKIP_USER_APPROVAL: 'settings:set-skip-user-approval',
@@ -100,6 +101,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SETTINGS),
   setOutputFolder: (folderPath: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_OUTPUT_FOLDER, folderPath),
+  setImpexFolder: (folderPath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_IMPEX_FOLDER, folderPath),
   setDarkMode: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_DARK_MODE, enabled),
   setLanguage: (language: string) =>

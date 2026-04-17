@@ -43,6 +43,10 @@ const IPC_CHANNELS = {
   GET_HISTORY: 'history:get-all',
   CLEAR_HISTORY: 'history:clear',
   GET_APP_VERSION: 'app:get-version',
+  ZALICZKI_SELECT_PDFS: 'zaliczki:select-pdfs',
+  ZALICZKI_EXTRACT_PDF: 'zaliczki:extract-pdf',
+  ZALICZKI_GENERATE_XLSX: 'zaliczki:generate-xlsx',
+  ZALICZKI_GET_MODELS: 'zaliczki:get-models',
 } as const;
 
 // Expose protected methods that allow the renderer process to use
@@ -115,6 +119,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // History
   getHistory: () => ipcRenderer.invoke(IPC_CHANNELS.GET_HISTORY),
   clearHistory: () => ipcRenderer.invoke(IPC_CHANNELS.CLEAR_HISTORY),
+
+  // Zaliczki
+  zaliczkiGetModels: () => ipcRenderer.invoke(IPC_CHANNELS.ZALICZKI_GET_MODELS),
+  zaliczkiSelectPdfs: () => ipcRenderer.invoke(IPC_CHANNELS.ZALICZKI_SELECT_PDFS),
+  zaliczkiExtractPdf: (filePath: string, model: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZALICZKI_EXTRACT_PDF, filePath, model),
+  zaliczkiGenerateXlsx: (files: unknown[], year: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZALICZKI_GENERATE_XLSX, files, year),
 
   // App info
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION),

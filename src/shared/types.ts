@@ -179,4 +179,10 @@ export const IPC_CHANNELS = {
   // History
   GET_HISTORY: 'history:get-all',
   CLEAR_HISTORY: 'history:clear',
+
+  // Zaliczki (housing-community monthly fee summary)
+  ZALICZKI_SELECT_PDFS: 'zaliczki:select-pdfs',
+  ZALICZKI_EXTRACT_PDF: 'zaliczki:extract-pdf',
+  ZALICZKI_GENERATE_XLSX: 'zaliczki:generate-xlsx',
+  ZALICZKI_GET_MODELS: 'zaliczki:get-models',
 } as const;

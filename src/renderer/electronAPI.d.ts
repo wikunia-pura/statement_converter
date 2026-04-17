@@ -2,6 +2,40 @@
 
 import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ConversionReviewData, ReviewDecision, KontrahentTyp } from '../shared/types';
 
+// Zaliczki shared types (referenced by the main-process helpers)
+export type ZaliczkiCategory =
+  | 'zaliczka_utrzymanie' | 'co_zmienna' | 'co_stala'
+  | 'ciepla_woda_licznik' | 'ciepla_woda_ryczalt'
+  | 'zimna_woda_licznik' | 'zimna_woda_ryczalt'
+  | 'scieki_licznik' | 'scieki_ryczalt'
+  | 'razem_swiadczenia' | 'odpady_komunalne' | 'fundusz_remontowy'
+  | 'razem_total';
+
+export interface ZaliczkiPropertyData {
+  property: string;
+  values: Partial<Record<ZaliczkiCategory, number | null>>;
+}
+
+export interface ZaliczkiExtractionResult {
+  filename: string;
+  month: number | null;
+  year: number | null;
+  properties: ZaliczkiPropertyData[];
+  rawResponse: string;
+}
+
+export interface ZaliczkiEditedFile {
+  filename: string;
+  month: number | null;
+  year: number | null;
+  properties: ZaliczkiPropertyData[];
+}
+
+export interface ZaliczkiModel {
+  id: string;
+  label: string;
+}
+
 interface ConversionResult {
   success?: boolean;
   outputPath?: string;
@@ -66,6 +100,14 @@ interface ElectronAPI {
   getHistory: () => Promise<ConversionHistory[]>;
   clearHistory: () => Promise<boolean>;
   
+  // Zaliczki
+  zaliczkiGetModels: () => Promise<{ models: readonly ZaliczkiModel[]; default: string }>;
+  zaliczkiSelectPdfs: () => Promise<{ fileName: string; filePath: string }[]>;
+  zaliczkiExtractPdf: (filePath: string, model: string) =>
+    Promise<{ data?: ZaliczkiExtractionResult; error?: string }>;
+  zaliczkiGenerateXlsx: (files: ZaliczkiEditedFile[], year: number) =>
+    Promise<{ success?: boolean; filePath?: string; canceled?: boolean; error?: string }>;
+
   // App info
   getAppVersion: () => Promise<string>;
 

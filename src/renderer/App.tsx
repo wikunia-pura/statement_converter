@@ -4,13 +4,14 @@ import Settings from './views/Settings';
 import History from './views/History';
 import Kontrahenci from './views/Kontrahenci';
 import Adresy from './views/Adresy';
+import PodsumowanieZaliczek, { ZaliczkiFileEntry } from './views/PodsumowanieZaliczek';
 import Logo from './components/Logo';
 import Footer from './components/Footer';
 import UpdateNotification from './components/UpdateNotification';
 import { translations, Language } from './translations';
 import { FileEntry } from '../shared/types';
 
-type View = 'converter' | 'settings' | 'history' | 'kontrahenci' | 'adresy';
+type View = 'converter' | 'settings' | 'history' | 'kontrahenci' | 'adresy' | 'podsumowanie';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('converter');
@@ -18,6 +19,8 @@ const App: React.FC = () => {
   const [language, setLanguage] = useState<Language>('pl');
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [selectedBank, setSelectedBank] = useState<number | null>(null);
+  const [zaliczkiFiles, setZaliczkiFiles] = useState<ZaliczkiFileEntry[]>([]);
+  const [zaliczkiGeneratedPath, setZaliczkiGeneratedPath] = useState<string | null>(null);
   const [appVersion, setAppVersion] = useState<string>('1.0.0');
 
   useEffect(() => {
@@ -77,17 +80,25 @@ const App: React.FC = () => {
             <span>📁</span> {t.converter}
           </div>
           <div
-            className={`nav-item ${currentView === 'kontrahenci' ? 'active' : ''}`}
-            onClick={() => setCurrentView('kontrahenci')}
+            className={`nav-item ${currentView === 'podsumowanie' ? 'active' : ''}`}
+            onClick={() => setCurrentView('podsumowanie')}
           >
-            <span>👥</span> {t.kontrahenci}
+            <span>📊</span> {t.podsumowanieZaliczek}
           </div>
+          <div className="nav-divider" />
           <div
             className={`nav-item ${currentView === 'adresy' ? 'active' : ''}`}
             onClick={() => setCurrentView('adresy')}
           >
             <span>📍</span> {t.adresy}
           </div>
+          <div
+            className={`nav-item ${currentView === 'kontrahenci' ? 'active' : ''}`}
+            onClick={() => setCurrentView('kontrahenci')}
+          >
+            <span>👥</span> {t.kontrahenci}
+          </div>
+          <div className="nav-divider" />
           <div
             className={`nav-item ${currentView === 'settings' ? 'active' : ''}`}
             onClick={() => setCurrentView('settings')}
@@ -115,6 +126,15 @@ const App: React.FC = () => {
         )}
         {currentView === 'kontrahenci' && <Kontrahenci language={language} />}
         {currentView === 'adresy' && <Adresy language={language} />}
+        {currentView === 'podsumowanie' && (
+          <PodsumowanieZaliczek
+            language={language}
+            files={zaliczkiFiles}
+            setFiles={setZaliczkiFiles}
+            generatedFilePath={zaliczkiGeneratedPath}
+            setGeneratedFilePath={setZaliczkiGeneratedPath}
+          />
+        )}
         {currentView === 'settings' && (
           <Settings
             darkMode={darkMode}

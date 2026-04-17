@@ -7,6 +7,12 @@ import DatabaseService from './database';
 import ConverterRegistry, { setDatabaseInstance } from './converterRegistry';
 import { IPC_CHANNELS, KontrahentTyp } from '../shared/types';
 import { extractPdfText } from '../shared/pdf-utils';
+import {
+  DEFAULT_ZALICZKI_MODEL,
+  ZALICZKI_MODELS,
+  extractZaliczkiFromPdf,
+} from './zaliczki/extractor';
+import { buildWorkbookFromEdited, EditedFile } from './zaliczki/excelWriter';
 
 // Log environment variable for testing
 log.debug('[MAIN] TEST_AI_BILLING_ERROR =', process.env.TEST_AI_BILLING_ERROR);
@@ -687,6 +693,63 @@ function setupIpcHandlers() {
       return null;
     }
   });
+
+  // ---- Zaliczki (podsumowanie zaliczek miesięcznych) ----
+  ipcMain.handle(IPC_CHANNELS.ZALICZKI_GET_MODELS, async () => {
+    return { models: ZALICZKI_MODELS, default: DEFAULT_ZALICZKI_MODEL };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ZALICZKI_SELECT_PDFS, async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+    if (result.canceled) return [];
+    return result.filePaths.map((p) => ({ fileName: path.basename(p), filePath: p }));
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.ZALICZKI_EXTRACT_PDF,
+    async (_event, filePath: string, model: string) => {
+      const apiKey = converterRegistry.getAnthropicApiKey();
+      if (!apiKey) {
+        return {
+          error: 'Brak klucza Anthropic API w config/ai-config.yml ani w ANTHROPIC_API_KEY.',
+        };
+      }
+      try {
+        const extraction = await extractZaliczkiFromPdf(filePath, apiKey, model);
+        return { data: extraction };
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        log.error('[ZALICZKI] extract failed:', message);
+        return { error: message };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.ZALICZKI_GENERATE_XLSX,
+    async (_event, files: EditedFile[], year: number) => {
+      try {
+        const buffer = await buildWorkbookFromEdited(files, year);
+        const saveResult = await dialog.showSaveDialog(mainWindow!, {
+          title: 'Zapisz podsumowanie',
+          defaultPath: `Podsumowanie_zaliczek_${year}.xlsx`,
+          filters: [{ name: 'Excel', extensions: ['xlsx'] }],
+        });
+        if (saveResult.canceled || !saveResult.filePath) {
+          return { canceled: true };
+        }
+        fs.writeFileSync(saveResult.filePath, buffer);
+        return { success: true, filePath: saveResult.filePath };
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        log.error('[ZALICZKI] generate xlsx failed:', message);
+        return { error: message };
+      }
+    },
+  );
 
   ipcMain.handle(
     IPC_CHANNELS.CONVERT_FILE,

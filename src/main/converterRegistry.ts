@@ -119,6 +119,10 @@ class ConverterRegistry {
     }
   }
 
+  public getAnthropicApiKey(): string {
+    return this.aiConfig?.ai?.anthropic_api_key || '';
+  }
+
   private loadConverters() {
     try {
       // Use app.getAppPath() to get the root directory in both dev and production

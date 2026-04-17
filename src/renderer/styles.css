@@ -368,6 +368,16 @@ body.dark-mode .button-group-separator {
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
 }
 
+.nav-divider {
+  height: 1px;
+  margin: 10px 25px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+body.dark-mode .nav-divider {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 /* Main Content Layout */
 .main-content {
   flex: 1;
@@ -1268,5 +1278,87 @@ body.dark-mode .update-text p {
 body.dark-mode .spinner {
   border-color: #404040;
   border-top-color: #3498db;
+}
+
+/* Zaliczki status banner + edit-table number inputs */
+.zaliczki-status {
+  display: flex;
+  align-items: center;
+  margin-bottom: 15px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.zaliczki-status-success {
+  background: #e6f4ea;
+  color: #1e4620;
+  border: 1px solid #b7dfbf;
+}
+
+.zaliczki-status-error {
+  background: #fdecea;
+  color: #611a15;
+  border: 1px solid #f5b5ad;
+}
+
+body.dark-mode .zaliczki-status-success {
+  background: #14291a;
+  color: #a7d7b0;
+  border: 1px solid #2d4a35;
+}
+
+body.dark-mode .zaliczki-status-error {
+  background: #2b1513;
+  color: #f0a89f;
+  border: 1px solid #5a2b26;
+}
+
+.zaliczki-status-warning {
+  background: #fff4e5;
+  color: #8a4b00;
+  border: 1px solid #ffcc80;
+}
+
+body.dark-mode .zaliczki-status-warning {
+  background: #2b2414;
+  color: #f0c994;
+  border: 1px solid #5a4726;
+}
+
+body.dark-mode input[type='number'] {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  color: #e0e0e0;
+}
+
+.zaliczki-edit-table input[type='text'],
+.zaliczki-edit-table input[type='number'] {
+  padding: 6px 8px;
+  border: 1px solid #d0d7de;
+  border-radius: 4px;
+  font-size: 13px;
+  height: 30px;
+  box-sizing: border-box;
+}
+
+body.dark-mode .zaliczki-edit-table input[type='text'],
+body.dark-mode .zaliczki-edit-table input[type='number'] {
+  border-color: #30363d;
+}
+
+.zaliczki-edit-table input[type='number']::-webkit-inner-spin-button,
+.zaliczki-edit-table input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.zaliczki-edit-table input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+body.dark-mode input[type='checkbox'] {
+  accent-color: #58a6ff;
 }
 

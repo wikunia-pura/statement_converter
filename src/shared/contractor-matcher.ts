@@ -5,7 +5,7 @@
  */
 
 import { AITransaction, MatchedContractor } from './ai-types';
-import { Kontrahent } from './types';
+import { Kontrahent, KontrahentTyp } from './types';
 
 export type { MatchedContractor } from './ai-types';
 
@@ -14,6 +14,15 @@ export class ContractorMatcher {
 
   constructor(contractors: Kontrahent[]) {
     this.contractors = contractors;
+  }
+
+  /**
+   * Return contractors filtered by typ. `undefined`/missing typ is treated as 'Kontrahent'.
+   */
+  private filterByTypes(allowedTypes?: KontrahentTyp[]): Kontrahent[] {
+    if (!allowedTypes || allowedTypes.length === 0) return this.contractors;
+    const allowed = new Set(allowedTypes);
+    return this.contractors.filter(c => allowed.has(c.typ || 'Kontrahent'));
   }
 
   /**
@@ -94,11 +103,17 @@ export class ContractorMatcher {
   /**
    * Match transaction with contractor
    * Priority: desc-opt > desc-base
+   *
+   * When `allowedTypes` is provided, only contractors with those typ values are considered.
+   * This enforces the semantic rule: expense pipeline rejects 'Pozostałe przychody',
+   * income pipeline only considers 'Pozostałe przychody'.
    */
-  match(transaction: AITransaction): MatchedContractor {
+  match(transaction: AITransaction, allowedTypes?: KontrahentTyp[]): MatchedContractor {
+    const pool = this.filterByTypes(allowedTypes);
+
     // Try desc-opt first (higher priority)
     if (transaction.descOpt && transaction.descOpt.trim() !== '') {
-      const match = this.findBestMatch(transaction.descOpt);
+      const match = this.findBestMatch(transaction.descOpt, pool);
       if (match.contractor) {
         return {
           ...match,
@@ -108,7 +123,7 @@ export class ContractorMatcher {
     }
 
     // Try desc-base
-    const match = this.findBestMatch(transaction.descBase);
+    const match = this.findBestMatch(transaction.descBase, pool);
     if (match.contractor) {
       return {
         ...match,
@@ -129,13 +144,19 @@ export class ContractorMatcher {
    * Returns the most likely contractors based on matching (exact and fuzzy)
    * Score priority: NIP (110) > Main name = Alternative names (100 - EQUAL) > Fuzzy match (85-95)
    */
-  getTopCandidates(transaction: AITransaction, topN: number = 10): Kontrahent[] {
+  getTopCandidates(
+    transaction: AITransaction,
+    topN: number = 10,
+    allowedTypes?: KontrahentTyp[]
+  ): Kontrahent[] {
+    const pool = this.filterByTypes(allowedTypes);
+
     // Combine desc-opt and desc-base for searching
     const searchText = `${transaction.descOpt || ''} ${transaction.descBase}`.toLowerCase();
     const searchTextNormalized = this.normalizeText(searchText);
-    
+
     // Score all contractors
-    const scored = this.contractors.map(contractor => {
+    const scored = pool.map(contractor => {
       let score = 0;
 
       // HIGHEST PRIORITY: Check NIP (full match required) - Score: 110
@@ -199,14 +220,17 @@ export class ContractorMatcher {
    * Find best matching contractor in description
    * Priority order checked: NIP (highest) > Main name = Alternative names (EQUAL) > Word-based
    */
-  private findBestMatch(description: string): Omit<MatchedContractor, 'matchedIn'> {
+  private findBestMatch(
+    description: string,
+    pool: Kontrahent[] = this.contractors
+  ): Omit<MatchedContractor, 'matchedIn'> {
     const descLower = description.toLowerCase();
     const descNormalizedText = this.normalizeText(descLower);
     let bestMatch: Kontrahent | null = null;
     let bestConfidence = 0;
     let matchedText = '';
 
-    for (const contractor of this.contractors) {
+    for (const contractor of pool) {
       // FIRST: Check NIP (highest priority - full match required)
       if (contractor.nip && contractor.nip.trim()) {
         const nip = contractor.nip.replace(/[\s-]/g, '');

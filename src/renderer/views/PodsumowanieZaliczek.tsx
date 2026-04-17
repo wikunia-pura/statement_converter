@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { translations, Language } from '../translations';
+import Icon from '../components/Icon';
 import type {
   ZaliczkiCategory,
   ZaliczkiEditedFile,
@@ -319,7 +320,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
     <div className="content-body">
       <div className="card">
         <div style={{ marginBottom: '20px' }}>
-          <h2 style={{ marginBottom: '4px', fontSize: '18px', color: '#667eea' }}>
+          <h2 style={{ marginBottom: '4px', fontSize: '18px', color: 'var(--accent)' }}>
             {t.zaliczkiTitle}
           </h2>
           <div style={{ fontSize: '13px', opacity: 0.7 }}>{t.zaliczkiSubtitle}</div>
@@ -332,7 +333,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
           onDragLeave={handleDragLeave}
           onClick={handlePickPdfs}
         >
-          <div className="drop-zone-icon">📁</div>
+          <div className="drop-zone-icon"><Icon name="upload" size={40} /></div>
           <div className="drop-zone-text">{t.dragDropFiles}</div>
         </div>
       </div>
@@ -358,7 +359,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                 title={!anyPending ? t.zaliczkiNothingToProcess : ''}
                 style={!anyPending ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
               >
-                {isProcessing ? t.zaliczkiOcrRunning : t.zaliczkiRunOcrAll}
+                <Icon name="search" size={14} /> {isProcessing ? t.zaliczkiOcrRunning : t.zaliczkiRunOcrAll}
               </button>
               <button
                 className="button button-success"
@@ -371,14 +372,14 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                 }
                 style={!canGenerateExcel || isGenerating ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
               >
-                {isGenerating ? t.zaliczkiGenerating : t.zaliczkiGenerateExcel}
+                <Icon name="bar-chart" size={14} /> {isGenerating ? t.zaliczkiGenerating : t.zaliczkiGenerateExcel}
               </button>
               <button
                 className="button button-secondary"
                 onClick={clearAll}
                 disabled={isProcessing}
               >
-                {t.zaliczkiClearAll}
+                <Icon name="trash" size={14} /> {t.zaliczkiClearAll}
               </button>
             </div>
           </div>
@@ -452,7 +453,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                             <div
                               style={{
                                 fontSize: '12px',
-                                color: '#7f8c8d',
+                                color: 'var(--text-tertiary)',
                                 marginTop: '6px',
                                 cursor: 'pointer',
                                 wordBreak: 'break-word',
@@ -536,7 +537,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
         </div>
       ) : (
         <div className="empty-state">
-          <div className="empty-state-icon">📄</div>
+          <div className="empty-state-icon"><Icon name="file-text" size={48} /></div>
           <div className="empty-state-text">{t.zaliczkiNoFiles}</div>
         </div>
       )}
@@ -612,16 +613,18 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
         <div className="modal-overlay" onClick={() => setShowDuplicatesModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2 style={{ margin: 0 }}>⚠️ {t.zaliczkiDuplicatesTitle}</h2>
+              <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Icon name="alert-triangle" size={20} /> {t.zaliczkiDuplicatesTitle}
+              </h2>
             </div>
             <div className="modal-body" style={{ padding: '20px' }}>
-              <p style={{ marginBottom: '15px', fontSize: '14px', color: '#6c757d' }}>
+              <p style={{ marginBottom: '15px', fontSize: '14px', color: 'var(--text-tertiary)' }}>
                 {t.zaliczkiDuplicatesMessage}
               </p>
               <div
                 style={{
-                  background: '#fff3cd',
-                  border: '1px solid #ffc107',
+                  background: 'var(--warning-bg)',
+                  border: '1px solid var(--warning-border)',
                   borderRadius: '8px',
                   padding: '15px',
                   maxHeight: '300px',
@@ -634,7 +637,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                     style={{
                       padding: '8px 12px',
                       marginBottom: '8px',
-                      background: 'white',
+                      background: 'var(--bg-surface)',
                       borderRadius: '4px',
                       fontSize: '13px',
                       display: 'flex',
@@ -642,7 +645,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                       gap: '8px',
                     }}
                   >
-                    <span style={{ fontSize: '16px' }}>📄</span>
+                    <Icon name="file-text" size={16} />
                     <span style={{ fontWeight: '500' }}>{fileName}</span>
                   </div>
                 ))}
@@ -652,7 +655,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
               className="modal-footer"
               style={{
                 padding: '15px 20px',
-                borderTop: '1px solid #e8ecf1',
+                borderTop: '1px solid var(--border-subtle)',
                 display: 'flex',
                 justifyContent: 'flex-end',
               }}
@@ -710,7 +713,7 @@ const MonthYearPicker: React.FC<MonthYearPickerProps> = ({
         </select>
       </div>
       {missing && (
-        <div style={{ fontSize: '11px', color: '#c0392b' }}>⚠ {missingLabel}</div>
+        <div style={{ fontSize: '11px', color: 'var(--danger)' }}>⚠ {missingLabel}</div>
       )}
     </div>
   );

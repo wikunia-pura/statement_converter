@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ConversionHistory } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { formatDate } from '../../shared/utils';
+import Icon from '../components/Icon';
 
 interface HistoryProps {
   language: Language;
@@ -129,7 +130,7 @@ const History: React.FC<HistoryProps> = ({ language }) => {
             <div>
               <h2 style={{ marginBottom: '5px' }}>{t.recentConversions}</h2>
               {history.length > 0 && (
-                <p style={{ fontSize: '14px', color: '#6c757d', margin: 0 }}>
+                <p style={{ fontSize: '14px', color: 'var(--text-tertiary)', margin: 0 }}>
                   Wpisy {startIndex + 1}-{Math.min(endIndex, history.length)} z {history.length}
                 </p>
               )}
@@ -157,12 +158,12 @@ const History: React.FC<HistoryProps> = ({ language }) => {
                 <tbody>
                   {currentItems.map((entry) => (
                   <tr key={entry.id}>
-                    <td style={{ fontSize: '12px', color: '#7f8c8d' }}>
+                    <td style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
                       {formatDate(entry.convertedAt)}
                     </td>
                     <td>{entry.fileName}</td>
                     <td>{entry.bankName}</td>
-                    <td style={{ fontSize: '12px', color: '#7f8c8d' }}>
+                    <td style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
                       {entry.converterName}
                     </td>
                     <td>
@@ -175,7 +176,7 @@ const History: React.FC<HistoryProps> = ({ language }) => {
                       </span>
                       {entry.errorMessage && (
                         <div
-                          style={{ fontSize: '11px', color: '#e74c3c', marginTop: '4px' }}
+                          style={{ fontSize: '11px', color: 'var(--danger)', marginTop: '4px' }}
                         >
                           {entry.errorMessage}
                         </div>
@@ -198,8 +199,8 @@ const History: React.FC<HistoryProps> = ({ language }) => {
                               position: 'absolute',
                               top: '100%',
                               left: 0,
-                              backgroundColor: isDarkMode ? '#161b22' : '#fff',
-                              border: `1px solid ${isDarkMode ? '#30363d' : '#ddd'}`,
+                              backgroundColor: isDarkMode ? 'var(--bg-surface)' : 'var(--bg-surface)',
+                              border: `1px solid ${isDarkMode ? 'var(--border-default)' : 'var(--border-default)'}`,
                               borderRadius: '4px',
                               boxShadow: isDarkMode ? '0 2px 8px rgba(0,0,0,0.4)' : '0 2px 8px rgba(0,0,0,0.15)',
                               zIndex: 1000,
@@ -215,13 +216,15 @@ const History: React.FC<HistoryProps> = ({ language }) => {
                                   textAlign: 'left',
                                   cursor: 'pointer',
                                   fontSize: '13px',
-                                  color: isDarkMode ? '#c9d1d9' : 'inherit',
+                                  color: isDarkMode ? 'var(--text-primary)' : 'inherit',
                                 }}
                                 onClick={() => handleOpenFile(entry.outputPath, 'preview')}
-                                onMouseEnter={(e) => e.currentTarget.style.background = isDarkMode ? '#30363d' : '#f5f5f5'}
+                                onMouseEnter={(e) => e.currentTarget.style.background = isDarkMode ? 'var(--border-default)' : 'var(--bg-surface-sunken)'}
                                 onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
                               >
-                                📄 {t.openPreview}
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                  <Icon name="file-text" size={13} /> {t.openPreview}
+                                </span>
                               </button>
                               <button
                                 style={{
@@ -233,13 +236,15 @@ const History: React.FC<HistoryProps> = ({ language }) => {
                                   textAlign: 'left',
                                   cursor: 'pointer',
                                   fontSize: '13px',
-                                  color: isDarkMode ? '#c9d1d9' : 'inherit',
+                                  color: isDarkMode ? 'var(--text-primary)' : 'inherit',
                                 }}
                                 onClick={() => handleOpenFile(entry.outputPath, 'accounting')}
-                                onMouseEnter={(e) => e.currentTarget.style.background = isDarkMode ? '#30363d' : '#f5f5f5'}
+                                onMouseEnter={(e) => e.currentTarget.style.background = isDarkMode ? 'var(--border-default)' : 'var(--bg-surface-sunken)'}
                                 onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
                               >
-                                📊 {t.openAccounting}
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                  <Icon name="bar-chart" size={13} /> {t.openAccounting}
+                                </span>
                               </button>
                             </div>
                           )}
@@ -294,7 +299,7 @@ const History: React.FC<HistoryProps> = ({ language }) => {
             </>
           ) : (
             <div className="empty-state">
-              <div className="empty-state-icon">📊</div>
+              <div className="empty-state-icon"><Icon name="history" size={48} /></div>
               <div className="empty-state-text">{t.noConversionHistory}</div>
             </div>
           )}

@@ -3,6 +3,7 @@ import { FileEntry, Bank, Adres, ConversionReviewData, ReviewDecision } from '..
 import { translations, Language } from '../translations';
 import { generateId } from '../../shared/utils';
 import { TransactionReviewScreen } from '../components/TransactionReviewScreen';
+import Icon from '../components/Icon';
 import bankIcon from '../assets/bank.png';
 import kapitanBombaImg from '../assets/kapitan_bomba.jpg';
 
@@ -55,19 +56,19 @@ const SearchableAdresSelect: React.FC<SearchableAdresSelectProps> = ({
 
   // Theme colors
   const colors = isDarkMode ? {
-    background: '#161b22',
-    border: '#30363d',
-    text: '#e0e0e0',
-    textMuted: '#8b949e',
-    hover: '#0d1117',
-    selected: '#21262d'
+    background: 'var(--bg-surface)',
+    border: 'var(--border-default)',
+    text: 'var(--text-primary)',
+    textMuted: 'var(--text-tertiary)',
+    hover: 'var(--bg-surface-sunken)',
+    selected: 'var(--accent-subtle)'
   } : {
-    background: '#fff',
-    border: '#ddd',
-    text: '#000',
-    textMuted: '#999',
-    hover: '#f8f8f8',
-    selected: '#f0f0f0'
+    background: 'var(--bg-surface)',
+    border: 'var(--border-default)',
+    text: 'var(--text-primary)',
+    textMuted: 'var(--text-tertiary)',
+    hover: 'var(--bg-surface-sunken)',
+    selected: 'var(--bg-surface-sunken)'
   };
 
   const selectedAdres = adresy.find(a => a.id === selectedAdresId);
@@ -705,7 +706,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
       if (result.needsReview && result.reviewData) {
         // Show warning message if AI fallback occurred (before review)
         if (result.warningMessage) {
-          alert(`⚠️ ${result.warningMessage}`);
+          alert(`${result.warningMessage}`);
         }
         
         // If skipUserApproval is enabled, auto-finalize without showing review screen
@@ -798,7 +799,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
         
         // Show warning message if AI fallback occurred
         if (result.warningMessage) {
-          alert(`⚠️ ${result.warningMessage}`);
+          alert(`${result.warningMessage}`);
         }
         
         // Process next file in queue if no review was needed
@@ -959,10 +960,10 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                 }} 
               />
             </div>
-            <h2 style={{ marginBottom: '10px', fontSize: '24px', color: '#667eea' }}>
+            <h2 style={{ marginBottom: '10px', fontSize: '24px', color: 'var(--accent)' }}>
               {t.selectBank}
             </h2>
-            <p style={{ color: '#7b87a1', marginBottom: '30px', fontSize: '16px' }}>
+            <p style={{ color: 'var(--text-tertiary)', marginBottom: '30px', fontSize: '16px' }}>
               Wybierz bank, aby rozpocząć konwersję plików
             </p>
             <div style={{ maxWidth: '400px', margin: '0 auto' }}>
@@ -974,7 +975,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                   padding: '16px 20px',
                   fontSize: '16px',
                   borderRadius: '12px',
-                  border: '2px solid #e8ecf1',
+                  border: '2px solid var(--border-default)',
                   cursor: 'pointer',
                 }}
               >
@@ -991,7 +992,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
           <>
             <div className="card">
           <div style={{ marginBottom: '20px' }}>
-            <h2 style={{ marginBottom: '15px', fontSize: '18px', color: '#667eea' }}>{t.addFiles}</h2>
+            <h2 style={{ marginBottom: '15px', fontSize: '18px', color: 'var(--accent)' }}>{t.addFiles}</h2>
             <div className="bank-selector-inline">
               <label style={{ fontSize: '14px', fontWeight: '500', marginBottom: '8px', display: 'block' }}>
                 {t.selectBank}
@@ -1004,7 +1005,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                   padding: '12px 16px',
                   fontSize: '15px',
                   borderRadius: '10px',
-                  border: '2px solid #e8ecf1',
+                  border: '2px solid var(--border-default)',
                   cursor: 'pointer',
                   fontWeight: '500',
                 }}
@@ -1025,7 +1026,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
             onDragLeave={handleDragLeave}
             onClick={handleFileSelect}
           >
-            <div className="drop-zone-icon">📁</div>
+            <div className="drop-zone-icon"><Icon name="upload" size={40} /></div>
             <div className="drop-zone-text">
               {t.dragDropFiles}
             </div>
@@ -1043,7 +1044,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                   disabled={!outputFolder}
                   title={outputFolder || 'Folder wyjściowy nie został skonfigurowany'}
                 >
-                  📂 {t.openOutputFolder}
+                  <Icon name="folder" size={14} /> {t.openOutputFolder}
                 </button>
                 <button 
                   className="button button-success" 
@@ -1123,11 +1124,11 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                         <td>
                           {file.pdfPath ? (
                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', maxWidth: '160px' }}>
-                              <span style={{ fontSize: '14px', flexShrink: 0, color: '#e55' }}>📕</span>
+                              <span style={{ fontSize: '14px', flexShrink: 0, color: 'var(--danger)' }}>📕</span>
                               <span
                                 style={{
                                   fontSize: '11px',
-                                  color: '#aaa',
+                                  color: 'var(--text-tertiary)',
                                   overflow: 'hidden',
                                   textOverflow: 'ellipsis',
                                   whiteSpace: 'nowrap',
@@ -1145,14 +1146,14 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                                   fontSize: '10px',
                                   backgroundColor: 'transparent',
                                   border: '1px solid #555',
-                                  color: '#888',
+                                  color: 'var(--text-tertiary)',
                                   cursor: 'pointer',
                                   borderRadius: '3px',
                                   flexShrink: 0,
                                 }}
                                 title="Usuń PDF"
                               >
-                                ✕
+                                <Icon name="x" size={10} />
                               </button>
                             </div>
                           ) : (
@@ -1164,7 +1165,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                                 fontSize: '12px',
                                 backgroundColor: 'transparent',
                                 border: '1px dashed #666',
-                                color: '#999',
+                                color: 'var(--text-tertiary)',
                                 cursor: 'pointer',
                                 borderRadius: '3px',
                                 whiteSpace: 'nowrap',
@@ -1191,7 +1192,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                             <div 
                               style={{ 
                                 fontSize: '12px', 
-                                color: '#7f8c8d', 
+                                color: 'var(--text-tertiary)', 
                                 marginTop: '10px',
                                 cursor: 'pointer',
                                 wordBreak: 'break-word'
@@ -1224,8 +1225,8 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                                       top: '100%',
                                       left: 0,
                                       zIndex: 1000,
-                                      background: isDarkMode ? '#161b22' : '#fff',
-                                      border: `1px solid ${isDarkMode ? '#30363d' : '#ddd'}`,
+                                      background: isDarkMode ? 'var(--bg-surface)' : 'var(--bg-surface)',
+                                      border: `1px solid ${isDarkMode ? 'var(--border-default)' : 'var(--border-default)'}`,
                                       borderRadius: '4px',
                                       boxShadow: isDarkMode ? '0 2px 8px rgba(0,0,0,0.4)' : '0 2px 8px rgba(0,0,0,0.15)',
                                       minWidth: '120px',
@@ -1241,13 +1242,15 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                                           textAlign: 'left',
                                           cursor: 'pointer',
                                           fontSize: '13px',
-                                          color: isDarkMode ? '#c9d1d9' : 'inherit',
+                                          color: isDarkMode ? 'var(--text-primary)' : 'inherit',
                                         }}
                                         onClick={() => handleOpenFile(file.id, 'preview')}
-                                        onMouseEnter={(e) => e.currentTarget.style.background = isDarkMode ? '#30363d' : '#f5f5f5'}
+                                        onMouseEnter={(e) => e.currentTarget.style.background = isDarkMode ? 'var(--border-default)' : 'var(--bg-surface-sunken)'}
                                         onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
                                       >
-                                        📄 {t.openPreview}
+                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                          <Icon name="file-text" size={13} /> {t.openPreview}
+                                        </span>
                                       </button>
                                       <button
                                         style={{
@@ -1259,13 +1262,15 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                                           textAlign: 'left',
                                           cursor: 'pointer',
                                           fontSize: '13px',
-                                          color: isDarkMode ? '#c9d1d9' : 'inherit',
+                                          color: isDarkMode ? 'var(--text-primary)' : 'inherit',
                                         }}
                                         onClick={() => handleOpenFile(file.id, 'accounting')}
-                                        onMouseEnter={(e) => e.currentTarget.style.background = isDarkMode ? '#30363d' : '#f5f5f5'}
+                                        onMouseEnter={(e) => e.currentTarget.style.background = isDarkMode ? 'var(--border-default)' : 'var(--bg-surface-sunken)'}
                                         onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
                                       >
-                                        📊 {t.openAccounting}
+                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                          <Icon name="bar-chart" size={13} /> {t.openAccounting}
+                                        </span>
                                       </button>
                                     </div>
                                   )}
@@ -1311,7 +1316,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
 
         {files.length === 0 && (
           <div className="empty-state">
-            <div className="empty-state-icon">📄</div>
+            <div className="empty-state-icon"><Icon name="file-text" size={48} /></div>
             <div className="empty-state-text">{t.noFilesAdded}</div>
           </div>
         )}
@@ -1343,12 +1348,12 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                 </h2>
               </div>
               <div className="modal-body" style={{ padding: '20px' }}>
-                <p style={{ marginBottom: '15px', fontSize: '14px', color: '#6c757d' }}>
+                <p style={{ marginBottom: '15px', fontSize: '14px', color: 'var(--text-tertiary)' }}>
                   Galaktyka Kurvix została opanowana przez złych kosmitów. Pokonać ich może tylko załoga Gwiezdnego Patrolu, na czele której stoi... File Funky!
                 </p>
                 <div style={{
-                  background: '#fff3cd',
-                  border: '1px solid #ffc107',
+                  background: 'var(--bg-surface-sunken)',
+                  border: '1px solid var(--border-subtle)',
                   borderRadius: '8px',
                   padding: '15px',
                   maxHeight: '300px',
@@ -1358,13 +1363,13 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                     <div key={index} style={{
                       padding: '12px',
                       marginBottom: '10px',
-                      background: 'white',
+                      background: 'var(--bg-surface)',
                       borderRadius: '4px',
                       fontSize: '13px'
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-                          <span style={{ fontSize: '16px', flexShrink: 0 }}>📄</span>
+                          <Icon name="file-text" size={16} />
                           <span style={{ fontWeight: '600', fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.fileName}</span>
                         </div>
                         <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
@@ -1384,13 +1389,13 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                               performConversion(file.fileId, true);
                             }}
                           >
-                            🤖 Napierdalamy!
+                            <Icon name="bot" size={14} /> Napierdalamy!
                           </button>
                         </div>
                       </div>
-                      <div style={{ paddingLeft: '24px', fontSize: '12px', color: '#6c757d' }}>
+                      <div style={{ paddingLeft: '24px', fontSize: '12px', color: 'var(--text-tertiary)' }}>
                         <div>Transakcje: {file.totalTransactions}</div>
-                        <div style={{ color: '#dc3545', fontWeight: '500' }}>
+                        <div style={{ color: 'var(--danger)', fontWeight: '500' }}>
                           Wymaga weryfikacji (confidence {'<'} 70%): {file.lowConfidenceCount}
                         </div>
                       </div>
@@ -1398,7 +1403,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                   ))}
                 </div>
               </div>
-              <div className="modal-footer" style={{ padding: '15px 20px', borderTop: '1px solid #e8ecf1', display: 'flex', justifyContent: 'space-between' }}>
+              <div className="modal-footer" style={{ padding: '15px 20px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between' }}>
                 <button 
                   className="button button-secondary" 
                   onClick={() => setShowAIWarningModal(false)}
@@ -1429,15 +1434,17 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
           <div className="modal-overlay" onClick={() => setShowDuplicatesModal(false)}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h2 style={{ margin: 0 }}>⚠️ Wykryto duplikaty</h2>
+                <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Icon name="alert-triangle" size={20} /> Wykryto duplikaty
+                </h2>
               </div>
               <div className="modal-body" style={{ padding: '20px' }}>
-                <p style={{ marginBottom: '15px', fontSize: '14px', color: '#6c757d' }}>
+                <p style={{ marginBottom: '15px', fontSize: '14px', color: 'var(--text-tertiary)' }}>
                   Następujące pliki zostały już dodane do listy i nie zostaną dodane ponownie:
                 </p>
                 <div style={{
-                  background: '#fff3cd',
-                  border: '1px solid #ffc107',
+                  background: 'var(--bg-surface-sunken)',
+                  border: '1px solid var(--border-subtle)',
                   borderRadius: '8px',
                   padding: '15px',
                   maxHeight: '300px',
@@ -1447,20 +1454,20 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                     <div key={index} style={{
                       padding: '8px 12px',
                       marginBottom: '8px',
-                      background: 'white',
+                      background: 'var(--bg-surface)',
                       borderRadius: '4px',
                       fontSize: '13px',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '8px'
                     }}>
-                      <span style={{ fontSize: '16px' }}>📄</span>
+                      <Icon name="file-text" size={16} />
                       <span style={{ fontWeight: '500' }}>{fileName}</span>
                     </div>
                   ))}
                 </div>
               </div>
-              <div className="modal-footer" style={{ padding: '15px 20px', borderTop: '1px solid #e8ecf1', display: 'flex', justifyContent: 'flex-end' }}>
+              <div className="modal-footer" style={{ padding: '15px 20px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'flex-end' }}>
                 <button 
                   className="button button-primary" 
                   onClick={() => setShowDuplicatesModal(false)}

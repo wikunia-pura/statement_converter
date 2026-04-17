@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ConversionReviewData, ReviewDecision, TransactionForReview, Kontrahent } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { searchTransactionInPdf, PdfSearchMatch } from '../../shared/pdf-search';
+import Icon from './Icon';
 
 // SearchableContractorSelect component
 interface SearchableContractorSelectProps {
@@ -61,20 +62,20 @@ const SearchableContractorSelect: React.FC<SearchableContractorSelectProps> = ({
         onClick={() => !disabled && setIsOpen(!isOpen)}
         style={{
           padding: '6px 10px',
-          border: '1px solid #3c3c3c',
+          border: '1px solid var(--border-default)',
           borderRadius: '4px',
           cursor: disabled ? 'not-allowed' : 'pointer',
-          backgroundColor: disabled ? '#2a2a2a' : '#1e1e1e',
+          backgroundColor: disabled ? 'var(--bg-surface-sunken)' : 'var(--bg-surface)',
           minHeight: '34px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between'
         }}
       >
-        <span style={{ color: selectedContractor ? '#e0e0e0' : '#888' }}>
+        <span style={{ color: selectedContractor ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>
           {selectedContractor ? selectedContractor.nazwa : placeholder}
         </span>
-        <span style={{ fontSize: '10px', color: '#888' }}>▼</span>
+        <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>▼</span>
       </div>
 
       {isOpen && (
@@ -84,8 +85,8 @@ const SearchableContractorSelect: React.FC<SearchableContractorSelectProps> = ({
             top: '100%',
             left: 0,
             right: 0,
-            backgroundColor: '#1e1e1e',
-            border: '1px solid #3c3c3c',
+            backgroundColor: 'var(--bg-surface)',
+            border: '1px solid var(--border-default)',
             borderRadius: '4px',
             marginTop: '2px',
             maxHeight: '250px',
@@ -104,11 +105,11 @@ const SearchableContractorSelect: React.FC<SearchableContractorSelectProps> = ({
               width: '100%',
               padding: '8px',
               border: 'none',
-              borderBottom: '1px solid #3c3c3c',
+              borderBottom: '1px solid var(--border-default)',
               outline: 'none',
               boxSizing: 'border-box',
-              backgroundColor: '#1e1e1e',
-              color: '#e0e0e0'
+              backgroundColor: 'var(--bg-surface)',
+              color: 'var(--text-primary)'
             }}
           />
           <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
@@ -117,13 +118,13 @@ const SearchableContractorSelect: React.FC<SearchableContractorSelectProps> = ({
               style={{
                 padding: '8px 10px',
                 cursor: 'pointer',
-                backgroundColor: selectedContractorId === null ? '#21262d' : '#1e1e1e',
-                borderBottom: '1px solid #3c3c3c'
+                backgroundColor: selectedContractorId === null ? 'var(--accent-subtle)' : 'var(--bg-surface)',
+                borderBottom: '1px solid var(--border-default)'
               }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0d1117'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = selectedContractorId === null ? '#21262d' : '#1e1e1e'}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface-sunken)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = selectedContractorId === null ? 'var(--accent-subtle)' : 'var(--bg-surface)'}
             >
-              <em style={{ color: '#888' }}>{placeholder}</em>
+              <em style={{ color: 'var(--text-tertiary)' }}>{placeholder}</em>
             </div>
             {filteredKontrahenci.map((kontrahent) => (
               <div
@@ -132,27 +133,27 @@ const SearchableContractorSelect: React.FC<SearchableContractorSelectProps> = ({
                 style={{
                   padding: '8px 10px',
                   cursor: 'pointer',
-                  backgroundColor: kontrahent.id === selectedContractorId ? '#21262d' : '#1e1e1e',
-                  borderBottom: '1px solid #3c3c3c'
+                  backgroundColor: kontrahent.id === selectedContractorId ? 'var(--accent-subtle)' : 'var(--bg-surface)',
+                  borderBottom: '1px solid var(--border-default)'
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0d1117'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = kontrahent.id === selectedContractorId ? '#21262d' : '#1e1e1e'}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface-sunken)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = kontrahent.id === selectedContractorId ? 'var(--accent-subtle)' : 'var(--bg-surface)'}
               >
-                <div style={{ color: '#e0e0e0' }}>{kontrahent.nazwa}</div>
+                <div style={{ color: 'var(--text-primary)' }}>{kontrahent.nazwa}</div>
                 {kontrahent.nip && (
-                  <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
                     NIP: {kontrahent.nip}
                   </div>
                 )}
                 {kontrahent.alternativeNames && kontrahent.alternativeNames.length > 0 && (
-                  <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
                     {kontrahent.alternativeNames.join(', ')}
                   </div>
                 )}
               </div>
             ))}
             {filteredKontrahenci.length === 0 && (
-              <div style={{ padding: '8px 10px', color: '#888', textAlign: 'center' }}>
+              <div style={{ padding: '8px 10px', color: 'var(--text-tertiary)', textAlign: 'center' }}>
                 Brak kontrahentów
               </div>
             )}
@@ -177,16 +178,20 @@ const PdfPanel: React.FC<PdfPanelProps> = ({ searchResult, searching, searchFiel
     return (
       <div style={{
         padding: '15px',
-        backgroundColor: '#1a2332',
-        border: '1px solid #2a5a8a',
+        backgroundColor: 'var(--info-bg)',
+        border: '1px solid var(--info-border)',
         borderRadius: '6px',
         marginTop: '10px',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-          <span style={{ color: '#5B9BD5', fontWeight: 600, fontSize: '13px' }}>📄 Szukam w PDF...</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: '14px' }}>✕</button>
+          <span style={{ color: 'var(--info)', fontWeight: 600, fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <Icon name="search" size={14} /> Szukam w PDF...
+          </span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: '2px', display: 'inline-flex' }}>
+            <Icon name="x" size={14} />
+          </button>
         </div>
-        <div style={{ color: '#888', fontSize: '13px' }}>Proszę czekać...</div>
+        <div style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>Proszę czekać...</div>
       </div>
     );
   }
@@ -195,16 +200,20 @@ const PdfPanel: React.FC<PdfPanelProps> = ({ searchResult, searching, searchFiel
     return (
       <div style={{
         padding: '15px',
-        backgroundColor: '#2a1a1a',
-        border: '1px solid #8a2a2a',
+        backgroundColor: 'var(--danger-bg)',
+        border: '1px solid var(--danger-border)',
         borderRadius: '6px',
         marginTop: '10px',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-          <span style={{ color: '#F44747', fontWeight: 600, fontSize: '13px' }}>📄 Nie znaleziono w PDF</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: '14px' }}>✕</button>
+          <span style={{ color: 'var(--danger)', fontWeight: 600, fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <Icon name="alert-circle" size={14} /> Nie znaleziono w PDF
+          </span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: '2px', display: 'inline-flex' }}>
+            <Icon name="x" size={14} />
+          </button>
         </div>
-        <div style={{ color: '#888', fontSize: '13px' }}>Nie znaleziono pasującej transakcji w dokumencie PDF.</div>
+        <div style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>Nie znaleziono pasującej transakcji w dokumencie PDF.</div>
       </div>
     );
   }
@@ -219,7 +228,7 @@ const PdfPanel: React.FC<PdfPanelProps> = ({ searchResult, searching, searchFiel
     
     return parts.map((part, i) => {
       if (regex.test(part)) {
-        return <span key={i} style={{ backgroundColor: 'rgba(255, 213, 79, 0.3)', color: '#FFD54F', fontWeight: 600, padding: '0 2px', borderRadius: '2px' }}>{part}</span>;
+        return <span key={i} style={{ backgroundColor: 'rgba(255, 213, 79, 0.3)', color: 'var(--warning)', fontWeight: 600, padding: '0 2px', borderRadius: '2px' }}>{part}</span>;
       }
       return part;
     });
@@ -251,7 +260,7 @@ const PdfPanel: React.FC<PdfPanelProps> = ({ searchResult, searching, searchFiel
       if (i > 0 && isTransactionStart(line)) {
         elements.push(
           <div key={`${prefix}-sep-${i}`} style={{
-            borderTop: '1px solid #30363d',
+            borderTop: '1px solid var(--border-default)',
             margin: '6px 0',
             opacity: 0.6,
           }} />
@@ -267,7 +276,7 @@ const PdfPanel: React.FC<PdfPanelProps> = ({ searchResult, searching, searchFiel
   };
 
   const contextLineStyle: React.CSSProperties = {
-    color: '#666',
+    color: 'var(--text-tertiary)',
     fontSize: '12px',
     lineHeight: '1.5',
     fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
@@ -276,19 +285,19 @@ const PdfPanel: React.FC<PdfPanelProps> = ({ searchResult, searching, searchFiel
   return (
     <div style={{
       padding: '15px',
-      backgroundColor: '#1a2332',
-      border: '1px solid #2a5a8a',
+      backgroundColor: 'var(--info-bg)',
+      border: '1px solid var(--info-border)',
       borderRadius: '6px',
       marginTop: '10px',
     }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ color: '#5B9BD5', fontWeight: 600, fontSize: '13px' }}>
-            📄 Dane z PDF ({searchField})
+          <span style={{ color: 'var(--info)', fontWeight: 600, fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <Icon name="file-text" size={14} /> Dane z PDF ({searchField})
           </span>
           <span style={{
-            color: searchResult.score >= 60 ? '#4EC9B0' : '#DCDCAA',
+            color: searchResult.score >= 60 ? 'var(--success)' : 'var(--warning)',
             fontSize: '12px',
             backgroundColor: searchResult.score >= 60 ? 'rgba(78, 201, 176, 0.15)' : 'rgba(220, 220, 170, 0.15)',
             padding: '2px 8px',
@@ -297,19 +306,21 @@ const PdfPanel: React.FC<PdfPanelProps> = ({ searchResult, searching, searchFiel
             trafność: {searchResult.score}%
           </span>
         </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: '14px' }}>✕</button>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: '2px', display: 'inline-flex' }}>
+          <Icon name="x" size={14} />
+        </button>
       </div>
 
       <div style={{
-        backgroundColor: '#0d1117',
+        backgroundColor: 'var(--bg-surface-sunken)',
         borderRadius: '6px',
         maxHeight: '300px',
         overflowY: 'auto',
-        border: '1px solid #21262d',
+        border: '1px solid var(--accent-subtle)',
       }}>
         {/* Before context */}
         {beforeLines.length > 0 && (
-          <div style={{ padding: '8px 12px', borderBottom: '1px dashed #30363d' }}>
+          <div style={{ padding: '8px 12px', borderBottom: '1px dashed var(--border-default)' }}>
             {renderLinesWithSeparators(beforeLines, 'before', contextLineStyle, false)}
           </div>
         )}
@@ -318,7 +329,7 @@ const PdfPanel: React.FC<PdfPanelProps> = ({ searchResult, searching, searchFiel
         <div style={{
           padding: '10px 12px',
           backgroundColor: 'rgba(91, 155, 213, 0.08)',
-          borderLeft: '3px solid #5B9BD5',
+          borderLeft: '3px solid var(--info)',
           position: 'relative',
         }}>
           <div style={{
@@ -326,7 +337,7 @@ const PdfPanel: React.FC<PdfPanelProps> = ({ searchResult, searching, searchFiel
             top: '4px',
             right: '8px',
             fontSize: '10px',
-            color: '#5B9BD5',
+            color: 'var(--info)',
             opacity: 0.7,
             textTransform: 'uppercase',
             letterSpacing: '0.5px',
@@ -337,7 +348,7 @@ const PdfPanel: React.FC<PdfPanelProps> = ({ searchResult, searching, searchFiel
               fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
               fontSize: '13px',
               lineHeight: '1.7',
-              color: '#e0e0e0',
+              color: 'var(--text-primary)',
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-word',
             }, true)}
@@ -345,7 +356,7 @@ const PdfPanel: React.FC<PdfPanelProps> = ({ searchResult, searching, searchFiel
 
         {/* After context */}
         {afterLines.length > 0 && (
-          <div style={{ padding: '8px 12px', borderTop: '1px dashed #30363d' }}>
+          <div style={{ padding: '8px 12px', borderTop: '1px dashed var(--border-default)' }}>
             {renderLinesWithSeparators(afterLines, 'after', contextLineStyle, false)}
           </div>
         )}
@@ -436,18 +447,18 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
   // Determine card colors based on decision
   const getCardColors = () => {
     if (!currentDecision) {
-      return { bg: '#2d2d30', border: '#3c3c3c' };
+      return { bg: 'var(--bg-surface-hover)', border: 'var(--border-default)' };
     }
     
     switch (currentDecision.action) {
       case 'accept':
-        return { bg: 'rgba(76, 175, 80, 0.1)', border: '#4CAF50' }; // green
+        return { bg: 'rgba(76, 175, 80, 0.1)', border: 'var(--success)' }; // green
       case 'reject':
-        return { bg: 'rgba(244, 67, 54, 0.1)', border: '#f44336' }; // red
+        return { bg: 'rgba(244, 67, 54, 0.1)', border: 'var(--danger)' }; // red
       case 'manual':
-        return { bg: 'rgba(156, 39, 176, 0.1)', border: '#9C27B0' }; // purple
+        return { bg: 'rgba(156, 39, 176, 0.1)', border: 'var(--accent)' }; // purple
       default:
-        return { bg: '#2d2d30', border: '#3c3c3c' };
+        return { bg: 'var(--bg-surface-hover)', border: 'var(--border-default)' };
     }
   };
   
@@ -470,10 +481,10 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
       alignItems: 'center',
       marginBottom: '15px',
       paddingBottom: '10px',
-      borderBottom: '1px solid #3c3c3c',
+      borderBottom: '1px solid var(--border-default)',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <h3 style={{ margin: 0, color: trn.transactionType === 'income' ? '#4EC9B0' : '#CE9178' }}>
+        <h3 style={{ margin: 0, color: trn.transactionType === 'income' ? 'var(--success)' : 'var(--warning)' }}>
           Transakcja #{idx + 1} ({trn.transactionType === 'income' ? 'WPŁATA' : 'WYDATEK'})
         </h3>
         {(() => {
@@ -482,7 +493,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
             ? trn.extracted.confidence 
             : (trn.matchedContractor?.confidence || 0);
           
-          const color = conf >= 85 ? '#4EC9B0' : conf >= 60 ? '#DCDCAA' : '#F44747';
+          const color = conf >= 85 ? 'var(--success)' : conf >= 60 ? 'var(--warning)' : 'var(--danger)';
           const bgColor = conf >= 85 ? 'rgba(78, 201, 176, 0.15)' : conf >= 60 ? 'rgba(220, 220, 170, 0.15)' : 'rgba(244, 71, 71, 0.15)';
           const borderColor = conf >= 85 ? 'rgba(78, 201, 176, 0.4)' : conf >= 60 ? 'rgba(220, 220, 170, 0.4)' : 'rgba(244, 71, 71, 0.4)';
           
@@ -505,10 +516,10 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
 
     {/* Original Data */}
     <div style={{ marginBottom: '15px' }}>
-      <h4 style={{ margin: '0 0 10px 0', color: '#569CD6' }}>
-        📄 Dane z wyciągu:
+      <h4 style={{ margin: '0 0 10px 0', color: 'var(--info)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <Icon name="file-text" size={16} /> Dane z wyciągu:
         {pdfLines && pdfLines.length > 0 && (
-          <span style={{ fontSize: '11px', color: '#5B9BD5', marginLeft: '10px', fontWeight: 400 }}>
+          <span style={{ fontSize: '11px', color: 'var(--info)', marginLeft: '10px', fontWeight: 400 }}>
             (kliknij opis lub kontrahenta aby sprawdzić w PDF)
           </span>
         )}
@@ -523,8 +534,8 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
               onClick={() => handlePdfLookup('opis')}
               style={{
                 cursor: 'pointer',
-                borderBottom: '1px dashed #5B9BD5',
-                color: pdfVisible && pdfSearchField === 'opis' ? '#5B9BD5' : undefined,
+                borderBottom: '1px dashed var(--info)',
+                color: pdfVisible && pdfSearchField === 'opis' ? 'var(--info)' : undefined,
                 transition: 'color 0.2s',
               }}
               title="Kliknij aby wyszukać w PDF"
@@ -542,8 +553,8 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
               onClick={() => handlePdfLookup('kontrahent')}
               style={{
                 cursor: 'pointer',
-                borderBottom: '1px dashed #5B9BD5',
-                color: pdfVisible && pdfSearchField === 'kontrahent' ? '#5B9BD5' : undefined,
+                borderBottom: '1px dashed var(--info)',
+                color: pdfVisible && pdfSearchField === 'kontrahent' ? 'var(--info)' : undefined,
                 transition: 'color 0.2s',
               }}
               title="Kliknij aby wyszukać w PDF"
@@ -571,8 +582,10 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
     {/* Extracted Data */}
     {trn.transactionType === 'income' && (
       <div style={{ marginBottom: '15px' }}>
-        <h4 style={{ margin: '0 0 10px 0', color: '#DCDCAA' }}>🔍 {language === 'pl' ? 'Wyekstrahowane dane' : 'Extracted data'}:</h4>
-        <div style={{ fontSize: '14px', lineHeight: '1.6', color: '#858585' }}>
+        <h4 style={{ margin: '0 0 10px 0', color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Icon name="search" size={16} /> {language === 'pl' ? 'Wyekstrahowane dane' : 'Extracted data'}:
+        </h4>
+        <div style={{ fontSize: '14px', lineHeight: '1.6', color: 'var(--text-secondary)' }}>
           <div>{language === 'pl' ? 'Adres' : 'Address'}: {trn.extracted.fullAddress || (language === 'pl' ? 'NIE ZNALEZIONO' : 'NOT FOUND')}</div>
           <div>{language === 'pl' ? 'Ulica' : 'Street'}: {trn.extracted.streetName || 'N/A'}</div>
           <div>{language === 'pl' ? 'Numer budynku' : 'Building number'}: {trn.extracted.buildingNumber || 'N/A'}</div>
@@ -585,12 +598,14 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
               backgroundColor: 'rgba(220, 220, 170, 0.15)',
               border: '1px solid rgba(220, 220, 170, 0.3)',
               borderRadius: '4px',
-              color: '#DCDCAA',
+              color: 'var(--warning)',
               fontSize: '13px',
               fontStyle: 'italic',
               lineHeight: '1.5',
             }}>
-              <strong style={{ color: '#DCDCAA' }}>💡 {language === 'pl' ? 'Uzasadnienie AI' : 'AI Reasoning'}:</strong> {trn.extracted.reasoning}
+              <strong style={{ color: 'var(--warning)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <Icon name="sparkles" size={12} /> {language === 'pl' ? 'Uzasadnienie AI' : 'AI Reasoning'}:
+              </strong> {trn.extracted.reasoning}
             </div>
           )}
         </div>
@@ -600,8 +615,10 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
     {/* Contractor Data (for expenses) */}
     {trn.transactionType === 'expense' && trn.matchedContractor && (
       <div style={{ marginBottom: '15px' }}>
-        <h4 style={{ margin: '0 0 10px 0', color: '#DCDCAA' }}>💼 Dopasowany kontrahent:</h4>
-        <div style={{ fontSize: '14px', lineHeight: '1.6', color: '#858585' }}>
+        <h4 style={{ margin: '0 0 10px 0', color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Icon name="briefcase" size={16} /> Dopasowany kontrahent:
+        </h4>
+        <div style={{ fontSize: '14px', lineHeight: '1.6', color: 'var(--text-secondary)' }}>
           <div>Nazwa: {trn.matchedContractor.contractorName || 'NIE ZNALEZIONO'}</div>
           <div>Konto: {trn.matchedContractor.contractorAccount || 'N/A'}</div>
           <div>Confidence: {trn.matchedContractor.confidence}%</div>
@@ -612,12 +629,14 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
               backgroundColor: 'rgba(220, 220, 170, 0.15)',
               border: '1px solid rgba(220, 220, 170, 0.3)',
               borderRadius: '4px',
-              color: '#DCDCAA',
+              color: 'var(--warning)',
               fontSize: '13px',
               fontStyle: 'italic',
               lineHeight: '1.5',
             }}>
-              <strong style={{ color: '#DCDCAA' }}>💡 {language === 'pl' ? 'Uzasadnienie AI' : 'AI Reasoning'}:</strong> {trn.extracted.reasoning}
+              <strong style={{ color: 'var(--warning)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <Icon name="sparkles" size={12} /> {language === 'pl' ? 'Uzasadnienie AI' : 'AI Reasoning'}:
+              </strong> {trn.extracted.reasoning}
             </div>
           )}
         </div>
@@ -637,26 +656,30 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
             <div style={{ 
               padding: '12px 16px',
               backgroundColor: isManuallyEdited ? 'rgba(197, 134, 192, 0.2)' : 'rgba(78, 201, 176, 0.2)',
-              border: isManuallyEdited ? '2px solid #C586C0' : '2px solid #4EC9B0',
+              border: isManuallyEdited ? '2px solid var(--accent)' : '2px solid var(--success)',
               borderRadius: '6px',
             }}>
-              <div style={{ 
-                fontSize: '11px', 
-                color: isManuallyEdited ? '#C586C0' : '#4EC9B0',
+              <div style={{
+                fontSize: '11px',
+                color: isManuallyEdited ? 'var(--accent)' : 'var(--success)',
                 fontWeight: 600,
                 textTransform: 'uppercase',
                 letterSpacing: '0.5px',
                 marginBottom: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
               }}>
-                {isManuallyEdited 
-                  ? (language === 'pl' ? '✏️ Numer lokalu (ręcznie wpisany)' : '✏️ Apartment number (manually entered)')
-                  : (language === 'pl' ? '🏠 Zmatchowany numer lokalu' : '🏠 Matched apartment number')
+                <Icon name={isManuallyEdited ? 'edit' : 'check-circle'} size={12} />
+                {isManuallyEdited
+                  ? (language === 'pl' ? 'Numer lokalu (ręcznie wpisany)' : 'Apartment number (manually entered)')
+                  : (language === 'pl' ? 'Zmatchowany numer lokalu' : 'Matched apartment number')
                 }
               </div>
               <div style={{ 
                 fontSize: '24px', 
                 fontWeight: 700,
-                color: isManuallyEdited ? '#C586C0' : '#4EC9B0',
+                color: isManuallyEdited ? 'var(--accent)' : 'var(--success)',
                 letterSpacing: '1px',
               }}>
                 {displayValue}
@@ -671,23 +694,23 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
             <div style={{ 
               padding: '12px 16px',
               backgroundColor: 'rgba(244, 71, 71, 0.2)',
-              border: '2px solid #F44747',
+              border: '2px solid var(--danger)',
               borderRadius: '6px',
             }}>
               <div style={{ 
                 fontSize: '11px', 
-                color: '#F44747',
+                color: 'var(--danger)',
                 fontWeight: 600,
                 textTransform: 'uppercase',
                 letterSpacing: '0.5px',
                 marginBottom: '6px',
               }}>
-                {language === 'pl' ? '⚠️ Numer lokalu' : '⚠️ Apartment number'}
+                <Icon name="alert-triangle" size={12} /> {language === 'pl' ? 'Numer lokalu' : 'Apartment number'}
               </div>
               <div style={{ 
                 fontSize: '24px', 
                 fontWeight: 700,
-                color: '#F44747',
+                color: 'var(--danger)',
                 letterSpacing: '1px',
               }}>
                 {language === 'pl' ? 'NIE ZNALEZIONO' : 'NOT FOUND'}
@@ -698,169 +721,145 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
       }
     })()}
 
-    {/* Decision Buttons */}
-    <div style={{ marginTop: '15px' }}>
-      <h4 style={{ margin: '0 0 10px 0', color: '#C586C0' }}>✅ Decyzja:</h4>
-      {(() => {
-        const hasManualOverride = !!(manualInput && manualInput.trim().length > 0) 
-          || manualContractorId !== undefined 
-          || manualRemainingIncomeId !== undefined 
-          || manualRemainingCostId !== undefined;
-        return (
-          <>
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-              {/* Show Accept only when there's meaningful extracted data to accept */}
-              {((trn.transactionType === 'expense' && trn.matchedContractor?.contractorName) || (trn.transactionType === 'income' && trn.extracted.apartmentNumber)) && (
-                <button
-                  onClick={() => handleDecision(trn.index, 'accept')}
-                  disabled={hasManualOverride}
-                  style={{
-                    padding: '10px 20px',
-                    backgroundColor: hasManualOverride
-                      ? '#555'
-                      : currentDecision?.action === 'accept' ? '#2e7d32' : '#4CAF50',
-                    color: hasManualOverride ? '#888' : 'white',
-                    border: 'none',
-                    borderRadius: '3px',
-                    cursor: hasManualOverride ? 'not-allowed' : 'pointer',
-                    fontWeight: currentDecision?.action === 'accept' ? 'bold' : 'normal',
-                    opacity: hasManualOverride ? 0.5 : 1,
-                  }}
-                >
-                  ✓ Akceptuj
-                </button>
-              )}
+    {/* Action zone — decision + manual input + status */}
+    {(() => {
+      const hasManualOverride = !!(manualInput && manualInput.trim().length > 0)
+        || manualContractorId !== undefined
+        || manualRemainingIncomeId !== undefined
+        || manualRemainingCostId !== undefined;
+
+      return (
+        <div className="review-card__actions">
+          <h4 className="review-card__actions-title">
+            <Icon name="check-circle" size={12} /> Decyzja
+          </h4>
+
+          <div className="review-card__actions-row">
+            {((trn.transactionType === 'expense' && trn.matchedContractor?.contractorName) || (trn.transactionType === 'income' && trn.extracted.apartmentNumber)) && (
               <button
-                onClick={() => handleDecision(trn.index, 'reject')}
+                onClick={() => handleDecision(trn.index, 'accept')}
                 disabled={hasManualOverride}
-                style={{
-                  padding: '10px 20px',
-                  backgroundColor: hasManualOverride
-                    ? '#555'
-                    : currentDecision?.action === 'reject' ? '#b71c1c' : '#d32f2f',
-                  color: hasManualOverride ? '#888' : 'white',
-                  border: 'none',
-                  borderRadius: '3px',
-                  cursor: hasManualOverride ? 'not-allowed' : 'pointer',
-                  fontWeight: currentDecision?.action === 'reject' ? 'bold' : 'normal',
-                  opacity: hasManualOverride ? 0.5 : 1,
-                }}
+                className={`button button-success${currentDecision?.action === 'accept' ? ' is-selected' : ''}`}
               >
-                ✗ Oznacz jako nierozpoznane
+                <Icon name="check" size={14} /> Akceptuj
               </button>
-            </div>
-            {hasManualOverride && (
-              <div style={{ fontSize: '12px', color: '#DCDCAA', marginBottom: '10px', fontStyle: 'italic' }}>
-                ⚠ Wyczyść ręczne przypisanie, aby użyć przycisków akceptuj/odrzuć
-              </div>
             )}
-          </>
-        );
-      })()}
+            <button
+              onClick={() => handleDecision(trn.index, 'reject')}
+              disabled={hasManualOverride}
+              className={`button button-danger${currentDecision?.action === 'reject' ? ' is-selected' : ''}`}
+            >
+              <Icon name="x" size={14} /> Oznacz jako nierozpoznane
+            </button>
+          </div>
 
-      {/* Manual Input (only for income) */}
-      {trn.transactionType === 'income' && (
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <div style={{ minWidth: '200px', maxWidth: '220px' }}>
-            <label style={{ display: 'block', marginBottom: '5px', color: '#C586C0' }}>
-              Numer mieszkania {trn.extracted.apartmentNumber ? '(możesz edytować)' : '(wpisz ręcznie)'}:
-            </label>
-            <input
-              type="text"
-              value={manualInput || ''}
-              onChange={(e) => handleManualInput(trn.index, (e.target as HTMLInputElement).value)}
-              placeholder="np. 42, ZGN"
-              disabled={manualRemainingIncomeId !== undefined}
-              style={{
-                padding: '8px',
-                backgroundColor: manualRemainingIncomeId !== undefined ? '#2a2a2a' : '#3c3c3c',
-                color: manualRemainingIncomeId !== undefined ? '#666' : '#d4d4d4',
-                border: '1px solid #555',
-                borderRadius: '3px',
-                width: '100%',
-                boxSizing: 'border-box' as const,
-                opacity: manualRemainingIncomeId !== undefined ? 0.5 : 1,
-              }}
-            />
-          </div>
-          <div style={{ minWidth: '250px', maxWidth: '350px' }}>
-            <label style={{ display: 'block', marginBottom: '5px', color: '#5B9BD5' }}>
-              {language === 'pl' ? 'Pozostałe przychody' : 'Remaining income'}:
-            </label>
-            <SearchableContractorSelect
-              kontrahenci={remainingIncomeEntries}
-              selectedContractorId={manualRemainingIncomeId !== undefined ? manualRemainingIncomeId : null}
-              onChange={(entryId) => handleManualRemainingIncomeSelect(trn.index, entryId)}
-              placeholder={language === 'pl' ? 'Wybierz pozostały przychód...' : 'Select remaining income...'}
-              searchPlaceholder={language === 'pl' ? 'Szukaj po nazwie...' : 'Search by name...'}
-              disabled={!!(manualInput && manualInput.trim().length > 0)}
-            />
-          </div>
-        </div>
-      )}
+          {hasManualOverride && (
+            <div style={{ fontSize: '12px', color: 'var(--warning)', marginBottom: 'var(--s-3)', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Icon name="alert-triangle" size={12} /> Wyczyść ręczne przypisanie, aby użyć przycisków akceptuj/odrzuć
+            </div>
+          )}
 
-      {/* Manual Contractor Selection (only for expense) */}
-      {trn.transactionType === 'expense' && (
-        <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-          <div style={{ flex: '1', minWidth: '250px' }}>
-            <label style={{ display: 'block', marginBottom: '5px', color: '#C586C0' }}>
-              Wybierz kontrahenta {trn.matchedContractor?.contractorName ? '(możesz zmienić)' : '(wybierz ręcznie)'}:
-            </label>
-            <SearchableContractorSelect
-              kontrahenci={kontrahenci}
-              selectedContractorId={manualContractorId !== undefined ? manualContractorId : null}
-              onChange={(contractorId) => handleManualContractorSelect(trn.index, contractorId)}
-              placeholder="Brak przypisania"
-              searchPlaceholder="Szukaj kontrahenta po nazwie lub NIP..."
-              disabled={manualRemainingCostId !== undefined}
-            />
-          </div>
-          <div style={{ flex: '1', minWidth: '250px' }}>
-            <label style={{ display: 'block', marginBottom: '5px', color: '#CE9178' }}>
-              {language === 'pl' ? 'Pozostałe koszty' : 'Remaining costs'}:
-            </label>
-            <SearchableContractorSelect
-              kontrahenci={remainingCostEntries}
-              selectedContractorId={manualRemainingCostId !== undefined ? manualRemainingCostId : null}
-              onChange={(entryId) => handleManualRemainingCostSelect(trn.index, entryId)}
-              placeholder={language === 'pl' ? 'Wybierz pozostały koszt...' : 'Select remaining cost...'}
-              searchPlaceholder={language === 'pl' ? 'Szukaj po nazwie...' : 'Search by name...'}
-              disabled={manualContractorId !== undefined}
-            />
-          </div>
-        </div>
-      )}
+          {/* Manual Input (only for income) */}
+          {trn.transactionType === 'income' && (
+            <div className="review-card__manual">
+              <div className="review-card__manual-field" style={{ maxWidth: 220 }}>
+                <label className="review-card__manual-label">Numer mieszkania</label>
+                <input
+                  type="text"
+                  value={manualInput || ''}
+                  onChange={(e) => handleManualInput(trn.index, (e.target as HTMLInputElement).value)}
+                  placeholder="np. 42, ZGN"
+                  disabled={manualRemainingIncomeId !== undefined}
+                />
+              </div>
+              <div className="review-card__manual-field" style={{ maxWidth: 350 }}>
+                <label className="review-card__manual-label">
+                  {language === 'pl' ? 'Pozostałe przychody' : 'Remaining income'}
+                </label>
+                <SearchableContractorSelect
+                  kontrahenci={remainingIncomeEntries}
+                  selectedContractorId={manualRemainingIncomeId !== undefined ? manualRemainingIncomeId : null}
+                  onChange={(entryId) => handleManualRemainingIncomeSelect(trn.index, entryId)}
+                  placeholder={language === 'pl' ? 'Wybierz pozostały przychód...' : 'Select remaining income...'}
+                  searchPlaceholder={language === 'pl' ? 'Szukaj po nazwie...' : 'Search by name...'}
+                  disabled={!!(manualInput && manualInput.trim().length > 0)}
+                />
+              </div>
+            </div>
+          )}
 
-      {/* Current Decision Display */}
-      {currentDecision && (
-        <div style={{
-          marginTop: '10px',
-          padding: '8px',
-          backgroundColor: '#1e3a1e',
-          color: '#4EC9B0',
-          borderRadius: '3px',
-          fontSize: '14px',
-        }}>
-          {currentDecision.action === 'accept' && '✓ Zaakceptowano wyekstrahowane dane'}
-          {currentDecision.action === 'reject' && '✗ Oznaczono jako NIEROZPOZNANE'}
-          {currentDecision.action === 'manual' && (() => {
-            if (trn.transactionType === 'income' && currentDecision.manualRemainingIncomeId) {
-              const entry = remainingIncomeEntries.find(k => k.id === currentDecision.manualRemainingIncomeId);
-              return `✏️  Pozostały przychód: ${entry?.nazwa || 'Nieznany'} (${entry?.kontoKontrahenta || ''})`;
-            } else if (trn.transactionType === 'income' && currentDecision.manualApartmentNumber) {
-              return `✏️  Ręcznie wpisano mieszkanie: ${currentDecision.manualApartmentNumber}`;
-            } else if (trn.transactionType === 'expense' && currentDecision.manualRemainingCostId) {
-              const entry = remainingCostEntries.find(k => k.id === currentDecision.manualRemainingCostId);
-              return `✏️  Pozostały koszt: ${entry?.nazwa || 'Nieznany'} (${entry?.kontoKontrahenta || ''})`;
-            } else if (trn.transactionType === 'expense' && currentDecision.manualContractorId) {
-              const selectedContractor = kontrahenci.find(k => k.id === currentDecision.manualContractorId);
-              return `✏️  Ręcznie wybrano kontrahenta: ${selectedContractor?.nazwa || 'Nieznany'}`;
+          {/* Manual Contractor Selection (only for expense) */}
+          {trn.transactionType === 'expense' && (
+            <div className="review-card__manual">
+              <div className="review-card__manual-field">
+                <label className="review-card__manual-label">
+                  Wybierz kontrahenta {trn.matchedContractor?.contractorName ? '(możesz zmienić)' : '(wybierz ręcznie)'}
+                </label>
+                <SearchableContractorSelect
+                  kontrahenci={kontrahenci}
+                  selectedContractorId={manualContractorId !== undefined ? manualContractorId : null}
+                  onChange={(contractorId) => handleManualContractorSelect(trn.index, contractorId)}
+                  placeholder="Brak przypisania"
+                  searchPlaceholder="Szukaj kontrahenta po nazwie lub NIP..."
+                  disabled={manualRemainingCostId !== undefined}
+                />
+              </div>
+              <div className="review-card__manual-field">
+                <label className="review-card__manual-label">
+                  {language === 'pl' ? 'Pozostałe koszty' : 'Remaining costs'}
+                </label>
+                <SearchableContractorSelect
+                  kontrahenci={remainingCostEntries}
+                  selectedContractorId={manualRemainingCostId !== undefined ? manualRemainingCostId : null}
+                  onChange={(entryId) => handleManualRemainingCostSelect(trn.index, entryId)}
+                  placeholder={language === 'pl' ? 'Wybierz pozostały koszt...' : 'Select remaining cost...'}
+                  searchPlaceholder={language === 'pl' ? 'Szukaj po nazwie...' : 'Search by name...'}
+                  disabled={manualContractorId !== undefined}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Current Decision Status */}
+          {currentDecision && (() => {
+            const isReject = currentDecision.action === 'reject';
+            const bg = isReject ? 'var(--danger-bg)' : 'var(--success-bg)';
+            const fg = isReject ? 'var(--danger)' : 'var(--success)';
+
+            let iconName: React.ComponentProps<typeof Icon>['name'] = 'check-circle';
+            let label: string = 'Zaakceptowano wyekstrahowane dane';
+
+            if (currentDecision.action === 'reject') {
+              iconName = 'x-circle';
+              label = 'Oznaczono jako NIEROZPOZNANE';
+            } else if (currentDecision.action === 'manual') {
+              iconName = 'edit';
+              if (trn.transactionType === 'income' && currentDecision.manualRemainingIncomeId) {
+                const entry = remainingIncomeEntries.find(k => k.id === currentDecision.manualRemainingIncomeId);
+                label = `Pozostały przychód: ${entry?.nazwa || 'Nieznany'} (${entry?.kontoKontrahenta || ''})`;
+              } else if (trn.transactionType === 'income' && currentDecision.manualApartmentNumber) {
+                label = `Ręcznie wpisano mieszkanie: ${currentDecision.manualApartmentNumber}`;
+              } else if (trn.transactionType === 'expense' && currentDecision.manualRemainingCostId) {
+                const entry = remainingCostEntries.find(k => k.id === currentDecision.manualRemainingCostId);
+                label = `Pozostały koszt: ${entry?.nazwa || 'Nieznany'} (${entry?.kontoKontrahenta || ''})`;
+              } else if (trn.transactionType === 'expense' && currentDecision.manualContractorId) {
+                const selectedContractor = kontrahenci.find(k => k.id === currentDecision.manualContractorId);
+                label = `Ręcznie wybrano kontrahenta: ${selectedContractor?.nazwa || 'Nieznany'}`;
+              } else {
+                label = 'Ręcznie edytowano';
+              }
             }
-            return '✏️  Ręcznie edytowano';
+
+            return (
+              <div className="review-card__status" style={{ backgroundColor: bg, color: fg }}>
+                <Icon name={iconName} size={14} />
+                <span>{label}</span>
+              </div>
+            );
           })()}
         </div>
-      )}
-    </div>
+      );
+    })()}
   </div>
   );
 };
@@ -1093,8 +1092,8 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: '#1e1e1e',
-      color: '#d4d4d4',
+      backgroundColor: 'var(--bg-surface)',
+      color: 'var(--text-primary)',
       display: 'flex',
       flexDirection: 'column',
       zIndex: 1000,
@@ -1103,8 +1102,8 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
       {/* Header */}
       <div style={{
         padding: '12px 20px',
-        borderBottom: '1px solid #3c3c3c',
-        backgroundColor: '#252526',
+        borderBottom: '1px solid var(--border-default)',
+        backgroundColor: 'var(--bg-surface-sunken)',
         flexShrink: 0,
         display: 'flex',
         justifyContent: 'space-between',
@@ -1117,7 +1116,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
             style={{
               background: 'none',
               border: 'none',
-              color: '#858585',
+              color: 'var(--text-secondary)',
               cursor: 'pointer',
               fontSize: '16px',
               fontWeight: 500,
@@ -1126,18 +1125,18 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
               transition: 'color 0.2s ease',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = '#b0b0b0';
+              e.currentTarget.style.color = 'var(--text-secondary)';
               e.currentTarget.style.textDecoration = 'underline';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.color = '#858585';
+              e.currentTarget.style.color = 'var(--text-secondary)';
               e.currentTarget.style.textDecoration = 'none';
             }}
           >
             Konwerter
           </button>
-          <span style={{ color: '#555', fontSize: '16px', userSelect: 'none' }}>/</span>
-          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 500, color: '#e0e0e0' }}>Przegląd transakcji</h2>
+          <span style={{ color: 'var(--border-strong)', fontSize: '16px', userSelect: 'none' }}>/</span>
+          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 500, color: 'var(--text-primary)' }}>Przegląd transakcji</h2>
         </div>
         
         {/* Close button */}
@@ -1146,7 +1145,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
           style={{
             background: 'none',
             border: 'none',
-            color: '#858585',
+            color: 'var(--text-secondary)',
             cursor: 'pointer',
             fontSize: '20px',
             padding: '4px 8px',
@@ -1154,14 +1153,14 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
             lineHeight: 1,
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.color = '#e0e0e0';
+            e.currentTarget.style.color = 'var(--text-primary)';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.color = '#858585';
+            e.currentTarget.style.color = 'var(--text-secondary)';
           }}
           title="Zamknij"
         >
-          ✕
+          <Icon name="x" size={18} />
         </button>
       </div>
       
@@ -1169,11 +1168,11 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
       {reviewData.adresName && (
         <div style={{
           padding: '14px 20px',
-          borderBottom: '1px solid #4a4a4a',
-          backgroundColor: '#373738',
+          borderBottom: '1px solid var(--border-strong)',
+          backgroundColor: 'var(--bg-surface-hover)',
           textAlign: 'center',
           fontSize: '16px',
-          color: '#e0e0e0',
+          color: 'var(--text-primary)',
           fontWeight: 600,
           letterSpacing: '0.3px',
           flexShrink: 0,
@@ -1185,12 +1184,12 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
       {/* File info */}
       <div style={{
         padding: '8px 20px',
-        borderBottom: '1px solid #3c3c3c',
-        backgroundColor: '#252526',
+        borderBottom: '1px solid var(--border-default)',
+        backgroundColor: 'var(--bg-surface-sunken)',
         flexShrink: 0,
       }}>
-        <p style={{ margin: 0, color: '#858585', fontSize: '13px' }}>
-          Plik: <strong>{reviewData.fileName}</strong> | Bank: <strong>{reviewData.bankName}</strong> | <span style={{ color: '#ffa500' }}>{reviewData.transactions.length} transakcji do zaakceptowania</span>
+        <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '13px' }}>
+          Plik: <strong>{reviewData.fileName}</strong> | Bank: <strong>{reviewData.bankName}</strong> | <span style={{ color: 'var(--warning)' }}>{reviewData.transactions.length} transakcji do zaakceptowania</span>
         </p>
       </div>
 
@@ -1204,14 +1203,14 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
         {(filter === 'all' || filter === 'income') && incomeTransactions.length > 0 && (
           <>
             <div style={{
-              backgroundColor: '#1e3a2e',
+              backgroundColor: 'var(--success-bg)',
               padding: '12px 16px',
               marginBottom: '15px',
               borderRadius: '6px',
-              borderLeft: '4px solid #4EC9B0',
+              borderLeft: '4px solid var(--success)',
             }}>
-              <h3 style={{ margin: 0, color: '#4EC9B0', fontSize: '18px' }}>
-                💰 WPŁATY ({incomeTransactions.length})
+              <h3 style={{ margin: 0, color: 'var(--success)', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Icon name="coins" size={18} /> WPŁATY ({incomeTransactions.length})
               </h3>
             </div>
             {incomeTransactions.map((trn) => {
@@ -1250,32 +1249,26 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
         {(filter === 'all' || filter === 'expense') && expenseTransactions.length > 0 && (
           <>
             <div style={{
-              backgroundColor: '#3a2e1e',
+              backgroundColor: 'var(--warning-bg)',
               padding: '12px 16px',
               marginBottom: '15px',
               marginTop: filter === 'all' && incomeTransactions.length > 0 ? '30px' : '0',
               borderRadius: '6px',
-              borderLeft: '4px solid #CE9178',
+              borderLeft: '4px solid var(--warning)',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
             }}>
-              <h3 style={{ margin: 0, color: '#CE9178', fontSize: '18px' }}>
-                💸 WYDATKI ({expenseTransactions.length})
+              <h3 style={{ margin: 0, color: 'var(--warning)', fontSize: '18px' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                  <Icon name="arrow-right" size={18} /> WYDATKI ({expenseTransactions.length})
+                </span>
               </h3>
               <button
                 onClick={handleMarkAllExpensesAsUnrecognized}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: '#d32f2f',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                }}
+                className="button button-danger button-small"
               >
-                ✗ {t.markAllExpensesAsUnrecognized}
+                <Icon name="x" size={14} /> {t.markAllExpensesAsUnrecognized}
               </button>
             </div>
             {expenseTransactions.map((trn) => {
@@ -1315,8 +1308,8 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
       {/* Footer with filters and actions */}
       <div style={{
         padding: '10px 20px',
-        borderTop: '1px solid #3c3c3c',
-        backgroundColor: '#252526',
+        borderTop: '1px solid var(--border-default)',
+        backgroundColor: 'var(--bg-surface-sunken)',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -1326,13 +1319,13 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
         {/* Left: Filter buttons */}
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <span style={{ color: '#858585', fontSize: '12px', marginRight: '4px' }}>Filtruj:</span>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '12px', marginRight: '4px' }}>Filtruj:</span>
             <button
               onClick={() => setFilter('all')}
               style={{
                 padding: '5px 10px',
                 fontSize: '12px',
-                backgroundColor: filter === 'all' ? '#0e639c' : '#3c3c3c',
+                backgroundColor: filter === 'all' ? 'var(--accent)' : 'var(--border-default)',
                 color: 'white',
                 border: 'none',
                 borderRadius: '4px',
@@ -1347,30 +1340,36 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
               style={{
                 padding: '5px 10px',
                 fontSize: '12px',
-                backgroundColor: filter === 'income' ? '#4EC9B0' : '#3c3c3c',
-                color: filter === 'income' ? '#1e1e1e' : 'white',
+                backgroundColor: filter === 'income' ? 'var(--success)' : 'var(--border-default)',
+                color: filter === 'income' ? 'var(--bg-surface)' : 'white',
                 border: 'none',
                 borderRadius: '4px',
                 cursor: 'pointer',
                 fontWeight: filter === 'income' ? 'bold' : 'normal',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
               }}
             >
-              💰 Wpłaty ({totalIncome})
+              <Icon name="coins" size={12} /> Wpłaty ({totalIncome})
             </button>
             <button
               onClick={() => setFilter('expense')}
               style={{
                 padding: '5px 10px',
                 fontSize: '12px',
-                backgroundColor: filter === 'expense' ? '#CE9178' : '#3c3c3c',
-                color: filter === 'expense' ? '#1e1e1e' : 'white',
+                backgroundColor: filter === 'expense' ? 'var(--warning)' : 'var(--border-default)',
+                color: filter === 'expense' ? 'var(--bg-surface)' : 'white',
                 border: 'none',
                 borderRadius: '4px',
                 cursor: 'pointer',
                 fontWeight: filter === 'expense' ? 'bold' : 'normal',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
               }}
             >
-              💸 Wydatki ({totalExpense})
+              <Icon name="arrow-right" size={12} /> Wydatki ({totalExpense})
             </button>
           </div>
         </div>
@@ -1384,19 +1383,22 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
               alignItems: 'center',
               gap: '10px',
               padding: '10px 18px',
-              backgroundColor: '#2a2d3a',
-              border: '1px solid #DCDCAA',
+              backgroundColor: 'var(--accent-subtle)',
+              border: '1px solid var(--warning)',
               borderRadius: '3px',
               boxSizing: 'border-box',
             }}>
-              <span style={{ 
-                color: '#DCDCAA', 
-                fontSize: '14px', 
+              <span style={{
+                color: 'var(--warning)',
+                fontSize: '14px',
                 fontWeight: 600,
                 whiteSpace: 'nowrap',
                 lineHeight: 1,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
               }}>
-                📁 {t.filesRemaining}: {remainingCount}
+                <Icon name="folder" size={14} /> {t.filesRemaining}: {remainingCount}
               </span>
             </div>
           )}
@@ -1406,17 +1408,17 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
             alignItems: 'center',
             gap: '10px',
             padding: '10px 18px',
-            backgroundColor: allDecided ? '#1e4620' : '#3c2a1e',
-            border: allDecided ? '1px solid #4EC9B0' : '1px solid #CE9178',
+            backgroundColor: allDecided ? 'var(--success-bg)' : 'var(--warning-bg)',
+            border: allDecided ? '1px solid var(--success)' : '1px solid var(--warning)',
             borderRadius: '3px',
             minWidth: '150px',
             boxSizing: 'border-box',
           }}>
-            <span style={{ fontSize: '16px', lineHeight: 1 }}>
-              {allDecided ? '✅' : '⏳'}
+            <span style={{ lineHeight: 0, color: allDecided ? 'var(--success)' : 'var(--warning)' }}>
+              <Icon name={allDecided ? 'check-circle' : 'loader'} size={16} />
             </span>
             <span style={{ 
-              color: '#e0e0e0', 
+              color: 'var(--text-primary)', 
               fontSize: '14px',
               fontWeight: 600,
               whiteSpace: 'nowrap',
@@ -1433,8 +1435,8 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                 disabled={isProcessing}
                 style={{
                   padding: '12px 24px',
-                  backgroundColor: '#3c3c3c',
-                  color: '#d4d4d4',
+                  backgroundColor: 'var(--border-default)',
+                  color: 'var(--text-primary)',
                   border: 'none',
                   borderRadius: '3px',
                   cursor: isProcessing ? 'not-allowed' : 'pointer',
@@ -1448,7 +1450,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                 disabled={!allDecided || isProcessing}
                 style={{
                   padding: '12px 24px',
-                  backgroundColor: allDecided && !isProcessing ? '#d32f2f' : '#3c3c3c',
+                  backgroundColor: allDecided && !isProcessing ? 'var(--danger)' : 'var(--border-default)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '3px',
@@ -1463,7 +1465,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                 disabled={!allDecided || isProcessing}
                 style={{
                   padding: '12px 24px',
-                  backgroundColor: allDecided && !isProcessing ? '#0e639c' : '#3c3c3c',
+                  backgroundColor: allDecided && !isProcessing ? 'var(--accent)' : 'var(--border-default)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '3px',
@@ -1481,7 +1483,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
               disabled={!allDecided || isProcessing}
               style={{
                 padding: '12px 24px',
-                backgroundColor: allDecided && !isProcessing ? '#0e639c' : '#3c3c3c',
+                backgroundColor: allDecided && !isProcessing ? 'var(--accent)' : 'var(--border-default)',
                 color: 'white',
                 border: 'none',
                 borderRadius: '3px',

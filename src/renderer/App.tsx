@@ -7,6 +7,7 @@ import Adresy from './views/Adresy';
 import PodsumowanieZaliczek, { ZaliczkiFileEntry } from './views/PodsumowanieZaliczek';
 import Logo from './components/Logo';
 import Footer from './components/Footer';
+import Icon from './components/Icon';
 import UpdateNotification from './components/UpdateNotification';
 import { translations, Language } from './translations';
 import { FileEntry } from '../shared/types';
@@ -77,39 +78,39 @@ const App: React.FC = () => {
             className={`nav-item ${currentView === 'converter' ? 'active' : ''}`}
             onClick={() => setCurrentView('converter')}
           >
-            <span>📁</span> {t.converter}
+            <Icon name="folder" /> {t.converter}
           </div>
           <div
             className={`nav-item ${currentView === 'podsumowanie' ? 'active' : ''}`}
             onClick={() => setCurrentView('podsumowanie')}
           >
-            <span>📊</span> {t.podsumowanieZaliczek}
+            <Icon name="bar-chart" /> {t.podsumowanieZaliczek}
           </div>
           <div className="nav-divider" />
           <div
             className={`nav-item ${currentView === 'adresy' ? 'active' : ''}`}
             onClick={() => setCurrentView('adresy')}
           >
-            <span>📍</span> {t.adresy}
+            <Icon name="map-pin" /> {t.adresy}
           </div>
           <div
             className={`nav-item ${currentView === 'kontrahenci' ? 'active' : ''}`}
             onClick={() => setCurrentView('kontrahenci')}
           >
-            <span>👥</span> {t.kontrahenci}
+            <Icon name="users" /> {t.kontrahenci}
           </div>
           <div className="nav-divider" />
           <div
             className={`nav-item ${currentView === 'settings' ? 'active' : ''}`}
             onClick={() => setCurrentView('settings')}
           >
-            <span>⚙️</span> {t.settings}
+            <Icon name="settings" /> {t.settings}
           </div>
           <div
             className={`nav-item ${currentView === 'history' ? 'active' : ''}`}
             onClick={() => setCurrentView('history')}
           >
-            <span>📜</span> {t.history}
+            <Icon name="history" /> {t.history}
           </div>
         </div>
       </div>

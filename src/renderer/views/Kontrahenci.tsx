@@ -340,7 +340,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
               <select
                 value={newTyp}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewTyp(e.target.value as KontrahentTyp)}
-                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #3c3c3c', backgroundColor: '#1e1e1e', color: '#e0e0e0', width: '100%', minWidth: '220px' }}
+                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #3c3c3c', backgroundColor: 'var(--bg-surface)', color: 'var(--text-primary)', width: '100%', minWidth: '220px' }}
               >
                 <option value="Kontrahent">{t.typKontrahent}</option>
                 <option value="Pozostałe przychody">{t.typPozostalePrzychody}</option>
@@ -459,9 +459,9 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
                         backgroundColor: kontrahent.typ === 'Kontrahent' ? 'rgba(78, 201, 176, 0.15)' 
                           : kontrahent.typ === 'Pozostałe przychody' ? 'rgba(91, 155, 213, 0.15)' 
                           : 'rgba(206, 145, 120, 0.15)',
-                        color: kontrahent.typ === 'Kontrahent' ? '#4EC9B0' 
-                          : kontrahent.typ === 'Pozostałe przychody' ? '#5B9BD5' 
-                          : '#CE9178',
+                        color: kontrahent.typ === 'Kontrahent' ? 'var(--success)' 
+                          : kontrahent.typ === 'Pozostałe przychody' ? 'var(--info)' 
+                          : 'var(--warning)',
                       }}>
                         {kontrahent.typ || 'Kontrahent'}
                       </span>

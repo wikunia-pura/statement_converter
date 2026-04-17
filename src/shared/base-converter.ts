@@ -17,7 +17,10 @@
 import { AIExtractor } from './ai-extractor';
 import { ExtractionCache } from './extraction-cache';
 import { ContractorMatcher, MatchedContractor } from './contractor-matcher';
-import { Kontrahent, Adres } from './types';
+import { Kontrahent, Adres, KontrahentTyp } from './types';
+
+const EXPENSE_MATCH_TYPES: KontrahentTyp[] = ['Kontrahent', 'Pozostałe koszty'];
+const INCOME_MATCH_TYPES: KontrahentTyp[] = ['Pozostałe przychody'];
 
 // ============================================================
 // Shared interfaces
@@ -360,6 +363,21 @@ export abstract class BaseConverter<TRaw> {
       const transaction = transactions[i];
       let extracted: BaseExtractedData | null = null;
 
+      // Income-side name match against 'Pozostałe przychody' entries.
+      // Runs before cache/regex so categorized deposits (lokaty, odsetki, etc.)
+      // route straight to the configured income account.
+      if (this.contractorMatcher) {
+        const norm = this.normalize(transaction);
+        const incomeMatch = this.contractorMatcher.match(norm, INCOME_MATCH_TYPES);
+        if (incomeMatch.contractor && incomeMatch.confidence >= 90) {
+          extracted = this.buildIncomeCategoryExtracted(transaction, incomeMatch.contractor);
+          processed.push(
+            this.createProcessedTransaction(transaction, extracted, 'income')
+          );
+          continue;
+        }
+      }
+
       // Optional: check cache first
       if (this.shouldCheckCacheBeforeRegex()) {
         const norm = this.normalize(transaction);
@@ -433,7 +451,7 @@ export abstract class BaseConverter<TRaw> {
       const norm = this.normalize(transaction);
 
       const matchedContractor = this.contractorMatcher
-        ? this.contractorMatcher.match(norm)
+        ? this.contractorMatcher.match(norm, EXPENSE_MATCH_TYPES)
         : { contractor: null, confidence: 0, matchedIn: 'none' as const };
 
       if (matchedContractor.contractor !== null && matchedContractor.confidence > 0) {
@@ -583,7 +601,7 @@ export abstract class BaseConverter<TRaw> {
         );
 
         const candidatesPerTransaction = transactionsForAI.map((t) =>
-          this.contractorMatcher!.getTopCandidates(t, 10)
+          this.contractorMatcher!.getTopCandidates(t, 10, EXPENSE_MATCH_TYPES)
         );
 
         const matchedContractors =
@@ -709,6 +727,29 @@ export abstract class BaseConverter<TRaw> {
         extractionMethods,
       },
       errors: [],
+    };
+  }
+
+  /**
+   * Build ExtractedData for an income transaction that matched a 'Pozostałe przychody' entry.
+   * The entry's account goes straight into apartmentNumber — csv-exporter's formatAccountNumber
+   * passes non-digit strings through as-is, so konto like "760-500" routes correctly.
+   */
+  protected buildIncomeCategoryExtracted(
+    transaction: TRaw,
+    contractor: Kontrahent
+  ): BaseExtractedData {
+    return {
+      streetName: null,
+      buildingNumber: null,
+      apartmentNumber: contractor.kontoKontrahenta,
+      fullAddress: contractor.nazwa,
+      tenantName: contractor.nazwa,
+      confidence: { address: 100, apartment: 100, tenantName: 100, overall: 100 },
+      extractionMethod: 'regex',
+      reasoning: `Dopasowano wpis "${contractor.nazwa}" (Pozostałe przychody)`,
+      warnings: [],
+      rawData: this.buildRawData(transaction),
     };
   }
 

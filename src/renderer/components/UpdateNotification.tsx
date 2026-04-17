@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { translations, Language } from '../translations';
+import Icon from './Icon';
 
 interface UpdateNotificationProps {
   language: Language;
@@ -87,7 +88,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
     <div className="update-notification">
       {updateDownloaded ? (
         <div className="update-content">
-          <div className="update-icon">🎉</div>
+          <div className="update-icon" style={{ color: 'var(--success)' }}><Icon name="sparkles" size={24} /></div>
           <div className="update-text">
             <strong>{language === 'pl' ? 'Aktualizacja pobrana!' : 'Update Downloaded!'}</strong>
             {platform === 'win32' ? (
@@ -117,7 +118,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
         </div>
       ) : updateAvailable ? (
         <div className="update-content">
-          <div className="update-icon">🔄</div>
+          <div className="update-icon" style={{ color: 'var(--info)' }}><Icon name="refresh" size={24} /></div>
           <div className="update-text">
             <strong>{t.updateAvailableTitle}</strong>
             <p>
@@ -144,7 +145,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
         </div>
       ) : error ? (
         <div className="update-content update-error">
-          <div className="update-icon">⚠️</div>
+          <div className="update-icon" style={{ color: 'var(--danger)' }}><Icon name="alert-triangle" size={24} /></div>
           <div className="update-text">
             <strong>{t.updateError}</strong>
             <p>{error}</p>

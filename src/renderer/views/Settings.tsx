@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Bank, Converter } from '../../shared/types';
 import { translations, Language } from '../translations';
+import Icon from '../components/Icon';
 
 interface SettingsProps {
   darkMode: boolean;
@@ -214,8 +215,10 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
     <div className="content-body">
         {/* Updates */}
         <div className="card">
-          <h2 style={{ marginBottom: '20px' }}>🔄 {t.checkForUpdates}</h2>
-          <p style={{ color: '#6c757d', fontSize: '14px', marginBottom: '20px' }}>
+          <h2 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Icon name="refresh" size={20} /> {t.checkForUpdates}
+          </h2>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: '14px', marginBottom: '20px' }}>
             Sprawdź czy dostępna jest nowa wersja aplikacji.
           </p>
           <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
@@ -246,11 +249,11 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
               }}
               title="Otwórz folder z logami aplikacji - pomaga w diagnozowaniu problemów z aktualizacjami"
             >
-              📋 Pokaż logi
+              <Icon name="clipboard" size={14} /> Pokaż logi
             </button>
           </div>
-          <p style={{ color: '#6c757d', fontSize: '12px', fontStyle: 'italic' }}>
-            💡 Jeśli aktualizacja nie działa, sprawdź logi aby zobaczyć szczegóły błędu.
+          <p style={{ color: 'var(--text-tertiary)', fontSize: '12px', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Icon name="info" size={12} /> Jeśli aktualizacja nie działa, sprawdź logi aby zobaczyć szczegóły błędu.
           </p>
         </div>
 
@@ -260,7 +263,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
           
           <div className="settings-row">
             <div className="settings-label">
-              <span className="settings-label-main">🌙 {t.darkMode}</span>
+              <span className="settings-label-main">{t.darkMode}</span>
               <span className="settings-label-sub">
                 {darkMode ? 'Ciemny motyw jest włączony' : 'Jasny motyw jest włączony'}
               </span>
@@ -277,7 +280,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
 
           <div className="settings-row">
             <div className="settings-label">
-              <span className="settings-label-main">🌍 {t.language}</span>
+              <span className="settings-label-main">{t.language}</span>
               <span className="settings-label-sub">Wybierz preferowany język</span>
             </div>
             <select value={language} onChange={handleLanguageChange} style={{ minWidth: '150px' }}>
@@ -303,11 +306,13 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
 
         {/* IMPEX Folder Settings */}
         <div className="card">
-          <h2 style={{ marginBottom: '15px' }}>📁 Folder IMPEX</h2>
+          <h2 style={{ marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Icon name="folder" size={20} /> Folder IMPEX
+          </h2>
           <div className="form-group">
             <label>
               Opcjonalna ścieżka dla dodatkowej kopii plików accounting
-              <span style={{ display: 'block', fontSize: '12px', color: '#6c757d', marginTop: '5px' }}>
+              <span style={{ display: 'block', fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '5px' }}>
                 Jeśli ustawiona, każdy plik accounting będzie dodatkowo zapisany w tym folderze
               </span>
             </label>
@@ -330,7 +335,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
                   }}
                   title="Wyczyść ścieżkę IMPEX"
                 >
-                  ✕
+                  <Icon name="x" size={14} />
                 </button>
               )}
             </div>
@@ -417,14 +422,14 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
                       <td>
                         {bank.name}
                         {hasInvalidConverter && (
-                          <span style={{ color: '#dc3545', marginLeft: '8px', fontSize: '12px' }} title="Konwerter nie istnieje">
-                            ⚠️
+                          <span style={{ color: 'var(--danger)', marginLeft: '8px', display: 'inline-flex', alignItems: 'center' }} title="Konwerter nie istnieje">
+                            <Icon name="alert-triangle" size={14} />
                           </span>
                         )}
                       </td>
                       <td>
                         {converter?.name || (
-                          <span style={{ color: '#dc3545' }}>
+                          <span style={{ color: 'var(--danger)' }}>
                             {bank.converterId} (nie znaleziono)
                           </span>
                         )}
@@ -452,7 +457,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
             </table>
           ) : (
             <div className="empty-state">
-              <div className="empty-state-icon">🏦</div>
+              <div className="empty-state-icon"><Icon name="building" size={48} /></div>
               <div className="empty-state-text">{t.noBanksConfigured}</div>
             </div>
           )}
@@ -472,7 +477,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
               {converters.filter(c => c && c.id).map((converter) => (
                 <tr key={converter.id}>
                   <td>{converter.name || converter.id}</td>
-                  <td style={{ color: '#7f8c8d' }}>{converter.description || 'No description'}</td>
+                  <td style={{ color: 'var(--text-tertiary)' }}>{converter.description || 'No description'}</td>
                 </tr>
               ))}
             </tbody>
@@ -482,29 +487,33 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
         {/* Export/Import Settings */}
         <div className="card">
           <h2 style={{ marginBottom: '20px' }}>📦 Zarządzanie ustawieniami</h2>
-          <p style={{ color: '#6c757d', fontSize: '14px', marginBottom: '20px' }}>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: '14px', marginBottom: '20px' }}>
             Eksportuj lub importuj swoje ustawienia, w tym listę banków i preferencje aplikacji.
           </p>
           <div className="button-group" style={{ marginTop: 0 }}>
             <button className="button button-primary" onClick={handleExportSettings}>
-              📄 Eksportuj ustawienia
+              <Icon name="download" size={14} /> Eksportuj ustawienia
             </button>
             <button className="button button-secondary" onClick={handleImportSettings}>
-              📂 Importuj ustawienia
+              <Icon name="upload" size={14} /> Importuj ustawienia
             </button>
           </div>
         </div>
 
         {/* Developer-only section - Skip Approval */}
-        <div className="card" style={{ borderColor: '#dc3545', backgroundColor: 'rgba(220, 53, 69, 0.05)' }}>
-          <h2 style={{ marginBottom: '20px', color: '#dc3545' }}>⚠️ {t.doNotUseSkipApproval}</h2>
-          <p style={{ color: '#dc3545', fontSize: '14px', marginBottom: '15px', fontWeight: 'bold' }}>
+        <div className="card" style={{ borderColor: 'var(--danger)', backgroundColor: 'rgba(220, 53, 69, 0.05)' }}>
+          <h2 style={{ marginBottom: '20px', color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Icon name="alert-triangle" size={20} /> {t.doNotUseSkipApproval}
+          </h2>
+          <p style={{ color: 'var(--danger)', fontSize: '14px', marginBottom: '15px', fontWeight: 'bold' }}>
             {t.skipApprovalWarningMessage}
           </p>
           <div className="settings-row">
             <div className="settings-label">
-              <span className="settings-label-main" style={{ color: '#dc3545' }}>🚨 {t.skipUserApproval}</span>
-              <span className="settings-label-sub" style={{ color: '#6c757d' }}>
+              <span className="settings-label-main" style={{ color: 'var(--danger)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <Icon name="alert-circle" size={14} /> {t.skipUserApproval}
+              </span>
+              <span className="settings-label-sub" style={{ color: 'var(--text-tertiary)' }}>
                 {t.skipUserApprovalDesc}
               </span>
             </div>

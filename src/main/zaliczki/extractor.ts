@@ -186,26 +186,30 @@ export async function extractZaliczkiFromPdf(
   // `document` content block (native PDF) is supported by the Anthropic API
   // but not yet typed in SDK v0.32. Cast the message payload to bypass the
   // type check — upgrading the SDK would ripple into ai-extractor.ts.
-  const resp = await client.messages.create({
-    model,
-    max_tokens: 32000,
-    messages: [
-      {
-        role: 'user',
-        content: [
+  const resp = await withRateLimitRetry(
+    () =>
+      client.messages.create({
+        model,
+        max_tokens: 32000,
+        messages: [
           {
-            type: 'document',
-            source: {
-              type: 'base64',
-              media_type: 'application/pdf',
-              data: base64,
-            },
+            role: 'user',
+            content: [
+              {
+                type: 'document',
+                source: {
+                  type: 'base64',
+                  media_type: 'application/pdf',
+                  data: base64,
+                },
+              },
+              { type: 'text', text: PROMPT },
+            ],
           },
-          { type: 'text', text: PROMPT },
-        ],
-      },
-    ] as unknown as Anthropic.MessageCreateParamsNonStreaming['messages'],
-  });
+        ] as unknown as Anthropic.MessageCreateParamsNonStreaming['messages'],
+      }),
+    filename,
+  );
 
   const firstBlock = resp.content[0];
   const text = firstBlock && firstBlock.type === 'text' ? firstBlock.text : '';
@@ -344,4 +348,38 @@ function toNumber(v: unknown): number | null {
   if (!s || s.toLowerCase() === 'null') return null;
   const n = parseFloat(s);
   return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Retry on 429 rate_limit_error with Retry-After honor.
+ * Anthropic SDK exposes the header via `err.headers['retry-after']` (seconds).
+ * Input-token-per-minute limits recover in ≤60s, so we cap waits at 90s.
+ */
+async function withRateLimitRetry<T>(
+  fn: () => Promise<T>,
+  filename: string,
+  maxAttempts: number = 4,
+): Promise<T> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      const isRateLimit = err?.status === 429 || err?.error?.type === 'rate_limit_error';
+      if (!isRateLimit || attempt === maxAttempts) throw err;
+
+      const headerRetry = parseFloat(
+        err?.headers?.['retry-after'] ?? err?.response?.headers?.get?.('retry-after') ?? '',
+      );
+      const waitSeconds = Number.isFinite(headerRetry) && headerRetry > 0
+        ? Math.min(headerRetry, 90)
+        : Math.min(30 * attempt, 90);
+      logger.warn(
+        `[ZALICZKI] ${filename}: 429 rate_limit_error (attempt ${attempt}/${maxAttempts}), ` +
+          `waiting ${waitSeconds}s before retry`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
+    }
+  }
+  // Unreachable — loop either returns or throws.
+  throw new Error('withRateLimitRetry: exhausted retries unexpectedly');
 }

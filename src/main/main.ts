@@ -13,6 +13,8 @@ import {
   extractZaliczkiFromPdf,
 } from './zaliczki/extractor';
 import { buildWorkbookFromEdited, EditedFile } from './zaliczki/excelWriter';
+import { extractNotaFromPdf } from './notySwiadczenia/extractor';
+import { buildNotaWorkbook } from './notySwiadczenia/excelWriter';
 
 // Log environment variable for testing
 log.debug('[MAIN] TEST_AI_BILLING_ERROR =', process.env.TEST_AI_BILLING_ERROR);
@@ -746,6 +748,62 @@ function setupIpcHandlers() {
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         log.error('[ZALICZKI] generate xlsx failed:', message);
+        return { error: message };
+      }
+    },
+  );
+
+  // ---- Noty Świadczenia (correction notices) ----
+  ipcMain.handle(IPC_CHANNELS.NOTY_SELECT_PDFS, async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+    if (result.canceled) return [];
+    return result.filePaths.map((p) => ({ fileName: path.basename(p), filePath: p }));
+  });
+
+  ipcMain.handle(IPC_CHANNELS.NOTY_SELECT_OUTPUT_DIR, async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.NOTY_CONVERT,
+    async (_event, filePath: string, outputDir: string | null) => {
+      try {
+        if (!fs.existsSync(filePath)) {
+          return { error: 'Plik PDF nie istnieje lub został usunięty' };
+        }
+        const data = await extractNotaFromPdf(filePath);
+        const buffer = await buildNotaWorkbook(data);
+
+        const baseName = path.basename(filePath, path.extname(filePath));
+        const defaultName = `${baseName}.xlsx`;
+
+        let targetPath: string;
+        if (outputDir) {
+          targetPath = path.join(outputDir, defaultName);
+        } else {
+          const saveResult = await dialog.showSaveDialog(mainWindow!, {
+            title: 'Zapisz notę jako Excel',
+            defaultPath: defaultName,
+            filters: [{ name: 'Excel', extensions: ['xlsx'] }],
+          });
+          if (saveResult.canceled || !saveResult.filePath) {
+            return { canceled: true };
+          }
+          targetPath = saveResult.filePath;
+        }
+
+        fs.writeFileSync(targetPath, buffer);
+        return { success: true, filePath: targetPath };
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        log.error('[NOTY] convert failed:', message);
         return { error: message };
       }
     },

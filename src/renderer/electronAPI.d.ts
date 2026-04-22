@@ -108,6 +108,12 @@ interface ElectronAPI {
   zaliczkiGenerateXlsx: (files: ZaliczkiEditedFile[], year: number) =>
     Promise<{ success?: boolean; filePath?: string; canceled?: boolean; error?: string }>;
 
+  // Noty Świadczenia
+  notySelectPdfs: () => Promise<{ fileName: string; filePath: string }[]>;
+  notySelectOutputDir: () => Promise<string | null>;
+  notyConvert: (filePath: string, outputDir: string | null) =>
+    Promise<{ success?: boolean; filePath?: string; canceled?: boolean; error?: string }>;
+
   // App info
   getAppVersion: () => Promise<string>;
 

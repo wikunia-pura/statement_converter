@@ -1079,7 +1079,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                   <th>{t.adres}</th>
                   <th>PDF</th>
                   <th>{t.status}</th>
-                  <th>{t.actions}</th>
+                  <th style={{ textAlign: 'right' }}>{t.actions}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1209,7 +1209,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                           )}
                         </td>
                         <td>
-                          <div style={{ display: 'flex', gap: '8px' }}>
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
                             {file.status === 'success' && (
                               <>
                                 <div style={{ position: 'relative' }} ref={openDropdownId === file.id ? dropdownRef : undefined}>

@@ -47,6 +47,9 @@ const IPC_CHANNELS = {
   ZALICZKI_EXTRACT_PDF: 'zaliczki:extract-pdf',
   ZALICZKI_GENERATE_XLSX: 'zaliczki:generate-xlsx',
   ZALICZKI_GET_MODELS: 'zaliczki:get-models',
+  NOTY_SELECT_PDFS: 'noty:select-pdfs',
+  NOTY_SELECT_OUTPUT_DIR: 'noty:select-output-dir',
+  NOTY_CONVERT: 'noty:convert',
 } as const;
 
 // Expose protected methods that allow the renderer process to use
@@ -127,6 +130,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.ZALICZKI_EXTRACT_PDF, filePath, model),
   zaliczkiGenerateXlsx: (files: unknown[], year: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.ZALICZKI_GENERATE_XLSX, files, year),
+
+  // Noty Świadczenia
+  notySelectPdfs: () => ipcRenderer.invoke(IPC_CHANNELS.NOTY_SELECT_PDFS),
+  notySelectOutputDir: () => ipcRenderer.invoke(IPC_CHANNELS.NOTY_SELECT_OUTPUT_DIR),
+  notyConvert: (filePath: string, outputDir: string | null) =>
+    ipcRenderer.invoke(IPC_CHANNELS.NOTY_CONVERT, filePath, outputDir),
 
   // App info
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION),

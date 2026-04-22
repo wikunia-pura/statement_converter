@@ -224,6 +224,25 @@ export const translations = {
     zaliczkiDuplicatesTitle: 'Wykryto duplikaty',
     zaliczkiDuplicatesMessage: 'Następujące pliki zostały już dodane do listy i nie zostaną dodane ponownie:',
     zaliczkiDuplicatesOk: 'Rozumiem',
+
+    // Noty Świadczenia
+    notySwiadczenia: 'Noty Świadczenia',
+    notyTitle: 'Noty Świadczenia',
+    notySubtitle: 'Wrzuć PDF-y z korektami → konwertuj na Excel z formułami (Korekta = Powinno być − Było).',
+    notyNoFiles: 'Nie dodano jeszcze żadnych PDF-ów.',
+    notyFile: 'Plik',
+    notyStatus: 'Status',
+    notyConvert: 'Konwertuj',
+    notyConvertAgain: 'Konwertuj ponownie',
+    notyConvertAll: 'Konwertuj wszystkie',
+    notyConverting: 'Konwertowanie…',
+    notyClearAll: 'Wyczyść',
+    notyConvertSuccess: 'Zapisano',
+    notyConvertError: 'Błąd konwersji',
+    notyOpenFile: '📂 Otwórz plik',
+    notyStatusConverting: 'konwertowanie…',
+    notyNothingToProcess: 'Brak plików do przetworzenia.',
+    notyPickOutputDirTitle: 'Wybierz folder zapisu',
   },
   en: {
     // Navigation
@@ -450,6 +469,25 @@ export const translations = {
     zaliczkiDuplicatesTitle: 'Duplicates detected',
     zaliczkiDuplicatesMessage: 'The following files have already been added and will not be added again:',
     zaliczkiDuplicatesOk: 'Got it',
+
+    // Noty Świadczenia
+    notySwiadczenia: 'Settlement Notices',
+    notyTitle: 'Settlement Notices',
+    notySubtitle: 'Drop correction PDFs → convert to Excel with formulas (Korekta = Powinno być − Było).',
+    notyNoFiles: 'No PDFs added yet.',
+    notyFile: 'File',
+    notyStatus: 'Status',
+    notyConvert: 'Convert',
+    notyConvertAgain: 'Convert again',
+    notyConvertAll: 'Convert all',
+    notyConverting: 'Converting…',
+    notyClearAll: 'Clear all',
+    notyConvertSuccess: 'Saved',
+    notyConvertError: 'Conversion error',
+    notyOpenFile: '📂 Open file',
+    notyStatusConverting: 'converting…',
+    notyNothingToProcess: 'Nothing to process.',
+    notyPickOutputDirTitle: 'Pick output folder',
   },
 };
 

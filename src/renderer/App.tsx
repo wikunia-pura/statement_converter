@@ -5,6 +5,7 @@ import History from './views/History';
 import Kontrahenci from './views/Kontrahenci';
 import Adresy from './views/Adresy';
 import PodsumowanieZaliczek, { ZaliczkiFileEntry } from './views/PodsumowanieZaliczek';
+import NotySwiadczenia, { NotyFileEntry } from './views/NotySwiadczenia';
 import Logo from './components/Logo';
 import Footer from './components/Footer';
 import Icon from './components/Icon';
@@ -12,7 +13,7 @@ import UpdateNotification from './components/UpdateNotification';
 import { translations, Language } from './translations';
 import { FileEntry } from '../shared/types';
 
-type View = 'converter' | 'settings' | 'history' | 'kontrahenci' | 'adresy' | 'podsumowanie';
+type View = 'converter' | 'settings' | 'history' | 'kontrahenci' | 'adresy' | 'podsumowanie' | 'noty';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('converter');
@@ -22,6 +23,7 @@ const App: React.FC = () => {
   const [selectedBank, setSelectedBank] = useState<number | null>(null);
   const [zaliczkiFiles, setZaliczkiFiles] = useState<ZaliczkiFileEntry[]>([]);
   const [zaliczkiGeneratedPath, setZaliczkiGeneratedPath] = useState<string | null>(null);
+  const [notyFiles, setNotyFiles] = useState<NotyFileEntry[]>([]);
   const [appVersion, setAppVersion] = useState<string>('1.0.0');
 
   useEffect(() => {
@@ -86,6 +88,12 @@ const App: React.FC = () => {
           >
             <Icon name="bar-chart" /> {t.podsumowanieZaliczek}
           </div>
+          <div
+            className={`nav-item ${currentView === 'noty' ? 'active' : ''}`}
+            onClick={() => setCurrentView('noty')}
+          >
+            <Icon name="file-text" /> {t.notySwiadczenia}
+          </div>
           <div className="nav-divider" />
           <div
             className={`nav-item ${currentView === 'adresy' ? 'active' : ''}`}
@@ -134,6 +142,13 @@ const App: React.FC = () => {
             setFiles={setZaliczkiFiles}
             generatedFilePath={zaliczkiGeneratedPath}
             setGeneratedFilePath={setZaliczkiGeneratedPath}
+          />
+        )}
+        {currentView === 'noty' && (
+          <NotySwiadczenia
+            language={language}
+            files={notyFiles}
+            setFiles={setNotyFiles}
           />
         )}
         {currentView === 'settings' && (

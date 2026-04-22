@@ -391,7 +391,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                 <th>{t.zaliczkiFile}</th>
                 <th style={{ width: '190px' }}>{t.zaliczkiMonth}</th>
                 <th style={{ width: '220px' }}>{t.zaliczkiStatus}</th>
-                <th style={{ width: '180px' }}>{t.actions}</th>
+                <th style={{ textAlign: 'right' }}>{t.actions}</th>
               </tr>
             </thead>
             <tbody>
@@ -468,7 +468,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                           )}
                         </td>
                         <td>
-                          <div style={{ display: 'flex', gap: '8px' }}>
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
                             {(f.status === 'pending' || f.status === 'error') && (
                               <button
                                 className="button button-small button-success"

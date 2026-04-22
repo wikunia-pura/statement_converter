@@ -185,4 +185,9 @@ export const IPC_CHANNELS = {
   ZALICZKI_EXTRACT_PDF: 'zaliczki:extract-pdf',
   ZALICZKI_GENERATE_XLSX: 'zaliczki:generate-xlsx',
   ZALICZKI_GET_MODELS: 'zaliczki:get-models',
+
+  // Noty Świadczenia (correction notices for housing community settlements)
+  NOTY_SELECT_PDFS: 'noty:select-pdfs',
+  NOTY_SELECT_OUTPUT_DIR: 'noty:select-output-dir',
+  NOTY_CONVERT: 'noty:convert',
 } as const;

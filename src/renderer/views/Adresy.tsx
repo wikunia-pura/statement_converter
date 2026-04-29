@@ -14,6 +14,8 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
   const [newNazwa, setNewNazwa] = useState('');
   const [newAlternativeNames, setNewAlternativeNames] = useState<string[]>([]);
   const [newAlternativeName, setNewAlternativeName] = useState('');
+  const [newSwrkIdentifiers, setNewSwrkIdentifiers] = useState<string[]>([]);
+  const [newSwrkIdentifier, setNewSwrkIdentifier] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -50,10 +52,12 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
     }
 
     try {
-      await window.electronAPI.addAdres(newNazwa, newAlternativeNames);
+      await window.electronAPI.addAdres(newNazwa, newAlternativeNames, newSwrkIdentifiers);
       setNewNazwa('');
       setNewAlternativeNames([]);
       setNewAlternativeName('');
+      setNewSwrkIdentifiers([]);
+      setNewSwrkIdentifier('');
       setShowAddAdres(false);
       loadData();
     } catch (error: unknown) {
@@ -78,10 +82,17 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
     }
 
     try {
-      await window.electronAPI.updateAdres(editingAdres.id, newNazwa, newAlternativeNames);
+      await window.electronAPI.updateAdres(
+        editingAdres.id,
+        newNazwa,
+        newAlternativeNames,
+        newSwrkIdentifiers,
+      );
       setNewNazwa('');
       setNewAlternativeNames([]);
       setNewAlternativeName('');
+      setNewSwrkIdentifiers([]);
+      setNewSwrkIdentifier('');
       setEditingAdres(null);
       loadData();
     } catch (error: unknown) {
@@ -107,6 +118,8 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
     setNewNazwa(adres.nazwa);
     setNewAlternativeNames(adres.alternativeNames || []);
     setNewAlternativeName('');
+    setNewSwrkIdentifiers(adres.swrkIdentifiers || []);
+    setNewSwrkIdentifier('');
   };
 
   const handleCancelEdit = () => {
@@ -115,6 +128,8 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
     setNewNazwa('');
     setNewAlternativeNames([]);
     setNewAlternativeName('');
+    setNewSwrkIdentifiers([]);
+    setNewSwrkIdentifier('');
   };
 
   const handleImportFromFile = async () => {
@@ -170,9 +185,26 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
     setNewAlternativeNames(newAlternativeNames.filter((_, i) => i !== index));
   };
 
-  const filteredAdresy = adresy.filter(a =>
-    a.nazwa.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const handleAddSwrkIdentifier = () => {
+    const trimmed = newSwrkIdentifier.trim();
+    if (trimmed && !newSwrkIdentifiers.includes(trimmed)) {
+      setNewSwrkIdentifiers([...newSwrkIdentifiers, trimmed]);
+      setNewSwrkIdentifier('');
+    }
+  };
+
+  const handleRemoveSwrkIdentifier = (index: number) => {
+    setNewSwrkIdentifiers(newSwrkIdentifiers.filter((_, i) => i !== index));
+  };
+
+  const filteredAdresy = adresy.filter((a) => {
+    const q = searchTerm.toLowerCase().trim();
+    if (!q) return true;
+    if (a.nazwa.toLowerCase().includes(q)) return true;
+    if (a.alternativeNames?.some((n) => n.toLowerCase().includes(q))) return true;
+    if (a.swrkIdentifiers?.some((s) => s.toLowerCase().includes(q))) return true;
+    return false;
+  });
 
   return (
     <div className="content-body">
@@ -311,6 +343,53 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
                 </button>
               </div>
             </div>
+            <div className="form-group">
+              <label>{t.swrkIdentifiers}</label>
+              <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
+                {t.swrkIdentifiersHint}
+              </div>
+              {newSwrkIdentifiers.length > 0 && (
+                <div style={{ marginBottom: '8px' }}>
+                  {newSwrkIdentifiers.map((id, index) => (
+                    <div key={index} className="alternative-name-tag">
+                      <span>{id}</span>
+                      <button
+                        onClick={() => handleRemoveSwrkIdentifier(index)}
+                        className="alternative-name-remove"
+                        type="button"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="text"
+                  value={newSwrkIdentifier}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setNewSwrkIdentifier(e.target.value)
+                  }
+                  onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddSwrkIdentifier();
+                    }
+                  }}
+                  placeholder={t.swrkPlaceholder}
+                  style={{ flex: 1 }}
+                />
+                <button
+                  type="button"
+                  className="button button-primary"
+                  onClick={handleAddSwrkIdentifier}
+                  disabled={!newSwrkIdentifier.trim()}
+                >
+                  + {t.addSwrkIdentifier}
+                </button>
+              </div>
+            </div>
             <div className="button-group button-group-separator" style={{ marginTop: '20px', paddingTop: '15px' }}>
               <button
                 className="button button-success"
@@ -350,6 +429,7 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
               <thead>
                 <tr>
                   <th>{t.nazwa}</th>
+                  <th>{t.swrkIdentifiers}</th>
                   <th>{t.actions}</th>
                 </tr>
               </thead>
@@ -363,6 +443,11 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
                           {adres.alternativeNames.join(', ')}
                         </div>
                       )}
+                    </td>
+                    <td style={{ wordBreak: 'break-all' }}>
+                      {adres.swrkIdentifiers && adres.swrkIdentifiers.length > 0
+                        ? adres.swrkIdentifiers.join(', ')
+                        : '—'}
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: '8px' }}>

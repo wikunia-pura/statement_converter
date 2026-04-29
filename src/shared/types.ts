@@ -24,6 +24,8 @@ export interface Adres {
   nazwa: string;
 
   alternativeNames?: string[];
+  /** Substring identifiers used by the "Scalanie wpłat" module — any one of these appearing anywhere in a file's content marks the file as belonging to this address. */
+  swrkIdentifiers?: string[];
   createdAt: string;
 }
 
@@ -190,4 +192,10 @@ export const IPC_CHANNELS = {
   NOTY_SELECT_PDFS: 'noty:select-pdfs',
   NOTY_SELECT_OUTPUT_DIR: 'noty:select-output-dir',
   NOTY_CONVERT: 'noty:convert',
+
+  // Scalanie wpłat (merge daily-deposit files per community)
+  SCALANIE_SELECT_FILES: 'scalanie:select-files',
+  SCALANIE_ANALYZE_FILE: 'scalanie:analyze-file',
+  SCALANIE_SELECT_OUTPUT_DIR: 'scalanie:select-output-dir',
+  SCALANIE_MERGE: 'scalanie:merge',
 } as const;

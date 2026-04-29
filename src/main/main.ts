@@ -15,6 +15,11 @@ import {
 import { buildWorkbookFromEdited, EditedFile } from './zaliczki/excelWriter';
 import { extractNotaFromPdf } from './notySwiadczenia/extractor';
 import { buildNotaWorkbook } from './notySwiadczenia/excelWriter';
+import {
+  analyzeFile as scalanieAnalyzeFile,
+  mergeGroups as scalanieMergeGroups,
+  MergeFileInput as ScalanieMergeFileInput,
+} from './scalanieWplat/merger';
 
 // Log environment variable for testing
 log.debug('[MAIN] TEST_AI_BILLING_ERROR =', process.env.TEST_AI_BILLING_ERROR);
@@ -494,14 +499,31 @@ function setupIpcHandlers() {
     return database.getAllAdresy();
   });
 
-  ipcMain.handle(IPC_CHANNELS.ADD_ADRES, async (_, nazwa: string, alternativeNames?: string[]) => {
-    return database.addAdres(nazwa, alternativeNames);
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.ADD_ADRES,
+    async (
+      _,
+      nazwa: string,
+      alternativeNames?: string[],
+      swrkIdentifiers?: string[],
+    ) => {
+      return database.addAdres(nazwa, alternativeNames, swrkIdentifiers);
+    },
+  );
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_ADRES, async (_, id: number, nazwa: string, alternativeNames?: string[]) => {
-    database.updateAdres(id, nazwa, alternativeNames);
-    return true;
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.UPDATE_ADRES,
+    async (
+      _,
+      id: number,
+      nazwa: string,
+      alternativeNames?: string[],
+      swrkIdentifiers?: string[],
+    ) => {
+      database.updateAdres(id, nazwa, alternativeNames, swrkIdentifiers);
+      return true;
+    },
+  );
 
   ipcMain.handle(IPC_CHANNELS.DELETE_ADRES, async (_, id: number) => {
     database.deleteAdres(id);
@@ -535,52 +557,69 @@ function setupIpcHandlers() {
       let count = 0;
       let lastAdres: any = null;
       let accumulatedAltNames: string[] = [];
-      
+      let accumulatedSwrk: string[] = [];
+
       const finalizeLastAdres = () => {
-        if (lastAdres && accumulatedAltNames.length > 0) {
-          database.updateAdres(lastAdres.id, lastAdres.nazwa, accumulatedAltNames);
+        if (lastAdres && (accumulatedAltNames.length > 0 || accumulatedSwrk.length > 0)) {
+          database.updateAdres(
+            lastAdres.id,
+            lastAdres.nazwa,
+            accumulatedAltNames,
+            accumulatedSwrk,
+          );
           lastAdres.alternativeNames = accumulatedAltNames;
+          lastAdres.swrkIdentifiers = accumulatedSwrk;
         }
       };
-      
+
       for (const line of lines) {
         // Skip header lines and empty lines
         if (line.trim().length === 0 || line.includes('Adresy') || line.includes('---')) {
           continue;
         }
-        
+
         // Check if it's an alternative names line
         const altMatch = line.match(/^\s*ALT:\s*(.+)$/);
         if (altMatch && lastAdres) {
-          // Accumulate alternative name
           const altName = altMatch[1].trim();
           if (altName.length > 0) {
             accumulatedAltNames.push(altName);
           }
           continue;
         }
-        
+
+        // Check if it's a SWRK identifier line
+        const swrkMatch = line.match(/^\s*SWRK:\s*(.+)$/);
+        if (swrkMatch && lastAdres) {
+          const id = swrkMatch[1].trim();
+          if (id.length > 0) {
+            accumulatedSwrk.push(id);
+          }
+          continue;
+        }
+
         // Parse data line - just nazwa (no symbol)
         const nazwa = line.trim();
-        if (nazwa.length > 0 && !nazwa.startsWith('ALT:')) {
-          // Finalize previous adres with accumulated alt names
+        if (nazwa.length > 0 && !nazwa.startsWith('ALT:') && !nazwa.startsWith('SWRK:')) {
+          // Finalize previous adres with accumulated alt names + SWRK
           finalizeLastAdres();
           accumulatedAltNames = [];
-          
+          accumulatedSwrk = [];
+
           // Check if not already exists
           const existing = database.getAllAdresy().find(
             a => a.nazwa === nazwa
           );
-          
+
           if (!existing) {
-            lastAdres = database.addAdres(nazwa, []);
+            lastAdres = database.addAdres(nazwa, [], []);
             count++;
           } else {
-            lastAdres = null;
+            lastAdres = existing;
           }
         }
       }
-      
+
       // Finalize last adres in file
       finalizeLastAdres();
       
@@ -616,11 +655,18 @@ function setupIpcHandlers() {
       for (const a of adresy) {
         // Main nazwa
         lines.push(a.nazwa);
-        
+
         // Add alternative names if present
         if (a.alternativeNames && a.alternativeNames.length > 0) {
           for (const altName of a.alternativeNames) {
             lines.push(`  ALT: ${altName}`);
+          }
+        }
+
+        // Add SWRK identifiers if present
+        if (a.swrkIdentifiers && a.swrkIdentifiers.length > 0) {
+          for (const id of a.swrkIdentifiers) {
+            lines.push(`  SWRK: ${id}`);
           }
         }
       }
@@ -804,6 +850,58 @@ function setupIpcHandlers() {
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         log.error('[NOTY] convert failed:', message);
+        return { error: message };
+      }
+    },
+  );
+
+  // ---- Scalanie wpłat (merge daily deposit files per community) ----
+  ipcMain.handle(IPC_CHANNELS.SCALANIE_SELECT_FILES, async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openFile', 'multiSelections'],
+    });
+    if (result.canceled) return [];
+    return result.filePaths.map((p) => ({ fileName: path.basename(p), filePath: p }));
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SCALANIE_SELECT_OUTPUT_DIR, async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SCALANIE_ANALYZE_FILE, async (_event, filePath: string) => {
+    try {
+      if (!fs.existsSync(filePath)) {
+        return { error: 'Plik nie istnieje lub został usunięty' };
+      }
+      const adresy = database.getAllAdresy();
+      const analyzed = scalanieAnalyzeFile(filePath, adresy);
+      return { data: analyzed };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      log.error('[SCALANIE] analyze failed:', message);
+      return { error: message };
+    }
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.SCALANIE_MERGE,
+    async (_event, files: ScalanieMergeFileInput[], outputDir: string) => {
+      try {
+        if (!files || files.length === 0) {
+          return { error: 'Brak plików do scalenia' };
+        }
+        if (!outputDir || !fs.existsSync(outputDir)) {
+          return { error: 'Folder docelowy nie istnieje' };
+        }
+        const results = scalanieMergeGroups(files, outputDir);
+        return { success: true, results };
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        log.error('[SCALANIE] merge failed:', message);
         return { error: message };
       }
     },

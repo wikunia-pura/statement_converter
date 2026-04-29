@@ -36,6 +36,32 @@ export interface ZaliczkiModel {
   label: string;
 }
 
+export interface ScalanieAnalyzedFile {
+  filePath: string;
+  fileName: string;
+  date: string | null;
+  detectedAddress: string | null;
+  detectedAdresId: number | null;
+  accountKey: string | null;
+  lineCount: number;
+}
+
+export interface ScalanieMergeFileInput {
+  filePath: string;
+  communityKey: string;
+  communityLabel: string;
+  date: string | null;
+}
+
+export interface ScalanieMergeGroupResult {
+  communityKey: string;
+  communityLabel: string;
+  outputPath: string;
+  fileCount: number;
+  startDate: string | null;
+  endDate: string | null;
+}
+
 interface ConversionResult {
   success?: boolean;
   outputPath?: string;
@@ -66,8 +92,13 @@ interface ElectronAPI {
 
   // Adresy
   getAdresy: () => Promise<Adres[]>;
-  addAdres: (nazwa: string, alternativeNames?: string[]) => Promise<Adres>;
-  updateAdres: (id: number, nazwa: string, alternativeNames?: string[]) => Promise<boolean>;
+  addAdres: (nazwa: string, alternativeNames?: string[], swrkIdentifiers?: string[]) => Promise<Adres>;
+  updateAdres: (
+    id: number,
+    nazwa: string,
+    alternativeNames?: string[],
+    swrkIdentifiers?: string[],
+  ) => Promise<boolean>;
   deleteAdres: (id: number) => Promise<boolean>;
   deleteAllAdresy: () => Promise<boolean>;
   importAdresyFromFile: () => Promise<{ success: boolean; count?: number; error?: string }>;
@@ -113,6 +144,19 @@ interface ElectronAPI {
   notySelectOutputDir: () => Promise<string | null>;
   notyConvert: (filePath: string, outputDir: string | null) =>
     Promise<{ success?: boolean; filePath?: string; canceled?: boolean; error?: string }>;
+
+  // Scalanie wpłat
+  scalanieSelectFiles: () => Promise<{ fileName: string; filePath: string }[]>;
+  scalanieAnalyzeFile: (filePath: string) => Promise<{
+    data?: ScalanieAnalyzedFile;
+    error?: string;
+  }>;
+  scalanieSelectOutputDir: () => Promise<string | null>;
+  scalanieMerge: (files: ScalanieMergeFileInput[], outputDir: string) => Promise<{
+    success?: boolean;
+    results?: ScalanieMergeGroupResult[];
+    error?: string;
+  }>;
 
   // App info
   getAppVersion: () => Promise<string>;

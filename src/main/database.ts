@@ -161,33 +161,43 @@ class DatabaseService {
     return adresy.sort((a, b) => a.nazwa.localeCompare(b.nazwa));
   }
 
-  addAdres(nazwa: string, alternativeNames?: string[]): Adres {
+  addAdres(nazwa: string, alternativeNames?: string[], swrkIdentifiers?: string[]): Adres {
     const adresy = this.store.get('adresy', []);
     const id = this.store.get('nextAdresId', 1);
-    
+
     const newAdres: Adres = {
       id,
       nazwa,
       alternativeNames: alternativeNames || [],
+      swrkIdentifiers: swrkIdentifiers || [],
       createdAt: new Date().toISOString(),
     };
-    
+
     adresy.push(newAdres);
     this.store.set('adresy', adresy);
     this.store.set('nextAdresId', id + 1);
-    
+
     return newAdres;
   }
 
-  updateAdres(id: number, nazwa: string, alternativeNames?: string[]): void {
+  updateAdres(
+    id: number,
+    nazwa: string,
+    alternativeNames?: string[],
+    swrkIdentifiers?: string[],
+  ): void {
     const adresy = this.store.get('adresy', []);
     const index = adresy.findIndex(a => a.id === id);
-    
+
     if (index !== -1) {
-      adresy[index] = { 
-        ...adresy[index], 
-        nazwa, 
-        alternativeNames: alternativeNames || adresy[index].alternativeNames || []
+      adresy[index] = {
+        ...adresy[index],
+        nazwa,
+        alternativeNames: alternativeNames || adresy[index].alternativeNames || [],
+        swrkIdentifiers:
+          swrkIdentifiers !== undefined
+            ? swrkIdentifiers
+            : adresy[index].swrkIdentifiers || [],
       };
       this.store.set('adresy', adresy);
     }

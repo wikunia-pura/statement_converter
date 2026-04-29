@@ -50,6 +50,10 @@ const IPC_CHANNELS = {
   NOTY_SELECT_PDFS: 'noty:select-pdfs',
   NOTY_SELECT_OUTPUT_DIR: 'noty:select-output-dir',
   NOTY_CONVERT: 'noty:convert',
+  SCALANIE_SELECT_FILES: 'scalanie:select-files',
+  SCALANIE_ANALYZE_FILE: 'scalanie:analyze-file',
+  SCALANIE_SELECT_OUTPUT_DIR: 'scalanie:select-output-dir',
+  SCALANIE_MERGE: 'scalanie:merge',
 } as const;
 
 // Expose protected methods that allow the renderer process to use
@@ -77,10 +81,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Adresy
   getAdresy: () => ipcRenderer.invoke(IPC_CHANNELS.GET_ADRESY),
-  addAdres: (nazwa: string, alternativeNames?: string[]) =>
-    ipcRenderer.invoke(IPC_CHANNELS.ADD_ADRES, nazwa, alternativeNames),
-  updateAdres: (id: number, nazwa: string, alternativeNames?: string[]) =>
-    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_ADRES, id, nazwa, alternativeNames),
+  addAdres: (nazwa: string, alternativeNames?: string[], swrkIdentifiers?: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ADD_ADRES, nazwa, alternativeNames, swrkIdentifiers),
+  updateAdres: (
+    id: number,
+    nazwa: string,
+    alternativeNames?: string[],
+    swrkIdentifiers?: string[],
+  ) =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.UPDATE_ADRES,
+      id,
+      nazwa,
+      alternativeNames,
+      swrkIdentifiers,
+    ),
   deleteAdres: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ADRES, id),
   deleteAllAdresy: () => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ALL_ADRESY),
   importAdresyFromFile: () => ipcRenderer.invoke(IPC_CHANNELS.IMPORT_ADRESY_FROM_FILE),
@@ -136,6 +151,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   notySelectOutputDir: () => ipcRenderer.invoke(IPC_CHANNELS.NOTY_SELECT_OUTPUT_DIR),
   notyConvert: (filePath: string, outputDir: string | null) =>
     ipcRenderer.invoke(IPC_CHANNELS.NOTY_CONVERT, filePath, outputDir),
+
+  // Scalanie wpłat
+  scalanieSelectFiles: () => ipcRenderer.invoke(IPC_CHANNELS.SCALANIE_SELECT_FILES),
+  scalanieAnalyzeFile: (filePath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCALANIE_ANALYZE_FILE, filePath),
+  scalanieSelectOutputDir: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCALANIE_SELECT_OUTPUT_DIR),
+  scalanieMerge: (files: unknown[], outputDir: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SCALANIE_MERGE, files, outputDir),
 
   // App info
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION),

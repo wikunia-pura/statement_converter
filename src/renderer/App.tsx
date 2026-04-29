@@ -6,6 +6,7 @@ import Kontrahenci from './views/Kontrahenci';
 import Adresy from './views/Adresy';
 import PodsumowanieZaliczek, { ZaliczkiFileEntry } from './views/PodsumowanieZaliczek';
 import NotySwiadczenia, { NotyFileEntry } from './views/NotySwiadczenia';
+import ScalanieWplat, { ScalanieFileEntry } from './views/ScalanieWplat';
 import Logo from './components/Logo';
 import Footer from './components/Footer';
 import Icon from './components/Icon';
@@ -13,7 +14,7 @@ import UpdateNotification from './components/UpdateNotification';
 import { translations, Language } from './translations';
 import { FileEntry } from '../shared/types';
 
-type View = 'converter' | 'settings' | 'history' | 'kontrahenci' | 'adresy' | 'podsumowanie' | 'noty';
+type View = 'converter' | 'settings' | 'history' | 'kontrahenci' | 'adresy' | 'podsumowanie' | 'noty' | 'scalanie';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('converter');
@@ -24,6 +25,7 @@ const App: React.FC = () => {
   const [zaliczkiFiles, setZaliczkiFiles] = useState<ZaliczkiFileEntry[]>([]);
   const [zaliczkiGeneratedPath, setZaliczkiGeneratedPath] = useState<string | null>(null);
   const [notyFiles, setNotyFiles] = useState<NotyFileEntry[]>([]);
+  const [scalanieFiles, setScalanieFiles] = useState<ScalanieFileEntry[]>([]);
   const [appVersion, setAppVersion] = useState<string>('1.0.0');
 
   useEffect(() => {
@@ -94,6 +96,12 @@ const App: React.FC = () => {
           >
             <Icon name="file-text" /> {t.notySwiadczenia}
           </div>
+          <div
+            className={`nav-item ${currentView === 'scalanie' ? 'active' : ''}`}
+            onClick={() => setCurrentView('scalanie')}
+          >
+            <Icon name="wallet" /> {t.scalanieWplat}
+          </div>
           <div className="nav-divider" />
           <div
             className={`nav-item ${currentView === 'adresy' ? 'active' : ''}`}
@@ -149,6 +157,13 @@ const App: React.FC = () => {
             language={language}
             files={notyFiles}
             setFiles={setNotyFiles}
+          />
+        )}
+        {currentView === 'scalanie' && (
+          <ScalanieWplat
+            language={language}
+            files={scalanieFiles}
+            setFiles={setScalanieFiles}
           />
         )}
         {currentView === 'settings' && (

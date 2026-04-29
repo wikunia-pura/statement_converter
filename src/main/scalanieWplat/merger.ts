@@ -146,8 +146,15 @@ export function analyzeFile(filePath: string, addresses: Adres[]): AnalyzedFile 
   };
 }
 
+const POLISH_CHAR_MAP: Record<string, string> = {
+  ą: 'a', Ą: 'A', ć: 'c', Ć: 'C', ę: 'e', Ę: 'E',
+  ł: 'l', Ł: 'L', ń: 'n', Ń: 'N', ó: 'o', Ó: 'O',
+  ś: 's', Ś: 'S', ź: 'z', Ź: 'Z', ż: 'z', Ż: 'Z',
+};
+
 function sanitizeForFilename(name: string): string {
   return name
+    .replace(/[ąĄćĆęĘłŁńŃóÓśŚźŹżŻ]/g, (c) => POLISH_CHAR_MAP[c] ?? c)
     .replace(/[<>:"/\\|?*]/g, '')
     .replace(/\s+/g, '_')
     .replace(/_+/g, '_')

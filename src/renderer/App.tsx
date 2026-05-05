@@ -4,9 +4,11 @@ import Settings from './views/Settings';
 import History from './views/History';
 import Kontrahenci from './views/Kontrahenci';
 import Adresy from './views/Adresy';
+import Banki from './views/Banki';
 import PodsumowanieZaliczek, { ZaliczkiFileEntry } from './views/PodsumowanieZaliczek';
 import NotySwiadczenia, { NotyFileEntry } from './views/NotySwiadczenia';
 import ScalanieWplat, { ScalanieFileEntry } from './views/ScalanieWplat';
+import Homebanking, { HomebankingFileEntry } from './views/Homebanking';
 import Logo from './components/Logo';
 import Footer from './components/Footer';
 import Icon from './components/Icon';
@@ -14,7 +16,17 @@ import UpdateNotification from './components/UpdateNotification';
 import { translations, Language } from './translations';
 import { FileEntry } from '../shared/types';
 
-type View = 'converter' | 'settings' | 'history' | 'kontrahenci' | 'adresy' | 'podsumowanie' | 'noty' | 'scalanie';
+type View =
+  | 'converter'
+  | 'settings'
+  | 'history'
+  | 'kontrahenci'
+  | 'adresy'
+  | 'banki'
+  | 'podsumowanie'
+  | 'noty'
+  | 'scalanie'
+  | 'homebanking';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('converter');
@@ -26,6 +38,7 @@ const App: React.FC = () => {
   const [zaliczkiGeneratedPath, setZaliczkiGeneratedPath] = useState<string | null>(null);
   const [notyFiles, setNotyFiles] = useState<NotyFileEntry[]>([]);
   const [scalanieFiles, setScalanieFiles] = useState<ScalanieFileEntry[]>([]);
+  const [homebankingFiles, setHomebankingFiles] = useState<HomebankingFileEntry[]>([]);
   const [appVersion, setAppVersion] = useState<string>('1.0.0');
 
   useEffect(() => {
@@ -75,6 +88,7 @@ const App: React.FC = () => {
   return (
     <div className="app">
       <UpdateNotification language={language} />
+      <div className="app-body">
       <div className="sidebar">
         <Logo />
         <div className="sidebar-nav">
@@ -102,6 +116,12 @@ const App: React.FC = () => {
           >
             <Icon name="wallet" /> {t.scalanieWplat}
           </div>
+          <div
+            className={`nav-item ${currentView === 'homebanking' ? 'active' : ''}`}
+            onClick={() => setCurrentView('homebanking')}
+          >
+            <Icon name="briefcase" /> {t.homebanking}
+          </div>
           <div className="nav-divider" />
           <div
             className={`nav-item ${currentView === 'adresy' ? 'active' : ''}`}
@@ -114,6 +134,12 @@ const App: React.FC = () => {
             onClick={() => setCurrentView('kontrahenci')}
           >
             <Icon name="users" /> {t.kontrahenci}
+          </div>
+          <div
+            className={`nav-item ${currentView === 'banki' ? 'active' : ''}`}
+            onClick={() => setCurrentView('banki')}
+          >
+            <Icon name="building" /> {t.banki}
           </div>
           <div className="nav-divider" />
           <div
@@ -143,6 +169,7 @@ const App: React.FC = () => {
         )}
         {currentView === 'kontrahenci' && <Kontrahenci language={language} />}
         {currentView === 'adresy' && <Adresy language={language} />}
+        {currentView === 'banki' && <Banki language={language} />}
         {currentView === 'podsumowanie' && (
           <PodsumowanieZaliczek
             language={language}
@@ -166,6 +193,13 @@ const App: React.FC = () => {
             setFiles={setScalanieFiles}
           />
         )}
+        {currentView === 'homebanking' && (
+          <Homebanking
+            language={language}
+            files={homebankingFiles}
+            setFiles={setHomebankingFiles}
+          />
+        )}
         {currentView === 'settings' && (
           <Settings
             darkMode={darkMode}
@@ -175,8 +209,9 @@ const App: React.FC = () => {
           />
         )}
         {currentView === 'history' && <History language={language} />}
-        <Footer language={language} appVersion={appVersion} />
       </div>
+      </div>
+      <Footer language={language} appVersion={appVersion} />
     </div>
   );
 };

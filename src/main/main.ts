@@ -20,6 +20,11 @@ import {
   mergeGroups as scalanieMergeGroups,
   MergeFileInput as ScalanieMergeFileInput,
 } from './scalanieWplat/merger';
+import {
+  analyzeFile as homebankingAnalyzeFile,
+  mergeGroups as homebankingMergeGroups,
+  MergeFileInput as HomebankingMergeFileInput,
+} from './homebanking/merger';
 
 // Log environment variable for testing
 log.debug('[MAIN] TEST_AI_BILLING_ERROR =', process.env.TEST_AI_BILLING_ERROR);
@@ -155,18 +160,84 @@ function setupIpcHandlers() {
     return database.getAllBanks();
   });
 
-  ipcMain.handle(IPC_CHANNELS.ADD_BANK, async (_, name: string, converterId: string) => {
-    return database.addBank(name, converterId);
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.ADD_BANK,
+    async (_, name: string, converterId: string, accountPrefixes?: string[]) => {
+      return database.addBank(name, converterId, accountPrefixes);
+    },
+  );
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_BANK, async (_, id: number, name: string, converterId: string) => {
-    database.updateBank(id, name, converterId);
-    return true;
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.UPDATE_BANK,
+    async (_, id: number, name: string, converterId: string, accountPrefixes?: string[]) => {
+      database.updateBank(id, name, converterId, accountPrefixes);
+      return true;
+    },
+  );
 
   ipcMain.handle(IPC_CHANNELS.DELETE_BANK, async (_, id: number) => {
     database.deleteBank(id);
     return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_ALL_BANKS, async () => {
+    database.deleteAllBanks();
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.EXPORT_BANKS_TO_FILE, async () => {
+    try {
+      const result = await dialog.showSaveDialog(mainWindow!, {
+        title: 'Export Banki',
+        defaultPath: 'banki.json',
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      });
+
+      if (result.canceled || !result.filePath) {
+        return { success: false };
+      }
+
+      const banks = database.getAllBanks();
+      fs.writeFileSync(result.filePath, JSON.stringify(banks, null, 2), 'utf-8');
+      return { success: true, count: banks.length, filePath: result.filePath };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return { success: false, error: errorMessage };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.IMPORT_BANKS_FROM_FILE, async () => {
+    try {
+      const result = await dialog.showOpenDialog(mainWindow!, {
+        title: 'Import Banki',
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+        properties: ['openFile'],
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false };
+      }
+
+      const content = fs.readFileSync(result.filePaths[0], 'utf-8');
+      const parsed = JSON.parse(content);
+      if (!Array.isArray(parsed)) {
+        return { success: false, error: 'Nieprawidłowy format pliku' };
+      }
+
+      const banks = parsed.map((b: any, idx: number) => ({
+        id: typeof b.id === 'number' ? b.id : idx + 1,
+        name: String(b.name || ''),
+        converterId: String(b.converterId || ''),
+        accountPrefixes: Array.isArray(b.accountPrefixes) ? b.accountPrefixes : [],
+        createdAt: b.createdAt || new Date().toISOString(),
+      }));
+
+      database.importBanks(banks);
+      return { success: true, count: banks.length };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return { success: false, error: errorMessage };
+    }
   });
 
   // Database - Kontrahenci
@@ -907,6 +978,65 @@ function setupIpcHandlers() {
     },
   );
 
+  // ---- Homebanking (merge multi-day, multi-bank deposit files) ----
+  ipcMain.handle(IPC_CHANNELS.HOMEBANKING_SELECT_FILES, async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openFile', 'multiSelections'],
+    });
+    if (result.canceled) return [];
+    return result.filePaths.map((p) => ({ fileName: path.basename(p), filePath: p }));
+  });
+
+  ipcMain.handle(IPC_CHANNELS.HOMEBANKING_SELECT_OUTPUT_DIR, async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
+
+  ipcMain.handle(IPC_CHANNELS.HOMEBANKING_ANALYZE_FILE, async (_event, filePath: string) => {
+    try {
+      if (!fs.existsSync(filePath)) {
+        return { error: 'Plik nie istnieje lub został usunięty' };
+      }
+      const banks = database.getAllBanks();
+      const adresy = database.getAllAdresy();
+      const analyzed = homebankingAnalyzeFile(filePath, banks, adresy);
+      return { data: analyzed };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      log.error('[HOMEBANKING] analyze failed:', message);
+      return { error: message };
+    }
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.HOMEBANKING_MERGE,
+    async (
+      _event,
+      files: HomebankingMergeFileInput[],
+      outputDir: string,
+    ) => {
+      try {
+        if (!files || files.length === 0) {
+          return { error: 'Brak plików do scalenia' };
+        }
+        if (!outputDir || !fs.existsSync(outputDir)) {
+          return { error: 'Folder docelowy nie istnieje' };
+        }
+        const banks = database.getAllBanks();
+        const adresy = database.getAllAdresy();
+        const results = homebankingMergeGroups(files, outputDir, banks, adresy);
+        return { success: true, results };
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        log.error('[HOMEBANKING] merge failed:', message);
+        return { error: message };
+      }
+    },
+  );
+
   ipcMain.handle(
     IPC_CHANNELS.CONVERT_FILE,
     async (_, inputPath: string, bankId: number, fileName: string, adresId?: number | null) => {
@@ -1230,6 +1360,7 @@ function setupIpcHandlers() {
     return {
       outputFolder: database.getSetting('outputFolder') || '',
       impexFolder: database.getSetting('impexFolder') || '',
+      swrkFolder: database.getSetting('swrkFolder') || '',
       darkMode: database.getSetting('darkMode') === 'true',
       language: database.getSetting('language') || 'pl',
       skipUserApproval: database.getSetting('skipUserApproval') === 'true',
@@ -1243,6 +1374,11 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.SET_IMPEX_FOLDER, async (_, folderPath: string) => {
     database.setSetting('impexFolder', folderPath);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SET_SWRK_FOLDER, async (_, folderPath: string) => {
+    database.setSetting('swrkFolder', folderPath);
     return true;
   });
 
@@ -1399,11 +1535,19 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle('download-update', async () => {
+    // macOS: notify-only flow — niepodpisana aplikacja nie przejdzie weryfikacji
+    // podpisu w electron-updater, więc otwieramy stronę Release w przeglądarce.
+    if (process.platform === 'darwin') {
+      const url = 'https://github.com/wikunia-pura/statement_converter/releases/latest';
+      log.info('macOS notify-only: opening release page', url);
+      await shell.openExternal(url);
+      return { success: true, openedRelease: true };
+    }
     try {
       const downloadPath = await autoUpdater.downloadUpdate();
       const downloadsFolder = app.getPath('downloads');
-      return { 
-        success: true, 
+      return {
+        success: true,
         downloadPath: downloadsFolder,
         message: 'Update downloaded to Downloads folder'
       };
@@ -1460,7 +1604,16 @@ function setupAutoUpdater() {
     log.info('App is packaged, will check for updates in 3 seconds');
     setTimeout(() => {
       log.info('Starting auto-update check...');
-      autoUpdater.checkForUpdatesAndNotify();
+      // macOS: niepodpisana aplikacja — używamy tylko checkForUpdates (bez Notify),
+      // żeby uniknąć systemowej notyfikacji "kliknij aby zainstalować", która i tak by
+      // odpaliła nieobsługiwany flow downloadUpdate. Renderer pokaże własny dialog.
+      if (process.platform === 'darwin') {
+        autoUpdater.checkForUpdates().catch((err) => {
+          log.error('macOS startup update check failed:', err);
+        });
+      } else {
+        autoUpdater.checkForUpdatesAndNotify();
+      }
     }, 3000);
   } else {
     log.info('App is not packaged, skipping auto-update check');

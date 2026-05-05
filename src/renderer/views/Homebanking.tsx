@@ -2,115 +2,77 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { translations, Language } from '../translations';
 import Icon from '../components/Icon';
 import {
-  ScalanieAnalyzedFile,
-  ScalanieMergeFileInput,
-  ScalanieMergeGroupResult,
+  HomebankingAnalyzedFile,
+  HomebankingBankHit,
+  HomebankingMergeFileInput,
+  HomebankingMergeGroupResult,
 } from '../electronAPI';
 
-export interface ScalanieFileEntry {
+export interface HomebankingFileEntry {
   filePath: string;
   fileName: string;
   status: 'analyzing' | 'ready' | 'error';
   date: string | null;
-  detectedAddress: string | null;
-  detectedAdresId: number | null;
-  /** Stable cross-file identifier (typically the receiver IBAN repeated in content). Used to share detection between sibling files for the same community. */
-  accountKey: string | null;
-  /** What we'll write into the filename. User can override. */
-  communityLabel: string;
-  /** Stable group key — the user-edited communityLabel (trimmed, lowercased). */
-  communityKey: string;
+  bankHits: HomebankingBankHit[];
+  /** User-selected subset of `bankHits.bankId`. Defaults to all detected. */
+  selectedBankIds: number[];
+  addressHits: { label: string; lineCount: number }[];
   lineCount: number;
+  splitByAddress: boolean;
   error?: string;
 }
 
 interface Props {
   language: Language;
-  files: ScalanieFileEntry[];
-  setFiles: React.Dispatch<React.SetStateAction<ScalanieFileEntry[]>>;
-}
-
-function communityKeyOf(label: string): string {
-  return label.trim().toLowerCase();
+  files: HomebankingFileEntry[];
+  setFiles: React.Dispatch<React.SetStateAction<HomebankingFileEntry[]>>;
 }
 
 function applyAnalyzed(
-  prev: ScalanieFileEntry,
-  data: ScalanieAnalyzedFile,
-): ScalanieFileEntry {
-  const label = data.detectedAddress ?? '';
+  prev: HomebankingFileEntry,
+  data: HomebankingAnalyzedFile,
+): HomebankingFileEntry {
+  // Single-bank files: auto-select that bank — no UI choice to make.
+  // Multi-bank files: leave everything unchecked so the user picks explicitly.
+  const selectedBankIds =
+    data.bankHits.length === 1 ? [data.bankHits[0].bankId] : [];
   return {
     ...prev,
     status: 'ready',
     date: data.date,
-    detectedAddress: data.detectedAddress,
-    detectedAdresId: data.detectedAdresId,
-    accountKey: data.accountKey,
-    communityLabel: label,
-    communityKey: communityKeyOf(label),
+    bankHits: data.bankHits,
+    selectedBankIds,
+    addressHits: data.addressHits,
     lineCount: data.lineCount,
     error: undefined,
   };
 }
 
-/**
- * Fill empty communityLabel for files whose accountKey matches a sibling
- * that does have a label. The label propagates from any ready file with
- * the same accountKey — we count occurrences and pick the most common, so
- * a single mis-detection in one file can't override consensus.
- */
-function propagateByAccountKey(files: ScalanieFileEntry[]): ScalanieFileEntry[] {
-  const labelByKey = new Map<string, Map<string, number>>();
-  for (const f of files) {
-    if (!f.accountKey || !f.communityLabel) continue;
-    const inner = labelByKey.get(f.accountKey) ?? new Map<string, number>();
-    inner.set(f.communityLabel, (inner.get(f.communityLabel) ?? 0) + 1);
-    labelByKey.set(f.accountKey, inner);
-  }
-  const winners = new Map<string, string>();
-  for (const [key, inner] of labelByKey) {
-    let best = '';
-    let bestCount = 0;
-    for (const [label, count] of inner) {
-      if (count > bestCount) {
-        best = label;
-        bestCount = count;
-      }
-    }
-    if (best) winners.set(key, best);
-  }
-  return files.map((f) => {
-    if (f.communityLabel || !f.accountKey) return f;
-    const inherited = winners.get(f.accountKey);
-    if (!inherited) return f;
-    return { ...f, communityLabel: inherited, communityKey: communityKeyOf(inherited) };
-  });
-}
-
-const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
+const Homebanking: React.FC<Props> = ({ language, files, setFiles }) => {
   const t = translations[language];
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [statusIsError, setStatusIsError] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const filesRef = useRef<ScalanieFileEntry[]>(files);
+  const [lastResults, setLastResults] = useState<HomebankingMergeGroupResult[]>([]);
+  const [lastOutputDir, setLastOutputDir] = useState('');
+  const filesRef = useRef<HomebankingFileEntry[]>(files);
 
   useEffect(() => {
     filesRef.current = files;
   }, [files]);
 
   const analyzeOne = async (filePath: string) => {
-    const res = await window.electronAPI.scalanieAnalyzeFile(filePath);
-    setFiles((prev) => {
-      const updated = prev.map((f) => {
+    const res = await window.electronAPI.homebankingAnalyzeFile(filePath);
+    setFiles((prev) =>
+      prev.map((f) => {
         if (f.filePath !== filePath) return f;
         if (res.error || !res.data) {
           return { ...f, status: 'error' as const, error: res.error ?? 'Unknown error' };
         }
         return applyAnalyzed(f, res.data);
-      });
-      return propagateByAccountKey(updated);
-    });
+      }),
+    );
   };
 
   const addFiles = async (newFiles: { fileName: string; filePath: string }[]) => {
@@ -119,26 +81,25 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
     if (uniqueFiles.length === 0) return;
     setFiles((prev) => [
       ...prev,
-      ...uniqueFiles.map<ScalanieFileEntry>((p) => ({
+      ...uniqueFiles.map<HomebankingFileEntry>((p) => ({
         filePath: p.filePath,
         fileName: p.fileName,
         status: 'analyzing',
         date: null,
-        detectedAddress: null,
-        detectedAdresId: null,
-        communityLabel: '',
-        communityKey: '',
+        bankHits: [],
+        selectedBankIds: [],
+        addressHits: [],
         lineCount: 0,
+        splitByAddress: false,
       })),
     ]);
     for (const f of uniqueFiles) {
-      // sequential is fine — analyzing one file is fast
       await analyzeOne(f.filePath);
     }
   };
 
   const handlePickFiles = async () => {
-    const picked = await window.electronAPI.scalanieSelectFiles();
+    const picked = await window.electronAPI.homebankingSelectFiles();
     if (picked && picked.length > 0) await addFiles(picked);
   };
 
@@ -165,6 +126,27 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
     setFiles((prev) => prev.filter((f) => f.filePath !== filePath));
   };
 
+  const toggleSplitByAddress = (filePath: string) => {
+    setFiles((prev) =>
+      prev.map((f) =>
+        f.filePath === filePath ? { ...f, splitByAddress: !f.splitByAddress } : f,
+      ),
+    );
+  };
+
+  const toggleBankSelection = (filePath: string, bankId: number) => {
+    setFiles((prev) =>
+      prev.map((f) => {
+        if (f.filePath !== filePath) return f;
+        const has = f.selectedBankIds.includes(bankId);
+        const next = has
+          ? f.selectedBankIds.filter((id) => id !== bankId)
+          : [...f.selectedBankIds, bankId];
+        return { ...f, selectedBankIds: next };
+      }),
+    );
+  };
+
   const clearAll = () => {
     setFiles([]);
     setStatusMessage('');
@@ -172,30 +154,26 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
     setLastOutputDir('');
   };
 
-  const updateCommunityLabel = (filePath: string, label: string) => {
-    setFiles((prev) => {
-      const updated = prev.map((f) =>
-        f.filePath === filePath
-          ? { ...f, communityLabel: label, communityKey: communityKeyOf(label) }
-          : f,
-      );
-      return propagateByAccountKey(updated);
-    });
-  };
-
-  const groups = useMemo(() => {
-    const map = new Map<string, ScalanieFileEntry[]>();
+  /** Bank id → display name, aggregated from currently-selected banks across all files. */
+  const bankGroups = useMemo(() => {
+    const map = new Map<number, { bankName: string; fileCount: number }>();
     for (const f of files) {
-      if (!f.communityKey) continue;
-      const arr = map.get(f.communityKey) ?? [];
-      arr.push(f);
-      map.set(f.communityKey, arr);
+      if (f.status !== 'ready') continue;
+      for (const id of f.selectedBankIds) {
+        const hit = f.bankHits.find((h) => h.bankId === id);
+        if (!hit) continue;
+        const prev = map.get(id);
+        if (prev) prev.fileCount += 1;
+        else map.set(id, { bankName: hit.bankName, fileCount: 1 });
+      }
     }
     return map;
   }, [files]);
 
-  const missingCommunityCount = useMemo(
-    () => files.filter((f) => f.status === 'ready' && !f.communityKey).length,
+  /** Files that ended up with no selected bank — they'd contribute nothing. */
+  const noSelectionCount = useMemo(
+    () =>
+      files.filter((f) => f.status === 'ready' && f.selectedBankIds.length === 0).length,
     [files],
   );
 
@@ -208,49 +186,43 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
     !isProcessing &&
     !anyAnalyzing &&
     files.length > 0 &&
-    missingCommunityCount === 0 &&
-    files.every((f) => f.status === 'ready');
+    files.some((f) => f.status === 'ready' && f.selectedBankIds.length > 0);
 
   const openOutput = (p: string) => window.electronAPI.openFile(p);
 
-  const [lastResults, setLastResults] = useState<ScalanieMergeGroupResult[]>([]);
-  const [lastOutputDir, setLastOutputDir] = useState('');
-
   const mergeWithResults = async () => {
-    const ready = filesRef.current.filter((f) => f.status === 'ready' && f.communityKey);
+    const ready = filesRef.current.filter(
+      (f) => f.status === 'ready' && f.selectedBankIds.length > 0,
+    );
     if (ready.length === 0) {
-      setStatusMessage(t.scalanieNothingToMerge);
+      setStatusMessage(t.homebankingNothingToMerge);
       setStatusIsError(true);
       return;
     }
-    // Use the configured "Folder SWRK" silently when set; otherwise prompt.
-    const settings = await window.electronAPI.getSettings();
-    const outputDir = settings.swrkFolder?.trim()
-      ? settings.swrkFolder.trim()
-      : await window.electronAPI.scalanieSelectOutputDir();
+    const outputDir = await window.electronAPI.homebankingSelectOutputDir();
     if (!outputDir) return;
 
     setIsProcessing(true);
     setStatusMessage('');
     setLastResults([]);
     setLastOutputDir(outputDir);
-    const payload: ScalanieMergeFileInput[] = ready.map((f) => ({
+    const payload: HomebankingMergeFileInput[] = ready.map((f) => ({
       filePath: f.filePath,
-      communityKey: f.communityKey,
-      communityLabel: f.communityLabel,
+      bankIds: f.selectedBankIds,
       date: f.date,
+      splitByAddress: f.splitByAddress,
     }));
-    const res = await window.electronAPI.scalanieMerge(payload, outputDir);
+    const res = await window.electronAPI.homebankingMerge(payload, outputDir);
     setIsProcessing(false);
     if (res.error) {
-      setStatusMessage(`${t.scalanieMergeError}: ${res.error}`);
+      setStatusMessage(`${t.homebankingMergeError}: ${res.error}`);
       setStatusIsError(true);
       return;
     }
     setLastResults(res.results ?? []);
     const groupCount = res.results?.length ?? 0;
     setStatusMessage(
-      `${t.scalanieMergeSuccess}: ${groupCount} ${t.scalanieGroupsSummary.toLowerCase()} → ${outputDir}`,
+      `${t.homebankingMergeSuccess}: ${groupCount} ${t.homebankingBanksSummary.toLowerCase()} → ${outputDir}`,
     );
     setStatusIsError(false);
   };
@@ -260,9 +232,9 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
       <div className="card">
         <div style={{ marginBottom: '20px' }}>
           <h2 style={{ marginBottom: '4px', fontSize: '18px', color: 'var(--accent)' }}>
-            {t.scalanieTitle}
+            {t.homebankingTitle}
           </h2>
-          <div style={{ fontSize: '13px', opacity: 0.7 }}>{t.scalanieSubtitle}</div>
+          <div style={{ fontSize: '13px', opacity: 0.7 }}>{t.homebankingSubtitle}</div>
         </div>
 
         <div
@@ -274,6 +246,10 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
         >
           <div className="drop-zone-icon"><Icon name="upload" size={40} /></div>
           <div className="drop-zone-text">{t.dragDropFiles}</div>
+        </div>
+
+        <div style={{ marginTop: '12px', fontSize: '12px', opacity: 0.7 }}>
+          {t.homebankingSplitByAddressHint}
         </div>
       </div>
 
@@ -314,17 +290,21 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
               <table>
                 <thead>
                   <tr>
-                    <th>{t.scalanieCommunity}</th>
-                    <th style={{ width: '90px' }}>{t.scalanieFilesPerGroup}</th>
-                    <th>{t.scalanieDate}</th>
+                    <th>{t.homebankingDetectedBank}</th>
+                    <th>{t.homebankingResultAddress}</th>
+                    <th style={{ width: '90px' }}>{t.homebankingFilesPerBank}</th>
+                    <th style={{ width: '90px' }}>{t.homebankingLines}</th>
+                    <th>{t.homebankingDate}</th>
                     <th style={{ textAlign: 'right' }}>{t.actions}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {lastResults.map((r) => (
                     <tr key={r.outputPath}>
-                      <td>{r.communityLabel}</td>
+                      <td>{r.bankName}</td>
+                      <td>{r.addressLabel ?? '—'}</td>
                       <td>{r.fileCount}</td>
+                      <td>{r.lineCount}</td>
                       <td>
                         {r.startDate && r.endDate
                           ? r.startDate === r.endDate
@@ -367,43 +347,38 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
                 className="button button-success"
                 onClick={mergeWithResults}
                 disabled={!canMerge}
-                title={
-                  missingCommunityCount > 0
-                    ? t.scalanieMissingCommunityBanner
-                    : ''
-                }
                 style={!canMerge ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
               >
                 <Icon name="bar-chart" size={14} />{' '}
-                {isProcessing ? t.scalanieMerging : t.scalanieMergeAll}
+                {isProcessing ? t.homebankingMerging : t.homebankingMergeAll}
               </button>
               <button
                 className="button button-secondary"
                 onClick={clearAll}
                 disabled={isProcessing}
               >
-                <Icon name="trash" size={14} /> {t.scalanieClearAll}
+                <Icon name="trash" size={14} /> {t.homebankingClearAll}
               </button>
             </div>
           </div>
 
-          {missingCommunityCount > 0 && (
+          {noSelectionCount > 0 && (
             <div
               className="zaliczki-status zaliczki-status-error"
               style={{ marginBottom: '15px' }}
             >
-              <span style={{ flex: 1 }}>{t.scalanieMissingCommunityBanner}</span>
+              <span style={{ flex: 1 }}>{t.homebankingMissingBankBanner}</span>
             </div>
           )}
 
-          {groups.size > 0 && (
+          {bankGroups.size > 0 && (
             <div style={{ marginBottom: '15px', fontSize: '13px', opacity: 0.8 }}>
-              {t.scalanieGroupsSummary}: {groups.size}
+              {t.homebankingBanksSummary}: {bankGroups.size}
               {' — '}
-              {Array.from(groups.entries())
+              {Array.from(bankGroups.values())
                 .map(
-                  ([, entries]) =>
-                    `${entries[0].communityLabel} (${entries.length} ${t.scalanieFilesPerGroup})`,
+                  (g) =>
+                    `${g.bankName} (${g.fileCount} ${t.homebankingFilesPerBank})`,
                 )
                 .join(', ')}
             </div>
@@ -413,10 +388,14 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
             <thead>
               <tr>
                 <th style={{ width: '40px' }}>#</th>
-                <th>{t.scalanieFile}</th>
-                <th style={{ width: '110px' }}>{t.scalanieDate}</th>
-                <th style={{ width: '32%' }}>{t.scalanieCommunity}</th>
-                <th style={{ width: '70px' }}>{t.scalanieLines}</th>
+                <th>{t.homebankingFile}</th>
+                <th style={{ width: '110px' }}>{t.homebankingDate}</th>
+                <th style={{ width: '18%' }}>{t.homebankingDetectedBank}</th>
+                <th>{t.homebankingAddresses}</th>
+                <th style={{ width: '60px' }}>{t.homebankingLines}</th>
+                <th style={{ width: '120px', textAlign: 'center' }}>
+                  {t.homebankingSplitByAddress}
+                </th>
                 <th style={{ textAlign: 'right' }}>{t.actions}</th>
               </tr>
             </thead>
@@ -427,37 +406,77 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
                   <td style={{ wordBreak: 'break-all' }}>{f.fileName}</td>
                   <td>
                     {f.status === 'analyzing' ? (
-                      <span style={{ opacity: 0.6 }}>{t.scalanieAnalyzing}</span>
+                      <span style={{ opacity: 0.6 }}>{t.homebankingAnalyzing}</span>
                     ) : (
                       f.date ?? '—'
                     )}
                   </td>
                   <td>
                     {f.status === 'analyzing' ? (
-                      <span style={{ opacity: 0.6 }}>{t.scalanieDetectingAddress}</span>
+                      <span style={{ opacity: 0.6 }}>{t.homebankingDetectingBank}</span>
                     ) : f.status === 'error' ? (
                       <span className="status-badge status-error">{f.error ?? t.error}</span>
+                    ) : f.bankHits.length === 0 ? (
+                      <span className="status-badge status-error">
+                        {t.homebankingUnknownBank}
+                      </span>
+                    ) : f.bankHits.length === 1 ? (
+                      <span>{f.bankHits[0].bankName}</span>
                     ) : (
-                      <input
-                        type="text"
-                        value={f.communityLabel}
-                        onChange={(e) => updateCommunityLabel(f.filePath, e.target.value)}
-                        placeholder={t.scalanieEditCommunity}
-                        style={{
-                          width: '100%',
-                          padding: '6px 8px',
-                          borderRadius: '4px',
-                          border: f.communityLabel
-                            ? '1px solid var(--border)'
-                            : '1px solid var(--error)',
-                          background: 'var(--bg-secondary)',
-                          color: 'var(--text-primary)',
-                          fontSize: '13px',
-                        }}
-                      />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        {f.bankHits.map((hit) => (
+                          <label
+                            key={hit.bankId}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              fontSize: '12px',
+                              cursor: isProcessing ? 'default' : 'pointer',
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={f.selectedBankIds.includes(hit.bankId)}
+                              onChange={() => toggleBankSelection(f.filePath, hit.bankId)}
+                              disabled={isProcessing}
+                            />
+                            <span>
+                              {hit.bankName}{' '}
+                              <span style={{ opacity: 0.6 }}>({hit.lineCount})</span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
                     )}
                   </td>
+                  <td style={{ fontSize: '12px' }}>
+                    {f.status === 'ready' && f.addressHits.length > 0
+                      ? f.addressHits
+                          .slice(0, 3)
+                          .map((h) => `${h.label} (${h.lineCount})`)
+                          .join(', ') +
+                        (f.addressHits.length > 3
+                          ? `, +${f.addressHits.length - 3}`
+                          : '')
+                      : '—'}
+                  </td>
                   <td>{f.status === 'ready' ? f.lineCount : '—'}</td>
+                  <td style={{ textAlign: 'center' }}>
+                    <label
+                      className="toggle-switch"
+                      style={{ display: 'inline-flex', verticalAlign: 'middle' }}
+                      title={t.homebankingSplitByAddressHint}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={f.splitByAddress}
+                        onChange={() => toggleSplitByAddress(f.filePath)}
+                        disabled={f.status !== 'ready' || isProcessing}
+                      />
+                      <span className="toggle-slider"></span>
+                    </label>
+                  </td>
                   <td style={{ textAlign: 'right' }}>
                     <button
                       className="button button-small button-danger"
@@ -483,12 +502,12 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
         </div>
       ) : (
         <div className="empty-state">
-          <div className="empty-state-icon"><Icon name="wallet" size={48} /></div>
-          <div className="empty-state-text">{t.scalanieNoFiles}</div>
+          <div className="empty-state-icon"><Icon name="building" size={48} /></div>
+          <div className="empty-state-text">{t.homebankingNoFiles}</div>
         </div>
       )}
     </div>
   );
 };
 
-export default ScalanieWplat;
+export default Homebanking;

@@ -11,6 +11,7 @@ interface StoreSchema {
   settings: {
     outputFolder: string;
     impexFolder: string;
+    swrkFolder: string;
     darkMode: boolean;
     language: 'pl' | 'en';
     aiConfidenceThreshold: number;
@@ -35,6 +36,7 @@ class DatabaseService {
         settings: {
           outputFolder: path.join(app.getPath('documents'), 'StatementConverter'),
           impexFolder: '',
+          swrkFolder: '',
           darkMode: true,
           language: 'pl',
           aiConfidenceThreshold: 95,
@@ -54,30 +56,39 @@ class DatabaseService {
     return banks.sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  addBank(name: string, converterId: string): Bank {
+  addBank(name: string, converterId: string, accountPrefixes?: string[]): Bank {
     const banks = this.store.get('banks', []);
     const id = this.store.get('nextBankId', 1);
-    
+
     const newBank: Bank = {
       id,
       name,
       converterId,
+      accountPrefixes: accountPrefixes || [],
       createdAt: new Date().toISOString(),
     };
-    
+
     banks.push(newBank);
     this.store.set('banks', banks);
     this.store.set('nextBankId', id + 1);
-    
+
     return newBank;
   }
 
-  updateBank(id: number, name: string, converterId: string): void {
+  updateBank(id: number, name: string, converterId: string, accountPrefixes?: string[]): void {
     const banks = this.store.get('banks', []);
     const index = banks.findIndex(b => b.id === id);
-    
+
     if (index !== -1) {
-      banks[index] = { ...banks[index], name, converterId };
+      banks[index] = {
+        ...banks[index],
+        name,
+        converterId,
+        accountPrefixes:
+          accountPrefixes !== undefined
+            ? accountPrefixes
+            : banks[index].accountPrefixes || [],
+      };
       this.store.set('banks', banks);
     }
   }
@@ -85,6 +96,10 @@ class DatabaseService {
   deleteBank(id: number): void {
     const banks = this.store.get('banks', []);
     this.store.set('banks', banks.filter(b => b.id !== id));
+  }
+
+  deleteAllBanks(): void {
+    this.store.set('banks', []);
   }
 
   getBankById(id: number): Bank | undefined {
@@ -270,23 +285,22 @@ class DatabaseService {
     this.store.set('settings', { ...settings, [key]: value });
   }
 
-  exportSettings(): { banks: Bank[]; settings: any } {
+  exportSettings(): { settings: any } {
     return {
-      banks: this.store.get('banks', []),
       settings: this.store.get('settings'),
     };
   }
 
-  importSettings(data: { banks?: Bank[]; settings?: any }): void {
-    if (data.banks) {
-      this.store.set('banks', data.banks);
-      // Update nextBankId to be higher than any existing ID
-      const maxId = Math.max(0, ...data.banks.map(b => b.id));
-      this.store.set('nextBankId', maxId + 1);
-    }
+  importSettings(data: { settings?: any }): void {
     if (data.settings) {
       this.store.set('settings', { ...this.store.get('settings'), ...data.settings });
     }
+  }
+
+  importBanks(banks: Bank[]): void {
+    this.store.set('banks', banks);
+    const maxId = Math.max(0, ...banks.map(b => b.id));
+    this.store.set('nextBankId', maxId + 1);
   }
 
   close(): void {

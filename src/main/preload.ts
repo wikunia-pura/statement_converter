@@ -6,6 +6,9 @@ const IPC_CHANNELS = {
   ADD_BANK: 'db:add-bank',
   UPDATE_BANK: 'db:update-bank',
   DELETE_BANK: 'db:delete-bank',
+  DELETE_ALL_BANKS: 'db:delete-all-banks',
+  IMPORT_BANKS_FROM_FILE: 'db:import-banks-from-file',
+  EXPORT_BANKS_TO_FILE: 'db:export-banks-to-file',
   GET_KONTRAHENCI: 'db:get-kontrahenci',
   ADD_KONTRAHENT: 'db:add-kontrahent',
   UPDATE_KONTRAHENT: 'db:update-kontrahent',
@@ -35,6 +38,7 @@ const IPC_CHANNELS = {
   GET_SETTINGS: 'settings:get',
   SET_OUTPUT_FOLDER: 'settings:set-output-folder',
   SET_IMPEX_FOLDER: 'settings:set-impex-folder',
+  SET_SWRK_FOLDER: 'settings:set-swrk-folder',
   SET_DARK_MODE: 'settings:set-dark-mode',
   SET_LANGUAGE: 'settings:set-language',
   SET_SKIP_USER_APPROVAL: 'settings:set-skip-user-approval',
@@ -54,6 +58,10 @@ const IPC_CHANNELS = {
   SCALANIE_ANALYZE_FILE: 'scalanie:analyze-file',
   SCALANIE_SELECT_OUTPUT_DIR: 'scalanie:select-output-dir',
   SCALANIE_MERGE: 'scalanie:merge',
+  HOMEBANKING_SELECT_FILES: 'homebanking:select-files',
+  HOMEBANKING_ANALYZE_FILE: 'homebanking:analyze-file',
+  HOMEBANKING_SELECT_OUTPUT_DIR: 'homebanking:select-output-dir',
+  HOMEBANKING_MERGE: 'homebanking:merge',
 } as const;
 
 // Expose protected methods that allow the renderer process to use
@@ -61,11 +69,14 @@ const IPC_CHANNELS = {
 contextBridge.exposeInMainWorld('electronAPI', {
   // Banks
   getBanks: () => ipcRenderer.invoke(IPC_CHANNELS.GET_BANKS),
-  addBank: (name: string, converterId: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.ADD_BANK, name, converterId),
-  updateBank: (id: number, name: string, converterId: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_BANK, id, name, converterId),
+  addBank: (name: string, converterId: string, accountPrefixes?: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ADD_BANK, name, converterId, accountPrefixes),
+  updateBank: (id: number, name: string, converterId: string, accountPrefixes?: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_BANK, id, name, converterId, accountPrefixes),
   deleteBank: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_BANK, id),
+  deleteAllBanks: () => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ALL_BANKS),
+  importBanksFromFile: () => ipcRenderer.invoke(IPC_CHANNELS.IMPORT_BANKS_FROM_FILE),
+  exportBanksToFile: () => ipcRenderer.invoke(IPC_CHANNELS.EXPORT_BANKS_TO_FILE),
 
   // Kontrahenci
   getKontrahenci: () => ipcRenderer.invoke(IPC_CHANNELS.GET_KONTRAHENCI),
@@ -125,6 +136,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.SET_OUTPUT_FOLDER, folderPath),
   setImpexFolder: (folderPath: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_IMPEX_FOLDER, folderPath),
+  setSwrkFolder: (folderPath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_SWRK_FOLDER, folderPath),
   setDarkMode: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_DARK_MODE, enabled),
   setLanguage: (language: string) =>
@@ -161,6 +174,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   scalanieMerge: (files: unknown[], outputDir: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SCALANIE_MERGE, files, outputDir),
 
+  // Homebanking
+  homebankingSelectFiles: () => ipcRenderer.invoke(IPC_CHANNELS.HOMEBANKING_SELECT_FILES),
+  homebankingAnalyzeFile: (filePath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.HOMEBANKING_ANALYZE_FILE, filePath),
+  homebankingSelectOutputDir: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.HOMEBANKING_SELECT_OUTPUT_DIR),
+  homebankingMerge: (files: unknown[], outputDir: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.HOMEBANKING_MERGE, files, outputDir),
+
   // App info
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION),
 
@@ -168,6 +190,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   zoomIn: () => ipcRenderer.invoke('app:zoom-in'),
   zoomOut: () => ipcRenderer.invoke('app:zoom-out'),
   zoomReset: () => ipcRenderer.invoke('app:zoom-reset'),
+
+  platform: process.platform,
 
   // Auto-updater
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),

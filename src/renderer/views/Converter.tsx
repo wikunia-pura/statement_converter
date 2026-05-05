@@ -4,8 +4,8 @@ import { translations, Language } from '../translations';
 import { generateId } from '../../shared/utils';
 import { TransactionReviewScreen } from '../components/TransactionReviewScreen';
 import Icon from '../components/Icon';
-import bankIcon from '../assets/bank.png';
 import kapitanBombaImg from '../assets/kapitan_bomba.jpg';
+import BankIllustration from '../components/BankIllustration';
 
 interface SearchableAdresSelectProps {
   adresy: Adres[];
@@ -273,7 +273,8 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     setIsLoading(true);
     try {
       const banksData = await window.electronAPI.getBanks();
-      setBanks(banksData);
+      // Konwersja działa tylko dla banków z przypisanym konwerterem — banki używane wyłącznie w Homebankingu nie powinny pojawiać się tu w dropdownach.
+      setBanks(banksData.filter((b) => !!b.converterId));
     } finally {
       setIsLoading(false);
     }
@@ -949,16 +950,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
         ) : !selectedBank ? (
           <div className="card" style={{ textAlign: 'center', padding: '60px 40px' }}>
             <div style={{ marginBottom: '20px' }}>
-              <img 
-                src={bankIcon} 
-                alt="Bank" 
-                style={{ 
-                  width: '240px', 
-                  height: '240px', 
-                  objectFit: 'contain',
-                  filter: isDarkMode ? 'brightness(0.9)' : 'none'
-                }} 
-              />
+              <BankIllustration />
             </div>
             <h2 style={{ marginBottom: '10px', fontSize: '24px', color: 'var(--accent)' }}>
               {t.selectBank}

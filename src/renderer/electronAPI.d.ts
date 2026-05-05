@@ -62,6 +62,44 @@ export interface ScalanieMergeGroupResult {
   endDate: string | null;
 }
 
+export interface HomebankingAddressHit {
+  label: string;
+  lineCount: number;
+}
+
+export interface HomebankingBankHit {
+  bankId: number;
+  bankName: string;
+  lineCount: number;
+}
+
+export interface HomebankingAnalyzedFile {
+  filePath: string;
+  fileName: string;
+  date: string | null;
+  bankHits: HomebankingBankHit[];
+  addressHits: HomebankingAddressHit[];
+  lineCount: number;
+}
+
+export interface HomebankingMergeFileInput {
+  filePath: string;
+  bankIds: number[];
+  date: string | null;
+  splitByAddress: boolean;
+}
+
+export interface HomebankingMergeGroupResult {
+  bankId: number;
+  bankName: string;
+  addressLabel: string | null;
+  outputPath: string;
+  fileCount: number;
+  lineCount: number;
+  startDate: string | null;
+  endDate: string | null;
+}
+
 interface ConversionResult {
   success?: boolean;
   outputPath?: string;
@@ -76,9 +114,12 @@ interface ConversionResult {
 interface ElectronAPI {
   // Banks
   getBanks: () => Promise<Bank[]>;
-  addBank: (name: string, converterId: string) => Promise<Bank>;
-  updateBank: (id: number, name: string, converterId: string) => Promise<boolean>;
+  addBank: (name: string, converterId: string, accountPrefixes?: string[]) => Promise<Bank>;
+  updateBank: (id: number, name: string, converterId: string, accountPrefixes?: string[]) => Promise<boolean>;
   deleteBank: (id: number) => Promise<boolean>;
+  deleteAllBanks: () => Promise<boolean>;
+  importBanksFromFile: () => Promise<{ success: boolean; count?: number; error?: string }>;
+  exportBanksToFile: () => Promise<{ success: boolean; count?: number; filePath?: string; error?: string }>;
 
   // Kontrahenci
   getKontrahenci: () => Promise<Kontrahent[]>;
@@ -121,6 +162,8 @@ interface ElectronAPI {
   // Settings
   getSettings: () => Promise<AppSettings>;
   setOutputFolder: (folderPath: string) => Promise<boolean>;
+  setImpexFolder: (folderPath: string) => Promise<boolean>;
+  setSwrkFolder: (folderPath: string) => Promise<boolean>;
   setDarkMode: (enabled: boolean) => Promise<boolean>;
   setLanguage: (language: string) => Promise<boolean>;
   setSkipUserApproval: (enabled: boolean) => Promise<boolean>;
@@ -158,6 +201,22 @@ interface ElectronAPI {
     error?: string;
   }>;
 
+  // Homebanking
+  homebankingSelectFiles: () => Promise<{ fileName: string; filePath: string }[]>;
+  homebankingAnalyzeFile: (filePath: string) => Promise<{
+    data?: HomebankingAnalyzedFile;
+    error?: string;
+  }>;
+  homebankingSelectOutputDir: () => Promise<string | null>;
+  homebankingMerge: (
+    files: HomebankingMergeFileInput[],
+    outputDir: string,
+  ) => Promise<{
+    success?: boolean;
+    results?: HomebankingMergeGroupResult[];
+    error?: string;
+  }>;
+
   // App info
   getAppVersion: () => Promise<string>;
 
@@ -166,9 +225,11 @@ interface ElectronAPI {
   zoomOut: () => Promise<boolean>;
   zoomReset: () => Promise<boolean>;
 
+  platform: NodeJS.Platform;
+
   // Auto-updater
   checkForUpdates: () => Promise<{ available: boolean; info?: any; error?: string; message?: string }>;
-  downloadUpdate: () => Promise<{ success: boolean; downloadPath?: string; message?: string; error?: string }>;
+  downloadUpdate: () => Promise<{ success: boolean; downloadPath?: string; message?: string; error?: string; openedRelease?: boolean }>;
   openDownloadsFolder: () => Promise<{ success: boolean }>;
   openLogsFolder: () => Promise<{ success: boolean; logPath?: string }>;
   getLogPath: () => Promise<{ path: string }>;

@@ -4,6 +4,8 @@ export interface Bank {
   id: number;
   name: string;
   converterId: string;
+  /** Substrings (typically account-number prefixes) used by the "Homebanking" module to identify which bank a deposit file belongs to. Matched as "contains" against file content. */
+  accountPrefixes?: string[];
   createdAt: string;
 }
 
@@ -121,6 +123,8 @@ export interface ConversionHistory {
 export interface AppSettings {
   outputFolder: string;
   impexFolder: string;
+  /** Default destination folder for "Scalanie wpłat" merged outputs. Empty string ⇒ ask the user during merge. */
+  swrkFolder: string;
   darkMode: boolean;
   language: 'pl' | 'en';
   aiConfidenceThreshold: number; // Minimum confidence to skip AI warning (default: 95)
@@ -134,6 +138,9 @@ export const IPC_CHANNELS = {
   ADD_BANK: 'db:add-bank',
   UPDATE_BANK: 'db:update-bank',
   DELETE_BANK: 'db:delete-bank',
+  DELETE_ALL_BANKS: 'db:delete-all-banks',
+  IMPORT_BANKS_FROM_FILE: 'db:import-banks-from-file',
+  EXPORT_BANKS_TO_FILE: 'db:export-banks-to-file',
   
   // Kontrahenci operations
   GET_KONTRAHENCI: 'db:get-kontrahenci',
@@ -172,6 +179,7 @@ export const IPC_CHANNELS = {
   GET_SETTINGS: 'settings:get',
   SET_OUTPUT_FOLDER: 'settings:set-output-folder',
   SET_IMPEX_FOLDER: 'settings:set-impex-folder',
+  SET_SWRK_FOLDER: 'settings:set-swrk-folder',
   SET_DARK_MODE: 'settings:set-dark-mode',
   SET_LANGUAGE: 'settings:set-language',
   SET_SKIP_USER_APPROVAL: 'settings:set-skip-user-approval',
@@ -198,4 +206,10 @@ export const IPC_CHANNELS = {
   SCALANIE_ANALYZE_FILE: 'scalanie:analyze-file',
   SCALANIE_SELECT_OUTPUT_DIR: 'scalanie:select-output-dir',
   SCALANIE_MERGE: 'scalanie:merge',
+
+  // Homebanking (merge multi-day, multi-bank homebanking files per bank)
+  HOMEBANKING_SELECT_FILES: 'homebanking:select-files',
+  HOMEBANKING_ANALYZE_FILE: 'homebanking:analyze-file',
+  HOMEBANKING_SELECT_OUTPUT_DIR: 'homebanking:select-output-dir',
+  HOMEBANKING_MERGE: 'homebanking:merge',
 } as const;

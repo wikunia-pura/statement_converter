@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bank, Converter } from '../../shared/types';
+import { Converter } from '../../shared/types';
 import { translations, Language } from '../translations';
 import Icon from '../components/Icon';
 
@@ -12,15 +12,11 @@ interface SettingsProps {
 
 const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChange, onLanguageChange }) => {
   const t = translations[language];
-  const [banks, setBanks] = useState<Bank[]>([]);
   const [converters, setConverters] = useState<Converter[]>([]);
   const [outputFolder, setOutputFolder] = useState('');
   const [impexFolder, setImpexFolder] = useState('');
+  const [swrkFolder, setSwrkFolder] = useState('');
   const [skipUserApproval, setSkipUserApproval] = useState(false);
-  const [showAddBank, setShowAddBank] = useState(false);
-  const [editingBank, setEditingBank] = useState<Bank | null>(null);
-  const [newBankName, setNewBankName] = useState('');
-  const [newBankConverter, setNewBankConverter] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -30,15 +26,14 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [banksData, convertersData, settings] = await Promise.all([
-        window.electronAPI.getBanks(),
+      const [convertersData, settings] = await Promise.all([
         window.electronAPI.getConverters(),
         window.electronAPI.getSettings(),
       ]);
-      setBanks(banksData);
       setConverters(convertersData);
       setOutputFolder(settings.outputFolder);
       setImpexFolder(settings.impexFolder || '');
+      setSwrkFolder(settings.swrkFolder || '');
       setSkipUserApproval(settings.skipUserApproval ?? false);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -60,6 +55,14 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
     if (folder) {
       await window.electronAPI.setImpexFolder(folder);
       setImpexFolder(folder);
+    }
+  };
+
+  const handleSelectSwrkFolder = async () => {
+    const folder = await window.electronAPI.selectOutputFolder();
+    if (folder) {
+      await window.electronAPI.setSwrkFolder(folder);
+      setSwrkFolder(folder);
     }
   };
 
@@ -103,67 +106,6 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
     onLanguageChange(newLanguage);
   };
 
-  const handleAddBank = async () => {
-    if (!newBankName || !newBankConverter) {
-      alert(t.fillAllFields);
-      return;
-    }
-
-    try {
-      await window.electronAPI.addBank(newBankName, newBankConverter);
-      setNewBankName('');
-      setNewBankConverter('');
-      setShowAddBank(false);
-      loadData();
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      alert(`${t.errorAddingBank}: ${errorMessage}`);
-    }
-  };
-
-  const handleUpdateBank = async () => {
-    if (!editingBank || !newBankName || !newBankConverter) {
-      alert(t.fillAllFields);
-      return;
-    }
-
-    try {
-      await window.electronAPI.updateBank(editingBank.id, newBankName, newBankConverter);
-      setNewBankName('');
-      setNewBankConverter('');
-      setEditingBank(null);
-      loadData();
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      alert(`${t.errorUpdatingBank}: ${errorMessage}`);
-    }
-  };
-
-  const handleDeleteBank = async (id: number) => {
-    if (confirm(t.confirmDeleteBank)) {
-      try {
-        await window.electronAPI.deleteBank(id);
-        loadData();
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        alert(`${t.errorDeletingBank}: ${errorMessage}`);
-      }
-    }
-  };
-
-  const handleEditBank = (bank: Bank) => {
-    setEditingBank(bank);
-    setNewBankName(bank.name);
-    setNewBankConverter(bank.converterId);
-  };
-
-  const handleCancelEdit = () => {
-    setEditingBank(null);
-    setShowAddBank(false);
-    setNewBankName('');
-    setNewBankConverter('');
-  };
-
   const handleExportSettings = async () => {
     try {
       const result = await window.electronAPI.exportSettings();
@@ -201,6 +143,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
           // Explicitly update outputFolder in local state
           setOutputFolder(settings.outputFolder || '');
           setImpexFolder(settings.impexFolder || '');
+          setSwrkFolder(settings.swrkFolder || '');
           setSkipUserApproval(settings.skipUserApproval ?? false);
         } else if (result.error) {
           alert(`${t.importError}: ${result.error}`);
@@ -327,8 +270,8 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
                 {t.change}
               </button>
               {impexFolder && (
-                <button 
-                  className="button button-secondary" 
+                <button
+                  className="button button-secondary"
                   onClick={async () => {
                     await window.electronAPI.setImpexFolder('');
                     setImpexFolder('');
@@ -342,125 +285,42 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
           </div>
         </div>
 
-        {/* Banks Management */}
+        {/* SWRK Folder Settings */}
         <div className="card">
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '15px',
-            }}
-          >
-            <h2>{t.banks}</h2>
-            <button
-              className="button button-primary"
-              onClick={() => setShowAddBank(true)}
-              disabled={showAddBank || editingBank !== null}
-            >
-              {t.addBank}
-            </button>
-          </div>
-
-          {(showAddBank || editingBank) && (
-            <div className="bank-form">
-              <h3 style={{ marginBottom: '10px' }}>
-                {editingBank ? t.editBank : t.addNewBank}
-              </h3>
-              <div className="form-group">
-                <label>{t.bankName}</label>
-                <input
-                  type="text"
-                  value={newBankName}
-                  onChange={(e) => setNewBankName(e.target.value)}
-                  placeholder="e.g., ING Bank"
-                />
-              </div>
-              <div className="form-group">
-                <label>{t.converterType}</label>
-                <select
-                  value={newBankConverter}
-                  onChange={(e) => setNewBankConverter(e.target.value)}
-                >
-                  <option value="">{t.chooseConverter}</option>
-                  {converters.map((converter) => (
-                    <option key={converter.id} value={converter.id}>
-                      {converter.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="button-group" style={{ marginTop: '10px' }}>
+          <h2 style={{ marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Icon name="folder" size={20} /> {t.swrkFolderTitle}
+          </h2>
+          <div className="form-group">
+            <label>
+              {t.swrkFolderLabel}
+              <span style={{ display: 'block', fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '5px' }}>
+                {t.swrkFolderHint}
+              </span>
+            </label>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <input
+                type="text"
+                value={swrkFolder}
+                readOnly
+                placeholder={t.swrkFolderPlaceholder}
+              />
+              <button className="button button-primary" onClick={handleSelectSwrkFolder}>
+                {t.change}
+              </button>
+              {swrkFolder && (
                 <button
-                  className="button button-success"
-                  onClick={editingBank ? handleUpdateBank : handleAddBank}
+                  className="button button-secondary"
+                  onClick={async () => {
+                    await window.electronAPI.setSwrkFolder('');
+                    setSwrkFolder('');
+                  }}
+                  title={t.swrkFolderClearTooltip}
                 >
-                  {editingBank ? t.update : t.add}
+                  <Icon name="x" size={14} />
                 </button>
-                <button className="button button-secondary" onClick={handleCancelEdit}>
-                  {t.cancel}
-                </button>
-              </div>
+              )}
             </div>
-          )}
-
-          {banks.length > 0 ? (
-            <table>
-              <thead>
-                <tr>
-                  <th>{t.bankName}</th>
-                  <th>{t.converterType}</th>
-                  <th>{t.actions}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {banks.map((bank) => {
-                  const converter = converters.find((c) => c.id === bank.converterId);
-                  const hasInvalidConverter = !converter;
-                  return (
-                    <tr key={bank.id} style={hasInvalidConverter ? { backgroundColor: 'rgba(220, 53, 69, 0.1)' } : {}}>
-                      <td>
-                        {bank.name}
-                        {hasInvalidConverter && (
-                          <span style={{ color: 'var(--danger)', marginLeft: '8px', display: 'inline-flex', alignItems: 'center' }} title="Konwerter nie istnieje">
-                            <Icon name="alert-triangle" size={14} />
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        {converter?.name || (
-                          <span style={{ color: 'var(--danger)' }}>
-                            {bank.converterId} (nie znaleziono)
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            className="button button-small button-primary"
-                            onClick={() => handleEditBank(bank)}
-                          >
-                            {t.edit}
-                          </button>
-                          <button
-                            className="button button-small button-danger"
-                            onClick={() => handleDeleteBank(bank.id)}
-                          >
-                            {t.delete}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          ) : (
-            <div className="empty-state">
-              <div className="empty-state-icon"><Icon name="building" size={48} /></div>
-              <div className="empty-state-text">{t.noBanksConfigured}</div>
-            </div>
-          )}
+          </div>
         </div>
 
         {/* Available Converters Info */}

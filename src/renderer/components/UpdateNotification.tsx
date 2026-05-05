@@ -8,6 +8,7 @@ interface UpdateNotificationProps {
 
 const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => {
   const t = translations[language];
+  const isMac = typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateDownloaded, setUpdateDownloaded] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -16,6 +17,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
   const [downloadPath, setDownloadPath] = useState<string>('');
   const [platform, setPlatform] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const [macReleaseOpened, setMacReleaseOpened] = useState(false);
 
   useEffect(() => {
     // Listen for update events
@@ -50,8 +52,24 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
 
   const handleDownload = async () => {
     console.log('Starting download...');
-    setDownloading(true);
     setError('');
+    if (isMac) {
+      // macOS: niepodpisana aplikacja — handler IPC otworzy stronę Release
+      // w przeglądarce zamiast pobierać przez electron-updater (i tak by się
+      // wywaliło na weryfikacji podpisu).
+      try {
+        const result = await window.electronAPI.downloadUpdate();
+        if (result.success && result.openedRelease) {
+          setMacReleaseOpened(true);
+        } else if (result.error) {
+          setError(result.error);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unknown error');
+      }
+      return;
+    }
+    setDownloading(true);
     setDownloadProgress(0);
     try {
       const result = await window.electronAPI.downloadUpdate();
@@ -77,16 +95,30 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
   const handleDismiss = () => {
     setUpdateAvailable(false);
     setUpdateDownloaded(false);
+    setMacReleaseOpened(false);
     setError('');
   };
 
-  if (!updateAvailable && !updateDownloaded && !error) {
+  if (!updateAvailable && !updateDownloaded && !error && !macReleaseOpened) {
     return null;
   }
 
   return (
     <div className="update-notification">
-      {updateDownloaded ? (
+      {macReleaseOpened ? (
+        <div className="update-content">
+          <div className="update-icon" style={{ color: 'var(--success)' }}><Icon name="sparkles" size={24} /></div>
+          <div className="update-text">
+            <strong>{t.macReleasePageOpened}</strong>
+            <p>{t.macUpdateInstructions}</p>
+          </div>
+          <div className="update-actions">
+            <button className="button button-secondary" onClick={handleDismiss}>
+              {t.close}
+            </button>
+          </div>
+        </div>
+      ) : updateDownloaded ? (
         <div className="update-content">
           <div className="update-icon" style={{ color: 'var(--success)' }}><Icon name="sparkles" size={24} /></div>
           <div className="update-text">
@@ -134,7 +166,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
             ) : (
               <>
                 <button className="button button-primary" onClick={handleDownload}>
-                  {t.download}
+                  {isMac ? t.openDownloadPage : t.download}
                 </button>
                 <button className="button button-secondary" onClick={handleDismiss}>
                   {t.skip}

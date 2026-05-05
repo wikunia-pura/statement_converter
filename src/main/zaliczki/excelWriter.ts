@@ -109,6 +109,8 @@ export async function buildWorkbook(
   ws.getColumn(1).width = 36;
   for (let m = 1; m <= 12; m++) ws.getColumn(1 + m).width = 13;
   ws.getColumn(14).width = 14;
+  ws.getColumn(15).width = 14;
+  ws.getColumn(16).width = 14;
 
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
@@ -140,6 +142,14 @@ function writePropertyBlock(
   sumaHeader.value = 'SUMA';
   sumaHeader.alignment = { horizontal: 'center' };
   headerCells.push(sumaHeader);
+  const h1Header = ws.getCell(r, 15);
+  h1Header.value = 'I półrocze';
+  h1Header.alignment = { horizontal: 'center' };
+  headerCells.push(h1Header);
+  const h2Header = ws.getCell(r, 16);
+  h2Header.value = 'II półrocze';
+  h2Header.alignment = { horizontal: 'center' };
+  headerCells.push(h2Header);
   for (const c of headerCells) {
     c.font = { bold: true };
     c.fill = HEADER_FILL;
@@ -172,6 +182,20 @@ function writePropertyBlock(
     sumCell.font = { bold: true };
     sumCell.border = BORDER;
     if (isSection) sumCell.fill = SECTION_FILL;
+
+    const h1Cell = ws.getCell(r, 15);
+    h1Cell.value = { formula: `SUM(B${r}:G${r})` } as ExcelJS.CellFormulaValue;
+    h1Cell.numFmt = MONEY_FMT;
+    h1Cell.font = { bold: true };
+    h1Cell.border = BORDER;
+    if (isSection) h1Cell.fill = SECTION_FILL;
+
+    const h2Cell = ws.getCell(r, 16);
+    h2Cell.value = { formula: `SUM(H${r}:M${r})` } as ExcelJS.CellFormulaValue;
+    h2Cell.numFmt = MONEY_FMT;
+    h2Cell.font = { bold: true };
+    h2Cell.border = BORDER;
+    if (isSection) h2Cell.fill = SECTION_FILL;
 
     r++;
   }

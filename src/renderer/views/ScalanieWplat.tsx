@@ -4,7 +4,7 @@ import Icon from '../components/Icon';
 import {
   ScalanieAnalyzedFile,
   ScalanieMergeFileInput,
-  ScalanieMergeGroupResult,
+  ScalanieMergeResult,
 } from '../electronAPI';
 
 export interface ScalanieFileEntry {
@@ -12,14 +12,6 @@ export interface ScalanieFileEntry {
   fileName: string;
   status: 'analyzing' | 'ready' | 'error';
   date: string | null;
-  detectedAddress: string | null;
-  detectedAdresId: number | null;
-  /** Stable cross-file identifier (typically the receiver IBAN repeated in content). Used to share detection between sibling files for the same community. */
-  accountKey: string | null;
-  /** What we'll write into the filename. User can override. */
-  communityLabel: string;
-  /** Stable group key — the user-edited communityLabel (trimmed, lowercased). */
-  communityKey: string;
   lineCount: number;
   error?: string;
 }
@@ -30,61 +22,17 @@ interface Props {
   setFiles: React.Dispatch<React.SetStateAction<ScalanieFileEntry[]>>;
 }
 
-function communityKeyOf(label: string): string {
-  return label.trim().toLowerCase();
-}
-
 function applyAnalyzed(
   prev: ScalanieFileEntry,
   data: ScalanieAnalyzedFile,
 ): ScalanieFileEntry {
-  const label = data.detectedAddress ?? '';
   return {
     ...prev,
     status: 'ready',
     date: data.date,
-    detectedAddress: data.detectedAddress,
-    detectedAdresId: data.detectedAdresId,
-    accountKey: data.accountKey,
-    communityLabel: label,
-    communityKey: communityKeyOf(label),
     lineCount: data.lineCount,
     error: undefined,
   };
-}
-
-/**
- * Fill empty communityLabel for files whose accountKey matches a sibling
- * that does have a label. The label propagates from any ready file with
- * the same accountKey — we count occurrences and pick the most common, so
- * a single mis-detection in one file can't override consensus.
- */
-function propagateByAccountKey(files: ScalanieFileEntry[]): ScalanieFileEntry[] {
-  const labelByKey = new Map<string, Map<string, number>>();
-  for (const f of files) {
-    if (!f.accountKey || !f.communityLabel) continue;
-    const inner = labelByKey.get(f.accountKey) ?? new Map<string, number>();
-    inner.set(f.communityLabel, (inner.get(f.communityLabel) ?? 0) + 1);
-    labelByKey.set(f.accountKey, inner);
-  }
-  const winners = new Map<string, string>();
-  for (const [key, inner] of labelByKey) {
-    let best = '';
-    let bestCount = 0;
-    for (const [label, count] of inner) {
-      if (count > bestCount) {
-        best = label;
-        bestCount = count;
-      }
-    }
-    if (best) winners.set(key, best);
-  }
-  return files.map((f) => {
-    if (f.communityLabel || !f.accountKey) return f;
-    const inherited = winners.get(f.accountKey);
-    if (!inherited) return f;
-    return { ...f, communityLabel: inherited, communityKey: communityKeyOf(inherited) };
-  });
 }
 
 const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
@@ -101,16 +49,15 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
 
   const analyzeOne = async (filePath: string) => {
     const res = await window.electronAPI.scalanieAnalyzeFile(filePath);
-    setFiles((prev) => {
-      const updated = prev.map((f) => {
+    setFiles((prev) =>
+      prev.map((f) => {
         if (f.filePath !== filePath) return f;
         if (res.error || !res.data) {
           return { ...f, status: 'error' as const, error: res.error ?? 'Unknown error' };
         }
         return applyAnalyzed(f, res.data);
-      });
-      return propagateByAccountKey(updated);
-    });
+      }),
+    );
   };
 
   const addFiles = async (newFiles: { fileName: string; filePath: string }[]) => {
@@ -124,10 +71,6 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
         fileName: p.fileName,
         status: 'analyzing',
         date: null,
-        detectedAddress: null,
-        detectedAdresId: null,
-        communityLabel: '',
-        communityKey: '',
         lineCount: 0,
       })),
     ]);
@@ -168,36 +111,9 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
   const clearAll = () => {
     setFiles([]);
     setStatusMessage('');
-    setLastResults([]);
+    setLastResult(null);
     setLastOutputDir('');
   };
-
-  const updateCommunityLabel = (filePath: string, label: string) => {
-    setFiles((prev) => {
-      const updated = prev.map((f) =>
-        f.filePath === filePath
-          ? { ...f, communityLabel: label, communityKey: communityKeyOf(label) }
-          : f,
-      );
-      return propagateByAccountKey(updated);
-    });
-  };
-
-  const groups = useMemo(() => {
-    const map = new Map<string, ScalanieFileEntry[]>();
-    for (const f of files) {
-      if (!f.communityKey) continue;
-      const arr = map.get(f.communityKey) ?? [];
-      arr.push(f);
-      map.set(f.communityKey, arr);
-    }
-    return map;
-  }, [files]);
-
-  const missingCommunityCount = useMemo(
-    () => files.filter((f) => f.status === 'ready' && !f.communityKey).length,
-    [files],
-  );
 
   const anyAnalyzing = useMemo(
     () => files.some((f) => f.status === 'analyzing'),
@@ -208,16 +124,15 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
     !isProcessing &&
     !anyAnalyzing &&
     files.length > 0 &&
-    missingCommunityCount === 0 &&
     files.every((f) => f.status === 'ready');
 
   const openOutput = (p: string) => window.electronAPI.openFile(p);
 
-  const [lastResults, setLastResults] = useState<ScalanieMergeGroupResult[]>([]);
+  const [lastResult, setLastResult] = useState<ScalanieMergeResult | null>(null);
   const [lastOutputDir, setLastOutputDir] = useState('');
 
   const mergeWithResults = async () => {
-    const ready = filesRef.current.filter((f) => f.status === 'ready' && f.communityKey);
+    const ready = filesRef.current.filter((f) => f.status === 'ready');
     if (ready.length === 0) {
       setStatusMessage(t.scalanieNothingToMerge);
       setStatusIsError(true);
@@ -232,26 +147,21 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
 
     setIsProcessing(true);
     setStatusMessage('');
-    setLastResults([]);
+    setLastResult(null);
     setLastOutputDir(outputDir);
     const payload: ScalanieMergeFileInput[] = ready.map((f) => ({
       filePath: f.filePath,
-      communityKey: f.communityKey,
-      communityLabel: f.communityLabel,
       date: f.date,
     }));
     const res = await window.electronAPI.scalanieMerge(payload, outputDir);
     setIsProcessing(false);
-    if (res.error) {
-      setStatusMessage(`${t.scalanieMergeError}: ${res.error}`);
+    if (res.error || !res.result) {
+      setStatusMessage(`${t.scalanieMergeError}: ${res.error ?? 'unknown'}`);
       setStatusIsError(true);
       return;
     }
-    setLastResults(res.results ?? []);
-    const groupCount = res.results?.length ?? 0;
-    setStatusMessage(
-      `${t.scalanieMergeSuccess}: ${groupCount} ${t.scalanieGroupsSummary.toLowerCase()} → ${outputDir}`,
-    );
+    setLastResult(res.result);
+    setStatusMessage(`${t.scalanieMergeSuccess} → ${outputDir}`);
     setStatusIsError(false);
   };
 
@@ -277,18 +187,18 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
         </div>
       </div>
 
-      {!statusIsError && (statusMessage || lastResults.length > 0) && (
+      {!statusIsError && (statusMessage || lastResult) && (
         <div className="card" style={{ borderTop: '3px solid var(--success, #10b981)' }}>
           {statusMessage && (
             <div
               className="zaliczki-status zaliczki-status-success"
-              style={{ marginBottom: lastResults.length > 0 ? '15px' : 0 }}
+              style={{ marginBottom: lastResult ? '15px' : 0 }}
             >
               <span style={{ flex: 1, wordBreak: 'break-all' }}>{statusMessage}</span>
             </div>
           )}
 
-          {lastResults.length > 0 && (
+          {lastResult && (
             <>
               <div
                 style={{
@@ -314,34 +224,30 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
               <table>
                 <thead>
                   <tr>
-                    <th>{t.scalanieCommunity}</th>
                     <th style={{ width: '90px' }}>{t.scalanieFilesPerGroup}</th>
                     <th>{t.scalanieDate}</th>
                     <th style={{ textAlign: 'right' }}>{t.actions}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {lastResults.map((r) => (
-                    <tr key={r.outputPath}>
-                      <td>{r.communityLabel}</td>
-                      <td>{r.fileCount}</td>
-                      <td>
-                        {r.startDate && r.endDate
-                          ? r.startDate === r.endDate
-                            ? r.startDate
-                            : `${r.startDate} → ${r.endDate}`
-                          : '—'}
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button
-                          className="button button-small button-primary"
-                          onClick={() => openOutput(r.outputPath)}
-                        >
-                          {t.notyOpenFile}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  <tr>
+                    <td>{lastResult.fileCount}</td>
+                    <td>
+                      {lastResult.startDate && lastResult.endDate
+                        ? lastResult.startDate === lastResult.endDate
+                          ? lastResult.startDate
+                          : `${lastResult.startDate} → ${lastResult.endDate}`
+                        : '—'}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button
+                        className="button button-small button-primary"
+                        onClick={() => openOutput(lastResult.outputPath)}
+                      >
+                        {t.notyOpenFile}
+                      </button>
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </>
@@ -367,11 +273,6 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
                 className="button button-success"
                 onClick={mergeWithResults}
                 disabled={!canMerge}
-                title={
-                  missingCommunityCount > 0
-                    ? t.scalanieMissingCommunityBanner
-                    : ''
-                }
                 style={!canMerge ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
               >
                 <Icon name="bar-chart" size={14} />{' '}
@@ -387,35 +288,12 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
             </div>
           </div>
 
-          {missingCommunityCount > 0 && (
-            <div
-              className="zaliczki-status zaliczki-status-error"
-              style={{ marginBottom: '15px' }}
-            >
-              <span style={{ flex: 1 }}>{t.scalanieMissingCommunityBanner}</span>
-            </div>
-          )}
-
-          {groups.size > 0 && (
-            <div style={{ marginBottom: '15px', fontSize: '13px', opacity: 0.8 }}>
-              {t.scalanieGroupsSummary}: {groups.size}
-              {' — '}
-              {Array.from(groups.entries())
-                .map(
-                  ([, entries]) =>
-                    `${entries[0].communityLabel} (${entries.length} ${t.scalanieFilesPerGroup})`,
-                )
-                .join(', ')}
-            </div>
-          )}
-
           <table>
             <thead>
               <tr>
                 <th style={{ width: '40px' }}>#</th>
                 <th>{t.scalanieFile}</th>
                 <th style={{ width: '110px' }}>{t.scalanieDate}</th>
-                <th style={{ width: '32%' }}>{t.scalanieCommunity}</th>
                 <th style={{ width: '70px' }}>{t.scalanieLines}</th>
                 <th style={{ textAlign: 'right' }}>{t.actions}</th>
               </tr>
@@ -428,33 +306,10 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
                   <td>
                     {f.status === 'analyzing' ? (
                       <span style={{ opacity: 0.6 }}>{t.scalanieAnalyzing}</span>
-                    ) : (
-                      f.date ?? '—'
-                    )}
-                  </td>
-                  <td>
-                    {f.status === 'analyzing' ? (
-                      <span style={{ opacity: 0.6 }}>{t.scalanieDetectingAddress}</span>
                     ) : f.status === 'error' ? (
                       <span className="status-badge status-error">{f.error ?? t.error}</span>
                     ) : (
-                      <input
-                        type="text"
-                        value={f.communityLabel}
-                        onChange={(e) => updateCommunityLabel(f.filePath, e.target.value)}
-                        placeholder={t.scalanieEditCommunity}
-                        style={{
-                          width: '100%',
-                          padding: '6px 8px',
-                          borderRadius: '4px',
-                          border: f.communityLabel
-                            ? '1px solid var(--border)'
-                            : '1px solid var(--error)',
-                          background: 'var(--bg-secondary)',
-                          color: 'var(--text-primary)',
-                          fontSize: '13px',
-                        }}
-                      />
+                      f.date ?? '—'
                     )}
                   </td>
                   <td>{f.status === 'ready' ? f.lineCount : '—'}</td>

@@ -262,11 +262,10 @@ export const translations = {
     // Scalanie wpłat
     scalanieWplat: 'Scalanie wpłat',
     scalanieTitle: 'Scalanie wpłat',
-    scalanieSubtitle: 'Wrzuć pliki dziennych wpłat → wykryjemy wspólnotę z treści → scalimy per wspólnota wg dat.',
+    scalanieSubtitle: 'Wrzuć pliki dziennych wpłat → scalimy je w jeden plik wg dat.',
     scalanieNoFiles: 'Nie dodano jeszcze żadnych plików.',
     scalanieFile: 'Plik',
     scalanieDate: 'Data',
-    scalanieCommunity: 'Wspólnota',
     scalanieLines: 'Linii',
     scalanieMergeAll: 'Scal',
     scalanieMerging: 'Scalanie…',
@@ -275,11 +274,6 @@ export const translations = {
     scalanieMergeError: 'Błąd scalania',
     scalanieNothingToMerge: 'Brak plików do scalenia.',
     scalanieAnalyzing: 'analiza…',
-    scalanieDetectingAddress: 'wykrywanie adresu…',
-    scalanieUnknownCommunity: 'Nierozpoznana',
-    scalanieEditCommunity: 'Wpisz nazwę wspólnoty',
-    scalanieMissingCommunityBanner: 'Uzupełnij wspólnotę dla wszystkich plików — bez tego nie da się scalić.',
-    scalanieGroupsSummary: 'Wspólnoty',
     scalanieFilesPerGroup: 'plików',
 
     // Banki (osobny widok)
@@ -589,11 +583,10 @@ export const translations = {
     // Scalanie wpłat
     scalanieWplat: 'Merge deposits',
     scalanieTitle: 'Merge deposits',
-    scalanieSubtitle: 'Drop daily deposit files → community is auto-detected from content → we merge per community in date order.',
+    scalanieSubtitle: 'Drop daily deposit files → we merge them into a single file in date order.',
     scalanieNoFiles: 'No files added yet.',
     scalanieFile: 'File',
     scalanieDate: 'Date',
-    scalanieCommunity: 'Community',
     scalanieLines: 'Lines',
     scalanieMergeAll: 'Merge',
     scalanieMerging: 'Merging…',
@@ -602,11 +595,6 @@ export const translations = {
     scalanieMergeError: 'Merge error',
     scalanieNothingToMerge: 'Nothing to merge.',
     scalanieAnalyzing: 'analyzing…',
-    scalanieDetectingAddress: 'detecting address…',
-    scalanieUnknownCommunity: 'Unknown',
-    scalanieEditCommunity: 'Type community name',
-    scalanieMissingCommunityBanner: 'Set a community for every file — merging requires it.',
-    scalanieGroupsSummary: 'Communities',
     scalanieFilesPerGroup: 'files',
 
     // Banki (separate view)

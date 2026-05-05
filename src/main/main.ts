@@ -17,7 +17,7 @@ import { extractNotaFromPdf } from './notySwiadczenia/extractor';
 import { buildNotaWorkbook } from './notySwiadczenia/excelWriter';
 import {
   analyzeFile as scalanieAnalyzeFile,
-  mergeGroups as scalanieMergeGroups,
+  mergeFiles as scalanieMergeFiles,
   MergeFileInput as ScalanieMergeFileInput,
 } from './scalanieWplat/merger';
 import {
@@ -948,8 +948,7 @@ function setupIpcHandlers() {
       if (!fs.existsSync(filePath)) {
         return { error: 'Plik nie istnieje lub został usunięty' };
       }
-      const adresy = database.getAllAdresy();
-      const analyzed = scalanieAnalyzeFile(filePath, adresy);
+      const analyzed = scalanieAnalyzeFile(filePath);
       return { data: analyzed };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
@@ -968,8 +967,8 @@ function setupIpcHandlers() {
         if (!outputDir || !fs.existsSync(outputDir)) {
           return { error: 'Folder docelowy nie istnieje' };
         }
-        const results = scalanieMergeGroups(files, outputDir);
-        return { success: true, results };
+        const result = scalanieMergeFiles(files, outputDir);
+        return { success: true, result };
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         log.error('[SCALANIE] merge failed:', message);

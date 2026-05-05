@@ -6,8 +6,8 @@ import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kon
 export type ZaliczkiCategory =
   | 'zaliczka_utrzymanie' | 'co_zmienna' | 'co_stala'
   | 'ciepla_woda_licznik' | 'ciepla_woda_ryczalt'
-  | 'zimna_woda_licznik' | 'zimna_woda_ryczalt'
-  | 'scieki_licznik' | 'scieki_ryczalt'
+  | 'zw_kanalizacja_licznik' | 'zw_kanalizacja_ryczalt'
+  | 'woda_gospodarcza'
   | 'razem_swiadczenia' | 'odpady_komunalne' | 'fundusz_remontowy'
   | 'razem_total';
 
@@ -40,22 +40,15 @@ export interface ScalanieAnalyzedFile {
   filePath: string;
   fileName: string;
   date: string | null;
-  detectedAddress: string | null;
-  detectedAdresId: number | null;
-  accountKey: string | null;
   lineCount: number;
 }
 
 export interface ScalanieMergeFileInput {
   filePath: string;
-  communityKey: string;
-  communityLabel: string;
   date: string | null;
 }
 
-export interface ScalanieMergeGroupResult {
-  communityKey: string;
-  communityLabel: string;
+export interface ScalanieMergeResult {
   outputPath: string;
   fileCount: number;
   startDate: string | null;
@@ -197,7 +190,7 @@ interface ElectronAPI {
   scalanieSelectOutputDir: () => Promise<string | null>;
   scalanieMerge: (files: ScalanieMergeFileInput[], outputDir: string) => Promise<{
     success?: boolean;
-    results?: ScalanieMergeGroupResult[];
+    result?: ScalanieMergeResult;
     error?: string;
   }>;
 

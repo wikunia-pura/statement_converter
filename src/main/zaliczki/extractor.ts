@@ -21,10 +21,9 @@ export const ZALICZKI_CATEGORIES = [
   'co_stala',
   'ciepla_woda_licznik',
   'ciepla_woda_ryczalt',
-  'zimna_woda_licznik',
-  'zimna_woda_ryczalt',
-  'scieki_licznik',
-  'scieki_ryczalt',
+  'zw_kanalizacja_licznik',
+  'zw_kanalizacja_ryczalt',
+  'woda_gospodarcza',
   'razem_swiadczenia',
   'odpady_komunalne',
   'fundusz_remontowy',
@@ -39,10 +38,9 @@ export const ZALICZKI_CATEGORY_LABELS: Record<ZaliczkiCategory, string> = {
   co_stala: '  CO - opłata stała',
   ciepla_woda_licznik: '  Ciepła woda - licznik',
   ciepla_woda_ryczalt: '  Ciepła woda - ryczałt',
-  zimna_woda_licznik: '  Zimna woda - licznik',
-  zimna_woda_ryczalt: '  Zimna woda - ryczałt',
-  scieki_licznik: '  Ścieki - licznik',
-  scieki_ryczalt: '  Ścieki - ryczałt',
+  zw_kanalizacja_licznik: '  Zimna woda + kanalizacja - licznik',
+  zw_kanalizacja_ryczalt: '  Zimna woda + kanalizacja - ryczałt',
+  woda_gospodarcza: '  Woda gospodarcza',
   razem_swiadczenia: '2. Razem świadczenia',
   odpady_komunalne: '3. Odpady komunalne',
   fundusz_remontowy: '4. Fundusz remontowy',
@@ -96,41 +94,70 @@ A) Zidentyfikuj ADRES wspólnoty — zazwyczaj wpisany jako "Wspólnota Mieszkan
 - Przykłady: "Bokserska 34 (mieszkalne)", "Rzymowskiego 45 (użytkowe)", "al. Niepodległości 103 (mieszkalne)"
 - Używaj DOKŁADNIE tej samej formy adresu co na dokumencie (zachowaj polskie znaki, wielkość liter, kropki, cudzysłowy).
 
-B) Wyciągnij wartości (w zł, jako liczby dziesiętne z kropką). WAŻNE: NIE sumuj linii "licznik" z "ryczałt" — wpisuj je w osobne pola.
+B) Wyciągnij wartości (w zł, jako liczby dziesiętne z kropką).
 
-KOREKTY: linie "korekta …" / "cd potr. korekty …" NIE są osobną kategorią. Zostają wliczone (z zachowanym znakiem +/−) do tej kategorii, do której się odnoszą:
-- "korekta c.w. lok. X ..." / "ciepła woda korekta" → DODAJ do ciepla_woda_licznik jeśli korekta dotyczy licznika (m³), albo do ciepla_woda_ryczalt jeśli dotyczy ryczałtu (m²/os.)
-- "korekta z.w. lok. X ..." → analogicznie do zimna_woda_licznik / zimna_woda_ryczalt
-- "korekta ścieków lok. X ..." / "korekta odprowadzanie ścieków" → analogicznie do scieki_licznik / scieki_ryczalt
-- Korekta bywa UJEMNA (np. "−4 985,76") — zachowaj znak.
-- Domyślnie traktuj korektę wody jako dotyczącą licznika (m³), bo tak jest najczęściej. Tylko jeśli linia jasno mówi o ryczałcie/powierzchni — dodawaj do _ryczalt.
+GENERYCZNA REGUŁA KLASYFIKACJI licznik vs ryczałt (stosuje się do KAŻDEJ wspólnoty):
+1. Jeśli linia w opisie literalnie zawiera słowo "**ryczałt**" lub "**rycz.**" → wartość trafia do pola **_ryczalt**.
+2. Inaczej, jeśli linia w opisie literalnie zawiera słowo "**licznik**" / "**liczniki**" / "**liczb.**" / "**licz.**" → wartość trafia do pola **_licznik**.
+3. Inaczej, jeśli w jednostce/wzorze linii pojawia się **m³** (np. "1,00 m³", "47,00 m³", "3 os × 2,00 m³ × 8,29", "118,50 m³ × 40,00") → wartość trafia do pola **_licznik**.
+4. Inaczej (linia bez słowa licznik/ryczałt i bez m³, liczona np. tylko per "X os × stawka", "Y m² × stawka", "Z gosp × zł/gosp") → wartość trafia do pola **_ryczalt**.
+- Sformułowania pomocnicze ("liczniki radiowe", "(normy ind./os.)", "lok. X") nie wpływają na klasyfikację — liczą się tylko reguły 1–4 wyżej.
+- Wyjątek: słowo "woda gospodarcza" (i jej korekty) ma własne, osobne pole woda_gospodarcza — patrz pkt 8 niżej. Nie wrzucaj jej do zw_kanalizacja_*.
 
-1. zaliczka_utrzymanie — "1. Zaliczka na pokrycie kosztów utrzymania ..." (wartość w ostatniej kolumnie tej linii)
-2. co_zmienna — "centralne ogrzewanie - zmienna" / "opłata zmienna" (jeśli jest tylko jedna linia "centralne ogrzewanie" bez podziału — wpisz tę wartość tutaj). Ewentualna korekta CO — wlicz z znakiem.
+REGUŁA ŁĄCZENIA Z.W. + KANALIZACJI (ścieków):
+- W jednym wierszu wynikowym łączymy zimną wodę i kanalizację (ścieki). Niezależnie od tego, czy w PDF są to:
+  - dwie osobne linie ("zimna woda 18 os × 3 m³ × 5,43" + "odprowadzanie ścieków 18 os × 3 m³ × 8,29") — ZSUMUJ je do zw_kanalizacja_licznik (lub _ryczalt),
+  - jedna połączona linia ("zimna woda i kanalizacja - licznik 25 m³ × 14,90 = 372,50") — wpisz wartość 1:1 do zw_kanalizacja_licznik (lub _ryczalt),
+- Klasyfikacja licznik vs ryczałt dla części z.w. i ścieków zawsze idzie razem (jeśli z.w. ma m³, to i ścieki w tej samej linii idą do licznika).
+- NIE łącz licznika z ryczałtem — to są osobne pola, mimo wspólnej nazwy "Z.W. + kanalizacja".
+
+REGUŁA SUMOWANIA: w ramach jednego pola kategorii ZSUMUJ WSZYSTKIE pasujące linie z tej strony, w tym:
+- linię główną (np. "ciepła woda 28 os × 2 m³ × 40 = 2240", "zimna woda i kanalizacja 25 m³"),
+- linie per-lokalowe (np. "ciepła woda lok. 18 i 25 12 os × 1 m³ × 40 = 480", "c.w. licznik lok. 16 ...", "z.w. licznik lok. 1", "z.w. licznik lok. 2"),
+- korekty lokalne (patrz niżej).
+Nie wybieraj tylko jednej linii — jeśli na stronie są DWIE linie "zimna woda i kanalizacja - licznik" (np. lok. 1 i lok. 2), obie idą do tego samego pola zw_kanalizacja_licznik (suma). Pominięcie linii daje błędną sumę.
+
+KOREKTY — odróżnij dwa rodzaje:
+A) **Korekta lokalna / per-lokalowa** — linia w opisie ma kontekst konkretnego lokalu lub konkretnej kategorii, np. "korekta c.w. lok. 5", "cd potr. korekty Uchwały ... lok 55", "Korekta za viii/2025 lok.35", "Nota lic. korygująca ... korekta dotyczy zużycia C.W. w lok 1.13". TAKĄ korektę DOLICZ (z zachowanym znakiem +/−) do właściwej kategorii według reguł klasyfikacji 1–4. Większość korekt jest UJEMNA — zachowaj minus.
+B) **Nota globalna** — linia "Nota X/Y/Z z dnia DD.MM.RRRR" BEZ kontekstu konkretnego lokalu ani konkretnej kategorii (np. "Nota 3/58/52 z dnia 20.08.2025r." -14 990,63 zł). Taką notę **IGNORUJ** — nie dodawaj do żadnej kategorii. Ona modyfikuje tylko końcowy RAZEM (i tak go odczytasz z ramki w PDF).
+Wskazówka rozróżnienia: jeśli w treści linii jest "lok. X", "C.W. w lok X", "z.w. lok X" itp. → korekta lokalna (rodzaj A). Jeśli to gołe "Nota …" bez wskazania lokalu/kategorii → nota globalna (rodzaj B).
+
+1. zaliczka_utrzymanie — "1. Zaliczka na pokrycie kosztów utrzymania ..." (wartość w ostatniej kolumnie tej linii). Doliczaj korekty lokalne zaliczki utrzymania (np. "cd potr. korekty Uchwały ...").
+2. co_zmienna — "centralne ogrzewanie - zmienna" / "opłata zmienna" (jeśli jest tylko jedna linia "centralne ogrzewanie" bez podziału — wpisz tę wartość tutaj). Doliczaj korekty CO ze znakiem.
 3. co_stala — "centralne ogrzewanie - opłata stała"
 
-Ciepła woda — rozdziel na licznik i ryczałt:
-4. ciepla_woda_licznik — SUMA linii z licznika/zużycia: "c.w. - liczniki radiowe", "ciepła woda liczniki", "ciepła woda licznik lok. X", "podgrzanie wody wg licznika" (jednostka m³), PLUS korekty c.w. dotyczące liczników (ze znakiem).
-5. ciepla_woda_ryczalt — SUMA GENUINE linii ryczałtu: "ciepła woda" bez słowa "licznik" (jednostka m² lub os. bez liczników), "ciepła woda lok. X i Y" (ryczałt dla lokali bez licznika). PLUS korekty c.w. dotyczące ryczałtu. NIE wpisuj tu zwykłych korekt licznika!
+Ciepła woda — reguły 1–4:
+4. ciepla_woda_licznik — SUMA WSZYSTKICH linii c.w. zaklasyfikowanych jako licznik wg reguł 1–4: "c.w. - liczniki radiowe", "ciepła woda - liczb.", "ciepła woda" z m³ ("28 os × 2 m³ × 40"), "c.w. licznik lok. X"; PLUS korekty lokalne c.w. licznika ze znakiem.
+5. ciepla_woda_ryczalt — SUMA linii c.w. zaklasyfikowanych jako ryczałt wg reguł 1–4: "ciepła woda - ryczałt - lok. X", "ciepła woda" bez m³; PLUS korekty lokalne c.w. ryczałtu ze znakiem.
 
-Zimna woda — rozdziel na licznik i ryczałt:
-6. zimna_woda_licznik — SUMA linii z licznika: "z.w. - liczniki radiowe", "zimna woda liczniki", "zimna woda licznik lok. X" (jednostka m³), PLUS korekty z.w. dotyczące liczników.
-7. zimna_woda_ryczalt — SUMA linii ryczałtu: "zimna woda" bez "licznik", "woda gospodarcza" (jeśli dotyczy ZW), PLUS korekty z.w. dotyczące ryczałtu. Jeśli zimna woda i ścieki są w JEDNEJ linii ("zimna woda i kanalizacja"), wpisz tu całość i ustaw scieki_licznik/scieki_ryczalt na null.
+Zimna woda + kanalizacja (ścieki) — łączone w JEDNEJ pozycji, rozdzielone tylko na licznik / ryczałt:
+6. zw_kanalizacja_licznik — SUMA wszystkich linii z.w. + ścieków zaklasyfikowanych jako licznik:
+    - "zimna woda 33 os × 3 m³ × 5,43" (rule 3, m³),
+    - "odprowadzanie ścieków 33 os × 3 m³ × 8,29" (rule 3, m³),
+    - "zimna woda i kanalizacja - licznik Lok. X" 5×3×13,72 (rule 2, "licznik"),
+    - "z.w. - liczniki radiowe 47,00 m³ × 5,43" (rule 2, "liczniki"),
+    - "z.w. licznik lok. X" + "odprow. ścieków lok. X",
+    - PLUS korekty lokalne z.w./ścieków klasyfikowane jako licznik ze znakiem.
+   Nie wrzucaj tu "wody gospodarczej" (osobne pole nr 8); ALE odpowiadające jej "odprowadzanie ścieków" linijki Z m³ TAK trafiają tutaj.
+7. zw_kanalizacja_ryczalt — SUMA z.w. + ścieków zaklasyfikowanych jako ryczałt:
+    - "zimna woda i kanalizacja - ryczałt lok. X" (rule 1, "ryczałt"),
+    - "z.w. ryczałt" + "odprow. ścieków ryczałt",
+    - linie z.w./ścieków bez m³ i bez słów licznik/ryczałt (rule 4),
+    - PLUS korekty lokalne z.w./ścieków klasyfikowane jako ryczałt ze znakiem.
 
-Ścieki — rozdziel na licznik i ryczałt:
-8. scieki_licznik — SUMA głównych linii "odprowadzanie ścieków" powiązanych z licznikami (m³), PLUS korekty ścieków dotyczące liczników.
-9. scieki_ryczalt — SUMA linii ryczałtowych ścieków: "odprowadzanie ścieków" powiązane z "wodą gospodarczą", PLUS korekty ścieków dotyczące ryczałtu.
+8. woda_gospodarcza — OSOBNA pozycja TYLKO na linie literalnie nazwane "woda gospodarcza" (zwykle "X os × Y m³ × stawka_z.w.", np. "14 os × 0,50 m³ × 5,43 = 38,01 zł"). PLUS korekty wody gospodarczej. UWAGA: jeśli przy wodzie gospodarczej jest też linia "odprowadzanie ścieków" liczona po stronie wody gospodarczej (np. "14 os × 0,50 m³ × 8,29 = 58,03"), TĘ linię traktujemy jak zwykłe ścieki licznikowe i wrzucamy do zw_kanalizacja_licznik (NIE do woda_gospodarcza).
 
-10. razem_swiadczenia — "Razem świadczenia" / "Świadczenia razem"
-11. odpady_komunalne — "Razem odpady komunalne" / "Wywóz nieczystości" / "3. Gospodarowanie odpadami komunalnymi"
-12. fundusz_remontowy — "4. Fundusz remontowy" / "4. Zaliczka B - Fundusz remontowy"
-13. razem_total — ogólna suma "zaliczka A, B i świadczenia" + odpady (zazwyczaj w prawym dolnym rogu w ramce, np. "Razem zal. A, B, św. i odpady")
+9. razem_swiadczenia — "Razem świadczenia" / "Świadczenia razem"
+10. odpady_komunalne — "Razem odpady komunalne" / "Wywóz nieczystości" / "3. Gospodarowanie odpadami komunalnymi"
+11. fundusz_remontowy — "4. Fundusz remontowy" / "4. Zaliczka B - Fundusz remontowy"
+12. razem_total — ogólna suma "zaliczka A, B i świadczenia" + odpady (zazwyczaj w prawym dolnym rogu w ramce, np. "Razem zal. A, B, św. i odpady"). Tu odzwierciedla się też ewentualna nota globalna — odczytaj z ramki, nie licz sam.
 
 WAŻNE:
-- Jeśli wartości nie ma na stronie — wpisz null (nie 0).
+- Jeśli wartości nie ma na stronie — wpisz null (nie 0). Nie wymyślaj wartości "po analogii" do innych miesięcy.
 - Nie zgaduj — jeśli nie jesteś pewien, wpisz null.
-- Korekty i noty obciążeniowe mogą być ujemne — uwzględnij znak.
-- Nie sumuj licznika z ryczałtem pod żadnym pozorem — są to OSOBNE pola.
+- Korekty lokalne mogą być ujemne — uwzględnij znak. Noty globalne ignoruj.
+- Klasyfikacja licznik vs ryczałt: priorytet słowa "ryczałt"/"licznik" w opisie linii, dopiero potem reguła m³.
+- Pamiętaj sumować WSZYSTKIE pasujące linie (główna + per-lokalowe + korekty), nie tylko jedną.
 - Zwróć WYŁĄCZNIE JSON, bez komentarza ani \`\`\`-fences.
 
 Format odpowiedzi:
@@ -146,10 +173,9 @@ Format odpowiedzi:
         "co_stala": 396.82,
         "ciepla_woda_licznik": 2075.20,
         "ciepla_woda_ryczalt": null,
-        "zimna_woda_licznik": 545.72,
-        "zimna_woda_ryczalt": null,
-        "scieki_licznik": 833.14,
-        "scieki_ryczalt": null,
+        "zw_kanalizacja_licznik": 1378.86,
+        "zw_kanalizacja_ryczalt": null,
+        "woda_gospodarcza": null,
         "razem_swiadczenia": 6968.72,
         "odpady_komunalne": 720.00,
         "fundusz_remontowy": 1700.64,

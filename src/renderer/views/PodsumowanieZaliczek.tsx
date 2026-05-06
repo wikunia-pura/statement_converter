@@ -42,6 +42,8 @@ const CATEGORIES: ZaliczkiCategory[] = [
 const MONTH_SHORT = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze',
                      'lip', 'sie', 'wrz', 'paź', 'lis', 'gru'];
 
+const OCR_CONCURRENCY = 4;
+
 const ROMAN_TO_MONTH: Record<string, number> = {
   I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6,
   VII: 7, VIII: 8, IX: 9, X: 10, XI: 11, XII: 12,
@@ -205,7 +207,8 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
     setIsProcessing(true);
     setStatusMessage('');
     setGeneratedFilePath(null);
-    for (const entry of targets) {
+
+    const processOne = async (entry: FileEntry) => {
       setFiles((prev) =>
         prev.map((f) => (f.filePath === entry.filePath ? { ...f, status: 'running' } : f)),
       );
@@ -225,7 +228,21 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
           return { ...f, status: 'done', result, error: undefined };
         }),
       );
-    }
+    };
+
+    // Process up to OCR_CONCURRENCY PDFs in parallel. Anthropic 429 retry is
+    // handled in the main process; the cap balances throughput against tier
+    // input-token-per-minute limits.
+    const queue = [...targets];
+    const workers = Array.from({ length: Math.min(OCR_CONCURRENCY, queue.length) }, async () => {
+      while (queue.length > 0) {
+        const next = queue.shift();
+        if (!next) return;
+        await processOne(next);
+      }
+    });
+    await Promise.all(workers);
+
     setIsProcessing(false);
   };
 

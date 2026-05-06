@@ -9,6 +9,19 @@ import OpenAI from 'openai';
 import { AITransaction, AIExtractedData, AIExtractionResponse, AIConfig } from './ai-types';
 import logger from './logger';
 
+function logCacheUsage(label: string, usage: unknown): void {
+  const u = usage as Record<string, number | undefined> | undefined;
+  if (!u) return;
+  const created = u.cache_creation_input_tokens ?? 0;
+  const read = u.cache_read_input_tokens ?? 0;
+  const input = u.input_tokens ?? 0;
+  if (created || read) {
+    logger.info(
+      `[AI-EXTRACTOR/${label}] cache created=${created}, read=${read}, fresh input=${input}`,
+    );
+  }
+}
+
 export class AIExtractor {
   private anthropic?: Anthropic;
   private openai?: OpenAI;
@@ -239,7 +252,15 @@ export class AIExtractor {
           model: this.config.model || 'claude-sonnet-4-6',
           max_tokens: 2000 + (transactions.length * 200),
           temperature: 0,
-          system: systemPrompt,
+          // Mark system prompt with cache_control for prompt caching. Cast is
+          // needed because SDK v0.32 doesn't yet expose cache_control in types.
+          system: [
+            {
+              type: 'text',
+              text: systemPrompt,
+              cache_control: { type: 'ephemeral' },
+            },
+          ] as unknown as Anthropic.MessageCreateParamsNonStreaming['system'],
           messages: [
             {
               role: 'user',
@@ -252,6 +273,7 @@ export class AIExtractor {
         if (content.type !== 'text') {
           throw new Error('Unexpected response type from Claude');
         }
+        logCacheUsage('extract', message.usage);
 
         const response: AIExtractionResponse = this.parseJsonResponse(content.text);
         return this.processAIResponse(response, transactions);
@@ -627,7 +649,15 @@ Example 2:
           model: this.config.model || 'claude-sonnet-4-6',
           max_tokens: 2000 + (transactions.length * 300),
           temperature: 0,
-          system: systemPrompt,
+          // Mark system prompt with cache_control for prompt caching. Cast is
+          // needed because SDK v0.32 doesn't yet expose cache_control in types.
+          system: [
+            {
+              type: 'text',
+              text: systemPrompt,
+              cache_control: { type: 'ephemeral' },
+            },
+          ] as unknown as Anthropic.MessageCreateParamsNonStreaming['system'],
           messages: [
             {
               role: 'user',
@@ -640,6 +670,7 @@ Example 2:
         if (content.type !== 'text') {
           throw new Error('Unexpected response type from Claude');
         }
+        logCacheUsage('match', message.usage);
 
         const response = this.parseJsonResponse(content.text);
         return this.processContractorMatchingResponse(response, candidatesPerTransaction);

@@ -212,6 +212,8 @@ export async function extractZaliczkiFromPdf(
   // `document` content block (native PDF) is supported by the Anthropic API
   // but not yet typed in SDK v0.32. Cast the message payload to bypass the
   // type check — upgrading the SDK would ripple into ai-extractor.ts.
+  // PROMPT goes FIRST with cache_control so the 2.6k-token instructions hit
+  // the prefix cache across all PDFs in the user's batch (TTL ~5 min).
   const resp = await withRateLimitRetry(
     () =>
       client.messages.create({
@@ -222,6 +224,11 @@ export async function extractZaliczkiFromPdf(
             role: 'user',
             content: [
               {
+                type: 'text',
+                text: PROMPT,
+                cache_control: { type: 'ephemeral' },
+              },
+              {
                 type: 'document',
                 source: {
                   type: 'base64',
@@ -229,13 +236,13 @@ export async function extractZaliczkiFromPdf(
                   data: base64,
                 },
               },
-              { type: 'text', text: PROMPT },
             ],
           },
         ] as unknown as Anthropic.MessageCreateParamsNonStreaming['messages'],
       }),
     filename,
   );
+  logCacheUsage(filename, resp.usage);
 
   const firstBlock = resp.content[0];
   const text = firstBlock && firstBlock.type === 'text' ? firstBlock.text : '';
@@ -374,6 +381,19 @@ function toNumber(v: unknown): number | null {
   if (!s || s.toLowerCase() === 'null') return null;
   const n = parseFloat(s);
   return Number.isFinite(n) ? n : null;
+}
+
+function logCacheUsage(filename: string, usage: unknown): void {
+  const u = usage as Record<string, number | undefined> | undefined;
+  if (!u) return;
+  const created = u.cache_creation_input_tokens ?? 0;
+  const read = u.cache_read_input_tokens ?? 0;
+  const input = u.input_tokens ?? 0;
+  if (created || read) {
+    logger.info(
+      `[ZALICZKI] ${filename}: cache created=${created}, read=${read}, fresh input=${input}`,
+    );
+  }
 }
 
 /**

@@ -2,10 +2,13 @@
  * Homebanking — merge multi-day deposit/payment files coming from many banks
  * into one file per bank, with optional split per address.
  *
- * Bank detection: each Bank carries `accountPrefixes`. A file belongs to the
- * bank whose prefix appears most frequently in the raw content (substring
- * match). Files without any matching bank are flagged and skipped during
- * merge.
+ * Bank detection: each Bank carries `accountPrefixes`. For each row we restrict
+ * the prefix scan to the SENDER section of the line (everything up to and
+ * including the first 26-digit IBAN). Homebanking files are outgoing payments
+ * by the wspólnota — the sender's bank is what we want to route by; the
+ * receiver bank (E.ON, ZGN, etc.) is irrelevant and would otherwise tie or
+ * dominate the count. Files without any matching bank are flagged and skipped
+ * during merge.
  *
  * Address split (optional): when enabled, each "position" (line) in the
  * input is run through the shared AddressMatcher (same logic as the
@@ -87,6 +90,18 @@ export function extractDate(fileName: string, content: string): string | null {
 }
 
 /**
+ * For an Elixir/PLI line, return the slice ending at the first 26-digit run
+ * (sender IBAN). Field 4 (sender clearing number) and the sender IBAN both
+ * fall within this slice; the receiver IBAN that follows is excluded. Lines
+ * without an IBAN-like pattern fall back to the full line.
+ */
+export function extractSenderSection(line: string): string {
+  const m = /\d{26}/.exec(line);
+  if (!m) return line;
+  return line.slice(0, m.index + m[0].length);
+}
+
+/**
  * Pick the bank whose accountPrefixes appear most often (as substrings) in
  * `content`. Ties are broken by configured order (first wins) so detection
  * is stable across calls.
@@ -158,8 +173,9 @@ export function analyzeFile(
     if (!line.trim()) continue;
     nonEmpty += 1;
 
-    // Per-line bank detection — supports multi-bank files like .PLI
-    const bank = detectBankForContent(line, banks);
+    // Per-line bank detection — supports multi-bank files like .PLI.
+    // Restrict to sender section so receiver IBAN/clearing don't pollute the count.
+    const bank = detectBankForContent(extractSenderSection(line), banks);
     if (bank) {
       const prev = bankCounts.get(bank.bankId);
       if (prev) prev.lineCount += 1;
@@ -287,7 +303,7 @@ function bucketLines(
       // empty lines: skip — they'd add stray separators on join
       if (lineBuf.length === 0) continue;
       const lineText = decodeBuffer(lineBuf);
-      const bank = detectBankForContent(lineText, banks);
+      const bank = detectBankForContent(extractSenderSection(lineText), banks);
       if (!bank || !allowed.has(bank.bankId)) continue;
 
       let addressLabel = '';

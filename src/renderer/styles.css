@@ -601,6 +601,9 @@ option {
   padding: var(--s-6);
   margin-bottom: var(--s-6);
   box-shadow: var(--shadow-sm);
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
 
 /* ==========================================================================

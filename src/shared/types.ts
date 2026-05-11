@@ -212,4 +212,13 @@ export const IPC_CHANNELS = {
   HOMEBANKING_ANALYZE_FILE: 'homebanking:analyze-file',
   HOMEBANKING_SELECT_OUTPUT_DIR: 'homebanking:select-output-dir',
   HOMEBANKING_MERGE: 'homebanking:merge',
+
+  // Auth (Supabase-backed)
+  AUTH_SIGN_IN: 'auth:sign-in',
+  AUTH_SIGN_OUT: 'auth:sign-out',
+  AUTH_GET_SESSION: 'auth:get-session',
+
+  // One-time local→cloud migration
+  MIGRATION_GET_STATUS: 'migration:get-status',
+  MIGRATION_RUN: 'migration:run',
 } as const;

@@ -2,12 +2,11 @@ import Store from 'electron-store';
 import path from 'path';
 import { app } from 'electron';
 import { Bank, ConversionHistory, AppSettings, Kontrahent, Adres, KontrahentTyp } from '../shared/types';
+import { getSupabase } from './supabaseClient';
 
-interface StoreSchema {
-  banks: Bank[];
-  kontrahenci: Kontrahent[];
-  adresy: Adres[];
-  history: ConversionHistory[];
+// Settings remain machine-local: dark mode, folder paths, language, etc. are
+// per-user-machine UI prefs that shouldn't sync across installs.
+interface SettingsStoreSchema {
   settings: {
     outputFolder: string;
     impexFolder: string;
@@ -17,22 +16,32 @@ interface StoreSchema {
     aiConfidenceThreshold: number;
     skipUserApproval: boolean;
   };
-  nextBankId: number;
-  nextKontrahentId: number;
-  nextAdresId: number;
-  nextHistoryId: number;
+}
+
+const BANK_COLS = 'id, name, converterId:converter_id, accountPrefixes:account_prefixes, createdAt:created_at';
+const KONTRAHENT_COLS =
+  'id, nazwa, kontoKontrahenta:konto_kontrahenta, nip, typ, alternativeNames:alternative_names, createdAt:created_at';
+const ADRES_COLS =
+  'id, nazwa, alternativeNames:alternative_names, swrkIdentifiers:swrk_identifiers, createdAt:created_at';
+const HISTORY_COLS =
+  'id, fileName:file_name, bankName:bank_name, converterName:converter_name, status, errorMessage:error_message, inputPath:input_path, outputPath:output_path, convertedAt:converted_at';
+
+function unwrap<T>(data: T | null, error: { message: string } | null, context: string): T {
+  if (error) throw new Error(`${context}: ${error.message}`);
+  if (data === null) throw new Error(`${context}: no data returned`);
+  return data;
 }
 
 class DatabaseService {
-  private store: Store<StoreSchema>;
+  private settingsStore: Store<SettingsStoreSchema>;
 
   constructor() {
-    this.store = new Store<StoreSchema>({
+    // Keep the default store file ('config.json' in userData) so existing
+    // settings (dark mode, folder paths, language) are preserved across the migration.
+    // Legacy keys (banks, kontrahenci, adresy, history, nextBankId, …) are left in
+    // place — the importer reads them later, then they can be cleared.
+    this.settingsStore = new Store<SettingsStoreSchema>({
       defaults: {
-        banks: [],
-        kontrahenci: [],
-        adresy: [],
-        history: [],
         settings: {
           outputFolder: path.join(app.getPath('documents'), 'StatementConverter'),
           impexFolder: '',
@@ -42,198 +51,253 @@ class DatabaseService {
           aiConfidenceThreshold: 95,
           skipUserApproval: false,
         },
-        nextBankId: 1,
-        nextKontrahentId: 1,
-        nextAdresId: 1,
-        nextHistoryId: 1,
       },
     });
   }
 
-  // Banks operations
-  getAllBanks(): Bank[] {
-    const banks = this.store.get('banks', []);
-    return banks.sort((a, b) => a.name.localeCompare(b.name));
+  // ------------------------------ Banks ------------------------------
+
+  async getAllBanks(): Promise<Bank[]> {
+    const { data, error } = await getSupabase()
+      .from('banks')
+      .select(BANK_COLS)
+      .order('name', { ascending: true });
+    const rows = unwrap(data, error, 'getAllBanks');
+    return rows.map(b => ({ ...b, accountPrefixes: b.accountPrefixes ?? [] })) as Bank[];
   }
 
-  addBank(name: string, converterId: string, accountPrefixes?: string[]): Bank {
-    const banks = this.store.get('banks', []);
-    const id = this.store.get('nextBankId', 1);
-
-    const newBank: Bank = {
-      id,
-      name,
-      converterId,
-      accountPrefixes: accountPrefixes || [],
-      createdAt: new Date().toISOString(),
-    };
-
-    banks.push(newBank);
-    this.store.set('banks', banks);
-    this.store.set('nextBankId', id + 1);
-
-    return newBank;
-  }
-
-  updateBank(id: number, name: string, converterId: string, accountPrefixes?: string[]): void {
-    const banks = this.store.get('banks', []);
-    const index = banks.findIndex(b => b.id === id);
-
-    if (index !== -1) {
-      banks[index] = {
-        ...banks[index],
+  async addBank(name: string, converterId: string, accountPrefixes?: string[]): Promise<Bank> {
+    const { data, error } = await getSupabase()
+      .from('banks')
+      .insert({
         name,
-        converterId,
-        accountPrefixes:
-          accountPrefixes !== undefined
-            ? accountPrefixes
-            : banks[index].accountPrefixes || [],
-      };
-      this.store.set('banks', banks);
-    }
+        converter_id: converterId,
+        account_prefixes: accountPrefixes ?? [],
+      })
+      .select(BANK_COLS)
+      .single();
+    return unwrap(data, error, 'addBank') as Bank;
   }
 
-  deleteBank(id: number): void {
-    const banks = this.store.get('banks', []);
-    this.store.set('banks', banks.filter(b => b.id !== id));
+  async updateBank(
+    id: number,
+    name: string,
+    converterId: string,
+    accountPrefixes?: string[],
+  ): Promise<void> {
+    const { error } = await getSupabase()
+      .from('banks')
+      .update({
+        name,
+        converter_id: converterId,
+        account_prefixes: accountPrefixes ?? [],
+      })
+      .eq('id', id);
+    if (error) throw new Error(`updateBank: ${error.message}`);
   }
 
-  deleteAllBanks(): void {
-    this.store.set('banks', []);
+  async deleteBank(id: number): Promise<void> {
+    const { error } = await getSupabase().from('banks').delete().eq('id', id);
+    if (error) throw new Error(`deleteBank: ${error.message}`);
   }
 
-  getBankById(id: number): Bank | undefined {
-    const banks = this.store.get('banks', []);
-    return banks.find(b => b.id === id);
+  async deleteAllBanks(): Promise<void> {
+    const { error } = await getSupabase().from('banks').delete().gt('id', 0);
+    if (error) throw new Error(`deleteAllBanks: ${error.message}`);
   }
 
-  // Kontrahenci operations
-  getAllKontrahenci(): Kontrahent[] {
-    const kontrahenci = this.store.get('kontrahenci', []);
-    // Migration: ensure every entry has a 'typ' field
-    const migrated = kontrahenci.map(k => ({
-      ...k,
-      typ: k.typ || 'Kontrahent' as KontrahentTyp,
+  async getBankById(id: number): Promise<Bank | undefined> {
+    const { data, error } = await getSupabase()
+      .from('banks')
+      .select(BANK_COLS)
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw new Error(`getBankById: ${error.message}`);
+    return (data ?? undefined) as Bank | undefined;
+  }
+
+  async importBanks(banks: Bank[]): Promise<void> {
+    if (banks.length === 0) return;
+    // Strip ids; let Postgres assign fresh ones (avoids collisions with rows already in the cloud).
+    const payload = banks.map(b => ({
+      name: b.name,
+      converter_id: b.converterId,
+      account_prefixes: b.accountPrefixes ?? [],
     }));
-    return migrated.sort((a, b) => a.nazwa.localeCompare(b.nazwa));
+    const { error } = await getSupabase().from('banks').insert(payload);
+    if (error) throw new Error(`importBanks: ${error.message}`);
   }
 
-  addKontrahent(nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typ?: KontrahentTyp): Kontrahent {
-    const kontrahenci = this.store.get('kontrahenci', []);
-    const id = this.store.get('nextKontrahentId', 1);
-    
-    const newKontrahent: Kontrahent = {
-      id,
+  // ---------------------------- Kontrahenci ----------------------------
+
+  async getAllKontrahenci(): Promise<Kontrahent[]> {
+    const { data, error } = await getSupabase()
+      .from('kontrahenci')
+      .select(KONTRAHENT_COLS)
+      .order('nazwa', { ascending: true });
+    const rows = unwrap(data, error, 'getAllKontrahenci');
+    return rows.map(k => ({
+      ...k,
+      typ: (k.typ as KontrahentTyp) || 'Kontrahent',
+      alternativeNames: k.alternativeNames ?? [],
+      nip: k.nip ?? undefined,
+    })) as Kontrahent[];
+  }
+
+  async addKontrahent(
+    nazwa: string,
+    kontoKontrahenta: string,
+    nip?: string,
+    alternativeNames?: string[],
+    typ?: KontrahentTyp,
+  ): Promise<Kontrahent> {
+    const { data, error } = await getSupabase()
+      .from('kontrahenci')
+      .insert({
+        nazwa,
+        konto_kontrahenta: kontoKontrahenta,
+        nip: nip || null,
+        typ: typ || 'Kontrahent',
+        alternative_names: alternativeNames ?? [],
+      })
+      .select(KONTRAHENT_COLS)
+      .single();
+    const row = unwrap(data, error, 'addKontrahent') as Kontrahent;
+    return { ...row, nip: row.nip ?? undefined };
+  }
+
+  async updateKontrahent(
+    id: number,
+    nazwa: string,
+    kontoKontrahenta: string,
+    nip?: string,
+    alternativeNames?: string[],
+    typ?: KontrahentTyp,
+  ): Promise<void> {
+    const patch: Record<string, unknown> = {
       nazwa,
-      kontoKontrahenta,
-      nip: nip || undefined,
-      typ: typ || 'Kontrahent',
-      alternativeNames: alternativeNames || [],
-      createdAt: new Date().toISOString(),
+      konto_kontrahenta: kontoKontrahenta,
     };
-    
-    kontrahenci.push(newKontrahent);
-    this.store.set('kontrahenci', kontrahenci);
-    this.store.set('nextKontrahentId', id + 1);
-    
-    return newKontrahent;
+    if (nip !== undefined) patch.nip = nip || null;
+    if (typ !== undefined) patch.typ = typ;
+    if (alternativeNames !== undefined) patch.alternative_names = alternativeNames;
+    const { error } = await getSupabase().from('kontrahenci').update(patch).eq('id', id);
+    if (error) throw new Error(`updateKontrahent: ${error.message}`);
   }
 
-  updateKontrahent(id: number, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typ?: KontrahentTyp): void {
-    const kontrahenci = this.store.get('kontrahenci', []);
-    const index = kontrahenci.findIndex(k => k.id === id);
-    
-    if (index !== -1) {
-      kontrahenci[index] = { 
-        ...kontrahenci[index], 
-        nazwa, 
-        kontoKontrahenta,
-        nip: nip || kontrahenci[index].nip || undefined,
-        typ: typ || kontrahenci[index].typ || 'Kontrahent',
-        alternativeNames: alternativeNames || kontrahenci[index].alternativeNames || []
-      };
-      this.store.set('kontrahenci', kontrahenci);
-    }
+  async deleteKontrahent(id: number): Promise<void> {
+    const { error } = await getSupabase().from('kontrahenci').delete().eq('id', id);
+    if (error) throw new Error(`deleteKontrahent: ${error.message}`);
   }
 
-  deleteKontrahent(id: number): void {
-    const kontrahenci = this.store.get('kontrahenci', []);
-    this.store.set('kontrahenci', kontrahenci.filter(k => k.id !== id));
+  async deleteAllKontrahenci(): Promise<void> {
+    const { error } = await getSupabase().from('kontrahenci').delete().gt('id', 0);
+    if (error) throw new Error(`deleteAllKontrahenci: ${error.message}`);
   }
 
-  deleteAllKontrahenci(): void {
-    this.store.set('kontrahenci', []);
+  async getKontrahentById(id: number): Promise<Kontrahent | undefined> {
+    const { data, error } = await getSupabase()
+      .from('kontrahenci')
+      .select(KONTRAHENT_COLS)
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw new Error(`getKontrahentById: ${error.message}`);
+    if (!data) return undefined;
+    return { ...(data as Kontrahent), nip: (data as Kontrahent).nip ?? undefined };
   }
 
-  getKontrahentById(id: number): Kontrahent | undefined {
-    const kontrahenci = this.store.get('kontrahenci', []);
-    return kontrahenci.find(k => k.id === id);
+  async importKontrahenci(kontrahenci: Kontrahent[]): Promise<void> {
+    if (kontrahenci.length === 0) return;
+    const payload = kontrahenci.map(k => ({
+      nazwa: k.nazwa,
+      konto_kontrahenta: k.kontoKontrahenta,
+      nip: k.nip || null,
+      typ: k.typ || 'Kontrahent',
+      alternative_names: k.alternativeNames ?? [],
+    }));
+    const { error } = await getSupabase().from('kontrahenci').insert(payload);
+    if (error) throw new Error(`importKontrahenci: ${error.message}`);
   }
 
-  // Adresy operations
-  getAllAdresy(): Adres[] {
-    const adresy = this.store.get('adresy', []);
-    return adresy.sort((a, b) => a.nazwa.localeCompare(b.nazwa));
+  // ------------------------------ Adresy ------------------------------
+
+  async getAllAdresy(): Promise<Adres[]> {
+    const { data, error } = await getSupabase()
+      .from('adresy')
+      .select(ADRES_COLS)
+      .order('nazwa', { ascending: true });
+    const rows = unwrap(data, error, 'getAllAdresy');
+    return rows.map(a => ({
+      ...a,
+      alternativeNames: a.alternativeNames ?? [],
+      swrkIdentifiers: a.swrkIdentifiers ?? [],
+    })) as Adres[];
   }
 
-  addAdres(nazwa: string, alternativeNames?: string[], swrkIdentifiers?: string[]): Adres {
-    const adresy = this.store.get('adresy', []);
-    const id = this.store.get('nextAdresId', 1);
-
-    const newAdres: Adres = {
-      id,
-      nazwa,
-      alternativeNames: alternativeNames || [],
-      swrkIdentifiers: swrkIdentifiers || [],
-      createdAt: new Date().toISOString(),
-    };
-
-    adresy.push(newAdres);
-    this.store.set('adresy', adresy);
-    this.store.set('nextAdresId', id + 1);
-
-    return newAdres;
+  async addAdres(
+    nazwa: string,
+    alternativeNames?: string[],
+    swrkIdentifiers?: string[],
+  ): Promise<Adres> {
+    const { data, error } = await getSupabase()
+      .from('adresy')
+      .insert({
+        nazwa,
+        alternative_names: alternativeNames ?? [],
+        swrk_identifiers: swrkIdentifiers ?? [],
+      })
+      .select(ADRES_COLS)
+      .single();
+    return unwrap(data, error, 'addAdres') as Adres;
   }
 
-  updateAdres(
+  async updateAdres(
     id: number,
     nazwa: string,
     alternativeNames?: string[],
     swrkIdentifiers?: string[],
-  ): void {
-    const adresy = this.store.get('adresy', []);
-    const index = adresy.findIndex(a => a.id === id);
-
-    if (index !== -1) {
-      adresy[index] = {
-        ...adresy[index],
-        nazwa,
-        alternativeNames: alternativeNames || adresy[index].alternativeNames || [],
-        swrkIdentifiers:
-          swrkIdentifiers !== undefined
-            ? swrkIdentifiers
-            : adresy[index].swrkIdentifiers || [],
-      };
-      this.store.set('adresy', adresy);
-    }
+  ): Promise<void> {
+    const patch: Record<string, unknown> = { nazwa };
+    if (alternativeNames !== undefined) patch.alternative_names = alternativeNames;
+    if (swrkIdentifiers !== undefined) patch.swrk_identifiers = swrkIdentifiers;
+    const { error } = await getSupabase().from('adresy').update(patch).eq('id', id);
+    if (error) throw new Error(`updateAdres: ${error.message}`);
   }
 
-  deleteAdres(id: number): void {
-    const adresy = this.store.get('adresy', []);
-    this.store.set('adresy', adresy.filter(a => a.id !== id));
+  async deleteAdres(id: number): Promise<void> {
+    const { error } = await getSupabase().from('adresy').delete().eq('id', id);
+    if (error) throw new Error(`deleteAdres: ${error.message}`);
   }
 
-  deleteAllAdresy(): void {
-    this.store.set('adresy', []);
+  async deleteAllAdresy(): Promise<void> {
+    const { error } = await getSupabase().from('adresy').delete().gt('id', 0);
+    if (error) throw new Error(`deleteAllAdresy: ${error.message}`);
   }
 
-  getAdresById(id: number): Adres | undefined {
-    const adresy = this.store.get('adresy', []);
-    return adresy.find(a => a.id === id);
+  async getAdresById(id: number): Promise<Adres | undefined> {
+    const { data, error } = await getSupabase()
+      .from('adresy')
+      .select(ADRES_COLS)
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw new Error(`getAdresById: ${error.message}`);
+    return (data ?? undefined) as Adres | undefined;
   }
 
-  // Conversion history operations
-  addConversionHistory(data: {
+  async importAdresy(adresy: Adres[]): Promise<void> {
+    if (adresy.length === 0) return;
+    const payload = adresy.map(a => ({
+      nazwa: a.nazwa,
+      alternative_names: a.alternativeNames ?? [],
+      swrk_identifiers: a.swrkIdentifiers ?? [],
+    }));
+    const { error } = await getSupabase().from('adresy').insert(payload);
+    if (error) throw new Error(`importAdresy: ${error.message}`);
+  }
+
+  // ----------------------------- History -----------------------------
+
+  async addConversionHistory(data: {
     fileName: string;
     bankName: string;
     converterName: string;
@@ -241,70 +305,82 @@ class DatabaseService {
     errorMessage?: string;
     inputPath: string;
     outputPath: string;
-  }): void {
-    const history = this.store.get('history', []);
-    const id = this.store.get('nextHistoryId', 1);
-    
-    const newEntry: ConversionHistory = {
-      id,
-      fileName: data.fileName,
-      bankName: data.bankName,
-      converterName: data.converterName,
+  }): Promise<void> {
+    const { error } = await getSupabase().from('history').insert({
+      file_name: data.fileName,
+      bank_name: data.bankName,
+      converter_name: data.converterName,
       status: data.status,
-      errorMessage: data.errorMessage,
-      inputPath: data.inputPath,
-      outputPath: data.outputPath,
-      convertedAt: new Date().toISOString(),
-    };
-    
-    history.unshift(newEntry); // Add to beginning for most recent first
-    this.store.set('history', history);
-    this.store.set('nextHistoryId', id + 1);
+      error_message: data.errorMessage || null,
+      input_path: data.inputPath,
+      output_path: data.outputPath,
+    });
+    if (error) throw new Error(`addConversionHistory: ${error.message}`);
   }
 
-  getAllHistory(): ConversionHistory[] {
-    return this.store.get('history', []);
+  async getAllHistory(): Promise<ConversionHistory[]> {
+    const { data, error } = await getSupabase()
+      .from('history')
+      .select(HISTORY_COLS)
+      .order('converted_at', { ascending: false });
+    const rows = unwrap(data, error, 'getAllHistory');
+    return rows.map(h => ({ ...h, errorMessage: h.errorMessage ?? undefined })) as ConversionHistory[];
   }
 
-  clearHistory(): void {
-    this.store.set('history', []);
+  async clearHistory(): Promise<void> {
+    const { error } = await getSupabase().from('history').delete().gt('id', 0);
+    if (error) throw new Error(`clearHistory: ${error.message}`);
   }
 
-  // Settings operations
+  // Bulk import history (used by the local→cloud migrator).
+  async importHistory(history: ConversionHistory[]): Promise<void> {
+    if (history.length === 0) return;
+    const payload = history.map(h => ({
+      file_name: h.fileName,
+      bank_name: h.bankName,
+      converter_name: h.converterName,
+      status: h.status,
+      error_message: h.errorMessage || null,
+      input_path: h.inputPath,
+      output_path: h.outputPath,
+      converted_at: h.convertedAt,
+    }));
+    const { error } = await getSupabase().from('history').insert(payload);
+    if (error) throw new Error(`importHistory: ${error.message}`);
+  }
+
+  // ----------------------------- Settings -----------------------------
+  // Stay local to the machine — these are UI prefs, not shared data.
+
   getSetting(key: string): string | undefined {
-    const settings = this.store.get('settings');
+    const settings = this.settingsStore.get('settings');
     return (settings as any)[key];
   }
 
   getSettings(): AppSettings {
-    return this.store.get('settings');
+    return this.settingsStore.get('settings');
   }
 
   setSetting(key: string, value: string): void {
-    const settings = this.store.get('settings');
-    this.store.set('settings', { ...settings, [key]: value });
+    const settings = this.settingsStore.get('settings');
+    this.settingsStore.set('settings', { ...settings, [key]: value });
   }
 
   exportSettings(): { settings: any } {
-    return {
-      settings: this.store.get('settings'),
-    };
+    return { settings: this.settingsStore.get('settings') };
   }
 
   importSettings(data: { settings?: any }): void {
     if (data.settings) {
-      this.store.set('settings', { ...this.store.get('settings'), ...data.settings });
+      this.settingsStore.set('settings', {
+        ...this.settingsStore.get('settings'),
+        ...data.settings,
+      });
     }
   }
 
-  importBanks(banks: Bank[]): void {
-    this.store.set('banks', banks);
-    const maxId = Math.max(0, ...banks.map(b => b.id));
-    this.store.set('nextBankId', maxId + 1);
-  }
-
   close(): void {
-    // electron-store doesn't need explicit closing
+    // Nothing to release; the Supabase client + electron-store don't need explicit closing.
   }
 }
 

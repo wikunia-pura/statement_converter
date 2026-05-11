@@ -9,6 +9,7 @@ import PodsumowanieZaliczek, { ZaliczkiFileEntry } from './views/PodsumowanieZal
 import NotySwiadczenia, { NotyFileEntry } from './views/NotySwiadczenia';
 import ScalanieWplat, { ScalanieFileEntry } from './views/ScalanieWplat';
 import Homebanking, { HomebankingFileEntry } from './views/Homebanking';
+import Login from './views/Login';
 import Logo from './components/Logo';
 import Footer from './components/Footer';
 import Icon from './components/Icon';
@@ -40,11 +41,33 @@ const App: React.FC = () => {
   const [scalanieFiles, setScalanieFiles] = useState<ScalanieFileEntry[]>([]);
   const [homebankingFiles, setHomebankingFiles] = useState<HomebankingFileEntry[]>([]);
   const [appVersion, setAppVersion] = useState<string>('1.0.0');
+  const [session, setSession] = useState<{ email: string; userId: string } | null>(null);
+  const [sessionChecked, setSessionChecked] = useState(false);
 
   useEffect(() => {
-    loadSettings();
     loadAppVersion();
+    // Load local settings (dark mode, language) immediately so the login screen
+    // respects them — these are machine-local and don't need a session.
+    loadSettings();
+    void (async () => {
+      try {
+        const s = await window.electronAPI.authGetSession();
+        setSession(s);
+      } finally {
+        setSessionChecked(true);
+      }
+    })();
   }, []);
+
+  const handleSignOut = async () => {
+    await window.electronAPI.authSignOut();
+    setSession(null);
+  };
+
+  const handleSignedIn = async () => {
+    const s = await window.electronAPI.authGetSession();
+    setSession(s);
+  };
 
   const loadAppVersion = async () => {
     try {
@@ -84,6 +107,18 @@ const App: React.FC = () => {
   };
 
   const t = translations[language];
+
+  if (!sessionChecked) {
+    return <div className="app" />;
+  }
+
+  if (!session) {
+    return (
+      <div className="app">
+        <Login onSignedIn={handleSignedIn} />
+      </div>
+    );
+  }
 
   return (
     <div className="app">
@@ -153,6 +188,15 @@ const App: React.FC = () => {
             onClick={() => setCurrentView('history')}
           >
             <Icon name="history" /> {t.history}
+          </div>
+          <div className="nav-divider" />
+          <div
+            className="nav-item"
+            onClick={handleSignOut}
+            title={session.email}
+            style={{ fontSize: 12, opacity: 0.7 }}
+          >
+            <Icon name="users" /> Wyloguj ({session.email})
           </div>
         </div>
       </div>

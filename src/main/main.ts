@@ -6,6 +6,8 @@ import fs from 'fs';
 import DatabaseService from './database';
 import ConverterRegistry, { setDatabaseInstance } from './converterRegistry';
 import { IPC_CHANNELS, KontrahentTyp } from '../shared/types';
+import * as authService from './authService';
+import { getMigrationStatus, runMigration } from './migrationService';
 import { extractPdfText } from '../shared/pdf-utils';
 import {
   DEFAULT_ZALICZKI_MODEL,
@@ -106,24 +108,25 @@ function sanitizeForFilename(name: string): string {
  * Format: {address}_{timestamp}.txt
  * Example: Aleja_Lotnikow_20_20260227_143025.txt
  */
-function generateOutputFileName(adresId: number | null | undefined, db: DatabaseService): string {
+async function generateOutputFileName(
+  adresId: number | null | undefined,
+  db: DatabaseService,
+): Promise<string> {
   const timestamp = generateTimestamp();
-  
-  // Get address name if adresId provided
+
   let addressPart = 'wyciag';
   if (adresId !== null && adresId !== undefined) {
-    const adres = db.getAdresById(adresId);
+    const adres = await db.getAdresById(adresId);
     if (adres) {
       addressPart = sanitizeForFilename(adres.nazwa);
     }
   } else {
-    // Try to get first/default address
-    const allAddresses = db.getAllAdresy();
+    const allAddresses = await db.getAllAdresy();
     if (allAddresses.length > 0) {
       addressPart = sanitizeForFilename(allAddresses[0].nazwa);
     }
   }
-  
+
   return `${addressPart}_${timestamp}.txt`;
 }
 
@@ -157,31 +160,31 @@ function createWindow() {
 function setupIpcHandlers() {
   // Database - Banks
   ipcMain.handle(IPC_CHANNELS.GET_BANKS, async () => {
-    return database.getAllBanks();
+    return await database.getAllBanks();
   });
 
   ipcMain.handle(
     IPC_CHANNELS.ADD_BANK,
     async (_, name: string, converterId: string, accountPrefixes?: string[]) => {
-      return database.addBank(name, converterId, accountPrefixes);
+      return await database.addBank(name, converterId, accountPrefixes);
     },
   );
 
   ipcMain.handle(
     IPC_CHANNELS.UPDATE_BANK,
     async (_, id: number, name: string, converterId: string, accountPrefixes?: string[]) => {
-      database.updateBank(id, name, converterId, accountPrefixes);
+      await database.updateBank(id, name, converterId, accountPrefixes);
       return true;
     },
   );
 
   ipcMain.handle(IPC_CHANNELS.DELETE_BANK, async (_, id: number) => {
-    database.deleteBank(id);
+    await database.deleteBank(id);
     return true;
   });
 
   ipcMain.handle(IPC_CHANNELS.DELETE_ALL_BANKS, async () => {
-    database.deleteAllBanks();
+    await database.deleteAllBanks();
     return true;
   });
 
@@ -197,7 +200,7 @@ function setupIpcHandlers() {
         return { success: false };
       }
 
-      const banks = database.getAllBanks();
+      const banks = await database.getAllBanks();
       fs.writeFileSync(result.filePath, JSON.stringify(banks, null, 2), 'utf-8');
       return { success: true, count: banks.length, filePath: result.filePath };
     } catch (error: unknown) {
@@ -232,7 +235,7 @@ function setupIpcHandlers() {
         createdAt: b.createdAt || new Date().toISOString(),
       }));
 
-      database.importBanks(banks);
+      await database.importBanks(banks);
       return { success: true, count: banks.length };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -242,25 +245,25 @@ function setupIpcHandlers() {
 
   // Database - Kontrahenci
   ipcMain.handle(IPC_CHANNELS.GET_KONTRAHENCI, async () => {
-    return database.getAllKontrahenci();
+    return await database.getAllKontrahenci();
   });
 
   ipcMain.handle(IPC_CHANNELS.ADD_KONTRAHENT, async (_, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typ?: string) => {
-    return database.addKontrahent(nazwa, kontoKontrahenta, nip, alternativeNames, typ as any);
+    return await database.addKontrahent(nazwa, kontoKontrahenta, nip, alternativeNames, typ as any);
   });
 
   ipcMain.handle(IPC_CHANNELS.UPDATE_KONTRAHENT, async (_, id: number, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typ?: string) => {
-    database.updateKontrahent(id, nazwa, kontoKontrahenta, nip, alternativeNames, typ as any);
+    await database.updateKontrahent(id, nazwa, kontoKontrahenta, nip, alternativeNames, typ as any);
     return true;
   });
 
   ipcMain.handle(IPC_CHANNELS.DELETE_KONTRAHENT, async (_, id: number) => {
-    database.deleteKontrahent(id);
+    await database.deleteKontrahent(id);
     return true;
   });
 
   ipcMain.handle(IPC_CHANNELS.DELETE_ALL_KONTRAHENCI, async () => {
-    database.deleteAllKontrahenci();
+    await database.deleteAllKontrahenci();
     return true;
   });
 
@@ -291,9 +294,9 @@ function setupIpcHandlers() {
       let accumulatedAltNames: string[] = [];
       let accumulatedTyp: string | undefined = undefined;
       
-      const finalizeLastKontrahent = () => {
+      const finalizeLastKontrahent = async () => {
         if (lastKontrahent && (accumulatedNip || accumulatedAltNames.length > 0 || accumulatedTyp)) {
-          database.updateKontrahent(
+          await database.updateKontrahent(
             lastKontrahent.id, 
             lastKontrahent.nazwa, 
             lastKontrahent.kontoKontrahenta, 
@@ -361,7 +364,7 @@ function setupIpcHandlers() {
         const match = line.match(/^\s*(\d{3}-\d+)\s+(.+?)\s{2,}[ZN]\s+/);
         if (match) {
           // Finalize previous kontrahent with accumulated data
-          finalizeLastKontrahent();
+          await finalizeLastKontrahent();
           accumulatedNip = undefined;
           accumulatedAltNames = [];
           accumulatedTyp = undefined;
@@ -370,12 +373,12 @@ function setupIpcHandlers() {
           const nazwa = match[2].trim();
           
           // Check if already exists
-          const existing = database.getAllKontrahenci().find(
+          const existing = (await database.getAllKontrahenci()).find(
             k => k.kontoKontrahenta === symbol
           );
           
           if (!existing) {
-            lastKontrahent = database.addKontrahent(nazwa, symbol, undefined, []);
+            lastKontrahent = await database.addKontrahent(nazwa, symbol, undefined, []);
             added++;
             wasNewlyAdded = true;
           } else {
@@ -387,8 +390,8 @@ function setupIpcHandlers() {
       }
       
       // Finalize last kontrahent in file
-      finalizeLastKontrahent();
-      
+      await finalizeLastKontrahent();
+
       log.info(`[IMPORT] FileFunky import completed: added=${added}, updated=${updated}`);
       return { success: true, added, updated };
     } catch (error: unknown) {
@@ -425,17 +428,17 @@ function setupIpcHandlers() {
       let lastSymbol: string | null = null;
       let accumulatedNip: string | undefined = undefined;
       
-      const finalizeLastKontrahent = () => {
+      const finalizeLastKontrahent = async () => {
         if (lastNazwa && lastSymbol) {
           // Match by nazwa (main name), not by symbol
-          const existing = database.getAllKontrahenci().find(
+          const existing = (await database.getAllKontrahenci()).find(
             k => k.nazwa.toLowerCase() === lastNazwa!.toLowerCase()
           );
           
           if (existing) {
             // Update existing: nazwa, kontoKontrahenta, nip can change
             // BUT keep existing alternativeNames
-            database.updateKontrahent(
+            await database.updateKontrahent(
               existing.id,
               lastNazwa,
               lastSymbol,
@@ -445,7 +448,7 @@ function setupIpcHandlers() {
             updated++;
           } else {
             // Add new
-            database.addKontrahent(lastNazwa, lastSymbol, accumulatedNip, []);
+            await database.addKontrahent(lastNazwa, lastSymbol, accumulatedNip, []);
             added++;
           }
         }
@@ -490,16 +493,16 @@ function setupIpcHandlers() {
         const match = line.match(/^\s*(\d{3}-\d+)\s+(.+?)\s{2,}[ZN]\s+/);
         if (match) {
           // Finalize previous kontrahent
-          finalizeLastKontrahent();
-          
+          await finalizeLastKontrahent();
+
           lastSymbol = match[1].trim();
           lastNazwa = match[2].trim();
           accumulatedNip = undefined;
         }
       }
-      
+
       // Finalize last kontrahent in file
-      finalizeLastKontrahent();
+      await finalizeLastKontrahent();
       
       return { success: true, added, updated };
     } catch (error: unknown) {
@@ -523,7 +526,7 @@ function setupIpcHandlers() {
         return { success: false };
       }
 
-      const kontrahenci = database.getAllKontrahenci();
+      const kontrahenci = await database.getAllKontrahenci();
       
       // Create text content in the same format as import expects
       const lines: string[] = [];
@@ -567,7 +570,7 @@ function setupIpcHandlers() {
 
   // Database - Adresy
   ipcMain.handle(IPC_CHANNELS.GET_ADRESY, async () => {
-    return database.getAllAdresy();
+    return await database.getAllAdresy();
   });
 
   ipcMain.handle(
@@ -578,7 +581,7 @@ function setupIpcHandlers() {
       alternativeNames?: string[],
       swrkIdentifiers?: string[],
     ) => {
-      return database.addAdres(nazwa, alternativeNames, swrkIdentifiers);
+      return await database.addAdres(nazwa, alternativeNames, swrkIdentifiers);
     },
   );
 
@@ -591,18 +594,18 @@ function setupIpcHandlers() {
       alternativeNames?: string[],
       swrkIdentifiers?: string[],
     ) => {
-      database.updateAdres(id, nazwa, alternativeNames, swrkIdentifiers);
+      await database.updateAdres(id, nazwa, alternativeNames, swrkIdentifiers);
       return true;
     },
   );
 
   ipcMain.handle(IPC_CHANNELS.DELETE_ADRES, async (_, id: number) => {
-    database.deleteAdres(id);
+    await database.deleteAdres(id);
     return true;
   });
 
   ipcMain.handle(IPC_CHANNELS.DELETE_ALL_ADRESY, async () => {
-    database.deleteAllAdresy();
+    await database.deleteAllAdresy();
     return true;
   });
 
@@ -630,9 +633,9 @@ function setupIpcHandlers() {
       let accumulatedAltNames: string[] = [];
       let accumulatedSwrk: string[] = [];
 
-      const finalizeLastAdres = () => {
+      const finalizeLastAdres = async () => {
         if (lastAdres && (accumulatedAltNames.length > 0 || accumulatedSwrk.length > 0)) {
-          database.updateAdres(
+          await database.updateAdres(
             lastAdres.id,
             lastAdres.nazwa,
             accumulatedAltNames,
@@ -673,17 +676,17 @@ function setupIpcHandlers() {
         const nazwa = line.trim();
         if (nazwa.length > 0 && !nazwa.startsWith('ALT:') && !nazwa.startsWith('SWRK:')) {
           // Finalize previous adres with accumulated alt names + SWRK
-          finalizeLastAdres();
+          await finalizeLastAdres();
           accumulatedAltNames = [];
           accumulatedSwrk = [];
 
           // Check if not already exists
-          const existing = database.getAllAdresy().find(
+          const existing = (await database.getAllAdresy()).find(
             a => a.nazwa === nazwa
           );
 
           if (!existing) {
-            lastAdres = database.addAdres(nazwa, [], []);
+            lastAdres = await database.addAdres(nazwa, [], []);
             count++;
           } else {
             lastAdres = existing;
@@ -692,7 +695,7 @@ function setupIpcHandlers() {
       }
 
       // Finalize last adres in file
-      finalizeLastAdres();
+      await finalizeLastAdres();
       
       return { success: true, count };
     } catch (error: unknown) {
@@ -716,7 +719,7 @@ function setupIpcHandlers() {
         return { success: false };
       }
 
-      const adresy = database.getAllAdresy();
+      const adresy = await database.getAllAdresy();
       
       // Create text content: simple list of nazwy with ALT: lines for alternative names
       const lines: string[] = [];
@@ -999,8 +1002,8 @@ function setupIpcHandlers() {
       if (!fs.existsSync(filePath)) {
         return { error: 'Plik nie istnieje lub został usunięty' };
       }
-      const banks = database.getAllBanks();
-      const adresy = database.getAllAdresy();
+      const banks = await database.getAllBanks();
+      const adresy = await database.getAllAdresy();
       const analyzed = homebankingAnalyzeFile(filePath, banks, adresy);
       return { data: analyzed };
     } catch (error: unknown) {
@@ -1024,8 +1027,8 @@ function setupIpcHandlers() {
         if (!outputDir || !fs.existsSync(outputDir)) {
           return { error: 'Folder docelowy nie istnieje' };
         }
-        const banks = database.getAllBanks();
-        const adresy = database.getAllAdresy();
+        const banks = await database.getAllBanks();
+        const adresy = await database.getAllAdresy();
         const results = homebankingMergeGroups(files, outputDir, banks, adresy);
         return { success: true, results };
       } catch (error: unknown) {
@@ -1045,7 +1048,7 @@ function setupIpcHandlers() {
           throw new Error('Input file not found');
         }
 
-        const bank = database.getBankById(bankId);
+        const bank = await database.getBankById(bankId);
         if (!bank) {
           throw new Error('Bank not found');
         }
@@ -1070,7 +1073,7 @@ function setupIpcHandlers() {
         }
 
         // Generate output filename with address and timestamp
-        const outputFileName = generateOutputFileName(adresId, database);
+        const outputFileName = await generateOutputFileName(adresId, database);
         const finalOutputPath = path.join(outputFolder, outputFileName);
 
         // Perform conversion
@@ -1093,7 +1096,7 @@ function setupIpcHandlers() {
         }
 
         // Save to history (only if no review needed)
-        database.addConversionHistory({
+        await database.addConversionHistory({
           fileName,
           bankName: bank.name,
           converterName: converter.name,
@@ -1109,10 +1112,10 @@ function setupIpcHandlers() {
       } catch (error: unknown) {
         // Save error to history
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        const bank = database.getBankById(bankId);
+        const bank = await database.getBankById(bankId);
         if (bank) {
           const converter = converterRegistry.getConverter(bank.converterId);
-          database.addConversionHistory({
+          await database.addConversionHistory({
             fileName,
             bankName: bank.name,
             converterName: converter?.name || 'Unknown',
@@ -1136,7 +1139,7 @@ function setupIpcHandlers() {
     'files:analyze',
     async (_, inputPath: string, bankId: number, adresId?: number | null) => {
       try {
-        const bank = database.getBankById(bankId);
+        const bank = await database.getBankById(bankId);
         if (!bank) {
           throw new Error('Bank not found');
         }
@@ -1168,7 +1171,7 @@ function setupIpcHandlers() {
           throw new Error('Input file not found');
         }
 
-        const bank = database.getBankById(bankId);
+        const bank = await database.getBankById(bankId);
         if (!bank) {
           throw new Error('Bank not found');
         }
@@ -1192,7 +1195,7 @@ function setupIpcHandlers() {
         }
 
         // Generate output filename with address and timestamp
-        const outputFileName = generateOutputFileName(adresId, database);
+        const outputFileName = await generateOutputFileName(adresId, database);
         const finalOutputPath = path.join(outputFolder, outputFileName);
 
         try {
@@ -1215,7 +1218,7 @@ function setupIpcHandlers() {
             };
           }
 
-          database.addConversionHistory({
+          await database.addConversionHistory({
             fileName,
             bankName: bank.name,
             converterName: converter.name,
@@ -1262,7 +1265,7 @@ function setupIpcHandlers() {
               };
             }
 
-            database.addConversionHistory({
+            await database.addConversionHistory({
               fileName,
               bankName: bank.name,
               converterName: converter.name,
@@ -1284,10 +1287,10 @@ function setupIpcHandlers() {
         }
       } catch (error: unknown) {
         const errorMessage = getErrorMessage(error);
-        const bank = database.getBankById(bankId);
+        const bank = await database.getBankById(bankId);
         if (bank) {
           const converter = converterRegistry.getConverter(bank.converterId);
-          database.addConversionHistory({
+          await database.addConversionHistory({
             fileName,
             bankName: bank.name,
             converterName: converter?.name || 'Unknown',
@@ -1316,7 +1319,7 @@ function setupIpcHandlers() {
         // Add to history
         if (result.fileName && result.bankName && result.inputPath && result.outputPath) {
           const converter = converterRegistry.getConverter(result.converterId || '');
-          database.addConversionHistory({
+          await database.addConversionHistory({
             fileName: result.fileName,
             bankName: result.bankName,
             converterName: converter?.name || 'Unknown',
@@ -1432,11 +1435,11 @@ function setupIpcHandlers() {
 
   // History
   ipcMain.handle(IPC_CHANNELS.GET_HISTORY, async () => {
-    return database.getAllHistory();
+    return await database.getAllHistory();
   });
 
   ipcMain.handle(IPC_CHANNELS.CLEAR_HISTORY, async () => {
-    database.clearHistory();
+    await database.clearHistory();
     return true;
   });
 
@@ -1571,6 +1574,28 @@ function setupIpcHandlers() {
 
   ipcMain.handle('get-log-path', () => {
     return { path: log.transports.file.getFile().path };
+  });
+
+  // Auth (Supabase)
+  ipcMain.handle(IPC_CHANNELS.AUTH_SIGN_IN, async (_, email: string, password: string) => {
+    return authService.signIn(email, password);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.AUTH_SIGN_OUT, async () => {
+    await authService.signOut();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.AUTH_GET_SESSION, async () => {
+    return authService.getSession();
+  });
+
+  // One-time local→cloud migration
+  ipcMain.handle(IPC_CHANNELS.MIGRATION_GET_STATUS, () => {
+    return getMigrationStatus();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MIGRATION_RUN, async () => {
+    return runMigration(database);
   });
 }
 

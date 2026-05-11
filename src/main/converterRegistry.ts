@@ -174,10 +174,10 @@ class ConverterRegistry {
   ): Promise<{ totalTransactions: number; lowConfidenceCount: number; averageConfidence: number; needsAI: boolean }> {
     if (converterId === 'santander_xml') {
       // Fetch contractors from database
-      const contractors = dbInstance?.getAllKontrahenci() || [];
+      const contractors = (dbInstance ? await dbInstance.getAllKontrahenci() : []);
       
       // Fetch addresses from database
-      const addresses = dbInstance?.getAllAdresy() || [];
+      const addresses = (dbInstance ? await dbInstance.getAllAdresy() : []);
       
       // Get app language
       const language = (dbInstance?.getSetting('language') || 'pl') as 'pl' | 'en';
@@ -221,11 +221,11 @@ class ConverterRegistry {
     
     if (converterId === 'pko_mt940') {
       // Fetch contractors from database
-      const contractors = dbInstance?.getAllKontrahenci() || [];
+      const contractors = (dbInstance ? await dbInstance.getAllKontrahenci() : []);
       
       // Fetch addresses from database
       // If adresId is provided, use only that address; otherwise use all addresses
-      let addresses = dbInstance?.getAllAdresy() || [];
+      let addresses = (dbInstance ? await dbInstance.getAllAdresy() : []);
       if (adresId !== null && adresId !== undefined) {
         addresses = addresses.filter(a => a.id === adresId);
       }
@@ -271,8 +271,8 @@ class ConverterRegistry {
     }
 
     if (converterId === 'bnp_xml') {
-      const contractors = dbInstance?.getAllKontrahenci() || [];
-      let addresses = dbInstance?.getAllAdresy() || [];
+      const contractors = (dbInstance ? await dbInstance.getAllKontrahenci() : []);
+      let addresses = (dbInstance ? await dbInstance.getAllAdresy() : []);
       if (adresId !== null && adresId !== undefined) {
         addresses = addresses.filter(a => a.id === adresId);
       }
@@ -312,8 +312,8 @@ class ConverterRegistry {
     }
 
     if (converterId === 'alior') {
-      const contractors = dbInstance?.getAllKontrahenci() || [];
-      let addresses = dbInstance?.getAllAdresy() || [];
+      const contractors = (dbInstance ? await dbInstance.getAllKontrahenci() : []);
+      let addresses = (dbInstance ? await dbInstance.getAllAdresy() : []);
       if (adresId !== null && adresId !== undefined) {
         addresses = addresses.filter(a => a.id === adresId);
       }
@@ -353,8 +353,8 @@ class ConverterRegistry {
     }
 
     if (converterId === 'pko_biznes') {
-      const contractors = dbInstance?.getAllKontrahenci() || [];
-      let addresses = dbInstance?.getAllAdresy() || [];
+      const contractors = (dbInstance ? await dbInstance.getAllKontrahenci() : []);
+      let addresses = (dbInstance ? await dbInstance.getAllAdresy() : []);
       if (adresId !== null && adresId !== undefined) {
         addresses = addresses.filter(a => a.id === adresId);
       }
@@ -394,8 +394,8 @@ class ConverterRegistry {
     }
 
     if (converterId === 'pko_sa') {
-      const contractors = dbInstance?.getAllKontrahenci() || [];
-      let addresses = dbInstance?.getAllAdresy() || [];
+      const contractors = (dbInstance ? await dbInstance.getAllKontrahenci() : []);
+      let addresses = (dbInstance ? await dbInstance.getAllAdresy() : []);
       if (adresId !== null && adresId !== undefined) {
         addresses = addresses.filter(a => a.id === adresId);
       }
@@ -435,8 +435,8 @@ class ConverterRegistry {
     }
 
     if (converterId === 'ing') {
-      const contractors = dbInstance?.getAllKontrahenci() || [];
-      let addresses = dbInstance?.getAllAdresy() || [];
+      const contractors = (dbInstance ? await dbInstance.getAllKontrahenci() : []);
+      let addresses = (dbInstance ? await dbInstance.getAllAdresy() : []);
       if (adresId !== null && adresId !== undefined) {
         addresses = addresses.filter(a => a.id === adresId);
       }
@@ -476,8 +476,8 @@ class ConverterRegistry {
     }
 
     if (converterId === 'bos_xml') {
-      const contractors = dbInstance?.getAllKontrahenci() || [];
-      let addresses = dbInstance?.getAllAdresy() || [];
+      const contractors = (dbInstance ? await dbInstance.getAllKontrahenci() : []);
+      let addresses = (dbInstance ? await dbInstance.getAllAdresy() : []);
       if (adresId !== null && adresId !== undefined) {
         addresses = addresses.filter(a => a.id === adresId);
       }
@@ -747,11 +747,11 @@ class ConverterRegistry {
           }
 
           // Fetch contractors from database
-          const contractors = dbInstance?.getAllKontrahenci() || [];
+          const contractors = (dbInstance ? await dbInstance.getAllKontrahenci() : []);
           
           // Fetch addresses from database
           // If adresId is provided, use only that address; otherwise use all addresses
-          let addresses = dbInstance?.getAllAdresy() || [];
+          let addresses = (dbInstance ? await dbInstance.getAllAdresy() : []);
           if (adresId !== null && adresId !== undefined) {
             addresses = addresses.filter(a => a.id === adresId);
           }
@@ -953,7 +953,7 @@ class ConverterRegistry {
             // Get address name from database
             let adresName: string | null = null;
             if (adresId !== null && adresId !== undefined) {
-              const adres = dbInstance?.getAdresById(adresId);
+              const adres = (dbInstance ? await dbInstance.getAdresById(adresId) : undefined);
               adresName = adres?.nazwa || null;
             }
             
@@ -1010,11 +1010,11 @@ class ConverterRegistry {
           }
 
           // Fetch contractors from database
-          const contractors = dbInstance?.getAllKontrahenci() || [];
+          const contractors = (dbInstance ? await dbInstance.getAllKontrahenci() : []);
           
           // Fetch addresses from database
           // If adresId is provided, use only that address; otherwise use all addresses
-          let addresses = dbInstance?.getAllAdresy() || [];
+          let addresses = (dbInstance ? await dbInstance.getAllAdresy() : []);
           if (adresId !== null && adresId !== undefined) {
             addresses = addresses.filter(a => a.id === adresId);
           }
@@ -1216,7 +1216,7 @@ class ConverterRegistry {
             // Get address name from database
             let adresName: string | null = null;
             if (adresId !== null && adresId !== undefined) {
-              const adres = dbInstance?.getAdresById(adresId);
+              const adres = (dbInstance ? await dbInstance.getAdresById(adresId) : undefined);
               adresName = adres?.nazwa || null;
             }
             
@@ -1271,8 +1271,8 @@ class ConverterRegistry {
               : this.aiConfig.ai.openai_api_key;
           }
 
-          const contractors = dbInstance?.getAllKontrahenci() || [];
-          let addresses = dbInstance?.getAllAdresy() || [];
+          const contractors = (dbInstance ? await dbInstance.getAllKontrahenci() : []);
+          let addresses = (dbInstance ? await dbInstance.getAllAdresy() : []);
           if (adresId !== null && adresId !== undefined) {
             addresses = addresses.filter(a => a.id === adresId);
           }
@@ -1449,7 +1449,7 @@ class ConverterRegistry {
 
             let adresName: string | null = null;
             if (adresId !== null && adresId !== undefined) {
-              const adres = dbInstance?.getAdresById(adresId);
+              const adres = (dbInstance ? await dbInstance.getAdresById(adresId) : undefined);
               adresName = adres?.nazwa || null;
             }
 
@@ -1500,8 +1500,8 @@ class ConverterRegistry {
               : this.aiConfig.ai.openai_api_key;
           }
 
-          const contractors = dbInstance?.getAllKontrahenci() || [];
-          let addresses = dbInstance?.getAllAdresy() || [];
+          const contractors = (dbInstance ? await dbInstance.getAllKontrahenci() : []);
+          let addresses = (dbInstance ? await dbInstance.getAllAdresy() : []);
           if (adresId !== null && adresId !== undefined) {
             addresses = addresses.filter(a => a.id === adresId);
           }
@@ -1682,7 +1682,7 @@ class ConverterRegistry {
 
             let adresName: string | null = null;
             if (adresId !== null && adresId !== undefined) {
-              const adres = dbInstance?.getAdresById(adresId);
+              const adres = (dbInstance ? await dbInstance.getAdresById(adresId) : undefined);
               adresName = adres?.nazwa || null;
             }
 
@@ -1733,8 +1733,8 @@ class ConverterRegistry {
               : this.aiConfig.ai.openai_api_key;
           }
 
-          const contractors = dbInstance?.getAllKontrahenci() || [];
-          let addresses = dbInstance?.getAllAdresy() || [];
+          const contractors = (dbInstance ? await dbInstance.getAllKontrahenci() : []);
+          let addresses = (dbInstance ? await dbInstance.getAllAdresy() : []);
           if (adresId !== null && adresId !== undefined) {
             addresses = addresses.filter(a => a.id === adresId);
           }
@@ -1915,7 +1915,7 @@ class ConverterRegistry {
 
             let adresName: string | null = null;
             if (adresId !== null && adresId !== undefined) {
-              const adres = dbInstance?.getAdresById(adresId);
+              const adres = (dbInstance ? await dbInstance.getAdresById(adresId) : undefined);
               adresName = adres?.nazwa || null;
             }
 
@@ -1966,8 +1966,8 @@ class ConverterRegistry {
               : this.aiConfig.ai.openai_api_key;
           }
 
-          const contractors = dbInstance?.getAllKontrahenci() || [];
-          let addresses = dbInstance?.getAllAdresy() || [];
+          const contractors = (dbInstance ? await dbInstance.getAllKontrahenci() : []);
+          let addresses = (dbInstance ? await dbInstance.getAllAdresy() : []);
           if (adresId !== null && adresId !== undefined) {
             addresses = addresses.filter(a => a.id === adresId);
           }
@@ -2132,7 +2132,7 @@ class ConverterRegistry {
 
             let adresName: string | null = null;
             if (adresId !== null && adresId !== undefined) {
-              const adres = dbInstance?.getAdresById(adresId);
+              const adres = (dbInstance ? await dbInstance.getAdresById(adresId) : undefined);
               adresName = adres?.nazwa || null;
             }
 
@@ -2183,8 +2183,8 @@ class ConverterRegistry {
               : this.aiConfig.ai.openai_api_key;
           }
 
-          const contractors = dbInstance?.getAllKontrahenci() || [];
-          let addresses = dbInstance?.getAllAdresy() || [];
+          const contractors = (dbInstance ? await dbInstance.getAllKontrahenci() : []);
+          let addresses = (dbInstance ? await dbInstance.getAllAdresy() : []);
           if (adresId !== null && adresId !== undefined) {
             addresses = addresses.filter(a => a.id === adresId);
           }
@@ -2365,7 +2365,7 @@ class ConverterRegistry {
 
             let adresName: string | null = null;
             if (adresId !== null && adresId !== undefined) {
-              const adres = dbInstance?.getAdresById(adresId);
+              const adres = (dbInstance ? await dbInstance.getAdresById(adresId) : undefined);
               adresName = adres?.nazwa || null;
             }
 
@@ -2416,8 +2416,8 @@ class ConverterRegistry {
               : this.aiConfig.ai.openai_api_key;
           }
 
-          const contractors = dbInstance?.getAllKontrahenci() || [];
-          let addresses = dbInstance?.getAllAdresy() || [];
+          const contractors = (dbInstance ? await dbInstance.getAllKontrahenci() : []);
+          let addresses = (dbInstance ? await dbInstance.getAllAdresy() : []);
           if (adresId !== null && adresId !== undefined) {
             addresses = addresses.filter(a => a.id === adresId);
           }
@@ -2590,7 +2590,7 @@ class ConverterRegistry {
 
             let adresName: string | null = null;
             if (adresId !== null && adresId !== undefined) {
-              const adres = dbInstance?.getAdresById(adresId);
+              const adres = (dbInstance ? await dbInstance.getAdresById(adresId) : undefined);
               adresName = adres?.nazwa || null;
             }
 

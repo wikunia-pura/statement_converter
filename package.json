@@ -1,6 +1,6 @@
 {
   "name": "statement-converter",
-  "version": "3.7.4",
+  "version": "4.0.0",
   "description": "Bank statement converter for housing communities",
   "main": "dist/main/main/main.js",
   "scripts": {
@@ -71,6 +71,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.0",
+    "@supabase/supabase-js": "^2.45.0",
     "@types/adm-zip": "^0.5.7",
     "adm-zip": "^0.5.16",
     "electron-log": "^5.4.3",
@@ -81,6 +82,7 @@
     "js-yaml": "^4.1.0",
     "openai": "^4.77.3",
     "pdf-parse": "^1.1.1",
+    "ws": "^8.18.0",
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
@@ -89,6 +91,7 @@
     "@types/node": "^20.11.5",
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
+    "@types/ws": "^8.5.13",
     "@types/xml2js": "^0.4.14",
     "@vitejs/plugin-react": "^4.2.1",
     "concurrently": "^8.2.2",

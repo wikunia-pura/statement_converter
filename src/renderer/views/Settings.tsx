@@ -18,10 +18,50 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
   const [swrkFolder, setSwrkFolder] = useState('');
   const [skipUserApproval, setSkipUserApproval] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [migrationStatus, setMigrationStatus] = useState<{
+    hasLocalData: boolean;
+    migrated: boolean;
+    counts: { banks: number; kontrahenci: number; adresy: number; history: number };
+  } | null>(null);
+  const [migrating, setMigrating] = useState(false);
 
   useEffect(() => {
     loadData();
+    void window.electronAPI.migrationGetStatus().then(setMigrationStatus);
   }, []);
+
+  const handleRunMigration = async () => {
+    if (!migrationStatus) return;
+    const counts = migrationStatus.counts;
+    const ok = window.confirm(
+      `Przesłać lokalne dane do chmury?\n\n` +
+        `• Banki: ${counts.banks}\n` +
+        `• Kontrahenci: ${counts.kontrahenci}\n` +
+        `• Adresy: ${counts.adresy}\n` +
+        `• Historia: ${counts.history}\n\n` +
+        `Operację można wykonać tylko raz. Dane lokalne pozostaną nietknięte.`,
+    );
+    if (!ok) return;
+    setMigrating(true);
+    try {
+      const result = await window.electronAPI.migrationRun();
+      if (result.ok) {
+        alert(
+          `Przeniesiono do chmury:\n\n` +
+            `• Banki: ${result.counts.banks}\n` +
+            `• Kontrahenci: ${result.counts.kontrahenci}\n` +
+            `• Adresy: ${result.counts.adresy}\n` +
+            `• Historia: ${result.counts.history}`,
+        );
+        const fresh = await window.electronAPI.migrationGetStatus();
+        setMigrationStatus(fresh);
+      } else {
+        alert(`Błąd migracji:\n${result.error}`);
+      }
+    } finally {
+      setMigrating(false);
+    }
+  };
 
   const loadData = async () => {
     setIsLoading(true);
@@ -156,6 +196,31 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
 
   return (
     <div className="content-body">
+        {migrationStatus && migrationStatus.hasLocalData && !migrationStatus.migrated && (
+          <div className="card">
+            <h2 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Icon name="folder" size={20} /> Migracja danych do chmury
+            </h2>
+            <p style={{ color: 'var(--text-tertiary)', fontSize: '14px', marginBottom: '12px' }}>
+              Wykryto lokalne dane z poprzedniej wersji aplikacji. Możesz przesłać je raz do chmury,
+              aby były dostępne dla wszystkich zalogowanych użytkowników.
+            </p>
+            <ul style={{ marginBottom: '20px', paddingLeft: 20 }}>
+              <li>Banki: {migrationStatus.counts.banks}</li>
+              <li>Kontrahenci: {migrationStatus.counts.kontrahenci}</li>
+              <li>Adresy: {migrationStatus.counts.adresy}</li>
+              <li>Historia: {migrationStatus.counts.history}</li>
+            </ul>
+            <button
+              className="button button-primary"
+              onClick={handleRunMigration}
+              disabled={migrating}
+            >
+              {migrating ? 'Przesyłam…' : 'Prześlij dane do chmury'}
+            </button>
+          </div>
+        )}
+
         {/* Updates */}
         <div className="card">
           <h2 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>

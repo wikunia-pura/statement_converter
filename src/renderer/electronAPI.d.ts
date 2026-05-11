@@ -210,6 +210,25 @@ interface ElectronAPI {
     error?: string;
   }>;
 
+  // Auth (Supabase)
+  authSignIn: (
+    email: string,
+    password: string,
+  ) => Promise<{ ok: true; session: { email: string; userId: string } } | { ok: false; error: string }>;
+  authSignOut: () => Promise<void>;
+  authGetSession: () => Promise<{ email: string; userId: string } | null>;
+
+  // One-time local→cloud migration
+  migrationGetStatus: () => Promise<{
+    hasLocalData: boolean;
+    migrated: boolean;
+    counts: { banks: number; kontrahenci: number; adresy: number; history: number };
+  }>;
+  migrationRun: () => Promise<
+    | { ok: true; counts: { banks: number; kontrahenci: number; adresy: number; history: number } }
+    | { ok: false; error: string }
+  >;
+
   // App info
   getAppVersion: () => Promise<string>;
 

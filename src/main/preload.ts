@@ -62,6 +62,11 @@ const IPC_CHANNELS = {
   HOMEBANKING_ANALYZE_FILE: 'homebanking:analyze-file',
   HOMEBANKING_SELECT_OUTPUT_DIR: 'homebanking:select-output-dir',
   HOMEBANKING_MERGE: 'homebanking:merge',
+  AUTH_SIGN_IN: 'auth:sign-in',
+  AUTH_SIGN_OUT: 'auth:sign-out',
+  AUTH_GET_SESSION: 'auth:get-session',
+  MIGRATION_GET_STATUS: 'migration:get-status',
+  MIGRATION_RUN: 'migration:run',
 } as const;
 
 // Expose protected methods that allow the renderer process to use
@@ -190,6 +195,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   zoomIn: () => ipcRenderer.invoke('app:zoom-in'),
   zoomOut: () => ipcRenderer.invoke('app:zoom-out'),
   zoomReset: () => ipcRenderer.invoke('app:zoom-reset'),
+
+  // Auth (Supabase)
+  authSignIn: (email: string, password: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.AUTH_SIGN_IN, email, password),
+  authSignOut: () => ipcRenderer.invoke(IPC_CHANNELS.AUTH_SIGN_OUT),
+  authGetSession: () => ipcRenderer.invoke(IPC_CHANNELS.AUTH_GET_SESSION),
+
+  // One-time local→cloud migration
+  migrationGetStatus: () => ipcRenderer.invoke(IPC_CHANNELS.MIGRATION_GET_STATUS),
+  migrationRun: () => ipcRenderer.invoke(IPC_CHANNELS.MIGRATION_RUN),
 
   platform: process.platform,
 

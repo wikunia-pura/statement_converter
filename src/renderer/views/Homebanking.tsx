@@ -453,12 +453,8 @@ const Homebanking: React.FC<Props> = ({ language, files, setFiles }) => {
                   <td style={{ fontSize: '12px' }}>
                     {f.status === 'ready' && f.addressHits.length > 0
                       ? f.addressHits
-                          .slice(0, 3)
                           .map((h) => `${h.label} (${h.lineCount})`)
-                          .join(', ') +
-                        (f.addressHits.length > 3
-                          ? `, +${f.addressHits.length - 3}`
-                          : '')
+                          .join(', ')
                       : '—'}
                   </td>
                   <td>{f.status === 'ready' ? f.lineCount : '—'}</td>

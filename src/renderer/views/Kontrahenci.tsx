@@ -302,111 +302,112 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
         </div>
 
         {(showAddKontrahent || editingKontrahent) && (
-          <div className="bank-form">
-            <h3 style={{ marginBottom: '10px' }}>
-              {editingKontrahent ? t.editKontrahent : t.addNewKontrahent}
-            </h3>
-            <div className="form-group">
-              <label>{t.nazwa} <span style={{ color: 'red' }}>*</span></label>
-              <input
-                type="text"
-                value={newNazwa}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewNazwa(e.target.value)}
-                placeholder="np. Miasto Stołeczne Warszawa"
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label>{t.kontoKontrahenta} <span style={{ color: 'red' }}>*</span></label>
-              <input
-                type="text"
-                value={newKontoKontrahenta}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewKontoKontrahenta(e.target.value)}
-                placeholder="np. 201-00001"
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label>{t.nip}</label>
-              <input
-                type="text"
-                value={newNip}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewNip(e.target.value)}
-                placeholder="np. 1234567890"
-              />
-            </div>
-            <div className="form-group">
-              <label>{t.typ}</label>
-              <select
-                value={newTyp}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewTyp(e.target.value as KontrahentTyp)}
-                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #3c3c3c', backgroundColor: 'var(--bg-surface)', color: 'var(--text-primary)', width: '100%', minWidth: '220px' }}
-              >
-                <option value="Kontrahent">{t.typKontrahent}</option>
-                <option value="Pozostałe przychody">{t.typPozostalePrzychody}</option>
-                <option value="Pozostałe koszty">{t.typPozostaleKoszty}</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label>{t.alternativeNames}</label>
-              <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
-                {t.alternativeNamesHint}
+          <div className="modal-overlay" onClick={handleCancelEdit}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                {editingKontrahent ? t.editKontrahent : t.addNewKontrahent}
               </div>
-              {newAlternativeNames.length > 0 && (
-                <div style={{ marginBottom: '8px' }}>
-                  {newAlternativeNames.map((name, index) => (
-                    <div key={index} className="alternative-name-tag">
-                      <span>{name}</span>
-                      <button
-                        onClick={() => handleRemoveAlternativeName(index)}
-                        className="alternative-name-remove"
-                        type="button"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
+              <div className="modal-body">
+                <div className="form-group">
+                  <label>{t.nazwa} <span style={{ color: 'red' }}>*</span></label>
+                  <input
+                    type="text"
+                    value={newNazwa}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewNazwa(e.target.value)}
+                    placeholder="np. Miasto Stołeczne Warszawa"
+                    required
+                  />
                 </div>
-              )}
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  type="text"
-                  value={newAlternativeName}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewAlternativeName(e.target.value)}
-                  onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddAlternativeName();
-                    }
-                  }}
-                  placeholder="np. Tech-Home, TECH HOME"
-                  style={{ flex: 1 }}
-                />
+                <div className="form-group">
+                  <label>{t.kontoKontrahenta} <span style={{ color: 'red' }}>*</span></label>
+                  <input
+                    type="text"
+                    value={newKontoKontrahenta}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewKontoKontrahenta(e.target.value)}
+                    placeholder="np. 201-00001"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>{t.nip}</label>
+                  <input
+                    type="text"
+                    value={newNip}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewNip(e.target.value)}
+                    placeholder="np. 1234567890"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>{t.typ}</label>
+                  <select
+                    value={newTyp}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewTyp(e.target.value as KontrahentTyp)}
+                  >
+                    <option value="Kontrahent">{t.typKontrahent}</option>
+                    <option value="Pozostałe przychody">{t.typPozostalePrzychody}</option>
+                    <option value="Pozostałe koszty">{t.typPozostaleKoszty}</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>{t.alternativeNames}</label>
+                  <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
+                    {t.alternativeNamesHint}
+                  </div>
+                  {newAlternativeNames.length > 0 && (
+                    <div style={{ marginBottom: '8px' }}>
+                      {newAlternativeNames.map((name, index) => (
+                        <div key={index} className="alternative-name-tag">
+                          <span>{name}</span>
+                          <button
+                            onClick={() => handleRemoveAlternativeName(index)}
+                            className="alternative-name-remove"
+                            type="button"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      type="text"
+                      value={newAlternativeName}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewAlternativeName(e.target.value)}
+                      onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddAlternativeName();
+                        }
+                      }}
+                      placeholder="np. Tech-Home, TECH HOME"
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      type="button"
+                      className="button button-primary"
+                      onClick={handleAddAlternativeName}
+                      disabled={!newAlternativeName.trim()}
+                    >
+                      + {t.addAlternativeName}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
                 <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={handleAddAlternativeName}
-                  disabled={!newAlternativeName.trim()}
+                  className="button button-secondary"
+                  onClick={handleCancelEdit}
                 >
-                  + {t.addAlternativeName}
+                  {t.cancel}
+                </button>
+                <button
+                  className="button button-success"
+                  onClick={editingKontrahent ? handleUpdateKontrahent : handleAddKontrahent}
+                >
+                  {editingKontrahent ? t.update : t.add}
                 </button>
               </div>
-            </div>
-            <div className="button-group button-group-separator" style={{ marginTop: '20px', paddingTop: '15px' }}>
-              <button
-                className="button button-success"
-                onClick={editingKontrahent ? handleUpdateKontrahent : handleAddKontrahent}
-                style={{ fontSize: '15px', padding: '10px 24px' }}
-              >
-                {editingKontrahent ? t.update : t.add}
-              </button>
-              <button 
-                className="button button-secondary" 
-                onClick={handleCancelEdit}
-                style={{ fontSize: '15px', padding: '10px 24px' }}
-              >
-                {t.cancel}
-              </button>
             </div>
           </div>
         )}

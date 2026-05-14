@@ -284,127 +284,129 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
         </div>
 
         {(showAddAdres || editingAdres) && (
-          <div className="bank-form">
-            <h3 style={{ marginBottom: '10px' }}>
-              {editingAdres ? t.editAdres : t.addNewAdres}
-            </h3>
-            <div className="form-group">
-              <label>{t.nazwa} <span style={{ color: 'red' }}>*</span></label>
-              <input
-                type="text"
-                value={newNazwa}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewNazwa(e.target.value)}
-                placeholder="np. Joliot-Curie"
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label>{t.alternativeNames}</label>
-              <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
-                {t.alternativeNamesHint}
+          <div className="modal-overlay" onClick={handleCancelEdit}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                {editingAdres ? t.editAdres : t.addNewAdres}
               </div>
-              {newAlternativeNames.length > 0 && (
-                <div style={{ marginBottom: '8px' }}>
-                  {newAlternativeNames.map((name, index) => (
-                    <div key={index} className="alternative-name-tag">
-                      <span>{name}</span>
-                      <button
-                        onClick={() => handleRemoveAlternativeName(index)}
-                        className="alternative-name-remove"
-                        type="button"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
+              <div className="modal-body">
+                <div className="form-group">
+                  <label>{t.nazwa} <span style={{ color: 'red' }}>*</span></label>
+                  <input
+                    type="text"
+                    value={newNazwa}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewNazwa(e.target.value)}
+                    placeholder="np. Joliot-Curie"
+                    required
+                  />
                 </div>
-              )}
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  type="text"
-                  value={newAlternativeName}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewAlternativeName(e.target.value)}
-                  onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddAlternativeName();
-                    }
-                  }}
-                  placeholder="np. Joliot Curie, ul. Joliot-Curie"
-                  style={{ flex: 1 }}
-                />
+                <div className="form-group">
+                  <label>{t.alternativeNames}</label>
+                  <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
+                    {t.alternativeNamesHint}
+                  </div>
+                  {newAlternativeNames.length > 0 && (
+                    <div style={{ marginBottom: '8px' }}>
+                      {newAlternativeNames.map((name, index) => (
+                        <div key={index} className="alternative-name-tag">
+                          <span>{name}</span>
+                          <button
+                            onClick={() => handleRemoveAlternativeName(index)}
+                            className="alternative-name-remove"
+                            type="button"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      type="text"
+                      value={newAlternativeName}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewAlternativeName(e.target.value)}
+                      onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddAlternativeName();
+                        }
+                      }}
+                      placeholder="np. Joliot Curie, ul. Joliot-Curie"
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      type="button"
+                      className="button button-primary"
+                      onClick={handleAddAlternativeName}
+                      disabled={!newAlternativeName.trim()}
+                    >
+                      + {t.addAlternativeName}
+                    </button>
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>{t.swrkIdentifiers}</label>
+                  <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
+                    {t.swrkIdentifiersHint}
+                  </div>
+                  {newSwrkIdentifiers.length > 0 && (
+                    <div style={{ marginBottom: '8px' }}>
+                      {newSwrkIdentifiers.map((id, index) => (
+                        <div key={index} className="alternative-name-tag">
+                          <span>{id}</span>
+                          <button
+                            onClick={() => handleRemoveSwrkIdentifier(index)}
+                            className="alternative-name-remove"
+                            type="button"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      type="text"
+                      value={newSwrkIdentifier}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setNewSwrkIdentifier(e.target.value)
+                      }
+                      onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddSwrkIdentifier();
+                        }
+                      }}
+                      placeholder={t.swrkPlaceholder}
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      type="button"
+                      className="button button-primary"
+                      onClick={handleAddSwrkIdentifier}
+                      disabled={!newSwrkIdentifier.trim()}
+                    >
+                      + {t.addSwrkIdentifier}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
                 <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={handleAddAlternativeName}
-                  disabled={!newAlternativeName.trim()}
+                  className="button button-secondary"
+                  onClick={handleCancelEdit}
                 >
-                  + {t.addAlternativeName}
+                  {t.cancel}
+                </button>
+                <button
+                  className="button button-success"
+                  onClick={editingAdres ? handleUpdateAdres : handleAddAdres}
+                >
+                  {editingAdres ? t.update : t.add}
                 </button>
               </div>
-            </div>
-            <div className="form-group">
-              <label>{t.swrkIdentifiers}</label>
-              <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
-                {t.swrkIdentifiersHint}
-              </div>
-              {newSwrkIdentifiers.length > 0 && (
-                <div style={{ marginBottom: '8px' }}>
-                  {newSwrkIdentifiers.map((id, index) => (
-                    <div key={index} className="alternative-name-tag">
-                      <span>{id}</span>
-                      <button
-                        onClick={() => handleRemoveSwrkIdentifier(index)}
-                        className="alternative-name-remove"
-                        type="button"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  type="text"
-                  value={newSwrkIdentifier}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                    setNewSwrkIdentifier(e.target.value)
-                  }
-                  onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddSwrkIdentifier();
-                    }
-                  }}
-                  placeholder={t.swrkPlaceholder}
-                  style={{ flex: 1 }}
-                />
-                <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={handleAddSwrkIdentifier}
-                  disabled={!newSwrkIdentifier.trim()}
-                >
-                  + {t.addSwrkIdentifier}
-                </button>
-              </div>
-            </div>
-            <div className="button-group button-group-separator" style={{ marginTop: '20px', paddingTop: '15px' }}>
-              <button
-                className="button button-success"
-                onClick={editingAdres ? handleUpdateAdres : handleAddAdres}
-                style={{ fontSize: '15px', padding: '10px 24px' }}
-              >
-                {editingAdres ? t.update : t.add}
-              </button>
-              <button 
-                className="button button-secondary" 
-                onClick={handleCancelEdit}
-                style={{ fontSize: '15px', padding: '10px 24px' }}
-              >
-                {t.cancel}
-              </button>
             </div>
           </div>
         )}

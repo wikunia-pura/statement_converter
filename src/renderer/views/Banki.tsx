@@ -236,89 +236,91 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
         </div>
 
         {(showAdd || editing) && (
-          <div className="bank-form">
-            <h3 style={{ marginBottom: '10px' }}>
-              {editing ? t.editBank : t.addNewBankView}
-            </h3>
-            <div className="form-group">
-              <label>{t.bankName} <span style={{ color: 'red' }}>*</span></label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="np. ING Bank"
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label>{t.converterType}</label>
-              <select value={converterId} onChange={(e) => setConverterId(e.target.value)}>
-                <option value="">{t.chooseConverter}</option>
-                {converters.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label>{t.accountPrefixes}</label>
-              <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
-                {t.accountPrefixesHint}
+          <div className="modal-overlay" onClick={resetForm}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                {editing ? t.editBank : t.addNewBankView}
               </div>
-              {accountPrefixes.length > 0 && (
-                <div style={{ marginBottom: '8px' }}>
-                  {accountPrefixes.map((p, idx) => (
-                    <div key={idx} className="alternative-name-tag">
-                      <span>{p}</span>
-                      <button
-                        onClick={() => handleRemoveAccountPrefix(idx)}
-                        className="alternative-name-remove"
-                        type="button"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
+              <div className="modal-body">
+                <div className="form-group">
+                  <label>{t.bankName} <span style={{ color: 'red' }}>*</span></label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="np. ING Bank"
+                    required
+                  />
                 </div>
-              )}
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  type="text"
-                  value={newAccountPrefix}
-                  onChange={(e) => setNewAccountPrefix(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddAccountPrefix();
-                    }
-                  }}
-                  placeholder={t.accountPrefixPlaceholder}
-                  style={{ flex: 1 }}
-                />
+                <div className="form-group">
+                  <label>{t.converterType}</label>
+                  <select value={converterId} onChange={(e) => setConverterId(e.target.value)}>
+                    <option value="">{t.chooseConverter}</option>
+                    {converters.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>{t.accountPrefixes}</label>
+                  <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
+                    {t.accountPrefixesHint}
+                  </div>
+                  {accountPrefixes.length > 0 && (
+                    <div style={{ marginBottom: '8px' }}>
+                      {accountPrefixes.map((p, idx) => (
+                        <div key={idx} className="alternative-name-tag">
+                          <span>{p}</span>
+                          <button
+                            onClick={() => handleRemoveAccountPrefix(idx)}
+                            className="alternative-name-remove"
+                            type="button"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      type="text"
+                      value={newAccountPrefix}
+                      onChange={(e) => setNewAccountPrefix(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddAccountPrefix();
+                        }
+                      }}
+                      placeholder={t.accountPrefixPlaceholder}
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      type="button"
+                      className="button button-primary"
+                      onClick={handleAddAccountPrefix}
+                      disabled={!newAccountPrefix.trim()}
+                    >
+                      + {t.addAccountPrefix}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
                 <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={handleAddAccountPrefix}
-                  disabled={!newAccountPrefix.trim()}
+                  className="button button-secondary"
+                  onClick={resetForm}
                 >
-                  + {t.addAccountPrefix}
+                  {t.cancel}
+                </button>
+                <button
+                  className="button button-success"
+                  onClick={editing ? handleUpdate : handleAdd}
+                >
+                  {editing ? t.update : t.add}
                 </button>
               </div>
-            </div>
-            <div className="button-group button-group-separator" style={{ marginTop: '20px', paddingTop: '15px' }}>
-              <button
-                className="button button-success"
-                onClick={editing ? handleUpdate : handleAdd}
-                style={{ fontSize: '15px', padding: '10px 24px' }}
-              >
-                {editing ? t.update : t.add}
-              </button>
-              <button
-                className="button button-secondary"
-                onClick={resetForm}
-                style={{ fontSize: '15px', padding: '10px 24px' }}
-              >
-                {t.cancel}
-              </button>
             </div>
           </div>
         )}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Adres } from '../../shared/types';
+import { Adres, Bank } from '../../shared/types';
 import { translations, Language } from '../translations';
 
 interface AdresyProps {
@@ -9,6 +9,7 @@ interface AdresyProps {
 const Adresy: React.FC<AdresyProps> = ({ language }) => {
   const t = translations[language];
   const [adresy, setAdresy] = useState<Adres[]>([]);
+  const [banks, setBanks] = useState<Bank[]>([]);
   const [showAddAdres, setShowAddAdres] = useState(false);
   const [editingAdres, setEditingAdres] = useState<Adres | null>(null);
   const [newNazwa, setNewNazwa] = useState('');
@@ -16,6 +17,7 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
   const [newAlternativeName, setNewAlternativeName] = useState('');
   const [newSwrkIdentifiers, setNewSwrkIdentifiers] = useState<string[]>([]);
   const [newSwrkIdentifier, setNewSwrkIdentifier] = useState('');
+  const [newBankId, setNewBankId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -27,8 +29,12 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const adresyData = await window.electronAPI.getAdresy();
+      const [adresyData, banksData] = await Promise.all([
+        window.electronAPI.getAdresy(),
+        window.electronAPI.getBanks(),
+      ]);
       setAdresy(adresyData);
+      setBanks(banksData);
     } catch (error) {
       console.error('Error loading adresy:', error);
     } finally {
@@ -52,12 +58,18 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
     }
 
     try {
-      await window.electronAPI.addAdres(newNazwa, newAlternativeNames, newSwrkIdentifiers);
+      await window.electronAPI.addAdres(
+        newNazwa,
+        newAlternativeNames,
+        newSwrkIdentifiers,
+        newBankId,
+      );
       setNewNazwa('');
       setNewAlternativeNames([]);
       setNewAlternativeName('');
       setNewSwrkIdentifiers([]);
       setNewSwrkIdentifier('');
+      setNewBankId(null);
       setShowAddAdres(false);
       loadData();
     } catch (error: unknown) {
@@ -87,12 +99,14 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
         newNazwa,
         newAlternativeNames,
         newSwrkIdentifiers,
+        newBankId,
       );
       setNewNazwa('');
       setNewAlternativeNames([]);
       setNewAlternativeName('');
       setNewSwrkIdentifiers([]);
       setNewSwrkIdentifier('');
+      setNewBankId(null);
       setEditingAdres(null);
       loadData();
     } catch (error: unknown) {
@@ -120,6 +134,7 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
     setNewAlternativeName('');
     setNewSwrkIdentifiers(adres.swrkIdentifiers || []);
     setNewSwrkIdentifier('');
+    setNewBankId(adres.bankId ?? null);
   };
 
   const handleCancelEdit = () => {
@@ -130,6 +145,7 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
     setNewAlternativeName('');
     setNewSwrkIdentifiers([]);
     setNewSwrkIdentifier('');
+    setNewBankId(null);
   };
 
   const handleImportFromFile = async () => {
@@ -301,6 +317,25 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
                   />
                 </div>
                 <div className="form-group">
+                  <label>{t.adresBank}</label>
+                  <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
+                    {t.adresBankHint}
+                  </div>
+                  <select
+                    value={newBankId ?? ''}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                      setNewBankId(e.target.value ? Number(e.target.value) : null)
+                    }
+                  >
+                    <option value="">{t.adresNoBank}</option>
+                    {banks.map((bank) => (
+                      <option key={bank.id} value={bank.id}>
+                        {bank.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
                   <label>{t.alternativeNames}</label>
                   <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
                     {t.alternativeNamesHint}
@@ -431,6 +466,7 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
               <thead>
                 <tr>
                   <th>{t.nazwa}</th>
+                  <th>{t.adresBank}</th>
                   <th>{t.swrkIdentifiers}</th>
                   <th>{t.actions}</th>
                 </tr>
@@ -445,6 +481,11 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
                           {adres.alternativeNames.join(', ')}
                         </div>
                       )}
+                    </td>
+                    <td>
+                      {adres.bankId
+                        ? banks.find((b) => b.id === adres.bankId)?.name ?? '—'
+                        : '—'}
                     </td>
                     <td style={{ wordBreak: 'break-all' }}>
                       {adres.swrkIdentifiers && adres.swrkIdentifiers.length > 0

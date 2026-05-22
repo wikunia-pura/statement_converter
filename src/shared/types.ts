@@ -28,6 +28,8 @@ export interface Adres {
   alternativeNames?: string[];
   /** Substring identifiers used by the "Scalanie wpłat" module — any one of these appearing anywhere in a file's content marks the file as belonging to this address. */
   swrkIdentifiers?: string[];
+  /** Optional link to a Bank. When set, the converter only shows this address for files whose bank matches; null/undefined ⇒ address is available for all banks. */
+  bankId?: number | null;
   createdAt: string;
 }
 

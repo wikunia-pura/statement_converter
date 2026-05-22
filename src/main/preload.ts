@@ -97,13 +97,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Adresy
   getAdresy: () => ipcRenderer.invoke(IPC_CHANNELS.GET_ADRESY),
-  addAdres: (nazwa: string, alternativeNames?: string[], swrkIdentifiers?: string[]) =>
-    ipcRenderer.invoke(IPC_CHANNELS.ADD_ADRES, nazwa, alternativeNames, swrkIdentifiers),
+  addAdres: (
+    nazwa: string,
+    alternativeNames?: string[],
+    swrkIdentifiers?: string[],
+    bankId?: number | null,
+  ) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ADD_ADRES, nazwa, alternativeNames, swrkIdentifiers, bankId),
   updateAdres: (
     id: number,
     nazwa: string,
     alternativeNames?: string[],
     swrkIdentifiers?: string[],
+    bankId?: number | null,
   ) =>
     ipcRenderer.invoke(
       IPC_CHANNELS.UPDATE_ADRES,
@@ -111,6 +117,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       nazwa,
       alternativeNames,
       swrkIdentifiers,
+      bankId,
     ),
   deleteAdres: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ADRES, id),
   deleteAllAdresy: () => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ALL_ADRESY),

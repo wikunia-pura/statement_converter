@@ -137,6 +137,9 @@ export const translations = {
     swrkIdentifiersHint: 'Fragmenty pojawiające się w plikach wpłat dla tej wspólnoty (np. numer konta, prefix ID). Każdy wpis dopasowywany jako "zawiera". Wystarczy jedno trafienie.',
     addSwrkIdentifier: 'Dodaj identyfikator',
     swrkPlaceholder: 'np. 10201026 lub 4315',
+    adresBank: 'Bank',
+    adresBankHint: 'Opcjonalnie: przypisz adres do banku — w Konwerterze adres pojawi się tylko dla plików tego banku.',
+    adresNoBank: '— (dowolny bank)',
     
     // Alerts
     fillAllFields: 'Proszę wypełnić wszystkie pola',
@@ -458,6 +461,9 @@ export const translations = {
     swrkIdentifiersHint: 'Substrings appearing inside deposit files for this community (e.g. account number, ID prefix). Each entry is matched as "contains". A single hit is enough.',
     addSwrkIdentifier: 'Add identifier',
     swrkPlaceholder: 'e.g. 10201026 or 4315',
+    adresBank: 'Bank',
+    adresBankHint: 'Optional: link this address to a bank — in the Converter it will appear only for files of that bank.',
+    adresNoBank: '— (any bank)',
     
     // Alerts
     fillAllFields: 'Please fill in all fields',

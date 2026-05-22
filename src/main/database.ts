@@ -22,7 +22,7 @@ const BANK_COLS = 'id, name, converterId:converter_id, accountPrefixes:account_p
 const KONTRAHENT_COLS =
   'id, nazwa, kontoKontrahenta:konto_kontrahenta, nip, typ, alternativeNames:alternative_names, createdAt:created_at';
 const ADRES_COLS =
-  'id, nazwa, alternativeNames:alternative_names, swrkIdentifiers:swrk_identifiers, createdAt:created_at';
+  'id, nazwa, alternativeNames:alternative_names, swrkIdentifiers:swrk_identifiers, bankId:bank_id, createdAt:created_at';
 const HISTORY_COLS =
   'id, fileName:file_name, bankName:bank_name, converterName:converter_name, status, errorMessage:error_message, inputPath:input_path, outputPath:output_path, convertedAt:converted_at';
 
@@ -231,6 +231,7 @@ class DatabaseService {
       ...a,
       alternativeNames: a.alternativeNames ?? [],
       swrkIdentifiers: a.swrkIdentifiers ?? [],
+      bankId: a.bankId ?? null,
     })) as Adres[];
   }
 
@@ -238,6 +239,7 @@ class DatabaseService {
     nazwa: string,
     alternativeNames?: string[],
     swrkIdentifiers?: string[],
+    bankId?: number | null,
   ): Promise<Adres> {
     const { data, error } = await getSupabase()
       .from('adresy')
@@ -245,6 +247,7 @@ class DatabaseService {
         nazwa,
         alternative_names: alternativeNames ?? [],
         swrk_identifiers: swrkIdentifiers ?? [],
+        bank_id: bankId ?? null,
       })
       .select(ADRES_COLS)
       .single();
@@ -256,10 +259,12 @@ class DatabaseService {
     nazwa: string,
     alternativeNames?: string[],
     swrkIdentifiers?: string[],
+    bankId?: number | null,
   ): Promise<void> {
     const patch: Record<string, unknown> = { nazwa };
     if (alternativeNames !== undefined) patch.alternative_names = alternativeNames;
     if (swrkIdentifiers !== undefined) patch.swrk_identifiers = swrkIdentifiers;
+    if (bankId !== undefined) patch.bank_id = bankId;
     const { error } = await getSupabase().from('adresy').update(patch).eq('id', id);
     if (error) throw new Error(`updateAdres: ${error.message}`);
   }
@@ -290,6 +295,7 @@ class DatabaseService {
       nazwa: a.nazwa,
       alternative_names: a.alternativeNames ?? [],
       swrk_identifiers: a.swrkIdentifiers ?? [],
+      bank_id: a.bankId ?? null,
     }));
     const { error } = await getSupabase().from('adresy').insert(payload);
     if (error) throw new Error(`importAdresy: ${error.message}`);

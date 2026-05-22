@@ -272,7 +272,9 @@ function setupIpcHandlers() {
       const result = await dialog.showOpenDialog(mainWindow!, {
         properties: ['openFile'],
         filters: [
+          { name: 'Plan kont', extensions: ['txt', 'pdf'] },
           { name: 'Text Files', extensions: ['txt'] },
+          { name: 'PDF Files', extensions: ['pdf'] },
           { name: 'All Files', extensions: ['*'] },
         ],
       });
@@ -282,8 +284,16 @@ function setupIpcHandlers() {
       }
 
       const filePath = result.filePaths[0];
-      const content = fs.readFileSync(filePath, 'utf-8');
-      
+      const content = filePath.toLowerCase().endsWith('.pdf')
+        ? (await extractPdfText(filePath)).text
+        : fs.readFileSync(filePath, 'utf-8');
+
+      // Snapshot existing kontrahenci once — avoid an O(n²) round-trip per line on large Plan kont files.
+      const bySymbol = new Map<string, any>();
+      for (const k of await database.getAllKontrahenci()) {
+        bySymbol.set(k.kontoKontrahenta, k);
+      }
+
       // Parse the file
       const lines = content.split('\n');
       let added = 0;
@@ -371,14 +381,13 @@ function setupIpcHandlers() {
           
           const symbol = match[1].trim();
           const nazwa = match[2].trim();
-          
-          // Check if already exists
-          const existing = (await database.getAllKontrahenci()).find(
-            k => k.kontoKontrahenta === symbol
-          );
-          
+
+          // Local snapshot lookup — populated once before the loop.
+          const existing = bySymbol.get(symbol);
+
           if (!existing) {
             lastKontrahent = await database.addKontrahent(nazwa, symbol, undefined, []);
+            bySymbol.set(symbol, lastKontrahent);
             added++;
             wasNewlyAdded = true;
           } else {
@@ -407,7 +416,9 @@ function setupIpcHandlers() {
       const result = await dialog.showOpenDialog(mainWindow!, {
         properties: ['openFile'],
         filters: [
+          { name: 'Plan kont', extensions: ['txt', 'pdf'] },
           { name: 'Text Files', extensions: ['txt'] },
+          { name: 'PDF Files', extensions: ['pdf'] },
           { name: 'All Files', extensions: ['*'] },
         ],
       });
@@ -417,8 +428,16 @@ function setupIpcHandlers() {
       }
 
       const filePath = result.filePaths[0];
-      const content = fs.readFileSync(filePath, 'utf-8');
-      
+      const content = filePath.toLowerCase().endsWith('.pdf')
+        ? (await extractPdfText(filePath)).text
+        : fs.readFileSync(filePath, 'utf-8');
+
+      // Snapshot existing kontrahenci once — avoid an O(n²) round-trip per line on large Plan kont files.
+      const byNameLower = new Map<string, any>();
+      for (const k of await database.getAllKontrahenci()) {
+        byNameLower.set(k.nazwa.toLowerCase(), k);
+      }
+
       // Parse the file
       const lines = content.split('\n');
       let added = 0;
@@ -427,14 +446,12 @@ function setupIpcHandlers() {
       let lastNazwa: string | null = null;
       let lastSymbol: string | null = null;
       let accumulatedNip: string | undefined = undefined;
-      
+
       const finalizeLastKontrahent = async () => {
         if (lastNazwa && lastSymbol) {
-          // Match by nazwa (main name), not by symbol
-          const existing = (await database.getAllKontrahenci()).find(
-            k => k.nazwa.toLowerCase() === lastNazwa!.toLowerCase()
-          );
-          
+          // Match by nazwa (main name), not by symbol — local snapshot lookup.
+          const existing = byNameLower.get(lastNazwa.toLowerCase());
+
           if (existing) {
             // Update existing: nazwa, kontoKontrahenta, nip can change
             // BUT keep existing alternativeNames
@@ -448,7 +465,8 @@ function setupIpcHandlers() {
             updated++;
           } else {
             // Add new
-            await database.addKontrahent(lastNazwa, lastSymbol, accumulatedNip, []);
+            const created = await database.addKontrahent(lastNazwa, lastSymbol, accumulatedNip, []);
+            byNameLower.set(lastNazwa.toLowerCase(), created);
             added++;
           }
         }
@@ -580,8 +598,9 @@ function setupIpcHandlers() {
       nazwa: string,
       alternativeNames?: string[],
       swrkIdentifiers?: string[],
+      bankId?: number | null,
     ) => {
-      return await database.addAdres(nazwa, alternativeNames, swrkIdentifiers);
+      return await database.addAdres(nazwa, alternativeNames, swrkIdentifiers, bankId);
     },
   );
 
@@ -593,8 +612,9 @@ function setupIpcHandlers() {
       nazwa: string,
       alternativeNames?: string[],
       swrkIdentifiers?: string[],
+      bankId?: number | null,
     ) => {
-      await database.updateAdres(id, nazwa, alternativeNames, swrkIdentifiers);
+      await database.updateAdres(id, nazwa, alternativeNames, swrkIdentifiers, bankId);
       return true;
     },
   );
@@ -625,24 +645,41 @@ function setupIpcHandlers() {
 
       const filePath = result.filePaths[0];
       const content = fs.readFileSync(filePath, 'utf-8');
-      
+
+      // Cache banks once so we can resolve BANK: <name> → bankId without hammering the DB.
+      const allBanks = await database.getAllBanks();
+      const findBankIdByName = (name: string): number | null => {
+        const trimmed = name.trim().toLowerCase();
+        const match = allBanks.find(b => b.name.toLowerCase() === trimmed);
+        return match ? match.id : null;
+      };
+
       // Parse the file
       const lines = content.split('\n');
       let count = 0;
       let lastAdres: any = null;
       let accumulatedAltNames: string[] = [];
       let accumulatedSwrk: string[] = [];
+      let accumulatedBankId: number | null = null;
+      let accumulatedBankSet = false;
 
       const finalizeLastAdres = async () => {
-        if (lastAdres && (accumulatedAltNames.length > 0 || accumulatedSwrk.length > 0)) {
+        if (
+          lastAdres &&
+          (accumulatedAltNames.length > 0 ||
+            accumulatedSwrk.length > 0 ||
+            accumulatedBankSet)
+        ) {
           await database.updateAdres(
             lastAdres.id,
             lastAdres.nazwa,
             accumulatedAltNames,
             accumulatedSwrk,
+            accumulatedBankSet ? accumulatedBankId : undefined,
           );
           lastAdres.alternativeNames = accumulatedAltNames;
           lastAdres.swrkIdentifiers = accumulatedSwrk;
+          if (accumulatedBankSet) lastAdres.bankId = accumulatedBankId;
         }
       };
 
@@ -672,13 +709,29 @@ function setupIpcHandlers() {
           continue;
         }
 
+        // Check if it's a BANK: <name> line (resolves to bank_id; unknown names ⇒ null/no link).
+        const bankMatch = line.match(/^\s*BANK:\s*(.+)$/);
+        if (bankMatch && lastAdres) {
+          const bankName = bankMatch[1].trim();
+          accumulatedBankSet = true;
+          accumulatedBankId = bankName.length > 0 ? findBankIdByName(bankName) : null;
+          continue;
+        }
+
         // Parse data line - just nazwa (no symbol)
         const nazwa = line.trim();
-        if (nazwa.length > 0 && !nazwa.startsWith('ALT:') && !nazwa.startsWith('SWRK:')) {
-          // Finalize previous adres with accumulated alt names + SWRK
+        if (
+          nazwa.length > 0 &&
+          !nazwa.startsWith('ALT:') &&
+          !nazwa.startsWith('SWRK:') &&
+          !nazwa.startsWith('BANK:')
+        ) {
+          // Finalize previous adres with accumulated alt names + SWRK + bank
           await finalizeLastAdres();
           accumulatedAltNames = [];
           accumulatedSwrk = [];
+          accumulatedBankId = null;
+          accumulatedBankSet = false;
 
           // Check if not already exists
           const existing = (await database.getAllAdresy()).find(
@@ -720,15 +773,26 @@ function setupIpcHandlers() {
       }
 
       const adresy = await database.getAllAdresy();
-      
+      // Banks looked up by id so we can render BANK: <name> in the export.
+      const allBanks = await database.getAllBanks();
+      const bankNameById = new Map(allBanks.map(b => [b.id, b.name]));
+
       // Create text content: simple list of nazwy with ALT: lines for alternative names
       const lines: string[] = [];
       lines.push('Adresy');
       lines.push('-'.repeat(50));
-      
+
       for (const a of adresy) {
         // Main nazwa
         lines.push(a.nazwa);
+
+        // Optional bank link
+        if (a.bankId) {
+          const bankName = bankNameById.get(a.bankId);
+          if (bankName) {
+            lines.push(`  BANK: ${bankName}`);
+          }
+        }
 
         // Add alternative names if present
         if (a.alternativeNames && a.alternativeNames.length > 0) {

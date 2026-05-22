@@ -126,12 +126,18 @@ interface ElectronAPI {
 
   // Adresy
   getAdresy: () => Promise<Adres[]>;
-  addAdres: (nazwa: string, alternativeNames?: string[], swrkIdentifiers?: string[]) => Promise<Adres>;
+  addAdres: (
+    nazwa: string,
+    alternativeNames?: string[],
+    swrkIdentifiers?: string[],
+    bankId?: number | null,
+  ) => Promise<Adres>;
   updateAdres: (
     id: number,
     nazwa: string,
     alternativeNames?: string[],
     swrkIdentifiers?: string[],
+    bankId?: number | null,
   ) => Promise<boolean>;
   deleteAdres: (id: number) => Promise<boolean>;
   deleteAllAdresy: () => Promise<boolean>;

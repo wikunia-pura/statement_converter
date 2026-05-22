@@ -13,14 +13,17 @@ interface SearchableAdresSelectProps {
   onChange: (adresId: number | null) => void;
   placeholder: string;
   searchPlaceholder: string;
+  /** When set, only addresses linked to this bankId (or unlinked addresses) are shown. */
+  bankFilter?: number | null;
 }
 
-const SearchableAdresSelect: React.FC<SearchableAdresSelectProps> = ({ 
-  adresy, 
-  selectedAdresId, 
-  onChange, 
+const SearchableAdresSelect: React.FC<SearchableAdresSelectProps> = ({
+  adresy,
+  selectedAdresId,
+  onChange,
   placeholder,
-  searchPlaceholder 
+  searchPlaceholder,
+  bankFilter,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -73,7 +76,13 @@ const SearchableAdresSelect: React.FC<SearchableAdresSelectProps> = ({
 
   const selectedAdres = adresy.find(a => a.id === selectedAdresId);
 
-  const filteredAdresy = adresy.filter(adres => {
+  // Bank-scoped: if a bank is chosen for the file, only show addresses linked to that bank
+  // plus addresses with no bank link (which act as "any bank"). If no bank is chosen, show all.
+  const bankScopedAdresy = bankFilter
+    ? adresy.filter(a => !a.bankId || a.bankId === bankFilter)
+    : adresy;
+
+  const filteredAdresy = bankScopedAdresy.filter(adres => {
     if (!searchTerm) return true;
     const search = searchTerm.toLowerCase();
     return (
@@ -420,7 +429,17 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
       files.map((file) => {
         if (file.id === fileId) {
           const bank = banks.find((b) => b.id === bankId);
-          return { ...file, bankId, bankName: bank?.name || null };
+          // If the previously chosen address is linked to a different bank, clear it
+          // so the user doesn't accidentally convert into the wrong community.
+          const currentAdres = adresy.find((a) => a.id === file.adresId);
+          const adresStillValid =
+            !currentAdres || !currentAdres.bankId || currentAdres.bankId === bankId;
+          return {
+            ...file,
+            bankId,
+            bankName: bank?.name || null,
+            adresId: adresStillValid ? file.adresId : null,
+          };
         }
         return file;
       })
@@ -1111,6 +1130,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                             onChange={(adresId) => handleAdresChange(file.id, adresId)}
                             placeholder={t.chooseAdres}
                             searchPlaceholder={t.searchAdres}
+                            bankFilter={file.bankId}
                           />
                         </td>
                         <td>

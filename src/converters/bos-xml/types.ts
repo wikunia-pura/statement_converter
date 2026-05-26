@@ -46,4 +46,6 @@ export interface ConverterConfig {
   contractors?: import('../../shared/types').Kontrahent[];
   addresses?: import('../../shared/types').Adres[];
   language?: 'pl' | 'en';
+  cachePath?: string;
+  aiConcurrency?: number;
 }

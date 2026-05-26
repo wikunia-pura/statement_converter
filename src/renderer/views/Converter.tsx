@@ -228,6 +228,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   const [isProcessingQueue, setIsProcessingQueue] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(document.body.classList.contains('dark-mode'));
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const [progressByFile, setProgressByFile] = useState<Record<string, { label: string; percent: number }>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<FileEntry[]>(files);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -235,6 +236,34 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   // Keep ref in sync with state
   useEffect(() => {
     filesRef.current = files;
+  }, [files]);
+
+  // Subscribe to conversion progress events from main process
+  useEffect(() => {
+    if (!window.electronAPI?.onConversionProgress) return;
+    const unsubscribe = window.electronAPI.onConversionProgress((p) => {
+      setProgressByFile((prev) => ({
+        ...prev,
+        [p.fileName]: { label: p.label, percent: p.percent },
+      }));
+    });
+    return () => {
+      try { unsubscribe?.(); } catch { /* ignore */ }
+    };
+  }, []);
+
+  // Drop progress entries for files no longer in 'processing' state
+  useEffect(() => {
+    const processingNames = new Set(
+      files.filter((f) => f.status === 'processing').map((f) => f.fileName),
+    );
+    setProgressByFile((prev) => {
+      const next: typeof prev = {};
+      for (const [name, value] of Object.entries(prev)) {
+        if (processingNames.has(name)) next[name] = value;
+      }
+      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
+    });
   }, [files]);
 
   // Detect dark mode changes
@@ -1122,9 +1151,22 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                       <td colSpan={7}>
                         <div className="processing-loader">
                           <div className="loader-spinner"></div>
-                          <div className="loader-content">
+                          <div className="loader-content" style={{ flex: 1 }}>
                             <span className="loader-text">Przetwarzanie pliku: <strong>{file.fileName}</strong></span>
-                            <span className="loader-subtext">Proszę czekać...</span>
+                            <span className="loader-subtext">
+                              {progressByFile[file.fileName]?.label || 'Proszę czekać...'}
+                            </span>
+                            {progressByFile[file.fileName] && (
+                              <div className="conversion-progress-bar">
+                                <div
+                                  className="conversion-progress-bar-fill"
+                                  style={{ width: `${progressByFile[file.fileName].percent}%` }}
+                                />
+                                <span className="conversion-progress-bar-text">
+                                  {progressByFile[file.fileName].percent}%
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>

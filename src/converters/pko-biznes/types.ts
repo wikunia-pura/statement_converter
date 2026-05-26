@@ -187,4 +187,6 @@ export interface ConverterConfig {
   contractors?: Kontrahent[];
   addresses?: Adres[];
   language?: 'pl' | 'en';
+  cachePath?: string;
+  aiConcurrency?: number;
 }

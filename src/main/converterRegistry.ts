@@ -4,6 +4,7 @@ import yaml from 'js-yaml';
 import { app } from 'electron';
 import { Converter, TransactionForReview, ConversionReviewData } from '../shared/types';
 import { readFileWithEncoding } from '../shared/encoding';
+import type { ConversionProgressCallback } from '../shared/base-converter';
 import { SantanderXmlConverter } from '../converters/santander-xml';
 import { PKOBPMT940Converter } from '../converters/pko-mt940';
 import { BnpXmlConverter } from '../converters/bnp-xml';
@@ -730,8 +731,15 @@ class ConverterRegistry {
     useAI: boolean = false,
     adresId?: number | null,
     fileName?: string,
-    bankName?: string
+    bankName?: string,
+    onProgress?: ConversionProgressCallback
   ): Promise<ConvertResult> {
+    // Persistent extraction cache lives in userData so it survives across runs.
+    // Only used by AI-enabled conversions; non-AI flows don't write to it.
+    const cachePath = useAI
+      ? path.join(app.getPath('userData'), 'extraction-cache.json')
+      : undefined;
+
     return new Promise(async (resolve, reject) => {
       try {
         if (converterId === 'santander_xml') {
@@ -771,10 +779,11 @@ class ConverterRegistry {
             contractors, // Pass contractors for expense matching
             addresses, // Pass addresses for income address matching
             language,
+            cachePath,
           });
 
           const xmlContent = readFileWithEncoding(inputPath);
-          const result = await converter.convert(xmlContent);
+          const result = await converter.convert(xmlContent, { onProgress });
 
           // Separate transactions into income and expenses
           const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
@@ -1034,10 +1043,11 @@ class ConverterRegistry {
             contractors, // Pass contractors for expense matching
             addresses, // Pass addresses for income address matching
             language,
+            cachePath,
           });
 
           const mt940Content = readFileWithEncoding(inputPath);
-          const result = await converter.convert(mt940Content);
+          const result = await converter.convert(mt940Content, { onProgress });
 
           // Separate transactions into income and expenses
           const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
@@ -1286,10 +1296,11 @@ class ConverterRegistry {
             contractors,
             addresses,
             language,
+            cachePath,
           });
 
           const xmlContent = readFileWithEncoding(inputPath);
-          const result = await converter.convert(xmlContent);
+          const result = await converter.convert(xmlContent, { onProgress });
 
           const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
           const expenseTransactions = result.processed.filter(t => t.transactionType === 'expense');
@@ -1515,10 +1526,11 @@ class ConverterRegistry {
             contractors,
             addresses,
             language,
+            cachePath,
           });
 
           const mt940Content = readFileWithEncoding(inputPath);
-          const result = await converter.convert(mt940Content);
+          const result = await converter.convert(mt940Content, { onProgress });
 
           const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
           const expenseTransactions = result.processed.filter(t => t.transactionType === 'expense');
@@ -1748,10 +1760,11 @@ class ConverterRegistry {
             contractors,
             addresses,
             language,
+            cachePath,
           });
 
           const zipBuffer = fs.readFileSync(inputPath);
-          const result = await converter.convert(zipBuffer);
+          const result = await converter.convert(zipBuffer, { onProgress });
 
           const incomeTransactions = result.processed.filter((t: any) => t.transactionType === 'income');
           const expenseTransactions = result.processed.filter((t: any) => t.transactionType === 'expense');
@@ -1981,10 +1994,11 @@ class ConverterRegistry {
             contractors,
             addresses,
             language,
+            cachePath,
           });
 
           const expContent = readFileWithEncoding(inputPath);
-          const result = await converter.convert(expContent);
+          const result = await converter.convert(expContent, { onProgress });
 
           const incomeTransactions = result.processed.filter((t: any) => t.transactionType === 'income');
           const expenseTransactions = result.processed.filter((t: any) => t.transactionType === 'expense');
@@ -2198,10 +2212,11 @@ class ConverterRegistry {
             contractors,
             addresses,
             language,
+            cachePath,
           });
 
           const mt940Content = readFileWithEncoding(inputPath, 'cp852');
-          const result = await converter.convert(mt940Content);
+          const result = await converter.convert(mt940Content, { onProgress });
 
           const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
           const expenseTransactions = result.processed.filter(t => t.transactionType === 'expense');
@@ -2431,10 +2446,11 @@ class ConverterRegistry {
             contractors,
             addresses,
             language,
+            cachePath,
           });
 
           const xmlContent = readFileWithEncoding(inputPath);
-          const result = await converter.convert(xmlContent);
+          const result = await converter.convert(xmlContent, { onProgress });
 
           const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
           const expenseTransactions = result.processed.filter(t => t.transactionType === 'expense');

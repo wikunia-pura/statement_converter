@@ -25,6 +25,7 @@ import {
   NormalizedTransaction,
   ParseResult,
   ICsvExporter,
+  ConvertOptions,
 } from '../../shared/base-converter';
 
 export class PKOBiznesConverter extends BaseConverter<PKOBiznesTransaction> {
@@ -47,12 +48,12 @@ export class PKOBiznesConverter extends BaseConverter<PKOBiznesTransaction> {
   /**
    * Override convert() to accept Buffer (ZIP file) instead of string
    */
-  async convert(content: string | Buffer): Promise<any> {
+  async convert(content: string | Buffer, opts?: ConvertOptions): Promise<any> {
     // Convert string to Buffer if needed
     const buffer = typeof content === 'string' ? Buffer.from(content, 'binary') : content;
-    
+
     // Call parent convert with Buffer (will be passed to doParse)
-    return super.convert(buffer as any);
+    return super.convert(buffer as any, opts);
   }
 
   // ── Abstract method implementations ────────────────────────

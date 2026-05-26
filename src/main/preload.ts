@@ -246,4 +246,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onDownloadProgress: (callback: (progress: any) => void) => {
     ipcRenderer.on('download-progress', (_event, progress) => callback(progress));
   },
+  onConversionProgress: (callback: (progress: any) => void) => {
+    const listener = (_event: unknown, progress: any) => callback(progress);
+    ipcRenderer.on('conversion:progress', listener);
+    return () => ipcRenderer.off('conversion:progress', listener);
+  },
 });

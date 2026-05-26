@@ -180,4 +180,10 @@ export interface ConverterConfig {
   
   // Application language for AI reasoning output
   language?: 'pl' | 'en';
+
+  // Optional persistent extraction cache path (cross-session reuse)
+  cachePath?: string;
+
+  // Max concurrent AI batches per phase (default 3)
+  aiConcurrency?: number;
 }

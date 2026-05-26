@@ -258,6 +258,16 @@ interface ElectronAPI {
   onUpdateDownloaded: (callback: (info: any) => void) => void;
   onUpdateError: (callback: (error: string) => void) => void;
   onDownloadProgress: (callback: (progress: any) => void) => void;
+  onConversionProgress: (callback: (progress: ConversionProgressEvent) => void) => () => void;
+}
+
+export interface ConversionProgressEvent {
+  fileName: string;
+  phase: 'parse' | 'filter' | 'income-quick' | 'income-ai' | 'expense-quick' | 'expense-ai' | 'done';
+  label: string;
+  aiBatchesCompleted: number;
+  aiBatchesTotal: number;
+  percent: number;
 }
 
 declare global {

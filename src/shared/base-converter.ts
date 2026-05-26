@@ -63,6 +63,10 @@ export interface BaseConverterConfig {
   contractors?: Kontrahent[];
   addresses?: Adres[];
   language?: 'pl' | 'en';
+  /** Optional file path for cross-session extraction cache persistence. */
+  cachePath?: string;
+  /** Max concurrent AI batches per phase. Defaults to 3. */
+  aiConcurrency?: number;
 }
 
 /**
@@ -153,6 +157,33 @@ export interface ParseResult<TRaw> {
   logExtra?: string;
 }
 
+/**
+ * Progress event emitted during conversion.
+ */
+export interface ConversionProgress {
+  phase:
+    | 'parse'
+    | 'filter'
+    | 'income-quick'
+    | 'income-ai'
+    | 'expense-quick'
+    | 'expense-ai'
+    | 'done';
+  label: string;
+  /** Completed AI batches so far (across both income & expense). */
+  aiBatchesCompleted: number;
+  /** Total AI batches planned for this conversion. May be 0 before planning. */
+  aiBatchesTotal: number;
+  /** Percent in [0,100]. */
+  percent: number;
+}
+
+export type ConversionProgressCallback = (e: ConversionProgress) => void;
+
+export interface ConvertOptions {
+  onProgress?: ConversionProgressCallback;
+}
+
 // ============================================================
 // Utility functions
 // ============================================================
@@ -189,6 +220,12 @@ export abstract class BaseConverter<TRaw> {
   protected cache: ExtractionCache;
   protected config: BaseConverterConfig;
   protected contractorMatcher?: ContractorMatcher;
+  private onProgress?: ConversionProgressCallback;
+  private aiBatchesCompleted = 0;
+  private aiBatchesStarted = 0;
+  private aiBatchesTotal = 0;
+  private totalTransactionsToPrepare = 0;
+  private transactionsPrepared = 0;
 
   constructor(config: Partial<BaseConverterConfig> = {}) {
     this.config = {
@@ -209,9 +246,11 @@ export abstract class BaseConverter<TRaw> {
       contractors: config.contractors,
       addresses: config.addresses,
       language: config.language,
+      cachePath: config.cachePath,
+      aiConcurrency: config.aiConcurrency ?? 3,
     };
 
-    this.cache = new ExtractionCache();
+    this.cache = new ExtractionCache(this.config.cachePath);
 
     if (this.config.apiKey && this.config.aiProvider !== 'none') {
       this.aiExtractor = new AIExtractor(this.config);
@@ -300,14 +339,26 @@ export abstract class BaseConverter<TRaw> {
   /**
    * Main conversion entry point.
    */
-  async convert(content: string): Promise<BaseImportResult<TRaw>> {
+  async convert(
+    content: string,
+    opts: ConvertOptions = {}
+  ): Promise<BaseImportResult<TRaw>> {
+    this.onProgress = opts.onProgress;
+    this.aiBatchesCompleted = 0;
+    this.aiBatchesStarted = 0;
+    this.aiBatchesTotal = 0;
+    this.totalTransactionsToPrepare = 0;
+    this.transactionsPrepared = 0;
+
     const name = this.getConverterName();
     console.log(`🔄 Starting ${name} conversion...`);
 
+    this.emitProgress('parse', 'Parsowanie pliku...');
     const { transactions, logExtra } = await this.doParse(content);
     console.log(`📄 Parsed ${transactions.length} transactions`);
     if (logExtra) console.log(`   ${logExtra}`);
 
+    this.emitProgress('filter', 'Filtrowanie transakcji...');
     const filtered = this.doFilter(transactions, {
       skipNegative: this.config.skipNegativeAmounts,
       skipBankFees: this.config.skipBankFees,
@@ -316,6 +367,8 @@ export abstract class BaseConverter<TRaw> {
     console.log(`✂️  Filtered to ${filtered.length} transactions (skipped ${skipped})`);
 
     const processed = await this.processTransactions(filtered);
+
+    this.emitProgress('done', 'Generowanie wyników...', 97);
     const result = this.generateResult(processed, transactions.length);
 
     console.log('✅ Conversion complete');
@@ -324,28 +377,125 @@ export abstract class BaseConverter<TRaw> {
     console.log(`   Needs manual input: ${result.summary.needsManualInput}`);
     console.log(`   Skipped: ${result.summary.skipped}`);
 
+    this.emitProgress('done', 'Gotowe', 100);
+    this.onProgress = undefined;
+
     return result;
   }
 
   /**
-   * Split transactions into income/expense and process each group.
+   * Split transactions into income/expense and process each group in parallel.
+   * Income and expense phases are independent and can safely run concurrently.
    */
   private async processTransactions(
     transactions: TRaw[]
   ): Promise<BaseProcessedTransaction<TRaw>[]> {
-    const processed: BaseProcessedTransaction<TRaw>[] = [];
-
     const income = transactions.filter((t) => this.isIncome(t));
     const expenses = transactions.filter((t) => !this.isIncome(t));
 
-    if (income.length > 0) {
-      processed.push(...(await this.processIncomeTransactions(income)));
-    }
-    if (expenses.length > 0) {
-      processed.push(...(await this.processExpenseTransactions(expenses)));
+    this.totalTransactionsToPrepare = income.length + expenses.length;
+    this.transactionsPrepared = 0;
+
+    const [incomeProcessed, expenseProcessed] = await Promise.all([
+      income.length > 0
+        ? this.processIncomeTransactions(income)
+        : Promise.resolve([] as BaseProcessedTransaction<TRaw>[]),
+      expenses.length > 0
+        ? this.processExpenseTransactions(expenses)
+        : Promise.resolve([] as BaseProcessedTransaction<TRaw>[]),
+    ]);
+
+    return [...incomeProcessed, ...expenseProcessed];
+  }
+
+  /**
+   * Emit a progress event if a callback is attached.
+   *
+   * Percent buckets:
+   *   parse:                 2%
+   *   filter:                5%
+   *   prepare (quick):       5% → 30%   (linear by transactionsPrepared / total)
+   *   AI batches:           30% → 95%   (linear by aiBatchesCompleted / aiBatchesTotal)
+   *   finalize (97%) → done (100%)
+   *
+   * Callers may pass explicitPercent to override (used for parse/filter/done).
+   */
+  private emitProgress(
+    phase: ConversionProgress['phase'],
+    label: string,
+    explicitPercent?: number
+  ): void {
+    if (!this.onProgress) return;
+
+    let percent: number;
+    if (typeof explicitPercent === 'number') {
+      percent = explicitPercent;
+    } else if (phase === 'parse') {
+      percent = 2;
+    } else if (phase === 'filter') {
+      percent = 5;
+    } else if (phase === 'income-quick' || phase === 'expense-quick') {
+      const total = Math.max(1, this.totalTransactionsToPrepare);
+      const share = (this.transactionsPrepared / total) * 25;
+      percent = Math.min(30, 5 + share);
+    } else if (phase === 'income-ai' || phase === 'expense-ai') {
+      if (this.aiBatchesTotal === 0) {
+        percent = 30;
+      } else {
+        // In-flight batches get half credit so each batch start nudges the bar
+        // immediately, instead of sitting still until the API call returns.
+        const inFlight = this.aiBatchesStarted - this.aiBatchesCompleted;
+        const effective = this.aiBatchesCompleted + inFlight * 0.5;
+        const share = (effective / this.aiBatchesTotal) * 65;
+        percent = Math.min(95, 30 + share);
+      }
+    } else {
+      percent = 50;
     }
 
-    return processed;
+    try {
+      this.onProgress({
+        phase,
+        label,
+        aiBatchesCompleted: this.aiBatchesCompleted,
+        aiBatchesTotal: this.aiBatchesTotal,
+        percent: Math.round(percent),
+      });
+    } catch (e) {
+      console.warn('onProgress callback threw:', e);
+    }
+  }
+
+  /**
+   * Yield to the event loop. Lets queued IPC messages flush so the UI
+   * actually sees progress emitted from inside otherwise-synchronous loops.
+   */
+  private yieldEventLoop(): Promise<void> {
+    return new Promise((resolve) => setImmediate(resolve));
+  }
+
+  /**
+   * Run async tasks with a concurrency limit.
+   * Results preserve input order.
+   */
+  private async runWithConcurrency<T, R>(
+    items: T[],
+    limit: number,
+    worker: (item: T, index: number) => Promise<R>
+  ): Promise<R[]> {
+    const results: R[] = new Array(items.length);
+    let cursor = 0;
+
+    const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (true) {
+        const i = cursor++;
+        if (i >= items.length) return;
+        results[i] = await worker(items[i], i);
+      }
+    });
+
+    await Promise.all(runners);
+    return results;
   }
 
   /**
@@ -358,8 +508,25 @@ export abstract class BaseConverter<TRaw> {
     const needsAI: Array<{ transaction: TRaw; index: number }> = [];
 
     console.log('🔍 Phase 1: Quick extraction (regex + cache) for income...');
+    this.emitProgress(
+      'income-quick',
+      `Szybka ekstrakcja przychodów: 0/${transactions.length}`
+    );
 
+    const tickEvery = 25;
     for (let i = 0; i < transactions.length; i++) {
+      // Bump prepare counter at the top so it's visible even if the rest of
+      // the body `continue`s. Emit + yield every `tickEvery` items so the
+      // renderer actually sees the progress update.
+      this.transactionsPrepared++;
+      if (this.transactionsPrepared % tickEvery === 0) {
+        this.emitProgress(
+          'income-quick',
+          `Szybka ekstrakcja przychodów: ${this.transactionsPrepared}/${this.totalTransactionsToPrepare}`
+        );
+        await this.yieldEventLoop();
+      }
+
       const transaction = transactions[i];
       let extracted: BaseExtractedData | null = null;
 
@@ -445,8 +612,22 @@ export abstract class BaseConverter<TRaw> {
     const needsAI: Array<{ transaction: TRaw; index: number }> = [];
 
     console.log('🔍 Phase 1: Partial matching with contractors...');
+    this.emitProgress(
+      'expense-quick',
+      `Dopasowanie kontrahentów: 0/${transactions.length}`
+    );
 
+    const tickEvery = 25;
     for (let i = 0; i < transactions.length; i++) {
+      this.transactionsPrepared++;
+      if (this.transactionsPrepared % tickEvery === 0) {
+        this.emitProgress(
+          'expense-quick',
+          `Dopasowanie kontrahentów: ${this.transactionsPrepared}/${this.totalTransactionsToPrepare}`
+        );
+        await this.yieldEventLoop();
+      }
+
       const transaction = transactions[i];
       const norm = this.normalize(transaction);
 
@@ -511,6 +692,7 @@ export abstract class BaseConverter<TRaw> {
 
   /**
    * Process income transactions with AI in batches.
+   * Batches run with bounded concurrency (config.aiConcurrency, default 3).
    */
   private async processWithAI(
     needsAI: Array<{ transaction: TRaw; index: number }>,
@@ -520,42 +702,67 @@ export abstract class BaseConverter<TRaw> {
 
     const batchSize = this.config.useBatchProcessing ? this.config.batchSize : 1;
     const batches = this.createBatches(needsAI, batchSize);
+    const concurrency = this.config.aiConcurrency ?? 3;
 
-    console.log(
-      `   Processing ${batches.length} batches (${batchSize} transactions each)...`
+    this.aiBatchesTotal += batches.length;
+    this.emitProgress(
+      'income-ai',
+      `AI: przychody — 0/${batches.length} batchy`
     );
 
-    for (let i = 0; i < batches.length; i++) {
-      const batch = batches[i];
-      console.log(`   Batch ${i + 1}/${batches.length}...`);
+    console.log(
+      `   Processing ${batches.length} income batches (${batchSize} txns each, concurrency=${concurrency})...`
+    );
 
-      try {
-        const transactionsForAI = batch.map((item) =>
-          this.normalize(item.transaction)
-        );
-        const extracted = await this.aiExtractor.extractBatch(transactionsForAI);
-
-        for (let j = 0; j < batch.length; j++) {
-          const { transaction } = batch[j];
-          const extractedData: BaseExtractedData = {
-            ...extracted[j],
-            rawData: this.buildRawData(transaction),
-          };
-
-          // Cache AI extraction
-          if (this.config.useCache) {
-            const norm = this.normalize(transaction);
-            this.cache.set(norm.descBase, norm.descOpt, extractedData as any);
-          }
-
-          processed.push(
-            this.createProcessedTransaction(transaction, extractedData, 'income')
+    const batchResults = await this.runWithConcurrency(
+      batches,
+      concurrency,
+      async (batch, batchIdx) => {
+        try {
+          this.aiBatchesStarted += 1;
+          this.emitProgress(
+            'income-ai',
+            `AI: przychody — ${this.aiBatchesCompleted}/${this.aiBatchesTotal} batchy (w toku: ${this.aiBatchesStarted - this.aiBatchesCompleted})`
           );
+
+          const transactionsForAI = batch.map((item) =>
+            this.normalize(item.transaction)
+          );
+          const extracted =
+            await this.aiExtractor!.extractBatch(transactionsForAI);
+
+          const items: BaseProcessedTransaction<TRaw>[] = batch.map((b, j) => {
+            const extractedData: BaseExtractedData = {
+              ...extracted[j],
+              rawData: this.buildRawData(b.transaction),
+            };
+            if (this.config.useCache) {
+              const norm = this.normalize(b.transaction);
+              this.cache.set(norm.descBase, norm.descOpt, extractedData as any);
+            }
+            return this.createProcessedTransaction(
+              b.transaction,
+              extractedData,
+              'income'
+            );
+          });
+
+          this.aiBatchesCompleted += 1;
+          this.emitProgress(
+            'income-ai',
+            `AI: przychody — ${this.aiBatchesCompleted}/${this.aiBatchesTotal} batchy`
+          );
+
+          return items;
+        } catch (error) {
+          console.error(`   ❌ Income batch ${batchIdx + 1} failed:`, error);
+          throw error;
         }
-      } catch (error) {
-        console.error(`   ❌ Batch ${i + 1} failed:`, error);
-        throw error;
       }
+    );
+
+    for (const items of batchResults) {
+      processed.push(...items);
     }
   }
 
@@ -586,67 +793,88 @@ export abstract class BaseConverter<TRaw> {
 
     const batchSize = this.config.useBatchProcessing ? 50 : 1;
     const batches = this.createBatches(needsAI, batchSize);
+    const concurrency = this.config.aiConcurrency ?? 3;
 
-    console.log(
-      `   Processing ${batches.length} batches (${batchSize} expenses each)...`
+    this.aiBatchesTotal += batches.length;
+    this.emitProgress(
+      'expense-ai',
+      `AI: wydatki — 0/${batches.length} batchy`
     );
 
-    for (let i = 0; i < batches.length; i++) {
-      const batch = batches[i];
-      console.log(`   Batch ${i + 1}/${batches.length}...`);
+    console.log(
+      `   Processing ${batches.length} expense batches (${batchSize} txns each, concurrency=${concurrency})...`
+    );
 
-      try {
-        const transactionsForAI = batch.map((item) =>
-          this.normalize(item.transaction)
-        );
-
-        const candidatesPerTransaction = transactionsForAI.map((t) =>
-          this.contractorMatcher!.getTopCandidates(t, 10, EXPENSE_MATCH_TYPES)
-        );
-
-        const matchedContractors =
-          await this.aiExtractor.matchContractorsBatch(
-            transactionsForAI,
-            candidatesPerTransaction
+    const batchResults = await this.runWithConcurrency(
+      batches,
+      concurrency,
+      async (batch, batchIdx) => {
+        try {
+          this.aiBatchesStarted += 1;
+          this.emitProgress(
+            'expense-ai',
+            `AI: wydatki — ${this.aiBatchesCompleted}/${this.aiBatchesTotal} batchy (w toku: ${this.aiBatchesStarted - this.aiBatchesCompleted})`
           );
 
-        for (let j = 0; j < batch.length; j++) {
-          const { transaction } = batch[j];
-          const matchedContractor = matchedContractors[j];
+          const transactionsForAI = batch.map((item) =>
+            this.normalize(item.transaction)
+          );
 
-          const extracted: BaseExtractedData = {
-            streetName: null,
-            buildingNumber: null,
-            apartmentNumber: null,
-            fullAddress: null,
-            tenantName: null,
-            confidence: {
-              address: 0,
-              apartment: 0,
-              tenantName: 0,
-              overall: 0,
-            },
-            extractionMethod: 'ai',
-            reasoning: matchedContractor.reasoning,
-            warnings: matchedContractor.contractor
-              ? []
-              : ['AI could not match contractor'],
-            rawData: this.buildRawData(transaction),
-          };
+          const candidatesPerTransaction = transactionsForAI.map((t) =>
+            this.contractorMatcher!.getTopCandidates(t, 10, EXPENSE_MATCH_TYPES)
+          );
 
-          processed.push(
-            this.createProcessedTransaction(
-              transaction,
+          const matchedContractors =
+            await this.aiExtractor!.matchContractorsBatch(
+              transactionsForAI,
+              candidatesPerTransaction
+            );
+
+          const items: BaseProcessedTransaction<TRaw>[] = batch.map((b, j) => {
+            const matchedContractor = matchedContractors[j];
+            const extracted: BaseExtractedData = {
+              streetName: null,
+              buildingNumber: null,
+              apartmentNumber: null,
+              fullAddress: null,
+              tenantName: null,
+              confidence: {
+                address: 0,
+                apartment: 0,
+                tenantName: 0,
+                overall: 0,
+              },
+              extractionMethod: 'ai',
+              reasoning: matchedContractor.reasoning,
+              warnings: matchedContractor.contractor
+                ? []
+                : ['AI could not match contractor'],
+              rawData: this.buildRawData(b.transaction),
+            };
+            return this.createProcessedTransaction(
+              b.transaction,
               extracted,
               'expense',
               matchedContractor
-            )
+            );
+          });
+
+          this.aiBatchesCompleted += 1;
+          this.emitProgress(
+            'expense-ai',
+            `AI: wydatki — ${this.aiBatchesCompleted}/${this.aiBatchesTotal} batchy`
           );
+
+          return items;
+        } catch (error) {
+          console.error(`   ❌ Expense batch ${batchIdx + 1} failed:`, error);
+          throw error;
         }
-      } catch (error) {
-        console.error(`   ❌ Batch ${i + 1} failed:`, error);
-        throw error;
       }
+    );
+
+    for (const items of batchResults) {
+      processed.push(...items);
     }
   }
 

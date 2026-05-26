@@ -1277,7 +1277,15 @@ function setupIpcHandlers() {
   // Convert with AI enabled
   ipcMain.handle(
     IPC_CHANNELS.CONVERT_FILE_WITH_AI,
-    async (_, inputPath: string, bankId: number, fileName: string, adresId?: number | null) => {
+    async (event, inputPath: string, bankId: number, fileName: string, adresId?: number | null) => {
+      // Emit progress events back to the renderer that initiated this call.
+      const onProgress = (e: any) => {
+        try {
+          event.sender.send('conversion:progress', { fileName, ...e });
+        } catch {
+          // ignore — renderer may have closed
+        }
+      };
       try {
         if (!fs.existsSync(inputPath)) {
           throw new Error('Input file not found');
@@ -1313,13 +1321,14 @@ function setupIpcHandlers() {
         try {
           // Perform conversion WITH AI
           const result = await converterRegistry.convert(
-            bank.converterId, 
-            inputPath, 
-            finalOutputPath, 
-            true, 
+            bank.converterId,
+            inputPath,
+            finalOutputPath,
+            true,
             adresId,
             fileName,
-            bank.name
+            bank.name,
+            onProgress
           );
 
           // Check if review is needed
@@ -1359,13 +1368,14 @@ function setupIpcHandlers() {
           try {
             // Perform conversion WITHOUT AI (fallback)
             const fallbackResult = await converterRegistry.convert(
-              bank.converterId, 
-              inputPath, 
-              finalOutputPath, 
+              bank.converterId,
+              inputPath,
+              finalOutputPath,
               false,  // useAI = false
               adresId,
               fileName,
-              bank.name
+              bank.name,
+              onProgress
             );
 
             // Check if review is needed

@@ -9,6 +9,7 @@ import { IPC_CHANNELS, KontrahentTyp } from '../shared/types';
 import * as authService from './authService';
 import { getMigrationStatus, runMigration } from './migrationService';
 import { extractPdfText } from '../shared/pdf-utils';
+import { extractAccountNumbersFromFile } from '../shared/account-extractor-node';
 import {
   DEFAULT_ZALICZKI_MODEL,
   ZALICZKI_MODELS,
@@ -599,8 +600,9 @@ function setupIpcHandlers() {
       alternativeNames?: string[],
       swrkIdentifiers?: string[],
       bankId?: number | null,
+      accountNumbers?: string[],
     ) => {
-      return await database.addAdres(nazwa, alternativeNames, swrkIdentifiers, bankId);
+      return await database.addAdres(nazwa, alternativeNames, swrkIdentifiers, bankId, accountNumbers);
     },
   );
 
@@ -613,8 +615,9 @@ function setupIpcHandlers() {
       alternativeNames?: string[],
       swrkIdentifiers?: string[],
       bankId?: number | null,
+      accountNumbers?: string[],
     ) => {
-      await database.updateAdres(id, nazwa, alternativeNames, swrkIdentifiers, bankId);
+      await database.updateAdres(id, nazwa, alternativeNames, swrkIdentifiers, bankId, accountNumbers);
       return true;
     },
   );
@@ -660,6 +663,7 @@ function setupIpcHandlers() {
       let lastAdres: any = null;
       let accumulatedAltNames: string[] = [];
       let accumulatedSwrk: string[] = [];
+      let accumulatedAccounts: string[] = [];
       let accumulatedBankId: number | null = null;
       let accumulatedBankSet = false;
 
@@ -668,6 +672,7 @@ function setupIpcHandlers() {
           lastAdres &&
           (accumulatedAltNames.length > 0 ||
             accumulatedSwrk.length > 0 ||
+            accumulatedAccounts.length > 0 ||
             accumulatedBankSet)
         ) {
           await database.updateAdres(
@@ -676,9 +681,11 @@ function setupIpcHandlers() {
             accumulatedAltNames,
             accumulatedSwrk,
             accumulatedBankSet ? accumulatedBankId : undefined,
+            accumulatedAccounts.length > 0 ? accumulatedAccounts : undefined,
           );
           lastAdres.alternativeNames = accumulatedAltNames;
           lastAdres.swrkIdentifiers = accumulatedSwrk;
+          if (accumulatedAccounts.length > 0) lastAdres.accountNumbers = accumulatedAccounts;
           if (accumulatedBankSet) lastAdres.bankId = accumulatedBankId;
         }
       };
@@ -709,6 +716,17 @@ function setupIpcHandlers() {
           continue;
         }
 
+        // Check if it's an ACCT: <account-number> line (community bank account).
+        // Normalization happens at the DB layer when finalizeLastAdres calls updateAdres.
+        const acctMatch = line.match(/^\s*ACCT:\s*(.+)$/);
+        if (acctMatch && lastAdres) {
+          const acc = acctMatch[1].trim();
+          if (acc.length > 0) {
+            accumulatedAccounts.push(acc);
+          }
+          continue;
+        }
+
         // Check if it's a BANK: <name> line (resolves to bank_id; unknown names ⇒ null/no link).
         const bankMatch = line.match(/^\s*BANK:\s*(.+)$/);
         if (bankMatch && lastAdres) {
@@ -724,12 +742,14 @@ function setupIpcHandlers() {
           nazwa.length > 0 &&
           !nazwa.startsWith('ALT:') &&
           !nazwa.startsWith('SWRK:') &&
+          !nazwa.startsWith('ACCT:') &&
           !nazwa.startsWith('BANK:')
         ) {
-          // Finalize previous adres with accumulated alt names + SWRK + bank
+          // Finalize previous adres with accumulated alt names + SWRK + accounts + bank
           await finalizeLastAdres();
           accumulatedAltNames = [];
           accumulatedSwrk = [];
+          accumulatedAccounts = [];
           accumulatedBankId = null;
           accumulatedBankSet = false;
 
@@ -805,6 +825,13 @@ function setupIpcHandlers() {
         if (a.swrkIdentifiers && a.swrkIdentifiers.length > 0) {
           for (const id of a.swrkIdentifiers) {
             lines.push(`  SWRK: ${id}`);
+          }
+        }
+
+        // Add community bank account numbers if present
+        if (a.accountNumbers && a.accountNumbers.length > 0) {
+          for (const acc of a.accountNumbers) {
+            lines.push(`  ACCT: ${acc}`);
           }
         }
       }
@@ -1196,6 +1223,27 @@ function setupIpcHandlers() {
         };
       }
     }
+  );
+
+  // Pull the community ("our") bank account number(s) out of a freshly-dropped
+  // statement file. Used by the Converter to auto-pick the matching address.
+  // Lightweight: reads only the file header / (for pko_biznes) the inner CSVs.
+  // Best-effort — returns [] on any failure rather than throwing.
+  ipcMain.handle(
+    IPC_CHANNELS.DETECT_ACCOUNT_NUMBERS,
+    async (_, inputPath: string, bankId?: number | null) => {
+      try {
+        let converterId: string | null = null;
+        if (bankId) {
+          const bank = await database.getBankById(bankId);
+          converterId = bank?.converterId ?? null;
+        }
+        return extractAccountNumbersFromFile(inputPath, converterId);
+      } catch (error) {
+        log.warn('[detect-account-numbers] failed:', error);
+        return [];
+      }
+    },
   );
 
   // Analyze file without AI to check confidence

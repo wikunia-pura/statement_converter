@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Adres, Bank } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { normalizeAccount } from '../../shared/account-extractor';
 
 interface AdresyProps {
   language: Language;
+  /** When set, opens the "add address" modal with this account number pre-filled. The parent should clear it once consumed. */
+  prefillAccountNumber?: string | null;
+  onPrefillConsumed?: () => void;
 }
 
-const Adresy: React.FC<AdresyProps> = ({ language }) => {
+const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefillConsumed }) => {
   const t = translations[language];
   const [adresy, setAdresy] = useState<Adres[]>([]);
   const [banks, setBanks] = useState<Bank[]>([]);
@@ -17,10 +21,25 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
   const [newAlternativeName, setNewAlternativeName] = useState('');
   const [newSwrkIdentifiers, setNewSwrkIdentifiers] = useState<string[]>([]);
   const [newSwrkIdentifier, setNewSwrkIdentifier] = useState('');
+  const [newAccountNumbers, setNewAccountNumbers] = useState<string[]>([]);
+  const [newAccountNumber, setNewAccountNumber] = useState('');
+  const [accountNumberError, setAccountNumberError] = useState<string | null>(null);
   const [newBankId, setNewBankId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Honor incoming prefill from the Converter: open the "add" modal with the
+  // detected account pre-loaded so the user only needs to type the nazwa.
+  useEffect(() => {
+    if (!prefillAccountNumber) return;
+    const canonical = normalizeAccount(prefillAccountNumber);
+    if (!canonical) return;
+    setShowAddAdres(true);
+    setEditingAdres(null);
+    setNewAccountNumbers([canonical]);
+    onPrefillConsumed?.();
+  }, [prefillAccountNumber, onPrefillConsumed]);
 
   useEffect(() => {
     loadData();
@@ -63,13 +82,9 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
         newAlternativeNames,
         newSwrkIdentifiers,
         newBankId,
+        newAccountNumbers,
       );
-      setNewNazwa('');
-      setNewAlternativeNames([]);
-      setNewAlternativeName('');
-      setNewSwrkIdentifiers([]);
-      setNewSwrkIdentifier('');
-      setNewBankId(null);
+      resetForm();
       setShowAddAdres(false);
       loadData();
     } catch (error: unknown) {
@@ -100,13 +115,9 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
         newAlternativeNames,
         newSwrkIdentifiers,
         newBankId,
+        newAccountNumbers,
       );
-      setNewNazwa('');
-      setNewAlternativeNames([]);
-      setNewAlternativeName('');
-      setNewSwrkIdentifiers([]);
-      setNewSwrkIdentifier('');
-      setNewBankId(null);
+      resetForm();
       setEditingAdres(null);
       loadData();
     } catch (error: unknown) {
@@ -127,6 +138,18 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
     }
   };
 
+  const resetForm = () => {
+    setNewNazwa('');
+    setNewAlternativeNames([]);
+    setNewAlternativeName('');
+    setNewSwrkIdentifiers([]);
+    setNewSwrkIdentifier('');
+    setNewAccountNumbers([]);
+    setNewAccountNumber('');
+    setAccountNumberError(null);
+    setNewBankId(null);
+  };
+
   const handleEditAdres = (adres: Adres) => {
     setEditingAdres(adres);
     setNewNazwa(adres.nazwa);
@@ -134,18 +157,35 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
     setNewAlternativeName('');
     setNewSwrkIdentifiers(adres.swrkIdentifiers || []);
     setNewSwrkIdentifier('');
+    setNewAccountNumbers(adres.accountNumbers || []);
+    setNewAccountNumber('');
+    setAccountNumberError(null);
     setNewBankId(adres.bankId ?? null);
   };
 
   const handleCancelEdit = () => {
     setEditingAdres(null);
     setShowAddAdres(false);
-    setNewNazwa('');
-    setNewAlternativeNames([]);
-    setNewAlternativeName('');
-    setNewSwrkIdentifiers([]);
-    setNewSwrkIdentifier('');
-    setNewBankId(null);
+    resetForm();
+  };
+
+  const handleAddAccountNumber = () => {
+    const canonical = normalizeAccount(newAccountNumber);
+    if (!canonical) {
+      setAccountNumberError(t.accountNumberInvalid);
+      return;
+    }
+    if (newAccountNumbers.includes(canonical)) {
+      setAccountNumberError(t.accountNumberDuplicateLocal);
+      return;
+    }
+    setNewAccountNumbers([...newAccountNumbers, canonical]);
+    setNewAccountNumber('');
+    setAccountNumberError(null);
+  };
+
+  const handleRemoveAccountNumber = (index: number) => {
+    setNewAccountNumbers(newAccountNumbers.filter((_, i) => i !== index));
   };
 
   const handleImportFromFile = async () => {
@@ -219,6 +259,7 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
     if (a.nazwa.toLowerCase().includes(q)) return true;
     if (a.alternativeNames?.some((n) => n.toLowerCase().includes(q))) return true;
     if (a.swrkIdentifiers?.some((s) => s.toLowerCase().includes(q))) return true;
+    if (a.accountNumbers?.some((acc) => acc.includes(q.replace(/\s/g, '')))) return true;
     return false;
   });
 
@@ -427,6 +468,59 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
                     </button>
                   </div>
                 </div>
+                <div className="form-group">
+                  <label>{t.accountNumbers}</label>
+                  <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
+                    {t.accountNumbersHint}
+                  </div>
+                  {newAccountNumbers.length > 0 && (
+                    <div style={{ marginBottom: '8px' }}>
+                      {newAccountNumbers.map((acc, index) => (
+                        <div key={index} className="alternative-name-tag">
+                          <span style={{ fontFamily: 'monospace' }}>{acc}</span>
+                          <button
+                            onClick={() => handleRemoveAccountNumber(index)}
+                            className="alternative-name-remove"
+                            type="button"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      type="text"
+                      value={newAccountNumber}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                        setNewAccountNumber(e.target.value);
+                        if (accountNumberError) setAccountNumberError(null);
+                      }}
+                      onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddAccountNumber();
+                        }
+                      }}
+                      placeholder={t.accountNumberPlaceholder}
+                      style={{ flex: 1, fontFamily: 'monospace' }}
+                    />
+                    <button
+                      type="button"
+                      className="button button-primary"
+                      onClick={handleAddAccountNumber}
+                      disabled={!newAccountNumber.trim()}
+                    >
+                      + {t.addAccountNumber}
+                    </button>
+                  </div>
+                  {accountNumberError && (
+                    <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '6px' }}>
+                      {accountNumberError}
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="modal-footer">
                 <button
@@ -468,6 +562,7 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
                   <th>{t.nazwa}</th>
                   <th>{t.adresBank}</th>
                   <th>{t.swrkIdentifiers}</th>
+                  <th>{t.accountNumbers}</th>
                   <th>{t.actions}</th>
                 </tr>
               </thead>
@@ -490,6 +585,11 @@ const Adresy: React.FC<AdresyProps> = ({ language }) => {
                     <td style={{ wordBreak: 'break-all' }}>
                       {adres.swrkIdentifiers && adres.swrkIdentifiers.length > 0
                         ? adres.swrkIdentifiers.join(', ')
+                        : '—'}
+                    </td>
+                    <td style={{ wordBreak: 'break-all', fontFamily: 'monospace', fontSize: '11px' }}>
+                      {adres.accountNumbers && adres.accountNumbers.length > 0
+                        ? adres.accountNumbers.join(', ')
                         : '—'}
                     </td>
                     <td>

@@ -6,6 +6,7 @@ import { TransactionReviewScreen } from '../components/TransactionReviewScreen';
 import Icon from '../components/Icon';
 import kapitanBombaImg from '../assets/kapitan_bomba.jpg';
 import BankIllustration from '../components/BankIllustration';
+import { findAdresByAccountNumbers } from '../../shared/account-extractor';
 
 interface SearchableAdresSelectProps {
   adresy: Adres[];
@@ -206,9 +207,11 @@ interface ConverterProps {
   setFiles: React.Dispatch<React.SetStateAction<FileEntry[]>>;
   selectedBank: number | null;
   setSelectedBank: React.Dispatch<React.SetStateAction<number | null>>;
+  /** Called when the user clicks "+ Add address with this account" — App.tsx switches to the Adresy view with the account pre-filled in the new-adres modal. */
+  onAddAdresWithAccount?: (accountNumber: string) => void;
 }
 
-const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, selectedBank, setSelectedBank }) => {
+const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, selectedBank, setSelectedBank, onAddAdresWithAccount }) => {
   const t = translations[language];
   const [banks, setBanks] = useState<Bank[]>([]);
   const [adresy, setAdresy] = useState<Adres[]>([]);
@@ -330,13 +333,13 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     }
   };
 
-  const addFiles = (newFiles: { fileName: string; filePath: string }[], bankId: number) => {
+  const addFiles = async (newFiles: { fileName: string; filePath: string }[], bankId: number) => {
     const bank = banks.find((b) => b.id === bankId);
-    
+
     // Separate PDFs from conversion files
     const pdfFiles: { fileName: string; filePath: string }[] = [];
     const conversionFiles: { fileName: string; filePath: string }[] = [];
-    
+
     for (const file of newFiles) {
       if (file.fileName.toLowerCase().endsWith('.pdf')) {
         pdfFiles.push(file);
@@ -344,36 +347,53 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
         conversionFiles.push(file);
       }
     }
-    
+
     // Build a map of PDF base names for quick lookup
     const pdfByBaseName = new Map<string, string>();
     for (const pdf of pdfFiles) {
       const baseName = pdf.fileName.replace(/\.pdf$/i, '').toLowerCase();
       pdfByBaseName.set(baseName, pdf.filePath);
     }
-    
+
+    // Detect community accounts in parallel for all dropped conversion files.
+    // Detection is best-effort and never throws — failures yield [], which simply
+    // leaves the row's adres empty (same as the pre-existing behavior).
+    const detections = await Promise.all(
+      conversionFiles.map(async (file) => {
+        try {
+          return await window.electronAPI.detectAccountNumbers(file.filePath, bankId);
+        } catch {
+          return [] as string[];
+        }
+      }),
+    );
+
     // Create file entries, auto-pairing PDFs by matching base name
-    const fileEntries: FileEntry[] = conversionFiles.map((file) => {
+    const fileEntries: FileEntry[] = conversionFiles.map((file, idx) => {
       const baseName = file.fileName.replace(/\.[^.]+$/, '').toLowerCase();
       const matchedPdf = pdfByBaseName.get(baseName);
-      
-      // Remove matched PDF from the map so we know which are unmatched
-      if (matchedPdf) {
-        pdfByBaseName.delete(baseName);
-      }
-      
-      return {
+      if (matchedPdf) pdfByBaseName.delete(baseName);
+
+      const detectedAccounts = detections[idx] ?? [];
+      // Resolve detected accounts → an Adres. Bank-scoped, mirroring the dropdown.
+      // Duplicate prevention at save-time means at most one match here in practice.
+      const match = findAdresByAccountNumbers(detectedAccounts, adresy, bankId);
+
+      const entry: FileEntry = {
         id: generateId(),
         fileName: file.fileName,
         filePath: file.filePath,
-        bankId: bankId,
+        bankId,
         bankName: bank?.name || null,
-        adresId: null,
+        adresId: match.adres?.id ?? null,
         status: 'pending',
         ...(matchedPdf ? { pdfPath: matchedPdf } : {}),
       };
+      if (detectedAccounts.length > 0) entry.detectedAccounts = detectedAccounts;
+      if (match.adres) entry.adresAutoMatched = true;
+      return entry;
     });
-    
+
     // Also try to match remaining PDFs to already-existing files without a PDF
     const updatedExisting = files.map(f => {
       if (f.pdfPath) return f; // already has PDF
@@ -385,7 +405,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
       }
       return f;
     });
-    
+
     setFiles([...updatedExisting, ...fileEntries]);
   };
 
@@ -448,9 +468,11 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
 
   const handleAdresChange = (fileId: string, adresId: number | null) => {
     setFiles(
-      files.map((file) => 
-        file.id === fileId ? { ...file, adresId } : file
-      )
+      files.map((file) =>
+        // A manual change drops the "auto-matched" indicator — the badge is only
+        // meaningful for the value the matcher picked.
+        file.id === fileId ? { ...file, adresId, adresAutoMatched: false } : file,
+      ),
     );
   };
 
@@ -1132,6 +1154,45 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                             searchPlaceholder={t.searchAdres}
                             bankFilter={file.bankId}
                           />
+                          {file.adresId && file.adresAutoMatched && (
+                            <div
+                              style={{
+                                fontSize: '11px',
+                                color: 'var(--accent)',
+                                marginTop: '4px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                              }}
+                              title={file.detectedAccounts?.join(', ')}
+                            >
+                              <Icon name="check" size={11} /> {t.autoMatchedFromAccount}
+                            </div>
+                          )}
+                          {!file.adresId &&
+                            file.detectedAccounts &&
+                            file.detectedAccounts.length > 0 &&
+                            onAddAdresWithAccount && (
+                              <div style={{ marginTop: '6px' }}>
+                                <div
+                                  style={{
+                                    fontSize: '11px',
+                                    color: 'var(--text-tertiary)',
+                                    marginBottom: '4px',
+                                  }}
+                                >
+                                  {t.accountDetectedNoMatch}
+                                </div>
+                                <button
+                                  type="button"
+                                  className="button button-small button-secondary"
+                                  onClick={() => onAddAdresWithAccount(file.detectedAccounts![0])}
+                                  style={{ fontSize: '11px', padding: '4px 8px' }}
+                                >
+                                  {t.accountDetectedNoMatchAction}
+                                </button>
+                              </div>
+                            )}
                         </td>
                         <td>
                           {file.pdfPath ? (

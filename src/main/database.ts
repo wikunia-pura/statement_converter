@@ -3,6 +3,7 @@ import path from 'path';
 import { app } from 'electron';
 import { Bank, ConversionHistory, AppSettings, Kontrahent, Adres, KontrahentTyp } from '../shared/types';
 import { getSupabase } from './supabaseClient';
+import { normalizeAccount } from '../shared/account-extractor';
 
 // Settings remain machine-local: dark mode, folder paths, language, etc. are
 // per-user-machine UI prefs that shouldn't sync across installs.
@@ -22,7 +23,7 @@ const BANK_COLS = 'id, name, converterId:converter_id, accountPrefixes:account_p
 const KONTRAHENT_COLS =
   'id, nazwa, kontoKontrahenta:konto_kontrahenta, nip, typ, alternativeNames:alternative_names, createdAt:created_at';
 const ADRES_COLS =
-  'id, nazwa, alternativeNames:alternative_names, swrkIdentifiers:swrk_identifiers, bankId:bank_id, createdAt:created_at';
+  'id, nazwa, alternativeNames:alternative_names, swrkIdentifiers:swrk_identifiers, accountNumbers:account_numbers, bankId:bank_id, createdAt:created_at';
 const HISTORY_COLS =
   'id, fileName:file_name, bankName:bank_name, converterName:converter_name, status, errorMessage:error_message, inputPath:input_path, outputPath:output_path, convertedAt:converted_at';
 
@@ -231,8 +232,40 @@ class DatabaseService {
       ...a,
       alternativeNames: a.alternativeNames ?? [],
       swrkIdentifiers: a.swrkIdentifiers ?? [],
+      accountNumbers: a.accountNumbers ?? [],
       bankId: a.bankId ?? null,
     })) as Adres[];
+  }
+
+  /**
+   * Canonicalize an account-numbers input list and assert that none of them
+   * is already attached to a different Adres. Throws a user-readable error on
+   * conflict — caller (IPC handler) propagates it back to the renderer.
+   */
+  private async sanitizeAccountNumbers(
+    raw: string[] | undefined,
+    excludeAdresId?: number,
+  ): Promise<string[]> {
+    if (!raw || raw.length === 0) return [];
+    const canonical: string[] = [];
+    for (const value of raw) {
+      const norm = normalizeAccount(value);
+      if (!norm) throw new Error(`Nieprawidłowy numer konta: "${value}" (oczekiwano 26 cyfr).`);
+      if (!canonical.includes(norm)) canonical.push(norm);
+    }
+
+    const existing = await this.getAllAdresy();
+    for (const acc of canonical) {
+      const owner = existing.find(
+        a => a.id !== excludeAdresId && (a.accountNumbers ?? []).some(x => normalizeAccount(x) === acc),
+      );
+      if (owner) {
+        throw new Error(
+          `Numer konta ${acc} jest już przypisany do adresu „${owner.nazwa}". Jedno konto może należeć tylko do jednego adresu.`,
+        );
+      }
+    }
+    return canonical;
   }
 
   async addAdres(
@@ -240,13 +273,16 @@ class DatabaseService {
     alternativeNames?: string[],
     swrkIdentifiers?: string[],
     bankId?: number | null,
+    accountNumbers?: string[],
   ): Promise<Adres> {
+    const accounts = await this.sanitizeAccountNumbers(accountNumbers);
     const { data, error } = await getSupabase()
       .from('adresy')
       .insert({
         nazwa,
         alternative_names: alternativeNames ?? [],
         swrk_identifiers: swrkIdentifiers ?? [],
+        account_numbers: accounts,
         bank_id: bankId ?? null,
       })
       .select(ADRES_COLS)
@@ -260,11 +296,15 @@ class DatabaseService {
     alternativeNames?: string[],
     swrkIdentifiers?: string[],
     bankId?: number | null,
+    accountNumbers?: string[],
   ): Promise<void> {
     const patch: Record<string, unknown> = { nazwa };
     if (alternativeNames !== undefined) patch.alternative_names = alternativeNames;
     if (swrkIdentifiers !== undefined) patch.swrk_identifiers = swrkIdentifiers;
     if (bankId !== undefined) patch.bank_id = bankId;
+    if (accountNumbers !== undefined) {
+      patch.account_numbers = await this.sanitizeAccountNumbers(accountNumbers, id);
+    }
     const { error } = await getSupabase().from('adresy').update(patch).eq('id', id);
     if (error) throw new Error(`updateAdres: ${error.message}`);
   }
@@ -295,6 +335,9 @@ class DatabaseService {
       nazwa: a.nazwa,
       alternative_names: a.alternativeNames ?? [],
       swrk_identifiers: a.swrkIdentifiers ?? [],
+      account_numbers: (a.accountNumbers ?? [])
+        .map(normalizeAccount)
+        .filter((x): x is string => !!x),
       bank_id: a.bankId ?? null,
     }));
     const { error } = await getSupabase().from('adresy').insert(payload);

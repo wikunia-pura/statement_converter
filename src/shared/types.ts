@@ -28,6 +28,8 @@ export interface Adres {
   alternativeNames?: string[];
   /** Substring identifiers used by the "Scalanie wpłat" module — any one of these appearing anywhere in a file's content marks the file as belonging to this address. */
   swrkIdentifiers?: string[];
+  /** Community bank account numbers used by the Converter to auto-pick the address when a statement file is uploaded. Stored as the canonical 26-digit form (no PL prefix, no spaces). Globally unique across all addresses — enforced at the DB layer in addAdres/updateAdres. */
+  accountNumbers?: string[];
   /** Optional link to a Bank. When set, the converter only shows this address for files whose bank matches; null/undefined ⇒ address is available for all banks. */
   bankId?: number | null;
   createdAt: string;
@@ -51,6 +53,10 @@ export interface FileEntry {
   errorMessage?: string;
   outputPath?: string;  // Base output path (without -podglad or -accounting suffix)
   conversionSummary?: ConversionSummary;
+  /** True when adresId was set automatically by matching detectedAccounts against the address book — used by the UI to show a "auto" hint. */
+  adresAutoMatched?: boolean;
+  /** Community account number(s) extracted from the statement file at upload time. Used to power the "no match → add address with this account" affordance when adresId stays null. */
+  detectedAccounts?: string[];
 }
 
 export interface ConversionSummary {
@@ -176,6 +182,7 @@ export const IPC_CHANNELS = {
   FINALIZE_CONVERSION: 'files:finalize-conversion',
   CONVERT_ALL: 'files:convert-all',
   OPEN_FILE: 'files:open',
+  DETECT_ACCOUNT_NUMBERS: 'files:detect-account-numbers',
   
   // Settings
   GET_SETTINGS: 'settings:get',

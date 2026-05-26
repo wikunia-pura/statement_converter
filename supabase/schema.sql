@@ -30,13 +30,16 @@ create table if not exists public.adresy (
   nazwa              text        not null,
   alternative_names  text[]      not null default '{}',
   swrk_identifiers   text[]      not null default '{}',
+  account_numbers    text[]      not null default '{}',
   bank_id            bigint      references public.banks(id) on delete set null,
   created_at         timestamptz not null default now()
 );
 
--- Idempotent migration for existing deployments where adresy already existed without bank_id.
+-- Idempotent migrations for existing deployments.
 alter table public.adresy
   add column if not exists bank_id bigint references public.banks(id) on delete set null;
+alter table public.adresy
+  add column if not exists account_numbers text[] not null default '{}';
 
 create table if not exists public.history (
   id              bigserial primary key,

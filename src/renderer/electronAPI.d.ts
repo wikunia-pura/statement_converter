@@ -131,6 +131,7 @@ interface ElectronAPI {
     alternativeNames?: string[],
     swrkIdentifiers?: string[],
     bankId?: number | null,
+    accountNumbers?: string[],
   ) => Promise<Adres>;
   updateAdres: (
     id: number,
@@ -138,6 +139,7 @@ interface ElectronAPI {
     alternativeNames?: string[],
     swrkIdentifiers?: string[],
     bankId?: number | null,
+    accountNumbers?: string[],
   ) => Promise<boolean>;
   deleteAdres: (id: number) => Promise<boolean>;
   deleteAllAdresy: () => Promise<boolean>;
@@ -154,6 +156,7 @@ interface ElectronAPI {
   selectOutputFolder: () => Promise<string | null>;
   convertFile: (inputPath: string, bankId: number, fileName: string, adresId?: number | null) => Promise<ConversionResult>;
   analyzeFile: (inputPath: string, bankId: number, adresId?: number | null) => Promise<ConversionSummary>;
+  detectAccountNumbers: (inputPath: string, bankId?: number | null) => Promise<string[]>;
   convertFileWithAI: (inputPath: string, bankId: number, fileName: string, adresId?: number | null) => Promise<ConversionResult>;
   finalizeConversion: (tempConversionId: string, decisions: ReviewDecision[]) => Promise<ConversionResult>;
   openFile: (filePath: string) => Promise<boolean>;

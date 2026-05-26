@@ -40,6 +40,9 @@ const App: React.FC = () => {
   const [notyFiles, setNotyFiles] = useState<NotyFileEntry[]>([]);
   const [scalanieFiles, setScalanieFiles] = useState<ScalanieFileEntry[]>([]);
   const [homebankingFiles, setHomebankingFiles] = useState<HomebankingFileEntry[]>([]);
+  // When the Converter asks "+ Add address with this account", we switch to the
+  // Adresy view and pass this value through one render so the modal can prefill it.
+  const [adresyPrefillAccount, setAdresyPrefillAccount] = useState<string | null>(null);
   const [appVersion, setAppVersion] = useState<string>('1.0.0');
   const [session, setSession] = useState<{ email: string; userId: string } | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
@@ -209,10 +212,20 @@ const App: React.FC = () => {
             setFiles={setFiles}
             selectedBank={selectedBank}
             setSelectedBank={setSelectedBank}
+            onAddAdresWithAccount={(acc) => {
+              setAdresyPrefillAccount(acc);
+              setCurrentView('adresy');
+            }}
           />
         )}
         {currentView === 'kontrahenci' && <Kontrahenci language={language} />}
-        {currentView === 'adresy' && <Adresy language={language} />}
+        {currentView === 'adresy' && (
+          <Adresy
+            language={language}
+            prefillAccountNumber={adresyPrefillAccount}
+            onPrefillConsumed={() => setAdresyPrefillAccount(null)}
+          />
+        )}
         {currentView === 'banki' && <Banki language={language} />}
         {currentView === 'podsumowanie' && (
           <PodsumowanieZaliczek

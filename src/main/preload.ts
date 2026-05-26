@@ -30,6 +30,7 @@ const IPC_CHANNELS = {
   CONVERT_FILE: 'files:convert',
   CONVERT_ALL: 'files:convert-all',
   ANALYZE_FILE: 'files:analyze',
+  DETECT_ACCOUNT_NUMBERS: 'files:detect-account-numbers',
   CONVERT_FILE_WITH_AI: 'files:convert-with-ai',
   FINALIZE_CONVERSION: 'files:finalize-conversion',
   SELECT_PDF: 'files:select-pdf',
@@ -102,14 +103,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     alternativeNames?: string[],
     swrkIdentifiers?: string[],
     bankId?: number | null,
+    accountNumbers?: string[],
   ) =>
-    ipcRenderer.invoke(IPC_CHANNELS.ADD_ADRES, nazwa, alternativeNames, swrkIdentifiers, bankId),
+    ipcRenderer.invoke(
+      IPC_CHANNELS.ADD_ADRES,
+      nazwa,
+      alternativeNames,
+      swrkIdentifiers,
+      bankId,
+      accountNumbers,
+    ),
   updateAdres: (
     id: number,
     nazwa: string,
     alternativeNames?: string[],
     swrkIdentifiers?: string[],
     bankId?: number | null,
+    accountNumbers?: string[],
   ) =>
     ipcRenderer.invoke(
       IPC_CHANNELS.UPDATE_ADRES,
@@ -118,6 +128,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       alternativeNames,
       swrkIdentifiers,
       bankId,
+      accountNumbers,
     ),
   deleteAdres: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ADRES, id),
   deleteAllAdresy: () => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ALL_ADRESY),
@@ -136,6 +147,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.CONVERT_FILE, inputPath, bankId, fileName, adresId),
   analyzeFile: (inputPath: string, bankId: number, adresId?: number | null) =>
     ipcRenderer.invoke(IPC_CHANNELS.ANALYZE_FILE, inputPath, bankId, adresId),
+  detectAccountNumbers: (inputPath: string, bankId?: number | null) =>
+    ipcRenderer.invoke(IPC_CHANNELS.DETECT_ACCOUNT_NUMBERS, inputPath, bankId),
   convertFileWithAI: (inputPath: string, bankId: number, fileName: string, adresId?: number | null) =>
     ipcRenderer.invoke(IPC_CHANNELS.CONVERT_FILE_WITH_AI, inputPath, bankId, fileName, adresId),
   finalizeConversion: (tempConversionId: string, decisions: any[]) =>

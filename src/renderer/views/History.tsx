@@ -3,6 +3,7 @@ import { ConversionHistory } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { formatDate } from '../../shared/utils';
 import Icon from '../components/Icon';
+import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
 
 interface HistoryProps {
   language: Language;
@@ -16,6 +17,7 @@ const History: React.FC<HistoryProps> = ({ language }) => {
   const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(document.body.classList.contains('dark-mode'));
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const menuPlacement = useDropdownPlacement(dropdownRef, openDropdownId !== null, 120);
   const itemsPerPage = 100;
 
   useEffect(() => {
@@ -197,7 +199,10 @@ const History: React.FC<HistoryProps> = ({ language }) => {
                           {openDropdownId === entry.id && (
                             <div style={{
                               position: 'absolute',
-                              top: '100%',
+                              top: menuPlacement.top,
+                              bottom: menuPlacement.bottom,
+                              marginTop: menuPlacement.marginTop,
+                              marginBottom: menuPlacement.marginBottom,
                               left: 0,
                               backgroundColor: isDarkMode ? 'var(--bg-surface)' : 'var(--bg-surface)',
                               border: `1px solid ${isDarkMode ? 'var(--border-default)' : 'var(--border-default)'}`,

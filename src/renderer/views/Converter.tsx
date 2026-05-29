@@ -7,6 +7,7 @@ import Icon from '../components/Icon';
 import kapitanBombaImg from '../assets/kapitan_bomba.jpg';
 import BankIllustration from '../components/BankIllustration';
 import { findAdresByAccountNumbers } from '../../shared/account-extractor';
+import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
 
 interface SearchableAdresSelectProps {
   adresy: Adres[];
@@ -30,6 +31,7 @@ const SearchableAdresSelect: React.FC<SearchableAdresSelectProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(document.body.classList.contains('dark-mode'));
   const containerRef = useRef<HTMLDivElement>(null);
+  const placement = useDropdownPlacement(containerRef, isOpen);
 
   // Detect dark mode changes
   useEffect(() => {
@@ -124,14 +126,18 @@ const SearchableAdresSelect: React.FC<SearchableAdresSelectProps> = ({
         <div
           style={{
             position: 'absolute',
-            top: '100%',
+            top: placement.top,
+            bottom: placement.bottom,
+            marginTop: placement.marginTop,
+            marginBottom: placement.marginBottom,
             left: 0,
             right: 0,
             backgroundColor: colors.background,
             border: `1px solid ${colors.border}`,
             borderRadius: '4px',
-            marginTop: '2px',
-            maxHeight: '250px',
+            maxHeight: placement.maxHeight,
+            display: 'flex',
+            flexDirection: 'column',
             overflow: 'hidden',
             zIndex: 1000,
             boxShadow: isDarkMode ? '0 2px 8px rgba(0,0,0,0.5)' : '0 2px 8px rgba(0,0,0,0.15)'
@@ -150,11 +156,12 @@ const SearchableAdresSelect: React.FC<SearchableAdresSelectProps> = ({
               borderBottom: `1px solid ${colors.border}`,
               outline: 'none',
               boxSizing: 'border-box',
+              flex: 'none',
               backgroundColor: colors.background,
               color: colors.text
             }}
           />
-          <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
             <div
               onClick={() => handleSelect(null)}
               style={{
@@ -232,6 +239,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   const fileInputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<FileEntry[]>(files);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const menuPlacement = useDropdownPlacement(dropdownRef, openDropdownId !== null, 120);
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -1337,7 +1345,10 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                                   {openDropdownId === file.id && (
                                     <div style={{
                                       position: 'absolute',
-                                      top: '100%',
+                                      top: menuPlacement.top,
+                                      bottom: menuPlacement.bottom,
+                                      marginTop: menuPlacement.marginTop,
+                                      marginBottom: menuPlacement.marginBottom,
                                       left: 0,
                                       zIndex: 1000,
                                       background: isDarkMode ? 'var(--bg-surface)' : 'var(--bg-surface)',
@@ -1345,7 +1356,6 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                                       borderRadius: '4px',
                                       boxShadow: isDarkMode ? '0 2px 8px rgba(0,0,0,0.4)' : '0 2px 8px rgba(0,0,0,0.15)',
                                       minWidth: '120px',
-                                      marginTop: '2px',
                                     }}>
                                       <button
                                         style={{

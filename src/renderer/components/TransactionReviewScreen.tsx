@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ConversionReviewData, ReviewDecision, TransactionForReview, Kontrahent } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { searchTransactionInPdf, PdfSearchMatch } from '../../shared/pdf-search';
+import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
 import Icon from './Icon';
 
 // SearchableContractorSelect component
@@ -25,6 +26,7 @@ const SearchableContractorSelect: React.FC<SearchableContractorSelectProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
+  const placement = useDropdownPlacement(containerRef, isOpen);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -86,14 +88,18 @@ const SearchableContractorSelect: React.FC<SearchableContractorSelectProps> = ({
         <div
           style={{
             position: 'absolute',
-            top: '100%',
+            top: placement.top,
+            bottom: placement.bottom,
+            marginTop: placement.marginTop,
+            marginBottom: placement.marginBottom,
             left: 0,
             right: 0,
             backgroundColor: 'var(--bg-surface)',
             border: '1px solid var(--border-default)',
             borderRadius: '4px',
-            marginTop: '2px',
-            maxHeight: '250px',
+            maxHeight: placement.maxHeight,
+            display: 'flex',
+            flexDirection: 'column',
             overflow: 'hidden',
             zIndex: 1000,
             boxShadow: '0 2px 8px rgba(0,0,0,0.5)'
@@ -112,11 +118,12 @@ const SearchableContractorSelect: React.FC<SearchableContractorSelectProps> = ({
               borderBottom: '1px solid var(--border-default)',
               outline: 'none',
               boxSizing: 'border-box',
+              flex: 'none',
               backgroundColor: 'var(--bg-surface)',
               color: 'var(--text-primary)'
             }}
           />
-          <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
             <div
               onClick={() => handleSelect(null)}
               style={{
@@ -905,7 +912,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   
   const [kontrahenci, setKontrahenci] = useState<Kontrahent[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'income' | 'expense'>('all');
+  const [filter, setFilter] = useState<'all' | 'income' | 'expense' | 'undecided'>('all');
 
   // Filter kontrahenci by type
   const contractorEntries = kontrahenci.filter(k => (k.typ || 'Kontrahent') === 'Kontrahent');
@@ -924,6 +931,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   // Filter transactions based on selected filter
   const filteredTransactions = reviewData.transactions.filter(trn => {
     if (filter === 'all') return true;
+    if (filter === 'undecided') return !decisions.has(trn.index);
     return trn.transactionType === filter;
   });
 
@@ -934,6 +942,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   // Count totals for filter badges
   const totalIncome = reviewData.transactions.filter(trn => trn.transactionType === 'income').length;
   const totalExpense = reviewData.transactions.filter(trn => trn.transactionType === 'expense').length;
+  const totalUndecided = reviewData.transactions.filter(trn => !decisions.has(trn.index)).length;
 
   const handleDecision = (index: number, action: 'accept' | 'reject') => {
     const newDecisions = new Map(decisions);
@@ -1209,7 +1218,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
         overflowY: 'auto',
       }}>
         {/* Income Section */}
-        {(filter === 'all' || filter === 'income') && incomeTransactions.length > 0 && (
+        {(filter === 'all' || filter === 'income' || filter === 'undecided') && incomeTransactions.length > 0 && (
           <>
             <div style={{
               backgroundColor: 'var(--success-bg)',
@@ -1255,13 +1264,13 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
         )}
 
         {/* Expense Section */}
-        {(filter === 'all' || filter === 'expense') && expenseTransactions.length > 0 && (
+        {(filter === 'all' || filter === 'expense' || filter === 'undecided') && expenseTransactions.length > 0 && (
           <>
             <div style={{
               backgroundColor: 'var(--warning-bg)',
               padding: '12px 16px',
               marginBottom: '15px',
-              marginTop: filter === 'all' && incomeTransactions.length > 0 ? '30px' : '0',
+              marginTop: (filter === 'all' || filter === 'undecided') && incomeTransactions.length > 0 ? '30px' : '0',
               borderRadius: '6px',
               borderLeft: '4px solid var(--warning)',
               display: 'flex',
@@ -1379,6 +1388,24 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
               }}
             >
               <Icon name="arrow-right" size={12} /> Wydatki ({totalExpense})
+            </button>
+            <button
+              onClick={() => setFilter('undecided')}
+              style={{
+                padding: '5px 10px',
+                fontSize: '12px',
+                backgroundColor: filter === 'undecided' ? 'var(--danger)' : 'var(--border-default)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: filter === 'undecided' ? 'bold' : 'normal',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              <Icon name="alert-circle" size={12} /> Niepodjęta decyzja ({totalUndecided})
             </button>
           </div>
         </div>

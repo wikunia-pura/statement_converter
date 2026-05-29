@@ -191,6 +191,26 @@ function detectPolishEncoding(buffer: Buffer): string {
 }
 
 /**
+ * Encode a string to a Windows-1250 (CP1250) buffer.
+ *
+ * Polish accounting software expects import files in Windows-1250, not UTF-8.
+ * Writing UTF-8 causes Polish characters (ł, ą, ń, ś, ...) to be garbled on import.
+ */
+export function encodeWin1250(content: string): Buffer {
+  return iconv.encode(content, 'win1250');
+}
+
+/**
+ * Write a file encoded as Windows-1250 (CP1250).
+ *
+ * Used for the accounting export files that get imported into Polish accounting
+ * software, which requires CP1250 to render Polish characters correctly.
+ */
+export function writeFileWin1250(filePath: string, content: string): void {
+  fs.writeFileSync(filePath, encodeWin1250(content));
+}
+
+/**
  * Normalize encoding name to one supported by iconv-lite
  */
 function normalizeEncodingName(name: string): string {

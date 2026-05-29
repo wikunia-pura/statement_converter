@@ -3,7 +3,7 @@ import path from 'path';
 import yaml from 'js-yaml';
 import { app } from 'electron';
 import { Converter, TransactionForReview, ConversionReviewData } from '../shared/types';
-import { readFileWithEncoding } from '../shared/encoding';
+import { readFileWithEncoding, writeFileWin1250 } from '../shared/encoding';
 import type { ConversionProgressCallback } from '../shared/base-converter';
 import { SantanderXmlConverter } from '../converters/santander-xml';
 import { PKOBPMT940Converter } from '../converters/pko-mt940';
@@ -56,7 +56,7 @@ function saveToImpexFolder(accountingFilePath: string, csvOutput: string): void 
     
     // Write the file to IMPEX folder
     const impexFilePath = path.join(impexFolder, fileName);
-    fs.writeFileSync(impexFilePath, csvOutput, 'utf8');
+    writeFileWin1250(impexFilePath, csvOutput);
     
     console.log(`✅ Saved accounting file to IMPEX folder: ${impexFilePath}`);
   } catch (error) {
@@ -999,7 +999,7 @@ class ConverterRegistry {
           // Generate TXT file for accounting system (tab-separated format)
           const csvOutput = converter.exportToCsv(result.processed);
           const txtPath = outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
-          fs.writeFileSync(txtPath, csvOutput, 'utf8');
+          writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
           
           console.log(`✅ Generated preview file: ${podgladPath}`);
@@ -1263,7 +1263,7 @@ class ConverterRegistry {
           // Generate TXT file for accounting system (tab-separated format)
           const csvOutput = converter.exportToCsv(result.processed);
           const txtPath = outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
-          fs.writeFileSync(txtPath, csvOutput, 'utf8');
+          writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
           
           console.log(`✅ Generated preview file: ${podgladPath}`);
@@ -1493,7 +1493,7 @@ class ConverterRegistry {
 
           const csvOutput = converter.exportToCsv(result.processed);
           const txtPath = outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
-          fs.writeFileSync(txtPath, csvOutput, 'utf8');
+          writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
 
           console.log(`✅ Generated preview file: ${podgladPath}`);
@@ -1727,7 +1727,7 @@ class ConverterRegistry {
 
           const csvOutput = converter.exportToCsv(result.processed);
           const txtPath = outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
-          fs.writeFileSync(txtPath, csvOutput, 'utf8');
+          writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
 
           console.log(`✅ Generated preview file: ${podgladPath}`);
@@ -1961,7 +1961,7 @@ class ConverterRegistry {
 
           const csvOutput = converter.exportToCsv(result.processed);
           const txtPath = outputPath.replace(/\.(txt|TXT|zip|ZIP)$/, '-accounting.txt');
-          fs.writeFileSync(txtPath, csvOutput, 'utf8');
+          writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
 
           console.log(`✅ Generated preview file: ${podgladPath}`);
@@ -2179,7 +2179,7 @@ class ConverterRegistry {
 
           const csvOutput = converter.exportToCsv(result.processed);
           const txtPath = outputPath.replace(/\.(txt|TXT|exp|EXP)$/, '-accounting.txt');
-          fs.writeFileSync(txtPath, csvOutput, 'utf8');
+          writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
 
           console.log(`✅ Generated preview file: ${podgladPath}`);
@@ -2413,7 +2413,7 @@ class ConverterRegistry {
 
           const csvOutput = converter.exportToCsv(result.processed);
           const txtPath = outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
-          fs.writeFileSync(txtPath, csvOutput, 'utf8');
+          writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
 
           console.log(`✅ Generated preview file: ${podgladPath}`);
@@ -2639,7 +2639,7 @@ class ConverterRegistry {
 
           const csvOutput = converter.exportToCsv(result.processed);
           const txtPath = outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
-          fs.writeFileSync(txtPath, csvOutput, 'utf8');
+          writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
 
           console.log(`✅ Generated preview file: ${podgladPath}`);
@@ -2753,7 +2753,7 @@ class ConverterRegistry {
       // Generate accounting file
       const csvOutput = converter.exportToCsv(updatedTransactions);
       const txtPath = cached.outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
-      fs.writeFileSync(txtPath, csvOutput, 'utf8');
+      writeFileWin1250(txtPath, csvOutput);
       saveToImpexFolder(txtPath, csvOutput);
       
       // Generate updated preview file with user review information

@@ -33,6 +33,25 @@ function unwrap<T>(data: T | null, error: { message: string } | null, context: s
   return data;
 }
 
+// Fetches every row from a Supabase query in fixed-size pages. PostgREST's
+// server-side `db-max-rows` (1000 on Supabase by default) caps a single
+// `.range()` response, so we loop until we get a short page.
+async function fetchAllPaged<T>(
+  context: string,
+  buildQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<T[]> {
+  const PAGE = 1000;
+  const out: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await buildQuery(from, from + PAGE - 1);
+    if (error) throw new Error(`${context}: ${error.message}`);
+    const rows = data ?? [];
+    out.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  return out;
+}
+
 class DatabaseService {
   private settingsStore: Store<SettingsStoreSchema>;
 
@@ -59,11 +78,13 @@ class DatabaseService {
   // ------------------------------ Banks ------------------------------
 
   async getAllBanks(): Promise<Bank[]> {
-    const { data, error } = await getSupabase()
-      .from('banks')
-      .select(BANK_COLS)
-      .order('name', { ascending: true });
-    const rows = unwrap(data, error, 'getAllBanks');
+    const rows = await fetchAllPaged<any>('getAllBanks', (from, to) =>
+      getSupabase()
+        .from('banks')
+        .select(BANK_COLS)
+        .order('name', { ascending: true })
+        .range(from, to),
+    );
     return rows.map(b => ({ ...b, accountPrefixes: b.accountPrefixes ?? [] })) as Bank[];
   }
 
@@ -132,11 +153,13 @@ class DatabaseService {
   // ---------------------------- Kontrahenci ----------------------------
 
   async getAllKontrahenci(): Promise<Kontrahent[]> {
-    const { data, error } = await getSupabase()
-      .from('kontrahenci')
-      .select(KONTRAHENT_COLS)
-      .order('nazwa', { ascending: true });
-    const rows = unwrap(data, error, 'getAllKontrahenci');
+    const rows = await fetchAllPaged<any>('getAllKontrahenci', (from, to) =>
+      getSupabase()
+        .from('kontrahenci')
+        .select(KONTRAHENT_COLS)
+        .order('nazwa', { ascending: true })
+        .range(from, to),
+    );
     return rows.map(k => ({
       ...k,
       typ: (k.typ as KontrahentTyp) || 'Kontrahent',
@@ -223,11 +246,13 @@ class DatabaseService {
   // ------------------------------ Adresy ------------------------------
 
   async getAllAdresy(): Promise<Adres[]> {
-    const { data, error } = await getSupabase()
-      .from('adresy')
-      .select(ADRES_COLS)
-      .order('nazwa', { ascending: true });
-    const rows = unwrap(data, error, 'getAllAdresy');
+    const rows = await fetchAllPaged<any>('getAllAdresy', (from, to) =>
+      getSupabase()
+        .from('adresy')
+        .select(ADRES_COLS)
+        .order('nazwa', { ascending: true })
+        .range(from, to),
+    );
     return rows.map(a => ({
       ...a,
       alternativeNames: a.alternativeNames ?? [],
@@ -368,11 +393,13 @@ class DatabaseService {
   }
 
   async getAllHistory(): Promise<ConversionHistory[]> {
-    const { data, error } = await getSupabase()
-      .from('history')
-      .select(HISTORY_COLS)
-      .order('converted_at', { ascending: false });
-    const rows = unwrap(data, error, 'getAllHistory');
+    const rows = await fetchAllPaged<any>('getAllHistory', (from, to) =>
+      getSupabase()
+        .from('history')
+        .select(HISTORY_COLS)
+        .order('converted_at', { ascending: false })
+        .range(from, to),
+    );
     return rows.map(h => ({ ...h, errorMessage: h.errorMessage ?? undefined })) as ConversionHistory[];
   }
 

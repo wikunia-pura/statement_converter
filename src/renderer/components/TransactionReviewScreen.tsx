@@ -47,7 +47,8 @@ const SearchableContractorSelect: React.FC<SearchableContractorSelectProps> = ({
     const nameMatch = kontrahent.nazwa.toLowerCase().includes(search);
     const altNamesMatch = kontrahent.alternativeNames && kontrahent.alternativeNames.some(alt => alt.toLowerCase().includes(search));
     const nipMatch = kontrahent.nip && kontrahent.nip.includes(searchTerm);
-    return nameMatch || altNamesMatch || nipMatch;
+    const accountMatch = kontrahent.kontoKontrahenta && kontrahent.kontoKontrahenta.toLowerCase().includes(search);
+    return nameMatch || altNamesMatch || nipMatch || accountMatch;
   });
 
   const handleSelect = (contractorId: number | null) => {
@@ -74,6 +75,9 @@ const SearchableContractorSelect: React.FC<SearchableContractorSelectProps> = ({
       >
         <span style={{ color: selectedContractor ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>
           {selectedContractor ? selectedContractor.nazwa : placeholder}
+          {selectedContractor && selectedContractor.kontoKontrahenta && (
+            <span style={{ color: 'var(--text-tertiary)' }}> ({selectedContractor.kontoKontrahenta})</span>
+          )}
         </span>
         <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>▼</span>
       </div>
@@ -139,7 +143,12 @@ const SearchableContractorSelect: React.FC<SearchableContractorSelectProps> = ({
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface-sunken)'}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = kontrahent.id === selectedContractorId ? 'var(--accent-subtle)' : 'var(--bg-surface)'}
               >
-                <div style={{ color: 'var(--text-primary)' }}>{kontrahent.nazwa}</div>
+                <div style={{ color: 'var(--text-primary)' }}>
+                  {kontrahent.nazwa}
+                  {kontrahent.kontoKontrahenta && (
+                    <span style={{ color: 'var(--text-tertiary)' }}> ({kontrahent.kontoKontrahenta})</span>
+                  )}
+                </div>
                 {kontrahent.nip && (
                   <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
                     NIP: {kontrahent.nip}
@@ -800,7 +809,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
                   selectedContractorId={manualContractorId !== undefined ? manualContractorId : null}
                   onChange={(contractorId) => handleManualContractorSelect(trn.index, contractorId)}
                   placeholder="Brak przypisania"
-                  searchPlaceholder="Szukaj kontrahenta po nazwie lub NIP..."
+                  searchPlaceholder="Szukaj kontrahenta po nazwie, NIP lub koncie..."
                   disabled={manualRemainingCostId !== undefined}
                 />
               </div>

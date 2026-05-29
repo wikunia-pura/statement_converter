@@ -18,6 +18,7 @@ import { AIExtractor } from './ai-extractor';
 import { ExtractionCache } from './extraction-cache';
 import { ContractorMatcher, MatchedContractor } from './contractor-matcher';
 import { Kontrahent, Adres, KontrahentTyp } from './types';
+import logger from './logger';
 
 const EXPENSE_MATCH_TYPES: KontrahentTyp[] = ['Kontrahent', 'Pozostałe koszty'];
 const INCOME_MATCH_TYPES: KontrahentTyp[] = ['Pozostałe przychody'];
@@ -242,7 +243,10 @@ export abstract class BaseConverter<TRaw> {
       useRegexFirst: config.useRegexFirst ?? true,
       skipNegativeAmounts: config.skipNegativeAmounts ?? false,
       skipBankFees: config.skipBankFees ?? true,
-      useAIForExpenses: config.useAIForExpenses ?? false,
+      // Left undefined when not explicitly set, so shouldUseAIForExpenses() can
+      // fall back to AI availability (mirrors income AI). Coercing to false here
+      // would permanently disable expense AI even in AI conversion mode.
+      useAIForExpenses: config.useAIForExpenses,
       contractors: config.contractors,
       addresses: config.addresses,
       language: config.language,
@@ -326,10 +330,12 @@ export abstract class BaseConverter<TRaw> {
 
   /**
    * Whether AI is allowed for expense matching.
-   * Default: from config.useAIForExpenses.
+   * Mirrors income AI: when an AI extractor is available (i.e. the user picked the
+   * AI conversion mode), expenses use AI too. An explicit `useAIForExpenses` in the
+   * config still wins, so callers can force it on/off independently.
    */
   protected shouldUseAIForExpenses(): boolean {
-    return this.config.useAIForExpenses ?? false;
+    return this.config.useAIForExpenses ?? !!this.aiExtractor;
   }
 
   // ============================================================
@@ -820,15 +826,43 @@ export abstract class BaseConverter<TRaw> {
             this.normalize(item.transaction)
           );
 
-          const candidatesPerTransaction = transactionsForAI.map((t) =>
-            this.contractorMatcher!.getTopCandidates(t, 10, EXPENSE_MATCH_TYPES)
-          );
+          // Full type-filtered catalog, used only as a fallback for transactions
+          // where fuzzy pre-filtering surfaces nothing (e.g. names corrupted by
+          // 35-char line wrapping that injects spaces — "La skowski", "GON TAREK").
+          // Without this the AI would receive an empty list and be forced to null.
+          const fullCatalog = this.contractorMatcher!.getAllByTypes(EXPENSE_MATCH_TYPES);
+          const candidatesPerTransaction = transactionsForAI.map((t) => {
+            const top = this.contractorMatcher!.getTopCandidates(t, 10, EXPENSE_MATCH_TYPES);
+            return top.length > 0 ? top : fullCatalog;
+          });
 
           const matchedContractors =
             await this.aiExtractor!.matchContractorsBatch(
               transactionsForAI,
               candidatesPerTransaction
             );
+
+          // Diagnostic logging: for every transaction, record what the AI was
+          // given (candidate IDs+names, whether the full-catalog fallback kicked
+          // in) and what it returned (matched contractor / null + confidence +
+          // reasoning). This makes "AI ran but didn't match X" inspectable in
+          // main.log instead of a black box.
+          const fullCatalogSize = fullCatalog.length;
+          transactionsForAI.forEach((t, j) => {
+            const cands = candidatesPerTransaction[j] || [];
+            const usedFallback = cands.length === fullCatalogSize && fullCatalogSize > 10;
+            const mc = matchedContractors[j];
+            const candStr = cands.length
+              ? cands.slice(0, 12).map((c) => `#${c.id}:${c.nazwa}`).join(' | ') +
+                (cands.length > 12 ? ` …(+${cands.length - 12})` : '')
+              : '(brak)';
+            logger.info(
+              `[EXPENSE-AI] desc-opt="${t.descOpt || ''}" desc-base="${t.descBase}" | ` +
+                `kandydaci(${cands.length}${usedFallback ? ', FALLBACK=pełny katalog' : ''}): ${candStr} | ` +
+                `AI => ${mc.contractor ? `MATCH #${mc.contractor.id} "${mc.contractor.nazwa}" (conf ${mc.confidence})` : 'NULL'}` +
+                `${mc.reasoning ? ` | reasoning: ${mc.reasoning}` : ''}`
+            );
+          });
 
           const items: BaseProcessedTransaction<TRaw>[] = batch.map((b, j) => {
             const matchedContractor = matchedContractors[j];

@@ -123,11 +123,6 @@ export class BnpXmlConverter extends BaseConverter<BnpTransaction> {
   protected regexAcceptThreshold(): number {
     return 90;
   }
-
-  /** BNP has explicit toggle for AI expenses (like Santander). */
-  protected shouldUseAIForExpenses(): boolean {
-    return this.localConfig.useAIForExpenses ?? false;
-  }
 }
 
 // Re-exports

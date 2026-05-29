@@ -297,7 +297,12 @@ export class AIExtractor {
           }
           
           // For other status errors, throw with status code
-          throw new Error(`Claude API error (${status}): ${message || 'Unknown error'}`);
+          // Preserve the HTTP status on the wrapped error so retryWithBackoff's
+          // isRetryableError() can see it — otherwise transient 500/502/503/504/529
+          // are treated as non-retryable and fail immediately.
+          const claudeErr = new Error(`Claude API error (${status}): ${message || 'Unknown error'}`);
+          (claudeErr as any).status = status;
+          throw claudeErr;
         }
         
         throw new Error(`Failed to extract with Claude: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -378,7 +383,12 @@ export class AIExtractor {
           }
           
           // For other status errors, throw with status code
-          throw new Error(`OpenAI API error (${status}): ${message || 'Unknown error'}`);
+          // Preserve the HTTP status on the wrapped error so retryWithBackoff's
+          // isRetryableError() can see it — otherwise transient 500/502/503/504/529
+          // are treated as non-retryable and fail immediately.
+          const openaiErr = new Error(`OpenAI API error (${status}): ${message || 'Unknown error'}`);
+          (openaiErr as any).status = status;
+          throw openaiErr;
         }
         
         throw new Error(`Failed to extract with OpenAI: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -698,7 +708,12 @@ Example 2:
           }
           
           // For other status errors, throw with status code
-          throw new Error(`Claude API error (${status}): ${message || 'Unknown error'}`);
+          // Preserve the HTTP status on the wrapped error so retryWithBackoff's
+          // isRetryableError() can see it — otherwise transient 500/502/503/504/529
+          // are treated as non-retryable and fail immediately.
+          const claudeErr = new Error(`Claude API error (${status}): ${message || 'Unknown error'}`);
+          (claudeErr as any).status = status;
+          throw claudeErr;
         }
         
         throw new Error(`Failed to match contractors with Claude: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -764,7 +779,12 @@ Example 2:
           }
           
           // For other status errors, throw with status code
-          throw new Error(`OpenAI API error (${status}): ${message || 'Unknown error'}`);
+          // Preserve the HTTP status on the wrapped error so retryWithBackoff's
+          // isRetryableError() can see it — otherwise transient 500/502/503/504/529
+          // are treated as non-retryable and fail immediately.
+          const openaiErr = new Error(`OpenAI API error (${status}): ${message || 'Unknown error'}`);
+          (openaiErr as any).status = status;
+          throw openaiErr;
         }
         
         throw new Error(`Failed to match contractors with OpenAI: ${error instanceof Error ? error.message : 'Unknown error'}`);

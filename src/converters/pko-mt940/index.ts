@@ -110,11 +110,6 @@ export class PKOBPMT940Converter extends BaseConverter<MT940Transaction> {
   protected regexAcceptThreshold(): number {
     return this.config.confidenceThresholds.autoApprove;
   }
-
-  /** PKO always uses AI for expenses when available. */
-  protected shouldUseAIForExpenses(): boolean {
-    return true;
-  }
 }
 
 // Export everything

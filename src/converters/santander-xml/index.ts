@@ -115,11 +115,6 @@ export class SantanderXmlConverter extends BaseConverter<XmlTransaction> {
   protected regexAcceptThreshold(): number {
     return 90;
   }
-
-  /** Santander has explicit toggle for AI expenses. */
-  protected shouldUseAIForExpenses(): boolean {
-    return this.localConfig.useAIForExpenses ?? false;
-  }
 }
 
 // Export everything

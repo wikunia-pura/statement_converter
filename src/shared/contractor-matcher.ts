@@ -140,6 +140,16 @@ export class ContractorMatcher {
   }
 
   /**
+   * Return the full contractor catalog filtered by typ.
+   * Used as an AI fallback pool when fuzzy pre-filtering surfaces no candidates
+   * (e.g. names corrupted by 35-char line wrapping that inject spaces into a name),
+   * so the AI can still match instead of being forced to return null.
+   */
+  getAllByTypes(allowedTypes?: KontrahentTyp[]): Kontrahent[] {
+    return this.filterByTypes(allowedTypes);
+  }
+
+  /**
    * Get top N candidate contractors for a transaction (for AI pre-filtering)
    * Returns the most likely contractors based on matching (exact and fuzzy)
    * Score priority: NIP (110) > Main name = Alternative names (100 - EQUAL) > Fuzzy match (85-95)
@@ -154,6 +164,7 @@ export class ContractorMatcher {
     // Combine desc-opt and desc-base for searching
     const searchText = `${transaction.descOpt || ''} ${transaction.descBase}`.toLowerCase();
     const searchTextNormalized = this.normalizeText(searchText);
+    const searchNoSpace = searchTextNormalized.replace(/\s/g, '');
 
     // Score all contractors
     const scored = pool.map(contractor => {
@@ -185,6 +196,26 @@ export class ContractorMatcher {
           if (searchTextNormalized.includes(altNameNormalized)) {
             score = 100;
             break;
+          }
+        }
+      }
+
+      // Space-insensitive full-name match - Score: 98 (just below exact name)
+      // Handles names mangled by fixed-width line wrapping ("Sp"→"S p",
+      // "Dudziński"→"Dud ziński"). Stricter than fuzzy: requires the whole name
+      // contiguous once whitespace is removed.
+      if (score === 0) {
+        const nameNoSpace = this.normalizeText(contractor.nazwa.toLowerCase()).replace(/\s/g, '');
+        if (nameNoSpace.length >= 8 && searchNoSpace.includes(nameNoSpace)) {
+          score = 98;
+        }
+        if (score === 0 && contractor.alternativeNames && contractor.alternativeNames.length > 0) {
+          for (const altName of contractor.alternativeNames) {
+            const altNoSpace = this.normalizeText(altName.toLowerCase()).replace(/\s/g, '');
+            if (altNoSpace.length >= 8 && searchNoSpace.includes(altNoSpace)) {
+              score = 98;
+              break;
+            }
           }
         }
       }
@@ -226,6 +257,9 @@ export class ContractorMatcher {
   ): Omit<MatchedContractor, 'matchedIn'> {
     const descLower = description.toLowerCase();
     const descNormalizedText = this.normalizeText(descLower);
+    // Whitespace-stripped variant, for matching names mangled by fixed-width
+    // line wrapping that injects spaces mid-word (see FOURTH check below).
+    const descNoSpace = descNormalizedText.replace(/\s/g, '');
     let bestMatch: Kontrahent | null = null;
     let bestConfidence = 0;
     let matchedText = '';
@@ -274,6 +308,31 @@ export class ContractorMatcher {
               bestConfidence = confidence;
               matchedText = altName;
             }
+          }
+        }
+      }
+
+      // FOURTH: space-insensitive match — handles names mangled by fixed-width
+      // line wrapping that injects spaces mid-word (e.g. "Sp"→"S p",
+      // "Dudziński"→"Dud ziński"). Match the full name as a contiguous substring
+      // with all whitespace removed. The min-length guard avoids short-name false
+      // positives; requiring the whole name contiguous makes this stricter than fuzzy.
+      if (bestConfidence < 88) {
+        const nameNoSpace = contractorNameNormalized.replace(/\s/g, '');
+        if (nameNoSpace.length >= 8 && descNoSpace.includes(nameNoSpace)) {
+          bestMatch = contractor;
+          bestConfidence = 88;
+          matchedText = contractor.nazwa;
+        }
+      }
+      if (bestConfidence < 88 && contractor.alternativeNames) {
+        for (const altName of contractor.alternativeNames) {
+          const altNoSpace = this.normalizeText(altName.toLowerCase()).replace(/\s/g, '');
+          if (altNoSpace.length >= 8 && descNoSpace.includes(altNoSpace)) {
+            bestMatch = contractor;
+            bestConfidence = 88;
+            matchedText = altName;
+            break;
           }
         }
       }

@@ -106,10 +106,6 @@ export class BosXmlConverter extends BaseConverter<BosTransaction> {
   protected regexAcceptThreshold(): number {
     return 90;
   }
-
-  protected shouldUseAIForExpenses(): boolean {
-    return this.localConfig.useAIForExpenses ?? false;
-  }
 }
 
 export * from './types';

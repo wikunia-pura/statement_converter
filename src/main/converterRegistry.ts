@@ -330,7 +330,10 @@ class ConverterRegistry {
         language,
       });
 
-      const mt940Content = readFileWithEncoding(inputPath);
+      // Alior MT940 is encoded in CP852 (DOS Latin-2), like ING. Auto-detection
+      // mis-picks win1250 (it sees 0x80-0x9F bytes), corrupting Polish chars
+      // (e.g. ń→ä, ł→�), so force cp852.
+      const mt940Content = readFileWithEncoding(inputPath, 'cp852');
       const result = await converter.convert(mt940Content);
 
       const lowConfidenceTransactions = result.processed.filter(trn => {
@@ -1529,7 +1532,10 @@ class ConverterRegistry {
             cachePath,
           });
 
-          const mt940Content = readFileWithEncoding(inputPath);
+          // Alior MT940 is encoded in CP852 (DOS Latin-2), like ING. Auto-detection
+          // mis-picks win1250 (it sees 0x80-0x9F bytes), corrupting Polish chars
+          // (e.g. ń→ä, ł→�), so force cp852.
+          const mt940Content = readFileWithEncoding(inputPath, 'cp852');
           const result = await converter.convert(mt940Content, { onProgress });
 
           const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');

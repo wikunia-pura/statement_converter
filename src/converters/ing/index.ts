@@ -127,11 +127,6 @@ export class INGConverter extends BaseConverter<INGTransaction> {
   protected regexAcceptThreshold(): number {
     return 90;
   }
-
-  /** ING has explicit toggle for AI expenses (like Alior). */
-  protected shouldUseAIForExpenses(): boolean {
-    return this.localConfig.useAIForExpenses ?? false;
-  }
 }
 
 // Re-exports

@@ -122,11 +122,6 @@ export class PKOSAConverter extends BaseConverter<PKOSATransaction> {
   protected regexAcceptThreshold(): number {
     return 90;
   }
-
-  /** PKO SA has explicit toggle for AI expenses. */
-  protected shouldUseAIForExpenses(): boolean {
-    return this.localConfig.useAIForExpenses ?? false;
-  }
 }
 
 // Re-exports

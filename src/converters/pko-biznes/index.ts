@@ -145,11 +145,6 @@ export class PKOBiznesConverter extends BaseConverter<PKOBiznesTransaction> {
   protected regexAcceptThreshold(): number {
     return 90;
   }
-
-  /** PKO Biznes has explicit toggle for AI expenses. */
-  protected shouldUseAIForExpenses(): boolean {
-    return this.localConfig.useAIForExpenses ?? false;
-  }
 }
 
 // Re-exports

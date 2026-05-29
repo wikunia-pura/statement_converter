@@ -121,11 +121,6 @@ export class AliorConverter extends BaseConverter<AliorTransaction> {
   protected regexAcceptThreshold(): number {
     return 90;
   }
-
-  /** Alior has explicit toggle for AI expenses (like BNP). */
-  protected shouldUseAIForExpenses(): boolean {
-    return this.localConfig.useAIForExpenses ?? false;
-  }
 }
 
 // Re-exports

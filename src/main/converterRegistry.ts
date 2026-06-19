@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
 import { app } from 'electron';
-import { Converter, TransactionForReview, ConversionReviewData } from '../shared/types';
+import { Converter, TransactionForReview, ConversionReviewData, CLARIFICATION_ACCOUNT } from '../shared/types';
 import { readFileWithEncoding, writeFileWin1250 } from '../shared/encoding';
 import type { ConversionProgressCallback } from '../shared/base-converter';
 import { SantanderXmlConverter } from '../converters/santander-xml';
@@ -539,9 +539,12 @@ class ConverterRegistry {
       
       // Include in review if:
       // 1. Confidence below threshold (<70%), OR
-      // 2. Income transaction without apartment number (regardless of confidence)
-      const needsReview = confidence < 70 
-        || (trn.transactionType === 'income' && !trn.extracted.apartmentNumber);
+      // 2. Income transaction without apartment number (regardless of confidence), OR
+      // 3. Apartment number came from a user-defined mapping rule — always shown
+      //    for confirmation ("assign, but show for acceptance").
+      const needsReview = confidence < 70
+        || (trn.transactionType === 'income' && !trn.extracted.apartmentNumber)
+        || trn.extracted.matchedByManualMapping === true;
       
       if (needsReview) {
         // For Santander, use 'value' (transaction amount) not 'realValue' (account balance)
@@ -567,6 +570,7 @@ class ConverterRegistry {
             tenantName: trn.extracted.tenantName,
             confidence,
             reasoning: trn.extracted.reasoning,
+            matchedByManualMapping: trn.extracted.matchedByManualMapping === true,
           },
         };
         
@@ -645,6 +649,47 @@ class ConverterRegistry {
           action: 'reject',
           originalValue: originalApartmentNumber
         };
+      } else if (decision.action === 'clarify') {
+        // Assign to the special clarification account (235-1) so the record is
+        // actually booked (not left unrecognized) in both preview and accounting files.
+        if (trn.transactionType === 'income') {
+          trn.extracted.apartmentNumber = CLARIFICATION_ACCOUNT;
+          if (trn.extracted.confidence) {
+            trn.extracted.confidence.overall = 100;
+            trn.extracted.confidence.apartment = 100;
+          }
+
+          trn.reviewedByUser = {
+            action: 'clarify',
+            originalValue: originalApartmentNumber,
+            manualValue: CLARIFICATION_ACCOUNT
+          };
+        } else {
+          // Expense: book against a synthetic contractor whose account is 235-1,
+          // so the existing exporters emit k_wn = 235-1, k_ma = 131-1.
+          const originalContractorName = trn.matchedContractor?.contractor?.nazwa || null;
+          const originalContractorAccount = trn.matchedContractor?.contractor?.kontoKontrahenta || null;
+
+          trn.matchedContractor = {
+            contractor: {
+              id: -1,
+              nazwa: `Konto wyjaśnień ${CLARIFICATION_ACCOUNT}`,
+              kontoKontrahenta: CLARIFICATION_ACCOUNT,
+              typ: 'Kontrahent',
+              createdAt: ''
+            },
+            confidence: 100,
+            matchedIn: 'manual'
+          };
+
+          trn.reviewedByUser = {
+            action: 'clarify',
+            originalContractorValue: {
+              name: originalContractorName,
+              account: originalContractorAccount
+            }
+          };
+        }
       } else if (decision.action === 'manual') {
         if (decision.manualRemainingIncomeId) {
           // Use user-selected "Pozostałe przychody" entry (for income)
@@ -2807,6 +2852,12 @@ class ConverterRegistry {
                 newPreviewOutput += `     Oryginalna wartość: ${trn.reviewedByUser.originalValue}\n`;
               }
               newPreviewOutput += `     Finalna wartość: NIEROZPOZNANE\n`;
+            } else if (trn.reviewedByUser.action === 'clarify') {
+              newPreviewOutput += `  🔍 DO WYJAŚNIENIA (konto ${CLARIFICATION_ACCOUNT})\n`;
+              if (trn.reviewedByUser.originalValue) {
+                newPreviewOutput += `     Oryginalna wartość: ${trn.reviewedByUser.originalValue}\n`;
+              }
+              newPreviewOutput += `     Finalna wartość: ${trn.extracted.apartmentNumber}\n`;
             } else if (trn.reviewedByUser.action === 'manual') {
               newPreviewOutput += `  ✏️  WPISANO RĘCZNIE\n`;
               if (trn.reviewedByUser.originalValue !== undefined) {
@@ -2842,6 +2893,14 @@ class ConverterRegistry {
                 newPreviewOutput += `     Oryginalna wartość: ${trn.reviewedByUser.originalContractorValue.name || 'NIE ZNALEZIONO'}\n`;
               }
               newPreviewOutput += `     Finalna wartość: NIEROZPOZNANY\n`;
+            } else if (trn.reviewedByUser.action === 'clarify') {
+              newPreviewOutput += `  🔍 DO WYJAŚNIENIA (konto ${CLARIFICATION_ACCOUNT})\n`;
+              if (trn.reviewedByUser.originalContractorValue) {
+                newPreviewOutput += `     Oryginalna wartość: ${trn.reviewedByUser.originalContractorValue.name || 'NIE ZNALEZIONO'}\n`;
+              }
+              if (trn.matchedContractor?.contractor) {
+                newPreviewOutput += `     Konto kontrahenta: ${trn.matchedContractor.contractor.kontoKontrahenta}\n`;
+              }
             } else if (trn.reviewedByUser.action === 'manual') {
               newPreviewOutput += `  ✏️  WYBRANO RĘCZNIE\n`;
               if (trn.reviewedByUser.originalContractorValue) {

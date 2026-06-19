@@ -46,6 +46,8 @@ export interface AddressMatchResult {
   isZGN: boolean;
   confidence: ConfidenceScores;
   warnings: string[];
+  /** True when the apartment number came from a user-defined ApartmentMapping rule. */
+  matchedByManualMapping: boolean;
 }
 
 // === MAIN CLASS ===
@@ -76,7 +78,17 @@ export class AddressMatcher {
         isZGN: true,
         confidence: { address: 100, apartment: 100, tenantName: 0, overall: 95 },
         warnings: [],
+        matchedByManualMapping: false,
       };
+    }
+
+    // 1b. User-defined apartment mappings (highest priority — explicit rules for
+    //     "weird" recurring payments the matcher can't otherwise resolve).
+    //     High confidence (95) so the regex path accepts it and AI is skipped;
+    //     the matchedByManualMapping flag still forces the transaction into review.
+    const mappingMatch = this.matchApartmentMapping(combinedText, counterpartyName);
+    if (mappingMatch) {
+      return mappingMatch;
     }
 
     // 2. Extract apartment/identifier from text (merged patterns from both converters)
@@ -191,7 +203,65 @@ export class AddressMatcher {
       isZGN: false,
       confidence,
       warnings,
+      matchedByManualMapping: false,
     };
+  }
+
+  // ============================================================
+  // USER-DEFINED APARTMENT MAPPINGS
+  // Match the transaction text against each address's apartmentMappings.
+  // matchText is compared as a normalized (lowercase, no Polish diacritics)
+  // substring of the combined text + counterparty name.
+  // ============================================================
+
+  private matchApartmentMapping(
+    combinedText: string,
+    counterpartyName?: string
+  ): AddressMatchResult | null {
+    const haystack = this.normalizePolishChars(
+      `${combinedText} ${counterpartyName || ''}`.toLowerCase()
+    );
+
+    for (const addr of this.addresses) {
+      const mappings = addr.apartmentMappings || [];
+      for (const mapping of mappings) {
+        const needle = this.normalizePolishChars(
+          (mapping.matchText || '').trim().toLowerCase()
+        );
+        if (!needle || !mapping.apartmentNumber) continue;
+        if (!haystack.includes(needle)) continue;
+
+        // Build street/building context from the address name (e.g. "Cieszyńska 4").
+        const parsed = addr.nazwa.match(/^(.+?)\s+(\d+)$/);
+        const streetName = parsed ? parsed[1] : addr.nazwa;
+        const buildingNumber = parsed ? parsed[2] : null;
+        const apartment = mapping.apartmentNumber.trim();
+        const fullAddress = buildingNumber
+          ? `${streetName} ${buildingNumber}/${apartment}`
+          : `${streetName} ${apartment}`;
+
+        const tenantName = this.extractTenantName(counterpartyName || combinedText);
+
+        return {
+          streetName,
+          buildingNumber,
+          apartmentNumber: apartment,
+          fullAddress,
+          tenantName,
+          isZGN: false,
+          confidence: {
+            address: 95,
+            apartment: 95,
+            tenantName: tenantName ? 95 : 0,
+            overall: 95,
+          },
+          warnings: [],
+          matchedByManualMapping: true,
+        };
+      }
+    }
+
+    return null;
   }
 
   // ============================================================

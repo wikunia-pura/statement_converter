@@ -1,7 +1,270 @@
 import React, { useState, useEffect } from 'react';
-import { Adres, Bank } from '../../shared/types';
+import { Adres, Bank, ApartmentMapping } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { normalizeAccount } from '../../shared/account-extractor';
+
+const newMappingId = () =>
+  (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+    ? crypto.randomUUID()
+    : `m-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+interface ApartmentMappingFormModalProps {
+  language: Language;
+  /** Mapping being edited, or null when adding a new one. */
+  editing: ApartmentMapping | null;
+  /** Existing mappings — used to block duplicate matchText. */
+  existing: ApartmentMapping[];
+  isSaving: boolean;
+  onSubmit: (entry: ApartmentMapping) => void;
+  onCancel: () => void;
+}
+
+/**
+ * Standalone add/edit form modal for a single apartment-number rule. Kept
+ * separate from the list modal so the two views don't crowd each other.
+ */
+const ApartmentMappingFormModal: React.FC<ApartmentMappingFormModalProps> = ({
+  language,
+  editing,
+  existing,
+  isSaving,
+  onSubmit,
+  onCancel,
+}) => {
+  const t = translations[language];
+  const [matchText, setMatchText] = useState(editing?.matchText || '');
+  const [apartmentNumber, setApartmentNumber] = useState(editing?.apartmentNumber || '');
+  const [note, setNote] = useState(editing?.note || '');
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = () => {
+    const mt = matchText.trim();
+    const apt = apartmentNumber.trim();
+    if (!mt || !apt) {
+      setError(t.fillAllFields);
+      return;
+    }
+    const duplicate = existing.some(
+      m => m.id !== editing?.id && m.matchText.toLowerCase() === mt.toLowerCase(),
+    );
+    if (duplicate) {
+      setError(t.apartmentMappingDuplicate);
+      return;
+    }
+    onSubmit({
+      id: editing?.id || newMappingId(),
+      matchText: mt,
+      apartmentNumber: apt,
+      ...(note.trim() ? { note: note.trim() } : {}),
+    });
+  };
+
+  return (
+    <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); onCancel(); }} style={{ zIndex: 1100 }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+        <div className="modal-header">
+          {editing ? t.edit : t.addApartmentMapping}
+        </div>
+        <div className="modal-body">
+          <div className="form-group">
+            <label>{t.apartmentMappingMatchText} <span style={{ color: 'red' }}>*</span></label>
+            <input
+              type="text"
+              value={matchText}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setMatchText(e.target.value); if (error) setError(null); }}
+              placeholder={t.apartmentMappingMatchTextPlaceholder}
+              autoFocus
+            />
+          </div>
+          <div className="form-group">
+            <label>{t.apartmentMappingApartment} <span style={{ color: 'red' }}>*</span></label>
+            <input
+              type="text"
+              value={apartmentNumber}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setApartmentNumber(e.target.value); if (error) setError(null); }}
+              placeholder={t.apartmentMappingApartmentPlaceholder}
+            />
+          </div>
+          <div className="form-group">
+            <label>{t.apartmentMappingNote}</label>
+            <input
+              type="text"
+              value={note}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)}
+              placeholder={t.apartmentMappingNotePlaceholder}
+            />
+          </div>
+          {error && (
+            <div style={{ fontSize: '12px', color: 'var(--danger)', marginBottom: '8px' }}>{error}</div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="button button-secondary" onClick={onCancel} disabled={isSaving}>
+            {t.cancel}
+          </button>
+          <button
+            className="button button-success"
+            onClick={handleSubmit}
+            disabled={isSaving || !matchText.trim() || !apartmentNumber.trim()}
+          >
+            {editing ? t.update : t.add}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface ApartmentMappingsModalProps {
+  adres: Adres;
+  language: Language;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+/**
+ * Per-address modal listing all apartment-number rules. Adding/editing a rule
+ * happens in a separate ApartmentMappingFormModal so the list stays readable.
+ * Saves through updateAdres (re-sending the address's other fields).
+ */
+const ApartmentMappingsModal: React.FC<ApartmentMappingsModalProps> = ({
+  adres,
+  language,
+  onClose,
+  onSaved,
+}) => {
+  const t = translations[language];
+  const [mappings, setMappings] = useState<ApartmentMapping[]>(adres.apartmentMappings || []);
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  // null = closed; { editing: null } = add; { editing: <m> } = edit.
+  const [formState, setFormState] = useState<{ editing: ApartmentMapping | null } | null>(null);
+
+  const persist = async (next: ApartmentMapping[]) => {
+    setIsSaving(true);
+    setError(null);
+    try {
+      await window.electronAPI.updateAdres(
+        adres.id,
+        adres.nazwa,
+        adres.alternativeNames || [],
+        adres.swrkIdentifiers || [],
+        adres.bankId ?? null,
+        adres.accountNumbers || [],
+        next,
+      );
+      setMappings(next);
+      onSaved();
+      return true;
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Unknown error');
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleFormSubmit = async (entry: ApartmentMapping) => {
+    const exists = mappings.some(m => m.id === entry.id);
+    const next = exists
+      ? mappings.map(m => (m.id === entry.id ? entry : m))
+      : [...mappings, entry];
+    const ok = await persist(next);
+    if (ok) setFormState(null);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm(t.confirmDeleteAdres)) return;
+    await persist(mappings.filter(m => m.id !== id));
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
+        <div className="modal-header">
+          {t.apartmentMappingsTitle} — {adres.nazwa}
+        </div>
+        <div className="modal-body">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '12px' }}>
+            <div style={{ fontSize: '12px', opacity: 0.7 }}>
+              {t.apartmentMappingsHint}
+            </div>
+            <button
+              className="button button-primary"
+              onClick={() => setFormState({ editing: null })}
+              disabled={isSaving}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              + {t.addApartmentMapping}
+            </button>
+          </div>
+
+          {error && (
+            <div style={{ fontSize: '12px', color: 'var(--danger)', marginBottom: '8px' }}>{error}</div>
+          )}
+
+          {mappings.length > 0 ? (
+            <table>
+              <thead>
+                <tr>
+                  <th>{t.apartmentMappingMatchText}</th>
+                  <th>{t.apartmentMappingApartment}</th>
+                  <th>{t.apartmentMappingNote}</th>
+                  <th>{t.actions}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mappings.map((m) => (
+                  <tr key={m.id}>
+                    <td style={{ wordBreak: 'break-word' }}>{m.matchText}</td>
+                    <td style={{ fontWeight: 600 }}>{m.apartmentNumber}</td>
+                    <td style={{ wordBreak: 'break-word', opacity: 0.8 }}>{m.note || '—'}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          className="button button-small button-primary"
+                          onClick={() => setFormState({ editing: m })}
+                          disabled={isSaving}
+                        >
+                          {t.edit}
+                        </button>
+                        <button
+                          className="button button-small button-danger"
+                          onClick={() => handleDelete(m.id)}
+                          disabled={isSaving}
+                        >
+                          {t.delete}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="empty-state">{t.noApartmentMappings}</div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="button button-secondary" onClick={onClose}>
+            {t.cancel}
+          </button>
+        </div>
+      </div>
+
+      {formState && (
+        <ApartmentMappingFormModal
+          language={language}
+          editing={formState.editing}
+          existing={mappings}
+          isSaving={isSaving}
+          onSubmit={handleFormSubmit}
+          onCancel={() => setFormState(null)}
+        />
+      )}
+    </div>
+  );
+};
 
 interface AdresyProps {
   language: Language;
@@ -28,6 +291,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
   const [isLoading, setIsLoading] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [mappingsAdres, setMappingsAdres] = useState<Adres | null>(null);
 
   // Honor incoming prefill from the Converter: open the "add" modal with the
   // detected account pre-loaded so the user only needs to type the nazwa.
@@ -563,6 +827,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                   <th>{t.adresBank}</th>
                   <th>{t.swrkIdentifiers}</th>
                   <th>{t.accountNumbers}</th>
+                  <th>{t.apartmentMappings}</th>
                   <th>{t.actions}</th>
                 </tr>
               </thead>
@@ -593,6 +858,15 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                         : '—'}
                     </td>
                     <td>
+                      <button
+                        className="button button-small button-secondary"
+                        onClick={() => setMappingsAdres(adres)}
+                        title={t.apartmentMappingsTitle}
+                      >
+                        {t.apartmentMappings} ({adres.apartmentMappings?.length ?? 0})
+                      </button>
+                    </td>
+                    <td>
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <button
                           className="button button-small button-primary"
@@ -617,6 +891,15 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
           <div className="empty-state">{t.noAdresyConfigured}</div>
         )}
       </div>
+
+      {mappingsAdres && (
+        <ApartmentMappingsModal
+          adres={mappingsAdres}
+          language={language}
+          onClose={() => setMappingsAdres(null)}
+          onSaved={loadData}
+        />
+      )}
     </div>
   );
 };

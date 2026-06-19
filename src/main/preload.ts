@@ -104,6 +104,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     swrkIdentifiers?: string[],
     bankId?: number | null,
     accountNumbers?: string[],
+    apartmentMappings?: import('../shared/types').ApartmentMapping[],
   ) =>
     ipcRenderer.invoke(
       IPC_CHANNELS.ADD_ADRES,
@@ -112,6 +113,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       swrkIdentifiers,
       bankId,
       accountNumbers,
+      apartmentMappings,
     ),
   updateAdres: (
     id: number,
@@ -120,6 +122,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     swrkIdentifiers?: string[],
     bankId?: number | null,
     accountNumbers?: string[],
+    apartmentMappings?: import('../shared/types').ApartmentMapping[],
   ) =>
     ipcRenderer.invoke(
       IPC_CHANNELS.UPDATE_ADRES,
@@ -129,6 +132,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       swrkIdentifiers,
       bankId,
       accountNumbers,
+      apartmentMappings,
     ),
   deleteAdres: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ADRES, id),
   deleteAllAdresy: () => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ALL_ADRESY),

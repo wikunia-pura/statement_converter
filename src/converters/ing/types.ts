@@ -96,6 +96,8 @@ export interface ExtractedData {
   extractionMethod: 'regex' | 'ai' | 'hybrid' | 'cache' | 'manual';
   reasoning?: string;
   warnings: string[];
+  /** True when the apartment number came from a user-defined ApartmentMapping rule. */
+  matchedByManualMapping?: boolean;
 
   // Raw data for review
   rawData: {

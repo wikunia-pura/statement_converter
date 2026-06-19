@@ -21,6 +21,24 @@ export interface Kontrahent {
   createdAt: string;
 }
 
+/**
+ * A user-defined rule that maps a "weird" recurring payment to an apartment
+ * number under a specific address. Used for payers whose transfers the matcher
+ * can't otherwise resolve (e.g. a tenant paying from a foreign account with a
+ * different description every month). The `matchText` is compared as a
+ * case-insensitive, Polish-diacritic-normalized substring against the combined
+ * transaction text (counterparty name + description + counterparty address).
+ */
+export interface ApartmentMapping {
+  /** Local identifier for React keys and edit/delete in the UI. */
+  id: string;
+  /** Phrase to look for in the transaction text (substring, normalized). */
+  matchText: string;
+  apartmentNumber: string;
+  /** Optional human-readable note. */
+  note?: string;
+}
+
 export interface Adres {
   id: number;
   nazwa: string;
@@ -32,6 +50,8 @@ export interface Adres {
   accountNumbers?: string[];
   /** Optional link to a Bank. When set, the converter only shows this address for files whose bank matches; null/undefined ⇒ address is available for all banks. */
   bankId?: number | null;
+  /** User-defined rules mapping recurring "weird" payments to apartment numbers. */
+  apartmentMappings?: ApartmentMapping[];
   createdAt: string;
 }
 
@@ -86,6 +106,8 @@ export interface TransactionForReview {
     tenantName: string | null;
     confidence: number;
     reasoning?: string;
+    /** True when the apartment number came from a user-defined ApartmentMapping rule. */
+    matchedByManualMapping?: boolean;
   };
   // For expenses
   matchedContractor?: {
@@ -96,9 +118,16 @@ export interface TransactionForReview {
   };
 }
 
+/**
+ * Special "do wyjaśnienia" (clarification) account. Records assigned here are
+ * actually booked to this account in both the preview and accounting files,
+ * instead of being left unrecognized.
+ */
+export const CLARIFICATION_ACCOUNT = '235-1';
+
 export interface ReviewDecision {
   index: number; // Matches TransactionForReview.index
-  action: 'accept' | 'reject' | 'manual';
+  action: 'accept' | 'reject' | 'manual' | 'clarify';
   manualApartmentNumber?: string; // Used when action is 'manual' for income
   manualContractorId?: number; // Used when action is 'manual' for expense
   manualRemainingIncomeId?: number; // Used when action is 'manual' for income - "Pozostałe przychody" entry

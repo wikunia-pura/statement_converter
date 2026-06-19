@@ -1,6 +1,6 @@
 // Type definitions for Electron API exposed via preload
 
-import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ConversionReviewData, ReviewDecision, KontrahentTyp } from '../shared/types';
+import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, KontrahentTyp } from '../shared/types';
 
 // Zaliczki shared types (referenced by the main-process helpers)
 export type ZaliczkiCategory =
@@ -132,6 +132,7 @@ interface ElectronAPI {
     swrkIdentifiers?: string[],
     bankId?: number | null,
     accountNumbers?: string[],
+    apartmentMappings?: ApartmentMapping[],
   ) => Promise<Adres>;
   updateAdres: (
     id: number,
@@ -140,6 +141,7 @@ interface ElectronAPI {
     swrkIdentifiers?: string[],
     bankId?: number | null,
     accountNumbers?: string[],
+    apartmentMappings?: ApartmentMapping[],
   ) => Promise<boolean>;
   deleteAdres: (id: number) => Promise<boolean>;
   deleteAllAdresy: () => Promise<boolean>;

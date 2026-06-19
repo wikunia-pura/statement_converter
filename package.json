@@ -1,6 +1,6 @@
 {
   "name": "statement-converter",
-  "version": "4.8.0",
+  "version": "4.9.0",
   "description": "Bank statement converter for housing communities",
   "main": "dist/main/main/main.js",
   "scripts": {
@@ -43,8 +43,14 @@
     },
     "mac": {
       "target": [
-        { "target": "dmg", "arch": "arm64" },
-        { "target": "zip", "arch": "arm64" }
+        {
+          "target": "dmg",
+          "arch": "arm64"
+        },
+        {
+          "target": "zip",
+          "arch": "arm64"
+        }
       ],
       "icon": "resources/icon.icns",
       "category": "public.app-category.finance",
@@ -56,11 +62,29 @@
     },
     "dmg": {
       "contents": [
-        { "x": 130, "y": 220, "type": "file" },
-        { "x": 410, "y": 220, "type": "link", "path": "/Applications" },
-        { "x": 270, "y": 360, "type": "file", "path": "build/Zainstaluj.command", "name": "Zainstaluj.command" }
+        {
+          "x": 130,
+          "y": 220,
+          "type": "file"
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        },
+        {
+          "x": 270,
+          "y": 360,
+          "type": "file",
+          "path": "build/Zainstaluj.command",
+          "name": "Zainstaluj.command"
+        }
       ],
-      "window": { "width": 540, "height": 460 }
+      "window": {
+        "width": 540,
+        "height": 460
+      }
     },
     "publish": {
       "provider": "github",

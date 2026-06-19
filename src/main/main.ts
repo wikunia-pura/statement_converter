@@ -601,8 +601,9 @@ function setupIpcHandlers() {
       swrkIdentifiers?: string[],
       bankId?: number | null,
       accountNumbers?: string[],
+      apartmentMappings?: import('../shared/types').ApartmentMapping[],
     ) => {
-      return await database.addAdres(nazwa, alternativeNames, swrkIdentifiers, bankId, accountNumbers);
+      return await database.addAdres(nazwa, alternativeNames, swrkIdentifiers, bankId, accountNumbers, apartmentMappings);
     },
   );
 
@@ -616,8 +617,9 @@ function setupIpcHandlers() {
       swrkIdentifiers?: string[],
       bankId?: number | null,
       accountNumbers?: string[],
+      apartmentMappings?: import('../shared/types').ApartmentMapping[],
     ) => {
-      await database.updateAdres(id, nazwa, alternativeNames, swrkIdentifiers, bankId, accountNumbers);
+      await database.updateAdres(id, nazwa, alternativeNames, swrkIdentifiers, bankId, accountNumbers, apartmentMappings);
       return true;
     },
   );

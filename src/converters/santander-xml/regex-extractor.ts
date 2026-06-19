@@ -46,6 +46,7 @@ export class RegexExtractor {
       confidence: result.confidence,
       extractionMethod: 'regex',
       warnings: result.warnings,
+      matchedByManualMapping: result.matchedByManualMapping,
       rawData: { descBase, descOpt },
     };
   }

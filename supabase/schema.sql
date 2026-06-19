@@ -40,6 +40,8 @@ alter table public.adresy
   add column if not exists bank_id bigint references public.banks(id) on delete set null;
 alter table public.adresy
   add column if not exists account_numbers text[] not null default '{}';
+alter table public.adresy
+  add column if not exists apartment_mappings jsonb not null default '[]'::jsonb;
 
 create table if not exists public.history (
   id              bigserial primary key,

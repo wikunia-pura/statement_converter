@@ -1,9 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ConversionReviewData, ReviewDecision, TransactionForReview, Kontrahent } from '../../shared/types';
+import { ConversionReviewData, ReviewDecision, TransactionForReview, Kontrahent, ApartmentMapping } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { searchTransactionInPdf, PdfSearchMatch } from '../../shared/pdf-search';
 import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
 import Icon from './Icon';
+
+// Normalize like AddressMatcher (lowercase + strip Polish diacritics) so we can
+// find which apartment-mapping rule produced a match in the acceptance view.
+const normalizeForMapping = (s: string): string =>
+  s
+    .toLowerCase()
+    .replace(/[ąĄ]/g, 'a').replace(/[ćĆ]/g, 'c').replace(/[ęĘ]/g, 'e')
+    .replace(/[łŁ]/g, 'l').replace(/[ńŃ]/g, 'n').replace(/[óÓ]/g, 'o')
+    .replace(/[śŚ]/g, 's').replace(/[źŹżŻ]/g, 'z');
 
 // SearchableContractorSelect component
 interface SearchableContractorSelectProps {
@@ -393,13 +402,20 @@ interface TransactionCardProps {
   kontrahenci: Kontrahent[];
   remainingIncomeEntries: Kontrahent[];
   remainingCostEntries: Kontrahent[];
-  handleDecision: (index: number, action: 'accept' | 'reject') => void;
+  handleDecision: (index: number, action: 'accept' | 'reject' | 'clarify') => void;
   handleManualInput: (index: number, value: string) => void;
   handleManualContractorSelect: (index: number, contractorId: number | null) => void;
   handleManualRemainingIncomeSelect: (index: number, entryId: number | null) => void;
   handleManualRemainingCostSelect: (index: number, entryId: number | null) => void;
   language: Language;
   pdfLines?: string[];
+  /** Address id the current acceptance concerns; null disables saving a rule. */
+  adresId: number | null;
+  /** Current apartment-mapping rules of that address (for detecting existing matches). */
+  addressMappings: ApartmentMapping[];
+  /** Persist an apartment-mapping rule under the current address and mark the
+   *  given transaction as matched by it. Pass editId to update an existing rule. */
+  onSaveApartmentMapping: (index: number, matchText: string, apartmentNumber: string, editId?: string) => Promise<void>;
 }
 
 const TransactionCard: React.FC<TransactionCardProps> = ({
@@ -420,12 +436,67 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
   handleManualRemainingCostSelect,
   language,
   pdfLines,
+  adresId,
+  addressMappings,
+  onSaveApartmentMapping,
 }) => {
   const [pdfResult, setPdfResult] = useState<PdfSearchMatch | null>(null);
   const [pdfSearching, setPdfSearching] = useState(false);
   const [pdfVisible, setPdfVisible] = useState(false);
   const [pdfSearchField, setPdfSearchField] = useState('');
   const [pdfHighlightTokens, setPdfHighlightTokens] = useState<string[]>([]);
+
+  // Apartment-mapping rule form (income only)
+  const [ruleFormOpen, setRuleFormOpen] = useState(false);
+  const [ruleMatchText, setRuleMatchText] = useState('');
+  const [ruleApartment, setRuleApartment] = useState('');
+  const [ruleSaving, setRuleSaving] = useState(false);
+  const [ruleSaved, setRuleSaved] = useState(false);
+  const [ruleError, setRuleError] = useState<string | null>(null);
+
+  const t = translations[language];
+
+  // The rule (if any) that this transaction already matches — used to switch the
+  // "link apartment" button into edit mode instead of adding a duplicate.
+  const existingRule = React.useMemo<ApartmentMapping | null>(() => {
+    if (trn.transactionType !== 'income') return null;
+    if (!trn.extracted.matchedByManualMapping) return null;
+    const hay = normalizeForMapping(`${trn.original.description} ${trn.original.counterparty}`);
+    return addressMappings.find(m => hay.includes(normalizeForMapping(m.matchText.trim()))) || null;
+  }, [addressMappings, trn]);
+
+  const openRuleForm = () => {
+    if (existingRule) {
+      setRuleMatchText(existingRule.matchText);
+      setRuleApartment(existingRule.apartmentNumber);
+    } else {
+      setRuleMatchText(trn.original.counterparty || '');
+      setRuleApartment((manualInput && manualInput.trim()) || trn.extracted.apartmentNumber || '');
+    }
+    setRuleError(null);
+    setRuleSaved(false);
+    setRuleFormOpen(true);
+  };
+
+  const submitRule = async () => {
+    const mt = ruleMatchText.trim();
+    const apt = ruleApartment.trim();
+    if (!mt || !apt) {
+      setRuleError(t.fillAllFields);
+      return;
+    }
+    setRuleSaving(true);
+    setRuleError(null);
+    try {
+      await onSaveApartmentMapping(trn.index, mt, apt, existingRule?.id);
+      setRuleSaved(true);
+      setRuleFormOpen(false);
+    } catch (e: unknown) {
+      setRuleError(e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setRuleSaving(false);
+    }
+  };
 
   const handlePdfLookup = (field: 'opis' | 'kontrahent') => {
     if (!pdfLines || pdfLines.length === 0) return;
@@ -600,6 +671,22 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
       <div style={{ marginBottom: '15px' }}>
         <h4 style={{ margin: '0 0 10px 0', color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <Icon name="search" size={16} /> {language === 'pl' ? 'Wyekstrahowane dane' : 'Extracted data'}:
+          {trn.extracted.matchedByManualMapping && (
+            <span style={{
+              fontSize: '11px',
+              fontWeight: 600,
+              color: 'var(--accent)',
+              backgroundColor: 'var(--accent-subtle)',
+              border: '1px solid var(--accent)',
+              borderRadius: '10px',
+              padding: '2px 8px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}>
+              <Icon name="check-circle" size={11} /> {t.matchedByMapping}
+            </span>
+          )}
         </h4>
         <div style={{ fontSize: '14px', lineHeight: '1.6', color: 'var(--text-secondary)' }}>
           <div>{language === 'pl' ? 'Adres' : 'Address'}: {trn.extracted.fullAddress || (language === 'pl' ? 'NIE ZNALEZIONO' : 'NOT FOUND')}</div>
@@ -767,6 +854,29 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
             >
               <Icon name="x" size={14} /> Oznacz jako nierozpoznane
             </button>
+            <button
+              onClick={() => handleDecision(trn.index, 'clarify')}
+              disabled={hasManualOverride}
+              className={`button button-warning${currentDecision?.action === 'clarify' ? ' is-selected' : ''}`}
+              title="Przypisz do specjalnego konta wyjaśnień 235-1"
+            >
+              <Icon name="info" size={14} /> Do wyjaśnienia (235-1)
+            </button>
+            {trn.transactionType === 'income' && (
+              <button
+                onClick={() => (ruleFormOpen ? setRuleFormOpen(false) : openRuleForm())}
+                disabled={adresId == null}
+                className="button"
+                style={{
+                  backgroundColor: 'var(--info)',
+                  color: '#fff',
+                  opacity: adresId == null ? 0.5 : 1,
+                }}
+                title={adresId == null ? t.apartmentMappingNeedsAddress : (existingRule ? t.editApartmentLink : t.saveApartmentMappingRule)}
+              >
+                <Icon name={existingRule ? 'edit' : 'map-pin'} size={14} /> {existingRule ? t.editApartmentLink : t.linkApartment}
+              </button>
+            )}
           </div>
 
           {hasManualOverride && (
@@ -801,6 +911,69 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
                   disabled={!!(manualInput && manualInput.trim().length > 0)}
                 />
               </div>
+            </div>
+          )}
+
+          {/* Save apartment-mapping rule (only for income) — remembers this payer
+              for future statements under the address this acceptance concerns. */}
+          {trn.transactionType === 'income' && ruleFormOpen && (
+            <div style={{ marginTop: 'var(--s-3)' }}>
+              <div style={{
+                border: '1px solid var(--info)',
+                borderRadius: '6px',
+                padding: '12px',
+                backgroundColor: 'var(--info-bg)',
+              }}>
+                <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '8px' }}>
+                  {t.apartmentMappingsHint}
+                </div>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <div className="review-card__manual-field" style={{ flex: 2, minWidth: 240 }}>
+                    <label className="review-card__manual-label">{t.apartmentMappingMatchText}</label>
+                    <input
+                      type="text"
+                      value={ruleMatchText}
+                      onChange={(e) => { setRuleMatchText((e.target as HTMLInputElement).value); if (ruleError) setRuleError(null); }}
+                      placeholder={t.apartmentMappingMatchTextPlaceholder}
+                    />
+                  </div>
+                  <div className="review-card__manual-field" style={{ maxWidth: 140 }}>
+                    <label className="review-card__manual-label">{t.apartmentMappingApartment}</label>
+                    <input
+                      type="text"
+                      value={ruleApartment}
+                      onChange={(e) => { setRuleApartment((e.target as HTMLInputElement).value); if (ruleError) setRuleError(null); }}
+                      placeholder={t.apartmentMappingApartmentPlaceholder}
+                    />
+                  </div>
+                </div>
+                {ruleError && (
+                  <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '8px' }}>{ruleError}</div>
+                )}
+                <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                  <button
+                    type="button"
+                    className="button button-small button-success"
+                    onClick={submitRule}
+                    disabled={ruleSaving || !ruleMatchText.trim() || !ruleApartment.trim()}
+                  >
+                    <Icon name="check" size={14} /> {ruleSaving ? '...' : (existingRule ? t.update : t.saveApartmentMappingRule)}
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-small button-secondary"
+                    onClick={() => setRuleFormOpen(false)}
+                    disabled={ruleSaving}
+                  >
+                    {t.cancel}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          {trn.transactionType === 'income' && ruleSaved && !ruleFormOpen && (
+            <div style={{ marginTop: 'var(--s-3)', fontSize: '12px', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Icon name="check-circle" size={14} /> {t.apartmentMappingSaved}
             </div>
           )}
 
@@ -839,8 +1012,9 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
           {/* Current Decision Status */}
           {currentDecision && (() => {
             const isReject = currentDecision.action === 'reject';
-            const bg = isReject ? 'var(--danger-bg)' : 'var(--success-bg)';
-            const fg = isReject ? 'var(--danger)' : 'var(--success)';
+            const isClarify = currentDecision.action === 'clarify';
+            const bg = isReject ? 'var(--danger-bg)' : isClarify ? 'var(--warning-bg)' : 'var(--success-bg)';
+            const fg = isReject ? 'var(--danger)' : isClarify ? 'var(--warning)' : 'var(--success)';
 
             let iconName: React.ComponentProps<typeof Icon>['name'] = 'check-circle';
             let label: string = 'Zaakceptowano wyekstrahowane dane';
@@ -848,6 +1022,9 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
             if (currentDecision.action === 'reject') {
               iconName = 'x-circle';
               label = 'Oznaczono jako NIEROZPOZNANE';
+            } else if (currentDecision.action === 'clarify') {
+              iconName = 'info';
+              label = 'Przypisano do konta wyjaśnień 235-1';
             } else if (currentDecision.action === 'manual') {
               iconName = 'edit';
               if (trn.transactionType === 'income' && currentDecision.manualRemainingIncomeId) {
@@ -913,6 +1090,9 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   const [kontrahenci, setKontrahenci] = useState<Kontrahent[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'income' | 'expense' | 'undecided'>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [addressMappings, setAddressMappings] = useState<ApartmentMapping[]>([]);
 
   // Filter kontrahenci by type
   const contractorEntries = kontrahenci.filter(k => (k.typ || 'Kontrahent') === 'Kontrahent');
@@ -928,8 +1108,48 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
     loadKontrahenci();
   }, []);
 
-  // Filter transactions based on selected filter
+  // Load the current apartment-mapping rules of the address this acceptance
+  // concerns, so matched income rows can offer "edit rule" instead of "add".
+  useEffect(() => {
+    if (reviewData.adresId == null) {
+      setAddressMappings([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const adresy = await window.electronAPI.getAdresy();
+      const adres = adresy.find(a => a.id === reviewData.adresId);
+      if (!cancelled) setAddressMappings(adres?.apartmentMappings || []);
+    })();
+    return () => { cancelled = true; };
+  }, [reviewData.adresId]);
+
+  // Free-text search across every field of a transaction.
+  const matchesSearch = (trn: TransactionForReview): boolean => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return true;
+    const haystack = [
+      trn.original.date,
+      String(trn.original.amount),
+      trn.original.description,
+      trn.original.counterparty,
+      trn.extracted.apartmentNumber,
+      trn.extracted.fullAddress,
+      trn.extracted.streetName,
+      trn.extracted.buildingNumber,
+      trn.extracted.tenantName,
+      trn.matchedContractor?.contractorName,
+      trn.matchedContractor?.contractorAccount,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return haystack.includes(q);
+  };
+
+  // Filter transactions based on selected filter + search term
   const filteredTransactions = reviewData.transactions.filter(trn => {
+    if (!matchesSearch(trn)) return false;
     if (filter === 'all') return true;
     if (filter === 'undecided') return !decisions.has(trn.index);
     return trn.transactionType === filter;
@@ -944,7 +1164,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   const totalExpense = reviewData.transactions.filter(trn => trn.transactionType === 'expense').length;
   const totalUndecided = reviewData.transactions.filter(trn => !decisions.has(trn.index)).length;
 
-  const handleDecision = (index: number, action: 'accept' | 'reject') => {
+  const handleDecision = (index: number, action: 'accept' | 'reject' | 'clarify') => {
     const newDecisions = new Map(decisions);
     newDecisions.set(index, { index, action });
     setDecisions(newDecisions);
@@ -1058,6 +1278,66 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
     
     setManualRemainingCostIds(newIds);
     setDecisions(newDecisions);
+  };
+
+  // Save a new apartment-mapping rule under the address this acceptance concerns.
+  // The rule is auto-attached to reviewData.adresId (no address picker needed).
+  // Afterwards the current transaction is treated as a confirmed match (same as
+  // on subsequent runs): apartment filled in, flagged, and accepted.
+  const handleSaveApartmentMapping = async (index: number, matchText: string, apartmentNumber: string, editId?: string) => {
+    if (reviewData.adresId == null) throw new Error(t.apartmentMappingNeedsAddress);
+    const adresy = await window.electronAPI.getAdresy();
+    const adres = adresy.find(a => a.id === reviewData.adresId);
+    if (!adres) throw new Error('Address not found');
+    const current = adres.apartmentMappings || [];
+    // Block duplicate phrase (case-insensitive) against *other* rules.
+    const normalized = matchText.trim().toLowerCase();
+    if (current.some(m => m.id !== editId && m.matchText.trim().toLowerCase() === normalized)) {
+      throw new Error(t.apartmentMappingDuplicate);
+    }
+    let nextMappings;
+    if (editId) {
+      // Edit the existing rule in place.
+      nextMappings = current.map(m =>
+        m.id === editId ? { ...m, matchText, apartmentNumber } : m,
+      );
+    } else {
+      const newMapping = {
+        id: (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+          ? crypto.randomUUID()
+          : `m-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        matchText,
+        apartmentNumber,
+      };
+      nextMappings = [...current, newMapping];
+    }
+    await window.electronAPI.updateAdres(
+      adres.id,
+      adres.nazwa,
+      adres.alternativeNames || [],
+      adres.swrkIdentifiers || [],
+      adres.bankId ?? null,
+      adres.accountNumbers || [],
+      nextMappings,
+    );
+    setAddressMappings(nextMappings);
+
+    // Reflect the rule immediately in this view: the transaction now counts as a
+    // match (apartment filled, flagged), just like it would on the next run.
+    const trn = reviewData.transactions.find(t => t.index === index);
+    if (trn) {
+      trn.extracted.apartmentNumber = apartmentNumber;
+      trn.extracted.matchedByManualMapping = true;
+      trn.extracted.confidence = 95;
+    }
+    // Clear any manual override for this transaction, then accept it.
+    setManualInputs(prev => { const m = new Map(prev); m.delete(index); return m; });
+    setManualRemainingIncomeIds(prev => { const m = new Map(prev); m.delete(index); return m; });
+    setDecisions(prev => {
+      const m = new Map(prev);
+      m.set(index, { index, action: 'accept' });
+      return m;
+    });
   };
 
   const handleFinalizeAndNext = async () => {
@@ -1211,6 +1491,74 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
         </p>
       </div>
 
+      {/* Search bar — full width, highlighted */}
+      <div style={{
+        padding: '12px 20px',
+        borderBottom: '1px solid var(--border-default)',
+        backgroundColor: 'var(--bg-surface)',
+        flexShrink: 0,
+      }}>
+        <div style={{
+          position: 'relative',
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          backgroundColor: 'var(--bg-surface-sunken)',
+          border: `2px solid ${searchFocused ? 'var(--accent)' : 'var(--border-default)'}`,
+          borderRadius: '10px',
+          boxShadow: searchFocused ? '0 0 0 3px var(--accent-subtle)' : 'none',
+          transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+        }}>
+          <span style={{ paddingLeft: '14px', color: searchFocused ? 'var(--accent)' : 'var(--text-tertiary)', display: 'inline-flex', transition: 'color 0.15s ease' }}>
+            <Icon name="search" size={18} />
+          </span>
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm((e.target as HTMLInputElement).value)}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
+            placeholder={t.searchReviewPlaceholder}
+            style={{
+              flex: 1,
+              padding: '11px 12px',
+              border: 'none',
+              outline: 'none',
+              background: 'transparent',
+              color: 'var(--text-primary)',
+              fontSize: '14px',
+            }}
+          />
+          {searchTerm && (
+            <>
+              <span style={{ color: 'var(--text-tertiary)', fontSize: '12px', whiteSpace: 'nowrap', paddingRight: '8px' }}>
+                {filteredTransactions.length} / {reviewData.transactions.length}
+              </span>
+              <button
+                onClick={() => setSearchTerm('')}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'var(--border-default)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '22px',
+                  height: '22px',
+                  marginRight: '10px',
+                  color: 'var(--text-primary)',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+                title="Wyczyść"
+              >
+                <Icon name="x" size={14} />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
       {/* Transactions list */}
       <div style={{ 
         padding: '20px',
@@ -1257,6 +1605,9 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                   handleManualRemainingCostSelect={handleManualRemainingCostSelect}
                   language={language}
                   pdfLines={reviewData.pdfLines}
+                  adresId={reviewData.adresId}
+                  addressMappings={addressMappings}
+                  onSaveApartmentMapping={handleSaveApartmentMapping}
                 />
               );
             })}
@@ -1316,6 +1667,9 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                   handleManualRemainingCostSelect={handleManualRemainingCostSelect}
                   language={language}
                   pdfLines={reviewData.pdfLines}
+                  adresId={reviewData.adresId}
+                  addressMappings={addressMappings}
+                  onSaveApartmentMapping={handleSaveApartmentMapping}
                 />
               );
             })}

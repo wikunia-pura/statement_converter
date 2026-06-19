@@ -1,7 +1,7 @@
 import Store from 'electron-store';
 import path from 'path';
 import { app } from 'electron';
-import { Bank, ConversionHistory, AppSettings, Kontrahent, Adres, KontrahentTyp } from '../shared/types';
+import { Bank, ConversionHistory, AppSettings, Kontrahent, Adres, KontrahentTyp, ApartmentMapping } from '../shared/types';
 import { getSupabase } from './supabaseClient';
 import { normalizeAccount } from '../shared/account-extractor';
 
@@ -23,7 +23,7 @@ const BANK_COLS = 'id, name, converterId:converter_id, accountPrefixes:account_p
 const KONTRAHENT_COLS =
   'id, nazwa, kontoKontrahenta:konto_kontrahenta, nip, typ, alternativeNames:alternative_names, createdAt:created_at';
 const ADRES_COLS =
-  'id, nazwa, alternativeNames:alternative_names, swrkIdentifiers:swrk_identifiers, accountNumbers:account_numbers, bankId:bank_id, createdAt:created_at';
+  'id, nazwa, alternativeNames:alternative_names, swrkIdentifiers:swrk_identifiers, accountNumbers:account_numbers, bankId:bank_id, apartmentMappings:apartment_mappings, createdAt:created_at';
 const HISTORY_COLS =
   'id, fileName:file_name, bankName:bank_name, converterName:converter_name, status, errorMessage:error_message, inputPath:input_path, outputPath:output_path, convertedAt:converted_at';
 
@@ -259,6 +259,7 @@ class DatabaseService {
       swrkIdentifiers: a.swrkIdentifiers ?? [],
       accountNumbers: a.accountNumbers ?? [],
       bankId: a.bankId ?? null,
+      apartmentMappings: a.apartmentMappings ?? [],
     })) as Adres[];
   }
 
@@ -293,12 +294,39 @@ class DatabaseService {
     return canonical;
   }
 
+  /**
+   * Drop blank entries and ensure every mapping has a stable id and trimmed
+   * fields. A mapping needs both matchText and apartmentNumber to be usable.
+   */
+  private sanitizeApartmentMappings(raw: ApartmentMapping[] | undefined): ApartmentMapping[] {
+    if (!raw || raw.length === 0) return [];
+    const out: ApartmentMapping[] = [];
+    const seen = new Set<string>();
+    for (const m of raw) {
+      const matchText = (m.matchText ?? '').trim();
+      const apartmentNumber = (m.apartmentNumber ?? '').trim();
+      if (!matchText || !apartmentNumber) continue;
+      // Guard against duplicate phrases (case-insensitive) within one address.
+      const key = matchText.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        id: m.id || `${Date.now()}-${out.length}`,
+        matchText,
+        apartmentNumber,
+        ...(m.note && m.note.trim() ? { note: m.note.trim() } : {}),
+      });
+    }
+    return out;
+  }
+
   async addAdres(
     nazwa: string,
     alternativeNames?: string[],
     swrkIdentifiers?: string[],
     bankId?: number | null,
     accountNumbers?: string[],
+    apartmentMappings?: ApartmentMapping[],
   ): Promise<Adres> {
     const accounts = await this.sanitizeAccountNumbers(accountNumbers);
     const { data, error } = await getSupabase()
@@ -309,6 +337,7 @@ class DatabaseService {
         swrk_identifiers: swrkIdentifiers ?? [],
         account_numbers: accounts,
         bank_id: bankId ?? null,
+        apartment_mappings: this.sanitizeApartmentMappings(apartmentMappings),
       })
       .select(ADRES_COLS)
       .single();
@@ -322,6 +351,7 @@ class DatabaseService {
     swrkIdentifiers?: string[],
     bankId?: number | null,
     accountNumbers?: string[],
+    apartmentMappings?: ApartmentMapping[],
   ): Promise<void> {
     const patch: Record<string, unknown> = { nazwa };
     if (alternativeNames !== undefined) patch.alternative_names = alternativeNames;
@@ -329,6 +359,9 @@ class DatabaseService {
     if (bankId !== undefined) patch.bank_id = bankId;
     if (accountNumbers !== undefined) {
       patch.account_numbers = await this.sanitizeAccountNumbers(accountNumbers, id);
+    }
+    if (apartmentMappings !== undefined) {
+      patch.apartment_mappings = this.sanitizeApartmentMappings(apartmentMappings);
     }
     const { error } = await getSupabase().from('adresy').update(patch).eq('id', id);
     if (error) throw new Error(`updateAdres: ${error.message}`);
@@ -364,6 +397,7 @@ class DatabaseService {
         .map(normalizeAccount)
         .filter((x): x is string => !!x),
       bank_id: a.bankId ?? null,
+      apartment_mappings: this.sanitizeApartmentMappings(a.apartmentMappings),
     }));
     const { error } = await getSupabase().from('adresy').insert(payload);
     if (error) throw new Error(`importAdresy: ${error.message}`);

@@ -90,6 +90,8 @@ export interface BaseExtractedData {
   reasoning?: string;
   warnings: string[];
   rawData: Record<string, any>;
+  /** True when the apartment number came from a user-defined ApartmentMapping rule. */
+  matchedByManualMapping?: boolean;
 }
 
 /**

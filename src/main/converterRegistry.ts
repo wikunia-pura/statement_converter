@@ -65,6 +65,31 @@ function saveToImpexFolder(accountingFilePath: string, csvOutput: string): void 
   }
 }
 
+/**
+ * Build the destination path for a generated file inside a dedicated subfolder
+ * of the configured output folder. The subfolder (e.g. "podglad" / "accounting")
+ * is created if it doesn't exist yet. The original extension is stripped and
+ * replaced with the given suffix.
+ */
+function buildSubfolderPath(outputPath: string, subfolder: string, suffix: string): string {
+  const targetDir = path.join(path.dirname(outputPath), subfolder);
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
+  }
+  const fileName = path.basename(outputPath).replace(/\.[^.]+$/, '') + suffix;
+  return path.join(targetDir, fileName);
+}
+
+/** Destination path for the preview (podglad) file, inside the "podglad" subfolder. */
+function podgladOutputPath(outputPath: string): string {
+  return buildSubfolderPath(outputPath, 'podglad', '-podglad.txt');
+}
+
+/** Destination path for the accounting file, inside the "accounting" subfolder. */
+function accountingOutputPath(outputPath: string): string {
+  return buildSubfolderPath(outputPath, 'accounting', '-accounting.txt');
+}
+
 interface AIConfig {
   ai: {
     anthropic_api_key: string;
@@ -1041,12 +1066,12 @@ class ConverterRegistry {
 
           // No review needed - save files normally
           // Change output path to -podglad.txt instead of .txt
-          const podgladPath = outputPath.replace(/\.(txt|TXT)$/, '-podglad.txt');
+          const podgladPath = podgladOutputPath(outputPath);
           fs.writeFileSync(podgladPath, output, 'utf8');
 
           // Generate TXT file for accounting system (tab-separated format)
           const csvOutput = converter.exportToCsv(result.processed);
-          const txtPath = outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
+          const txtPath = accountingOutputPath(outputPath);
           writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
           
@@ -1305,12 +1330,12 @@ class ConverterRegistry {
 
           // No review needed - save files normally
           // Change output path to -podglad.txt instead of .txt
-          const podgladPath = outputPath.replace(/\.(txt|TXT)$/, '-podglad.txt');
+          const podgladPath = podgladOutputPath(outputPath);
           fs.writeFileSync(podgladPath, output, 'utf8');
 
           // Generate TXT file for accounting system (tab-separated format)
           const csvOutput = converter.exportToCsv(result.processed);
-          const txtPath = outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
+          const txtPath = accountingOutputPath(outputPath);
           writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
           
@@ -1536,11 +1561,11 @@ class ConverterRegistry {
             return;
           }
 
-          const podgladPath = outputPath.replace(/\.(txt|TXT)$/, '-podglad.txt');
+          const podgladPath = podgladOutputPath(outputPath);
           fs.writeFileSync(podgladPath, output, 'utf8');
 
           const csvOutput = converter.exportToCsv(result.processed);
-          const txtPath = outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
+          const txtPath = accountingOutputPath(outputPath);
           writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
 
@@ -1773,11 +1798,11 @@ class ConverterRegistry {
             return;
           }
 
-          const podgladPath = outputPath.replace(/\.(txt|TXT)$/, '-podglad.txt');
+          const podgladPath = podgladOutputPath(outputPath);
           fs.writeFileSync(podgladPath, output, 'utf8');
 
           const csvOutput = converter.exportToCsv(result.processed);
-          const txtPath = outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
+          const txtPath = accountingOutputPath(outputPath);
           writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
 
@@ -2007,11 +2032,11 @@ class ConverterRegistry {
             return;
           }
 
-          const podgladPath = outputPath.replace(/\.(txt|TXT|zip|ZIP)$/, '-podglad.txt');
+          const podgladPath = podgladOutputPath(outputPath);
           fs.writeFileSync(podgladPath, output, 'utf8');
 
           const csvOutput = converter.exportToCsv(result.processed);
-          const txtPath = outputPath.replace(/\.(txt|TXT|zip|ZIP)$/, '-accounting.txt');
+          const txtPath = accountingOutputPath(outputPath);
           writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
 
@@ -2225,11 +2250,11 @@ class ConverterRegistry {
             return;
           }
 
-          const podgladPath = outputPath.replace(/\.(txt|TXT|exp|EXP)$/, '-podglad.txt');
+          const podgladPath = podgladOutputPath(outputPath);
           fs.writeFileSync(podgladPath, output, 'utf8');
 
           const csvOutput = converter.exportToCsv(result.processed);
-          const txtPath = outputPath.replace(/\.(txt|TXT|exp|EXP)$/, '-accounting.txt');
+          const txtPath = accountingOutputPath(outputPath);
           writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
 
@@ -2459,11 +2484,11 @@ class ConverterRegistry {
             return;
           }
 
-          const podgladPath = outputPath.replace(/\.(txt|TXT)$/, '-podglad.txt');
+          const podgladPath = podgladOutputPath(outputPath);
           fs.writeFileSync(podgladPath, output, 'utf8');
 
           const csvOutput = converter.exportToCsv(result.processed);
-          const txtPath = outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
+          const txtPath = accountingOutputPath(outputPath);
           writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
 
@@ -2685,11 +2710,11 @@ class ConverterRegistry {
             return;
           }
 
-          const podgladPath = outputPath.replace(/\.(txt|TXT)$/, '-podglad.txt');
+          const podgladPath = podgladOutputPath(outputPath);
           fs.writeFileSync(podgladPath, output, 'utf8');
 
           const csvOutput = converter.exportToCsv(result.processed);
-          const txtPath = outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
+          const txtPath = accountingOutputPath(outputPath);
           writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
 
@@ -2803,12 +2828,12 @@ class ConverterRegistry {
       
       // Generate accounting file
       const csvOutput = converter.exportToCsv(updatedTransactions);
-      const txtPath = cached.outputPath.replace(/\.(txt|TXT)$/, '-accounting.txt');
+      const txtPath = accountingOutputPath(cached.outputPath);
       writeFileWin1250(txtPath, csvOutput);
       saveToImpexFolder(txtPath, csvOutput);
-      
+
       // Generate updated preview file with user review information
-      const podgladPath = cached.outputPath.replace(/\.(txt|TXT)$/, '-podglad.txt');
+      const podgladPath = podgladOutputPath(cached.outputPath);
       
       // Start with cached preview and add user review summary
       let newPreviewOutput = cached.previewOutput;

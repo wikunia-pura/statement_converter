@@ -157,6 +157,9 @@ export interface ConversionHistory {
   convertedAt: string;
 }
 
+/** Ordering of the contractor pick-lists in the transaction review screen. */
+export type ContractorSortOrder = 'name-asc' | 'name-desc' | 'account-asc' | 'account-desc';
+
 export interface AppSettings {
   outputFolder: string;
   impexFolder: string;
@@ -166,6 +169,7 @@ export interface AppSettings {
   language: 'pl' | 'en';
   aiConfidenceThreshold: number; // Minimum confidence to skip AI warning (default: 95)
   skipUserApproval: boolean; // Skip transaction review and generate files directly
+  contractorSortOrder: ContractorSortOrder; // Ordering of contractor pick-lists in review (default: name-asc)
 }
 
 // IPC Channel names
@@ -221,6 +225,7 @@ export const IPC_CHANNELS = {
   SET_DARK_MODE: 'settings:set-dark-mode',
   SET_LANGUAGE: 'settings:set-language',
   SET_SKIP_USER_APPROVAL: 'settings:set-skip-user-approval',
+  SET_CONTRACTOR_SORT_ORDER: 'settings:set-contractor-sort-order',
   EXPORT_SETTINGS: 'settings:export',
   IMPORT_SETTINGS: 'settings:import',
   

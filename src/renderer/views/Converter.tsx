@@ -7,6 +7,7 @@ import Icon from '../components/Icon';
 import kapitanBombaImg from '../assets/kapitan_bomba.jpg';
 import BankIllustration from '../components/BankIllustration';
 import { findAdresByAccountNumbers } from '../../shared/account-extractor';
+import { resolveOutputFilePath } from '../../shared/outputPaths';
 import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
 
 interface SearchableAdresSelectProps {
@@ -1004,9 +1005,8 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   const handleOpenFile = async (fileId: string, type: 'preview' | 'accounting') => {
     const file = files.find((f) => f.id === fileId);
     if (file && file.status === 'success' && file.outputPath) {
-      const suffix = type === 'preview' ? '-podglad.txt' : '-accounting.txt';
-      const filePath = file.outputPath.replace(/\.txt$/i, suffix);
-      
+      const filePath = resolveOutputFilePath(file.outputPath, type);
+
       const success = await window.electronAPI.openFile(filePath);
       if (!success) {
         alert(t.fileNotFound);

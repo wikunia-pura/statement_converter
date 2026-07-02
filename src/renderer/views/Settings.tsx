@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Converter } from '../../shared/types';
+import { Converter, ContractorSortOrder } from '../../shared/types';
 import { translations, Language } from '../translations';
 import Icon from '../components/Icon';
 
@@ -17,6 +17,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
   const [impexFolder, setImpexFolder] = useState('');
   const [swrkFolder, setSwrkFolder] = useState('');
   const [skipUserApproval, setSkipUserApproval] = useState(false);
+  const [contractorSortOrder, setContractorSortOrder] = useState<ContractorSortOrder>('name-asc');
   const [isLoading, setIsLoading] = useState(true);
   const [migrationStatus, setMigrationStatus] = useState<{
     hasLocalData: boolean;
@@ -75,6 +76,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
       setImpexFolder(settings.impexFolder || '');
       setSwrkFolder(settings.swrkFolder || '');
       setSkipUserApproval(settings.skipUserApproval ?? false);
+      setContractorSortOrder(settings.contractorSortOrder ?? 'name-asc');
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -146,6 +148,12 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
     onLanguageChange(newLanguage);
   };
 
+  const handleContractorSortOrderChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newOrder = e.target.value as ContractorSortOrder;
+    await window.electronAPI.setContractorSortOrder(newOrder);
+    setContractorSortOrder(newOrder);
+  };
+
   const handleExportSettings = async () => {
     try {
       const result = await window.electronAPI.exportSettings();
@@ -185,6 +193,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
           setImpexFolder(settings.impexFolder || '');
           setSwrkFolder(settings.swrkFolder || '');
           setSkipUserApproval(settings.skipUserApproval ?? false);
+          setContractorSortOrder(settings.contractorSortOrder ?? 'name-asc');
         } else if (result.error) {
           alert(`${t.importError}: ${result.error}`);
         }
@@ -294,6 +303,19 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
             <select value={language} onChange={handleLanguageChange} style={{ minWidth: '150px' }}>
               <option value="pl">{t.polish}</option>
               <option value="en">{t.english}</option>
+            </select>
+          </div>
+
+          <div className="settings-row">
+            <div className="settings-label">
+              <span className="settings-label-main">{t.contractorSortOrder}</span>
+              <span className="settings-label-sub">{t.contractorSortOrderDesc}</span>
+            </div>
+            <select value={contractorSortOrder} onChange={handleContractorSortOrderChange} style={{ minWidth: '180px' }}>
+              <option value="name-asc">{t.sortNameAsc}</option>
+              <option value="name-desc">{t.sortNameDesc}</option>
+              <option value="account-asc">{t.sortAccountAsc}</option>
+              <option value="account-desc">{t.sortAccountDesc}</option>
             </select>
           </div>
         </div>

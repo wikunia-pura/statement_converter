@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ConversionReviewData, ReviewDecision, TransactionForReview, Kontrahent, ApartmentMapping } from '../../shared/types';
+import { ConversionReviewData, ReviewDecision, TransactionForReview, Kontrahent, ApartmentMapping, ContractorSortOrder } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { searchTransactionInPdf, PdfSearchMatch } from '../../shared/pdf-search';
 import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
@@ -13,6 +13,28 @@ const normalizeForMapping = (s: string): string =>
     .replace(/[ąĄ]/g, 'a').replace(/[ćĆ]/g, 'c').replace(/[ęĘ]/g, 'e')
     .replace(/[łŁ]/g, 'l').replace(/[ńŃ]/g, 'n').replace(/[óÓ]/g, 'o')
     .replace(/[śŚ]/g, 's').replace(/[źŹżŻ]/g, 'z');
+
+// Sort a contractor pick-list per the user's preferred order. Names use a
+// Polish-locale compare; account numbers use a numeric-aware compare so
+// "9" < "10". Returns a new array (does not mutate the input).
+const sortKontrahenci = (list: Kontrahent[], order: ContractorSortOrder): Kontrahent[] => {
+  const byName = (a: Kontrahent, b: Kontrahent) =>
+    (a.nazwa || '').localeCompare(b.nazwa || '', 'pl', { sensitivity: 'base' });
+  const byAccount = (a: Kontrahent, b: Kontrahent) =>
+    (a.kontoKontrahenta || '').localeCompare(b.kontoKontrahenta || '', undefined, { numeric: true });
+  const sorted = [...list];
+  switch (order) {
+    case 'name-desc':
+      return sorted.sort((a, b) => byName(b, a));
+    case 'account-asc':
+      return sorted.sort(byAccount);
+    case 'account-desc':
+      return sorted.sort((a, b) => byAccount(b, a));
+    case 'name-asc':
+    default:
+      return sorted.sort(byName);
+  }
+};
 
 // SearchableContractorSelect component
 interface SearchableContractorSelectProps {
@@ -1088,24 +1110,30 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   const [manualRemainingCostIds, setManualRemainingCostIds] = useState<Map<number, number | null>>(new Map());
   
   const [kontrahenci, setKontrahenci] = useState<Kontrahent[]>([]);
+  const [contractorSortOrder, setContractorSortOrder] = useState<ContractorSortOrder>('name-asc');
   const [isProcessing, setIsProcessing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'income' | 'expense' | 'undecided'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [addressMappings, setAddressMappings] = useState<ApartmentMapping[]>([]);
 
-  // Filter kontrahenci by type
-  const contractorEntries = kontrahenci.filter(k => (k.typ || 'Kontrahent') === 'Kontrahent');
-  const remainingIncomeEntries = kontrahenci.filter(k => k.typ === 'Pozostałe przychody');
-  const remainingCostEntries = kontrahenci.filter(k => k.typ === 'Pozostałe koszty');
+  // Filter kontrahenci by type, then order per the user's preference so every
+  // pick-list in the review screen is sorted consistently.
+  const contractorEntries = sortKontrahenci(kontrahenci.filter(k => (k.typ || 'Kontrahent') === 'Kontrahent'), contractorSortOrder);
+  const remainingIncomeEntries = sortKontrahenci(kontrahenci.filter(k => k.typ === 'Pozostałe przychody'), contractorSortOrder);
+  const remainingCostEntries = sortKontrahenci(kontrahenci.filter(k => k.typ === 'Pozostałe koszty'), contractorSortOrder);
 
-  // Load kontrahenci on mount
+  // Load kontrahenci + sort preference on mount
   useEffect(() => {
-    const loadKontrahenci = async () => {
-      const result = await window.electronAPI.getKontrahenci();
+    const loadData = async () => {
+      const [result, settings] = await Promise.all([
+        window.electronAPI.getKontrahenci(),
+        window.electronAPI.getSettings(),
+      ]);
       setKontrahenci(result);
+      setContractorSortOrder(settings.contractorSortOrder ?? 'name-asc');
     };
-    loadKontrahenci();
+    loadData();
   }, []);
 
   // Load the current apartment-mapping rules of the address this acceptance

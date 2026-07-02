@@ -16,6 +16,7 @@ interface SettingsStoreSchema {
     language: 'pl' | 'en';
     aiConfidenceThreshold: number;
     skipUserApproval: boolean;
+    contractorSortOrder: 'name-asc' | 'name-desc' | 'account-asc' | 'account-desc';
   };
 }
 
@@ -70,6 +71,7 @@ class DatabaseService {
           language: 'pl',
           aiConfidenceThreshold: 95,
           skipUserApproval: false,
+          contractorSortOrder: 'name-asc',
         },
       },
     });

@@ -43,6 +43,7 @@ const IPC_CHANNELS = {
   SET_DARK_MODE: 'settings:set-dark-mode',
   SET_LANGUAGE: 'settings:set-language',
   SET_SKIP_USER_APPROVAL: 'settings:set-skip-user-approval',
+  SET_CONTRACTOR_SORT_ORDER: 'settings:set-contractor-sort-order',
   EXPORT_SETTINGS: 'settings:export',
   IMPORT_SETTINGS: 'settings:import',
   GET_HISTORY: 'history:get-all',
@@ -173,6 +174,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.SET_LANGUAGE, language),
   setSkipUserApproval: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_SKIP_USER_APPROVAL, enabled),
+  setContractorSortOrder: (sortOrder: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_CONTRACTOR_SORT_ORDER, sortOrder),
   exportSettings: () => ipcRenderer.invoke(IPC_CHANNELS.EXPORT_SETTINGS),
   importSettings: () => ipcRenderer.invoke(IPC_CHANNELS.IMPORT_SETTINGS),
 

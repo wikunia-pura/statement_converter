@@ -1490,6 +1490,7 @@ function setupIpcHandlers() {
       darkMode: database.getSetting('darkMode') === 'true',
       language: database.getSetting('language') || 'pl',
       skipUserApproval: database.getSetting('skipUserApproval') === 'true',
+      contractorSortOrder: database.getSetting('contractorSortOrder') || 'name-asc',
     };
   });
 
@@ -1520,6 +1521,11 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.SET_SKIP_USER_APPROVAL, async (_, enabled: boolean) => {
     database.setSetting('skipUserApproval', enabled.toString());
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SET_CONTRACTOR_SORT_ORDER, async (_, sortOrder: string) => {
+    database.setSetting('contractorSortOrder', sortOrder);
     return true;
   });
 

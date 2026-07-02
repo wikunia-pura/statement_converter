@@ -4,6 +4,7 @@ import { translations, Language } from '../translations';
 import { formatDate } from '../../shared/utils';
 import Icon from '../components/Icon';
 import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
+import { resolveOutputFilePath } from '../../shared/outputPaths';
 
 interface HistoryProps {
   language: Language;
@@ -70,8 +71,7 @@ const History: React.FC<HistoryProps> = ({ language }) => {
   };
 
   const handleOpenFile = async (outputPath: string, type: 'preview' | 'accounting') => {
-    const suffix = type === 'preview' ? '-podglad.txt' : '-accounting.txt';
-    const filePath = outputPath.replace(/\.txt$/, '') + suffix;
+    const filePath = resolveOutputFilePath(outputPath, type);
     const result = await window.electronAPI.openFile(filePath);
     if (!result) {
       alert(t.fileNotFound);

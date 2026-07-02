@@ -11,6 +11,7 @@ import ScalanieWplat, { ScalanieFileEntry } from './views/ScalanieWplat';
 import Homebanking, { HomebankingFileEntry } from './views/Homebanking';
 import Login from './views/Login';
 import Logo from './components/Logo';
+import SplashScreen from './components/SplashScreen';
 import Footer from './components/Footer';
 import Icon from './components/Icon';
 import UpdateNotification from './components/UpdateNotification';
@@ -71,6 +72,8 @@ const App: React.FC = () => {
   const [appVersion, setAppVersion] = useState<string>('1.0.0');
   const [session, setSession] = useState<{ email: string; userId: string } | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
+  // Funky intro shown once when the app opens; self-dismisses after its animation.
+  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
     loadAppVersion();
@@ -143,19 +146,33 @@ const App: React.FC = () => {
 
   const t = translations[language];
 
+  const splash = showSplash ? (
+    <SplashScreen onDone={() => setShowSplash(false)} />
+  ) : null;
+
   if (!sessionChecked) {
-    return <div className="app" />;
+    return (
+      <>
+        {splash}
+        <div className="app" />
+      </>
+    );
   }
 
   if (!session) {
     return (
-      <div className="app">
-        <Login onSignedIn={handleSignedIn} />
-      </div>
+      <>
+        {splash}
+        <div className="app">
+          <Login onSignedIn={handleSignedIn} />
+        </div>
+      </>
     );
   }
 
   return (
+    <>
+    {splash}
     <div className="app">
       <UpdateNotification language={language} />
       <div className="app-body">
@@ -313,6 +330,7 @@ const App: React.FC = () => {
       </div>
       <Footer language={language} appVersion={appVersion} />
     </div>
+    </>
   );
 };
 

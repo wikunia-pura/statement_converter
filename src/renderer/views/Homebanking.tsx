@@ -353,7 +353,7 @@ const Homebanking: React.FC<Props> = ({ language, files, setFiles }) => {
                 {isProcessing ? t.homebankingMerging : t.homebankingMergeAll}
               </button>
               <button
-                className="button button-secondary"
+                className="button button-danger"
                 onClick={clearAll}
                 disabled={isProcessing}
               >

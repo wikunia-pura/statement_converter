@@ -279,7 +279,7 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
                 {isProcessing ? t.scalanieMerging : t.scalanieMergeAll}
               </button>
               <button
-                className="button button-secondary"
+                className="button button-danger"
                 onClick={clearAll}
                 disabled={isProcessing}
               >

@@ -958,27 +958,25 @@ export abstract class BaseConverter<TRaw> {
     processed: BaseProcessedTransaction<TRaw>[],
     totalTransactions: number
   ): BaseImportResult<TRaw> {
-    const summary = {
-      autoApproved: processed.filter((p) => p.status === 'auto-approved').length,
-      needsReview: processed.filter((p) => p.status === 'needs-review').length,
-      needsManualInput: processed.filter((p) => p.status === 'needs-manual-input').length,
-      skipped: totalTransactions - processed.length,
-    };
+    // Single pass over `processed` instead of ~9 separate .filter().length scans.
+    const summary = { autoApproved: 0, needsReview: 0, needsManualInput: 0, skipped: totalTransactions - processed.length };
+    const extractionMethods = { regex: 0, ai: 0, cache: 0, manual: 0 };
+    let totalConfidence = 0;
+    for (const p of processed) {
+      if (p.status === 'auto-approved') summary.autoApproved++;
+      else if (p.status === 'needs-review') summary.needsReview++;
+      else if (p.status === 'needs-manual-input') summary.needsManualInput++;
 
-    const extractionMethods = {
-      regex: processed.filter((p) => p.extracted.extractionMethod === 'regex').length,
-      ai: processed.filter((p) => p.extracted.extractionMethod === 'ai').length,
-      cache: processed.filter((p) => p.extracted.extractionMethod === 'cache').length,
-      manual: processed.filter((p) => p.extracted.extractionMethod === 'manual').length,
-    };
+      const method = p.extracted.extractionMethod;
+      if (method === 'regex') extractionMethods.regex++;
+      else if (method === 'ai') extractionMethods.ai++;
+      else if (method === 'cache') extractionMethods.cache++;
+      else if (method === 'manual') extractionMethods.manual++;
 
-    const totalConfidence = processed.reduce((sum, p) => {
-      if (p.transactionType === 'income') {
-        return sum + p.extracted.confidence.overall;
-      } else {
-        return sum + (p.matchedContractor?.confidence || 0);
-      }
-    }, 0);
+      totalConfidence += p.transactionType === 'income'
+        ? p.extracted.confidence.overall
+        : (p.matchedContractor?.confidence || 0);
+    }
     const averageConfidence =
       processed.length > 0 ? totalConfidence / processed.length : 0;
 

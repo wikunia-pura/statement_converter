@@ -217,6 +217,73 @@ a:hover { color: var(--accent-hover); }
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  transition: width var(--t-base);
+}
+
+/* Collapsed: icon-only rail. Labels & the full logo are hidden and icons center. */
+.sidebar.collapsed {
+  width: 64px;
+}
+
+.sidebar-header {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-toggle {
+  width: 40px;
+  height: 40px;
+  margin: var(--s-2) var(--s-2) 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: background-color var(--t-fast), color var(--t-fast);
+}
+
+.sidebar-toggle:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.sidebar.collapsed .sidebar-toggle {
+  align-self: center;
+  margin-right: var(--s-2);
+  margin-left: var(--s-2);
+}
+
+.sidebar.collapsed .logo-container {
+  padding: var(--s-3) var(--s-2);
+}
+
+.sidebar.collapsed .logo-image {
+  width: 40px;
+}
+
+.nav-label {
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sidebar.collapsed .nav-label {
+  display: none;
+}
+
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.sidebar.collapsed .nav-divider {
+  margin-left: var(--s-3);
+  margin-right: var(--s-3);
 }
 
 .logo-container {
@@ -436,6 +503,71 @@ body.dark-mode .nav-item.active {
   border-color: var(--warning);
 }
 
+.button-info {
+  background: var(--bg-surface);
+  color: var(--info);
+  border-color: var(--info-border);
+}
+
+.button-info:hover:not(:disabled) {
+  background: var(--info-bg);
+  border-color: var(--info);
+}
+
+/* --------------------------------------------------------------------------
+   Semantic action colors — consistent across every view's top-bar actions.
+   Import = info (blue, "data coming in"), Export = success (green, "data going
+   out"). Add uses .button-primary (accent), Delete/Clear uses .button-danger.
+   -------------------------------------------------------------------------- */
+.button-import {
+  background: var(--info-bg);
+  color: var(--info);
+  border-color: var(--info-border);
+}
+
+.button-import:hover:not(:disabled) {
+  background: var(--info-border);
+  border-color: var(--info);
+}
+
+.button-export {
+  background: var(--success-bg);
+  color: var(--success);
+  border-color: var(--success-border);
+}
+
+.button-export:hover:not(:disabled) {
+  background: var(--success-border);
+  border-color: var(--success);
+  color: var(--success-hover);
+}
+
+/* Ghost button — for demoted, configuration-level actions that shouldn't
+   compete with the primary data actions (import/export/add) in a toolbar. */
+.button-ghost {
+  background: transparent;
+  color: var(--text-tertiary);
+  border-color: transparent;
+}
+
+.button-ghost:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  color: var(--text-secondary);
+}
+
+/* Icon-only square button */
+.button-icon {
+  padding: 8px;
+}
+
+/* Vertical separator between action clusters in a toolbar row */
+.toolbar-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 3px 2px;
+  background: var(--border-default);
+}
+
 .button-small {
   padding: 5px 10px;
   font-size: var(--fs-sm);
@@ -581,7 +713,7 @@ select {
   min-width: 150px;
   padding-right: 36px;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2382868e' d='M3 4.5l3 3 3-3' stroke='%2382868e' stroke-width='1.25' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' stroke='%2382868e' stroke-width='1.25' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 12px center;
   background-size: 12px;
@@ -589,7 +721,128 @@ select {
 }
 
 body.dark-mode select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23a7abb5' d='M3 4.5l3 3 3-3' stroke='%23a7abb5' stroke-width='1.25' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' stroke='%23a7abb5' stroke-width='1.25' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* ==========================================================================
+   Custom dropdown (components/Select.tsx)
+   Replaces native <select> so the OPEN option list matches the app design
+   instead of the OS popup. Trigger mirrors the native select styling.
+   ========================================================================== */
+.ui-select {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+  min-width: 150px;
+}
+
+.ui-select__trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  padding: 8px 36px 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--fs-base);
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' stroke='%2382868e' stroke-width='1.25' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px;
+}
+
+body.dark-mode .ui-select__trigger {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' stroke='%23a7abb5' stroke-width='1.25' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.ui-select__trigger:hover {
+  border-color: var(--text-tertiary);
+}
+
+.ui-select__trigger:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.ui-select--disabled .ui-select__trigger {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ui-select__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-select__value--placeholder {
+  color: var(--text-tertiary);
+}
+
+/* Size variants — keep the chevron gap intact, matching .select-sm / .select-lg */
+.ui-select--sm {
+  min-width: 0;
+}
+
+.ui-select--sm .ui-select__trigger {
+  padding: 5px 26px 5px 8px;
+  font-size: var(--fs-sm);
+  background-position: right 8px center;
+  background-size: 10px;
+}
+
+.ui-select--lg .ui-select__trigger {
+  padding: 12px 40px 12px 16px;
+  font-size: var(--fs-lg);
+  font-weight: 500;
+  border-radius: var(--r-lg);
+  background-position: right 16px center;
+}
+
+.ui-select__menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.ui-select__option {
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-md);
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ui-select__option.is-active {
+  background: var(--bg-surface-hover);
+}
+
+.ui-select__option.is-selected {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.ui-select__option.is-selected.is-active {
+  background: var(--accent-subtle);
 }
 
 option {
@@ -769,7 +1022,10 @@ tbody tr:hover {
   align-items: center;
   padding: var(--s-4) 0;
   border-bottom: 1px solid var(--border-subtle);
-  gap: var(--s-4);
+  gap: var(--s-6);
+  /* Cap the width so the control stays next to its label on wide monitors
+     instead of being pushed to the far right edge of a full-width card. */
+  max-width: 620px;
 }
 
 .settings-row:last-child { border-bottom: none; }
@@ -778,6 +1034,10 @@ tbody tr:hover {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  /* Let the label take the slack so the control sits at a fixed, readable
+     distance rather than the two ends drifting apart. */
+  flex: 1;
+  min-width: 0;
 }
 
 .settings-label-main {
@@ -813,6 +1073,7 @@ body.dark-mode .modal-overlay {
 }
 
 .modal {
+  position: relative;
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--r-xl);
@@ -826,6 +1087,36 @@ body.dark-mode .modal-overlay {
   animation: modalSlideIn 220ms cubic-bezier(0.2, 0, 0, 1);
 }
 
+/* Close (X) button — top-right corner of any modal. See ModalDismiss. */
+.modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background-color var(--t-fast), color var(--t-fast);
+}
+
+.modal-close:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.modal-close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
 @keyframes overlayFade {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -837,7 +1128,7 @@ body.dark-mode .modal-overlay {
 }
 
 .modal-header {
-  padding: var(--s-5) var(--s-6);
+  padding: var(--s-5) 48px var(--s-5) var(--s-6);
   border-bottom: 1px solid var(--border-subtle);
   font-size: var(--fs-xl);
   font-weight: 600;
@@ -945,6 +1236,22 @@ body.dark-mode .modal-overlay {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Full-view loader shown while a view fetches its data on entry. */
+.view-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-4);
+  min-height: 55vh;
+  padding: var(--s-8);
+}
+
+.view-loader__text {
+  font-size: var(--fs-base);
+  color: var(--text-tertiary);
 }
 
 .loader-content {

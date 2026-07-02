@@ -37,7 +37,8 @@ type IconName =
   | 'zap'
   | 'info'
   | 'edit'
-  | 'save';
+  | 'save'
+  | 'menu';
 
 interface IconProps {
   name: IconName;
@@ -244,6 +245,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M17 21v-8H7v8M7 3v5h8" />
     </>
   ),
+  menu: <path d="M4 6h16M4 12h16M4 18h16" />,
 };
 
 const Icon: React.FC<IconProps> = ({ name, size = 18, strokeWidth = 1.75, className }) => {

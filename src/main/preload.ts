@@ -48,6 +48,7 @@ const IPC_CHANNELS = {
   SET_LANGUAGE: 'settings:set-language',
   SET_SKIP_USER_APPROVAL: 'settings:set-skip-user-approval',
   SET_CONTRACTOR_SORT_ORDER: 'settings:set-contractor-sort-order',
+  SET_SIDEBAR_COLLAPSED: 'settings:set-sidebar-collapsed',
   EXPORT_SETTINGS: 'settings:export',
   IMPORT_SETTINGS: 'settings:import',
   GET_HISTORY: 'history:get-all',
@@ -71,8 +72,6 @@ const IPC_CHANNELS = {
   AUTH_SIGN_IN: 'auth:sign-in',
   AUTH_SIGN_OUT: 'auth:sign-out',
   AUTH_GET_SESSION: 'auth:get-session',
-  MIGRATION_GET_STATUS: 'migration:get-status',
-  MIGRATION_RUN: 'migration:run',
 } as const;
 
 // Expose protected methods that allow the renderer process to use
@@ -192,6 +191,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.SET_SKIP_USER_APPROVAL, enabled),
   setContractorSortOrder: (sortOrder: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_CONTRACTOR_SORT_ORDER, sortOrder),
+  setSidebarCollapsed: (collapsed: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_SIDEBAR_COLLAPSED, collapsed),
   exportSettings: () => ipcRenderer.invoke(IPC_CHANNELS.EXPORT_SETTINGS),
   importSettings: () => ipcRenderer.invoke(IPC_CHANNELS.IMPORT_SETTINGS),
 
@@ -245,10 +246,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   authSignOut: () => ipcRenderer.invoke(IPC_CHANNELS.AUTH_SIGN_OUT),
   authGetSession: () => ipcRenderer.invoke(IPC_CHANNELS.AUTH_GET_SESSION),
 
-  // One-time local→cloud migration
-  migrationGetStatus: () => ipcRenderer.invoke(IPC_CHANNELS.MIGRATION_GET_STATUS),
-  migrationRun: () => ipcRenderer.invoke(IPC_CHANNELS.MIGRATION_RUN),
-
   platform: process.platform,
 
   // Auto-updater
@@ -258,16 +255,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openLogsFolder: () => ipcRenderer.invoke('open-logs-folder'),
   getLogPath: () => ipcRenderer.invoke('get-log-path'),
   onUpdateAvailable: (callback: (info: any) => void) => {
-    ipcRenderer.on('update-available', (_event, info) => callback(info));
+    const listener = (_event: unknown, info: any) => callback(info);
+    ipcRenderer.on('update-available', listener);
+    return () => ipcRenderer.off('update-available', listener);
   },
   onUpdateDownloaded: (callback: (info: any) => void) => {
-    ipcRenderer.on('update-downloaded', (_event, info) => callback(info));
+    const listener = (_event: unknown, info: any) => callback(info);
+    ipcRenderer.on('update-downloaded', listener);
+    return () => ipcRenderer.off('update-downloaded', listener);
   },
   onUpdateError: (callback: (error: string) => void) => {
-    ipcRenderer.on('update-error', (_event, error) => callback(error));
+    const listener = (_event: unknown, error: string) => callback(error);
+    ipcRenderer.on('update-error', listener);
+    return () => ipcRenderer.off('update-error', listener);
   },
   onDownloadProgress: (callback: (progress: any) => void) => {
-    ipcRenderer.on('download-progress', (_event, progress) => callback(progress));
+    const listener = (_event: unknown, progress: any) => callback(progress);
+    ipcRenderer.on('download-progress', listener);
+    return () => ipcRenderer.off('download-progress', listener);
   },
   onConversionProgress: (callback: (progress: any) => void) => {
     const listener = (_event: unknown, progress: any) => callback(progress);

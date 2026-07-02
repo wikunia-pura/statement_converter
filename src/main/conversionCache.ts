@@ -20,6 +20,14 @@ class ConversionCache {
   private cache: Map<string, CachedConversion> = new Map();
   private readonly CACHE_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
 
+  constructor() {
+    // Periodic sweep so a lone conversion that's never followed by another
+    // doesn't keep its (potentially large) processedTransactions payload in
+    // memory indefinitely. unref() so this timer never keeps the app alive.
+    const timer = setInterval(() => this.cleanupExpired(), 5 * 60 * 1000);
+    if (typeof timer.unref === 'function') timer.unref();
+  }
+
   /**
    * Generate unique ID for conversion
    */

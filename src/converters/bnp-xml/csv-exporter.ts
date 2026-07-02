@@ -44,6 +44,8 @@ export class CsvExporter {
 
     const incomeTransactions = transactions.filter(t => t.transactionType === 'income');
     const expenseTransactions = transactions.filter(t => t.transactionType === 'expense');
+    const incomeIndexMap = new Map(incomeTransactions.map((t, i) => [t, i]));
+    const expenseIndexMap = new Map(expenseTransactions.map((t, i) => [t, i]));
 
     // ── INCOME ──────────────────────────────────────────────
 
@@ -62,7 +64,7 @@ export class CsvExporter {
     // Unrecognized income — single line, k_ma = -
     for (let i = 0; i < unrecognizedIncome.length; i++) {
       const transaction = unrecognizedIncome[i];
-      const transactionIndex = incomeTransactions.indexOf(transaction) + 1;
+      const transactionIndex = incomeIndexMap.get(transaction)! + 1;
       const date = this.formatDate(transaction.original.bookingDate);
       const description = `NIEROZPOZNANE #${transactionIndex} ` + this.cleanDescription(transaction.original.description);
       const amount = this.formatAmount(transaction.original.amount);
@@ -106,7 +108,7 @@ export class CsvExporter {
 
     for (let i = 0; i < unrecognizedExpenses.length; i++) {
       const transaction = unrecognizedExpenses[i];
-      const expenseIndex = expenseTransactions.indexOf(transaction) + 1;
+      const expenseIndex = expenseIndexMap.get(transaction)! + 1;
       const date = this.formatDate(transaction.original.bookingDate);
       const description = `NIEROZPOZNANY KONTRAHENT #${expenseIndex} ` + this.cleanDescription(transaction.original.description);
       const amount = this.formatAmount(transaction.original.amount);
@@ -139,6 +141,7 @@ export class CsvExporter {
 
     const incomeTransactions = transactions.filter(t => t.transactionType === 'income');
     const expenseTransactions = transactions.filter(t => t.transactionType === 'expense');
+    const expenseIndexMap = new Map(expenseTransactions.map((t, i) => [t, i]));
 
     // ── INCOME SECTION ─────────────────────────────────────
     if (incomeTransactions.length > 0) {
@@ -217,7 +220,7 @@ export class CsvExporter {
       }
 
       for (const transaction of unrecognizedExpenses) {
-        const i = expenseTransactions.indexOf(transaction);
+        const i = expenseIndexMap.get(transaction)!;
         const date = this.formatDate(transaction.original.bookingDate);
         const amount = this.formatAmount(transaction.original.amount);
 
@@ -240,7 +243,7 @@ export class CsvExporter {
       }
 
       for (const transaction of recognizedExpenses) {
-        const i = expenseTransactions.indexOf(transaction);
+        const i = expenseIndexMap.get(transaction)!;
         const date = this.formatDate(transaction.original.bookingDate);
         const amount = this.formatAmount(transaction.original.amount);
         const mc = transaction.matchedContractor!;

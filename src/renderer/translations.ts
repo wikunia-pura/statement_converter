@@ -5,6 +5,8 @@ export const translations = {
     settings: 'Ustawienia',
     history: 'Historia',
     goBack: 'Powrót',
+    collapseSidebar: 'Zwiń menu',
+    expandSidebar: 'Rozwiń menu',
     
     // Converter view
     fileConverter: 'Konwerter Plików v1.0.1',
@@ -81,6 +83,8 @@ export const translations = {
     clearHistory: 'Wyczyść Historię',
     date: 'Data',
     noConversionHistory: 'Brak historii konwersji',
+    searchHistory: 'Szukaj w historii (nazwa pliku, bank, konwerter, status, ścieżka, data, błąd...)',
+    noHistoryResults: 'Brak wpisów pasujących do wyszukiwania',
     
     // Kontrahenci view
     kontrahenci: 'Kontrahenci i konta',
@@ -228,6 +232,7 @@ export const translations = {
     newVersion: 'Nowa wersja',
     download: 'Pobierz',
     downloading: 'Pobieranie...',
+    loading: 'Ładowanie...',
     installNow: 'Zainstaluj teraz',
     later: 'Później',
     skip: 'Pomiń',
@@ -382,6 +387,8 @@ export const translations = {
     settings: 'Settings',
     history: 'History',
     goBack: 'Go Back',
+    collapseSidebar: 'Collapse menu',
+    expandSidebar: 'Expand menu',
     
     // Converter view
     fileConverter: 'File Converter',
@@ -458,6 +465,8 @@ export const translations = {
     clearHistory: 'Clear History',
     date: 'Date',
     noConversionHistory: 'No conversion history yet',
+    searchHistory: 'Search history (file name, bank, converter, status, path, date, error...)',
+    noHistoryResults: 'No entries match your search',
     
     // Kontrahenci view
     kontrahenci: 'Contractors & Accounts',
@@ -605,6 +614,7 @@ export const translations = {
     newVersion: 'New version',
     download: 'Download',
     downloading: 'Downloading...',
+    loading: 'Loading...',
     installNow: 'Install now',
     later: 'Later',
     skip: 'Skip',

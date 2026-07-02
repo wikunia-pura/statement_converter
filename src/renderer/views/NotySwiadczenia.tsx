@@ -200,7 +200,7 @@ const NotySwiadczenia: React.FC<Props> = ({ language, files, setFiles }) => {
                 {isProcessing ? t.notyConverting : t.notyConvertAll}
               </button>
               <button
-                className="button button-secondary"
+                className="button button-danger"
                 onClick={clearAll}
                 disabled={isProcessing}
               >

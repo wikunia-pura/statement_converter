@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Converter, ContractorSortOrder } from '../../shared/types';
 import { translations, Language } from '../translations';
 import Icon from '../components/Icon';
+import Select from '../components/Select';
+import Loader from '../components/Loader';
 
 interface SettingsProps {
   darkMode: boolean;
@@ -19,50 +21,10 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
   const [skipUserApproval, setSkipUserApproval] = useState(false);
   const [contractorSortOrder, setContractorSortOrder] = useState<ContractorSortOrder>('name-asc');
   const [isLoading, setIsLoading] = useState(true);
-  const [migrationStatus, setMigrationStatus] = useState<{
-    hasLocalData: boolean;
-    migrated: boolean;
-    counts: { banks: number; kontrahenci: number; adresy: number; history: number };
-  } | null>(null);
-  const [migrating, setMigrating] = useState(false);
 
   useEffect(() => {
     loadData();
-    void window.electronAPI.migrationGetStatus().then(setMigrationStatus);
   }, []);
-
-  const handleRunMigration = async () => {
-    if (!migrationStatus) return;
-    const counts = migrationStatus.counts;
-    const ok = window.confirm(
-      `Przesłać lokalne dane do chmury?\n\n` +
-        `• Banki: ${counts.banks}\n` +
-        `• Kontrahenci: ${counts.kontrahenci}\n` +
-        `• Adresy: ${counts.adresy}\n` +
-        `• Historia: ${counts.history}\n\n` +
-        `Operację można wykonać tylko raz. Dane lokalne pozostaną nietknięte.`,
-    );
-    if (!ok) return;
-    setMigrating(true);
-    try {
-      const result = await window.electronAPI.migrationRun();
-      if (result.ok) {
-        alert(
-          `Przeniesiono do chmury:\n\n` +
-            `• Banki: ${result.counts.banks}\n` +
-            `• Kontrahenci: ${result.counts.kontrahenci}\n` +
-            `• Adresy: ${result.counts.adresy}\n` +
-            `• Historia: ${result.counts.history}`,
-        );
-        const fresh = await window.electronAPI.migrationGetStatus();
-        setMigrationStatus(fresh);
-      } else {
-        alert(`Błąd migracji:\n${result.error}`);
-      }
-    } finally {
-      setMigrating(false);
-    }
-  };
 
   const loadData = async () => {
     setIsLoading(true);
@@ -142,14 +104,14 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
     setSkipUserApproval(newValue);
   };
 
-  const handleLanguageChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newLanguage = e.target.value as Language;
+  const handleLanguageChange = async (value: string) => {
+    const newLanguage = value as Language;
     await window.electronAPI.setLanguage(newLanguage);
     onLanguageChange(newLanguage);
   };
 
-  const handleContractorSortOrderChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newOrder = e.target.value as ContractorSortOrder;
+  const handleContractorSortOrderChange = async (value: string) => {
+    const newOrder = value as ContractorSortOrder;
     await window.electronAPI.setContractorSortOrder(newOrder);
     setContractorSortOrder(newOrder);
   };
@@ -203,33 +165,16 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="content-body">
+        <Loader label={t.loading} />
+      </div>
+    );
+  }
+
   return (
     <div className="content-body">
-        {migrationStatus && migrationStatus.hasLocalData && !migrationStatus.migrated && (
-          <div className="card">
-            <h2 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Icon name="folder" size={20} /> Migracja danych do chmury
-            </h2>
-            <p style={{ color: 'var(--text-tertiary)', fontSize: '14px', marginBottom: '12px' }}>
-              Wykryto lokalne dane z poprzedniej wersji aplikacji. Możesz przesłać je raz do chmury,
-              aby były dostępne dla wszystkich zalogowanych użytkowników.
-            </p>
-            <ul style={{ marginBottom: '20px', paddingLeft: 20 }}>
-              <li>Banki: {migrationStatus.counts.banks}</li>
-              <li>Kontrahenci: {migrationStatus.counts.kontrahenci}</li>
-              <li>Adresy: {migrationStatus.counts.adresy}</li>
-              <li>Historia: {migrationStatus.counts.history}</li>
-            </ul>
-            <button
-              className="button button-primary"
-              onClick={handleRunMigration}
-              disabled={migrating}
-            >
-              {migrating ? 'Przesyłam…' : 'Prześlij dane do chmury'}
-            </button>
-          </div>
-        )}
-
         {/* Updates */}
         <div className="card">
           <h2 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -300,10 +245,15 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
               <span className="settings-label-main">{t.language}</span>
               <span className="settings-label-sub">Wybierz preferowany język</span>
             </div>
-            <select value={language} onChange={handleLanguageChange} style={{ minWidth: '150px' }}>
-              <option value="pl">{t.polish}</option>
-              <option value="en">{t.english}</option>
-            </select>
+            <Select
+              value={language}
+              onChange={handleLanguageChange}
+              options={[
+                { value: 'pl', label: t.polish },
+                { value: 'en', label: t.english },
+              ]}
+              style={{ width: 'auto', minWidth: '150px' }}
+            />
           </div>
 
           <div className="settings-row">
@@ -311,12 +261,17 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
               <span className="settings-label-main">{t.contractorSortOrder}</span>
               <span className="settings-label-sub">{t.contractorSortOrderDesc}</span>
             </div>
-            <select value={contractorSortOrder} onChange={handleContractorSortOrderChange} style={{ minWidth: '180px' }}>
-              <option value="name-asc">{t.sortNameAsc}</option>
-              <option value="name-desc">{t.sortNameDesc}</option>
-              <option value="account-asc">{t.sortAccountAsc}</option>
-              <option value="account-desc">{t.sortAccountDesc}</option>
-            </select>
+            <Select
+              value={contractorSortOrder}
+              onChange={handleContractorSortOrderChange}
+              options={[
+                { value: 'name-asc', label: t.sortNameAsc },
+                { value: 'name-desc', label: t.sortNameDesc },
+                { value: 'account-asc', label: t.sortAccountAsc },
+                { value: 'account-desc', label: t.sortAccountDesc },
+              ]}
+              style={{ width: 'auto', minWidth: '180px' }}
+            />
           </div>
         </div>
 
@@ -438,10 +393,10 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
             Eksportuj lub importuj swoje ustawienia, w tym listę banków i preferencje aplikacji.
           </p>
           <div className="button-group" style={{ marginTop: 0 }}>
-            <button className="button button-primary" onClick={handleExportSettings}>
+            <button className="button button-export" onClick={handleExportSettings}>
               <Icon name="download" size={14} /> Eksportuj ustawienia
             </button>
-            <button className="button button-secondary" onClick={handleImportSettings}>
+            <button className="button button-import" onClick={handleImportSettings}>
               <Icon name="upload" size={14} /> Importuj ustawienia
             </button>
           </div>

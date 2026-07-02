@@ -180,6 +180,7 @@ interface ElectronAPI {
   setLanguage: (language: string) => Promise<boolean>;
   setSkipUserApproval: (enabled: boolean) => Promise<boolean>;
   setContractorSortOrder: (sortOrder: string) => Promise<boolean>;
+  setSidebarCollapsed: (collapsed: boolean) => Promise<boolean>;
   exportSettings: () => Promise<{ success: boolean; filePath?: string }>;
   importSettings: () => Promise<{ success: boolean; error?: string }>;
 
@@ -238,17 +239,6 @@ interface ElectronAPI {
   authSignOut: () => Promise<void>;
   authGetSession: () => Promise<{ email: string; userId: string } | null>;
 
-  // One-time local→cloud migration
-  migrationGetStatus: () => Promise<{
-    hasLocalData: boolean;
-    migrated: boolean;
-    counts: { banks: number; kontrahenci: number; adresy: number; history: number };
-  }>;
-  migrationRun: () => Promise<
-    | { ok: true; counts: { banks: number; kontrahenci: number; adresy: number; history: number } }
-    | { ok: false; error: string }
-  >;
-
   // App info
   getAppVersion: () => Promise<string>;
 
@@ -265,10 +255,10 @@ interface ElectronAPI {
   openDownloadsFolder: () => Promise<{ success: boolean }>;
   openLogsFolder: () => Promise<{ success: boolean; logPath?: string }>;
   getLogPath: () => Promise<{ path: string }>;
-  onUpdateAvailable: (callback: (info: any) => void) => void;
-  onUpdateDownloaded: (callback: (info: any) => void) => void;
-  onUpdateError: (callback: (error: string) => void) => void;
-  onDownloadProgress: (callback: (progress: any) => void) => void;
+  onUpdateAvailable: (callback: (info: any) => void) => () => void;
+  onUpdateDownloaded: (callback: (info: any) => void) => () => void;
+  onUpdateError: (callback: (error: string) => void) => () => void;
+  onDownloadProgress: (callback: (progress: any) => void) => () => void;
   onConversionProgress: (callback: (progress: ConversionProgressEvent) => void) => () => void;
 }
 

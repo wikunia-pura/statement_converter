@@ -7,7 +7,6 @@ import DatabaseService from './database';
 import ConverterRegistry, { setDatabaseInstance } from './converterRegistry';
 import { IPC_CHANNELS, KontrahentTyp, DEFAULT_ACCOUNT_CONFIG, AccountConfig } from '../shared/types';
 import * as authService from './authService';
-import { getMigrationStatus, runMigration } from './migrationService';
 import { extractPdfText } from '../shared/pdf-utils';
 import { extractAccountNumbersFromFile } from '../shared/account-extractor-node';
 import {
@@ -719,6 +718,14 @@ function setupIpcHandlers() {
         return match ? match.id : null;
       };
 
+      // Snapshot existing addresses once (by exact nazwa) — avoid an O(n²) full-table
+      // refetch per data line. Each addAdres invalidates the DB cache, so without this
+      // snapshot every new address would trigger a fresh fetch on the next line.
+      const adresByName = new Map<string, any>();
+      for (const a of await database.getAllAdresy()) {
+        adresByName.set(a.nazwa, a);
+      }
+
       // Parse the file
       const lines = content.split('\n');
       let count = 0;
@@ -815,13 +822,12 @@ function setupIpcHandlers() {
           accumulatedBankId = null;
           accumulatedBankSet = false;
 
-          // Check if not already exists
-          const existing = (await database.getAllAdresy()).find(
-            a => a.nazwa === nazwa
-          );
+          // Check if not already exists (local snapshot lookup — populated once).
+          const existing = adresByName.get(nazwa);
 
           if (!existing) {
             lastAdres = await database.addAdres(nazwa, [], []);
+            adresByName.set(nazwa, lastAdres);
             count++;
           } else {
             lastAdres = existing;
@@ -1551,14 +1557,27 @@ function setupIpcHandlers() {
 
   // Settings
   ipcMain.handle(IPC_CHANNELS.GET_SETTINGS, async () => {
+    // Booleans may be stored as native booleans (store defaults) or as strings
+    // (written by setSetting via .toString()); accept both so e.g. the default
+    // darkMode=true isn't silently read as false on a fresh install.
+    const boolSetting = (key: string): boolean => {
+      const v = database.getSetting(key) as unknown;
+      return v === true || v === 'true';
+    };
     return {
       outputFolder: database.getSetting('outputFolder') || '',
       impexFolder: database.getSetting('impexFolder') || '',
       swrkFolder: database.getSetting('swrkFolder') || '',
-      darkMode: database.getSetting('darkMode') === 'true',
+      darkMode: boolSetting('darkMode'),
       language: database.getSetting('language') || 'pl',
-      skipUserApproval: database.getSetting('skipUserApproval') === 'true',
+      skipUserApproval: boolSetting('skipUserApproval'),
       contractorSortOrder: database.getSetting('contractorSortOrder') || 'name-asc',
+      // Defaults to collapsed: an absent/undefined value (existing installs that
+      // predate this setting) reads as collapsed; only an explicit false expands.
+      sidebarCollapsed: (() => {
+        const v = database.getSetting('sidebarCollapsed') as unknown;
+        return !(v === false || v === 'false');
+      })(),
     };
   });
 
@@ -1594,6 +1613,11 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.SET_CONTRACTOR_SORT_ORDER, async (_, sortOrder: string) => {
     database.setSetting('contractorSortOrder', sortOrder);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SET_SIDEBAR_COLLAPSED, async (_, collapsed: boolean) => {
+    database.setSetting('sidebarCollapsed', collapsed.toString());
     return true;
   });
 
@@ -1725,9 +1749,13 @@ function setupIpcHandlers() {
       log.info('Manual update check initiated');
       autoUpdater.checkForUpdates().catch((error) => {
         clearTimeout(timeout);
-        autoUpdater.removeAllListeners('update-available');
-        autoUpdater.removeAllListeners('update-not-available');
-        autoUpdater.removeAllListeners('error');
+        // Remove only THIS promise's own `once` handlers — not every listener.
+        // removeAllListeners here also nuked the persistent listeners from
+        // setupAutoUpdater, silently killing automatic update notifications for
+        // the rest of the session after a single failed manual check.
+        autoUpdater.removeListener('update-available', onUpdateAvailable);
+        autoUpdater.removeListener('update-not-available', onUpdateNotAvailable);
+        autoUpdater.removeListener('error', onError);
         log.error('checkForUpdates failed:', error);
         resolve({ available: false, error: error.message });
       });
@@ -1785,15 +1813,6 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.AUTH_GET_SESSION, async () => {
     return authService.getSession();
-  });
-
-  // One-time local→cloud migration
-  ipcMain.handle(IPC_CHANNELS.MIGRATION_GET_STATUS, () => {
-    return getMigrationStatus();
-  });
-
-  ipcMain.handle(IPC_CHANNELS.MIGRATION_RUN, async () => {
-    return runMigration(database);
   });
 }
 

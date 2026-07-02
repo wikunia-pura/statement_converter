@@ -17,6 +17,7 @@ interface SettingsStoreSchema {
     aiConfidenceThreshold: number;
     skipUserApproval: boolean;
     contractorSortOrder: 'name-asc' | 'name-desc' | 'account-asc' | 'account-desc';
+    sidebarCollapsed: boolean;
   };
 }
 
@@ -63,8 +64,40 @@ async function fetchAllPaged<T>(
   return out;
 }
 
+interface CacheEntry<T> {
+  data: T;
+  expires: number;
+}
+
 class DatabaseService {
   private settingsStore: Store<SettingsStoreSchema>;
+
+  // In-memory cache for the reference tables that the conversion pipeline reads
+  // repeatedly (multiple times per file, per batch). A short TTL keeps data fresh
+  // enough when another instance edits the shared Supabase DB, while local writes
+  // invalidate immediately so the user always sees their own edits. This removes
+  // the dominant "full-table re-download on every operation" cost.
+  private static readonly CACHE_TTL_MS = 60_000;
+  private cache: {
+    banks?: CacheEntry<Bank[]>;
+    kontrahenci?: CacheEntry<Kontrahent[]>;
+    adresy?: CacheEntry<Adres[]>;
+    kontoTypy?: CacheEntry<KontoTyp[]>;
+  } = {};
+
+  private cacheGet<T>(entry: CacheEntry<T> | undefined): T | undefined {
+    if (entry && entry.expires > Date.now()) return entry.data;
+    return undefined;
+  }
+
+  private cacheSet<T>(data: T): CacheEntry<T> {
+    return { data, expires: Date.now() + DatabaseService.CACHE_TTL_MS };
+  }
+
+  /** Drop cached reference data. Called after every local write so reads re-fetch. */
+  private invalidateCache(key: keyof DatabaseService['cache']): void {
+    this.cache[key] = undefined;
+  }
 
   constructor() {
     // Keep the default store file ('config.json' in userData) so existing
@@ -82,6 +115,7 @@ class DatabaseService {
           aiConfidenceThreshold: 95,
           skipUserApproval: false,
           contractorSortOrder: 'name-asc',
+          sidebarCollapsed: true,
         },
       },
     });
@@ -90,6 +124,8 @@ class DatabaseService {
   // ------------------------------ Banks ------------------------------
 
   async getAllBanks(): Promise<Bank[]> {
+    const cached = this.cacheGet(this.cache.banks);
+    if (cached) return cached;
     const rows = await fetchAllPaged<any>('getAllBanks', (from, to) =>
       getSupabase()
         .from('banks')
@@ -97,7 +133,9 @@ class DatabaseService {
         .order('name', { ascending: true })
         .range(from, to),
     );
-    return rows.map(b => ({ ...b, accountPrefixes: b.accountPrefixes ?? [] })) as Bank[];
+    const data = rows.map(b => ({ ...b, accountPrefixes: b.accountPrefixes ?? [] })) as Bank[];
+    this.cache.banks = this.cacheSet(data);
+    return data;
   }
 
   async addBank(name: string, converterId: string, accountPrefixes?: string[]): Promise<Bank> {
@@ -110,7 +148,9 @@ class DatabaseService {
       })
       .select(BANK_COLS)
       .single();
-    return unwrap(data, error, 'addBank') as Bank;
+    const bank = unwrap(data, error, 'addBank') as Bank;
+    this.invalidateCache('banks');
+    return bank;
   }
 
   async updateBank(
@@ -128,16 +168,19 @@ class DatabaseService {
       })
       .eq('id', id);
     if (error) throw new Error(`updateBank: ${error.message}`);
+    this.invalidateCache('banks');
   }
 
   async deleteBank(id: number): Promise<void> {
     const { error } = await getSupabase().from('banks').delete().eq('id', id);
     if (error) throw new Error(`deleteBank: ${error.message}`);
+    this.invalidateCache('banks');
   }
 
   async deleteAllBanks(): Promise<void> {
     const { error } = await getSupabase().from('banks').delete().gt('id', 0);
     if (error) throw new Error(`deleteAllBanks: ${error.message}`);
+    this.invalidateCache('banks');
   }
 
   async getBankById(id: number): Promise<Bank | undefined> {
@@ -160,11 +203,14 @@ class DatabaseService {
     }));
     const { error } = await getSupabase().from('banks').insert(payload);
     if (error) throw new Error(`importBanks: ${error.message}`);
+    this.invalidateCache('banks');
   }
 
   // ---------------------------- Kontrahenci ----------------------------
 
   async getAllKontrahenci(): Promise<Kontrahent[]> {
+    const cached = this.cacheGet(this.cache.kontrahenci);
+    if (cached) return cached;
     const rows = await fetchAllPaged<any>('getAllKontrahenci', (from, to) =>
       getSupabase()
         .from('kontrahenci')
@@ -172,12 +218,14 @@ class DatabaseService {
         .order('nazwa', { ascending: true })
         .range(from, to),
     );
-    return rows.map(k => ({
+    const data = rows.map(k => ({
       ...k,
       typy: normalizeTypy(k),
       alternativeNames: k.alternativeNames ?? [],
       nip: k.nip ?? undefined,
     })) as Kontrahent[];
+    this.cache.kontrahenci = this.cacheSet(data);
+    return data;
   }
 
   async addKontrahent(
@@ -202,6 +250,7 @@ class DatabaseService {
       .select(KONTRAHENT_COLS)
       .single();
     const row = unwrap(data, error, 'addKontrahent') as any;
+    this.invalidateCache('kontrahenci');
     return { ...row, typy: normalizeTypy(row), nip: row.nip ?? undefined } as Kontrahent;
   }
 
@@ -226,16 +275,19 @@ class DatabaseService {
     if (alternativeNames !== undefined) patch.alternative_names = alternativeNames;
     const { error } = await getSupabase().from('kontrahenci').update(patch).eq('id', id);
     if (error) throw new Error(`updateKontrahent: ${error.message}`);
+    this.invalidateCache('kontrahenci');
   }
 
   async deleteKontrahent(id: number): Promise<void> {
     const { error } = await getSupabase().from('kontrahenci').delete().eq('id', id);
     if (error) throw new Error(`deleteKontrahent: ${error.message}`);
+    this.invalidateCache('kontrahenci');
   }
 
   async deleteAllKontrahenci(): Promise<void> {
     const { error } = await getSupabase().from('kontrahenci').delete().gt('id', 0);
     if (error) throw new Error(`deleteAllKontrahenci: ${error.message}`);
+    this.invalidateCache('kontrahenci');
   }
 
   async getKontrahentById(id: number): Promise<Kontrahent | undefined> {
@@ -249,28 +301,11 @@ class DatabaseService {
     return { ...(data as any), typy: normalizeTypy(data as any), nip: (data as Kontrahent).nip ?? undefined } as Kontrahent;
   }
 
-  async importKontrahenci(kontrahenci: Kontrahent[]): Promise<void> {
-    if (kontrahenci.length === 0) return;
-    const payload = kontrahenci.map(k => {
-      // Accept both the new `typy` array and legacy scalar `typ` (the local→cloud
-      // migrator feeds pre-migration objects that only carry `typ`).
-      const typy = normalizeTypy(k as any);
-      return {
-        nazwa: k.nazwa,
-        konto_kontrahenta: k.kontoKontrahenta,
-        nip: k.nip || null,
-        typ: typy[0],
-        typy,
-        alternative_names: k.alternativeNames ?? [],
-      };
-    });
-    const { error } = await getSupabase().from('kontrahenci').insert(payload);
-    if (error) throw new Error(`importKontrahenci: ${error.message}`);
-  }
-
   // ------------------------------ Adresy ------------------------------
 
   async getAllAdresy(): Promise<Adres[]> {
+    const cached = this.cacheGet(this.cache.adresy);
+    if (cached) return cached;
     const rows = await fetchAllPaged<any>('getAllAdresy', (from, to) =>
       getSupabase()
         .from('adresy')
@@ -278,7 +313,7 @@ class DatabaseService {
         .order('nazwa', { ascending: true })
         .range(from, to),
     );
-    return rows.map(a => ({
+    const data = rows.map(a => ({
       ...a,
       alternativeNames: a.alternativeNames ?? [],
       swrkIdentifiers: a.swrkIdentifiers ?? [],
@@ -287,6 +322,8 @@ class DatabaseService {
       bankId: a.bankId ?? null,
       apartmentMappings: a.apartmentMappings ?? [],
     })) as Adres[];
+    this.cache.adresy = this.cacheSet(data);
+    return data;
   }
 
   /**
@@ -393,7 +430,9 @@ class DatabaseService {
       })
       .select(ADRES_COLS)
       .single();
-    return unwrap(data, error, 'addAdres') as Adres;
+    const adres = unwrap(data, error, 'addAdres') as Adres;
+    this.invalidateCache('adresy');
+    return adres;
   }
 
   async updateAdres(
@@ -427,16 +466,19 @@ class DatabaseService {
     }
     const { error } = await getSupabase().from('adresy').update(patch).eq('id', id);
     if (error) throw new Error(`updateAdres: ${error.message}`);
+    this.invalidateCache('adresy');
   }
 
   async deleteAdres(id: number): Promise<void> {
     const { error } = await getSupabase().from('adresy').delete().eq('id', id);
     if (error) throw new Error(`deleteAdres: ${error.message}`);
+    this.invalidateCache('adresy');
   }
 
   async deleteAllAdresy(): Promise<void> {
     const { error } = await getSupabase().from('adresy').delete().gt('id', 0);
     if (error) throw new Error(`deleteAllAdresy: ${error.message}`);
+    this.invalidateCache('adresy');
   }
 
   async getAdresById(id: number): Promise<Adres | undefined> {
@@ -449,42 +491,19 @@ class DatabaseService {
     return (data ?? undefined) as Adres | undefined;
   }
 
-  async importAdresy(adresy: Adres[]): Promise<void> {
-    if (adresy.length === 0) return;
-    const payload = adresy.map(a => {
-      const accounts = (a.accountNumbers ?? [])
-        .map(normalizeAccount)
-        .filter((x): x is string => !!x);
-      const allowed = new Set(accounts);
-      // Re-key the type map onto canonical accounts, dropping stale entries.
-      const accountTypes: Record<string, number> = {};
-      for (const [account, typeId] of Object.entries(a.accountTypes ?? {})) {
-        const norm = normalizeAccount(account);
-        if (norm && allowed.has(norm)) accountTypes[norm] = typeId;
-      }
-      return {
-        nazwa: a.nazwa,
-        alternative_names: a.alternativeNames ?? [],
-        swrk_identifiers: a.swrkIdentifiers ?? [],
-        account_numbers: accounts,
-        account_types: accountTypes,
-        bank_id: a.bankId ?? null,
-        apartment_mappings: this.sanitizeApartmentMappings(a.apartmentMappings),
-      };
-    });
-    const { error } = await getSupabase().from('adresy').insert(payload);
-    if (error) throw new Error(`importAdresy: ${error.message}`);
-  }
-
   // ---------------------------- Konto typy ----------------------------
 
   async getKontoTypy(): Promise<KontoTyp[]> {
+    const cached = this.cacheGet(this.cache.kontoTypy);
+    if (cached) return cached;
     const { data, error } = await getSupabase()
       .from('konto_typy')
       .select(KONTO_TYP_COLS)
       .order('created_at', { ascending: true });
     if (error) throw new Error(`getKontoTypy: ${error.message}`);
-    return (data ?? []) as KontoTyp[];
+    const rows = (data ?? []) as KontoTyp[];
+    this.cache.kontoTypy = this.cacheSet(rows);
+    return rows;
   }
 
   /** Clear is_default on every other row so exactly one type stays default. */
@@ -512,7 +531,9 @@ class DatabaseService {
       })
       .select(KONTO_TYP_COLS)
       .single();
-    return unwrap(data, error, 'addKontoTyp') as KontoTyp;
+    const kontoTyp = unwrap(data, error, 'addKontoTyp') as KontoTyp;
+    this.invalidateCache('kontoTypy');
+    return kontoTyp;
   }
 
   async updateKontoTyp(
@@ -533,11 +554,13 @@ class DatabaseService {
       })
       .eq('id', id);
     if (error) throw new Error(`updateKontoTyp: ${error.message}`);
+    this.invalidateCache('kontoTypy');
   }
 
   async deleteKontoTyp(id: number): Promise<void> {
     const { error } = await getSupabase().from('konto_typy').delete().eq('id', id);
     if (error) throw new Error(`deleteKontoTyp: ${error.message}`);
+    this.invalidateCache('kontoTypy');
   }
 
   // ----------------------------- History -----------------------------
@@ -577,23 +600,6 @@ class DatabaseService {
   async clearHistory(): Promise<void> {
     const { error } = await getSupabase().from('history').delete().gt('id', 0);
     if (error) throw new Error(`clearHistory: ${error.message}`);
-  }
-
-  // Bulk import history (used by the local→cloud migrator).
-  async importHistory(history: ConversionHistory[]): Promise<void> {
-    if (history.length === 0) return;
-    const payload = history.map(h => ({
-      file_name: h.fileName,
-      bank_name: h.bankName,
-      converter_name: h.converterName,
-      status: h.status,
-      error_message: h.errorMessage || null,
-      input_path: h.inputPath,
-      output_path: h.outputPath,
-      converted_at: h.convertedAt,
-    }));
-    const { error } = await getSupabase().from('history').insert(payload);
-    if (error) throw new Error(`importHistory: ${error.message}`);
   }
 
   // ----------------------------- Settings -----------------------------

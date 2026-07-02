@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { translations, Language } from '../translations';
 import Icon from '../components/Icon';
+import ModalDismiss from '../components/Modal';
+import Select from '../components/Select';
 import type {
   ZaliczkiCategory,
   ZaliczkiEditedFile,
@@ -391,7 +393,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                 <Icon name="bar-chart" size={14} /> {isGenerating ? t.zaliczkiGenerating : t.zaliczkiGenerateExcel}
               </button>
               <button
-                className="button button-secondary"
+                className="button button-danger"
                 onClick={clearAll}
                 disabled={isProcessing}
               >
@@ -628,6 +630,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
       {showDuplicatesModal && (
         <div className="modal-overlay" onClick={() => setShowDuplicatesModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <ModalDismiss onClose={() => setShowDuplicatesModal(false)} />
             <div className="modal-header">
               <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Icon name="alert-triangle" size={20} /> {t.zaliczkiDuplicatesTitle}
@@ -707,26 +710,26 @@ const MonthYearPicker: React.FC<MonthYearPickerProps> = ({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
       <div style={{ display: 'flex', gap: '4px' }}>
-        <select
+        <Select
+          size="sm"
           value={month ?? ''}
-          onChange={(e) => onMonthChange(e.target.value === '' ? null : parseInt(e.target.value, 10))}
-          style={{ flex: 1, padding: '4px 6px', fontSize: '12px' }}
-        >
-          <option value="">—</option>
-          {MONTH_SHORT.map((m, i) => (
-            <option key={i} value={i + 1}>{m}</option>
-          ))}
-        </select>
-        <select
+          onChange={(v) => onMonthChange(v === '' ? null : parseInt(v, 10))}
+          options={[
+            { value: '', label: '—' },
+            ...MONTH_SHORT.map((m, i) => ({ value: String(i + 1), label: m })),
+          ]}
+          style={{ flex: 1 }}
+        />
+        <Select
+          size="sm"
           value={year ?? ''}
-          onChange={(e) => onYearChange(e.target.value === '' ? null : parseInt(e.target.value, 10))}
-          style={{ width: '72px', padding: '4px 6px', fontSize: '12px' }}
-        >
-          <option value="">—</option>
-          {yearOptions.map((y) => (
-            <option key={y} value={y}>{y}</option>
-          ))}
-        </select>
+          onChange={(v) => onYearChange(v === '' ? null : parseInt(v, 10))}
+          options={[
+            { value: '', label: '—' },
+            ...yearOptions.map((y) => ({ value: String(y), label: String(y) })),
+          ]}
+          style={{ width: '84px' }}
+        />
       </div>
       {missing && (
         <div style={{ fontSize: '11px', color: 'var(--danger)' }}>⚠ {missingLabel}</div>

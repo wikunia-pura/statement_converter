@@ -102,9 +102,82 @@ class ConverterRegistry {
   private converters: Map<string, Converter> = new Map();
   private aiConfig: AIConfig | null = null;
 
+  // Memo of the non-AI parse+match result per file, so the mandatory analyze pass
+  // (analyzeWithoutAI, run to decide whether AI is needed) isn't repeated by the
+  // subsequent non-AI convert of the same file. Keyed by file identity + mtime so
+  // an edited file busts it. Read is one-shot (take) to avoid aliasing the shared
+  // result object; TTL + a small cap bound memory.
+  private nonAiResultMemo = new Map<string, { result: any; expires: number }>();
+  private static readonly NONAI_MEMO_TTL_MS = 5 * 60 * 1000;
+  private static readonly NONAI_MEMO_MAX = 20;
+
   constructor() {
     this.loadConverters();
     this.loadAIConfig();
+  }
+
+  /**
+   * Build a memo key from file identity + mtime; null if the file can't be stat'd.
+   * santander_xml is intentionally excluded: its analyzeWithoutAI ignores adresId
+   * (matches against ALL addresses) while its convert filters by adresId, so their
+   * results can differ — reusing the memo there would change convert's output.
+   */
+  private fileMemoKey(converterId: string, inputPath: string, adresId?: number | null): string | null {
+    if (converterId === 'santander_xml') return null;
+    try {
+      const mtime = fs.statSync(inputPath).mtimeMs;
+      return `${converterId}|${inputPath}|${mtime}|${adresId ?? 'all'}`;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Take (read + remove) a memoized non-AI result if present and unexpired. */
+  private takeNonAiMemo(key: string | null): any | null {
+    if (!key) return null;
+    const entry = this.nonAiResultMemo.get(key);
+    if (!entry) return null;
+    this.nonAiResultMemo.delete(key);
+    if (entry.expires < Date.now()) return null;
+    return entry.result;
+  }
+
+  /** Store a non-AI result, evicting the oldest entry when over the cap. */
+  private setNonAiMemo(key: string | null, result: any): void {
+    if (!key) return;
+    if (this.nonAiResultMemo.size >= ConverterRegistry.NONAI_MEMO_MAX) {
+      const oldest = this.nonAiResultMemo.keys().next().value;
+      if (oldest !== undefined) this.nonAiResultMemo.delete(oldest);
+    }
+    this.nonAiResultMemo.set(key, { result, expires: Date.now() + ConverterRegistry.NONAI_MEMO_TTL_MS });
+  }
+
+  /**
+   * Run a non-AI converter, reusing/populating the per-file memo. Used by
+   * analyzeWithoutAI (and reused by the non-AI convert path) so the same file
+   * isn't parsed+matched twice within one analyze→convert cycle.
+   */
+  private async runNonAiMemoized<T>(key: string | null, run: () => Promise<T>): Promise<T> {
+    const hit = this.takeNonAiMemo(key);
+    if (hit) {
+      // Re-store so a following convert of the same file can still reuse it.
+      this.setNonAiMemo(key, hit);
+      return hit as T;
+    }
+    const result = await run();
+    this.setNonAiMemo(key, result);
+    return result;
+  }
+
+  /**
+   * Reuse a memoized non-AI result if present, else run `run()`. Generic so the
+   * caller's `result` keeps its precise (non-`any`) converter result type.
+   * Take semantics — the convert path consumes the memo once.
+   */
+  private async convertReusingMemo<T>(key: string | null, run: () => Promise<T>): Promise<T> {
+    const hit = this.takeNonAiMemo(key);
+    if (hit) return hit as T;
+    return run();
   }
 
   private loadAIConfig() {
@@ -198,6 +271,9 @@ class ConverterRegistry {
     confidenceThreshold: number = 90,
     adresId?: number | null
   ): Promise<{ totalTransactions: number; lowConfidenceCount: number; averageConfidence: number; needsAI: boolean }> {
+    // Memo the parse+match result so the subsequent non-AI convert of this same
+    // file reuses it instead of re-running the whole pipeline.
+    const memoKey = this.fileMemoKey(converterId, inputPath, adresId);
     if (converterId === 'santander_xml') {
       // Fetch contractors from database
       const contractors = (dbInstance ? await dbInstance.getAllKontrahenci() : []);
@@ -222,7 +298,7 @@ class ConverterRegistry {
       });
 
       const xmlContent = readFileWithEncoding(inputPath);
-      const result = await converter.convert(xmlContent);
+      const result = await this.runNonAiMemoized(memoKey, () => converter.convert(xmlContent));
 
       // Count all transactions that will need AI (both income and expenses < 70%)
       const lowConfidenceTransactions = result.processed.filter(trn => {
@@ -273,7 +349,7 @@ class ConverterRegistry {
       });
 
       const mt940Content = readFileWithEncoding(inputPath);
-      const result = await converter.convert(mt940Content);
+      const result = await this.runNonAiMemoized(memoKey, () => converter.convert(mt940Content));
 
       // Count all transactions that will need AI (both income and expenses < 70%)
       const lowConfidenceTransactions = result.processed.filter(trn => {
@@ -315,7 +391,7 @@ class ConverterRegistry {
       });
 
       const xmlContent = readFileWithEncoding(inputPath);
-      const result = await converter.convert(xmlContent);
+      const result = await this.runNonAiMemoized(memoKey, () => converter.convert(xmlContent));
 
       const lowConfidenceTransactions = result.processed.filter(trn => {
         if (trn.transactionType === 'income') {
@@ -359,7 +435,7 @@ class ConverterRegistry {
       // mis-picks win1250 (it sees 0x80-0x9F bytes), corrupting Polish chars
       // (e.g. ń→ä, ł→�), so force cp852.
       const mt940Content = readFileWithEncoding(inputPath, 'cp852');
-      const result = await converter.convert(mt940Content);
+      const result = await this.runNonAiMemoized(memoKey, () => converter.convert(mt940Content));
 
       const lowConfidenceTransactions = result.processed.filter(trn => {
         if (trn.transactionType === 'income') {
@@ -400,7 +476,7 @@ class ConverterRegistry {
       });
 
       const zipBuffer = fs.readFileSync(inputPath);
-      const result = await converter.convert(zipBuffer);
+      const result = await this.runNonAiMemoized(memoKey, () => converter.convert(zipBuffer));
 
       const lowConfidenceTransactions = result.processed.filter((trn: any) => {
         if (trn.transactionType === 'income') {
@@ -441,7 +517,7 @@ class ConverterRegistry {
       });
 
       const expContent = readFileWithEncoding(inputPath);
-      const result = await converter.convert(expContent);
+      const result = await this.runNonAiMemoized(memoKey, () => converter.convert(expContent));
 
       const lowConfidenceTransactions = result.processed.filter((trn: any) => {
         if (trn.transactionType === 'income') {
@@ -482,7 +558,7 @@ class ConverterRegistry {
       });
 
       const mt940Content = readFileWithEncoding(inputPath, 'cp852');
-      const result = await converter.convert(mt940Content);
+      const result = await this.runNonAiMemoized(memoKey, () => converter.convert(mt940Content));
 
       const lowConfidenceTransactions = result.processed.filter(trn => {
         if (trn.transactionType === 'income') {
@@ -523,7 +599,7 @@ class ConverterRegistry {
       });
 
       const xmlContent = readFileWithEncoding(inputPath);
-      const result = await converter.convert(xmlContent);
+      const result = await this.runNonAiMemoized(memoKey, () => converter.convert(xmlContent));
 
       const lowConfidenceTransactions = result.processed.filter(trn => {
         if (trn.transactionType === 'income') {
@@ -816,6 +892,9 @@ class ConverterRegistry {
 
     return new Promise(async (resolve, reject) => {
       try {
+        // Reuse the non-AI result computed during analyzeWithoutAI for this file
+        // (only valid for non-AI conversions; the AI path recomputes).
+        const memoKey = useAI ? null : this.fileMemoKey(converterId, inputPath, adresId);
         if (converterId === 'santander_xml') {
           let provider: 'none' | 'anthropic' | 'openai' = 'none';
           let apiKey = '';
@@ -857,7 +936,7 @@ class ConverterRegistry {
           });
 
           const xmlContent = readFileWithEncoding(inputPath);
-          const result = await converter.convert(xmlContent, { onProgress });
+          const result = await this.convertReusingMemo(memoKey, () => converter.convert(xmlContent, { onProgress }));
 
           // Separate transactions into income and expenses
           const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
@@ -1122,7 +1201,7 @@ class ConverterRegistry {
           });
 
           const mt940Content = readFileWithEncoding(inputPath);
-          const result = await converter.convert(mt940Content, { onProgress });
+          const result = await this.convertReusingMemo(memoKey, () => converter.convert(mt940Content, { onProgress }));
 
           // Separate transactions into income and expenses
           const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
@@ -1376,7 +1455,7 @@ class ConverterRegistry {
           });
 
           const xmlContent = readFileWithEncoding(inputPath);
-          const result = await converter.convert(xmlContent, { onProgress });
+          const result = await this.convertReusingMemo(memoKey, () => converter.convert(xmlContent, { onProgress }));
 
           const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
           const expenseTransactions = result.processed.filter(t => t.transactionType === 'expense');
@@ -1610,7 +1689,7 @@ class ConverterRegistry {
           // mis-picks win1250 (it sees 0x80-0x9F bytes), corrupting Polish chars
           // (e.g. ń→ä, ł→�), so force cp852.
           const mt940Content = readFileWithEncoding(inputPath, 'cp852');
-          const result = await converter.convert(mt940Content, { onProgress });
+          const result = await this.convertReusingMemo(memoKey, () => converter.convert(mt940Content, { onProgress }));
 
           const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
           const expenseTransactions = result.processed.filter(t => t.transactionType === 'expense');
@@ -1845,7 +1924,7 @@ class ConverterRegistry {
           });
 
           const zipBuffer = fs.readFileSync(inputPath);
-          const result = await converter.convert(zipBuffer, { onProgress });
+          const result = await this.convertReusingMemo(memoKey, () => converter.convert(zipBuffer, { onProgress }));
 
           const incomeTransactions = result.processed.filter((t: any) => t.transactionType === 'income');
           const expenseTransactions = result.processed.filter((t: any) => t.transactionType === 'expense');
@@ -2080,7 +2159,7 @@ class ConverterRegistry {
           });
 
           const expContent = readFileWithEncoding(inputPath);
-          const result = await converter.convert(expContent, { onProgress });
+          const result = await this.convertReusingMemo(memoKey, () => converter.convert(expContent, { onProgress }));
 
           const incomeTransactions = result.processed.filter((t: any) => t.transactionType === 'income');
           const expenseTransactions = result.processed.filter((t: any) => t.transactionType === 'expense');
@@ -2299,7 +2378,7 @@ class ConverterRegistry {
           });
 
           const mt940Content = readFileWithEncoding(inputPath, 'cp852');
-          const result = await converter.convert(mt940Content, { onProgress });
+          const result = await this.convertReusingMemo(memoKey, () => converter.convert(mt940Content, { onProgress }));
 
           const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
           const expenseTransactions = result.processed.filter(t => t.transactionType === 'expense');
@@ -2534,7 +2613,7 @@ class ConverterRegistry {
           });
 
           const xmlContent = readFileWithEncoding(inputPath);
-          const result = await converter.convert(xmlContent, { onProgress });
+          const result = await this.convertReusingMemo(memoKey, () => converter.convert(xmlContent, { onProgress }));
 
           const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
           const expenseTransactions = result.processed.filter(t => t.transactionType === 'expense');

@@ -46,6 +46,8 @@ export class CsvExporter {
     // Separate transactions into income (positive) and expenses (negative)
     const incomeTransactions = transactions.filter(t => t.transactionType === 'income');
     const expenseTransactions = transactions.filter(t => t.transactionType === 'expense');
+    const incomeIndexMap = new Map(incomeTransactions.map((t, i) => [t, i]));
+    const expenseIndexMap = new Map(expenseTransactions.map((t, i) => [t, i]));
 
     // ========== INCOME SECTION ==========
     // Separate income into recognized and unrecognized
@@ -64,7 +66,7 @@ export class CsvExporter {
     // Process unrecognized income first (single line, no k_ma)
     for (let i = 0; i < unrecognizedIncome.length; i++) {
       const transaction = unrecognizedIncome[i];
-      const transactionIndex = incomeTransactions.indexOf(transaction) + 1; // Find position in original array
+      const transactionIndex = incomeIndexMap.get(transaction)! + 1; // Find position in original array
       const date = this.formatDate(transaction.original.exeDate);
       const description = `NIEROZPOZNANE #${transactionIndex} ` + this.cleanDescription(transaction.original.descBase);
       const amount = this.formatAmount(transaction.original.value);
@@ -128,7 +130,7 @@ export class CsvExporter {
     // Process unrecognized expenses first
     for (let i = 0; i < unrecognizedExpenses.length; i++) {
       const transaction = unrecognizedExpenses[i];
-      const expenseIndex = expenseTransactions.indexOf(transaction) + 1; // Find position in original array
+      const expenseIndex = expenseIndexMap.get(transaction)! + 1; // Find position in original array
       const date = this.formatDate(transaction.original.exeDate);
       const description = `NIEROZPOZNANY KONTRAHENT #${expenseIndex} ` + this.cleanDescription(transaction.original.descBase);
       const amount = this.formatAmount(Math.abs(transaction.original.value));
@@ -177,6 +179,7 @@ export class CsvExporter {
     // Separate transactions into income and expenses
     const incomeTransactions = transactions.filter(t => t.transactionType === 'income');
     const expenseTransactions = transactions.filter(t => t.transactionType === 'expense');
+    const expenseIndexMap = new Map(expenseTransactions.map((t, i) => [t, i]));
 
     // ========== INCOME SECTION ==========
     if (incomeTransactions.length > 0) {
@@ -253,7 +256,7 @@ export class CsvExporter {
 
       // Show unrecognized expenses first
       for (const transaction of unrecognizedExpenses) {
-        const i = expenseTransactions.indexOf(transaction);
+        const i = expenseIndexMap.get(transaction)!;
         const date = this.formatDate(transaction.original.exeDate);
         const amount = this.formatAmount(Math.abs(transaction.original.value));
 
@@ -276,7 +279,7 @@ export class CsvExporter {
 
       // Show recognized expenses
       for (const transaction of recognizedExpenses) {
-        const i = expenseTransactions.indexOf(transaction);
+        const i = expenseIndexMap.get(transaction)!;
         const date = this.formatDate(transaction.original.exeDate);
         const amount = this.formatAmount(Math.abs(transaction.original.value));
         const matchedContractor = transaction.matchedContractor!;

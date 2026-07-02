@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ConversionReviewData, ReviewDecision, TransactionForReview, Kontrahent, KontrahentTyp, ApartmentMapping, ContractorSortOrder } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { searchTransactionInPdf, PdfSearchMatch } from '../../shared/pdf-search';
@@ -15,6 +15,10 @@ const normalizeForMapping = (s: string): string =>
     .replace(/[śŚ]/g, 's').replace(/[źŹżŻ]/g, 'z');
 
 // Sort a contractor pick-list per the user's preferred order. Names use a
+// True when a contractor holds the given role. Missing/empty typy ⇒ ['Kontrahent'].
+const hasTyp = (k: Kontrahent, t: KontrahentTyp): boolean =>
+  (k.typy && k.typy.length > 0 ? k.typy : ['Kontrahent']).includes(t);
+
 // Polish-locale compare; account numbers use a numeric-aware compare so
 // "9" < "10". Returns a new array (does not mutate the input).
 const sortKontrahenci = (list: Kontrahent[], order: ContractorSortOrder): Kontrahent[] => {
@@ -59,8 +63,10 @@ const SearchableContractorSelect: React.FC<SearchableContractorSelectProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const placement = useDropdownPlacement(containerRef, isOpen);
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside — only attach the document listener while
+  // open, so hundreds of closed row-dropdowns don't each run on every click.
   useEffect(() => {
+    if (!isOpen) return;
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
@@ -70,7 +76,7 @@ const SearchableContractorSelect: React.FC<SearchableContractorSelectProps> = ({
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [isOpen]);
 
   const selectedContractor = kontrahenci.find(k => k.id === selectedContractorId);
 
@@ -270,11 +276,14 @@ const PdfPanel: React.FC<PdfPanelProps> = ({ searchResult, searching, searchFiel
     if (highlightTokens.length === 0) return text;
     
     const escapedTokens = highlightTokens.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    const regex = new RegExp(`(${escapedTokens.join('|')})`, 'gi');
-    const parts = text.split(regex);
-    
+    // Split on the tokens (capturing group keeps them). Membership is tested
+    // against a Set — NOT regex.test(), whose global-flag lastIndex is stateful
+    // across calls and would mis-classify parts.
+    const parts = text.split(new RegExp(`(${escapedTokens.join('|')})`, 'gi'));
+    const tokenSet = new Set(highlightTokens.map(t => t.toLowerCase()));
+
     return parts.map((part, i) => {
-      if (regex.test(part)) {
+      if (part && tokenSet.has(part.toLowerCase())) {
         return <span key={i} style={{ backgroundColor: 'rgba(255, 213, 79, 0.3)', color: 'var(--warning)', fontWeight: 600, padding: '0 2px', borderRadius: '2px' }}>{part}</span>;
       }
       return part;
@@ -888,12 +897,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
               <button
                 onClick={() => (ruleFormOpen ? setRuleFormOpen(false) : openRuleForm())}
                 disabled={adresId == null}
-                className="button"
-                style={{
-                  backgroundColor: 'var(--info)',
-                  color: '#fff',
-                  opacity: adresId == null ? 0.5 : 1,
-                }}
+                className={`button button-info${ruleFormOpen ? ' is-selected' : ''}`}
                 title={adresId == null ? t.apartmentMappingNeedsAddress : (existingRule ? t.editApartmentLink : t.saveApartmentMappingRule)}
               >
                 <Icon name={existingRule ? 'edit' : 'map-pin'} size={14} /> {existingRule ? t.editApartmentLink : t.linkApartment}
@@ -1120,11 +1124,19 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   // Filter kontrahenci by type, then order per the user's preference so every
   // pick-list in the review screen is sorted consistently. A contractor can hold
   // several roles (`typy`), so it may legitimately appear in more than one list.
-  const hasTyp = (k: Kontrahent, t: KontrahentTyp) =>
-    (k.typy && k.typy.length > 0 ? k.typy : ['Kontrahent']).includes(t);
-  const contractorEntries = sortKontrahenci(kontrahenci.filter(k => hasTyp(k, 'Kontrahent')), contractorSortOrder);
-  const remainingIncomeEntries = sortKontrahenci(kontrahenci.filter(k => hasTyp(k, 'Pozostałe przychody')), contractorSortOrder);
-  const remainingCostEntries = sortKontrahenci(kontrahenci.filter(k => hasTyp(k, 'Pozostałe koszty')), contractorSortOrder);
+  // Memoized so the three filters + sorts don't re-run on every keystroke/click.
+  const contractorEntries = useMemo(
+    () => sortKontrahenci(kontrahenci.filter(k => hasTyp(k, 'Kontrahent')), contractorSortOrder),
+    [kontrahenci, contractorSortOrder],
+  );
+  const remainingIncomeEntries = useMemo(
+    () => sortKontrahenci(kontrahenci.filter(k => hasTyp(k, 'Pozostałe przychody')), contractorSortOrder),
+    [kontrahenci, contractorSortOrder],
+  );
+  const remainingCostEntries = useMemo(
+    () => sortKontrahenci(kontrahenci.filter(k => hasTyp(k, 'Pozostałe koszty')), contractorSortOrder),
+    [kontrahenci, contractorSortOrder],
+  );
 
   // Load kontrahenci + sort preference on mount
   useEffect(() => {
@@ -1178,22 +1190,42 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
     return haystack.includes(q);
   };
 
-  // Filter transactions based on selected filter + search term
-  const filteredTransactions = reviewData.transactions.filter(trn => {
+  // Stable position of each transaction in the original list — built once so the
+  // render loops below don't do an O(n) indexOf per row (was O(n²) per render).
+  const transactionPosition = useMemo(() => {
+    const m = new Map<TransactionForReview, number>();
+    reviewData.transactions.forEach((trn, i) => m.set(trn, i));
+    return m;
+  }, [reviewData.transactions]);
+
+  // Filter transactions based on selected filter + search term. Memoized so a
+  // keystroke/decision doesn't re-scan every transaction five times per render.
+  const filteredTransactions = useMemo(() => reviewData.transactions.filter(trn => {
     if (!matchesSearch(trn)) return false;
     if (filter === 'all') return true;
     if (filter === 'undecided') return !decisions.has(trn.index);
     return trn.transactionType === filter;
-  });
+  }), [reviewData.transactions, filter, decisions, searchTerm]);
 
   // Group transactions by type
-  const incomeTransactions = filteredTransactions.filter(trn => trn.transactionType === 'income');
-  const expenseTransactions = filteredTransactions.filter(trn => trn.transactionType === 'expense');
+  const incomeTransactions = useMemo(
+    () => filteredTransactions.filter(trn => trn.transactionType === 'income'),
+    [filteredTransactions],
+  );
+  const expenseTransactions = useMemo(
+    () => filteredTransactions.filter(trn => trn.transactionType === 'expense'),
+    [filteredTransactions],
+  );
 
   // Count totals for filter badges
-  const totalIncome = reviewData.transactions.filter(trn => trn.transactionType === 'income').length;
-  const totalExpense = reviewData.transactions.filter(trn => trn.transactionType === 'expense').length;
-  const totalUndecided = reviewData.transactions.filter(trn => !decisions.has(trn.index)).length;
+  const { totalIncome, totalExpense } = useMemo(() => ({
+    totalIncome: reviewData.transactions.filter(trn => trn.transactionType === 'income').length,
+    totalExpense: reviewData.transactions.filter(trn => trn.transactionType === 'expense').length,
+  }), [reviewData.transactions]);
+  const totalUndecided = useMemo(
+    () => reviewData.transactions.filter(trn => !decisions.has(trn.index)).length,
+    [reviewData.transactions, decisions],
+  );
 
   const handleDecision = (index: number, action: 'accept' | 'reject' | 'clarify') => {
     const newDecisions = new Map(decisions);
@@ -1614,7 +1646,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
               const currentDecision = decisions.get(trn.index);
               const manualInput = manualInputs.get(trn.index);
               const manualRemainingIncomeId = manualRemainingIncomeIds.get(trn.index) ?? undefined;
-              const idx = reviewData.transactions.indexOf(trn);
+              const idx = transactionPosition.get(trn) ?? -1;
               
               return (
                 <TransactionCard
@@ -1676,7 +1708,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
               const manualInput = manualInputs.get(trn.index);
               const manualContractorId = manualContractorIds.get(trn.index) ?? undefined;
               const manualRemainingCostId = manualRemainingCostIds.get(trn.index) ?? undefined;
-              const idx = reviewData.transactions.indexOf(trn);
+              const idx = transactionPosition.get(trn) ?? -1;
               
               return (
                 <TransactionCard

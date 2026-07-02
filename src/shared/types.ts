@@ -213,6 +213,7 @@ export interface AppSettings {
   aiConfidenceThreshold: number; // Minimum confidence to skip AI warning (default: 95)
   skipUserApproval: boolean; // Skip transaction review and generate files directly
   contractorSortOrder: ContractorSortOrder; // Ordering of contractor pick-lists in review (default: name-asc)
+  sidebarCollapsed: boolean; // Collapse the navigation sidebar to an icon-only rail (default: true)
 }
 
 // IPC Channel names
@@ -275,6 +276,7 @@ export const IPC_CHANNELS = {
   SET_LANGUAGE: 'settings:set-language',
   SET_SKIP_USER_APPROVAL: 'settings:set-skip-user-approval',
   SET_CONTRACTOR_SORT_ORDER: 'settings:set-contractor-sort-order',
+  SET_SIDEBAR_COLLAPSED: 'settings:set-sidebar-collapsed',
   EXPORT_SETTINGS: 'settings:export',
   IMPORT_SETTINGS: 'settings:import',
   
@@ -309,8 +311,4 @@ export const IPC_CHANNELS = {
   AUTH_SIGN_IN: 'auth:sign-in',
   AUTH_SIGN_OUT: 'auth:sign-out',
   AUTH_GET_SESSION: 'auth:get-session',
-
-  // One-time local→cloud migration
-  MIGRATION_GET_STATUS: 'migration:get-status',
-  MIGRATION_RUN: 'migration:run',
 } as const;

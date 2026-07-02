@@ -1,7 +1,119 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Adres, Bank, ApartmentMapping, KontoTyp } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { normalizeAccount } from '../../shared/account-extractor';
+import Icon from '../components/Icon';
+import Loader from '../components/Loader';
+import ModalDismiss from '../components/Modal';
+import Select from '../components/Select';
+
+interface AccountTypeFormModalProps {
+  language: Language;
+  /** Type being edited, or null when adding a new one. */
+  editing: KontoTyp | null;
+  isSaving: boolean;
+  /** Submit-time error surfaced from the parent (e.g. API failure). */
+  error: string | null;
+  onSubmit: (data: { name: string; bankAccountSymbol: string; apartmentPrefix: string; isDefault: boolean }) => void;
+  onCancel: () => void;
+}
+
+/**
+ * Standalone add/edit form for a single account type. Kept separate from the
+ * list modal (mirrors ApartmentMappingFormModal) so the list stays scannable
+ * and it's always unambiguous whether you're adding or editing.
+ */
+const AccountTypeFormModal: React.FC<AccountTypeFormModalProps> = ({
+  language,
+  editing,
+  isSaving,
+  error,
+  onSubmit,
+  onCancel,
+}) => {
+  const t = translations[language];
+  const [name, setName] = useState(editing?.name || '');
+  const [bankAccountSymbol, setBankAccountSymbol] = useState(editing?.bankAccountSymbol || '');
+  const [apartmentPrefix, setApartmentPrefix] = useState(editing?.apartmentPrefix || '');
+  const [isDefault, setIsDefault] = useState(editing?.isDefault || false);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  const handleSubmit = () => {
+    const n = name.trim();
+    const s = bankAccountSymbol.trim();
+    const p = apartmentPrefix.trim();
+    if (!n || !s || !p) {
+      setLocalError(t.fillAllFields);
+      return;
+    }
+    onSubmit({ name: n, bankAccountSymbol: s, apartmentPrefix: p, isDefault });
+  };
+
+  return (
+    <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); onCancel(); }} style={{ zIndex: 1100 }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+        <ModalDismiss onClose={onCancel} />
+        <div className="modal-header">
+          {editing ? t.edit : t.addAccountType}
+        </div>
+        <div className="modal-body">
+          <div className="form-group">
+            <label>{t.accountTypeName} <span style={{ color: 'red' }}>*</span></label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => { setName(e.target.value); if (localError) setLocalError(null); }}
+              placeholder={t.accountTypeNamePlaceholder}
+              autoFocus
+            />
+          </div>
+          <div className="form-group">
+            <label>{t.accountTypeBankSymbol} <span style={{ color: 'red' }}>*</span></label>
+            <input
+              type="text"
+              value={bankAccountSymbol}
+              onChange={(e) => { setBankAccountSymbol(e.target.value); if (localError) setLocalError(null); }}
+              placeholder={t.accountTypeBankSymbolPlaceholder}
+              style={{ fontFamily: 'monospace' }}
+            />
+          </div>
+          <div className="form-group">
+            <label>{t.accountTypeApartmentPrefix} <span style={{ color: 'red' }}>*</span></label>
+            <input
+              type="text"
+              value={apartmentPrefix}
+              onChange={(e) => { setApartmentPrefix(e.target.value); if (localError) setLocalError(null); }}
+              placeholder={t.accountTypeApartmentPrefixPlaceholder}
+              style={{ fontFamily: 'monospace' }}
+            />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginTop: '8px' }}>
+            <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{t.accountTypeIsDefault}</span>
+            <label className="toggle-switch">
+              <input type="checkbox" checked={isDefault} onChange={(e) => setIsDefault(e.target.checked)} />
+              <span className="toggle-slider"></span>
+            </label>
+          </div>
+          {(localError || error) && (
+            <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '8px' }}>{localError || error}</div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="button button-secondary" onClick={onCancel} disabled={isSaving}>
+            {t.cancel}
+          </button>
+          <button
+            className="button button-success"
+            onClick={handleSubmit}
+            disabled={isSaving || !name.trim() || !bankAccountSymbol.trim() || !apartmentPrefix.trim()}
+          >
+            {editing ? t.update : t.add}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 interface AccountTypesModalProps {
   language: Language;
@@ -17,50 +129,28 @@ interface AccountTypesModalProps {
  */
 const AccountTypesModal: React.FC<AccountTypesModalProps> = ({ language, kontoTypy, onClose, onSaved }) => {
   const t = translations[language];
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [name, setName] = useState('');
-  const [bankAccountSymbol, setBankAccountSymbol] = useState('');
-  const [apartmentPrefix, setApartmentPrefix] = useState('');
-  const [isDefault, setIsDefault] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // null = closed; { editing: null } = add; { editing: <typ> } = edit.
+  const [formState, setFormState] = useState<{ editing: KontoTyp | null } | null>(null);
 
-  const resetForm = () => {
-    setEditingId(null);
-    setName('');
-    setBankAccountSymbol('');
-    setApartmentPrefix('');
-    setIsDefault(false);
-    setError(null);
-  };
-
-  const startEdit = (typ: KontoTyp) => {
-    setEditingId(typ.id);
-    setName(typ.name);
-    setBankAccountSymbol(typ.bankAccountSymbol);
-    setApartmentPrefix(typ.apartmentPrefix);
-    setIsDefault(typ.isDefault);
-    setError(null);
-  };
-
-  const handleSubmit = async () => {
-    const trimmedName = name.trim();
-    const symbol = bankAccountSymbol.trim();
-    const prefix = apartmentPrefix.trim();
-    if (!trimmedName || !symbol || !prefix) {
-      setError(t.fillAllFields);
-      return;
-    }
+  const handleFormSubmit = async (data: {
+    name: string;
+    bankAccountSymbol: string;
+    apartmentPrefix: string;
+    isDefault: boolean;
+  }) => {
     setIsSaving(true);
     setError(null);
     try {
-      if (editingId != null) {
-        await window.electronAPI.updateKontoTyp(editingId, trimmedName, symbol, prefix, isDefault);
+      const editing = formState?.editing;
+      if (editing) {
+        await window.electronAPI.updateKontoTyp(editing.id, data.name, data.bankAccountSymbol, data.apartmentPrefix, data.isDefault);
       } else {
-        await window.electronAPI.addKontoTyp(trimmedName, symbol, prefix, isDefault);
+        await window.electronAPI.addKontoTyp(data.name, data.bankAccountSymbol, data.apartmentPrefix, data.isDefault);
       }
-      resetForm();
       onSaved();
+      setFormState(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Unknown error');
     } finally {
@@ -71,9 +161,9 @@ const AccountTypesModal: React.FC<AccountTypesModalProps> = ({ language, kontoTy
   const handleDelete = async (id: number) => {
     if (!confirm(t.confirmDeleteAccountType)) return;
     setIsSaving(true);
+    setError(null);
     try {
       await window.electronAPI.deleteKontoTyp(id);
-      if (editingId === id) resetForm();
       onSaved();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Unknown error');
@@ -84,13 +174,28 @@ const AccountTypesModal: React.FC<AccountTypesModalProps> = ({ language, kontoTy
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 800 }}>
+        <ModalDismiss onClose={onClose} />
         <div className="modal-header">{t.accountTypesTitle}</div>
         <div className="modal-body">
-          <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '12px' }}>{t.accountTypesHint}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '12px' }}>
+            <div style={{ fontSize: '12px', opacity: 0.7 }}>{t.accountTypesHint}</div>
+            <button
+              className="button button-primary"
+              onClick={() => { setError(null); setFormState({ editing: null }); }}
+              disabled={isSaving}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              + {t.addAccountType}
+            </button>
+          </div>
+
+          {error && (
+            <div style={{ fontSize: '12px', color: 'var(--danger)', marginBottom: '8px' }}>{error}</div>
+          )}
 
           {kontoTypy.length > 0 ? (
-            <table style={{ marginBottom: '16px' }}>
+            <table>
               <thead>
                 <tr>
                   <th>{t.accountTypeName}</th>
@@ -114,7 +219,7 @@ const AccountTypesModal: React.FC<AccountTypesModalProps> = ({ language, kontoTy
                     <td style={{ fontFamily: 'monospace' }}>{typ.apartmentPrefix}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '8px' }}>
-                        <button className="button button-small button-primary" onClick={() => startEdit(typ)} disabled={isSaving}>
+                        <button className="button button-small button-primary" onClick={() => { setError(null); setFormState({ editing: typ }); }} disabled={isSaving}>
                           {t.edit}
                         </button>
                         <button className="button button-small button-danger" onClick={() => handleDelete(typ.id)} disabled={isSaving}>
@@ -127,48 +232,24 @@ const AccountTypesModal: React.FC<AccountTypesModalProps> = ({ language, kontoTy
               </tbody>
             </table>
           ) : (
-            <div className="empty-state" style={{ marginBottom: '16px' }}>{t.noAccountTypes}</div>
+            <div className="empty-state">{t.noAccountTypes}</div>
           )}
-
-          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
-            <div style={{ fontWeight: 600, marginBottom: '8px' }}>
-              {editingId != null ? t.edit : t.addAccountType}
-            </div>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <div className="form-group" style={{ flex: '1 1 180px' }}>
-                <label>{t.accountTypeName} <span style={{ color: 'red' }}>*</span></label>
-                <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder={t.accountTypeNamePlaceholder} />
-              </div>
-              <div className="form-group" style={{ flex: '1 1 120px' }}>
-                <label>{t.accountTypeBankSymbol} <span style={{ color: 'red' }}>*</span></label>
-                <input type="text" value={bankAccountSymbol} onChange={(e) => setBankAccountSymbol(e.target.value)} placeholder={t.accountTypeBankSymbolPlaceholder} style={{ fontFamily: 'monospace' }} />
-              </div>
-              <div className="form-group" style={{ flex: '1 1 120px' }}>
-                <label>{t.accountTypeApartmentPrefix} <span style={{ color: 'red' }}>*</span></label>
-                <input type="text" value={apartmentPrefix} onChange={(e) => setApartmentPrefix(e.target.value)} placeholder={t.accountTypeApartmentPrefixPlaceholder} style={{ fontFamily: 'monospace' }} />
-              </div>
-            </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', marginTop: '4px' }}>
-              <input type="checkbox" checked={isDefault} onChange={(e) => setIsDefault(e.target.checked)} />
-              {t.accountTypeIsDefault}
-            </label>
-            {error && <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '8px' }}>{error}</div>}
-            <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-              <button className="button button-success" onClick={handleSubmit} disabled={isSaving}>
-                {editingId != null ? t.update : t.add}
-              </button>
-              {editingId != null && (
-                <button className="button button-secondary" onClick={resetForm} disabled={isSaving}>
-                  {t.cancel}
-                </button>
-              )}
-            </div>
-          </div>
         </div>
         <div className="modal-footer">
-          <button className="button button-secondary" onClick={onClose}>{t.cancel}</button>
+          <button className="button button-secondary" onClick={onClose}>{t.close}</button>
         </div>
       </div>
+
+      {formState && (
+        <AccountTypeFormModal
+          language={language}
+          editing={formState.editing}
+          isSaving={isSaving}
+          error={error}
+          onSubmit={handleFormSubmit}
+          onCancel={() => { setFormState(null); setError(null); }}
+        />
+      )}
     </div>
   );
 };
@@ -232,6 +313,7 @@ const ApartmentMappingFormModal: React.FC<ApartmentMappingFormModalProps> = ({
   return (
     <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); onCancel(); }} style={{ zIndex: 1100 }}>
       <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+        <ModalDismiss onClose={onCancel} />
         <div className="modal-header">
           {editing ? t.edit : t.addApartmentMapping}
         </div>
@@ -351,6 +433,7 @@ const ApartmentMappingsModal: React.FC<ApartmentMappingsModalProps> = ({
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
+        <ModalDismiss onClose={onClose} />
         <div className="modal-header">
           {t.apartmentMappingsTitle} — {adres.nazwa}
         </div>
@@ -417,7 +500,7 @@ const ApartmentMappingsModal: React.FC<ApartmentMappingsModalProps> = ({
         </div>
         <div className="modal-footer">
           <button className="button button-secondary" onClick={onClose}>
-            {t.cancel}
+            {t.close}
           </button>
         </div>
       </div>
@@ -715,7 +798,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     setNewSwrkIdentifiers(newSwrkIdentifiers.filter((_, i) => i !== index));
   };
 
-  const filteredAdresy = adresy.filter((a) => {
+  const filteredAdresy = useMemo(() => adresy.filter((a) => {
     const q = searchTerm.toLowerCase().trim();
     if (!q) return true;
     if (a.nazwa.toLowerCase().includes(q)) return true;
@@ -723,7 +806,15 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     if (a.swrkIdentifiers?.some((s) => s.toLowerCase().includes(q))) return true;
     if (a.accountNumbers?.some((acc) => acc.includes(q.replace(/\s/g, '')))) return true;
     return false;
-  });
+  }), [adresy, searchTerm]);
+
+  if (isLoading) {
+    return (
+      <div className="content-body">
+        <Loader label={t.loading} />
+      </div>
+    );
+  }
 
   return (
     <div className="content-body">
@@ -769,13 +860,16 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
           }}
         >
           <h2>{t.adresy}</h2>
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             <button
-              className="button button-secondary"
+              className="button button-ghost button-icon"
               onClick={() => setShowAccountTypesModal(true)}
+              title={t.accountTypesConfig}
+              aria-label={t.accountTypesConfig}
             >
-              {t.accountTypesConfig}
+              <Icon name="settings" size={16} />
             </button>
+            <span className="toolbar-divider" />
             {adresy.length > 0 && (
               <button
                 className="button button-danger"
@@ -785,14 +879,14 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
               </button>
             )}
             <button
-              className="button button-secondary"
+              className="button button-import"
               onClick={handleImportFromFile}
               disabled={isImporting}
             >
               {t.importFromFile}
             </button>
             <button
-              className="button button-secondary"
+              className="button button-export"
               onClick={handleExportToFile}
               disabled={adresy.length === 0}
             >
@@ -811,6 +905,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
         {(showAddAdres || editingAdres) && (
           <div className="modal-overlay" onClick={handleCancelEdit}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <ModalDismiss onClose={handleCancelEdit} />
               <div className="modal-header">
                 {editingAdres ? t.editAdres : t.addNewAdres}
               </div>
@@ -830,19 +925,14 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                   <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
                     {t.adresBankHint}
                   </div>
-                  <select
+                  <Select
                     value={newBankId ?? ''}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                      setNewBankId(e.target.value ? Number(e.target.value) : null)
-                    }
-                  >
-                    <option value="">{t.adresNoBank}</option>
-                    {banks.map((bank) => (
-                      <option key={bank.id} value={bank.id}>
-                        {bank.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(v) => setNewBankId(v ? Number(v) : null)}
+                    options={[
+                      { value: '', label: t.adresNoBank },
+                      ...banks.map((bank) => ({ value: String(bank.id), label: bank.name })),
+                    ]}
+                  />
                 </div>
                 <div className="form-group">
                   <label>{t.alternativeNames}</label>
@@ -958,18 +1048,17 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                         >
                           <span style={{ fontFamily: 'monospace', flex: '1 1 200px', wordBreak: 'break-all' }}>{acc}</span>
                           {kontoTypy.length > 0 && (
-                            <select
+                            <Select
+                              size="sm"
                               value={newAccountTypes[acc] ?? ''}
-                              onChange={(e) => handleAccountTypeChange(acc, Number(e.target.value))}
-                              style={{ flex: '0 1 200px', fontSize: '13px' }}
+                              onChange={(v) => handleAccountTypeChange(acc, Number(v))}
+                              options={kontoTypy.map((typ) => ({
+                                value: String(typ.id),
+                                label: `${typ.name} (${typ.bankAccountSymbol})`,
+                              }))}
+                              style={{ flex: '0 1 200px' }}
                               title={t.accountTypeForNumber}
-                            >
-                              {kontoTypy.map((typ) => (
-                                <option key={typ.id} value={typ.id}>
-                                  {typ.name} ({typ.bankAccountSymbol})
-                                </option>
-                              ))}
-                            </select>
+                            />
                           )}
                           <button
                             onClick={() => handleRemoveAccountNumber(index)}

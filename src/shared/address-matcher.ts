@@ -15,6 +15,15 @@
 
 import { Adres } from './types';
 
+// Generic fallback patterns — hoisted to module scope so they're compiled once,
+// not rebuilt on every extractAddress() call.
+const GENERIC_PATTERN_1 =
+  /(?:aleja|al|ulica|ul)\.?\s+([\wąćęłńóśźż]+(?:\s+[\wąćęłńóśźż]+)?)\s+(\d+)\s*[/\s]?\s*(?:m\.?\s*)?(?:lok\.?\s*)?(\d+)?/i;
+const GENERIC_PATTERN_2 =
+  /([\wąćęłńóśźż]+(?:\s+[\wąćęłńóśźż]+)?)\s+(\d+)\s*[/\s]?\s*(?:m\.?\s*)?(?:lok\.?\s*)?(\d+)?/i;
+const STREET_BLACKLIST =
+  /^(czynsz|zaliczka|zaliczki|fundusz|remontowy|remontowa|opłata|oplata|rata|wpłata|wplata|przelew|należność|naleznosc|płatność|platnosc|faktura|rachunek|za\s+)/i;
+
 // === PUBLIC TYPES ===
 
 export interface ApartmentExtraction {
@@ -50,13 +59,98 @@ export interface AddressMatchResult {
   matchedByManualMapping: boolean;
 }
 
+// === INTERNAL PRECOMPUTED TYPES ===
+
+/** One name-variation of an address, with everything derivable precomputed. */
+interface CompiledVariation {
+  /** Building number for this variation (from the variation, or the main name). */
+  building: string | null;
+  /** Regex matching "street + building + optional apartment" — null when no building. */
+  streetPattern: RegExp | null;
+  /** Street (ascii, no diacritics, no spaces/hyphens) for validation containment checks. */
+  knownWithoutSpaces: string;
+}
+
+/** A precomputed apartment-mapping rule (street/building/apartment fixed at build time). */
+interface CompiledMapping {
+  needle: string;
+  apartment: string;
+  streetName: string;
+  buildingNumber: string | null;
+  fullAddress: string;
+}
+
+/** All transaction-independent derived data for one address. */
+interface CompiledAddress {
+  mainStreet: string;
+  variations: CompiledVariation[];
+  mappings: CompiledMapping[];
+}
+
 // === MAIN CLASS ===
 
 export class AddressMatcher {
   private addresses: Adres[];
+  /** Precomputed per-address regexes/normalized strings — built once, reused per transaction. */
+  private compiled: CompiledAddress[];
 
   constructor(addresses: Adres[] = []) {
     this.addresses = addresses;
+    this.compiled = addresses.map(addr => this.compileAddress(addr));
+  }
+
+  private compileAddress(addr: Adres): CompiledAddress {
+    const mainParsed = addr.nazwa.match(/^(.+?)\s+(\d+)$/);
+    const mainStreet = mainParsed ? mainParsed[1] : addr.nazwa;
+    const mainBuilding = mainParsed ? mainParsed[2] : null;
+
+    const nameVariations = [addr.nazwa, ...(addr.alternativeNames || [])];
+    const variations: CompiledVariation[] = nameVariations.map(addrName => {
+      const addressMatch = addrName.match(/^(.+?)\s+(\d+)$/);
+      const street = addressMatch ? addressMatch[1].toLowerCase() : addrName.toLowerCase();
+      const building = addressMatch ? addressMatch[2] : mainBuilding;
+
+      // Build the street+building matching regex (only when a building is known).
+      let streetPattern: RegExp | null = null;
+      if (building) {
+        const streetAscii = this.normalizePolishChars(street);
+        const flexibleStreet = this.flexifyStreetName(streetAscii);
+        streetPattern = new RegExp(
+          `(${flexibleStreet})\\s*${this.escapeRegex(building)}\\s*[/\\s]?\\s*(?:m\\.?\\s*)?(?:lok\\.?\\s*)?(?:loc\\.?\\s*)?([0-9]+)?`,
+          'i',
+        );
+      }
+
+      // Validation containment key (mirrors isAddressInKnownProperties).
+      const knownStreet = (addressMatch ? addressMatch[1] : addrName).toLowerCase().trim();
+      const normalizedKnown = knownStreet.replace(/^(?:aleja|al\.?|ulica|ul\.?)\s+/i, '');
+      const knownWithoutSpaces = this.normalizePolishChars(normalizedKnown).replace(/[-\s]+/g, '');
+
+      return { building, streetPattern, knownWithoutSpaces };
+    });
+
+    // Parse street/building context from the address name for apartment mappings.
+    const parsed = addr.nazwa.match(/^(.+?)\s+(\d+)$/);
+    const mapStreet = parsed ? parsed[1] : addr.nazwa;
+    const mapBuilding = parsed ? parsed[2] : null;
+    const mappings: CompiledMapping[] = (addr.apartmentMappings || [])
+      .map(mapping => {
+        const needle = this.normalizePolishChars((mapping.matchText || '').trim().toLowerCase());
+        const apartment = (mapping.apartmentNumber || '').trim();
+        if (!needle || !apartment) return null;
+        return {
+          needle,
+          apartment,
+          streetName: mapStreet,
+          buildingNumber: mapBuilding,
+          fullAddress: mapBuilding
+            ? `${mapStreet} ${mapBuilding}/${apartment}`
+            : `${mapStreet} ${apartment}`,
+        };
+      })
+      .filter((m): m is CompiledMapping => m !== null);
+
+    return { mainStreet, variations, mappings };
   }
 
   /**
@@ -222,31 +316,17 @@ export class AddressMatcher {
       `${combinedText} ${counterpartyName || ''}`.toLowerCase()
     );
 
-    for (const addr of this.addresses) {
-      const mappings = addr.apartmentMappings || [];
-      for (const mapping of mappings) {
-        const needle = this.normalizePolishChars(
-          (mapping.matchText || '').trim().toLowerCase()
-        );
-        if (!needle || !mapping.apartmentNumber) continue;
-        if (!haystack.includes(needle)) continue;
-
-        // Build street/building context from the address name (e.g. "Cieszyńska 4").
-        const parsed = addr.nazwa.match(/^(.+?)\s+(\d+)$/);
-        const streetName = parsed ? parsed[1] : addr.nazwa;
-        const buildingNumber = parsed ? parsed[2] : null;
-        const apartment = mapping.apartmentNumber.trim();
-        const fullAddress = buildingNumber
-          ? `${streetName} ${buildingNumber}/${apartment}`
-          : `${streetName} ${apartment}`;
+    for (const compiled of this.compiled) {
+      for (const mapping of compiled.mappings) {
+        if (!haystack.includes(mapping.needle)) continue;
 
         const tenantName = this.extractTenantName(counterpartyName || combinedText);
 
         return {
-          streetName,
-          buildingNumber,
-          apartmentNumber: apartment,
-          fullAddress,
+          streetName: mapping.streetName,
+          buildingNumber: mapping.buildingNumber,
+          apartmentNumber: mapping.apartment,
+          fullAddress: mapping.fullAddress,
           tenantName,
           isZGN: false,
           confidence: {
@@ -432,40 +512,20 @@ export class AddressMatcher {
     const normalizedTextAscii = this.normalizePolishChars(normalizedText.toLowerCase());
 
     // --- Try known addresses first (highest confidence) ---
-    for (const addr of this.addresses) {
-      // Parse the main address to get default building number
-      const mainParsed = addr.nazwa.match(/^(.+?)\s+(\d+)$/);
-      const mainStreet = mainParsed ? mainParsed[1] : addr.nazwa;
-      const mainBuilding = mainParsed ? mainParsed[2] : null;
+    for (const compiled of this.compiled) {
+      const mainStreet = compiled.mainStreet;
 
-      const nameVariations = [addr.nazwa, ...(addr.alternativeNames || [])];
+      for (const variation of compiled.variations) {
+        // Skip variations for which we couldn't determine a building number.
+        if (!variation.building || !variation.streetPattern) continue;
 
-      for (const addrName of nameVariations) {
-        // Parse "Aleja Lotników 20" → street="Aleja Lotników", building="20"
-        // If name has no trailing number (e.g., "joliot curie"), use building from main name
-        const addressMatch = addrName.match(/^(.+?)\s+(\d+)$/);
-        const street = addressMatch ? addressMatch[1].toLowerCase() : addrName.toLowerCase();
-        const building = addressMatch ? addressMatch[2] : mainBuilding;
-
-        // Skip if we couldn't determine a building number at all
-        if (!building) continue;
-
-        const streetAscii = this.normalizePolishChars(street);
-
-        // Build pattern: street + building + optional apartment
-        // Use flexible name matching: hyphens/spaces interchangeable, dots optional
-        const flexibleStreet = this.flexifyStreetName(streetAscii);
-        const streetPattern = new RegExp(
-          `(${flexibleStreet})\\s*${this.escapeRegex(building)}\\s*[/\\s]?\\s*(?:m\\.?\\s*)?(?:lok\\.?\\s*)?(?:loc\\.?\\s*)?([0-9]+)?`,
-          'i'
-        );
-
-        const match = normalizedTextAscii.match(streetPattern);
+        const match = normalizedTextAscii.match(variation.streetPattern);
         if (match) {
           // IMPORTANT: If the known address pattern itself captured an apartment number (match[2]),
           // prefer it over existingApartment which may come from an unrelated address
           // (e.g., tenant's home address like "Belwederska 5/7" vs managed property "Głogowa 26/9")
           const apartment = match[2] || existingApartment || null;
+          const building = variation.building;
 
           return {
             streetName: mainStreet,
@@ -482,9 +542,7 @@ export class AddressMatcher {
     // --- Generic patterns (no known address matched) ---
 
     // Pattern 1: "Aleja Lotników 20/100", "UL. Kowalska 5 M.12"
-    const pattern1 =
-      /(?:aleja|al|ulica|ul)\.?\s+([\wąćęłńóśźż]+(?:\s+[\wąćęłńóśźż]+)?)\s+(\d+)\s*[/\s]?\s*(?:m\.?\s*)?(?:lok\.?\s*)?(\d+)?/i;
-    const match1 = normalizedText.match(pattern1);
+    const match1 = normalizedText.match(GENERIC_PATTERN_1);
     if (match1) {
       const streetName = this.capitalizeStreet(match1[1]);
       const buildingNumber = match1[2];
@@ -502,16 +560,12 @@ export class AddressMatcher {
 
     // Pattern 2: "LOTNIKÓW 20 100" (street name without prefix)
     // BUT: Exclude common non-street words (CZYNSZ, FUNDUSZ, etc.)
-    const pattern2 =
-      /([\wąćęłńóśźż]+(?:\s+[\wąćęłńóśźż]+)?)\s+(\d+)\s*[/\s]?\s*(?:m\.?\s*)?(?:lok\.?\s*)?(\d+)?/i;
-    const match2 = normalizedText.match(pattern2);
+    const match2 = normalizedText.match(GENERIC_PATTERN_2);
     if (match2 && match2[1].length > 3) {
-      // Blacklist: words that are NOT street names
-      const blacklist = /^(czynsz|zaliczka|zaliczki|fundusz|remontowy|remontowa|opłata|oplata|rata|wpłata|wplata|przelew|należność|naleznosc|płatność|platnosc|faktura|rachunek|za\s+)/i;
       const streetCandidate = match2[1].trim();
-      
+
       // Skip if matched word is in blacklist
-      if (!blacklist.test(streetCandidate)) {
+      if (!STREET_BLACKLIST.test(streetCandidate)) {
         const streetName = this.capitalizeStreet(match2[1]);
         const buildingNumber = match2[2];
         const apartmentNumber = existingApartment || match2[3] || null;
@@ -550,40 +604,20 @@ export class AddressMatcher {
     }
 
     const normalizedStreet = streetName.toLowerCase().trim();
+    const normalizedExtracted = normalizedStreet.replace(/^(?:aleja|al\.?|ulica|ul\.?)\s+/i, '');
+    // Extracted-street key — depends only on the transaction, computed once.
+    const streetWithoutSpaces = this.normalizePolishChars(normalizedExtracted).replace(/[-\s]+/g, '');
 
-    for (const addr of this.addresses) {
-      // Parse the main address to get default building number
-      const mainParsed = addr.nazwa.match(/^(.+?)\s+(\d+)$/);
-      const mainBuilding = mainParsed ? mainParsed[2] : null;
-
-      const nameVariations = [addr.nazwa, ...(addr.alternativeNames || [])];
-
-      for (const addrName of nameVariations) {
-        // Parse name; if no trailing number, use building from main name
-        const addressMatch = addrName.match(/^(.+?)\s+(\d+)$/);
-        const knownStreet = (addressMatch ? addressMatch[1] : addrName).toLowerCase().trim();
-        const knownBuilding = addressMatch ? addressMatch[2] : mainBuilding;
-
-        // Normalize: remove "aleja/al./ulica/ul." prefixes
-        const normalizedKnown = knownStreet.replace(
-          /^(?:aleja|al\.?|ulica|ul\.?)\s+/i,
-          ''
-        );
-        const normalizedExtracted = normalizedStreet.replace(
-          /^(?:aleja|al\.?|ulica|ul\.?)\s+/i,
-          ''
-        );
-
-        // Compare without spaces/hyphens and without Polish diacritics
-        const streetWithoutSpaces = this.normalizePolishChars(normalizedExtracted).replace(/[-\s]+/g, '');
-        const knownWithoutSpaces = this.normalizePolishChars(normalizedKnown).replace(/[-\s]+/g, '');
+    for (const compiled of this.compiled) {
+      for (const variation of compiled.variations) {
+        const knownWithoutSpaces = variation.knownWithoutSpaces;
 
         if (
           streetWithoutSpaces.includes(knownWithoutSpaces) ||
           knownWithoutSpaces.includes(streetWithoutSpaces)
         ) {
           // If both building numbers are known, they must match
-          if (buildingNumber && knownBuilding && buildingNumber !== knownBuilding) {
+          if (buildingNumber && variation.building && buildingNumber !== variation.building) {
             continue;
           }
           return true;

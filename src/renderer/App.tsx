@@ -17,6 +17,28 @@ import UpdateNotification from './components/UpdateNotification';
 import { translations, Language } from './translations';
 import { FileEntry } from '../shared/types';
 
+interface NavItemProps {
+  icon: React.ComponentProps<typeof Icon>['name'];
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+  /** Tooltip — defaults to the label (useful when the sidebar is collapsed to icons). */
+  title?: string;
+  style?: React.CSSProperties;
+}
+
+const NavItem: React.FC<NavItemProps> = ({ icon, label, active, onClick, title, style }) => (
+  <div
+    className={`nav-item ${active ? 'active' : ''}`}
+    onClick={onClick}
+    title={title ?? label}
+    style={style}
+  >
+    <Icon name={icon} />
+    <span className="nav-label">{label}</span>
+  </div>
+);
+
 type View =
   | 'converter'
   | 'settings'
@@ -33,6 +55,9 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('converter');
   const [darkMode, setDarkMode] = useState(false);
   const [language, setLanguage] = useState<Language>('pl');
+  // Sidebar starts collapsed (icon-only rail); the user can pin it expanded and
+  // the choice persists via settings. Default true so it's collapsed on first run.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [selectedBank, setSelectedBank] = useState<number | null>(null);
   const [zaliczkiFiles, setZaliczkiFiles] = useState<ZaliczkiFileEntry[]>([]);
@@ -86,6 +111,7 @@ const App: React.FC = () => {
       const settings = await window.electronAPI.getSettings();
       setDarkMode(settings.darkMode);
       setLanguage(settings.language || 'pl');
+      setSidebarCollapsed(settings.sidebarCollapsed);
       applyDarkMode(settings.darkMode);
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -109,6 +135,12 @@ const App: React.FC = () => {
     setLanguage(lang);
   };
 
+  const toggleSidebar = () => {
+    const next = !sidebarCollapsed;
+    setSidebarCollapsed(next);
+    void window.electronAPI.setSidebarCollapsed(next);
+  };
+
   const t = translations[language];
 
   if (!sessionChecked) {
@@ -127,80 +159,91 @@ const App: React.FC = () => {
     <div className="app">
       <UpdateNotification language={language} />
       <div className="app-body">
-      <div className="sidebar">
-        <Logo />
+      <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
+        <div className="sidebar-header">
+          <button
+            type="button"
+            className="sidebar-toggle"
+            onClick={toggleSidebar}
+            title={sidebarCollapsed ? t.expandSidebar : t.collapseSidebar}
+            aria-label={sidebarCollapsed ? t.expandSidebar : t.collapseSidebar}
+            aria-expanded={!sidebarCollapsed}
+          >
+            <Icon name="menu" size={20} />
+          </button>
+          <Logo />
+        </div>
         <div className="sidebar-nav">
-          <div
-            className={`nav-item ${currentView === 'converter' ? 'active' : ''}`}
+          <NavItem
+            icon="folder"
+            label={t.converter}
+            active={currentView === 'converter'}
             onClick={() => setCurrentView('converter')}
-          >
-            <Icon name="folder" /> {t.converter}
-          </div>
-          <div
-            className={`nav-item ${currentView === 'podsumowanie' ? 'active' : ''}`}
+          />
+          <NavItem
+            icon="bar-chart"
+            label={t.podsumowanieZaliczek}
+            active={currentView === 'podsumowanie'}
             onClick={() => setCurrentView('podsumowanie')}
-          >
-            <Icon name="bar-chart" /> {t.podsumowanieZaliczek}
-          </div>
-          <div
-            className={`nav-item ${currentView === 'noty' ? 'active' : ''}`}
+          />
+          <NavItem
+            icon="file-text"
+            label={t.notySwiadczenia}
+            active={currentView === 'noty'}
             onClick={() => setCurrentView('noty')}
-          >
-            <Icon name="file-text" /> {t.notySwiadczenia}
-          </div>
-          <div
-            className={`nav-item ${currentView === 'scalanie' ? 'active' : ''}`}
+          />
+          <NavItem
+            icon="wallet"
+            label={t.scalanieWplat}
+            active={currentView === 'scalanie'}
             onClick={() => setCurrentView('scalanie')}
-          >
-            <Icon name="wallet" /> {t.scalanieWplat}
-          </div>
-          <div
-            className={`nav-item ${currentView === 'homebanking' ? 'active' : ''}`}
+          />
+          <NavItem
+            icon="briefcase"
+            label={t.homebanking}
+            active={currentView === 'homebanking'}
             onClick={() => setCurrentView('homebanking')}
-          >
-            <Icon name="briefcase" /> {t.homebanking}
-          </div>
+          />
           <div className="nav-divider" />
-          <div
-            className={`nav-item ${currentView === 'adresy' ? 'active' : ''}`}
+          <NavItem
+            icon="map-pin"
+            label={t.adresy}
+            active={currentView === 'adresy'}
             onClick={() => setCurrentView('adresy')}
-          >
-            <Icon name="map-pin" /> {t.adresy}
-          </div>
-          <div
-            className={`nav-item ${currentView === 'kontrahenci' ? 'active' : ''}`}
+          />
+          <NavItem
+            icon="users"
+            label={t.kontrahenci}
+            active={currentView === 'kontrahenci'}
             onClick={() => setCurrentView('kontrahenci')}
-          >
-            <Icon name="users" /> {t.kontrahenci}
-          </div>
-          <div
-            className={`nav-item ${currentView === 'banki' ? 'active' : ''}`}
+          />
+          <NavItem
+            icon="building"
+            label={t.banki}
+            active={currentView === 'banki'}
             onClick={() => setCurrentView('banki')}
-          >
-            <Icon name="building" /> {t.banki}
-          </div>
+          />
           <div className="nav-divider" />
-          <div
-            className={`nav-item ${currentView === 'settings' ? 'active' : ''}`}
+          <NavItem
+            icon="settings"
+            label={t.settings}
+            active={currentView === 'settings'}
             onClick={() => setCurrentView('settings')}
-          >
-            <Icon name="settings" /> {t.settings}
-          </div>
-          <div
-            className={`nav-item ${currentView === 'history' ? 'active' : ''}`}
+          />
+          <NavItem
+            icon="history"
+            label={t.history}
+            active={currentView === 'history'}
             onClick={() => setCurrentView('history')}
-          >
-            <Icon name="history" /> {t.history}
-          </div>
+          />
           <div className="nav-divider" />
-          <div
-            className="nav-item"
-            onClick={handleSignOut}
+          <NavItem
+            icon="users"
+            label={`Wyloguj (${session.email})`}
             title={session.email}
+            onClick={handleSignOut}
             style={{ fontSize: 12, opacity: 0.7 }}
-          >
-            <Icon name="users" /> Wyloguj ({session.email})
-          </div>
+          />
         </div>
       </div>
 

@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Bank, Converter } from '../../shared/types';
 import { translations, Language } from '../translations';
 import Icon from '../components/Icon';
+import Loader from '../components/Loader';
+import ModalDismiss from '../components/Modal';
+import Select from '../components/Select';
 
 interface BankiProps {
   language: Language;
@@ -19,9 +22,13 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
   const [newAccountPrefix, setNewAccountPrefix] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [isImporting, setIsImporting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadData();
+    void (async () => {
+      await loadData();
+      setIsLoading(false);
+    })();
   }, []);
 
   const loadData = async () => {
@@ -166,6 +173,14 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
     return false;
   });
 
+  if (isLoading) {
+    return (
+      <div className="content-body">
+        <Loader label={t.loading} />
+      </div>
+    );
+  }
+
   return (
     <div className="content-body">
       {isImporting && (
@@ -205,14 +220,14 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
               </button>
             )}
             <button
-              className="button button-secondary"
+              className="button button-import"
               onClick={handleImport}
               disabled={isImporting}
             >
               {t.importFromFile}
             </button>
             <button
-              className="button button-secondary"
+              className="button button-export"
               onClick={handleExport}
               disabled={banks.length === 0}
             >
@@ -238,6 +253,7 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
         {(showAdd || editing) && (
           <div className="modal-overlay" onClick={resetForm}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <ModalDismiss onClose={resetForm} />
               <div className="modal-header">
                 {editing ? t.editBank : t.addNewBankView}
               </div>
@@ -254,12 +270,12 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
                 </div>
                 <div className="form-group">
                   <label>{t.converterType}</label>
-                  <select value={converterId} onChange={(e) => setConverterId(e.target.value)}>
-                    <option value="">{t.chooseConverter}</option>
-                    {converters.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+                  <Select
+                    value={converterId}
+                    onChange={(v) => setConverterId(v)}
+                    placeholder={t.chooseConverter}
+                    options={converters.map((c) => ({ value: String(c.id), label: c.name }))}
+                  />
                 </div>
                 <div className="form-group">
                   <label>{t.accountPrefixes}</label>

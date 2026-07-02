@@ -4,6 +4,9 @@ import { translations, Language } from '../translations';
 import { generateId } from '../../shared/utils';
 import { TransactionReviewScreen } from '../components/TransactionReviewScreen';
 import Icon from '../components/Icon';
+import Loader from '../components/Loader';
+import ModalDismiss from '../components/Modal';
+import Select from '../components/Select';
 import kapitanBombaImg from '../assets/kapitan_bomba.jpg';
 import BankIllustration from '../components/BankIllustration';
 import { findAdresByAccountNumbers, normalizeAccount } from '../../shared/account-extractor';
@@ -48,8 +51,10 @@ const SearchableAdresSelect: React.FC<SearchableAdresSelectProps> = ({
     return () => observer.disconnect();
   }, []);
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside — only attach the document listener while
+  // open, so many closed row-dropdowns don't each run on every click.
   useEffect(() => {
+    if (!isOpen) return;
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
@@ -59,7 +64,7 @@ const SearchableAdresSelect: React.FC<SearchableAdresSelectProps> = ({
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [isOpen]);
 
   // Theme colors
   const colors = isDarkMode ? {
@@ -1066,11 +1071,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   return (
     <div className="content-body">
         {isLoading ? (
-          <div className="card">
-            <div style={{ textAlign: 'center', padding: '2rem' }}>
-              Loading...
-            </div>
-          </div>
+          <Loader label={t.loading} />
         ) : !selectedBank ? (
           <div className="card" style={{ textAlign: 'center', padding: '60px 40px' }}>
             <div style={{ marginBottom: '20px' }}>
@@ -1083,25 +1084,14 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
               Wybierz bank, aby rozpocząć konwersję plików
             </p>
             <div style={{ maxWidth: '400px', margin: '0 auto' }}>
-              <select
-                value={selectedBank || ''}
-                onChange={(e) => setSelectedBank(Number(e.target.value))}
-                style={{
-                  width: '100%',
-                  padding: '16px 20px',
-                  fontSize: '16px',
-                  borderRadius: '12px',
-                  border: '2px solid var(--border-default)',
-                  cursor: 'pointer',
-                }}
-              >
-                <option value="">{t.chooseBank}</option>
-                {banks.map((bank) => (
-                  <option key={bank.id} value={bank.id}>
-                    {bank.name}
-                  </option>
-                ))}
-              </select>
+              <Select
+                size="lg"
+                value={selectedBank}
+                onChange={(v) => setSelectedBank(v ? Number(v) : null)}
+                placeholder={t.chooseBank}
+                options={banks.map((bank) => ({ value: String(bank.id), label: bank.name }))}
+                style={{ width: '100%' }}
+              />
             </div>
           </div>
         ) : (
@@ -1113,25 +1103,14 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
               <label style={{ fontSize: '14px', fontWeight: '500', marginBottom: '8px', display: 'block' }}>
                 {t.selectBank}
               </label>
-              <select
-                value={selectedBank || ''}
-                onChange={(e) => setSelectedBank(Number(e.target.value))}
-                style={{
-                  width: '100%',
-                  padding: '12px 16px',
-                  fontSize: '15px',
-                  borderRadius: '10px',
-                  border: '2px solid var(--border-default)',
-                  cursor: 'pointer',
-                  fontWeight: '500',
-                }}
-              >
-                {banks.map((bank) => (
-                  <option key={bank.id} value={bank.id}>
-                    {bank.name}
-                  </option>
-                ))}
-              </select>
+              <Select
+                size="lg"
+                value={selectedBank}
+                onChange={(v) => setSelectedBank(v ? Number(v) : null)}
+                placeholder={t.chooseBank}
+                options={banks.map((bank) => ({ value: String(bank.id), label: bank.name }))}
+                style={{ width: '100%' }}
+              />
             </div>
           </div>
 
@@ -1180,7 +1159,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                 >
                   {t.convertAll}
                 </button>
-                <button className="button button-secondary" onClick={handleClearAll}>
+                <button className="button button-danger" onClick={handleClearAll}>
                   {t.clearAll}
                 </button>
               </div>
@@ -1229,17 +1208,12 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                         <td>{index + 1}</td>
                         <td>{file.fileName}</td>
                         <td>
-                          <select
-                            value={file.bankId || ''}
-                            onChange={(e) => handleBankChange(file.id, Number(e.target.value))}
-                          >
-                            <option value="">{t.chooseBank}</option>
-                            {banks.map((bank) => (
-                              <option key={bank.id} value={bank.id}>
-                                {bank.name}
-                              </option>
-                            ))}
-                          </select>
+                          <Select
+                            value={file.bankId}
+                            onChange={(v) => handleBankChange(file.id, Number(v))}
+                            placeholder={t.chooseBank}
+                            options={banks.map((bank) => ({ value: String(bank.id), label: bank.name }))}
+                          />
                         </td>
                         <td>
                           <SearchableAdresSelect
@@ -1255,19 +1229,18 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                               <label style={{ fontSize: '11px', color: 'var(--text-tertiary)', display: 'block', marginBottom: '2px' }}>
                                 {t.accountTypeColumn}
                               </label>
-                              <select
-                                value={file.accountTypeId ?? ''}
-                                onChange={(e) =>
-                                  handleAccountTypeChange(file.id, e.target.value ? Number(e.target.value) : null)
+                              <Select
+                                size="sm"
+                                value={file.accountTypeId}
+                                onChange={(v) =>
+                                  handleAccountTypeChange(file.id, v ? Number(v) : null)
                                 }
-                                style={{ width: '100%', fontSize: '13px', padding: '4px 6px' }}
-                              >
-                                {kontoTypy.map((typ) => (
-                                  <option key={typ.id} value={typ.id}>
-                                    {typ.name} ({typ.bankAccountSymbol})
-                                  </option>
-                                ))}
-                              </select>
+                                options={kontoTypy.map((typ) => ({
+                                  value: String(typ.id),
+                                  label: `${typ.name} (${typ.bankAccountSymbol})`,
+                                }))}
+                                style={{ width: '100%' }}
+                              />
                             </div>
                           )}
                           {file.adresId && file.adresAutoMatched && (
@@ -1532,6 +1505,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
         {showAIWarningModal && (
           <div className="modal-overlay" onClick={() => setShowAIWarningModal(false)}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <ModalDismiss onClose={() => setShowAIWarningModal(false)} />
               <div className="modal-header">
                 <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                   <span>Tempe Huje</span>
@@ -1624,6 +1598,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
         {showDuplicatesModal && (
           <div className="modal-overlay" onClick={() => setShowDuplicatesModal(false)}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <ModalDismiss onClose={() => setShowDuplicatesModal(false)} />
               <div className="modal-header">
                 <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Icon name="alert-triangle" size={20} /> Wykryto duplikaty

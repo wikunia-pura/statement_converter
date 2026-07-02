@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Kontrahent, KontrahentTyp } from '../../shared/types';
 import { translations, Language } from '../translations';
+import Loader from '../components/Loader';
+import ModalDismiss from '../components/Modal';
 
 // Shared color scheme for the contractor-type pills — used both by the toggle
 // pills in the add/edit form and the read-only badges in the table.
@@ -227,11 +229,22 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
     setNewAlternativeNames(newAlternativeNames.filter((_, i) => i !== index));
   };
 
-  const filteredKontrahenci = kontrahenci.filter(k =>
-    k.nazwa.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    k.kontoKontrahenta.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (k.nip && k.nip.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredKontrahenci = useMemo(() => {
+    const q = searchTerm.toLowerCase();
+    return kontrahenci.filter(k =>
+      k.nazwa.toLowerCase().includes(q) ||
+      k.kontoKontrahenta.toLowerCase().includes(q) ||
+      (k.nip && k.nip.toLowerCase().includes(q))
+    );
+  }, [kontrahenci, searchTerm]);
+
+  if (isLoading) {
+    return (
+      <div className="content-body">
+        <Loader label={t.loading} />
+      </div>
+    );
+  }
 
   return (
     <div className="content-body">
@@ -287,21 +300,21 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
               </button>
             )}
             <button
-              className="button button-secondary"
+              className="button button-import"
               onClick={handleImportFromFileFunky}
               disabled={isImporting}
             >
               {t.importFromFileFunky}
             </button>
             <button
-              className="button button-secondary"
+              className="button button-import"
               onClick={handleImportFromDOM}
               disabled={isImporting}
             >
               {t.importFromDOM}
             </button>
             <button
-              className="button button-secondary"
+              className="button button-export"
               onClick={handleExportToFile}
               disabled={kontrahenci.length === 0}
             >
@@ -320,6 +333,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
         {(showAddKontrahent || editingKontrahent) && (
           <div className="modal-overlay" onClick={handleCancelEdit}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <ModalDismiss onClose={handleCancelEdit} />
               <div className="modal-header">
                 {editingKontrahent ? t.editKontrahent : t.addNewKontrahent}
               </div>

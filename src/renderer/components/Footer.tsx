@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { translations, Language } from '../translations';
 
 interface FooterProps {
@@ -9,6 +9,12 @@ interface FooterProps {
 const Footer: React.FC<FooterProps> = ({ language, appVersion }) => {
   const t = translations[language];
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const checkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear the pending "checking" reset timer if the component unmounts first.
+  useEffect(() => () => {
+    if (checkTimerRef.current) clearTimeout(checkTimerRef.current);
+  }, []);
 
   const handleZoomIn = async () => {
     try {
@@ -46,7 +52,7 @@ const Footer: React.FC<FooterProps> = ({ language, appVersion }) => {
       if (window.electronAPI && window.electronAPI.checkForUpdates) {
         await window.electronAPI.checkForUpdates();
         // The UpdateNotification component will show if update is available
-        setTimeout(() => {
+        checkTimerRef.current = setTimeout(() => {
           setCheckingUpdate(false);
         }, 2000);
       }

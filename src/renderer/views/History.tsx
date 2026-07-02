@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ConversionHistory } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { formatDate } from '../../shared/utils';
 import Icon from '../components/Icon';
+import Loader from '../components/Loader';
 import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
 import { resolveOutputFilePath } from '../../shared/outputPaths';
 
@@ -13,6 +14,7 @@ interface HistoryProps {
 const History: React.FC<HistoryProps> = ({ language }) => {
   const t = translations[language];
   const [history, setHistory] = useState<ConversionHistory[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
@@ -79,11 +81,46 @@ const History: React.FC<HistoryProps> = ({ language }) => {
     setOpenDropdownId(null);
   };
 
-  // Pagination logic
-  const totalPages = Math.ceil(history.length / itemsPerPage);
+  // Search across as many fields as possible
+  const filteredHistory = useMemo(() => {
+    const q = searchTerm.toLowerCase().trim();
+    if (!q) return history;
+
+    // Support space-separated terms — every term must match somewhere (AND).
+    const terms = q.split(/\s+/);
+
+    return history.filter((entry) => {
+      const statusLabel = entry.status === 'success' ? t.success : t.error;
+      const haystack = [
+        entry.fileName,
+        entry.bankName,
+        entry.converterName,
+        entry.status,
+        statusLabel,
+        entry.errorMessage,
+        entry.inputPath,
+        entry.outputPath,
+        entry.convertedAt,
+        formatDate(entry.convertedAt),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return terms.every((term) => haystack.includes(term));
+    });
+  }, [history, searchTerm, t]);
+
+  // Reset to first page whenever the search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  // Pagination logic (operates on the filtered list)
+  const totalPages = Math.ceil(filteredHistory.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const currentItems = history.slice(startIndex, endIndex);
+  const currentItems = filteredHistory.slice(startIndex, endIndex);
 
   const goToPage = (page: number) => {
     setCurrentPage(page);
@@ -118,6 +155,14 @@ const History: React.FC<HistoryProps> = ({ language }) => {
     return pages;
   };
 
+  if (isLoading) {
+    return (
+      <div className="content-body">
+        <Loader label={t.loading} />
+      </div>
+    );
+  }
+
   return (
     <div className="content-body">
         <div className="card">
@@ -133,7 +178,10 @@ const History: React.FC<HistoryProps> = ({ language }) => {
               <h2 style={{ marginBottom: '5px' }}>{t.recentConversions}</h2>
               {history.length > 0 && (
                 <p style={{ fontSize: '14px', color: 'var(--text-tertiary)', margin: 0 }}>
-                  Wpisy {startIndex + 1}-{Math.min(endIndex, history.length)} z {history.length}
+                  {filteredHistory.length > 0
+                    ? `Wpisy ${startIndex + 1}-${Math.min(endIndex, filteredHistory.length)} z ${filteredHistory.length}`
+                    : `0 z ${history.length}`}
+                  {searchTerm.trim() && ` (${history.length})`}
                 </p>
               )}
             </div>
@@ -144,7 +192,23 @@ const History: React.FC<HistoryProps> = ({ language }) => {
             )}
           </div>
 
-          {history.length > 0 ? (
+          {history.length > 0 && (
+            <div className="form-group" style={{ marginBottom: '15px' }}>
+              <input
+                type="text"
+                placeholder={t.searchHistory}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+          )}
+
+          {history.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-state-icon"><Icon name="history" size={48} /></div>
+              <div className="empty-state-text">{t.noConversionHistory}</div>
+            </div>
+          ) : filteredHistory.length > 0 ? (
             <>
               <table>
                 <thead>
@@ -304,8 +368,8 @@ const History: React.FC<HistoryProps> = ({ language }) => {
             </>
           ) : (
             <div className="empty-state">
-              <div className="empty-state-icon"><Icon name="history" size={48} /></div>
-              <div className="empty-state-text">{t.noConversionHistory}</div>
+              <div className="empty-state-icon"><Icon name="search" size={48} /></div>
+              <div className="empty-state-text">{t.noHistoryResults}</div>
             </div>
           )}
         </div>

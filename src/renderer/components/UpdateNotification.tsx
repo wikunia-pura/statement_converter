@@ -20,14 +20,17 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
   const [macReleaseOpened, setMacReleaseOpened] = useState(false);
 
   useEffect(() => {
-    // Listen for update events
-    if (typeof window !== 'undefined' && window.electronAPI) {
+    // Listen for update events. Each subscription returns an unsubscribe fn;
+    // collect them and tear down on unmount so listeners don't accumulate across
+    // login/logout remounts (each remount previously leaked 4 IPC listeners).
+    if (typeof window === 'undefined' || !window.electronAPI) return;
+
+    const unsubscribers = [
       window.electronAPI.onUpdateAvailable((info: any) => {
         console.log('Update available:', info);
         setUpdateAvailable(true);
         setUpdateInfo(info);
-      });
-
+      }),
       window.electronAPI.onUpdateDownloaded((info: any) => {
         console.log('Update downloaded:', info);
         setUpdateDownloaded(true);
@@ -35,19 +38,19 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
         setUpdateInfo(info);
         setDownloadPath(info.downloadPath || '');
         setPlatform(info.platform || '');
-      });
-
+      }),
       window.electronAPI.onUpdateError((err: string) => {
         console.error('Update error:', err);
         setError(err);
         setDownloading(false);
-      });
-
+      }),
       window.electronAPI.onDownloadProgress((progress: any) => {
         console.log('Download progress:', progress.percent);
         setDownloadProgress(Math.round(progress.percent || 0));
-      });
-    }
+      }),
+    ];
+
+    return () => unsubscribers.forEach(unsub => unsub());
   }, []);
 
   const handleDownload = async () => {

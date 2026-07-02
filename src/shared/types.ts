@@ -11,12 +11,51 @@ export interface Bank {
 
 export type KontrahentTyp = 'Kontrahent' | 'Pozostałe przychody' | 'Pozostałe koszty';
 
+/**
+ * A globally-configured "account type" that maps a community bank account to a
+ * pair of accounting symbols used when generating the accounting file:
+ *   - `bankAccountSymbol` — the community's own bank-account side (e.g. `131-1`,
+ *     `142-2`), replacing the previously hardcoded `131-1`.
+ *   - `apartmentPrefix` — the prefix for per-apartment accounts (e.g. `204` for
+ *     `131-1`, `205` for `142-2`), replacing the previously hardcoded `204`.
+ * Each account number added to an Adres references one KontoTyp; the type of the
+ * account matched during conversion selects which symbols the exporter emits.
+ */
+export interface KontoTyp {
+  id: number;
+  name: string;
+  bankAccountSymbol: string;
+  apartmentPrefix: string;
+  /** Exactly one KontoTyp is the default, used when an account has no explicit type. */
+  isDefault: boolean;
+  createdAt: string;
+}
+
+/** The accounting symbols an exporter needs for one conversion. */
+export interface AccountConfig {
+  bankAccountSymbol: string;
+  apartmentPrefix: string;
+}
+
+/** Fallback symbols matching the historical hardcoded behavior (no configured types). */
+export const DEFAULT_ACCOUNT_CONFIG: AccountConfig = {
+  bankAccountSymbol: '131-1',
+  apartmentPrefix: '204',
+};
+
 export interface Kontrahent {
   id: number;
   nazwa: string;
   kontoKontrahenta: string;
   nip?: string;
-  typ: KontrahentTyp;
+  /**
+   * One or more roles a contractor plays. A company can be several at once
+   * (e.g. a `Kontrahent` we pay for electricity that also issues `Pozostałe
+   * przychody` refunds). The matcher intersects these with the direction-allowed
+   * types, so each transaction side (income/expense) draws only from the pool it
+   * should. Never empty — defaults to `['Kontrahent']`.
+   */
+  typy: KontrahentTyp[];
   alternativeNames?: string[];
   createdAt: string;
 }
@@ -48,6 +87,8 @@ export interface Adres {
   swrkIdentifiers?: string[];
   /** Community bank account numbers used by the Converter to auto-pick the address when a statement file is uploaded. Stored as the canonical 26-digit form (no PL prefix, no spaces). Globally unique across all addresses — enforced at the DB layer in addAdres/updateAdres. */
   accountNumbers?: string[];
+  /** Maps a canonical account number (from `accountNumbers`) to a KontoTyp id. Missing entry ⇒ default type. */
+  accountTypes?: Record<string, number>;
   /** Optional link to a Bank. When set, the converter only shows this address for files whose bank matches; null/undefined ⇒ address is available for all banks. */
   bankId?: number | null;
   /** User-defined rules mapping recurring "weird" payments to apartment numbers. */
@@ -77,6 +118,8 @@ export interface FileEntry {
   adresAutoMatched?: boolean;
   /** Community account number(s) extracted from the statement file at upload time. Used to power the "no match → add address with this account" affordance when adresId stays null. */
   detectedAccounts?: string[];
+  /** Chosen KontoTyp id for this file's conversion. Defaults from the matched detected account's type; falls back to the default type. */
+  accountTypeId?: number | null;
 }
 
 export interface ConversionSummary {
@@ -201,7 +244,13 @@ export const IPC_CHANNELS = {
   DELETE_ALL_ADRESY: 'db:delete-all-adresy',
   IMPORT_ADRESY_FROM_FILE: 'db:import-adresy-from-file',
   EXPORT_ADRESY_TO_FILE: 'db:export-adresy-to-file',
-  
+
+  // Konto typy operations (global account-type configuration)
+  GET_KONTO_TYPY: 'db:get-konto-typy',
+  ADD_KONTO_TYP: 'db:add-konto-typ',
+  UPDATE_KONTO_TYP: 'db:update-konto-typ',
+  DELETE_KONTO_TYP: 'db:delete-konto-typ',
+
   // Converters
   GET_CONVERTERS: 'converters:get-all',
   

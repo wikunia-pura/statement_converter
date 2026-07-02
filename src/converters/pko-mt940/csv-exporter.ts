@@ -9,6 +9,10 @@ export interface CsvExportOptions {
   separator?: string;
   dateFormat?: 'D.MM.YYYY' | 'DD/MM/YYYY' | 'YYYY-MM-DD';
   decimalSeparator?: ',' | '.';
+  /** Community bank-account symbol (e.g. '131-1', '142-2'). Selected via the account type. */
+  bankAccountSymbol?: string;
+  /** Apartment-account prefix (e.g. '204', '205'). Selected via the account type. */
+  apartmentPrefix?: string;
 }
 
 export class CsvExporter {
@@ -19,6 +23,8 @@ export class CsvExporter {
       separator: options.separator || '\t',  // TAB separator by default
       dateFormat: options.dateFormat || 'D.MM.YYYY',
       decimalSeparator: options.decimalSeparator || ',',
+      bankAccountSymbol: options.bankAccountSymbol || '131-1',
+      apartmentPrefix: options.apartmentPrefix || '204',
     };
   }
 
@@ -70,7 +76,7 @@ export class CsvExporter {
         data_p: date,
         tresc: description,
         kwota: amount,
-        k_wn: '131-1',
+        k_wn: this.options.bankAccountSymbol,
         k_ma: '   -',
       }));
     }
@@ -89,7 +95,7 @@ export class CsvExporter {
         data_p: date,
         tresc: description,
         kwota: amount,
-        k_wn: '131-1',
+        k_wn: this.options.bankAccountSymbol,
         k_ma: '   -',
       }));
 
@@ -135,7 +141,7 @@ export class CsvExporter {
         tresc: description,
         kwota: amount,
         k_wn: '   -',
-        k_ma: '131-1',
+        k_ma: this.options.bankAccountSymbol,
       }));
     }
 
@@ -155,7 +161,7 @@ export class CsvExporter {
         tresc: description,
         kwota: amount,
         k_wn: contractorAccount,
-        k_ma: '131-1',
+        k_ma: this.options.bankAccountSymbol,
       }));
     }
 
@@ -195,11 +201,11 @@ export class CsvExporter {
           lines.push(`Rozpoznane mieszkanie: ${apartmentNumber}`);
           lines.push(`Konto lokalu: ${this.formatAccountNumber(apartmentNumber)}`);
           lines.push(`Księgowanie:`);
-          lines.push(`  Linia 1: k_wn = 131-1, k_ma = ---`);
+          lines.push(`  Linia 1: k_wn = ${this.options.bankAccountSymbol}, k_ma = ---`);
           lines.push(`  Linia 2: k_wn = ---, k_ma = ${this.formatAccountNumber(apartmentNumber)}`);
         } else {
           lines.push(`Status: NIEROZPOZNANE`);
-          lines.push(`Księgowanie: k_wn = 131-1, k_ma = ---`);
+          lines.push(`Księgowanie: k_wn = ${this.options.bankAccountSymbol}, k_ma = ---`);
         }
         
         // Confidence and status in one readable line
@@ -242,10 +248,10 @@ export class CsvExporter {
           lines.push(`Konto kontrahenta: ${contractor.kontoKontrahenta}`);
           lines.push(`Confidence: ${matchedContractor.confidence}%`);
           lines.push(`Dopasowane w: ${matchedContractor.matchedIn}`);
-          lines.push(`Księgowanie: k_wn = ${contractor.kontoKontrahenta}, k_ma = 131-1`);
+          lines.push(`Księgowanie: k_wn = ${contractor.kontoKontrahenta}, k_ma = ${this.options.bankAccountSymbol}`);
         } else {
           lines.push(`Status: NIEROZPOZNANY KONTRAHENT`);
-          lines.push(`Księgowanie: k_wn = ---, k_ma = 131-1`);
+          lines.push(`Księgowanie: k_wn = ---, k_ma = ${this.options.bankAccountSymbol}`);
         }
         
         lines.push(`Metoda ekstrakcji: ${transaction.extracted.extractionMethod}`);
@@ -337,14 +343,15 @@ export class CsvExporter {
    * Format account number for output (204-XXXXXX)
    */
   private formatAccountNumber(apartmentNumber: string): string {
+    const prefix = this.options.apartmentPrefix;
     // Handle ZGN special case - all zeros (same as santander-xml)
     if (apartmentNumber.toUpperCase() === 'ZGN') {
-      return '204-000000';
+      return `${prefix}-000000`;
     }
     // If NOT pure digits (contains letters, dashes, etc), it's an account symbol - use as-is
     if (!/^\d+$/.test(apartmentNumber)) return apartmentNumber;
     // Pure digits - it's an apartment number, format as 204-XXXXXX
-    return `204-${apartmentNumber.padStart(6, '0')}`;
+    return `${prefix}-${apartmentNumber.padStart(6, '0')}`;
   }
 
   /**

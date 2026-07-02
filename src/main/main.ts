@@ -5,7 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import DatabaseService from './database';
 import ConverterRegistry, { setDatabaseInstance } from './converterRegistry';
-import { IPC_CHANNELS, KontrahentTyp } from '../shared/types';
+import { IPC_CHANNELS, KontrahentTyp, DEFAULT_ACCOUNT_CONFIG, AccountConfig } from '../shared/types';
 import * as authService from './authService';
 import { getMigrationStatus, runMigration } from './migrationService';
 import { extractPdfText } from '../shared/pdf-utils';
@@ -131,6 +131,33 @@ async function generateOutputFileName(
   return `${addressPart}_${timestamp}.txt`;
 }
 
+/**
+ * Resolve the accounting symbols for a conversion from the chosen KontoTyp id.
+ * Falls back to the configured default type, then to the historical 131-1 / 204
+ * behavior when no types exist.
+ */
+async function resolveAccountConfig(
+  accountTypeId: number | null | undefined,
+  db: DatabaseService,
+): Promise<AccountConfig> {
+  try {
+    const types = await db.getKontoTypy();
+    const chosen =
+      (accountTypeId != null ? types.find(t => t.id === accountTypeId) : undefined) ||
+      types.find(t => t.isDefault) ||
+      types[0];
+    if (chosen) {
+      return {
+        bankAccountSymbol: chosen.bankAccountSymbol || DEFAULT_ACCOUNT_CONFIG.bankAccountSymbol,
+        apartmentPrefix: chosen.apartmentPrefix || DEFAULT_ACCOUNT_CONFIG.apartmentPrefix,
+      };
+    }
+  } catch (e) {
+    log.warn(`[CONVERT] resolveAccountConfig failed, using default: ${e}`);
+  }
+  return DEFAULT_ACCOUNT_CONFIG;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -249,12 +276,12 @@ function setupIpcHandlers() {
     return await database.getAllKontrahenci();
   });
 
-  ipcMain.handle(IPC_CHANNELS.ADD_KONTRAHENT, async (_, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typ?: string) => {
-    return await database.addKontrahent(nazwa, kontoKontrahenta, nip, alternativeNames, typ as any);
+  ipcMain.handle(IPC_CHANNELS.ADD_KONTRAHENT, async (_, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typy?: string[]) => {
+    return await database.addKontrahent(nazwa, kontoKontrahenta, nip, alternativeNames, typy as any);
   });
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_KONTRAHENT, async (_, id: number, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typ?: string) => {
-    await database.updateKontrahent(id, nazwa, kontoKontrahenta, nip, alternativeNames, typ as any);
+  ipcMain.handle(IPC_CHANNELS.UPDATE_KONTRAHENT, async (_, id: number, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typy?: string[]) => {
+    await database.updateKontrahent(id, nazwa, kontoKontrahenta, nip, alternativeNames, typy as any);
     return true;
   });
 
@@ -303,21 +330,21 @@ function setupIpcHandlers() {
       let wasNewlyAdded = false; // Track if lastKontrahent was just added
       let accumulatedNip: string | undefined = undefined;
       let accumulatedAltNames: string[] = [];
-      let accumulatedTyp: string | undefined = undefined;
-      
+      let accumulatedTypy: KontrahentTyp[] = [];
+
       const finalizeLastKontrahent = async () => {
-        if (lastKontrahent && (accumulatedNip || accumulatedAltNames.length > 0 || accumulatedTyp)) {
+        if (lastKontrahent && (accumulatedNip || accumulatedAltNames.length > 0 || accumulatedTypy.length > 0)) {
           await database.updateKontrahent(
-            lastKontrahent.id, 
-            lastKontrahent.nazwa, 
-            lastKontrahent.kontoKontrahenta, 
-            accumulatedNip, 
+            lastKontrahent.id,
+            lastKontrahent.nazwa,
+            lastKontrahent.kontoKontrahenta,
+            accumulatedNip,
             accumulatedAltNames,
-            accumulatedTyp as KontrahentTyp
+            accumulatedTypy.length > 0 ? accumulatedTypy : undefined
           );
           if (accumulatedNip) lastKontrahent.nip = accumulatedNip;
           if (accumulatedAltNames.length > 0) lastKontrahent.alternativeNames = accumulatedAltNames;
-          if (accumulatedTyp) lastKontrahent.typ = accumulatedTyp;
+          if (accumulatedTypy.length > 0) lastKontrahent.typy = accumulatedTypy;
           
           // Count as updated only if it wasn't just added (to avoid double counting)
           if (!wasNewlyAdded) {
@@ -359,12 +386,16 @@ function setupIpcHandlers() {
           continue;
         }
         
-        // Check if it's a TYP line
+        // Check if it's a TYP line (may list several comma-separated roles)
         const typMatch = line.match(/^\s*TYP:\s*(.+)$/);
         if (typMatch && lastKontrahent) {
-          const typValue = typMatch[1].trim();
-          if (typValue === 'Pozostałe przychody' || typValue === 'Pozostałe koszty') {
-            accumulatedTyp = typValue;
+          const validTypy = typMatch[1]
+            .split(',')
+            .map(s => s.trim())
+            .filter((v): v is KontrahentTyp =>
+              v === 'Kontrahent' || v === 'Pozostałe przychody' || v === 'Pozostałe koszty');
+          if (validTypy.length > 0) {
+            accumulatedTypy = validTypy;
           }
           continue;
         }
@@ -378,8 +409,8 @@ function setupIpcHandlers() {
           await finalizeLastKontrahent();
           accumulatedNip = undefined;
           accumulatedAltNames = [];
-          accumulatedTyp = undefined;
-          
+          accumulatedTypy = [];
+
           const symbol = match[1].trim();
           const nazwa = match[2].trim();
 
@@ -570,9 +601,10 @@ function setupIpcHandlers() {
           lines.push(`    ALT: ${k.alternativeNames.join(', ')}`);
         }
         
-        // Add typ if not default
-        if (k.typ && k.typ !== 'Kontrahent') {
-          lines.push(`    TYP: ${k.typ}`);
+        // Add typ(s) unless it's just the default single 'Kontrahent'
+        const typy = k.typy && k.typy.length > 0 ? k.typy : ['Kontrahent'];
+        if (!(typy.length === 1 && typy[0] === 'Kontrahent')) {
+          lines.push(`    TYP: ${typy.join(', ')}`);
         }
       }
       
@@ -602,8 +634,9 @@ function setupIpcHandlers() {
       bankId?: number | null,
       accountNumbers?: string[],
       apartmentMappings?: import('../shared/types').ApartmentMapping[],
+      accountTypes?: Record<string, number>,
     ) => {
-      return await database.addAdres(nazwa, alternativeNames, swrkIdentifiers, bankId, accountNumbers, apartmentMappings);
+      return await database.addAdres(nazwa, alternativeNames, swrkIdentifiers, bankId, accountNumbers, apartmentMappings, accountTypes);
     },
   );
 
@@ -618,11 +651,38 @@ function setupIpcHandlers() {
       bankId?: number | null,
       accountNumbers?: string[],
       apartmentMappings?: import('../shared/types').ApartmentMapping[],
+      accountTypes?: Record<string, number>,
     ) => {
-      await database.updateAdres(id, nazwa, alternativeNames, swrkIdentifiers, bankId, accountNumbers, apartmentMappings);
+      await database.updateAdres(id, nazwa, alternativeNames, swrkIdentifiers, bankId, accountNumbers, apartmentMappings, accountTypes);
       return true;
     },
   );
+
+  // ---------------------------- Konto typy ----------------------------
+
+  ipcMain.handle(IPC_CHANNELS.GET_KONTO_TYPY, async () => {
+    return await database.getKontoTypy();
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.ADD_KONTO_TYP,
+    async (_, name: string, bankAccountSymbol: string, apartmentPrefix: string, isDefault: boolean) => {
+      return await database.addKontoTyp(name, bankAccountSymbol, apartmentPrefix, isDefault);
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.UPDATE_KONTO_TYP,
+    async (_, id: number, name: string, bankAccountSymbol: string, apartmentPrefix: string, isDefault: boolean) => {
+      await database.updateKontoTyp(id, name, bankAccountSymbol, apartmentPrefix, isDefault);
+      return true;
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_KONTO_TYP, async (_, id: number) => {
+    await database.deleteKontoTyp(id);
+    return true;
+  });
 
   ipcMain.handle(IPC_CHANNELS.DELETE_ADRES, async (_, id: number) => {
     await database.deleteAdres(id);
@@ -1134,7 +1194,7 @@ function setupIpcHandlers() {
 
   ipcMain.handle(
     IPC_CHANNELS.CONVERT_FILE,
-    async (_, inputPath: string, bankId: number, fileName: string, adresId?: number | null) => {
+    async (_, inputPath: string, bankId: number, fileName: string, adresId?: number | null, accountTypeId?: number | null) => {
       try {
         // Validate input file exists
         if (!fs.existsSync(inputPath)) {
@@ -1169,15 +1229,19 @@ function setupIpcHandlers() {
         const outputFileName = await generateOutputFileName(adresId, database);
         const finalOutputPath = path.join(outputFolder, outputFileName);
 
+        const accountConfig = await resolveAccountConfig(accountTypeId, database);
+
         // Perform conversion
         const result = await converterRegistry.convert(
-          bank.converterId, 
-          inputPath, 
-          finalOutputPath, 
-          false, 
+          bank.converterId,
+          inputPath,
+          finalOutputPath,
+          false,
           adresId,
           fileName,
-          bank.name
+          bank.name,
+          undefined,
+          accountConfig
         );
 
         // Check if review is needed
@@ -1279,7 +1343,7 @@ function setupIpcHandlers() {
   // Convert with AI enabled
   ipcMain.handle(
     IPC_CHANNELS.CONVERT_FILE_WITH_AI,
-    async (event, inputPath: string, bankId: number, fileName: string, adresId?: number | null) => {
+    async (event, inputPath: string, bankId: number, fileName: string, adresId?: number | null, accountTypeId?: number | null) => {
       // Emit progress events back to the renderer that initiated this call.
       const onProgress = (e: any) => {
         try {
@@ -1320,6 +1384,8 @@ function setupIpcHandlers() {
         const outputFileName = await generateOutputFileName(adresId, database);
         const finalOutputPath = path.join(outputFolder, outputFileName);
 
+        const accountConfig = await resolveAccountConfig(accountTypeId, database);
+
         try {
           // Perform conversion WITH AI
           const result = await converterRegistry.convert(
@@ -1330,7 +1396,8 @@ function setupIpcHandlers() {
             adresId,
             fileName,
             bank.name,
-            onProgress
+            onProgress,
+            accountConfig
           );
 
           // Check if review is needed
@@ -1377,7 +1444,8 @@ function setupIpcHandlers() {
               adresId,
               fileName,
               bank.name,
-              onProgress
+              onProgress,
+              accountConfig
             );
 
             // Check if review is needed

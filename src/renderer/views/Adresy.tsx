@@ -1,7 +1,177 @@
 import React, { useState, useEffect } from 'react';
-import { Adres, Bank, ApartmentMapping } from '../../shared/types';
+import { Adres, Bank, ApartmentMapping, KontoTyp } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { normalizeAccount } from '../../shared/account-extractor';
+
+interface AccountTypesModalProps {
+  language: Language;
+  kontoTypy: KontoTyp[];
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+/**
+ * Global configuration of account types. Each type maps to a pair of accounting
+ * symbols (community bank-account side + apartment-account prefix). Exactly one
+ * type is the default (used when an account number has no explicit type).
+ */
+const AccountTypesModal: React.FC<AccountTypesModalProps> = ({ language, kontoTypy, onClose, onSaved }) => {
+  const t = translations[language];
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [name, setName] = useState('');
+  const [bankAccountSymbol, setBankAccountSymbol] = useState('');
+  const [apartmentPrefix, setApartmentPrefix] = useState('');
+  const [isDefault, setIsDefault] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const resetForm = () => {
+    setEditingId(null);
+    setName('');
+    setBankAccountSymbol('');
+    setApartmentPrefix('');
+    setIsDefault(false);
+    setError(null);
+  };
+
+  const startEdit = (typ: KontoTyp) => {
+    setEditingId(typ.id);
+    setName(typ.name);
+    setBankAccountSymbol(typ.bankAccountSymbol);
+    setApartmentPrefix(typ.apartmentPrefix);
+    setIsDefault(typ.isDefault);
+    setError(null);
+  };
+
+  const handleSubmit = async () => {
+    const trimmedName = name.trim();
+    const symbol = bankAccountSymbol.trim();
+    const prefix = apartmentPrefix.trim();
+    if (!trimmedName || !symbol || !prefix) {
+      setError(t.fillAllFields);
+      return;
+    }
+    setIsSaving(true);
+    setError(null);
+    try {
+      if (editingId != null) {
+        await window.electronAPI.updateKontoTyp(editingId, trimmedName, symbol, prefix, isDefault);
+      } else {
+        await window.electronAPI.addKontoTyp(trimmedName, symbol, prefix, isDefault);
+      }
+      resetForm();
+      onSaved();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm(t.confirmDeleteAccountType)) return;
+    setIsSaving(true);
+    try {
+      await window.electronAPI.deleteKontoTyp(id);
+      if (editingId === id) resetForm();
+      onSaved();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
+        <div className="modal-header">{t.accountTypesTitle}</div>
+        <div className="modal-body">
+          <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '12px' }}>{t.accountTypesHint}</div>
+
+          {kontoTypy.length > 0 ? (
+            <table style={{ marginBottom: '16px' }}>
+              <thead>
+                <tr>
+                  <th>{t.accountTypeName}</th>
+                  <th>{t.accountTypeBankSymbol}</th>
+                  <th>{t.accountTypeApartmentPrefix}</th>
+                  <th>{t.actions}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {kontoTypy.map((typ) => (
+                  <tr key={typ.id}>
+                    <td>
+                      {typ.name}
+                      {typ.isDefault && (
+                        <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--accent)' }}>
+                          ({t.accountTypeDefaultBadge})
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ fontFamily: 'monospace' }}>{typ.bankAccountSymbol}</td>
+                    <td style={{ fontFamily: 'monospace' }}>{typ.apartmentPrefix}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button className="button button-small button-primary" onClick={() => startEdit(typ)} disabled={isSaving}>
+                          {t.edit}
+                        </button>
+                        <button className="button button-small button-danger" onClick={() => handleDelete(typ.id)} disabled={isSaving}>
+                          {t.delete}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="empty-state" style={{ marginBottom: '16px' }}>{t.noAccountTypes}</div>
+          )}
+
+          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
+            <div style={{ fontWeight: 600, marginBottom: '8px' }}>
+              {editingId != null ? t.edit : t.addAccountType}
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <div className="form-group" style={{ flex: '1 1 180px' }}>
+                <label>{t.accountTypeName} <span style={{ color: 'red' }}>*</span></label>
+                <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder={t.accountTypeNamePlaceholder} />
+              </div>
+              <div className="form-group" style={{ flex: '1 1 120px' }}>
+                <label>{t.accountTypeBankSymbol} <span style={{ color: 'red' }}>*</span></label>
+                <input type="text" value={bankAccountSymbol} onChange={(e) => setBankAccountSymbol(e.target.value)} placeholder={t.accountTypeBankSymbolPlaceholder} style={{ fontFamily: 'monospace' }} />
+              </div>
+              <div className="form-group" style={{ flex: '1 1 120px' }}>
+                <label>{t.accountTypeApartmentPrefix} <span style={{ color: 'red' }}>*</span></label>
+                <input type="text" value={apartmentPrefix} onChange={(e) => setApartmentPrefix(e.target.value)} placeholder={t.accountTypeApartmentPrefixPlaceholder} style={{ fontFamily: 'monospace' }} />
+              </div>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', marginTop: '4px' }}>
+              <input type="checkbox" checked={isDefault} onChange={(e) => setIsDefault(e.target.checked)} />
+              {t.accountTypeIsDefault}
+            </label>
+            {error && <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '8px' }}>{error}</div>}
+            <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+              <button className="button button-success" onClick={handleSubmit} disabled={isSaving}>
+                {editingId != null ? t.update : t.add}
+              </button>
+              {editingId != null && (
+                <button className="button button-secondary" onClick={resetForm} disabled={isSaving}>
+                  {t.cancel}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="button button-secondary" onClick={onClose}>{t.cancel}</button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const newMappingId = () =>
   (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
@@ -277,6 +447,8 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
   const t = translations[language];
   const [adresy, setAdresy] = useState<Adres[]>([]);
   const [banks, setBanks] = useState<Bank[]>([]);
+  const [kontoTypy, setKontoTypy] = useState<KontoTyp[]>([]);
+  const [showAccountTypesModal, setShowAccountTypesModal] = useState(false);
   const [showAddAdres, setShowAddAdres] = useState(false);
   const [editingAdres, setEditingAdres] = useState<Adres | null>(null);
   const [newNazwa, setNewNazwa] = useState('');
@@ -285,6 +457,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
   const [newSwrkIdentifiers, setNewSwrkIdentifiers] = useState<string[]>([]);
   const [newSwrkIdentifier, setNewSwrkIdentifier] = useState('');
   const [newAccountNumbers, setNewAccountNumbers] = useState<string[]>([]);
+  const [newAccountTypes, setNewAccountTypes] = useState<Record<string, number>>({});
   const [newAccountNumber, setNewAccountNumber] = useState('');
   const [accountNumberError, setAccountNumberError] = useState<string | null>(null);
   const [newBankId, setNewBankId] = useState<number | null>(null);
@@ -312,12 +485,14 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [adresyData, banksData] = await Promise.all([
+      const [adresyData, banksData, kontoTypyData] = await Promise.all([
         window.electronAPI.getAdresy(),
         window.electronAPI.getBanks(),
+        window.electronAPI.getKontoTypy(),
       ]);
       setAdresy(adresyData);
       setBanks(banksData);
+      setKontoTypy(kontoTypyData);
     } catch (error) {
       console.error('Error loading adresy:', error);
     } finally {
@@ -347,6 +522,8 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
         newSwrkIdentifiers,
         newBankId,
         newAccountNumbers,
+        undefined,
+        newAccountTypes,
       );
       resetForm();
       setShowAddAdres(false);
@@ -380,6 +557,8 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
         newSwrkIdentifiers,
         newBankId,
         newAccountNumbers,
+        undefined, // apartment mappings unchanged here (managed in their own modal)
+        newAccountTypes,
       );
       resetForm();
       setEditingAdres(null);
@@ -409,6 +588,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     setNewSwrkIdentifiers([]);
     setNewSwrkIdentifier('');
     setNewAccountNumbers([]);
+    setNewAccountTypes({});
     setNewAccountNumber('');
     setAccountNumberError(null);
     setNewBankId(null);
@@ -422,6 +602,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     setNewSwrkIdentifiers(adres.swrkIdentifiers || []);
     setNewSwrkIdentifier('');
     setNewAccountNumbers(adres.accountNumbers || []);
+    setNewAccountTypes(adres.accountTypes || {});
     setNewAccountNumber('');
     setAccountNumberError(null);
     setNewBankId(adres.bankId ?? null);
@@ -444,12 +625,29 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
       return;
     }
     setNewAccountNumbers([...newAccountNumbers, canonical]);
+    // Default the new account to the default type (if one is configured).
+    const defaultType = kontoTypy.find((k) => k.isDefault) ?? kontoTypy[0];
+    if (defaultType) {
+      setNewAccountTypes((prev) => ({ ...prev, [canonical]: defaultType.id }));
+    }
     setNewAccountNumber('');
     setAccountNumberError(null);
   };
 
   const handleRemoveAccountNumber = (index: number) => {
+    const removed = newAccountNumbers[index];
     setNewAccountNumbers(newAccountNumbers.filter((_, i) => i !== index));
+    if (removed) {
+      setNewAccountTypes((prev) => {
+        const next = { ...prev };
+        delete next[removed];
+        return next;
+      });
+    }
+  };
+
+  const handleAccountTypeChange = (account: string, typeId: number) => {
+    setNewAccountTypes((prev) => ({ ...prev, [account]: typeId }));
   };
 
   const handleImportFromFile = async () => {
@@ -572,6 +770,12 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
         >
           <h2>{t.adresy}</h2>
           <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              className="button button-secondary"
+              onClick={() => setShowAccountTypesModal(true)}
+            >
+              {t.accountTypesConfig}
+            </button>
             {adresy.length > 0 && (
               <button
                 className="button button-danger"
@@ -738,10 +942,35 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                     {t.accountNumbersHint}
                   </div>
                   {newAccountNumbers.length > 0 && (
-                    <div style={{ marginBottom: '8px' }}>
+                    <div style={{ marginBottom: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       {newAccountNumbers.map((acc, index) => (
-                        <div key={index} className="alternative-name-tag">
-                          <span style={{ fontFamily: 'monospace' }}>{acc}</span>
+                        <div
+                          key={index}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            flexWrap: 'wrap',
+                            padding: '6px 8px',
+                            border: '1px solid var(--border-subtle)',
+                            borderRadius: '6px',
+                          }}
+                        >
+                          <span style={{ fontFamily: 'monospace', flex: '1 1 200px', wordBreak: 'break-all' }}>{acc}</span>
+                          {kontoTypy.length > 0 && (
+                            <select
+                              value={newAccountTypes[acc] ?? ''}
+                              onChange={(e) => handleAccountTypeChange(acc, Number(e.target.value))}
+                              style={{ flex: '0 1 200px', fontSize: '13px' }}
+                              title={t.accountTypeForNumber}
+                            >
+                              {kontoTypy.map((typ) => (
+                                <option key={typ.id} value={typ.id}>
+                                  {typ.name} ({typ.bankAccountSymbol})
+                                </option>
+                              ))}
+                            </select>
+                          )}
                           <button
                             onClick={() => handleRemoveAccountNumber(index)}
                             className="alternative-name-remove"
@@ -854,7 +1083,20 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                     </td>
                     <td style={{ wordBreak: 'break-all', fontFamily: 'monospace', fontSize: '11px' }}>
                       {adres.accountNumbers && adres.accountNumbers.length > 0
-                        ? adres.accountNumbers.join(', ')
+                        ? adres.accountNumbers.map((acc) => {
+                            const typeId = adres.accountTypes?.[acc];
+                            const typ = kontoTypy.find((k) => k.id === typeId);
+                            return (
+                              <div key={acc} style={{ marginBottom: '2px' }}>
+                                {acc}
+                                {typ && (
+                                  <span style={{ color: 'var(--accent)', marginLeft: '6px' }}>
+                                    · {typ.name} ({typ.bankAccountSymbol})
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })
                         : '—'}
                     </td>
                     <td>
@@ -897,6 +1139,15 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
           adres={mappingsAdres}
           language={language}
           onClose={() => setMappingsAdres(null)}
+          onSaved={loadData}
+        />
+      )}
+
+      {showAccountTypesModal && (
+        <AccountTypesModal
+          language={language}
+          kontoTypy={kontoTypy}
+          onClose={() => setShowAccountTypesModal(false)}
           onSaved={loadData}
         />
       )}

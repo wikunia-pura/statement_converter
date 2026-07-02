@@ -24,6 +24,10 @@ const IPC_CHANNELS = {
   DELETE_ALL_ADRESY: 'db:delete-all-adresy',
   IMPORT_ADRESY_FROM_FILE: 'db:import-adresy-from-file',
   EXPORT_ADRESY_TO_FILE: 'db:export-adresy-to-file',
+  GET_KONTO_TYPY: 'db:get-konto-typy',
+  ADD_KONTO_TYP: 'db:add-konto-typ',
+  UPDATE_KONTO_TYP: 'db:update-konto-typ',
+  DELETE_KONTO_TYP: 'db:delete-konto-typ',
   GET_CONVERTERS: 'converters:get-all',
   SELECT_FILES: 'files:select',
   SELECT_OUTPUT_FOLDER: 'files:select-output-folder',
@@ -87,10 +91,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Kontrahenci
   getKontrahenci: () => ipcRenderer.invoke(IPC_CHANNELS.GET_KONTRAHENCI),
-  addKontrahent: (nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typ?: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.ADD_KONTRAHENT, nazwa, kontoKontrahenta, nip, alternativeNames, typ),
-  updateKontrahent: (id: number, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typ?: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_KONTRAHENT, id, nazwa, kontoKontrahenta, nip, alternativeNames, typ),
+  addKontrahent: (nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typy?: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ADD_KONTRAHENT, nazwa, kontoKontrahenta, nip, alternativeNames, typy),
+  updateKontrahent: (id: number, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typy?: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_KONTRAHENT, id, nazwa, kontoKontrahenta, nip, alternativeNames, typy),
   deleteKontrahent: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_KONTRAHENT, id),
   deleteAllKontrahenci: () => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ALL_KONTRAHENCI),
   importKontrahenciFromFile: () => ipcRenderer.invoke(IPC_CHANNELS.IMPORT_KONTRAHENCI_FROM_FILE),
@@ -106,6 +110,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     bankId?: number | null,
     accountNumbers?: string[],
     apartmentMappings?: import('../shared/types').ApartmentMapping[],
+    accountTypes?: Record<string, number>,
   ) =>
     ipcRenderer.invoke(
       IPC_CHANNELS.ADD_ADRES,
@@ -115,6 +120,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       bankId,
       accountNumbers,
       apartmentMappings,
+      accountTypes,
     ),
   updateAdres: (
     id: number,
@@ -124,6 +130,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     bankId?: number | null,
     accountNumbers?: string[],
     apartmentMappings?: import('../shared/types').ApartmentMapping[],
+    accountTypes?: Record<string, number>,
   ) =>
     ipcRenderer.invoke(
       IPC_CHANNELS.UPDATE_ADRES,
@@ -134,11 +141,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
       bankId,
       accountNumbers,
       apartmentMappings,
+      accountTypes,
     ),
   deleteAdres: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ADRES, id),
   deleteAllAdresy: () => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ALL_ADRESY),
   importAdresyFromFile: () => ipcRenderer.invoke(IPC_CHANNELS.IMPORT_ADRESY_FROM_FILE),
   exportAdresyToFile: () => ipcRenderer.invoke(IPC_CHANNELS.EXPORT_ADRESY_TO_FILE),
+
+  // Konto typy
+  getKontoTypy: () => ipcRenderer.invoke(IPC_CHANNELS.GET_KONTO_TYPY),
+  addKontoTyp: (name: string, bankAccountSymbol: string, apartmentPrefix: string, isDefault: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ADD_KONTO_TYP, name, bankAccountSymbol, apartmentPrefix, isDefault),
+  updateKontoTyp: (id: number, name: string, bankAccountSymbol: string, apartmentPrefix: string, isDefault: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_KONTO_TYP, id, name, bankAccountSymbol, apartmentPrefix, isDefault),
+  deleteKontoTyp: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_KONTO_TYP, id),
 
   // Converters
   getConverters: () => ipcRenderer.invoke(IPC_CHANNELS.GET_CONVERTERS),
@@ -148,14 +164,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectPdf: () => ipcRenderer.invoke(IPC_CHANNELS.SELECT_PDF),
   extractPdfText: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.EXTRACT_PDF_TEXT, filePath),
   selectOutputFolder: () => ipcRenderer.invoke(IPC_CHANNELS.SELECT_OUTPUT_FOLDER),
-  convertFile: (inputPath: string, bankId: number, fileName: string, adresId?: number | null) =>
-    ipcRenderer.invoke(IPC_CHANNELS.CONVERT_FILE, inputPath, bankId, fileName, adresId),
+  convertFile: (inputPath: string, bankId: number, fileName: string, adresId?: number | null, accountTypeId?: number | null) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CONVERT_FILE, inputPath, bankId, fileName, adresId, accountTypeId),
   analyzeFile: (inputPath: string, bankId: number, adresId?: number | null) =>
     ipcRenderer.invoke(IPC_CHANNELS.ANALYZE_FILE, inputPath, bankId, adresId),
   detectAccountNumbers: (inputPath: string, bankId?: number | null) =>
     ipcRenderer.invoke(IPC_CHANNELS.DETECT_ACCOUNT_NUMBERS, inputPath, bankId),
-  convertFileWithAI: (inputPath: string, bankId: number, fileName: string, adresId?: number | null) =>
-    ipcRenderer.invoke(IPC_CHANNELS.CONVERT_FILE_WITH_AI, inputPath, bankId, fileName, adresId),
+  convertFileWithAI: (inputPath: string, bankId: number, fileName: string, adresId?: number | null, accountTypeId?: number | null) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CONVERT_FILE_WITH_AI, inputPath, bankId, fileName, adresId, accountTypeId),
   finalizeConversion: (tempConversionId: string, decisions: any[]) =>
     ipcRenderer.invoke(IPC_CHANNELS.FINALIZE_CONVERSION, tempConversionId, decisions),
   openFile: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.OPEN_FILE, filePath),

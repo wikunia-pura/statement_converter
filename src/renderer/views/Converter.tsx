@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileEntry, Bank, Adres, ConversionReviewData, ReviewDecision } from '../../shared/types';
+import { FileEntry, Bank, Adres, KontoTyp, ConversionReviewData, ReviewDecision } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { generateId } from '../../shared/utils';
 import { TransactionReviewScreen } from '../components/TransactionReviewScreen';
 import Icon from '../components/Icon';
 import kapitanBombaImg from '../assets/kapitan_bomba.jpg';
 import BankIllustration from '../components/BankIllustration';
-import { findAdresByAccountNumbers } from '../../shared/account-extractor';
+import { findAdresByAccountNumbers, normalizeAccount } from '../../shared/account-extractor';
 import { resolveOutputFilePath } from '../../shared/outputPaths';
 import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
 
@@ -223,6 +223,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   const t = translations[language];
   const [banks, setBanks] = useState<Bank[]>([]);
   const [adresy, setAdresy] = useState<Adres[]>([]);
+  const [kontoTypy, setKontoTypy] = useState<KontoTyp[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showDuplicatesModal, setShowDuplicatesModal] = useState(false);
@@ -306,8 +307,38 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   useEffect(() => {
     loadBanks();
     loadAdresy();
+    loadKontoTypy();
     loadSettings();
   }, []);
+
+  const loadKontoTypy = async () => {
+    try {
+      const data = await window.electronAPI.getKontoTypy();
+      setKontoTypy(data);
+    } catch (error) {
+      console.error('Error loading konto typy:', error);
+    }
+  };
+
+  /**
+   * Resolve the account type for a file: prefer the type of the address account
+   * that matches one of the file's detected account numbers; fall back to the
+   * default type (or the first configured type).
+   */
+  const resolveAccountTypeId = (
+    adresId: number | null,
+    detectedAccounts: string[] | undefined,
+  ): number | null => {
+    const defaultTypeId = kontoTypy.find((k) => k.isDefault)?.id ?? kontoTypy[0]?.id ?? null;
+    const adres = adresy.find((a) => a.id === adresId);
+    if (!adres) return defaultTypeId;
+    const normDetected = (detectedAccounts ?? [])
+      .map(normalizeAccount)
+      .filter((x): x is string => !!x);
+    const matchedAccount = (adres.accountNumbers ?? []).find((acc) => normDetected.includes(acc));
+    const typeId = matchedAccount ? adres.accountTypes?.[matchedAccount] : undefined;
+    return typeId ?? defaultTypeId;
+  };
 
   const loadSettings = async () => {
     try {
@@ -429,6 +460,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
       };
       if (detectedAccounts.length > 0) entry.detectedAccounts = detectedAccounts;
       if (match.adres) entry.adresAutoMatched = true;
+      entry.accountTypeId = resolveAccountTypeId(match.adres?.id ?? null, detectedAccounts);
       return entry;
     });
 
@@ -508,10 +540,22 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     setFiles(
       files.map((file) =>
         // A manual change drops the "auto-matched" indicator — the badge is only
-        // meaningful for the value the matcher picked.
-        file.id === fileId ? { ...file, adresId, adresAutoMatched: false } : file,
+        // meaningful for the value the matcher picked. Re-resolve the account type
+        // for the newly-selected address.
+        file.id === fileId
+          ? {
+              ...file,
+              adresId,
+              adresAutoMatched: false,
+              accountTypeId: resolveAccountTypeId(adresId, file.detectedAccounts),
+            }
+          : file,
       ),
     );
+  };
+
+  const handleAccountTypeChange = (fileId: string, accountTypeId: number | null) => {
+    setFiles(files.map((file) => (file.id === fileId ? { ...file, accountTypeId } : file)));
   };
 
   const handlePdfUpload = async (fileId: string) => {
@@ -766,13 +810,15 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
             currentFile.filePath,
             currentFile.bankId,
             currentFile.fileName,
-            currentFile.adresId
+            currentFile.adresId,
+            currentFile.accountTypeId
           )
         : await window.electronAPI.convertFile(
             currentFile.filePath,
             currentFile.bankId,
             currentFile.fileName,
-            currentFile.adresId
+            currentFile.adresId,
+            currentFile.accountTypeId
           );
 
       // Ensure minimum 1 second display time for loader
@@ -1204,6 +1250,26 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                             searchPlaceholder={t.searchAdres}
                             bankFilter={file.bankId}
                           />
+                          {file.adresId && kontoTypy.length > 0 && (
+                            <div style={{ marginTop: '6px' }}>
+                              <label style={{ fontSize: '11px', color: 'var(--text-tertiary)', display: 'block', marginBottom: '2px' }}>
+                                {t.accountTypeColumn}
+                              </label>
+                              <select
+                                value={file.accountTypeId ?? ''}
+                                onChange={(e) =>
+                                  handleAccountTypeChange(file.id, e.target.value ? Number(e.target.value) : null)
+                                }
+                                style={{ width: '100%', fontSize: '13px', padding: '4px 6px' }}
+                              >
+                                {kontoTypy.map((typ) => (
+                                  <option key={typ.id} value={typ.id}>
+                                    {typ.name} ({typ.bankAccountSymbol})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
                           {file.adresId && file.adresAutoMatched && (
                             <div
                               style={{

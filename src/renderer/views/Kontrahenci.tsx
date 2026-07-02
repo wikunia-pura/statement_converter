@@ -2,6 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Kontrahent, KontrahentTyp } from '../../shared/types';
 import { translations, Language } from '../translations';
 
+// Shared color scheme for the contractor-type pills — used both by the toggle
+// pills in the add/edit form and the read-only badges in the table.
+const TYP_COLORS: Record<KontrahentTyp, { bg: string; fg: string }> = {
+  'Kontrahent': { bg: 'rgba(78, 201, 176, 0.15)', fg: 'var(--success)' },
+  'Pozostałe przychody': { bg: 'rgba(91, 155, 213, 0.15)', fg: 'var(--info)' },
+  'Pozostałe koszty': { bg: 'rgba(206, 145, 120, 0.15)', fg: 'var(--warning)' },
+};
+
 interface KontrahenciProps {
   language: Language;
 }
@@ -14,7 +22,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
   const [newNazwa, setNewNazwa] = useState('');
   const [newKontoKontrahenta, setNewKontoKontrahenta] = useState('');
   const [newNip, setNewNip] = useState('');
-  const [newTyp, setNewTyp] = useState<KontrahentTyp>('Kontrahent');
+  const [newTypy, setNewTypy] = useState<KontrahentTyp[]>(['Kontrahent']);
   const [newAlternativeNames, setNewAlternativeNames] = useState<string[]>([]);
   const [newAlternativeName, setNewAlternativeName] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -53,11 +61,11 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
     }
 
     try {
-      await window.electronAPI.addKontrahent(newNazwa, newKontoKontrahenta, newNip || undefined, newAlternativeNames, newTyp);
+      await window.electronAPI.addKontrahent(newNazwa, newKontoKontrahenta, newNip || undefined, newAlternativeNames, newTypy);
       setNewNazwa('');
       setNewKontoKontrahenta('');
       setNewNip('');
-      setNewTyp('Kontrahent');
+      setNewTypy(['Kontrahent']);
       setNewAlternativeNames([]);
       setNewAlternativeName('');
       setShowAddKontrahent(false);
@@ -84,11 +92,11 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
     }
 
     try {
-      await window.electronAPI.updateKontrahent(editingKontrahent.id, newNazwa, newKontoKontrahenta, newNip || undefined, newAlternativeNames, newTyp);
+      await window.electronAPI.updateKontrahent(editingKontrahent.id, newNazwa, newKontoKontrahenta, newNip || undefined, newAlternativeNames, newTypy);
       setNewNazwa('');
       setNewKontoKontrahenta('');
       setNewNip('');
-      setNewTyp('Kontrahent');
+      setNewTypy(['Kontrahent']);
       setNewAlternativeNames([]);
       setNewAlternativeName('');
       setEditingKontrahent(null);
@@ -116,7 +124,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
     setNewNazwa(kontrahent.nazwa);
     setNewKontoKontrahenta(kontrahent.kontoKontrahenta);
     setNewNip(kontrahent.nip || '');
-    setNewTyp(kontrahent.typ || 'Kontrahent');
+    setNewTypy(kontrahent.typy && kontrahent.typy.length > 0 ? kontrahent.typy : ['Kontrahent']);
     setNewAlternativeNames(kontrahent.alternativeNames || []);
     setNewAlternativeName('');
   };
@@ -127,9 +135,17 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
     setNewNazwa('');
     setNewKontoKontrahenta('');
     setNewNip('');
-    setNewTyp('Kontrahent');
+    setNewTypy(['Kontrahent']);
     setNewAlternativeNames([]);
     setNewAlternativeName('');
+  };
+
+  const handleToggleTyp = (typ: KontrahentTyp) => {
+    setNewTypy(prev => {
+      const next = prev.includes(typ) ? prev.filter(t => t !== typ) : [...prev, typ];
+      // Never allow an empty selection — a contractor must have at least one role.
+      return next.length > 0 ? next : prev;
+    });
   };
 
   const handleImportFromFileFunky = async () => {
@@ -339,14 +355,37 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
                 </div>
                 <div className="form-group">
                   <label>{t.typ}</label>
-                  <select
-                    value={newTyp}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewTyp(e.target.value as KontrahentTyp)}
-                  >
-                    <option value="Kontrahent">{t.typKontrahent}</option>
-                    <option value="Pozostałe przychody">{t.typPozostalePrzychody}</option>
-                    <option value="Pozostałe koszty">{t.typPozostaleKoszty}</option>
-                  </select>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {([
+                      ['Kontrahent', t.typKontrahent],
+                      ['Pozostałe przychody', t.typPozostalePrzychody],
+                      ['Pozostałe koszty', t.typPozostaleKoszty],
+                    ] as [KontrahentTyp, string][]).map(([value, label]) => {
+                      const selected = newTypy.includes(value);
+                      const colors = TYP_COLORS[value];
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => handleToggleTyp(value)}
+                          style={{
+                            padding: '5px 14px',
+                            borderRadius: '14px',
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                            border: `1.5px solid ${selected ? colors.fg : 'var(--border)'}`,
+                            backgroundColor: selected ? colors.bg : 'transparent',
+                            color: selected ? colors.fg : 'var(--text-secondary)',
+                            opacity: selected ? 1 : 0.7,
+                          }}
+                        >
+                          {selected ? '✓ ' : ''}{label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div className="form-group">
                   <label>{t.alternativeNames}</label>
@@ -452,20 +491,20 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
                     <td>{kontrahent.kontoKontrahenta}</td>
                     <td>{kontrahent.nip || '-'}</td>
                     <td>
-                      <span style={{
-                        padding: '2px 8px',
-                        borderRadius: '10px',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        backgroundColor: kontrahent.typ === 'Kontrahent' ? 'rgba(78, 201, 176, 0.15)' 
-                          : kontrahent.typ === 'Pozostałe przychody' ? 'rgba(91, 155, 213, 0.15)' 
-                          : 'rgba(206, 145, 120, 0.15)',
-                        color: kontrahent.typ === 'Kontrahent' ? 'var(--success)' 
-                          : kontrahent.typ === 'Pozostałe przychody' ? 'var(--info)' 
-                          : 'var(--warning)',
-                      }}>
-                        {kontrahent.typ || 'Kontrahent'}
-                      </span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {(kontrahent.typy && kontrahent.typy.length > 0 ? kontrahent.typy : ['Kontrahent'] as KontrahentTyp[]).map((typ) => (
+                          <span key={typ} style={{
+                            padding: '2px 8px',
+                            borderRadius: '10px',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            backgroundColor: TYP_COLORS[typ].bg,
+                            color: TYP_COLORS[typ].fg,
+                          }}>
+                            {typ}
+                          </span>
+                        ))}
+                      </div>
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: '8px' }}>

@@ -700,7 +700,7 @@ class ConverterRegistry {
               id: -1,
               nazwa: `Konto wyjaśnień ${CLARIFICATION_ACCOUNT}`,
               kontoKontrahenta: CLARIFICATION_ACCOUNT,
-              typ: 'Kontrahent',
+              typy: ['Kontrahent'],
               createdAt: ''
             },
             confidence: 100,
@@ -805,7 +805,8 @@ class ConverterRegistry {
     adresId?: number | null,
     fileName?: string,
     bankName?: string,
-    onProgress?: ConversionProgressCallback
+    onProgress?: ConversionProgressCallback,
+    accountConfig?: { bankAccountSymbol: string; apartmentPrefix: string }
   ): Promise<ConvertResult> {
     // Persistent extraction cache lives in userData so it survives across runs.
     // Only used by AI-enabled conversions; non-AI flows don't write to it.
@@ -1029,7 +1030,8 @@ class ConverterRegistry {
               inputPath,
               outputPath,
               result.processed,
-              output
+              output,
+              accountConfig
             );
             
             // Get address name from database
@@ -1070,7 +1072,7 @@ class ConverterRegistry {
           fs.writeFileSync(podgladPath, output, 'utf8');
 
           // Generate TXT file for accounting system (tab-separated format)
-          const csvOutput = converter.exportToCsv(result.processed);
+          const csvOutput = converter.exportToCsv(result.processed, accountConfig);
           const txtPath = accountingOutputPath(outputPath);
           writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
@@ -1293,7 +1295,8 @@ class ConverterRegistry {
               inputPath,
               outputPath,
               result.processed,
-              output
+              output,
+              accountConfig
             );
             
             // Get address name from database
@@ -1334,7 +1337,7 @@ class ConverterRegistry {
           fs.writeFileSync(podgladPath, output, 'utf8');
 
           // Generate TXT file for accounting system (tab-separated format)
-          const csvOutput = converter.exportToCsv(result.processed);
+          const csvOutput = converter.exportToCsv(result.processed, accountConfig);
           const txtPath = accountingOutputPath(outputPath);
           writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
@@ -1528,7 +1531,8 @@ class ConverterRegistry {
               inputPath,
               outputPath,
               result.processed,
-              output
+              output,
+              accountConfig
             );
 
             let adresName: string | null = null;
@@ -1564,7 +1568,7 @@ class ConverterRegistry {
           const podgladPath = podgladOutputPath(outputPath);
           fs.writeFileSync(podgladPath, output, 'utf8');
 
-          const csvOutput = converter.exportToCsv(result.processed);
+          const csvOutput = converter.exportToCsv(result.processed, accountConfig);
           const txtPath = accountingOutputPath(outputPath);
           writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
@@ -1765,7 +1769,8 @@ class ConverterRegistry {
               inputPath,
               outputPath,
               result.processed,
-              output
+              output,
+              accountConfig
             );
 
             let adresName: string | null = null;
@@ -1801,7 +1806,7 @@ class ConverterRegistry {
           const podgladPath = podgladOutputPath(outputPath);
           fs.writeFileSync(podgladPath, output, 'utf8');
 
-          const csvOutput = converter.exportToCsv(result.processed);
+          const csvOutput = converter.exportToCsv(result.processed, accountConfig);
           const txtPath = accountingOutputPath(outputPath);
           writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
@@ -1999,7 +2004,8 @@ class ConverterRegistry {
               inputPath,
               outputPath,
               result.processed,
-              output
+              output,
+              accountConfig
             );
 
             let adresName: string | null = null;
@@ -2035,7 +2041,7 @@ class ConverterRegistry {
           const podgladPath = podgladOutputPath(outputPath);
           fs.writeFileSync(podgladPath, output, 'utf8');
 
-          const csvOutput = converter.exportToCsv(result.processed);
+          const csvOutput = converter.exportToCsv(result.processed, accountConfig);
           const txtPath = accountingOutputPath(outputPath);
           writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
@@ -2217,7 +2223,8 @@ class ConverterRegistry {
               inputPath,
               outputPath,
               result.processed,
-              output
+              output,
+              accountConfig
             );
 
             let adresName: string | null = null;
@@ -2253,7 +2260,7 @@ class ConverterRegistry {
           const podgladPath = podgladOutputPath(outputPath);
           fs.writeFileSync(podgladPath, output, 'utf8');
 
-          const csvOutput = converter.exportToCsv(result.processed);
+          const csvOutput = converter.exportToCsv(result.processed, accountConfig);
           const txtPath = accountingOutputPath(outputPath);
           writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
@@ -2451,7 +2458,8 @@ class ConverterRegistry {
               inputPath,
               outputPath,
               result.processed,
-              output
+              output,
+              accountConfig
             );
 
             let adresName: string | null = null;
@@ -2487,7 +2495,7 @@ class ConverterRegistry {
           const podgladPath = podgladOutputPath(outputPath);
           fs.writeFileSync(podgladPath, output, 'utf8');
 
-          const csvOutput = converter.exportToCsv(result.processed);
+          const csvOutput = converter.exportToCsv(result.processed, accountConfig);
           const txtPath = accountingOutputPath(outputPath);
           writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
@@ -2677,7 +2685,8 @@ class ConverterRegistry {
               inputPath,
               outputPath,
               result.processed,
-              output
+              output,
+              accountConfig
             );
 
             let adresName: string | null = null;
@@ -2713,7 +2722,7 @@ class ConverterRegistry {
           const podgladPath = podgladOutputPath(outputPath);
           fs.writeFileSync(podgladPath, output, 'utf8');
 
-          const csvOutput = converter.exportToCsv(result.processed);
+          const csvOutput = converter.exportToCsv(result.processed, accountConfig);
           const txtPath = accountingOutputPath(outputPath);
           writeFileWin1250(txtPath, csvOutput);
           saveToImpexFolder(txtPath, csvOutput);
@@ -2826,8 +2835,8 @@ class ConverterRegistry {
             addresses: adresy,
           });
       
-      // Generate accounting file
-      const csvOutput = converter.exportToCsv(updatedTransactions);
+      // Generate accounting file (using the account type chosen at conversion time)
+      const csvOutput = converter.exportToCsv(updatedTransactions, cached.accountConfig);
       const txtPath = accountingOutputPath(cached.outputPath);
       writeFileWin1250(txtPath, csvOutput);
       saveToImpexFolder(txtPath, csvOutput);

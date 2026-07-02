@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ConversionReviewData, ReviewDecision, TransactionForReview, Kontrahent, ApartmentMapping, ContractorSortOrder } from '../../shared/types';
+import { ConversionReviewData, ReviewDecision, TransactionForReview, Kontrahent, KontrahentTyp, ApartmentMapping, ContractorSortOrder } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { searchTransactionInPdf, PdfSearchMatch } from '../../shared/pdf-search';
 import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
@@ -1118,10 +1118,13 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   const [addressMappings, setAddressMappings] = useState<ApartmentMapping[]>([]);
 
   // Filter kontrahenci by type, then order per the user's preference so every
-  // pick-list in the review screen is sorted consistently.
-  const contractorEntries = sortKontrahenci(kontrahenci.filter(k => (k.typ || 'Kontrahent') === 'Kontrahent'), contractorSortOrder);
-  const remainingIncomeEntries = sortKontrahenci(kontrahenci.filter(k => k.typ === 'Pozostałe przychody'), contractorSortOrder);
-  const remainingCostEntries = sortKontrahenci(kontrahenci.filter(k => k.typ === 'Pozostałe koszty'), contractorSortOrder);
+  // pick-list in the review screen is sorted consistently. A contractor can hold
+  // several roles (`typy`), so it may legitimately appear in more than one list.
+  const hasTyp = (k: Kontrahent, t: KontrahentTyp) =>
+    (k.typy && k.typy.length > 0 ? k.typy : ['Kontrahent']).includes(t);
+  const contractorEntries = sortKontrahenci(kontrahenci.filter(k => hasTyp(k, 'Kontrahent')), contractorSortOrder);
+  const remainingIncomeEntries = sortKontrahenci(kontrahenci.filter(k => hasTyp(k, 'Pozostałe przychody')), contractorSortOrder);
+  const remainingCostEntries = sortKontrahenci(kontrahenci.filter(k => hasTyp(k, 'Pozostałe koszty')), contractorSortOrder);
 
   // Load kontrahenci + sort preference on mount
   useEffect(() => {

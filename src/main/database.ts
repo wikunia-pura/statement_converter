@@ -1,7 +1,7 @@
 import Store from 'electron-store';
 import path from 'path';
 import { app } from 'electron';
-import { Bank, ConversionHistory, AppSettings, Kontrahent, Adres, KontrahentTyp, ApartmentMapping } from '../shared/types';
+import { Bank, ConversionHistory, AppSettings, Kontrahent, Adres, KontrahentTyp, ApartmentMapping, KontoTyp } from '../shared/types';
 import { getSupabase } from './supabaseClient';
 import { normalizeAccount } from '../shared/account-extractor';
 
@@ -22,9 +22,19 @@ interface SettingsStoreSchema {
 
 const BANK_COLS = 'id, name, converterId:converter_id, accountPrefixes:account_prefixes, createdAt:created_at';
 const KONTRAHENT_COLS =
-  'id, nazwa, kontoKontrahenta:konto_kontrahenta, nip, typ, alternativeNames:alternative_names, createdAt:created_at';
+  'id, nazwa, kontoKontrahenta:konto_kontrahenta, nip, typ, typy, alternativeNames:alternative_names, createdAt:created_at';
+
+// Coerce a raw Supabase row's type info into the non-empty `typy` array the app
+// model guarantees. Prefers the multi-value `typy` column; falls back to the
+// legacy scalar `typ` for rows written before the multi-type migration.
+function normalizeTypy(row: { typy?: unknown; typ?: unknown }): KontrahentTyp[] {
+  if (Array.isArray(row.typy) && row.typy.length > 0) return row.typy as KontrahentTyp[];
+  return [((row.typ as KontrahentTyp) || 'Kontrahent')];
+}
 const ADRES_COLS =
-  'id, nazwa, alternativeNames:alternative_names, swrkIdentifiers:swrk_identifiers, accountNumbers:account_numbers, bankId:bank_id, apartmentMappings:apartment_mappings, createdAt:created_at';
+  'id, nazwa, alternativeNames:alternative_names, swrkIdentifiers:swrk_identifiers, accountNumbers:account_numbers, accountTypes:account_types, bankId:bank_id, apartmentMappings:apartment_mappings, createdAt:created_at';
+const KONTO_TYP_COLS =
+  'id, name, bankAccountSymbol:bank_account_symbol, apartmentPrefix:apartment_prefix, isDefault:is_default, createdAt:created_at';
 const HISTORY_COLS =
   'id, fileName:file_name, bankName:bank_name, converterName:converter_name, status, errorMessage:error_message, inputPath:input_path, outputPath:output_path, convertedAt:converted_at';
 
@@ -164,7 +174,7 @@ class DatabaseService {
     );
     return rows.map(k => ({
       ...k,
-      typ: (k.typ as KontrahentTyp) || 'Kontrahent',
+      typy: normalizeTypy(k),
       alternativeNames: k.alternativeNames ?? [],
       nip: k.nip ?? undefined,
     })) as Kontrahent[];
@@ -175,21 +185,24 @@ class DatabaseService {
     kontoKontrahenta: string,
     nip?: string,
     alternativeNames?: string[],
-    typ?: KontrahentTyp,
+    typy?: KontrahentTyp[],
   ): Promise<Kontrahent> {
+    const finalTypy: KontrahentTyp[] = typy && typy.length > 0 ? typy : ['Kontrahent'];
     const { data, error } = await getSupabase()
       .from('kontrahenci')
       .insert({
         nazwa,
         konto_kontrahenta: kontoKontrahenta,
         nip: nip || null,
-        typ: typ || 'Kontrahent',
+        // `typ` (scalar, legacy) mirrors the primary role; `typy` is the full set.
+        typ: finalTypy[0],
+        typy: finalTypy,
         alternative_names: alternativeNames ?? [],
       })
       .select(KONTRAHENT_COLS)
       .single();
-    const row = unwrap(data, error, 'addKontrahent') as Kontrahent;
-    return { ...row, nip: row.nip ?? undefined };
+    const row = unwrap(data, error, 'addKontrahent') as any;
+    return { ...row, typy: normalizeTypy(row), nip: row.nip ?? undefined } as Kontrahent;
   }
 
   async updateKontrahent(
@@ -198,14 +211,18 @@ class DatabaseService {
     kontoKontrahenta: string,
     nip?: string,
     alternativeNames?: string[],
-    typ?: KontrahentTyp,
+    typy?: KontrahentTyp[],
   ): Promise<void> {
     const patch: Record<string, unknown> = {
       nazwa,
       konto_kontrahenta: kontoKontrahenta,
     };
     if (nip !== undefined) patch.nip = nip || null;
-    if (typ !== undefined) patch.typ = typ;
+    if (typy !== undefined) {
+      const finalTypy: KontrahentTyp[] = typy.length > 0 ? typy : ['Kontrahent'];
+      patch.typy = finalTypy;
+      patch.typ = finalTypy[0]; // keep legacy scalar in sync with the primary role
+    }
     if (alternativeNames !== undefined) patch.alternative_names = alternativeNames;
     const { error } = await getSupabase().from('kontrahenci').update(patch).eq('id', id);
     if (error) throw new Error(`updateKontrahent: ${error.message}`);
@@ -229,18 +246,24 @@ class DatabaseService {
       .maybeSingle();
     if (error) throw new Error(`getKontrahentById: ${error.message}`);
     if (!data) return undefined;
-    return { ...(data as Kontrahent), nip: (data as Kontrahent).nip ?? undefined };
+    return { ...(data as any), typy: normalizeTypy(data as any), nip: (data as Kontrahent).nip ?? undefined } as Kontrahent;
   }
 
   async importKontrahenci(kontrahenci: Kontrahent[]): Promise<void> {
     if (kontrahenci.length === 0) return;
-    const payload = kontrahenci.map(k => ({
-      nazwa: k.nazwa,
-      konto_kontrahenta: k.kontoKontrahenta,
-      nip: k.nip || null,
-      typ: k.typ || 'Kontrahent',
-      alternative_names: k.alternativeNames ?? [],
-    }));
+    const payload = kontrahenci.map(k => {
+      // Accept both the new `typy` array and legacy scalar `typ` (the local→cloud
+      // migrator feeds pre-migration objects that only carry `typ`).
+      const typy = normalizeTypy(k as any);
+      return {
+        nazwa: k.nazwa,
+        konto_kontrahenta: k.kontoKontrahenta,
+        nip: k.nip || null,
+        typ: typy[0],
+        typy,
+        alternative_names: k.alternativeNames ?? [],
+      };
+    });
     const { error } = await getSupabase().from('kontrahenci').insert(payload);
     if (error) throw new Error(`importKontrahenci: ${error.message}`);
   }
@@ -260,6 +283,7 @@ class DatabaseService {
       alternativeNames: a.alternativeNames ?? [],
       swrkIdentifiers: a.swrkIdentifiers ?? [],
       accountNumbers: a.accountNumbers ?? [],
+      accountTypes: a.accountTypes ?? {},
       bankId: a.bankId ?? null,
       apartmentMappings: a.apartmentMappings ?? [],
     })) as Adres[];
@@ -322,6 +346,30 @@ class DatabaseService {
     return out;
   }
 
+  /**
+   * Keep only account→type entries whose key is one of the (canonicalized)
+   * account numbers and whose value is an existing KontoTyp id. Guards against
+   * stale mappings after an account is removed or a type is deleted.
+   */
+  private async sanitizeAccountTypes(
+    raw: Record<string, number> | undefined,
+    accountNumbers: string[],
+  ): Promise<Record<string, number>> {
+    if (!raw) return {};
+    const allowedAccounts = new Set(
+      accountNumbers.map(normalizeAccount).filter((x): x is string => !!x),
+    );
+    const validTypeIds = new Set((await this.getKontoTypy()).map(t => t.id));
+    const out: Record<string, number> = {};
+    for (const [account, typeId] of Object.entries(raw)) {
+      const norm = normalizeAccount(account);
+      if (norm && allowedAccounts.has(norm) && validTypeIds.has(typeId)) {
+        out[norm] = typeId;
+      }
+    }
+    return out;
+  }
+
   async addAdres(
     nazwa: string,
     alternativeNames?: string[],
@@ -329,6 +377,7 @@ class DatabaseService {
     bankId?: number | null,
     accountNumbers?: string[],
     apartmentMappings?: ApartmentMapping[],
+    accountTypes?: Record<string, number>,
   ): Promise<Adres> {
     const accounts = await this.sanitizeAccountNumbers(accountNumbers);
     const { data, error } = await getSupabase()
@@ -338,6 +387,7 @@ class DatabaseService {
         alternative_names: alternativeNames ?? [],
         swrk_identifiers: swrkIdentifiers ?? [],
         account_numbers: accounts,
+        account_types: await this.sanitizeAccountTypes(accountTypes, accounts),
         bank_id: bankId ?? null,
         apartment_mappings: this.sanitizeApartmentMappings(apartmentMappings),
       })
@@ -354,13 +404,23 @@ class DatabaseService {
     bankId?: number | null,
     accountNumbers?: string[],
     apartmentMappings?: ApartmentMapping[],
+    accountTypes?: Record<string, number>,
   ): Promise<void> {
     const patch: Record<string, unknown> = { nazwa };
     if (alternativeNames !== undefined) patch.alternative_names = alternativeNames;
     if (swrkIdentifiers !== undefined) patch.swrk_identifiers = swrkIdentifiers;
     if (bankId !== undefined) patch.bank_id = bankId;
+    let sanitizedAccounts: string[] | undefined;
     if (accountNumbers !== undefined) {
-      patch.account_numbers = await this.sanitizeAccountNumbers(accountNumbers, id);
+      sanitizedAccounts = await this.sanitizeAccountNumbers(accountNumbers, id);
+      patch.account_numbers = sanitizedAccounts;
+    }
+    if (accountTypes !== undefined) {
+      // Constrain against the accounts being written (or, if accounts weren't
+      // part of this update, the ones already stored).
+      const accounts =
+        sanitizedAccounts ?? (await this.getAdresById(id))?.accountNumbers ?? [];
+      patch.account_types = await this.sanitizeAccountTypes(accountTypes, accounts);
     }
     if (apartmentMappings !== undefined) {
       patch.apartment_mappings = this.sanitizeApartmentMappings(apartmentMappings);
@@ -391,18 +451,93 @@ class DatabaseService {
 
   async importAdresy(adresy: Adres[]): Promise<void> {
     if (adresy.length === 0) return;
-    const payload = adresy.map(a => ({
-      nazwa: a.nazwa,
-      alternative_names: a.alternativeNames ?? [],
-      swrk_identifiers: a.swrkIdentifiers ?? [],
-      account_numbers: (a.accountNumbers ?? [])
+    const payload = adresy.map(a => {
+      const accounts = (a.accountNumbers ?? [])
         .map(normalizeAccount)
-        .filter((x): x is string => !!x),
-      bank_id: a.bankId ?? null,
-      apartment_mappings: this.sanitizeApartmentMappings(a.apartmentMappings),
-    }));
+        .filter((x): x is string => !!x);
+      const allowed = new Set(accounts);
+      // Re-key the type map onto canonical accounts, dropping stale entries.
+      const accountTypes: Record<string, number> = {};
+      for (const [account, typeId] of Object.entries(a.accountTypes ?? {})) {
+        const norm = normalizeAccount(account);
+        if (norm && allowed.has(norm)) accountTypes[norm] = typeId;
+      }
+      return {
+        nazwa: a.nazwa,
+        alternative_names: a.alternativeNames ?? [],
+        swrk_identifiers: a.swrkIdentifiers ?? [],
+        account_numbers: accounts,
+        account_types: accountTypes,
+        bank_id: a.bankId ?? null,
+        apartment_mappings: this.sanitizeApartmentMappings(a.apartmentMappings),
+      };
+    });
     const { error } = await getSupabase().from('adresy').insert(payload);
     if (error) throw new Error(`importAdresy: ${error.message}`);
+  }
+
+  // ---------------------------- Konto typy ----------------------------
+
+  async getKontoTypy(): Promise<KontoTyp[]> {
+    const { data, error } = await getSupabase()
+      .from('konto_typy')
+      .select(KONTO_TYP_COLS)
+      .order('created_at', { ascending: true });
+    if (error) throw new Error(`getKontoTypy: ${error.message}`);
+    return (data ?? []) as KontoTyp[];
+  }
+
+  /** Clear is_default on every other row so exactly one type stays default. */
+  private async clearDefaultKontoTyp(exceptId?: number): Promise<void> {
+    let query = getSupabase().from('konto_typy').update({ is_default: false }).eq('is_default', true);
+    if (exceptId !== undefined) query = query.neq('id', exceptId);
+    const { error } = await query;
+    if (error) throw new Error(`clearDefaultKontoTyp: ${error.message}`);
+  }
+
+  async addKontoTyp(
+    name: string,
+    bankAccountSymbol: string,
+    apartmentPrefix: string,
+    isDefault: boolean,
+  ): Promise<KontoTyp> {
+    if (isDefault) await this.clearDefaultKontoTyp();
+    const { data, error } = await getSupabase()
+      .from('konto_typy')
+      .insert({
+        name,
+        bank_account_symbol: bankAccountSymbol,
+        apartment_prefix: apartmentPrefix,
+        is_default: isDefault,
+      })
+      .select(KONTO_TYP_COLS)
+      .single();
+    return unwrap(data, error, 'addKontoTyp') as KontoTyp;
+  }
+
+  async updateKontoTyp(
+    id: number,
+    name: string,
+    bankAccountSymbol: string,
+    apartmentPrefix: string,
+    isDefault: boolean,
+  ): Promise<void> {
+    if (isDefault) await this.clearDefaultKontoTyp(id);
+    const { error } = await getSupabase()
+      .from('konto_typy')
+      .update({
+        name,
+        bank_account_symbol: bankAccountSymbol,
+        apartment_prefix: apartmentPrefix,
+        is_default: isDefault,
+      })
+      .eq('id', id);
+    if (error) throw new Error(`updateKontoTyp: ${error.message}`);
+  }
+
+  async deleteKontoTyp(id: number): Promise<void> {
+    const { error } = await getSupabase().from('konto_typy').delete().eq('id', id);
+    if (error) throw new Error(`deleteKontoTyp: ${error.message}`);
   }
 
   // ----------------------------- History -----------------------------

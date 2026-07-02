@@ -1,6 +1,6 @@
 // Type definitions for Electron API exposed via preload
 
-import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, KontrahentTyp } from '../shared/types';
+import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, KontrahentTyp, KontoTyp } from '../shared/types';
 
 // Zaliczki shared types (referenced by the main-process helpers)
 export type ZaliczkiCategory =
@@ -116,8 +116,8 @@ interface ElectronAPI {
 
   // Kontrahenci
   getKontrahenci: () => Promise<Kontrahent[]>;
-  addKontrahent: (nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typ?: KontrahentTyp) => Promise<Kontrahent>;
-  updateKontrahent: (id: number, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typ?: KontrahentTyp) => Promise<boolean>;
+  addKontrahent: (nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typy?: KontrahentTyp[]) => Promise<Kontrahent>;
+  updateKontrahent: (id: number, nazwa: string, kontoKontrahenta: string, nip?: string, alternativeNames?: string[], typy?: KontrahentTyp[]) => Promise<boolean>;
   deleteKontrahent: (id: number) => Promise<boolean>;
   deleteAllKontrahenci: () => Promise<boolean>;
   importKontrahenciFromFile: () => Promise<{ success: boolean; added?: number; updated?: number; error?: string }>;
@@ -133,6 +133,7 @@ interface ElectronAPI {
     bankId?: number | null,
     accountNumbers?: string[],
     apartmentMappings?: ApartmentMapping[],
+    accountTypes?: Record<string, number>,
   ) => Promise<Adres>;
   updateAdres: (
     id: number,
@@ -142,11 +143,18 @@ interface ElectronAPI {
     bankId?: number | null,
     accountNumbers?: string[],
     apartmentMappings?: ApartmentMapping[],
+    accountTypes?: Record<string, number>,
   ) => Promise<boolean>;
   deleteAdres: (id: number) => Promise<boolean>;
   deleteAllAdresy: () => Promise<boolean>;
   importAdresyFromFile: () => Promise<{ success: boolean; count?: number; error?: string }>;
   exportAdresyToFile: () => Promise<{ success: boolean; count?: number; filePath?: string; error?: string }>;
+
+  // Konto typy
+  getKontoTypy: () => Promise<KontoTyp[]>;
+  addKontoTyp: (name: string, bankAccountSymbol: string, apartmentPrefix: string, isDefault: boolean) => Promise<KontoTyp>;
+  updateKontoTyp: (id: number, name: string, bankAccountSymbol: string, apartmentPrefix: string, isDefault: boolean) => Promise<boolean>;
+  deleteKontoTyp: (id: number) => Promise<boolean>;
 
   // Converters
   getConverters: () => Promise<Converter[]>;
@@ -156,10 +164,10 @@ interface ElectronAPI {
   selectPdf: () => Promise<{ fileName: string; filePath: string } | null>;
   extractPdfText: (filePath: string) => Promise<{ text: string; lines: string[]; numPages: number } | null>;
   selectOutputFolder: () => Promise<string | null>;
-  convertFile: (inputPath: string, bankId: number, fileName: string, adresId?: number | null) => Promise<ConversionResult>;
+  convertFile: (inputPath: string, bankId: number, fileName: string, adresId?: number | null, accountTypeId?: number | null) => Promise<ConversionResult>;
   analyzeFile: (inputPath: string, bankId: number, adresId?: number | null) => Promise<ConversionSummary>;
   detectAccountNumbers: (inputPath: string, bankId?: number | null) => Promise<string[]>;
-  convertFileWithAI: (inputPath: string, bankId: number, fileName: string, adresId?: number | null) => Promise<ConversionResult>;
+  convertFileWithAI: (inputPath: string, bankId: number, fileName: string, adresId?: number | null, accountTypeId?: number | null) => Promise<ConversionResult>;
   finalizeConversion: (tempConversionId: string, decisions: ReviewDecision[]) => Promise<ConversionResult>;
   openFile: (filePath: string) => Promise<boolean>;
 

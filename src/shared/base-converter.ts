@@ -1073,20 +1073,30 @@ export abstract class BaseConverter<TRaw> {
   // Public export methods (delegate to per-converter CsvExporter)
   // ============================================================
 
-  exportToCsv(transactions: BaseProcessedTransaction<TRaw>[]): string {
+  exportToCsv(
+    transactions: BaseProcessedTransaction<TRaw>[],
+    accountConfig?: { bankAccountSymbol?: string; apartmentPrefix?: string },
+  ): string {
     const exporter = this.createCsvExporter({
       separator: '\t',
       dateFormat: 'D.MM.YYYY',
       decimalSeparator: ',',
+      bankAccountSymbol: accountConfig?.bankAccountSymbol,
+      apartmentPrefix: accountConfig?.apartmentPrefix,
     });
     return exporter.export(transactions);
   }
 
-  exportAuxiliaryFile(transactions: BaseProcessedTransaction<TRaw>[]): string {
+  exportAuxiliaryFile(
+    transactions: BaseProcessedTransaction<TRaw>[],
+    accountConfig?: { bankAccountSymbol?: string; apartmentPrefix?: string },
+  ): string {
     const exporter = this.createCsvExporter({
       separator: '\t',
       dateFormat: 'D.MM.YYYY',
       decimalSeparator: ',',
+      bankAccountSymbol: accountConfig?.bankAccountSymbol,
+      apartmentPrefix: accountConfig?.apartmentPrefix,
     });
     return exporter.exportAuxiliary(transactions);
   }

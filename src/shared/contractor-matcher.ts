@@ -17,12 +17,18 @@ export class ContractorMatcher {
   }
 
   /**
-   * Return contractors filtered by typ. `undefined`/missing typ is treated as 'Kontrahent'.
+   * Return contractors that hold at least one of `allowedTypes`. A contractor
+   * can carry several roles (`typy`), so a company that is both `Kontrahent` and
+   * `Pozostałe przychody` qualifies for both the expense and income pools.
+   * Missing/empty `typy` is treated as `['Kontrahent']`.
    */
   private filterByTypes(allowedTypes?: KontrahentTyp[]): Kontrahent[] {
     if (!allowedTypes || allowedTypes.length === 0) return this.contractors;
     const allowed = new Set(allowedTypes);
-    return this.contractors.filter(c => allowed.has(c.typ || 'Kontrahent'));
+    return this.contractors.filter(c => {
+      const typy: KontrahentTyp[] = c.typy && c.typy.length > 0 ? c.typy : ['Kontrahent'];
+      return typy.some(t => allowed.has(t));
+    });
   }
 
   /**

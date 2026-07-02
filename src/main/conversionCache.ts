@@ -11,6 +11,8 @@ interface CachedConversion {
   outputPath: string;
   processedTransactions: any[];
   previewOutput: string;
+  /** Accounting symbols chosen for this conversion (bank-account side + apartment prefix). */
+  accountConfig?: { bankAccountSymbol: string; apartmentPrefix: string };
   createdAt: Date;
 }
 
@@ -35,10 +37,11 @@ class ConversionCache {
     inputPath: string,
     outputPath: string,
     processedTransactions: any[],
-    previewOutput: string
+    previewOutput: string,
+    accountConfig?: { bankAccountSymbol: string; apartmentPrefix: string }
   ): string {
     const id = this.generateId();
-    
+
     this.cache.set(id, {
       id,
       fileName,
@@ -48,6 +51,7 @@ class ConversionCache {
       outputPath,
       processedTransactions,
       previewOutput,
+      accountConfig,
       createdAt: new Date(),
     });
 

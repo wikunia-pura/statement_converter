@@ -169,6 +169,7 @@ interface ElectronAPI {
   detectAccountNumbers: (inputPath: string, bankId?: number | null) => Promise<string[]>;
   convertFileWithAI: (inputPath: string, bankId: number, fileName: string, adresId?: number | null, accountTypeId?: number | null) => Promise<ConversionResult>;
   finalizeConversion: (tempConversionId: string, decisions: ReviewDecision[]) => Promise<ConversionResult>;
+  touchConversion: (tempConversionId: string) => Promise<boolean>;
   openFile: (filePath: string) => Promise<boolean>;
 
   // Settings

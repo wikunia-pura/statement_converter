@@ -263,6 +263,7 @@ export const IPC_CHANNELS = {
   CONVERT_FILE: 'files:convert',
   CONVERT_FILE_WITH_AI: 'files:convert-with-ai',
   FINALIZE_CONVERSION: 'files:finalize-conversion',
+  TOUCH_CONVERSION: 'files:touch-conversion',
   CONVERT_ALL: 'files:convert-all',
   OPEN_FILE: 'files:open',
   DETECT_ACCOUNT_NUMBERS: 'files:detect-account-numbers',

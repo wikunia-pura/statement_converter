@@ -37,6 +37,7 @@ const IPC_CHANNELS = {
   DETECT_ACCOUNT_NUMBERS: 'files:detect-account-numbers',
   CONVERT_FILE_WITH_AI: 'files:convert-with-ai',
   FINALIZE_CONVERSION: 'files:finalize-conversion',
+  TOUCH_CONVERSION: 'files:touch-conversion',
   SELECT_PDF: 'files:select-pdf',
   EXTRACT_PDF_TEXT: 'files:extract-pdf-text',
   OPEN_FILE: 'files:open',
@@ -173,6 +174,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.CONVERT_FILE_WITH_AI, inputPath, bankId, fileName, adresId, accountTypeId),
   finalizeConversion: (tempConversionId: string, decisions: any[]) =>
     ipcRenderer.invoke(IPC_CHANNELS.FINALIZE_CONVERSION, tempConversionId, decisions),
+  touchConversion: (tempConversionId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.TOUCH_CONVERSION, tempConversionId),
   openFile: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.OPEN_FILE, filePath),
 
   // Settings

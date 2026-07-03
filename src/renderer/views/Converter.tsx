@@ -254,6 +254,20 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     filesRef.current = files;
   }, [files]);
 
+  // Heartbeat: while a review screen is open, keep its pending conversion alive
+  // in the main-process cache (sliding expiration) so a long or interrupted
+  // review never expires and loses the user's work.
+  useEffect(() => {
+    if (!reviewData?.tempConversionId || !window.electronAPI?.touchConversion) return;
+    const id = reviewData.tempConversionId;
+    // Touch immediately, then every 60s. TTL is hours, so this is comfortably frequent.
+    window.electronAPI.touchConversion(id).catch(() => { /* ignore */ });
+    const interval = setInterval(() => {
+      window.electronAPI.touchConversion(id).catch(() => { /* ignore */ });
+    }, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [reviewData?.tempConversionId]);
+
   // Subscribe to conversion progress events from main process
   useEffect(() => {
     if (!window.electronAPI?.onConversionProgress) return;
@@ -650,9 +664,39 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     }
   };
 
+  // A pending conversion that expired/was lost from the main-process cache is
+  // NOT a bank/converter misconfiguration — the file is fine, the review
+  // session is just gone. Tell the user plainly and let them re-run the file.
+  const isExpiredConversionError = (err?: string) =>
+    !!err && err.includes('not found or expired');
+
+  const reportFinalizeFailure = (fileName: string, rawError?: string) => {
+    const expired = isExpiredConversionError(rawError);
+    const isBillingError = rawError?.includes('💸') || rawError?.includes('Brak kasiory');
+    const errorMsg = expired
+      ? `${t.conversionFailed}: ${t.reviewSessionExpired}`
+      : isBillingError
+        ? `${t.conversionFailed}: ${rawError}`
+        : `${t.conversionFailed}: ${rawError}\n${t.checkBankConverter}`;
+    alert(errorMsg);
+    setFiles((prevFiles) =>
+      prevFiles.map((f) =>
+        f.fileName === fileName
+          ? {
+              // Expired sessions are recoverable by re-running, so leave the
+              // file selectable (pending) rather than marking it failed.
+              ...f,
+              status: expired ? ('pending' as const) : ('error' as const),
+              errorMessage: expired ? undefined : rawError,
+            }
+          : f
+      )
+    );
+  };
+
   const handleFinalizeAndNext = async (decisions: ReviewDecision[]) => {
     if (!reviewData) return;
-    
+
     try {
       const result = await window.electronAPI.finalizeConversion(
         reviewData.tempConversionId,
@@ -677,33 +721,14 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
         setReviewData(null);
         processNextInQueue();
       } else {
-        // Don't show "check bank/converter" for billing errors
-        const isBillingError = result.error?.includes('💸') || result.error?.includes('Brak kasiory');
-        const errorMsg = isBillingError 
-          ? `${t.conversionFailed}: ${result.error}`
-          : `${t.conversionFailed}: ${result.error}\n${t.checkBankConverter}`;
-        alert(errorMsg);
+        reportFinalizeFailure(reviewData.fileName, result.error);
         setReviewData(null);
-        setFiles((prevFiles) =>
-          prevFiles.map((f) =>
-            f.fileName === reviewData.fileName
-              ? { ...f, status: 'error' as const, errorMessage: result.error }
-              : f
-          )
-        );
         processNextInQueue();
       }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      alert(`${t.conversionFailed}: ${errorMessage}`);
+      reportFinalizeFailure(reviewData.fileName, errorMessage);
       setReviewData(null);
-      setFiles((prevFiles) =>
-        prevFiles.map((f) =>
-          f.fileName === reviewData.fileName
-            ? { ...f, status: 'error' as const, errorMessage }
-            : f
-        )
-      );
       processNextInQueue();
     }
   };
@@ -737,34 +762,15 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
         setConversionQueue([]);
         setIsProcessingQueue(false);
       } else {
-        // Don't show "check bank/converter" for billing errors
-        const isBillingError = result.error?.includes('💸') || result.error?.includes('Brak kasiory');
-        const errorMsg = isBillingError 
-          ? `${t.conversionFailed}: ${result.error}`
-          : `${t.conversionFailed}: ${result.error}\n${t.checkBankConverter}`;
-        alert(errorMsg);
+        reportFinalizeFailure(reviewData.fileName, result.error);
         setReviewData(null);
-        setFiles((prevFiles) =>
-          prevFiles.map((f) =>
-            f.fileName === reviewData.fileName
-              ? { ...f, status: 'error' as const, errorMessage: result.error }
-              : f
-          )
-        );
         setConversionQueue([]);
         setIsProcessingQueue(false);
       }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      alert(`${t.conversionFailed}: ${errorMessage}`);
+      reportFinalizeFailure(reviewData.fileName, errorMessage);
       setReviewData(null);
-      setFiles((prevFiles) =>
-        prevFiles.map((f) =>
-          f.fileName === reviewData.fileName
-            ? { ...f, status: 'error' as const, errorMessage }
-            : f
-        )
-      );
       setConversionQueue([]);
       setIsProcessingQueue(false);
     }

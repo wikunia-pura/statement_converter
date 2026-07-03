@@ -6,6 +6,7 @@ import fs from 'fs';
 import DatabaseService from './database';
 import ConverterRegistry, { setDatabaseInstance } from './converterRegistry';
 import { IPC_CHANNELS, KontrahentTyp, DEFAULT_ACCOUNT_CONFIG, AccountConfig } from '../shared/types';
+import { conversionCache } from './conversionCache';
 import * as authService from './authService';
 import { extractPdfText } from '../shared/pdf-utils';
 import { extractAccountNumbersFromFile } from '../shared/account-extractor-node';
@@ -1538,6 +1539,15 @@ function setupIpcHandlers() {
           error: errorMessage,
         };
       }
+    }
+  );
+
+  // Keep a pending conversion alive while its review screen is open (sliding
+  // expiration heartbeat). Returns whether the entry still exists.
+  ipcMain.handle(
+    IPC_CHANNELS.TOUCH_CONVERSION,
+    async (_, tempConversionId: string) => {
+      return conversionCache.touch(tempConversionId);
     }
   );
 

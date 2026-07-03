@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Converter, ContractorSortOrder } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { useNotify } from '../components/Notifications';
 import Icon from '../components/Icon';
 import Select from '../components/Select';
 import Loader from '../components/Loader';
@@ -14,6 +15,7 @@ interface SettingsProps {
 
 const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChange, onLanguageChange }) => {
   const t = translations[language];
+  const notify = useNotify();
   const [converters, setConverters] = useState<Converter[]>([]);
   const [outputFolder, setOutputFolder] = useState('');
   const [impexFolder, setImpexFolder] = useState('');
@@ -82,7 +84,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
     // If enabling, show warning dialogs
     if (newValue) {
       // First warning
-      const firstConfirm = window.confirm(
+      const firstConfirm = await notify.confirm(
         `${t.skipApprovalWarningTitle}\n\n${t.skipApprovalWarningMessage}\n\nKliknij OK aby kontynuować lub Anuluj aby wrócić.`
       );
       
@@ -91,7 +93,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
       }
       
       // Second confirmation
-      const secondConfirm = window.confirm(
+      const secondConfirm = await notify.confirm(
         `${t.skipApprovalConfirmTitle}\n\n${t.skipApprovalConfirmMessage}`
       );
       
@@ -120,19 +122,19 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
     try {
       const result = await window.electronAPI.exportSettings();
       if (result.success) {
-        alert(t.exportSuccess);
+        notify.success(t.exportSuccess);
       }
     } catch (error) {
-      alert(t.exportError);
+      notify.error(t.exportError);
     }
   };
 
   const handleImportSettings = async () => {
-    if (confirm(t.importConfirm)) {
+    if (await notify.confirm(t.importConfirm)) {
       try {
         const result = await window.electronAPI.importSettings();
         if (result.success) {
-          alert(t.importSuccess);
+          notify.success(t.importSuccess);
           
           // Reload all data and settings
           await loadData();
@@ -157,10 +159,10 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
           setSkipUserApproval(settings.skipUserApproval ?? false);
           setContractorSortOrder(settings.contractorSortOrder ?? 'name-asc');
         } else if (result.error) {
-          alert(`${t.importError}: ${result.error}`);
+          notify.error(`${t.importError}: ${result.error}`);
         }
       } catch (error) {
-        alert(t.importError);
+        notify.error(t.importError);
       }
     }
   };
@@ -189,13 +191,13 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
               onClick={async () => {
                 const result = await window.electronAPI.checkForUpdates();
                 if (result.message) {
-                  alert(result.message);
+                  notify.info(result.message);
                 } else if (result.error) {
-                  alert(`Błąd: ${result.error}`);
+                  notify.error(`Błąd: ${result.error}`);
                 } else if (result.available) {
-                  alert('Dostępna nowa wersja! Pojawi się powiadomienie.');
+                  notify.info('Dostępna nowa wersja! Pojawi się powiadomienie.');
                 } else {
-                  alert('Nie znaleziono aktualizacji');
+                  notify.info('Nie znaleziono aktualizacji');
                 }
               }}
             >

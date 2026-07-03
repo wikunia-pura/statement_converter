@@ -3,6 +3,7 @@ import { FileEntry, Bank, Adres, KontoTyp, ConversionReviewData, ReviewDecision,
 import { translations, Language } from '../translations';
 import { generateId, formatDate } from '../../shared/utils';
 import { TransactionReviewScreen } from '../components/TransactionReviewScreen';
+import { useNotify } from '../components/Notifications';
 import Icon from '../components/Icon';
 import Loader from '../components/Loader';
 import ModalDismiss from '../components/Modal';
@@ -226,6 +227,7 @@ interface ConverterProps {
 
 const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, selectedBank, setSelectedBank, onAddAdresWithAccount }) => {
   const t = translations[language];
+  const notify = useNotify();
   const [banks, setBanks] = useState<Bank[]>([]);
   const [adresy, setAdresy] = useState<Adres[]>([]);
   const [kontoTypy, setKontoTypy] = useState<KontoTyp[]>([]);
@@ -530,7 +532,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     setDragOver(false);
 
     if (!selectedBank) {
-      alert(t.pleaseSelectBank);
+      notify.warning(t.pleaseSelectBank);
       return;
     }
 
@@ -660,7 +662,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
             : f
         )
       );
-      alert(`Błąd analizy pliku: ${errorMessage}`);
+      notify.error(`Błąd analizy pliku: ${errorMessage}`);
     }
   };
 
@@ -678,7 +680,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
       : isBillingError
         ? `${t.conversionFailed}: ${rawError}`
         : `${t.conversionFailed}: ${rawError}\n${t.checkBankConverter}`;
-    alert(errorMsg);
+    notify.error(errorMsg);
     setFiles((prevFiles) =>
       prevFiles.map((f) =>
         f.fileName === fileName
@@ -870,7 +872,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
       if (result.needsReview && result.reviewData) {
         // Show warning message if AI fallback occurred (before review)
         if (result.warningMessage) {
-          alert(`${result.warningMessage}`);
+          notify.warning(`${result.warningMessage}`);
         }
         
         // If skipUserApproval is enabled, auto-finalize without showing review screen
@@ -963,7 +965,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
         
         // Show warning message if AI fallback occurred
         if (result.warningMessage) {
-          alert(`${result.warningMessage}`);
+          notify.warning(`${result.warningMessage}`);
         }
         
         // Process next file in queue if no review was needed
@@ -981,7 +983,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
         const errorMsg = isBillingError 
           ? `${t.conversionFailed}: ${result.error}`
           : `${t.conversionFailed}: ${result.error}\n${t.checkBankConverter}`;
-        alert(errorMsg);
+        notify.error(errorMsg);
         
         // Process next file even on error
         processNextInQueue();
@@ -1002,7 +1004,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
             : f
         )
       );
-      alert(`${t.conversionFailed}: ${errorMessage}`);
+      notify.error(`${t.conversionFailed}: ${errorMessage}`);
       
       // Process next file even on error
       processNextInQueue();
@@ -1093,10 +1095,10 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
 
       const success = await window.electronAPI.openFile(filePath);
       if (!success) {
-        alert(t.fileNotFound);
+        notify.error(t.fileNotFound);
       }
     } else {
-      alert(t.fileNotFound);
+      notify.error(t.fileNotFound);
     }
     setOpenDropdownId(null);
   };
@@ -1423,7 +1425,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                               onClick={(e) => {
                                 e.stopPropagation();
                                 navigator.clipboard.writeText(file.errorMessage || '');
-                                alert('Błąd skopiowany do schowka');
+                                notify.success('Błąd skopiowany do schowka');
                               }}
                               title="Kliknij aby skopiować błąd"
                             >

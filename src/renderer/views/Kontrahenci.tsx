@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Kontrahent, KontrahentTyp } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
 import ModalDismiss from '../components/Modal';
 
@@ -18,6 +19,7 @@ interface KontrahenciProps {
 
 const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
   const t = translations[language];
+  const notify = useNotify();
   const [kontrahenci, setKontrahenci] = useState<Kontrahent[]>([]);
   const [showAddKontrahent, setShowAddKontrahent] = useState(false);
   const [editingKontrahent, setEditingKontrahent] = useState<Kontrahent | null>(null);
@@ -49,7 +51,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
 
   const handleAddKontrahent = async () => {
     if (!newNazwa || !newKontoKontrahenta) {
-      alert(t.fillAllFields);
+      notify.warning(t.fillAllFields);
       return;
     }
 
@@ -58,7 +60,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
       k => k.nazwa.toLowerCase() === newNazwa.toLowerCase()
     );
     if (duplicateExists) {
-      alert(t.duplicateKontrahentName);
+      notify.warning(t.duplicateKontrahentName);
       return;
     }
 
@@ -74,13 +76,13 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
       loadData();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      alert(`${t.errorAddingKontrahent}: ${errorMessage}`);
+      notify.error(`${t.errorAddingKontrahent}: ${errorMessage}`);
     }
   };
 
   const handleUpdateKontrahent = async () => {
     if (!editingKontrahent || !newNazwa || !newKontoKontrahenta) {
-      alert(t.fillAllFields);
+      notify.warning(t.fillAllFields);
       return;
     }
 
@@ -89,7 +91,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
       k => k.id !== editingKontrahent.id && k.nazwa.toLowerCase() === newNazwa.toLowerCase()
     );
     if (duplicateExists) {
-      alert(t.duplicateKontrahentName);
+      notify.warning(t.duplicateKontrahentName);
       return;
     }
 
@@ -105,18 +107,18 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
       loadData();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      alert(`${t.errorUpdatingKontrahent}: ${errorMessage}`);
+      notify.error(`${t.errorUpdatingKontrahent}: ${errorMessage}`);
     }
   };
 
   const handleDeleteKontrahent = async (id: number) => {
-    if (confirm(t.confirmDeleteKontrahent)) {
+    if (await notify.confirm(t.confirmDeleteKontrahent, { danger: true })) {
       try {
         await window.electronAPI.deleteKontrahent(id);
         loadData();
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        alert(`${t.errorDeletingKontrahent}: ${errorMessage}`);
+        notify.error(`${t.errorDeletingKontrahent}: ${errorMessage}`);
       }
     }
   };
@@ -159,13 +161,13 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
         const message = t.importKontrahenciFromFileFunkySuccess
           .replace('{added}', result.added?.toString() || '0')
           .replace('{updated}', result.updated?.toString() || '0');
-        alert(message);
+        notify.success(message);
         loadData();
       } else if (result.error) {
-        alert(`${t.importKontrahenciError}: ${result.error}`);
+        notify.error(`${t.importKontrahenciError}: ${result.error}`);
       }
     } catch (error) {
-      alert(t.importKontrahenciError);
+      notify.error(t.importKontrahenciError);
     } finally {
       setIsImporting(false);
     }
@@ -179,15 +181,15 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
         const message = t.importKontrahenciFromDOMSuccess
           .replace('{added}', result.added?.toString() || '0')
           .replace('{updated}', result.updated?.toString() || '0');
-        alert(message);
+        notify.success(message);
         loadData();
       } else if (result.error) {
-        alert(`${t.importKontrahenciError}: ${result.error}`);
+        notify.error(`${t.importKontrahenciError}: ${result.error}`);
       }
       // If success is false but no error, user canceled - do nothing
     } catch (error) {
       console.error('Error importing from DOM:', error);
-      alert(`${t.importKontrahenciError}: ${error}`);
+      notify.error(`${t.importKontrahenciError}: ${error}`);
     } finally {
       setIsImporting(false);
     }
@@ -197,23 +199,23 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
     try {
       const result = await window.electronAPI.exportKontrahenciToFile();
       if (result.success) {
-        alert(t.exportKontrahenciSuccess.replace('{count}', result.count.toString()));
+        notify.success(t.exportKontrahenciSuccess.replace('{count}', result.count.toString()));
       } else if (result.error) {
-        alert(`${t.exportKontrahenciError}: ${result.error}`);
+        notify.error(`${t.exportKontrahenciError}: ${result.error}`);
       }
     } catch (error) {
-      alert(t.exportKontrahenciError);
+      notify.error(t.exportKontrahenciError);
     }
   };
 
   const handleDeleteAll = async () => {
-    if (confirm(t.confirmDeleteAllKontrahenci)) {
+    if (await notify.confirm(t.confirmDeleteAllKontrahenci, { danger: true })) {
       try {
         await window.electronAPI.deleteAllKontrahenci();
         loadData();
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        alert(`${t.errorDeletingKontrahent}: ${errorMessage}`);
+        notify.error(`${t.errorDeletingKontrahent}: ${errorMessage}`);
       }
     }
   };

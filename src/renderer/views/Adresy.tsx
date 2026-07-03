@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Adres, Bank, ApartmentMapping, KontoTyp } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { useNotify } from '../components/Notifications';
 import { normalizeAccount } from '../../shared/account-extractor';
 import Icon from '../components/Icon';
 import Loader from '../components/Loader';
@@ -129,6 +130,7 @@ interface AccountTypesModalProps {
  */
 const AccountTypesModal: React.FC<AccountTypesModalProps> = ({ language, kontoTypy, onClose, onSaved }) => {
   const t = translations[language];
+  const notify = useNotify();
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // null = closed; { editing: null } = add; { editing: <typ> } = edit.
@@ -159,7 +161,7 @@ const AccountTypesModal: React.FC<AccountTypesModalProps> = ({ language, kontoTy
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm(t.confirmDeleteAccountType)) return;
+    if (!(await notify.confirm(t.confirmDeleteAccountType, { danger: true }))) return;
     setIsSaving(true);
     setError(null);
     try {
@@ -386,6 +388,7 @@ const ApartmentMappingsModal: React.FC<ApartmentMappingsModalProps> = ({
   onSaved,
 }) => {
   const t = translations[language];
+  const notify = useNotify();
   const [mappings, setMappings] = useState<ApartmentMapping[]>(adres.apartmentMappings || []);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -426,7 +429,7 @@ const ApartmentMappingsModal: React.FC<ApartmentMappingsModalProps> = ({
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t.confirmDeleteAdres)) return;
+    if (!(await notify.confirm(t.confirmDeleteAdres, { danger: true }))) return;
     await persist(mappings.filter(m => m.id !== id));
   };
 
@@ -528,6 +531,7 @@ interface AdresyProps {
 
 const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefillConsumed }) => {
   const t = translations[language];
+  const notify = useNotify();
   const [adresy, setAdresy] = useState<Adres[]>([]);
   const [banks, setBanks] = useState<Bank[]>([]);
   const [kontoTypy, setKontoTypy] = useState<KontoTyp[]>([]);
@@ -585,7 +589,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
 
   const handleAddAdres = async () => {
     if (!newNazwa) {
-      alert(t.fillAllFields);
+      notify.warning(t.fillAllFields);
       return;
     }
 
@@ -594,7 +598,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
       a => a.nazwa.toLowerCase() === newNazwa.toLowerCase()
     );
     if (duplicateExists) {
-      alert(t.duplicateAdresName);
+      notify.warning(t.duplicateAdresName);
       return;
     }
 
@@ -613,13 +617,13 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
       loadData();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      alert(`${t.errorAddingAdres}: ${errorMessage}`);
+      notify.error(`${t.errorAddingAdres}: ${errorMessage}`);
     }
   };
 
   const handleUpdateAdres = async () => {
     if (!editingAdres || !newNazwa) {
-      alert(t.fillAllFields);
+      notify.warning(t.fillAllFields);
       return;
     }
 
@@ -628,7 +632,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
       a => a.id !== editingAdres.id && a.nazwa.toLowerCase() === newNazwa.toLowerCase()
     );
     if (duplicateExists) {
-      alert(t.duplicateAdresName);
+      notify.warning(t.duplicateAdresName);
       return;
     }
 
@@ -648,18 +652,18 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
       loadData();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      alert(`${t.errorUpdatingAdres}: ${errorMessage}`);
+      notify.error(`${t.errorUpdatingAdres}: ${errorMessage}`);
     }
   };
 
   const handleDeleteAdres = async (id: number) => {
-    if (confirm(t.confirmDeleteAdres)) {
+    if (await notify.confirm(t.confirmDeleteAdres, { danger: true })) {
       try {
         await window.electronAPI.deleteAdres(id);
         loadData();
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        alert(`${t.errorDeletingAdres}: ${errorMessage}`);
+        notify.error(`${t.errorDeletingAdres}: ${errorMessage}`);
       }
     }
   };
@@ -738,13 +742,13 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     try {
       const result = await window.electronAPI.importAdresyFromFile();
       if (result.success) {
-        alert(t.importAdresySuccess.replace('{count}', result.count.toString()));
+        notify.success(t.importAdresySuccess.replace('{count}', result.count.toString()));
         loadData();
       } else if (result.error) {
-        alert(`${t.importAdresyError}: ${result.error}`);
+        notify.error(`${t.importAdresyError}: ${result.error}`);
       }
     } catch (error) {
-      alert(t.importAdresyError);
+      notify.error(t.importAdresyError);
     } finally {
       setIsImporting(false);
     }
@@ -754,23 +758,23 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     try {
       const result = await window.electronAPI.exportAdresyToFile();
       if (result.success) {
-        alert(t.exportAdresySuccess.replace('{count}', result.count.toString()));
+        notify.success(t.exportAdresySuccess.replace('{count}', result.count.toString()));
       } else if (result.error) {
-        alert(`${t.exportAdresyError}: ${result.error}`);
+        notify.error(`${t.exportAdresyError}: ${result.error}`);
       }
     } catch (error) {
-      alert(t.exportAdresyError);
+      notify.error(t.exportAdresyError);
     }
   };
 
   const handleDeleteAll = async () => {
-    if (confirm(t.confirmDeleteAllAdresy)) {
+    if (await notify.confirm(t.confirmDeleteAllAdresy, { danger: true })) {
       try {
         await window.electronAPI.deleteAllAdresy();
         loadData();
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        alert(`${t.errorDeletingAdres}: ${errorMessage}`);
+        notify.error(`${t.errorDeletingAdres}: ${errorMessage}`);
       }
     }
   };

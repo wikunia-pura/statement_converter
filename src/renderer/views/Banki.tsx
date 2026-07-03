@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Bank, Converter } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { useNotify } from '../components/Notifications';
 import Icon from '../components/Icon';
 import Loader from '../components/Loader';
 import ModalDismiss from '../components/Modal';
@@ -12,6 +13,7 @@ interface BankiProps {
 
 const Banki: React.FC<BankiProps> = ({ language }) => {
   const t = translations[language];
+  const notify = useNotify();
   const [banks, setBanks] = useState<Bank[]>([]);
   const [converters, setConverters] = useState<Converter[]>([]);
   const [showAdd, setShowAdd] = useState(false);
@@ -51,12 +53,12 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
 
   const handleAdd = async () => {
     if (!name) {
-      alert(t.fillAllFields);
+      notify.warning(t.fillAllFields);
       return;
     }
     const duplicate = banks.some((b) => b.name.toLowerCase() === name.toLowerCase());
     if (duplicate) {
-      alert(t.duplicateBankName);
+      notify.warning(t.duplicateBankName);
       return;
     }
     try {
@@ -65,20 +67,20 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
       loadData();
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
-      alert(`${t.errorAddingBank}: ${msg}`);
+      notify.error(`${t.errorAddingBank}: ${msg}`);
     }
   };
 
   const handleUpdate = async () => {
     if (!editing || !name) {
-      alert(t.fillAllFields);
+      notify.warning(t.fillAllFields);
       return;
     }
     const duplicate = banks.some(
       (b) => b.id !== editing.id && b.name.toLowerCase() === name.toLowerCase(),
     );
     if (duplicate) {
-      alert(t.duplicateBankName);
+      notify.warning(t.duplicateBankName);
       return;
     }
     try {
@@ -87,29 +89,29 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
       loadData();
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
-      alert(`${t.errorUpdatingBank}: ${msg}`);
+      notify.error(`${t.errorUpdatingBank}: ${msg}`);
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm(t.confirmDeleteBank)) return;
+    if (!(await notify.confirm(t.confirmDeleteBank, { danger: true }))) return;
     try {
       await window.electronAPI.deleteBank(id);
       loadData();
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
-      alert(`${t.errorDeletingBank}: ${msg}`);
+      notify.error(`${t.errorDeletingBank}: ${msg}`);
     }
   };
 
   const handleDeleteAll = async () => {
-    if (!confirm(t.confirmDeleteAllBanks)) return;
+    if (!(await notify.confirm(t.confirmDeleteAllBanks, { danger: true }))) return;
     try {
       await window.electronAPI.deleteAllBanks();
       loadData();
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
-      alert(`${t.errorDeletingBank}: ${msg}`);
+      notify.error(`${t.errorDeletingBank}: ${msg}`);
     }
   };
 
@@ -139,13 +141,13 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
     try {
       const result = await window.electronAPI.importBanksFromFile();
       if (result.success && typeof result.count === 'number') {
-        alert(t.importBanksSuccess.replace('{count}', String(result.count)));
+        notify.success(t.importBanksSuccess.replace('{count}', String(result.count)));
         loadData();
       } else if (result.error) {
-        alert(`${t.importBanksError}: ${result.error}`);
+        notify.error(`${t.importBanksError}: ${result.error}`);
       }
     } catch {
-      alert(t.importBanksError);
+      notify.error(t.importBanksError);
     } finally {
       setIsImporting(false);
     }
@@ -155,12 +157,12 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
     try {
       const result = await window.electronAPI.exportBanksToFile();
       if (result.success && typeof result.count === 'number') {
-        alert(t.exportBanksSuccess.replace('{count}', String(result.count)));
+        notify.success(t.exportBanksSuccess.replace('{count}', String(result.count)));
       } else if (result.error) {
-        alert(`${t.exportBanksError}: ${result.error}`);
+        notify.error(`${t.exportBanksError}: ${result.error}`);
       }
     } catch {
-      alert(t.exportBanksError);
+      notify.error(t.exportBanksError);
     }
   };
 

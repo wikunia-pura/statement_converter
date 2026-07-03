@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ConversionHistory } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { useNotify } from '../components/Notifications';
 import { formatDate } from '../../shared/utils';
 import Icon from '../components/Icon';
 import Loader from '../components/Loader';
@@ -13,6 +14,7 @@ interface HistoryProps {
 
 const History: React.FC<HistoryProps> = ({ language }) => {
   const t = translations[language];
+  const notify = useNotify();
   const [history, setHistory] = useState<ConversionHistory[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -66,7 +68,7 @@ const History: React.FC<HistoryProps> = ({ language }) => {
   };
 
   const handleClearHistory = async () => {
-    if (confirm(t.confirmClearHistory)) {
+    if (await notify.confirm(t.confirmClearHistory, { danger: true })) {
       await window.electronAPI.clearHistory();
       loadHistory();
     }
@@ -76,7 +78,7 @@ const History: React.FC<HistoryProps> = ({ language }) => {
     const filePath = resolveOutputFilePath(outputPath, type);
     const result = await window.electronAPI.openFile(filePath);
     if (!result) {
-      alert(t.fileNotFound);
+      notify.error(t.fileNotFound);
     }
     setOpenDropdownId(null);
   };

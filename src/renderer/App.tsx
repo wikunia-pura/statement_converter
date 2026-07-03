@@ -15,6 +15,7 @@ import SplashScreen from './components/SplashScreen';
 import Footer from './components/Footer';
 import Icon from './components/Icon';
 import UpdateNotification from './components/UpdateNotification';
+import { NotificationProvider } from './components/Notifications';
 import { translations, Language } from './translations';
 import { FileEntry } from '../shared/types';
 
@@ -152,26 +153,26 @@ const App: React.FC = () => {
 
   if (!sessionChecked) {
     return (
-      <>
+      <NotificationProvider errorTitle={t.error} okLabel="OK" cancelLabel={t.cancel} dismissLabel={t.close}>
         {splash}
         <div className="app" />
-      </>
+      </NotificationProvider>
     );
   }
 
   if (!session) {
     return (
-      <>
+      <NotificationProvider errorTitle={t.error} okLabel="OK" cancelLabel={t.cancel} dismissLabel={t.close}>
         {splash}
         <div className="app">
           <Login onSignedIn={handleSignedIn} />
         </div>
-      </>
+      </NotificationProvider>
     );
   }
 
   return (
-    <>
+    <NotificationProvider errorTitle={t.error} okLabel="OK" cancelLabel={t.cancel} dismissLabel={t.close}>
     {splash}
     <div className="app">
       <UpdateNotification language={language} />
@@ -330,7 +331,7 @@ const App: React.FC = () => {
       </div>
       <Footer language={language} appVersion={appVersion} />
     </div>
-    </>
+    </NotificationProvider>
   );
 };
 

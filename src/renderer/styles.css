@@ -412,6 +412,13 @@ body.dark-mode .nav-item.active {
   margin-bottom: var(--s-4);
 }
 
+/* Divider between sections inside a single card (e.g. drop zone ↔ file list). */
+.card-separator {
+  border: none;
+  border-top: 3px solid var(--border-default);
+  margin: var(--s-5) 0;
+}
+
 /* ==========================================================================
    Buttons
    ========================================================================== */
@@ -2248,3 +2255,228 @@ pre {
   .splash__logo-wrap { animation: splash-bg-in 250ms ease-out both; }
 }
 .text-secondary { color: var(--text-secondary); }
+
+/* ==========================================================================
+   Conversion history timeline (grouped by day → bank)
+   Shared by the History view and the Converter "recent activity" panel.
+   ========================================================================== */
+
+.history-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+/* --- Day section --------------------------------------------------------- */
+.history-day {
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: var(--bg-surface);
+}
+
+.history-day.is-open {
+  border-color: var(--accent-border);
+}
+
+.history-day-header {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  padding: var(--s-3) var(--s-4);
+  border: none;
+  background: var(--bg-surface-sunken);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  color: var(--text-primary);
+  transition: background 0.12s ease;
+}
+
+.history-day-header:hover {
+  background: var(--bg-surface-hover);
+}
+
+.history-day.is-open .history-day-header {
+  background: var(--accent-subtle);
+  color: var(--text-primary);
+}
+
+.history-day-header > svg {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.history-day-title {
+  font-size: var(--fs-base);
+  font-weight: 600;
+}
+
+.history-day-title::first-letter {
+  text-transform: uppercase;
+}
+
+.history-day-summary {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.history-day-error-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-pill);
+  background: var(--danger);
+  display: inline-block;
+}
+
+.history-day-body {
+  padding: var(--s-3) var(--s-4) var(--s-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.history-day-toggle-all {
+  align-self: flex-start;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-pill);
+  background: var(--bg-surface);
+  cursor: pointer;
+  padding: 3px 12px;
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.history-day-toggle-all:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--accent-border);
+  color: var(--text-primary);
+}
+
+/* --- Bank sub-section ---------------------------------------------------- */
+.history-bank {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+.history-bank-header {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  width: 100%;
+  padding: var(--s-2) var(--s-3);
+  border: none;
+  background: var(--bg-surface);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  color: var(--text-primary);
+  transition: background 0.12s ease;
+}
+
+.history-bank-header:hover {
+  background: var(--bg-surface-hover);
+}
+
+.history-bank-header > svg {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.history-bank-name {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.history-bank-count {
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+}
+
+.history-bank-badge {
+  margin-left: auto;
+}
+
+.history-bank-body {
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* --- Entry row ----------------------------------------------------------- */
+.history-entry {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2) var(--s-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.history-entry:first-child {
+  border-top: none;
+}
+
+.history-entry-time {
+  flex-shrink: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  min-width: 44px;
+}
+
+.history-entry-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.history-entry-file {
+  font-size: var(--fs-base);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-entry-converter {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.history-entry-error {
+  font-size: var(--fs-xs);
+  color: var(--danger);
+}
+
+.history-entry-actions {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* Recent-activity panel inside the Converter view.
+   Rather than stacking another identical white card under the files list (which
+   reads as one continuous surface), break out of the card rhythm: a full-bleed,
+   recessed footer band that spans the whole content area on a sunken background,
+   so the white day/bank cards inside it clearly pop as a separate zone. */
+.recent-activity-card.card {
+  margin: var(--s-10) calc(-1 * var(--s-8)) calc(-1 * var(--s-8));
+  padding: var(--s-8);
+  background: var(--bg-surface-sunken);
+  border: none;
+  border-top: 3px solid var(--accent);
+  border-radius: 0;
+  box-shadow: inset 0 12px 16px -14px rgba(16, 24, 40, 0.25);
+}

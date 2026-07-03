@@ -277,6 +277,7 @@ const App: React.FC = () => {
               setAdresyPrefillAccount(acc);
               setCurrentView('adresy');
             }}
+            onNavigateToHistory={() => setCurrentView('history')}
           />
         )}
         {currentView === 'kontrahenci' && <Kontrahenci language={language} />}

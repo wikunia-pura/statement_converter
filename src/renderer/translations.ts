@@ -85,6 +85,12 @@ export const translations = {
     noConversionHistory: 'Brak historii konwersji',
     searchHistory: 'Szukaj w historii (nazwa pliku, bank, konwerter, status, ścieżka, data, błąd...)',
     noHistoryResults: 'Brak wpisów pasujących do wyszukiwania',
+    today: 'Dziś',
+    yesterday: 'Wczoraj',
+    historyLast30Days: 'Historia z ostatnich 30 dni',
+    goToFullHistory: 'Pełna historia',
+    expandAll: 'Rozwiń wszystkie',
+    collapseAll: 'Zwiń wszystkie',
     
     // Kontrahenci view
     kontrahenci: 'Kontrahenci i konta',
@@ -470,6 +476,12 @@ export const translations = {
     noConversionHistory: 'No conversion history yet',
     searchHistory: 'Search history (file name, bank, converter, status, path, date, error...)',
     noHistoryResults: 'No entries match your search',
+    today: 'Today',
+    yesterday: 'Yesterday',
+    historyLast30Days: 'History from the last 30 days',
+    goToFullHistory: 'Full history',
+    expandAll: 'Expand all',
+    collapseAll: 'Collapse all',
     
     // Kontrahenci view
     kontrahenci: 'Contractors & Accounts',

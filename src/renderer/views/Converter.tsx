@@ -13,6 +13,7 @@ import BankIllustration from '../components/BankIllustration';
 import { findAdresByAccountNumbers, normalizeAccount } from '../../shared/account-extractor';
 import { resolveOutputFilePath } from '../../shared/outputPaths';
 import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
+import ConversionHistoryTimeline from '../components/ConversionHistoryTimeline';
 
 interface SearchableAdresSelectProps {
   adresy: Adres[];
@@ -223,9 +224,11 @@ interface ConverterProps {
   setSelectedBank: React.Dispatch<React.SetStateAction<number | null>>;
   /** Called when the user clicks "+ Add address with this account" — App.tsx switches to the Adresy view with the account pre-filled in the new-adres modal. */
   onAddAdresWithAccount?: (accountNumber: string) => void;
+  /** Called when the user clicks "Full history" in the recent-activity panel — App.tsx switches to the History view. */
+  onNavigateToHistory?: () => void;
 }
 
-const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, selectedBank, setSelectedBank, onAddAdresWithAccount }) => {
+const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, selectedBank, setSelectedBank, onAddAdresWithAccount, onNavigateToHistory }) => {
   const t = translations[language];
   const notify = useNotify();
   const [banks, setBanks] = useState<Bank[]>([]);
@@ -343,6 +346,16 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     }
   };
 
+  // Keep the recent-activity panel in sync: every conversion (success or error)
+  // is written to history server-side, so reload whenever a file finishes.
+  const completedFileCount = useMemo(
+    () => files.filter((f) => f.status === 'success' || f.status === 'error').length,
+    [files]
+  );
+  useEffect(() => {
+    if (completedFileCount > 0) loadHistory();
+  }, [completedFileCount]);
+
   // Map of previously-processed input files → most recent successful conversion date.
   // Keyed by lowercased file name so an uploaded file can be flagged if it was already
   // converted before (guards against accidentally booking the same statement twice).
@@ -357,6 +370,13 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
       }
     }
     return map;
+  }, [conversionHistory]);
+
+  // Recent activity panel: only the last 30 days, so the converter view stays
+  // a quick reference without turning into the full History view.
+  const recentHistory = useMemo(() => {
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    return conversionHistory.filter((entry) => new Date(entry.convertedAt).getTime() >= cutoff);
   }, [conversionHistory]);
 
   const loadKontoTypy = async () => {
@@ -1161,12 +1181,12 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
               {t.dragDropFiles}
             </div>
           </div>
-        </div>
 
-        {files.length > 0 && (
-          <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h2>{t.files}</h2>
+          {files.length > 0 && (
+            <>
+              <hr className="card-separator" />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <h2>{t.files}</h2>
               <div className="button-group" style={{ margin: 0 }}>
                 <button 
                   className="button button-secondary"
@@ -1538,16 +1558,50 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                 ))}
               </tbody>
             </table>
-          </div>
+            </>
+          )}
+
+          {files.length === 0 && (
+            <>
+              <hr className="card-separator" />
+              <div className="empty-state">
+                <div className="empty-state-icon"><Icon name="file-text" size={48} /></div>
+                <div className="empty-state-text">{t.noFilesAdded}</div>
+              </div>
+            </>
+          )}
+        </div>
+          </>
         )}
 
-        {files.length === 0 && (
-          <div className="empty-state">
-            <div className="empty-state-icon"><Icon name="file-text" size={48} /></div>
-            <div className="empty-state-text">{t.noFilesAdded}</div>
+        {/* Recent activity — last 30 days, same timeline as the full History view.
+            Hidden while loading and while the full-screen review is up. */}
+        {!isLoading && !reviewData && (
+          <div className="card recent-activity-card">
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '15px',
+                gap: '12px',
+              }}
+            >
+              <h2 style={{ margin: 0, fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Icon name="history" size={18} /> {t.historyLast30Days}
+              </h2>
+              {onNavigateToHistory && (
+                <button className="button button-small button-secondary" onClick={onNavigateToHistory}>
+                  {t.goToFullHistory} →
+                </button>
+              )}
+            </div>
+            <ConversionHistoryTimeline
+              history={recentHistory}
+              language={language}
+              showSearch={false}
+            />
           </div>
-        )}
-          </>
         )}
 
         {/* Transaction Review Screen */}

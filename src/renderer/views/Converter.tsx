@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { FileEntry, Bank, Adres, KontoTyp, ConversionReviewData, ReviewDecision } from '../../shared/types';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { FileEntry, Bank, Adres, KontoTyp, ConversionReviewData, ReviewDecision, ConversionHistory } from '../../shared/types';
 import { translations, Language } from '../translations';
-import { generateId } from '../../shared/utils';
+import { generateId, formatDate } from '../../shared/utils';
 import { TransactionReviewScreen } from '../components/TransactionReviewScreen';
 import Icon from '../components/Icon';
 import Loader from '../components/Loader';
@@ -229,6 +229,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   const [banks, setBanks] = useState<Bank[]>([]);
   const [adresy, setAdresy] = useState<Adres[]>([]);
   const [kontoTypy, setKontoTypy] = useState<KontoTyp[]>([]);
+  const [conversionHistory, setConversionHistory] = useState<ConversionHistory[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showDuplicatesModal, setShowDuplicatesModal] = useState(false);
@@ -314,7 +315,33 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     loadAdresy();
     loadKontoTypy();
     loadSettings();
+    loadHistory();
   }, []);
+
+  const loadHistory = async () => {
+    try {
+      const data = await window.electronAPI.getHistory();
+      setConversionHistory(data);
+    } catch (error) {
+      console.error('Error loading history:', error);
+    }
+  };
+
+  // Map of previously-processed input files → most recent successful conversion date.
+  // Keyed by lowercased file name so an uploaded file can be flagged if it was already
+  // converted before (guards against accidentally booking the same statement twice).
+  const processedFileDates = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const entry of conversionHistory) {
+      if (entry.status !== 'success') continue;
+      const key = entry.fileName.toLowerCase();
+      const existing = map.get(key);
+      if (!existing || new Date(entry.convertedAt).getTime() > new Date(existing).getTime()) {
+        map.set(key, entry.convertedAt);
+      }
+    }
+    return map;
+  }, [conversionHistory]);
 
   const loadKontoTypy = async () => {
     try {
@@ -1206,7 +1233,35 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                     ) : (
                       <>
                         <td>{index + 1}</td>
-                        <td>{file.fileName}</td>
+                        <td>
+                          <div>{file.fileName}</div>
+                          {(() => {
+                            const processedAt = processedFileDates.get(file.fileName.toLowerCase());
+                            if (!processedAt) return null;
+                            return (
+                              <div
+                                style={{
+                                  marginTop: '6px',
+                                  padding: '3px 8px',
+                                  background: 'var(--bg-surface)',
+                                  color: 'var(--danger)',
+                                  border: '1px solid var(--danger-border)',
+                                  borderRadius: '4px',
+                                  fontSize: '12px',
+                                  fontWeight: 600,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  lineHeight: 1.3,
+                                  maxWidth: '100%',
+                                }}
+                              >
+                                <span>
+                                  {t.alreadyProcessedWarning}, {t.alreadyProcessedOn}: {formatDate(processedAt)}
+                                </span>
+                              </div>
+                            );
+                          })()}
+                        </td>
                         <td>
                           <Select
                             value={file.bankId}

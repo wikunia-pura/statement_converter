@@ -197,6 +197,8 @@ export const translations = {
     autoMatchedFromAccount: 'Adres dopasowany automatycznie po numerze konta z pliku',
     accountDetectedNoMatch: 'W pliku wykryto numer konta wspólnoty, ale nie pasuje do żadnego adresu w bazie.',
     accountDetectedNoMatchAction: '+ Dodaj adres z tym kontem',
+    alreadyProcessedWarning: 'Ten plik był już przetworzony',
+    alreadyProcessedOn: 'przetworzono',
     
     // Alerts
     fillAllFields: 'Proszę wypełnić wszystkie pola',
@@ -579,6 +581,8 @@ export const translations = {
     autoMatchedFromAccount: 'Address auto-matched from the account number in the file',
     accountDetectedNoMatch: 'A community account number was detected in the file but does not match any address in the database.',
     accountDetectedNoMatchAction: '+ Add address with this account',
+    alreadyProcessedWarning: 'This file was already processed',
+    alreadyProcessedOn: 'processed on',
     
     // Alerts
     fillAllFields: 'Please fill in all fields',

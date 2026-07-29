@@ -22,6 +22,47 @@ function logCacheUsage(label: string, usage: unknown): void {
   }
 }
 
+/** Contractor as it appears in a prompt — either as a pre-filtered candidate or in the shared pool. */
+type CandidateContractor = {
+  id: number;
+  nazwa: string;
+  kontoKontrahenta: string;
+  nip?: string;
+  alternativeNames?: string[];
+};
+
+/** One rendered contractor line, shared by the candidate lists and the pool. */
+function renderContractorLine(c: CandidateContractor, prefix: string): string {
+  let line = `  ${prefix}ID:${c.id} "${c.nazwa}"`;
+  if (c.nip) line += ` [NIP: ${c.nip}]`;
+  if (c.alternativeNames && c.alternativeNames.length > 0) {
+    line += ` [ALT: ${c.alternativeNames.join(', ')}]`;
+  }
+  return line;
+}
+
+/**
+ * Render the whole contractor book as one block, sent once per request and
+ * marked for prompt caching.
+ *
+ * Transactions whose name was mangled by the bank's 35-char line wrapping ("GON
+ * TAREK") get no pre-filtered candidates, so they need the full book to have any
+ * chance of matching. Inlining it under each such transaction used to repeat
+ * ~14k tokens per transaction; here it appears once and, because the bytes are
+ * identical across every batch and every file, it is served from the prompt
+ * cache at a tenth of the input price on repeats. Sorted by id so the bytes stay
+ * stable — any reordering would silently invalidate that cache.
+ */
+function renderContractorPool(pool: CandidateContractor[]): string {
+  const sorted = [...pool].sort((a, b) => a.id - b.id);
+  return (
+    `📚 PEŁNA LISTA KONTRAHENTÓW z bazy użytkownika (${sorted.length} pozycji).\n` +
+    `Dotyczy wyłącznie transakcji oznaczonych "KANDYDACI: PEŁNA LISTA" — dla nich wybierz ID z tej listy albo null.\n` +
+    `Dla pozostałych transakcji obowiązuje wyłącznie ich własna lista kandydatów.\n\n` +
+    sorted.map(c => renderContractorLine(c, '')).join('\n')
+  );
+}
+
 export class AIExtractor {
   private anthropic?: Anthropic;
   private openai?: OpenAI;
@@ -203,14 +244,22 @@ export class AIExtractor {
   /**
    * Match contractors for expense transactions using AI
    */
+  /**
+   * @param candidatesPerTransaction Pre-filtered candidates per transaction. An
+   *   empty list means "pre-filtering found nothing" — such a transaction draws
+   *   from `sharedPool` when one is supplied, and is forced to null otherwise.
+   * @param sharedPool The full contractor book, rendered once per request and
+   *   prompt-cached. Pass it only when at least one transaction needs it.
+   */
   async matchContractorsBatch(
     transactions: AITransaction[],
-    candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string; nip?: string; alternativeNames?: string[] }>>
+    candidatesPerTransaction: CandidateContractor[][],
+    sharedPool?: CandidateContractor[]
   ): Promise<Array<{ contractor: any | null; confidence: number; matchedIn: 'desc-opt' | 'desc-base' | 'none'; matchedText?: string; reasoning?: string }>> {
     if (this.config.aiProvider === 'anthropic') {
-      return this.matchContractorsWithClaude(transactions, candidatesPerTransaction);
+      return this.matchContractorsWithClaude(transactions, candidatesPerTransaction, sharedPool);
     } else if (this.config.aiProvider === 'openai') {
-      return this.matchContractorsWithOpenAI(transactions, candidatesPerTransaction);
+      return this.matchContractorsWithOpenAI(transactions, candidatesPerTransaction, sharedPool);
     } else {
       throw new Error('No AI provider configured');
     }
@@ -644,14 +693,35 @@ Example 2:
    */
   private async matchContractorsWithClaude(
     transactions: AITransaction[],
-    candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string; alternativeNames?: string[] }>>
+    candidatesPerTransaction: CandidateContractor[][],
+    sharedPool?: CandidateContractor[]
   ): Promise<Array<{ contractor: any | null; confidence: number; matchedIn: 'desc-opt' | 'desc-base' | 'none'; matchedText?: string; reasoning?: string }>> {
     if (!this.anthropic) {
       throw new Error('Anthropic client not initialized');
     }
 
     const systemPrompt = this.getContractorMatchingSystemPrompt();
-    const userPrompt = this.getContractorMatchingUserPrompt(transactions, candidatesPerTransaction);
+    const userPrompt = this.getContractorMatchingUserPrompt(
+      transactions,
+      candidatesPerTransaction,
+      !!sharedPool?.length
+    );
+
+    // Both stable blocks get their own cache breakpoint: the instructions are
+    // identical on every call, and the pool is identical on every call that
+    // needs it. Keeping them separate lets a request without a pool still read
+    // the instructions entry. Volatile per-transaction text stays in `messages`,
+    // after both breakpoints, so it never invalidates them.
+    const systemBlocks: Array<Record<string, unknown>> = [
+      { type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } },
+    ];
+    if (sharedPool?.length) {
+      systemBlocks.push({
+        type: 'text',
+        text: renderContractorPool(sharedPool),
+        cache_control: { type: 'ephemeral' },
+      });
+    }
 
     return this.retryWithBackoff(async () => {
       try {
@@ -659,15 +729,8 @@ Example 2:
           model: this.config.model || 'claude-sonnet-4-6',
           max_tokens: 2000 + (transactions.length * 300),
           temperature: 0,
-          // Mark system prompt with cache_control for prompt caching. Cast is
-          // needed because SDK v0.32 doesn't yet expose cache_control in types.
-          system: [
-            {
-              type: 'text',
-              text: systemPrompt,
-              cache_control: { type: 'ephemeral' },
-            },
-          ] as unknown as Anthropic.MessageCreateParamsNonStreaming['system'],
+          // Cast is needed because SDK v0.32 doesn't yet expose cache_control in types.
+          system: systemBlocks as unknown as Anthropic.MessageCreateParamsNonStreaming['system'],
           messages: [
             {
               role: 'user',
@@ -683,7 +746,7 @@ Example 2:
         logCacheUsage('match', message.usage);
 
         const response = this.parseJsonResponse(content.text);
-        return this.processContractorMatchingResponse(response, candidatesPerTransaction);
+        return this.processContractorMatchingResponse(response, candidatesPerTransaction, sharedPool);
       } catch (error) {
         logger.error('Claude API error (contractor matching):', error);
         
@@ -726,14 +789,23 @@ Example 2:
    */
   private async matchContractorsWithOpenAI(
     transactions: AITransaction[],
-    candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string; alternativeNames?: string[] }>>
+    candidatesPerTransaction: CandidateContractor[][],
+    sharedPool?: CandidateContractor[]
   ): Promise<Array<{ contractor: any | null; confidence: number; matchedIn: 'desc-opt' | 'desc-base' | 'none'; matchedText?: string; reasoning?: string }>> {
     if (!this.openai) {
       throw new Error('OpenAI client not initialized');
     }
 
-    const systemPrompt = this.getContractorMatchingSystemPrompt();
-    const userPrompt = this.getContractorMatchingUserPrompt(transactions, candidatesPerTransaction);
+    // No prompt caching here — OpenAI has no cache_control equivalent — but the
+    // pool still goes in once instead of once per transaction.
+    const systemPrompt = sharedPool?.length
+      ? `${this.getContractorMatchingSystemPrompt()}\n\n${renderContractorPool(sharedPool)}`
+      : this.getContractorMatchingSystemPrompt();
+    const userPrompt = this.getContractorMatchingUserPrompt(
+      transactions,
+      candidatesPerTransaction,
+      !!sharedPool?.length
+    );
 
     return this.retryWithBackoff(async () => {
       try {
@@ -754,7 +826,7 @@ Example 2:
         }
 
         const response = this.parseJsonResponse(content);
-        return this.processContractorMatchingResponse(response, candidatesPerTransaction);
+        return this.processContractorMatchingResponse(response, candidatesPerTransaction, sharedPool);
       } catch (error) {
         logger.error('OpenAI API error (contractor matching):', error);
         
@@ -856,30 +928,30 @@ JSON format:
    */
   private getContractorMatchingUserPrompt(
     transactions: AITransaction[],
-    candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string; nip?: string; alternativeNames?: string[] }>>
+    candidatesPerTransaction: CandidateContractor[][],
+    hasSharedPool: boolean
   ): string {
     let prompt = '';
-    
+
     transactions.forEach((t, idx) => {
       const candidates = candidatesPerTransaction[idx] || [];
-      
+
       prompt += `\n=== Transakcja ${idx} ===\n`;
       prompt += `DESC-BASE: "${t.descBase}"\n`;
       prompt += `DESC-OPT: "${t.descOpt || '(brak)'}"\n`;
-      
+
       if (candidates.length > 0) {
         prompt += `\n🏦 DOSTĘPNI KONTRAHENCI (z bazy użytkownika - pre-filtrowane top ${candidates.length}):\n`;
         candidates.forEach((c, i) => {
-          prompt += `  ${i + 1}. ID:${c.id} "${c.nazwa}"`;
-          if (c.nip) {
-            prompt += ` [NIP: ${c.nip}]`;
-          }
-          if (c.alternativeNames && c.alternativeNames.length > 0) {
-            prompt += ` [ALT: ${c.alternativeNames.join(', ')}]`;
-          }
-          prompt += `\n`;
+          prompt += `${renderContractorLine(c, `${i + 1}. `)}\n`;
         });
         prompt += `\n⚠️ Wybierz TYLKO z powyższej listy (ID) lub null jeśli żaden nie pasuje\n`;
+      } else if (hasSharedPool) {
+        // Pre-filtering surfaced nothing (typically a name mangled by line
+        // wrapping), so this transaction draws from the shared pool that was
+        // sent once at the top of the request instead of being inlined here.
+        prompt += `\n🏦 KANDYDACI: PEŁNA LISTA — wstępne filtrowanie nie znalazło kandydatów.\n`;
+        prompt += `⚠️ Wybierz ID z PEŁNEJ LISTY KONTRAHENTÓW (podanej w instrukcji) lub null\n`;
       } else {
         prompt += `\n❌ Brak kandydatów dla tej transakcji - zwróć contractorId: null\n`;
       }
@@ -899,7 +971,8 @@ JSON format:
    */
   private processContractorMatchingResponse(
     response: any,
-    candidatesPerTransaction: Array<Array<{ id: number; nazwa: string; kontoKontrahenta: string; alternativeNames?: string[] }>>
+    candidatesPerTransaction: CandidateContractor[][],
+    sharedPool?: CandidateContractor[]
   ): Array<{ contractor: any | null; confidence: number; matchedIn: 'desc-opt' | 'desc-base' | 'none'; matchedText?: string; reasoning?: string }> {
     return response.results.map((result: any, idx: number) => {
       if (result.contractorId === null || result.confidence < 50) {
@@ -911,12 +984,21 @@ JSON format:
         };
       }
 
+      // A transaction with pre-filtered candidates must pick from them; one
+      // without them was told to pick from the shared pool, so resolve there.
       const candidates = candidatesPerTransaction[idx] || [];
-      const contractor = candidates.find(c => c.id === result.contractorId);
-      
+      const allowed = candidates.length > 0 ? candidates : (sharedPool ?? []);
+      const contractor = allowed.find(c => c.id === result.contractorId);
+
       if (!contractor) {
         logger.warn(`[AI-EXTRACTOR] AI returned contractorId ${result.contractorId} for transaction ${idx}, but it's NOT in candidate list! Returning null.`);
-        logger.warn(`[AI-EXTRACTOR] Available candidate IDs: ${candidates.map(c => c.id).join(', ')}`);
+        logger.warn(
+          `[AI-EXTRACTOR] Allowed IDs: ${
+            candidates.length > 0
+              ? candidates.map(c => c.id).join(', ')
+              : `(pełna lista, ${allowed.length} pozycji)`
+          }`,
+        );
         return {
           contractor: null,
           confidence: 0,

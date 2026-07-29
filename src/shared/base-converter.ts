@@ -14,8 +14,10 @@
  *   - createCsvExporter(): return the format-specific CsvExporter
  */
 
+import * as path from 'path';
 import { AIExtractor } from './ai-extractor';
 import { ExtractionCache } from './extraction-cache';
+import { MatchCache, contractorSetFingerprint } from './match-cache';
 import { ContractorMatcher, MatchedContractor } from './contractor-matcher';
 import { Kontrahent, Adres, KontrahentTyp } from './types';
 import logger from './logger';
@@ -221,6 +223,7 @@ export function isBillingError(error: any): boolean {
 export abstract class BaseConverter<TRaw> {
   protected aiExtractor?: AIExtractor;
   protected cache: ExtractionCache;
+  protected matchCache: MatchCache;
   protected config: BaseConverterConfig;
   protected contractorMatcher?: ContractorMatcher;
   private onProgress?: ConversionProgressCallback;
@@ -257,6 +260,15 @@ export abstract class BaseConverter<TRaw> {
     };
 
     this.cache = new ExtractionCache(this.config.cachePath);
+    // Contractor matches live in their own file next to the extraction cache, so
+    // every converter gets one without threading a second path through all the
+    // construction sites in converterRegistry.
+    this.matchCache = new MatchCache(
+      this.config.cachePath
+        ? path.join(path.dirname(this.config.cachePath), 'match-cache.json')
+        : undefined,
+      contractorSetFingerprint(this.config.contractors ?? []),
+    );
 
     if (this.config.apiKey && this.config.aiProvider !== 'none') {
       this.aiExtractor = new AIExtractor(this.config);
@@ -618,6 +630,7 @@ export abstract class BaseConverter<TRaw> {
     console.log(`💸 Processing ${transactions.length} expense transactions...`);
     const processed: BaseProcessedTransaction<TRaw>[] = [];
     const needsAI: Array<{ transaction: TRaw; index: number }> = [];
+    let matchCacheHits = 0;
 
     console.log('🔍 Phase 1: Partial matching with contractors...');
     this.emitProgress(
@@ -659,13 +672,46 @@ export abstract class BaseConverter<TRaw> {
             matchedContractor
           )
         );
-      } else {
-        needsAI.push({ transaction, index: i });
+        continue;
       }
+
+      // The deterministic matcher gave up. Before paying for an AI call, check
+      // whether this exact description was already matched in an earlier run —
+      // housing communities pay the same vendors every month, so recurring
+      // transfers hit here. The cached id is re-resolved against the current
+      // database, so a renamed or deleted contractor can't resurrect stale data.
+      const cachedMatch = this.config.useCache
+        ? this.matchCache.get(norm.descBase, norm.descOpt)
+        : null;
+      const cachedContractor = cachedMatch
+        ? this.contractorMatcher?.getById(cachedMatch.contractorId, EXPENSE_MATCH_TYPES)
+        : undefined;
+
+      if (cachedMatch && cachedContractor) {
+        const fromCache: MatchedContractor = {
+          contractor: cachedContractor,
+          confidence: cachedMatch.confidence,
+          matchedIn: cachedMatch.matchedIn,
+          matchedText: cachedContractor.nazwa,
+          reasoning: cachedMatch.reasoning,
+        };
+        const extracted = this.buildExpenseExtracted(transaction, 'cache', []);
+        extracted.reasoning = cachedMatch.reasoning;
+        processed.push(
+          this.createProcessedTransaction(transaction, extracted, 'expense', fromCache)
+        );
+        matchCacheHits++;
+        continue;
+      }
+
+      needsAI.push({ transaction, index: i });
     }
 
     const matchedCount = processed.length;
-    console.log(`   ✅ Partial matching: ${matchedCount}/${transactions.length}`);
+    console.log(
+      `   ✅ Partial matching: ${matchedCount}/${transactions.length}` +
+        (matchCacheHits > 0 ? ` (w tym ${matchCacheHits} z cache dopasowań)` : '')
+    );
     console.log(`   🤖 Needs AI: ${needsAI.length}`);
 
     // Phase 2: AI matching
@@ -832,16 +878,25 @@ export abstract class BaseConverter<TRaw> {
           // where fuzzy pre-filtering surfaces nothing (e.g. names corrupted by
           // 35-char line wrapping that injects spaces — "La skowski", "GON TAREK").
           // Without this the AI would receive an empty list and be forced to null.
+          //
+          // Such transactions get an empty candidate list and the catalog is passed
+          // separately, so it is rendered once per request (and prompt-cached)
+          // instead of being inlined under every fallback transaction — that
+          // duplication was ~14k tokens per fallback and dominated the AI bill.
           const fullCatalog = this.contractorMatcher!.getAllByTypes(EXPENSE_MATCH_TYPES);
+          let needsFullCatalog = false;
           const candidatesPerTransaction = transactionsForAI.map((t) => {
             const top = this.contractorMatcher!.getTopCandidates(t, 10, EXPENSE_MATCH_TYPES);
-            return top.length > 0 ? top : fullCatalog;
+            if (top.length > 0) return top;
+            needsFullCatalog = true;
+            return [];
           });
 
           const matchedContractors =
             await this.aiExtractor!.matchContractorsBatch(
               transactionsForAI,
-              candidatesPerTransaction
+              candidatesPerTransaction,
+              needsFullCatalog && fullCatalog.length > 0 ? fullCatalog : undefined
             );
 
           // Diagnostic logging: for every transaction, record what the AI was
@@ -849,22 +904,41 @@ export abstract class BaseConverter<TRaw> {
           // in) and what it returned (matched contractor / null + confidence +
           // reasoning). This makes "AI ran but didn't match X" inspectable in
           // main.log instead of a black box.
-          const fullCatalogSize = fullCatalog.length;
           transactionsForAI.forEach((t, j) => {
             const cands = candidatesPerTransaction[j] || [];
-            const usedFallback = cands.length === fullCatalogSize && fullCatalogSize > 10;
+            // Empty candidates now means "drew from the shared full list".
+            const usedFallback = cands.length === 0 && needsFullCatalog;
             const mc = matchedContractors[j];
             const candStr = cands.length
               ? cands.slice(0, 12).map((c) => `#${c.id}:${c.nazwa}`).join(' | ') +
                 (cands.length > 12 ? ` …(+${cands.length - 12})` : '')
-              : '(brak)';
+              : usedFallback
+                ? `pełna lista (${fullCatalog.length} poz., wysłana raz na zapytanie)`
+                : '(brak)';
             logger.info(
               `[EXPENSE-AI] desc-opt="${t.descOpt || ''}" desc-base="${t.descBase}" | ` +
-                `kandydaci(${cands.length}${usedFallback ? ', FALLBACK=pełny katalog' : ''}): ${candStr} | ` +
+                `kandydaci(${usedFallback ? fullCatalog.length : cands.length}${usedFallback ? ', FALLBACK=pełna lista' : ''}): ${candStr} | ` +
                 `AI => ${mc.contractor ? `MATCH #${mc.contractor.id} "${mc.contractor.nazwa}" (conf ${mc.confidence})` : 'NULL'}` +
                 `${mc.reasoning ? ` | reasoning: ${mc.reasoning}` : ''}`
             );
           });
+
+          // Remember positive matches so the same recurring payment doesn't go
+          // to the AI again next month. Nulls are deliberately not cached — see
+          // MatchCache's header for why.
+          if (this.config.useCache) {
+            transactionsForAI.forEach((t, j) => {
+              const mc = matchedContractors[j];
+              if (mc.contractor && mc.confidence > 0) {
+                this.matchCache.set(t.descBase, t.descOpt, {
+                  contractorId: mc.contractor.id,
+                  confidence: mc.confidence,
+                  matchedIn: mc.matchedIn,
+                  reasoning: mc.reasoning,
+                });
+              }
+            });
+          }
 
           const items: BaseProcessedTransaction<TRaw>[] = batch.map((b, j) => {
             const matchedContractor = matchedContractors[j];

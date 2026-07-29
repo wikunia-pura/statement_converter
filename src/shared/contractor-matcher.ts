@@ -212,6 +212,16 @@ export class ContractorMatcher {
   }
 
   /**
+   * Look up a contractor by id, honoring the type filter. Used to re-resolve a
+   * cached match against the current database: the cache stores only the id, so
+   * a renamed or re-accounted contractor comes back with its current data, and a
+   * deleted one comes back undefined (treated as a cache miss by the caller).
+   */
+  getById(id: number, allowedTypes?: KontrahentTyp[]): Kontrahent | undefined {
+    return this.filterByTypes(allowedTypes).find(d => d.contractor.id === id)?.contractor;
+  }
+
+  /**
    * Get top N candidate contractors for a transaction (for AI pre-filtering)
    * Returns the most likely contractors based on matching (exact and fuzzy)
    * Score priority: NIP (110) > Main name = Alternative names (100 - EQUAL) > Fuzzy match (85-95)

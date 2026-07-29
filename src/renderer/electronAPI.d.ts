@@ -271,7 +271,7 @@ interface ElectronAPI {
   onUpdateError: (callback: (error: string) => void) => () => void;
   onDownloadProgress: (callback: (progress: any) => void) => () => void;
   onConversionProgress: (callback: (progress: ConversionProgressEvent) => void) => () => void;
-  onBackupCreated: (callback: (info: { filePath: string; date: string; trigger: 'startup' | 'quit' }) => void) => () => void;
+  onBackupCreated: (callback: (info: { filePath: string; date: string; upload: 'uploaded' | 'failed' | 'disabled'; trigger: 'startup' | 'quit' }) => void) => () => void;
 }
 
 export interface ConversionProgressEvent {

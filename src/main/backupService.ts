@@ -61,9 +61,17 @@ export function getBackupStatus(): BackupStatus {
   };
 }
 
+/**
+ * Outcome of the off-site push. 'disabled' means this machine has no upload
+ * config — the normal state for untrusted installs, so it must read as "fine",
+ * not as a failure. 'failed' is the one the user has to see.
+ */
+export type BackupUploadStatus = 'uploaded' | 'failed' | 'disabled';
+
 export interface AutoBackupResult {
   filePath: string;
   date: string; // YYYY-MM-DD
+  upload: BackupUploadStatus;
 }
 
 /**
@@ -99,10 +107,11 @@ export async function runAutoBackup(
     }
 
     // Off-site copy: push the file to the private backups repo. Failure is
-    // logged but never fails the backup itself (offline, no token, …).
-    await uploadBackupToRepo(target);
+    // logged and reported back but never fails the backup itself (offline,
+    // no token, …) — the local file is already safe on disk by now.
+    const upload = await uploadBackupToRepo(target);
 
-    return { filePath: target, date: today };
+    return { filePath: target, date: today, upload };
   } catch (error) {
     log.warn(`[BACKUP] Auto backup skipped: ${error instanceof Error ? error.message : error}`);
     return null;
@@ -165,11 +174,10 @@ async function githubApi(
 /**
  * Create or update `<hostname>/<file>` in the configured private repo.
  * Per-machine folders keep several installations from clobbering each other.
- * Returns true when the file landed in the repo.
  */
-async function uploadBackupToRepo(filePath: string): Promise<boolean> {
+async function uploadBackupToRepo(filePath: string): Promise<BackupUploadStatus> {
   const cfg = loadUploadConfig();
-  if (!cfg) return false; // upload not configured on this machine — fine
+  if (!cfg) return 'disabled'; // upload not configured on this machine — fine
   try {
     const remotePath = `${os.hostname()}/${path.basename(filePath)}`;
 
@@ -191,9 +199,9 @@ async function uploadBackupToRepo(filePath: string): Promise<boolean> {
       throw new Error(`PUT ${remotePath}: HTTP ${put.status} ${(await put.text()).slice(0, 200)}`);
     }
     log.info(`[BACKUP] Uploaded to ${cfg.repo}/${remotePath}`);
-    return true;
+    return 'uploaded';
   } catch (error) {
     log.warn(`[BACKUP] Repo upload failed: ${error instanceof Error ? error.message : error}`);
-    return false;
+    return 'failed';
   }
 }

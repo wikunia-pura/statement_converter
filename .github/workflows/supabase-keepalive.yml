@@ -1,13 +1,15 @@
 name: Supabase keep-alive
 
-# Supabase pauzuje darmowy projekt po 7 dniach bez żadnego ruchu do API.
-# Ten job raz dziennie strzela trywialne zapytanie do REST API, co resetuje
-# licznik bezczynności — niezależnie od tego, czy ktoś używa aplikacji.
+# Supabase pauzuje darmowy projekt po 7 dniach bez "wystarczającej" aktywności
+# bazodanowej. Jeden request dziennie okazał się poniżej progu (2026-07: mail
+# z ostrzeżeniem o pauzie w projekcie medykamenty mimo działającego pinga),
+# więc job odpala się co 6h i strzela zapytanie do kilku tabel — każde
+# wykonuje realny SQL po stronie bazy.
 
 on:
   schedule:
-    # Codziennie o 06:00 UTC.
-    - cron: '0 6 * * *'
+    # Co 6 godzin.
+    - cron: '0 */6 * * *'
   workflow_dispatch:
 
 jobs:
@@ -17,8 +19,12 @@ jobs:
       - name: Ping Supabase REST API
         run: |
           # URL i publishable (anon) key są bezpieczne do commitowania — patrz SUPABASE_SETUP.md.
-          # RLS blokuje dostęp do danych; to zapytanie zwróci pustą tablicę, ale liczy się jako aktywność.
-          curl --fail-with-body --silent --show-error \
-            "https://xyvltgegptamtlzsdjwo.supabase.co/rest/v1/banks?select=id&limit=1" \
-            -H "apikey: sb_publishable_7iJwmFOM5lUI4tOTzbYLcg_VVOS5CXF" \
-            -H "Authorization: Bearer sb_publishable_7iJwmFOM5lUI4tOTzbYLcg_VVOS5CXF"
+          # RLS blokuje dostęp do danych; zapytania zwrócą puste tablice,
+          # ale każde z nich liczy się jako aktywność bazodanowa.
+          for table in banks kontrahenci adresy konto_typy history; do
+            curl --fail-with-body --silent --show-error \
+              "https://xyvltgegptamtlzsdjwo.supabase.co/rest/v1/${table}?select=id&limit=1" \
+              -H "apikey: sb_publishable_7iJwmFOM5lUI4tOTzbYLcg_VVOS5CXF" \
+              -H "Authorization: Bearer sb_publishable_7iJwmFOM5lUI4tOTzbYLcg_VVOS5CXF"
+            echo " <- ${table}"
+          done

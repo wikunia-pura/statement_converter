@@ -174,6 +174,41 @@ const AccountTypesModal: React.FC<AccountTypesModalProps> = ({ language, kontoTy
     }
   };
 
+  const handleImport = async () => {
+    setIsSaving(true);
+    setError(null);
+    try {
+      const result = await window.electronAPI.importKontoTypyFromFile();
+      if (result.success) {
+        notify.success(
+          t.importKontoTypySuccess
+            .replace('{added}', String(result.added ?? 0))
+            .replace('{updated}', String(result.updated ?? 0)),
+        );
+        onSaved();
+      } else if (result.error) {
+        setError(result.error);
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      const result = await window.electronAPI.exportKontoTypyToFile();
+      if (result.success) {
+        notify.success(t.exportKontoTypySuccess.replace('{count}', String(result.count ?? 0)));
+      } else if (result.error) {
+        setError(result.error);
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Unknown error');
+    }
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 800 }}>
@@ -182,14 +217,32 @@ const AccountTypesModal: React.FC<AccountTypesModalProps> = ({ language, kontoTy
         <div className="modal-body">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '12px' }}>
             <div style={{ fontSize: '12px', opacity: 0.7 }}>{t.accountTypesHint}</div>
-            <button
-              className="button button-primary"
-              onClick={() => { setError(null); setFormState({ editing: null }); }}
-              disabled={isSaving}
-              style={{ whiteSpace: 'nowrap' }}
-            >
-              + {t.addAccountType}
-            </button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                className="button button-import"
+                onClick={handleImport}
+                disabled={isSaving}
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                {t.importFromFile}
+              </button>
+              <button
+                className="button button-export"
+                onClick={handleExport}
+                disabled={isSaving || kontoTypy.length === 0}
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                {t.exportToFile}
+              </button>
+              <button
+                className="button button-primary"
+                onClick={() => { setError(null); setFormState({ editing: null }); }}
+                disabled={isSaving}
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                + {t.addAccountType}
+              </button>
+            </div>
           </div>
 
           {error && (
@@ -742,7 +795,13 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     try {
       const result = await window.electronAPI.importAdresyFromFile();
       if (result.success) {
-        notify.success(t.importAdresySuccess.replace('{count}', result.count.toString()));
+        notify.success(t.importAdresySuccess.replace('{count}', String(result.count ?? 0)));
+        if (result.errors && result.errors.length > 0) {
+          notify.error(
+            t.importAdresyPartialErrors.replace('{count}', String(result.errors.length)) +
+              '\n' + result.errors.join('\n'),
+          );
+        }
         loadData();
       } else if (result.error) {
         notify.error(`${t.importAdresyError}: ${result.error}`);

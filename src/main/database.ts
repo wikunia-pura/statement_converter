@@ -1,7 +1,7 @@
 import Store from 'electron-store';
 import path from 'path';
 import { app } from 'electron';
-import { Bank, ConversionHistory, AppSettings, Kontrahent, Adres, KontrahentTyp, ApartmentMapping, KontoTyp } from '../shared/types';
+import { Bank, ConversionHistory, AppSettings, Kontrahent, Adres, KontrahentTyp, ApartmentMapping, KontoTyp, BackupData } from '../shared/types';
 import { getSupabase } from './supabaseClient';
 import { normalizeAccount } from '../shared/account-extractor';
 
@@ -193,17 +193,35 @@ class DatabaseService {
     return (data ?? undefined) as Bank | undefined;
   }
 
-  async importBanks(banks: Bank[]): Promise<void> {
-    if (banks.length === 0) return;
-    // Strip ids; let Postgres assign fresh ones (avoids collisions with rows already in the cloud).
-    const payload = banks.map(b => ({
-      name: b.name,
-      converter_id: b.converterId,
-      account_prefixes: b.accountPrefixes ?? [],
-    }));
-    const { error } = await getSupabase().from('banks').insert(payload);
-    if (error) throw new Error(`importBanks: ${error.message}`);
+  /**
+   * Upsert by bank name (case-insensitive): re-importing the same file updates
+   * rows in place instead of piling up duplicates. New rows keep the file's
+   * createdAt; ids are always assigned by Postgres.
+   */
+  async importBanks(banks: Bank[]): Promise<{ added: number; updated: number }> {
+    let added = 0;
+    let updated = 0;
+    if (banks.length === 0) return { added, updated };
     this.invalidateCache('banks');
+    const byName = new Map((await this.getAllBanks()).map(b => [b.name.trim().toLowerCase(), b]));
+    for (const b of banks) {
+      const existing = byName.get(b.name.trim().toLowerCase());
+      if (existing) {
+        await this.updateBank(existing.id, b.name.trim(), b.converterId, b.accountPrefixes ?? []);
+        updated++;
+      } else {
+        const { error } = await getSupabase().from('banks').insert({
+          name: b.name.trim(),
+          converter_id: b.converterId,
+          account_prefixes: b.accountPrefixes ?? [],
+          ...(b.createdAt ? { created_at: b.createdAt } : {}),
+        });
+        if (error) throw new Error(`importBanks: ${error.message}`);
+        added++;
+      }
+    }
+    this.invalidateCache('banks');
+    return { added, updated };
   }
 
   // ---------------------------- Kontrahenci ----------------------------
@@ -563,6 +581,29 @@ class DatabaseService {
     this.invalidateCache('kontoTypy');
   }
 
+  /**
+   * Upsert by type name (case-insensitive). add/update already enforce the
+   * single-default invariant, so an imported default demotes the current one.
+   */
+  async importKontoTypy(rows: KontoTyp[]): Promise<{ added: number; updated: number }> {
+    let added = 0;
+    let updated = 0;
+    if (rows.length === 0) return { added, updated };
+    this.invalidateCache('kontoTypy');
+    const byName = new Map((await this.getKontoTypy()).map(t => [t.name.trim().toLowerCase(), t]));
+    for (const r of rows) {
+      const existing = byName.get(r.name.trim().toLowerCase());
+      if (existing) {
+        await this.updateKontoTyp(existing.id, r.name.trim(), r.bankAccountSymbol, r.apartmentPrefix, r.isDefault);
+        updated++;
+      } else {
+        await this.addKontoTyp(r.name.trim(), r.bankAccountSymbol, r.apartmentPrefix, r.isDefault);
+        added++;
+      }
+    }
+    return { added, updated };
+  }
+
   // ----------------------------- History -----------------------------
 
   async addConversionHistory(data: {
@@ -602,6 +643,29 @@ class DatabaseService {
     if (error) throw new Error(`clearHistory: ${error.message}`);
   }
 
+  /**
+   * Merge-import: only entries whose (convertedAt, fileName) pair isn't already
+   * present are inserted, so re-importing the same file is a no-op.
+   */
+  async importHistory(rows: ConversionHistory[]): Promise<{ added: number; skipped: number }> {
+    const seen = new Set((await this.getAllHistory()).map(h => `${h.convertedAt}|${h.fileName}`));
+    const fresh = rows.filter(h => !seen.has(`${h.convertedAt}|${h.fileName}`));
+    await this.insertChunked(
+      'history',
+      fresh.map(h => ({
+        file_name: h.fileName,
+        bank_name: h.bankName,
+        converter_name: h.converterName,
+        status: h.status,
+        error_message: h.errorMessage || null,
+        input_path: h.inputPath,
+        output_path: h.outputPath,
+        converted_at: h.convertedAt,
+      })),
+    );
+    return { added: fresh.length, skipped: rows.length - fresh.length };
+  }
+
   // ----------------------------- Settings -----------------------------
   // Stay local to the machine — these are UI prefs, not shared data.
 
@@ -630,6 +694,177 @@ class DatabaseService {
         ...data.settings,
       });
     }
+  }
+
+  // ------------------------------ Backup ------------------------------
+  // Full snapshot of the shared Supabase data + this machine's settings.
+  // Restore replaces the cloud data wholesale; because every install shares
+  // one Supabase project, restoring affects all users — the UI double-confirms.
+
+  async exportFullBackup(appVersion: string): Promise<BackupData> {
+    const [banks, kontrahenci, adresy, kontoTypy, history] = await Promise.all([
+      this.getAllBanks(),
+      this.getAllKontrahenci(),
+      this.getAllAdresy(),
+      this.getKontoTypy(),
+      this.getAllHistory(),
+    ]);
+    return {
+      format: 'filefunky-backup',
+      formatVersion: 1,
+      appVersion,
+      createdAt: new Date().toISOString(),
+      data: { banks, kontrahenci, adresy, kontoTypy, history, settings: this.getSettings() },
+    };
+  }
+
+  /** PostgREST rejects huge payloads; insert big tables in slices. */
+  private static chunk<T>(rows: T[], size = 500): T[][] {
+    const out: T[][] = [];
+    for (let i = 0; i < rows.length; i += size) out.push(rows.slice(i, i + size));
+    return out;
+  }
+
+  private async insertChunked(table: string, rows: Record<string, unknown>[]): Promise<void> {
+    for (const slice of DatabaseService.chunk(rows)) {
+      const { error } = await getSupabase().from(table).insert(slice);
+      if (error) throw new Error(`restore ${table}: ${error.message}`);
+    }
+  }
+
+  private async deleteByIds(table: string, ids: number[]): Promise<void> {
+    for (const slice of DatabaseService.chunk(ids)) {
+      const { error } = await getSupabase().from(table).delete().in('id', slice);
+      if (error) throw new Error(`restore cleanup ${table}: ${error.message}`);
+    }
+  }
+
+  /**
+   * Insert the backup's rows into a referenced table while the old rows still
+   * exist, returning oldId → newId. Postgres assigns fresh ids, so rows that
+   * point at this table (adresy.bank_id, adresy.account_types values) are
+   * rewritten through this map before they're inserted.
+   */
+  private async insertRemapped(
+    table: string,
+    select: string,
+    oldIds: number[],
+    payload: Record<string, unknown>[],
+  ): Promise<Map<number, number>> {
+    const map = new Map<number, number>();
+    if (payload.length === 0) return map;
+    const { data, error } = await getSupabase().from(table).insert(payload).select(select);
+    if (error || !data) throw new Error(`restore ${table}: ${error?.message ?? 'no data returned'}`);
+    // PostgREST returns inserted rows in payload order.
+    (data as unknown as { id: number }[]).forEach((row, i) => map.set(oldIds[i], row.id));
+    return map;
+  }
+
+  /**
+   * Replace all shared data with the backup's contents. Ordered so referential
+   * integrity holds at every step: new banks/konto typy are inserted alongside
+   * the old ones first (building id maps), adresy are swapped to point at the
+   * new ids, and only then are the old bank/typ rows removed. A mid-restore
+   * failure can leave duplicates but never loses rows that weren't replaced yet.
+   */
+  async importFullBackup(backup: BackupData): Promise<void> {
+    const { banks, kontrahenci, adresy, kontoTypy, history, settings } = backup.data;
+
+    // Bypass the 60 s cache — the "rows to remove afterwards" list must reflect
+    // the live table, including rows another instance wrote moments ago.
+    this.invalidateCache('banks');
+    this.invalidateCache('kontoTypy');
+    const preexistingBankIds = (await this.getAllBanks()).map(b => b.id);
+    const preexistingTypIds = (await this.getKontoTypy()).map(t => t.id);
+
+    const bankIdMap = await this.insertRemapped(
+      'banks',
+      'id',
+      banks.map(b => b.id),
+      banks.map(b => ({
+        name: b.name,
+        converter_id: b.converterId,
+        account_prefixes: b.accountPrefixes ?? [],
+        created_at: b.createdAt,
+      })),
+    );
+
+    const typIdMap = await this.insertRemapped(
+      'konto_typy',
+      'id',
+      kontoTypy.map(t => t.id),
+      kontoTypy.map(t => ({
+        name: t.name,
+        bank_account_symbol: t.bankAccountSymbol,
+        apartment_prefix: t.apartmentPrefix,
+        is_default: t.isDefault,
+        created_at: t.createdAt,
+      })),
+    );
+
+    await this.deleteAllAdresy();
+    await this.insertChunked(
+      'adresy',
+      adresy.map(a => {
+        const accountTypes: Record<string, number> = {};
+        for (const [account, typId] of Object.entries(a.accountTypes ?? {})) {
+          const mapped = typIdMap.get(typId);
+          if (mapped !== undefined) accountTypes[account] = mapped;
+        }
+        return {
+          nazwa: a.nazwa,
+          alternative_names: a.alternativeNames ?? [],
+          swrk_identifiers: a.swrkIdentifiers ?? [],
+          account_numbers: a.accountNumbers ?? [],
+          account_types: accountTypes,
+          bank_id: a.bankId != null ? bankIdMap.get(a.bankId) ?? null : null,
+          apartment_mappings: a.apartmentMappings ?? [],
+          created_at: a.createdAt,
+        };
+      }),
+    );
+
+    await this.deleteByIds('banks', preexistingBankIds);
+    await this.deleteByIds('konto_typy', preexistingTypIds);
+
+    await this.deleteAllKontrahenci();
+    await this.insertChunked(
+      'kontrahenci',
+      kontrahenci.map(k => {
+        const typy: KontrahentTyp[] = k.typy && k.typy.length > 0 ? k.typy : ['Kontrahent'];
+        return {
+          nazwa: k.nazwa,
+          konto_kontrahenta: k.kontoKontrahenta,
+          nip: k.nip || null,
+          typ: typy[0],
+          typy,
+          alternative_names: k.alternativeNames ?? [],
+          created_at: k.createdAt,
+        };
+      }),
+    );
+
+    await this.clearHistory();
+    await this.insertChunked(
+      'history',
+      history.map(h => ({
+        file_name: h.fileName,
+        bank_name: h.bankName,
+        converter_name: h.converterName,
+        status: h.status,
+        error_message: h.errorMessage || null,
+        input_path: h.inputPath,
+        output_path: h.outputPath,
+        converted_at: h.convertedAt,
+      })),
+    );
+
+    this.importSettings({ settings });
+
+    this.invalidateCache('banks');
+    this.invalidateCache('kontrahenci');
+    this.invalidateCache('adresy');
+    this.invalidateCache('kontoTypy');
   }
 
   close(): void {

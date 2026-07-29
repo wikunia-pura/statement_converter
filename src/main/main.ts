@@ -5,7 +5,8 @@ import path from 'path';
 import fs from 'fs';
 import DatabaseService from './database';
 import ConverterRegistry, { setDatabaseInstance } from './converterRegistry';
-import { IPC_CHANNELS, KontrahentTyp, DEFAULT_ACCOUNT_CONFIG, AccountConfig } from '../shared/types';
+import { IPC_CHANNELS, KontrahentTyp, DEFAULT_ACCOUNT_CONFIG, AccountConfig, countBackup } from '../shared/types';
+import { runAutoBackup, getBackupStatus, getBackupsDir, validateBackup } from './backupService';
 import { conversionCache } from './conversionCache';
 import * as authService from './authService';
 import { extractPdfText } from '../shared/pdf-utils';
@@ -158,7 +159,47 @@ async function resolveAccountConfig(
   return DEFAULT_ACCOUNT_CONFIG;
 }
 
+// Exit-time backup. Closing the window (or quitting) is intercepted exactly
+// once: today's auto backup is refreshed with everything changed during the
+// session, an in-app toast is shown while the window is still visible, and
+// only then does the close/quit proceed. `backupOnExitDone` guards re-entry
+// and lets the auto-updater's quit skip the whole dance.
+let backupOnExitDone = false;
+
+function runExitBackup(resume: () => void) {
+  if (backupOnExitDone || !database) {
+    backupOnExitDone = true;
+    resume();
+    return;
+  }
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    backupOnExitDone = true;
+    resume();
+  };
+  // Never block closing for long — if Supabase is slow/offline, give up.
+  const failsafe = setTimeout(finish, 15000);
+
+  runAutoBackup(database, { force: true })
+    .then(info => {
+      if (info && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('backup:auto-created', { ...info, trigger: 'quit' });
+        // Keep the window up long enough for the toast to be seen.
+        return new Promise<void>(resolve => setTimeout(resolve, 2500));
+      }
+    })
+    .finally(() => {
+      clearTimeout(failsafe);
+      finish();
+    });
+}
+
 function createWindow() {
+  // A fresh window starts a fresh session — its close deserves its own backup.
+  backupOnExitDone = false;
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -167,6 +208,14 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
     },
+  });
+
+  mainWindow.on('close', (event) => {
+    // Intercept the X button too — on the app-quit path before-quit fires only
+    // after the window is gone, too late for an in-app notification.
+    if (backupOnExitDone) return;
+    event.preventDefault();
+    runExitBackup(() => mainWindow?.close());
   });
 
   // Load from dev server in development, from local files in production
@@ -263,8 +312,8 @@ function setupIpcHandlers() {
         createdAt: b.createdAt || new Date().toISOString(),
       }));
 
-      await database.importBanks(banks);
-      return { success: true, count: banks.length };
+      const { added, updated } = await database.importBanks(banks);
+      return { success: true, count: banks.length, added, updated };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return { success: false, error: errorMessage };
@@ -328,24 +377,30 @@ function setupIpcHandlers() {
       let updated = 0;
       let lastKontrahent: any = null;
       let wasNewlyAdded = false; // Track if lastKontrahent was just added
+      let lastParsedNazwa: string | null = null; // Nazwa as written in the file (may rename an existing entry)
       let accumulatedNip: string | undefined = undefined;
       let accumulatedAltNames: string[] = [];
       let accumulatedTypy: KontrahentTyp[] = [];
 
       const finalizeLastKontrahent = async () => {
-        if (lastKontrahent && (accumulatedNip || accumulatedAltNames.length > 0 || accumulatedTypy.length > 0)) {
+        if (!lastKontrahent) return;
+        // A changed nazwa alone (same symbol, no NIP/ALT/TYP lines) must also be saved.
+        const renamed = lastParsedNazwa !== null && lastParsedNazwa !== lastKontrahent.nazwa;
+        if (accumulatedNip || accumulatedAltNames.length > 0 || accumulatedTypy.length > 0 || renamed) {
+          const nazwa = lastParsedNazwa ?? lastKontrahent.nazwa;
           await database.updateKontrahent(
             lastKontrahent.id,
-            lastKontrahent.nazwa,
+            nazwa,
             lastKontrahent.kontoKontrahenta,
             accumulatedNip,
             accumulatedAltNames,
             accumulatedTypy.length > 0 ? accumulatedTypy : undefined
           );
+          lastKontrahent.nazwa = nazwa;
           if (accumulatedNip) lastKontrahent.nip = accumulatedNip;
           if (accumulatedAltNames.length > 0) lastKontrahent.alternativeNames = accumulatedAltNames;
           if (accumulatedTypy.length > 0) lastKontrahent.typy = accumulatedTypy;
-          
+
           // Count as updated only if it wasn't just added (to avoid double counting)
           if (!wasNewlyAdded) {
             updated++;
@@ -413,6 +468,7 @@ function setupIpcHandlers() {
 
           const symbol = match[1].trim();
           const nazwa = match[2].trim();
+          lastParsedNazwa = nazwa;
 
           // Local snapshot lookup — populated once before the loop.
           const existing = bySymbol.get(symbol);
@@ -596,16 +652,18 @@ function setupIpcHandlers() {
           lines.push(`    NIP: ${k.nip}`);
         }
         
-        // Add alternative names if present
+        // Add alternative names if present — one per line, so a name containing
+        // a comma can't be split into two entries on re-import.
         if (k.alternativeNames && k.alternativeNames.length > 0) {
-          lines.push(`    ALT: ${k.alternativeNames.join(', ')}`);
+          for (const altName of k.alternativeNames) {
+            lines.push(`    ALT: ${altName}`);
+          }
         }
-        
-        // Add typ(s) unless it's just the default single 'Kontrahent'
+
+        // Always write typ(s) explicitly, so an import knows the roles even
+        // when they were reset to the default single 'Kontrahent'.
         const typy = k.typy && k.typy.length > 0 ? k.typy : ['Kontrahent'];
-        if (!(typy.length === 1 && typy[0] === 'Kontrahent')) {
-          lines.push(`    TYP: ${typy.join(', ')}`);
-        }
+        lines.push(`    TYP: ${typy.join(', ')}`);
       }
       
       const txtContent = lines.join('\n');
@@ -684,6 +742,61 @@ function setupIpcHandlers() {
     return true;
   });
 
+  ipcMain.handle(IPC_CHANNELS.EXPORT_KONTO_TYPY_TO_FILE, async () => {
+    try {
+      const result = await dialog.showSaveDialog(mainWindow!, {
+        title: 'Export Typy kont',
+        defaultPath: 'typy-kont.json',
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      });
+
+      if (result.canceled || !result.filePath) {
+        return { success: false };
+      }
+
+      const kontoTypy = await database.getKontoTypy();
+      fs.writeFileSync(result.filePath, JSON.stringify(kontoTypy, null, 2), 'utf-8');
+      return { success: true, count: kontoTypy.length, filePath: result.filePath };
+    } catch (error: unknown) {
+      return { success: false, error: getErrorMessage(error) };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.IMPORT_KONTO_TYPY_FROM_FILE, async () => {
+    try {
+      const result = await dialog.showOpenDialog(mainWindow!, {
+        title: 'Import Typy kont',
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+        properties: ['openFile'],
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false };
+      }
+
+      const parsed = JSON.parse(fs.readFileSync(result.filePaths[0], 'utf-8'));
+      if (!Array.isArray(parsed)) {
+        return { success: false, error: 'Nieprawidłowy format pliku' };
+      }
+
+      const rows = parsed
+        .filter((r: any) => r && typeof r.name === 'string' && r.name.trim().length > 0)
+        .map((r: any) => ({
+          id: typeof r.id === 'number' ? r.id : 0,
+          name: String(r.name),
+          bankAccountSymbol: String(r.bankAccountSymbol || DEFAULT_ACCOUNT_CONFIG.bankAccountSymbol),
+          apartmentPrefix: String(r.apartmentPrefix || DEFAULT_ACCOUNT_CONFIG.apartmentPrefix),
+          isDefault: Boolean(r.isDefault),
+          createdAt: r.createdAt || new Date().toISOString(),
+        }));
+
+      const { added, updated } = await database.importKontoTypy(rows);
+      return { success: true, added, updated };
+    } catch (error: unknown) {
+      return { success: false, error: getErrorMessage(error) };
+    }
+  });
+
   ipcMain.handle(IPC_CHANNELS.DELETE_ADRES, async (_, id: number) => {
     await database.deleteAdres(id);
     return true;
@@ -715,9 +828,15 @@ function setupIpcHandlers() {
       const allBanks = await database.getAllBanks();
       const findBankIdByName = (name: string): number | null => {
         const trimmed = name.trim().toLowerCase();
-        const match = allBanks.find(b => b.name.toLowerCase() === trimmed);
+        // Trim the DB side too — bank names can carry stray whitespace (e.g. "ING "),
+        // and the exported file always holds the trimmed form.
+        const match = allBanks.find(b => b.name.trim().toLowerCase() === trimmed);
         return match ? match.id : null;
       };
+      // Konto typy resolved by name (ids differ between databases).
+      const typIdByName = new Map(
+        (await database.getKontoTypy()).map(kt => [kt.name.trim().toLowerCase(), kt.id]),
+      );
 
       // Snapshot existing addresses once (by exact nazwa) — avoid an O(n²) full-table
       // refetch per data line. Each addAdres invalidates the DB cache, so without this
@@ -730,12 +849,21 @@ function setupIpcHandlers() {
       // Parse the file
       const lines = content.split('\n');
       let count = 0;
+      // One adres failing (e.g. account-number conflict) must not abort the rest
+      // of the file — errors are collected and reported per adres.
+      const errors: string[] = [];
       let lastAdres: any = null;
       let accumulatedAltNames: string[] = [];
       let accumulatedSwrk: string[] = [];
       let accumulatedAccounts: string[] = [];
       let accumulatedBankId: number | null = null;
       let accumulatedBankSet = false;
+      let accumulatedMappings: import('../shared/types').ApartmentMapping[] = [];
+      let accumulatedAccountTypes: Record<string, number> = {};
+      // Only overwrite mappings/types when the file actually carries them, so
+      // pre-MAP/TYP exports don't wipe existing data on import.
+      let sawMappings = false;
+      let sawAccountTypes = false;
 
       const finalizeLastAdres = async () => {
         if (
@@ -743,20 +871,30 @@ function setupIpcHandlers() {
           (accumulatedAltNames.length > 0 ||
             accumulatedSwrk.length > 0 ||
             accumulatedAccounts.length > 0 ||
-            accumulatedBankSet)
+            accumulatedBankSet ||
+            sawMappings ||
+            sawAccountTypes)
         ) {
-          await database.updateAdres(
-            lastAdres.id,
-            lastAdres.nazwa,
-            accumulatedAltNames,
-            accumulatedSwrk,
-            accumulatedBankSet ? accumulatedBankId : undefined,
-            accumulatedAccounts.length > 0 ? accumulatedAccounts : undefined,
-          );
-          lastAdres.alternativeNames = accumulatedAltNames;
-          lastAdres.swrkIdentifiers = accumulatedSwrk;
-          if (accumulatedAccounts.length > 0) lastAdres.accountNumbers = accumulatedAccounts;
-          if (accumulatedBankSet) lastAdres.bankId = accumulatedBankId;
+          try {
+            await database.updateAdres(
+              lastAdres.id,
+              lastAdres.nazwa,
+              accumulatedAltNames,
+              accumulatedSwrk,
+              accumulatedBankSet ? accumulatedBankId : undefined,
+              accumulatedAccounts.length > 0 ? accumulatedAccounts : undefined,
+              sawMappings ? accumulatedMappings : undefined,
+              sawAccountTypes ? accumulatedAccountTypes : undefined,
+            );
+            lastAdres.alternativeNames = accumulatedAltNames;
+            lastAdres.swrkIdentifiers = accumulatedSwrk;
+            if (accumulatedAccounts.length > 0) lastAdres.accountNumbers = accumulatedAccounts;
+            if (accumulatedBankSet) lastAdres.bankId = accumulatedBankId;
+            if (sawMappings) lastAdres.apartmentMappings = accumulatedMappings;
+            if (sawAccountTypes) lastAdres.accountTypes = accumulatedAccountTypes;
+          } catch (e) {
+            errors.push(`${lastAdres.nazwa}: ${getErrorMessage(e)}`);
+          }
         }
       };
 
@@ -786,14 +924,40 @@ function setupIpcHandlers() {
           continue;
         }
 
-        // Check if it's an ACCT: <account-number> line (community bank account).
+        // Check if it's an ACCT: <account-number> [| TYP: <type name>] line
+        // (community bank account, optionally with its explicit account type).
         // Normalization happens at the DB layer when finalizeLastAdres calls updateAdres.
-        const acctMatch = line.match(/^\s*ACCT:\s*(.+)$/);
+        const acctMatch = line.match(/^\s*ACCT:\s*([^|]+?)(?:\s*\|\s*TYP:\s*(.+))?$/);
         if (acctMatch && lastAdres) {
           const acc = acctMatch[1].trim();
           if (acc.length > 0) {
             accumulatedAccounts.push(acc);
+            const typName = acctMatch[2]?.trim();
+            if (typName) {
+              sawAccountTypes = true;
+              const typId = typIdByName.get(typName.toLowerCase());
+              if (typId !== undefined) {
+                accumulatedAccountTypes[acc] = typId;
+              } else {
+                errors.push(`${lastAdres.nazwa}: nieznany typ konta "${typName}" (konto ${acc})`);
+              }
+            }
           }
+          continue;
+        }
+
+        // Check if it's a MAP: <matchText> => <apartment> [| <note>] line
+        // (user-defined apartment-number rule).
+        const mapMatch = line.match(/^\s*MAP:\s*(.+)=>\s*([^|]+?)(?:\s*\|\s*(.+))?$/);
+        if (mapMatch && lastAdres) {
+          sawMappings = true;
+          const note = mapMatch[3]?.trim();
+          accumulatedMappings.push({
+            id: '', // DB layer assigns a stable id via sanitizeApartmentMappings
+            matchText: mapMatch[1].trim(),
+            apartmentNumber: mapMatch[2].trim(),
+            ...(note ? { note } : {}),
+          });
           continue;
         }
 
@@ -813,15 +977,20 @@ function setupIpcHandlers() {
           !nazwa.startsWith('ALT:') &&
           !nazwa.startsWith('SWRK:') &&
           !nazwa.startsWith('ACCT:') &&
-          !nazwa.startsWith('BANK:')
+          !nazwa.startsWith('BANK:') &&
+          !nazwa.startsWith('MAP:')
         ) {
-          // Finalize previous adres with accumulated alt names + SWRK + accounts + bank
+          // Finalize previous adres with accumulated alt names + SWRK + accounts + bank + mappings
           await finalizeLastAdres();
           accumulatedAltNames = [];
           accumulatedSwrk = [];
           accumulatedAccounts = [];
           accumulatedBankId = null;
           accumulatedBankSet = false;
+          accumulatedMappings = [];
+          accumulatedAccountTypes = {};
+          sawMappings = false;
+          sawAccountTypes = false;
 
           // Check if not already exists (local snapshot lookup — populated once).
           const existing = adresByName.get(nazwa);
@@ -838,8 +1007,11 @@ function setupIpcHandlers() {
 
       // Finalize last adres in file
       await finalizeLastAdres();
-      
-      return { success: true, count };
+
+      if (errors.length > 0) {
+        log.warn(`[IMPORT] Adresy import finished with ${errors.length} error(s): ${errors.join('; ')}`);
+      }
+      return { success: true, count, errors };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return { success: false, error: errorMessage };
@@ -862,9 +1034,11 @@ function setupIpcHandlers() {
       }
 
       const adresy = await database.getAllAdresy();
-      // Banks looked up by id so we can render BANK: <name> in the export.
+      // Banks/typy looked up by id so we can render BANK:/TYP: by name — names
+      // survive a move to another database where the ids differ.
       const allBanks = await database.getAllBanks();
       const bankNameById = new Map(allBanks.map(b => [b.id, b.name]));
+      const typNameById = new Map((await database.getKontoTypy()).map(kt => [kt.id, kt.name]));
 
       // Create text content: simple list of nazwy with ALT: lines for alternative names
       const lines: string[] = [];
@@ -897,10 +1071,23 @@ function setupIpcHandlers() {
           }
         }
 
-        // Add community bank account numbers if present
+        // Add community bank account numbers if present, each with its explicit
+        // account-type (by name) when one is assigned.
         if (a.accountNumbers && a.accountNumbers.length > 0) {
           for (const acc of a.accountNumbers) {
-            lines.push(`  ACCT: ${acc}`);
+            const typName = a.accountTypes?.[acc] !== undefined ? typNameById.get(a.accountTypes[acc]) : undefined;
+            lines.push(typName ? `  ACCT: ${acc} | TYP: ${typName}` : `  ACCT: ${acc}`);
+          }
+        }
+
+        // Add apartment-number mapping rules if present
+        if (a.apartmentMappings && a.apartmentMappings.length > 0) {
+          for (const m of a.apartmentMappings) {
+            lines.push(
+              m.note
+                ? `  MAP: ${m.matchText} => ${m.apartmentNumber} | ${m.note}`
+                : `  MAP: ${m.matchText} => ${m.apartmentNumber}`,
+            );
           }
         }
       }
@@ -1675,6 +1862,128 @@ function setupIpcHandlers() {
     return true;
   });
 
+  ipcMain.handle(IPC_CHANNELS.EXPORT_HISTORY_TO_FILE, async () => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const result = await dialog.showSaveDialog(mainWindow!, {
+        title: 'Export Historia',
+        defaultPath: `historia-konwersji-${today}.json`,
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      });
+
+      if (result.canceled || !result.filePath) {
+        return { success: false };
+      }
+
+      const history = await database.getAllHistory();
+      fs.writeFileSync(result.filePath, JSON.stringify(history, null, 2), 'utf-8');
+      return { success: true, count: history.length, filePath: result.filePath };
+    } catch (error: unknown) {
+      return { success: false, error: getErrorMessage(error) };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.IMPORT_HISTORY_FROM_FILE, async () => {
+    try {
+      const result = await dialog.showOpenDialog(mainWindow!, {
+        title: 'Import Historia',
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+        properties: ['openFile'],
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false };
+      }
+
+      const parsed = JSON.parse(fs.readFileSync(result.filePaths[0], 'utf-8'));
+      if (!Array.isArray(parsed)) {
+        return { success: false, error: 'Nieprawidłowy format pliku' };
+      }
+
+      const rows = parsed
+        .filter((h: any) => h && typeof h.fileName === 'string' && typeof h.convertedAt === 'string')
+        .map((h: any) => ({
+          id: typeof h.id === 'number' ? h.id : 0,
+          fileName: String(h.fileName),
+          bankName: String(h.bankName || ''),
+          converterName: String(h.converterName || ''),
+          status: h.status === 'error' ? ('error' as const) : ('success' as const),
+          errorMessage: h.errorMessage ? String(h.errorMessage) : undefined,
+          inputPath: String(h.inputPath || ''),
+          outputPath: String(h.outputPath || ''),
+          convertedAt: String(h.convertedAt),
+        }));
+
+      const { added, skipped } = await database.importHistory(rows);
+      return { success: true, added, skipped };
+    } catch (error: unknown) {
+      return { success: false, error: getErrorMessage(error) };
+    }
+  });
+
+  // Backup — full snapshot (Supabase tables + local settings) to a single JSON file
+  ipcMain.handle(IPC_CHANNELS.BACKUP_EXPORT, async () => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const result = await dialog.showSaveDialog(mainWindow!, {
+        title: 'Utwórz kopię zapasową',
+        defaultPath: `filefunky-backup-${today}.json`,
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      });
+      if (result.canceled || !result.filePath) {
+        return { success: false };
+      }
+      const backup = await database.exportFullBackup(app.getVersion());
+      fs.writeFileSync(result.filePath, JSON.stringify(backup, null, 2), 'utf-8');
+      log.info(`[BACKUP] Manual backup written: ${result.filePath}`);
+      return { success: true, filePath: result.filePath, counts: countBackup(backup) };
+    } catch (error) {
+      log.error('[BACKUP] Export failed:', error);
+      return { success: false, error: getErrorMessage(error) };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.BACKUP_RESTORE, async () => {
+    try {
+      const result = await dialog.showOpenDialog(mainWindow!, {
+        title: 'Przywróć z kopii zapasowej',
+        defaultPath: getBackupsDir(),
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+        properties: ['openFile'],
+      });
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false };
+      }
+      const backup = validateBackup(JSON.parse(fs.readFileSync(result.filePaths[0], 'utf-8')));
+      // Snapshot the current state before it's replaced, so a restore of the
+      // wrong file is itself recoverable from the backups folder.
+      const preRestore = await database.exportFullBackup(app.getVersion());
+      const dir = getBackupsDir();
+      fs.mkdirSync(dir, { recursive: true });
+      const safetyPath = path.join(dir, `pre-restore-${Date.now()}.json`);
+      fs.writeFileSync(safetyPath, JSON.stringify(preRestore, null, 2), 'utf-8');
+      log.info(`[BACKUP] Pre-restore safety copy: ${safetyPath}`);
+
+      await database.importFullBackup(backup);
+      log.info(`[BACKUP] Restored from: ${result.filePaths[0]}`);
+      return { success: true, counts: countBackup(backup), createdAt: backup.createdAt };
+    } catch (error) {
+      log.error('[BACKUP] Restore failed:', error);
+      return { success: false, error: getErrorMessage(error) };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.BACKUP_GET_STATUS, () => {
+    return getBackupStatus();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.BACKUP_OPEN_FOLDER, () => {
+    const dir = getBackupsDir();
+    fs.mkdirSync(dir, { recursive: true });
+    shell.openPath(dir);
+    return { success: true };
+  });
+
   // App info
   ipcMain.handle('app:get-version', () => {
     return app.getVersion();
@@ -1918,6 +2227,9 @@ function setupAutoUpdater() {
       log.info('Windows platform - will quit and install in 2 seconds');
       setTimeout(() => {
         log.info('Quitting and installing update now...');
+        // Don't let the exit-time backup preventDefault this quit — the updater
+        // relaunches the app and the startup backup covers the gap.
+        backupOnExitDone = true;
         autoUpdater.quitAndInstall();
       }, 2000); // krótka pauza na wyświetlenie info
     } else {
@@ -1960,6 +2272,18 @@ app.whenReady().then(() => {
   setupAutoUpdater();
   createWindow();
 
+  // Startup auto backup — a safety net for days whose exit backup never ran:
+  // it writes (and toasts) only when today's file is missing, i.e. on the
+  // first open of the day or after a crash killed the previous session before
+  // its exit backup. Delayed so the persisted Supabase session has time to
+  // restore; without a session the reads fail and the backup is skipped (logged).
+  setTimeout(async () => {
+    const info = await runAutoBackup(database);
+    if (info && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('backup:auto-created', { ...info, trigger: 'startup' });
+    }
+  }, 15000);
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -1974,6 +2298,12 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+  if (backupOnExitDone || !database) return;
+  event.preventDefault();
+  runExitBackup(() => app.quit());
+});
+
+app.on('quit', () => {
   database.close();
 });

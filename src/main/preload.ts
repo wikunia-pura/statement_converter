@@ -28,6 +28,8 @@ const IPC_CHANNELS = {
   ADD_KONTO_TYP: 'db:add-konto-typ',
   UPDATE_KONTO_TYP: 'db:update-konto-typ',
   DELETE_KONTO_TYP: 'db:delete-konto-typ',
+  IMPORT_KONTO_TYPY_FROM_FILE: 'db:import-konto-typy-from-file',
+  EXPORT_KONTO_TYPY_TO_FILE: 'db:export-konto-typy-to-file',
   GET_CONVERTERS: 'converters:get-all',
   SELECT_FILES: 'files:select',
   SELECT_OUTPUT_FOLDER: 'files:select-output-folder',
@@ -54,6 +56,12 @@ const IPC_CHANNELS = {
   IMPORT_SETTINGS: 'settings:import',
   GET_HISTORY: 'history:get-all',
   CLEAR_HISTORY: 'history:clear',
+  IMPORT_HISTORY_FROM_FILE: 'history:import-from-file',
+  EXPORT_HISTORY_TO_FILE: 'history:export-to-file',
+  BACKUP_EXPORT: 'backup:export',
+  BACKUP_RESTORE: 'backup:restore',
+  BACKUP_GET_STATUS: 'backup:get-status',
+  BACKUP_OPEN_FOLDER: 'backup:open-folder',
   GET_APP_VERSION: 'app:get-version',
   ZALICZKI_SELECT_PDFS: 'zaliczki:select-pdfs',
   ZALICZKI_EXTRACT_PDF: 'zaliczki:extract-pdf',
@@ -155,6 +163,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateKontoTyp: (id: number, name: string, bankAccountSymbol: string, apartmentPrefix: string, isDefault: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.UPDATE_KONTO_TYP, id, name, bankAccountSymbol, apartmentPrefix, isDefault),
   deleteKontoTyp: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_KONTO_TYP, id),
+  importKontoTypyFromFile: () => ipcRenderer.invoke(IPC_CHANNELS.IMPORT_KONTO_TYPY_FROM_FILE),
+  exportKontoTypyToFile: () => ipcRenderer.invoke(IPC_CHANNELS.EXPORT_KONTO_TYPY_TO_FILE),
 
   // Converters
   getConverters: () => ipcRenderer.invoke(IPC_CHANNELS.GET_CONVERTERS),
@@ -202,6 +212,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // History
   getHistory: () => ipcRenderer.invoke(IPC_CHANNELS.GET_HISTORY),
   clearHistory: () => ipcRenderer.invoke(IPC_CHANNELS.CLEAR_HISTORY),
+  importHistoryFromFile: () => ipcRenderer.invoke(IPC_CHANNELS.IMPORT_HISTORY_FROM_FILE),
+  exportHistoryToFile: () => ipcRenderer.invoke(IPC_CHANNELS.EXPORT_HISTORY_TO_FILE),
+
+  // Backup
+  backupExport: () => ipcRenderer.invoke(IPC_CHANNELS.BACKUP_EXPORT),
+  backupRestore: () => ipcRenderer.invoke(IPC_CHANNELS.BACKUP_RESTORE),
+  backupGetStatus: () => ipcRenderer.invoke(IPC_CHANNELS.BACKUP_GET_STATUS),
+  backupOpenFolder: () => ipcRenderer.invoke(IPC_CHANNELS.BACKUP_OPEN_FOLDER),
 
   // Zaliczki
   zaliczkiGetModels: () => ipcRenderer.invoke(IPC_CHANNELS.ZALICZKI_GET_MODELS),
@@ -281,5 +299,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const listener = (_event: unknown, progress: any) => callback(progress);
     ipcRenderer.on('conversion:progress', listener);
     return () => ipcRenderer.off('conversion:progress', listener);
+  },
+  onBackupCreated: (callback: (info: any) => void) => {
+    const listener = (_event: unknown, info: any) => callback(info);
+    ipcRenderer.on('backup:auto-created', listener);
+    return () => ipcRenderer.off('backup:auto-created', listener);
   },
 });

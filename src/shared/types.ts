@@ -216,6 +216,47 @@ export interface AppSettings {
   sidebarCollapsed: boolean; // Collapse the navigation sidebar to an icon-only rail (default: true)
 }
 
+/**
+ * A full snapshot of everything the app persists: the shared Supabase tables
+ * (banks, kontrahenci, adresy, konto typy, history) plus this machine's local
+ * settings. Written as a single JSON file by manual export and by the daily
+ * auto-backup; consumed by the restore flow, which replaces the cloud data
+ * wholesale (remapping bank/konto-typ ids referenced from adresy).
+ */
+export interface BackupData {
+  format: 'filefunky-backup';
+  formatVersion: 1;
+  appVersion: string;
+  createdAt: string;
+  data: {
+    banks: Bank[];
+    kontrahenci: Kontrahent[];
+    adresy: Adres[];
+    kontoTypy: KontoTyp[];
+    history: ConversionHistory[];
+    settings: AppSettings;
+  };
+}
+
+/** Row counts of a backup / restore, for user-facing summaries. */
+export interface BackupCounts {
+  banks: number;
+  kontrahenci: number;
+  adresy: number;
+  kontoTypy: number;
+  history: number;
+}
+
+export function countBackup(data: BackupData): BackupCounts {
+  return {
+    banks: data.data.banks.length,
+    kontrahenci: data.data.kontrahenci.length,
+    adresy: data.data.adresy.length,
+    kontoTypy: data.data.kontoTypy.length,
+    history: data.data.history.length,
+  };
+}
+
 // IPC Channel names
 export const IPC_CHANNELS = {
   // Database operations
@@ -251,6 +292,8 @@ export const IPC_CHANNELS = {
   ADD_KONTO_TYP: 'db:add-konto-typ',
   UPDATE_KONTO_TYP: 'db:update-konto-typ',
   DELETE_KONTO_TYP: 'db:delete-konto-typ',
+  IMPORT_KONTO_TYPY_FROM_FILE: 'db:import-konto-typy-from-file',
+  EXPORT_KONTO_TYPY_TO_FILE: 'db:export-konto-typy-to-file',
 
   // Converters
   GET_CONVERTERS: 'converters:get-all',
@@ -284,6 +327,14 @@ export const IPC_CHANNELS = {
   // History
   GET_HISTORY: 'history:get-all',
   CLEAR_HISTORY: 'history:clear',
+  IMPORT_HISTORY_FROM_FILE: 'history:import-from-file',
+  EXPORT_HISTORY_TO_FILE: 'history:export-to-file',
+
+  // Backup (full snapshot: Supabase tables + local settings)
+  BACKUP_EXPORT: 'backup:export',
+  BACKUP_RESTORE: 'backup:restore',
+  BACKUP_GET_STATUS: 'backup:get-status',
+  BACKUP_OPEN_FOLDER: 'backup:open-folder',
 
   // Zaliczki (housing-community monthly fee summary)
   ZALICZKI_SELECT_PDFS: 'zaliczki:select-pdfs',

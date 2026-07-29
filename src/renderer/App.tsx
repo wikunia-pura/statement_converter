@@ -15,6 +15,7 @@ import SplashScreen from './components/SplashScreen';
 import Footer from './components/Footer';
 import Icon from './components/Icon';
 import UpdateNotification from './components/UpdateNotification';
+import BackupNotifier from './components/BackupNotifier';
 import { NotificationProvider } from './components/Notifications';
 import { translations, Language } from './translations';
 import { FileEntry } from '../shared/types';
@@ -176,6 +177,7 @@ const App: React.FC = () => {
     {splash}
     <div className="app">
       <UpdateNotification language={language} />
+      <BackupNotifier language={language} />
       <div className="app-body">
       <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header">

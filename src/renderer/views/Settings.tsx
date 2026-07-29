@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Converter, ContractorSortOrder } from '../../shared/types';
+import { Converter, ContractorSortOrder, BackupCounts } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import Icon from '../components/Icon';
@@ -23,6 +23,12 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
   const [skipUserApproval, setSkipUserApproval] = useState(false);
   const [contractorSortOrder, setContractorSortOrder] = useState<ContractorSortOrder>('name-asc');
   const [isLoading, setIsLoading] = useState(true);
+  const [backupStatus, setBackupStatus] = useState<{
+    folder: string;
+    lastAutoBackup: string | null;
+    autoBackupCount: number;
+  } | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -31,11 +37,13 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [convertersData, settings] = await Promise.all([
+      const [convertersData, settings, backupInfo] = await Promise.all([
         window.electronAPI.getConverters(),
         window.electronAPI.getSettings(),
+        window.electronAPI.backupGetStatus(),
       ]);
       setConverters(convertersData);
+      setBackupStatus(backupInfo);
       setOutputFolder(settings.outputFolder);
       setImpexFolder(settings.impexFolder || '');
       setSwrkFolder(settings.swrkFolder || '');
@@ -164,6 +172,55 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
       } catch (error) {
         notify.error(t.importError);
       }
+    }
+  };
+
+  const formatBackupCounts = (counts?: BackupCounts): string => {
+    if (!counts) return '';
+    return t.backupCounts
+      .replace('{banks}', String(counts.banks))
+      .replace('{kontrahenci}', String(counts.kontrahenci))
+      .replace('{adresy}', String(counts.adresy))
+      .replace('{kontoTypy}', String(counts.kontoTypy))
+      .replace('{history}', String(counts.history));
+  };
+
+  const handleCreateBackup = async () => {
+    setBackupBusy(true);
+    try {
+      const result = await window.electronAPI.backupExport();
+      if (result.success) {
+        notify.success(`${t.backupCreated} (${formatBackupCounts(result.counts)})`);
+      } else if (result.error) {
+        notify.error(`${t.backupError}: ${result.error}`);
+      }
+    } catch (error) {
+      notify.error(t.backupError);
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const handleRestoreBackup = async () => {
+    if (!(await notify.confirm(t.backupRestoreConfirm1))) return;
+    if (!(await notify.confirm(t.backupRestoreConfirm2))) return;
+    setBackupBusy(true);
+    try {
+      const result = await window.electronAPI.backupRestore();
+      if (result.success) {
+        notify.success(`${t.backupRestored} (${formatBackupCounts(result.counts)})`);
+        // Restored settings may change theme/language/folders — re-sync like settings import.
+        await loadData();
+        const settings = await window.electronAPI.getSettings();
+        if (settings.darkMode !== darkMode) onDarkModeChange(settings.darkMode);
+        if (settings.language !== language) onLanguageChange(settings.language);
+      } else if (result.error) {
+        notify.error(`${t.backupError}: ${result.error}`);
+      }
+    } catch (error) {
+      notify.error(t.backupError);
+    } finally {
+      setBackupBusy(false);
     }
   };
 
@@ -400,6 +457,35 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
             </button>
             <button className="button button-import" onClick={handleImportSettings}>
               <Icon name="upload" size={14} /> Importuj ustawienia
+            </button>
+          </div>
+        </div>
+
+        {/* Backup */}
+        <div className="card">
+          <h2 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Icon name="shield" size={20} /> {t.backupTitle}
+          </h2>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: '14px', marginBottom: '10px' }}>
+            {t.backupDesc}
+          </p>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: '13px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Icon name="info" size={12} /> {t.backupAutoInfo}{' '}
+            {t.backupLastAuto}: <strong>{backupStatus?.lastAutoBackup ?? t.backupNever}</strong>
+          </p>
+          <div className="button-group" style={{ marginTop: 0 }}>
+            <button className="button button-export" onClick={handleCreateBackup} disabled={backupBusy}>
+              <Icon name="download" size={14} /> {t.backupCreate}
+            </button>
+            <button className="button button-import" onClick={handleRestoreBackup} disabled={backupBusy}>
+              <Icon name="upload" size={14} /> {t.backupRestore}
+            </button>
+            <button
+              className="button button-secondary"
+              onClick={() => window.electronAPI.backupOpenFolder()}
+              disabled={backupBusy}
+            >
+              <Icon name="folder" size={14} /> {t.backupOpenFolder}
             </button>
           </div>
         </div>

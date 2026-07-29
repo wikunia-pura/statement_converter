@@ -1,6 +1,6 @@
 // Type definitions for Electron API exposed via preload
 
-import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, KontrahentTyp, KontoTyp } from '../shared/types';
+import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, KontrahentTyp, KontoTyp, BackupCounts } from '../shared/types';
 
 // Zaliczki shared types (referenced by the main-process helpers)
 export type ZaliczkiCategory =
@@ -111,7 +111,7 @@ interface ElectronAPI {
   updateBank: (id: number, name: string, converterId: string, accountPrefixes?: string[]) => Promise<boolean>;
   deleteBank: (id: number) => Promise<boolean>;
   deleteAllBanks: () => Promise<boolean>;
-  importBanksFromFile: () => Promise<{ success: boolean; count?: number; error?: string }>;
+  importBanksFromFile: () => Promise<{ success: boolean; count?: number; added?: number; updated?: number; error?: string }>;
   exportBanksToFile: () => Promise<{ success: boolean; count?: number; filePath?: string; error?: string }>;
 
   // Kontrahenci
@@ -147,7 +147,7 @@ interface ElectronAPI {
   ) => Promise<boolean>;
   deleteAdres: (id: number) => Promise<boolean>;
   deleteAllAdresy: () => Promise<boolean>;
-  importAdresyFromFile: () => Promise<{ success: boolean; count?: number; error?: string }>;
+  importAdresyFromFile: () => Promise<{ success: boolean; count?: number; errors?: string[]; error?: string }>;
   exportAdresyToFile: () => Promise<{ success: boolean; count?: number; filePath?: string; error?: string }>;
 
   // Konto typy
@@ -155,6 +155,8 @@ interface ElectronAPI {
   addKontoTyp: (name: string, bankAccountSymbol: string, apartmentPrefix: string, isDefault: boolean) => Promise<KontoTyp>;
   updateKontoTyp: (id: number, name: string, bankAccountSymbol: string, apartmentPrefix: string, isDefault: boolean) => Promise<boolean>;
   deleteKontoTyp: (id: number) => Promise<boolean>;
+  importKontoTypyFromFile: () => Promise<{ success: boolean; added?: number; updated?: number; error?: string }>;
+  exportKontoTypyToFile: () => Promise<{ success: boolean; count?: number; filePath?: string; error?: string }>;
 
   // Converters
   getConverters: () => Promise<Converter[]>;
@@ -188,6 +190,14 @@ interface ElectronAPI {
   // History
   getHistory: () => Promise<ConversionHistory[]>;
   clearHistory: () => Promise<boolean>;
+  importHistoryFromFile: () => Promise<{ success: boolean; added?: number; skipped?: number; error?: string }>;
+  exportHistoryToFile: () => Promise<{ success: boolean; count?: number; filePath?: string; error?: string }>;
+
+  // Backup
+  backupExport: () => Promise<{ success: boolean; filePath?: string; counts?: BackupCounts; error?: string }>;
+  backupRestore: () => Promise<{ success: boolean; counts?: BackupCounts; createdAt?: string; error?: string }>;
+  backupGetStatus: () => Promise<{ folder: string; lastAutoBackup: string | null; autoBackupCount: number }>;
+  backupOpenFolder: () => Promise<{ success: boolean }>;
   
   // Zaliczki
   zaliczkiGetModels: () => Promise<{ models: readonly ZaliczkiModel[]; default: string }>;
@@ -261,6 +271,7 @@ interface ElectronAPI {
   onUpdateError: (callback: (error: string) => void) => () => void;
   onDownloadProgress: (callback: (progress: any) => void) => () => void;
   onConversionProgress: (callback: (progress: ConversionProgressEvent) => void) => () => void;
+  onBackupCreated: (callback: (info: { filePath: string; date: string; trigger: 'startup' | 'quit' }) => void) => () => void;
 }
 
 export interface ConversionProgressEvent {

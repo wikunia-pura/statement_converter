@@ -2,6 +2,8 @@ import { app } from 'electron';
 import log from 'electron-log';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
+import yaml from 'js-yaml';
 import { BackupData } from '../shared/types';
 import DatabaseService from './database';
 
@@ -95,9 +97,103 @@ export async function runAutoBackup(
       fs.unlinkSync(path.join(dir, stale));
       log.info(`[BACKUP] Pruned old auto backup: ${stale}`);
     }
+
+    // Off-site copy: push the file to the private backups repo. Failure is
+    // logged but never fails the backup itself (offline, no token, …).
+    await uploadBackupToRepo(target);
+
     return { filePath: target, date: today };
   } catch (error) {
     log.warn(`[BACKUP] Auto backup skipped: ${error instanceof Error ? error.message : error}`);
     return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Off-site upload — GitHub Contents API
+//
+// The backup holds personal data (resident names, account numbers, NIPs), so
+// it must ONLY ever go to a PRIVATE repo. The token is deliberately NOT baked
+// into CI builds: release binaries are public, and a bundled token would let
+// anyone read the backups repo. Instead each trusted machine gets a local
+// config/backup-config.yml (gitignored), or the env vars.
+
+interface BackupUploadConfig {
+  token: string;
+  /** owner/name, e.g. "wikunia-pura/statement-converter-backups" */
+  repo: string;
+}
+
+function loadUploadConfig(): BackupUploadConfig | null {
+  try {
+    const configPath = path.join(app.getAppPath(), 'config', 'backup-config.yml');
+    if (fs.existsSync(configPath)) {
+      const parsed = yaml.load(fs.readFileSync(configPath, 'utf8')) as {
+        backup?: { github_token?: string; github_repo?: string };
+      };
+      const token = parsed?.backup?.github_token?.trim();
+      const repo = parsed?.backup?.github_repo?.trim();
+      if (token && repo) return { token, repo };
+    }
+  } catch (error) {
+    log.warn(`[BACKUP] Cannot read backup-config.yml: ${error instanceof Error ? error.message : error}`);
+  }
+  const token = process.env.BACKUP_GITHUB_TOKEN?.trim();
+  const repo = process.env.BACKUP_GITHUB_REPO?.trim();
+  if (token && repo) return { token, repo };
+  return null;
+}
+
+async function githubApi(
+  cfg: BackupUploadConfig,
+  method: 'GET' | 'PUT',
+  remotePath: string,
+  body?: unknown,
+): Promise<Response> {
+  return fetch(`https://api.github.com/repos/${cfg.repo}/contents/${remotePath}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${cfg.token}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'FileFunky-backup',
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+}
+
+/**
+ * Create or update `<hostname>/<file>` in the configured private repo.
+ * Per-machine folders keep several installations from clobbering each other.
+ * Returns true when the file landed in the repo.
+ */
+async function uploadBackupToRepo(filePath: string): Promise<boolean> {
+  const cfg = loadUploadConfig();
+  if (!cfg) return false; // upload not configured on this machine — fine
+  try {
+    const remotePath = `${os.hostname()}/${path.basename(filePath)}`;
+
+    // Updating an existing file requires its current blob sha.
+    let sha: string | undefined;
+    const existing = await githubApi(cfg, 'GET', remotePath);
+    if (existing.ok) {
+      sha = ((await existing.json()) as { sha?: string }).sha;
+    } else if (existing.status !== 404) {
+      throw new Error(`GET ${remotePath}: HTTP ${existing.status}`);
+    }
+
+    const put = await githubApi(cfg, 'PUT', remotePath, {
+      message: `Auto backup ${path.basename(filePath)} (${os.hostname()})`,
+      content: fs.readFileSync(filePath).toString('base64'),
+      ...(sha ? { sha } : {}),
+    });
+    if (!put.ok) {
+      throw new Error(`PUT ${remotePath}: HTTP ${put.status} ${(await put.text()).slice(0, 200)}`);
+    }
+    log.info(`[BACKUP] Uploaded to ${cfg.repo}/${remotePath}`);
+    return true;
+  } catch (error) {
+    log.warn(`[BACKUP] Repo upload failed: ${error instanceof Error ? error.message : error}`);
+    return false;
   }
 }

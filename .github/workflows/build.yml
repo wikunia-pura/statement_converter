@@ -28,16 +28,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Create AI config file
-        run: |
-          cat > config/ai-config.yml << 'EOF'
-          # AI Configuration for Statement Converter
-          ai:
-            anthropic_api_key: "${{ secrets.ANTHROPIC_API_KEY }}"
-            openai_api_key: ""
-            default_provider: "anthropic"
-          EOF
-        shell: bash
+      # NOTE: no AI key is baked into the build. Releases are publicly
+      # downloadable, so a bundled key could be extracted by anyone. The app
+      # fetches the Anthropic key at runtime from Supabase (app_config table,
+      # readable only by signed-in users).
 
       - name: Build and package (macOS)
         if: matrix.os == 'macos-latest'

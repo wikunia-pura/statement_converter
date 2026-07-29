@@ -76,6 +76,19 @@ insert into public.konto_typy (name, bank_account_symbol, apartment_prefix, is_d
 select 'Podstawowy', '131-1', '204', true
 where not exists (select 1 from public.konto_typy);
 
+-- Application-level configuration shared by all installations. Holds secrets
+-- that must NOT ship inside the (publicly downloadable) release binaries —
+-- e.g. the Anthropic API key. Signed-in users can only READ; writes happen
+-- exclusively from the Supabase dashboard (SQL editor / table editor):
+--
+--   insert into public.app_config (key, value) values ('anthropic_api_key', 'sk-ant-…')
+--     on conflict (key) do update set value = excluded.value, updated_at = now();
+create table if not exists public.app_config (
+  key         text primary key,
+  value       text        not null,
+  updated_at  timestamptz not null default now()
+);
+
 create table if not exists public.history (
   id              bigserial primary key,
   file_name       text        not null,
@@ -94,11 +107,18 @@ create table if not exists public.history (
 -- Anonymous users have no access.
 -- ============================================================
 
+alter table public.app_config  enable row level security;
 alter table public.banks       enable row level security;
 alter table public.kontrahenci enable row level security;
 alter table public.adresy      enable row level security;
 alter table public.konto_typy  enable row level security;
 alter table public.history     enable row level security;
+
+-- app_config: read-only for signed-in users; no insert/update/delete policy,
+-- so the anon/authenticated roles can never modify secrets.
+drop policy if exists "authenticated_read" on public.app_config;
+create policy "authenticated_read" on public.app_config
+  for select to authenticated using (true);
 
 drop policy if exists "authenticated_all" on public.banks;
 drop policy if exists "authenticated_all" on public.kontrahenci;

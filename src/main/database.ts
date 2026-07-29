@@ -666,6 +666,20 @@ class DatabaseService {
     return { added: fresh.length, skipped: rows.length - fresh.length };
   }
 
+  // ---------------------------- App config ----------------------------
+  // Shared secrets/config living in Supabase (`app_config`, authenticated
+  // read-only). Keeps API keys out of the publicly downloadable binaries.
+
+  async getAppConfigValue(key: string): Promise<string | null> {
+    const { data, error } = await getSupabase()
+      .from('app_config')
+      .select('value')
+      .eq('key', key)
+      .maybeSingle();
+    if (error) throw new Error(`getAppConfigValue(${key}): ${error.message}`);
+    return (data as { value: string } | null)?.value ?? null;
+  }
+
   // ----------------------------- Settings -----------------------------
   // Stay local to the machine — these are UI prefs, not shared data.
 

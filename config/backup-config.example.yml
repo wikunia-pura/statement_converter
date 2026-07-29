@@ -1,0 +1,19 @@
+# Off-site backup upload — GitHub (OPCJONALNE)
+#
+# Skopiuj ten plik jako backup-config.yml (jest w .gitignore) i uzupełnij token.
+# Po każdym auto-backupie aplikacja wypchnie plik do prywatnego repo, do
+# folderu o nazwie tej maszyny (hostname).
+#
+# UWAGA — dane wrażliwe:
+#  - repo docelowe MUSI być prywatne (backup zawiera nazwiska, numery kont, NIP-y),
+#  - użyj fine-grained PAT ograniczonego wyłącznie do repo backupów,
+#    z jedynym uprawnieniem: Contents -> Read and write,
+#  - NIE dodawaj tokenu do CI/binarki — wydania na GitHubie są publiczne
+#    i każdy mógłby wyciągnąć token z aplikacji i czytać backupy.
+#
+# Zamiast pliku można też ustawić zmienne środowiskowe:
+#   BACKUP_GITHUB_TOKEN, BACKUP_GITHUB_REPO
+
+backup:
+  github_token: ""
+  github_repo: "wikunia-pura/statement-converter-backups"

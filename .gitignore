@@ -14,3 +14,4 @@ release/
 coverage/
 test-output/
 config/ai-config.yml
+config/backup-config.yml

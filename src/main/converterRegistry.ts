@@ -223,6 +223,24 @@ class ConverterRegistry {
     return this.aiConfig?.ai?.anthropic_api_key || '';
   }
 
+  /**
+   * Inject the Anthropic key fetched from the shared Supabase `app_config`
+   * table (authenticated-only read). Release binaries are public, so the key
+   * is deliberately NOT bundled — the cloud is the production source. A key
+   * from a local ai-config.yml / env (dev override) always wins.
+   */
+  public setAnthropicApiKey(key: string): void {
+    if (!key || this.aiConfig?.ai?.anthropic_api_key) return;
+    this.aiConfig = {
+      ai: {
+        anthropic_api_key: key,
+        openai_api_key: this.aiConfig?.ai?.openai_api_key ?? '',
+        default_provider: 'anthropic',
+      },
+    };
+    console.log('[AI Config] Anthropic key loaded from cloud config (app_config)');
+  }
+
   private loadConverters() {
     try {
       // Use app.getAppPath() to get the root directory in both dev and production

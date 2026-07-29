@@ -199,7 +199,7 @@ export async function extractZaliczkiFromPdf(
   model: string = DEFAULT_ZALICZKI_MODEL,
 ): Promise<ExtractionResult> {
   if (!apiKey) {
-    throw new Error('Brak klucza Anthropic API (ai-config.yml lub ANTHROPIC_API_KEY).');
+    throw new Error('Brak klucza Anthropic API — dodaj wpis anthropic_api_key w tabeli app_config (Supabase) lub lokalnie w config/ai-config.yml.');
   }
 
   const pdfBytes = fs.readFileSync(pdfPath);

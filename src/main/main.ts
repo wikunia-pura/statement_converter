@@ -1183,7 +1183,7 @@ function setupIpcHandlers() {
       const apiKey = converterRegistry.getAnthropicApiKey();
       if (!apiKey) {
         return {
-          error: 'Brak klucza Anthropic API w config/ai-config.yml ani w ANTHROPIC_API_KEY.',
+          error: 'Brak klucza Anthropic API — dodaj wpis anthropic_api_key w tabeli app_config (Supabase) lub lokalnie w config/ai-config.yml.',
         };
       }
       try {
@@ -2123,7 +2123,12 @@ function setupIpcHandlers() {
 
   // Auth (Supabase)
   ipcMain.handle(IPC_CHANNELS.AUTH_SIGN_IN, async (_, email: string, password: string) => {
-    return authService.signIn(email, password);
+    const result = await authService.signIn(email, password);
+    if (result.ok) {
+      // A session is required to read app_config — retry the cloud AI key now.
+      void loadCloudAIKey();
+    }
+    return result;
   });
 
   ipcMain.handle(IPC_CHANNELS.AUTH_SIGN_OUT, async () => {
@@ -2272,6 +2277,12 @@ app.whenReady().then(() => {
   setupAutoUpdater();
   createWindow();
 
+  // Anthropic key lives in Supabase (app_config), not in the public binaries.
+  // Try shortly after start (covers a restored session); sign-in retries too.
+  setTimeout(() => {
+    void loadCloudAIKey();
+  }, 5000);
+
   // Startup auto backup — a safety net for days whose exit backup never ran:
   // it writes (and toasts) only when today's file is missing, i.e. on the
   // first open of the day or after a crash killed the previous session before
@@ -2290,6 +2301,27 @@ app.whenReady().then(() => {
     }
   });
 });
+
+/**
+ * Fetch the Anthropic key from the shared `app_config` table and hand it to
+ * the converter registry. Needs a signed-in Supabase session; failures are
+ * logged and retried on the next sign-in. A local ai-config.yml/env key
+ * (dev override) short-circuits the fetch.
+ */
+async function loadCloudAIKey(): Promise<void> {
+  try {
+    if (converterRegistry.getAnthropicApiKey()) return;
+    const key = await database.getAppConfigValue('anthropic_api_key');
+    if (key) {
+      converterRegistry.setAnthropicApiKey(key);
+      log.info('[AI Config] Anthropic key loaded from Supabase app_config');
+    } else {
+      log.warn('[AI Config] No anthropic_api_key row in app_config — AI features disabled');
+    }
+  } catch (error) {
+    log.warn(`[AI Config] Cloud key fetch failed: ${getErrorMessage(error)}`);
+  }
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

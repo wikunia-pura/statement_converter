@@ -246,11 +246,10 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   // non-AI path just because it wasn't first in line.
   const [alwaysUseAI, setAlwaysUseAI] = useState(true);
   const [outputFolder, setOutputFolder] = useState('');
-  const [isProcessingQueue, setIsProcessingQueue] = useState(false);
+  const [, setIsProcessingQueue] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(document.body.classList.contains('dark-mode'));
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [progressByFile, setProgressByFile] = useState<Record<string, { label: string; percent: number }>>({});
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<FileEntry[]>(files);
   // Read from the queue callback, which outlives the render that scheduled it.
   const alwaysUseAIRef = useRef(alwaysUseAI);

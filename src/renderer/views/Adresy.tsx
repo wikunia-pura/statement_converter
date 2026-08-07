@@ -1109,7 +1109,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     try {
       const result = await window.electronAPI.exportAdresyToFile();
       if (result.success) {
-        notify.success(t.exportAdresySuccess.replace('{count}', result.count.toString()));
+        notify.success(t.exportAdresySuccess.replace('{count}', String(result.count ?? 0)));
       } else if (result.error) {
         notify.error(`${t.exportAdresyError}: ${result.error}`);
       }

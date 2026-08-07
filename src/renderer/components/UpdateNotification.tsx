@@ -14,7 +14,6 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [updateInfo, setUpdateInfo] = useState<any>(null);
-  const [downloadPath, setDownloadPath] = useState<string>('');
   const [platform, setPlatform] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [macReleaseOpened, setMacReleaseOpened] = useState(false);
@@ -36,7 +35,6 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
         setUpdateDownloaded(true);
         setDownloading(false);
         setUpdateInfo(info);
-        setDownloadPath(info.downloadPath || '');
         setPlatform(info.platform || '');
       }),
       window.electronAPI.onUpdateError((err: string) => {
@@ -78,7 +76,6 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
       const result = await window.electronAPI.downloadUpdate();
       console.log('Download result:', result);
       if (result.success) {
-        setDownloadPath(result.downloadPath || '');
       } else if (result.error) {
         setError(result.error);
         setDownloading(false);

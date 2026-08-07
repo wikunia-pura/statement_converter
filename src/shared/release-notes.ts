@@ -84,7 +84,7 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    version: '6.0.0',
+    version: '6.0.1',
     date: '2026-08-07',
     title: 'Mailing do jednostek miasta, odczyty liczników i tańsze dopasowania',
     tagline:

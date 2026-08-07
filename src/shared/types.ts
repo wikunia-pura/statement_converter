@@ -93,6 +93,20 @@ export interface Adres {
   bankId?: number | null;
   /** User-defined rules mapping recurring "weird" payments to apartment numbers. */
   apartmentMappings?: ApartmentMapping[];
+  /** City unit ("jednostka ZGN") notified by the Mailing module when this community's rates change. Null ⇒ the address can't be mailed until one is picked. */
+  zgnJednostkaId?: number | null;
+  createdAt: string;
+}
+
+/**
+ * A city unit that must be told when a housing community changes its monthly-fee
+ * rates. One unit serves many communities, so it lives in its own dictionary and
+ * every Adres references at most one of them.
+ */
+export interface ZgnJednostka {
+  id: number;
+  nazwa: string;
+  email: string;
   createdAt: string;
 }
 
@@ -200,6 +214,183 @@ export interface ConversionHistory {
   convertedAt: string;
 }
 
+/* ---------------- Odczyty liczników — operation history ---------------- */
+
+export type OdczytySkipReason = 'no-device' | 'no-value' | 'no-wm' | 'no-date';
+
+/** A source row that produced no reading, with everything needed to find it. */
+export interface OdczytySkippedRow {
+  /** Row number exactly as Excel shows it in the row gutter. */
+  row: number;
+  sheet: string;
+  reason: OdczytySkipReason;
+  /** Header of the column we read and found unusable, e.g. "30.06.2026". */
+  column: string;
+  deviceNumber: string;
+  wm: string;
+  context: { label: string; value: string }[];
+  /** Newest older month that does hold a value, when there is one. */
+  fallback?: { column: string; value: string };
+}
+
+/** One supplier workbook that fed an operation. */
+export interface OdczytyHistorySource {
+  fileName: string;
+  filePath: string;
+  supplierLabel: string | null;
+  readingCount: number;
+  skippedCount: number;
+  skipped: OdczytySkippedRow[];
+  error?: string;
+}
+
+/** One generated IMPEX file. */
+export interface OdczytyHistoryOutput {
+  wm: string;
+  fileName: string;
+  outputPath: string;
+  date: string;
+  readingCount: number;
+}
+
+/**
+ * One "Konwertuj" click. A single operation may read several workbooks and emit
+ * one file per housing community, so both sides are kept as lists.
+ */
+export interface OdczytyHistoryEntry {
+  id: number;
+  /** Supplier label, or "A + B" when one operation mixed several. */
+  supplier: string;
+  status: 'success' | 'error';
+  errorMessage?: string;
+  outputDir: string;
+  sources: OdczytyHistorySource[];
+  outputs: OdczytyHistoryOutput[];
+  readingCount: number;
+  skippedCount: number;
+  convertedAt: string;
+}
+
+/* ----------------------- Mailing (rate-change mails) ----------------------- */
+
+/**
+ * Kind of mailing being sent. Drives which recipient the app resolves and which
+ * templates it offers; only one kind exists so far.
+ */
+export type MailingTyp = 'zgn-zaliczki';
+
+/**
+ * A user-defined dynamic field usable in a subject or body as `{{nazwa}}`.
+ * `tekst` is the fixed lead-in ("Zmianie uległa zaliczka na fundusz remontowy w
+ * kwocie:"); the value completing it is typed once per send, so the same field
+ * serves every month. Built-in fields (community address, today's date) are not
+ * stored here — see `BUILTIN_MAILING_FIELDS` in shared/mailing-template.
+ */
+export interface MailingPole {
+  id: number;
+  nazwa: string;
+  tekst: string;
+  createdAt: string;
+}
+
+/** A reusable message: subject + body, both with `{{field}}` placeholders. */
+export interface MailingSzablon {
+  id: number;
+  nazwa: string;
+  typ: MailingTyp;
+  temat: string;
+  /** Body as HTML (authored in the rich-text editor). */
+  tresc: string;
+  /** Template default for "also attach the body as a PDF"; overridable per send. */
+  attachPdf: boolean;
+  createdAt: string;
+}
+
+/** One field as it was resolved for a send — kept verbatim in the history. */
+export interface MailingFieldValue {
+  nazwa: string;
+  tekst: string;
+  wartosc: string;
+}
+
+export interface MailingAttachment {
+  fileName: string;
+  filePath: string;
+  /** 'pdf' = generated from the body; 'custom' = a file the user attached. */
+  kind: 'pdf' | 'custom';
+}
+
+/**
+ * One (send, community) pair. Every selected address produces its own mail — the
+ * body carries that community's address — so it gets its own history row with
+ * the subject and body exactly as they went out.
+ */
+export interface MailingHistoryEntry {
+  id: number;
+  typ: MailingTyp;
+  templateName: string;
+  status: 'success' | 'error';
+  errorMessage?: string;
+  adresId: number | null;
+  adresNazwa: string;
+  jednostkaNazwa: string;
+  jednostkaEmail: string;
+  subject: string;
+  /**
+   * The rendered body as HTML, without the document wrapper and without the
+   * letterhead — the logo is ~50 kB of base64 and re-adding it when displaying
+   * costs nothing, so it isn't duplicated onto every row.
+   */
+  bodyHtml: string;
+  bodyText: string;
+  fieldValues: MailingFieldValue[];
+  attachments: MailingAttachment[];
+  /** The mailbox the message was sent from. */
+  sentFrom: string;
+  sentAt: string;
+}
+
+/**
+ * SMTP credentials for the mailbox the app sends from. Machine-local (never
+ * synced, never written to a backup) — see AppSettings.
+ */
+export interface MailingSmtpConfig {
+  host: string;
+  port: number;
+  /** Implicit TLS (port 465). False ⇒ STARTTLS (port 587). */
+  secure: boolean;
+  user: string;
+  /** Display name in the From header; falls back to the user when empty. */
+  fromName: string;
+  /** Send a copy to the sending mailbox, so a record lands in the inbox. */
+  bccSelf: boolean;
+}
+
+/** What the UI needs to know about the stored SMTP config (password excluded). */
+export interface MailingSmtpStatus extends MailingSmtpConfig {
+  /** True when a password is stored on this machine. Never the password itself. */
+  passwordSet: boolean;
+}
+
+/** Per-community outcome of one send, returned to the UI. */
+export interface MailingSendResult {
+  adresId: number;
+  adresNazwa: string;
+  jednostkaNazwa: string;
+  jednostkaEmail: string;
+  status: 'success' | 'error';
+  errorMessage?: string;
+  subject: string;
+  attachments: MailingAttachment[];
+}
+
+/** Progress of a send, streamed to the renderer per community. */
+export interface MailingProgressEvent {
+  done: number;
+  total: number;
+  adresNazwa: string;
+}
+
 /** Ordering of the contractor pick-lists in the transaction review screen. */
 export type ContractorSortOrder = 'name-asc' | 'name-desc' | 'account-asc' | 'account-desc';
 
@@ -211,9 +402,37 @@ export interface AppSettings {
   darkMode: boolean;
   language: 'pl' | 'en';
   aiConfidenceThreshold: number; // Minimum confidence to skip AI warning (default: 95)
+  /**
+   * Run every conversion with AI (default: true). AI only ever sees what the
+   * income-contractor match, the extraction cache, regex and the user's mapping
+   * rules did not resolve — i.e. exactly the rows that would otherwise land in
+   * manual review — so leaving it on is both the cheaper and the faster default.
+   * Turn it off only to convert without touching the API (offline, key down, or
+   * a deliberately free run).
+   */
+  alwaysUseAI: boolean;
   skipUserApproval: boolean; // Skip transaction review and generate files directly
   contractorSortOrder: ContractorSortOrder; // Ordering of contractor pick-lists in review (default: name-asc)
   sidebarCollapsed: boolean; // Collapse the navigation sidebar to an icon-only rail (default: true)
+  /**
+   * Release-notes version this machine has already been shown ('' = never).
+   * The "Co nowego" modal opens once whenever the notes are newer than this.
+   */
+  lastSeenVersion: string;
+
+  /* --- Mailing: SMTP of the mailbox we send from (machine-local) --- */
+  smtpHost: string;
+  smtpPort: number;
+  smtpSecure: boolean;
+  smtpUser: string;
+  /**
+   * SMTP password. Deliberately excluded from backups and from every payload
+   * sent to the renderer — `exportSettings`/`exportFullBackup` blank it out and
+   * an import never overwrites the locally stored one with an empty value.
+   */
+  smtpPass: string;
+  smtpFromName: string;
+  smtpBccSelf: boolean;
 }
 
 /**
@@ -222,6 +441,28 @@ export interface AppSettings {
  * settings. Written as a single JSON file by manual export and by the daily
  * auto-backup; consumed by the restore flow, which replaces the cloud data
  * wholesale (remapping bank/konto-typ ids referenced from adresy).
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * ADDING PERSISTED DATA (do this in the SAME change that adds the table)
+ * ────────────────────────────────────────────────────────────────────────────
+ * A new Supabase table or a new `AppSettings` field is not "done" until it is
+ * in the backup — an unbacked table is silently lost on restore, and restore
+ * wipes the shared cloud data for EVERY install, so the gap only surfaces when
+ * it is already too late. Touch all five places:
+ *   1. `BackupData.data` here — new keys are OPTIONAL (`?`), so older backup
+ *      files still validate; a missing key must mean "leave the live rows
+ *      alone", never "wipe them".
+ *   2. `BackupCounts` + `countBackup` below, so the summary names it.
+ *   3. `DatabaseService.exportFullBackup` — read the rows.
+ *   4. `DatabaseService.importFullBackup` — restore them, in an order that
+ *      keeps foreign keys valid (see the insert/remap dance for adresy).
+ *   5. `backupCounts` in renderer/translations.ts (pl + en).
+ * `AppSettings` needs none of this — it is spread whole — but a secret added
+ * there must be blanked in `settingsForExport`, like `smtpPass`.
+ *
+ * Out of scope on purpose: `app_config` (infrastructure, not user data) and the
+ * module files on disk (mailing PDFs, attachment copies) — history entries stay
+ * readable without them.
  */
 export interface BackupData {
   format: 'filefunky-backup';
@@ -234,6 +475,14 @@ export interface BackupData {
     adresy: Adres[];
     kontoTypy: KontoTyp[];
     history: ConversionHistory[];
+    /** Absent in backups written before the meter-readings module existed. */
+    odczytyHistory?: OdczytyHistoryEntry[];
+    /** Absent in backups written before the Mailing module existed. */
+    zgnJednostki?: ZgnJednostka[];
+    mailingPola?: MailingPole[];
+    mailingSzablony?: MailingSzablon[];
+    mailingHistory?: MailingHistoryEntry[];
+    /** Never carries `smtpPass` — the SMTP password stays on the machine. */
     settings: AppSettings;
   };
 }
@@ -245,6 +494,11 @@ export interface BackupCounts {
   adresy: number;
   kontoTypy: number;
   history: number;
+  odczytyHistory: number;
+  zgnJednostki: number;
+  mailingPola: number;
+  mailingSzablony: number;
+  mailingHistory: number;
 }
 
 export function countBackup(data: BackupData): BackupCounts {
@@ -254,6 +508,11 @@ export function countBackup(data: BackupData): BackupCounts {
     adresy: data.data.adresy.length,
     kontoTypy: data.data.kontoTypy.length,
     history: data.data.history.length,
+    odczytyHistory: data.data.odczytyHistory?.length ?? 0,
+    zgnJednostki: data.data.zgnJednostki?.length ?? 0,
+    mailingPola: data.data.mailingPola?.length ?? 0,
+    mailingSzablony: data.data.mailingSzablony?.length ?? 0,
+    mailingHistory: data.data.mailingHistory?.length ?? 0,
   };
 }
 
@@ -306,6 +565,7 @@ export const IPC_CHANNELS = {
   CONVERT_FILE: 'files:convert',
   CONVERT_FILE_WITH_AI: 'files:convert-with-ai',
   FINALIZE_CONVERSION: 'files:finalize-conversion',
+  RERUN_EXPENSE_AI: 'files:rerun-expense-ai',
   TOUCH_CONVERSION: 'files:touch-conversion',
   CONVERT_ALL: 'files:convert-all',
   OPEN_FILE: 'files:open',
@@ -319,8 +579,10 @@ export const IPC_CHANNELS = {
   SET_DARK_MODE: 'settings:set-dark-mode',
   SET_LANGUAGE: 'settings:set-language',
   SET_SKIP_USER_APPROVAL: 'settings:set-skip-user-approval',
+  SET_ALWAYS_USE_AI: 'settings:set-always-use-ai',
   SET_CONTRACTOR_SORT_ORDER: 'settings:set-contractor-sort-order',
   SET_SIDEBAR_COLLAPSED: 'settings:set-sidebar-collapsed',
+  SET_LAST_SEEN_VERSION: 'settings:set-last-seen-version',
   EXPORT_SETTINGS: 'settings:export',
   IMPORT_SETTINGS: 'settings:import',
   
@@ -358,6 +620,37 @@ export const IPC_CHANNELS = {
   HOMEBANKING_ANALYZE_FILE: 'homebanking:analyze-file',
   HOMEBANKING_SELECT_OUTPUT_DIR: 'homebanking:select-output-dir',
   HOMEBANKING_MERGE: 'homebanking:merge',
+
+  // Odczyty liczników (supplier meter-reading workbooks → IMPEX txt)
+  ODCZYTY_SELECT_FILES: 'odczyty:select-files',
+  ODCZYTY_ANALYZE_FILE: 'odczyty:analyze-file',
+  ODCZYTY_SELECT_OUTPUT_DIR: 'odczyty:select-output-dir',
+  ODCZYTY_CONVERT: 'odczyty:convert',
+  ODCZYTY_GET_HISTORY: 'odczyty:get-history',
+  ODCZYTY_CLEAR_HISTORY: 'odczyty:clear-history',
+
+  // Mailing (rate-change notifications to city units)
+  MAILING_GET_ZGN: 'mailing:get-zgn',
+  MAILING_ADD_ZGN: 'mailing:add-zgn',
+  MAILING_UPDATE_ZGN: 'mailing:update-zgn',
+  MAILING_DELETE_ZGN: 'mailing:delete-zgn',
+  MAILING_GET_POLA: 'mailing:get-pola',
+  MAILING_ADD_POLE: 'mailing:add-pole',
+  MAILING_UPDATE_POLE: 'mailing:update-pole',
+  MAILING_DELETE_POLE: 'mailing:delete-pole',
+  MAILING_GET_SZABLONY: 'mailing:get-szablony',
+  MAILING_ADD_SZABLON: 'mailing:add-szablon',
+  MAILING_UPDATE_SZABLON: 'mailing:update-szablon',
+  MAILING_DELETE_SZABLON: 'mailing:delete-szablon',
+  MAILING_SELECT_ATTACHMENTS: 'mailing:select-attachments',
+  MAILING_SEND: 'mailing:send',
+  MAILING_GET_HISTORY: 'mailing:get-history',
+  MAILING_CLEAR_HISTORY: 'mailing:clear-history',
+  MAILING_GET_FILES_INFO: 'mailing:get-files-info',
+  MAILING_CLEANUP_FILES: 'mailing:cleanup-files',
+  MAILING_GET_SMTP: 'mailing:get-smtp',
+  MAILING_SET_SMTP: 'mailing:set-smtp',
+  MAILING_TEST_SMTP: 'mailing:test-smtp',
 
   // Auth (Supabase-backed)
   AUTH_SIGN_IN: 'auth:sign-in',

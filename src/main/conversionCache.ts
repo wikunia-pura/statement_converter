@@ -195,6 +195,24 @@ class ConversionCache {
   }
 
   /**
+   * Replace the processed transactions of a pending conversion and flush to
+   * disk. Used by the on-demand expense re-match, whose results must survive a
+   * main-process restart exactly like the original conversion's do. Also resets
+   * the sliding-expiration clock — a long re-run counts as activity.
+   * Returns false if the entry is gone.
+   */
+  updateProcessedTransactions(id: string, processedTransactions: any[]): boolean {
+    this.ensureLoaded();
+    const cached = this.cache.get(id);
+    if (!cached) return false;
+
+    cached.processedTransactions = processedTransactions;
+    cached.lastAccessedAt = new Date();
+    this.persist();
+    return true;
+  }
+
+  /**
    * Remove conversion from cache
    */
   remove(id: string): boolean {

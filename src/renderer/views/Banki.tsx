@@ -218,7 +218,7 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
           <div style={{ display: 'flex', gap: '10px' }}>
             {banks.length > 0 && (
               <button className="button button-danger" onClick={handleDeleteAll}>
-                {t.deleteAllBanks}
+                <Icon name="trash" size={14} />{' '}{t.deleteAllBanks}
               </button>
             )}
             <button
@@ -226,14 +226,14 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
               onClick={handleImport}
               disabled={isImporting}
             >
-              {t.importFromFile}
+              <Icon name="upload" size={14} />{' '}{t.importFromFile}
             </button>
             <button
               className="button button-export"
               onClick={handleExport}
               disabled={banks.length === 0}
             >
-              {t.exportToFile}
+              <Icon name="download" size={14} />{' '}{t.exportToFile}
             </button>
             <button
               className="button button-primary"
@@ -246,7 +246,7 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
                 setNewAccountPrefix('');
               }}
               disabled={showAdd || editing !== null}
-            >
+            ><Icon name="plus" size={14} />{' '}
               {t.addBank}
             </button>
           </div>
@@ -319,8 +319,7 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
                       className="button button-primary"
                       onClick={handleAddAccountPrefix}
                       disabled={!newAccountPrefix.trim()}
-                    >
-                      + {t.addAccountPrefix}
+                    ><Icon name="plus" size={14} />{' '}{t.addAccountPrefix}
                     </button>
                   </div>
                 </div>
@@ -330,13 +329,13 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
                   className="button button-secondary"
                   onClick={resetForm}
                 >
-                  {t.cancel}
+                  <Icon name="x" size={14} />{' '}{t.cancel}
                 </button>
                 <button
                   className="button button-success"
                   onClick={editing ? handleUpdate : handleAdd}
                 >
-                  {editing ? t.update : t.add}
+                  <Icon name="save" size={14} />{' '}{editing ? t.update : t.add}
                 </button>
               </div>
             </div>
@@ -412,13 +411,13 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
                           <button
                             className="button button-small button-primary"
                             onClick={() => handleEdit(bank)}
-                          >
+                          ><Icon name="edit" size={13} />{' '}
                             {t.edit}
                           </button>
                           <button
                             className="button button-small button-danger"
                             onClick={() => handleDelete(bank.id)}
-                          >
+                          ><Icon name="trash" size={13} />{' '}
                             {t.delete}
                           </button>
                         </div>

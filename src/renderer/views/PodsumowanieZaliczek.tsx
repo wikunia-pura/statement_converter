@@ -493,7 +493,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                                 onClick={() => runOcrOne(f.filePath)}
                                 disabled={isProcessing}
                                 style={{ whiteSpace: 'nowrap' }}
-                              >
+                              ><Icon name="bot" size={13} />{' '}
                                 {t.zaliczkiRunOcr}
                               </button>
                             )}
@@ -503,7 +503,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                                 onClick={() => runOcrOne(f.filePath)}
                                 disabled={isProcessing}
                                 style={{ whiteSpace: 'nowrap' }}
-                              >
+                              ><Icon name="refresh" size={13} />{' '}
                                 {t.zaliczkiRunOcrAgain}
                               </button>
                             )}
@@ -511,7 +511,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                               className="button button-small button-danger"
                               onClick={() => removeFile(f.filePath)}
                               disabled={isProcessing}
-                            >
+                            ><Icon name="trash" size={13} />{' '}
                               {t.remove}
                             </button>
                           </div>
@@ -547,7 +547,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                   onClick={openGeneratedFile}
                   style={{ marginLeft: '12px', flexShrink: 0 }}
                 >
-                  {t.zaliczkiOpenFile}
+                  <Icon name="folder" size={13} />{' '}{t.zaliczkiOpenFile}
                 </button>
               )}
             </div>
@@ -608,8 +608,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                       <button
                         className="button button-small button-danger"
                         onClick={() => deletePropertyRow(f.filePath, idx)}
-                      >
-                        ×
+                      ><Icon name="x" size={13} />
                       </button>
                     </td>
                   </tr>
@@ -621,8 +620,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
             className="button button-small button-secondary"
             onClick={() => addPropertyRow(f.filePath)}
             style={{ marginTop: '10px' }}
-          >
-            + {t.zaliczkiAddRow}
+          ><Icon name="plus" size={13} />{' '}{t.zaliczkiAddRow}
           </button>
         </div>
       ))}
@@ -682,7 +680,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
               <button
                 className="button button-primary"
                 onClick={() => setShowDuplicatesModal(false)}
-              >
+              ><Icon name="check" size={14} />{' '}
                 {t.zaliczkiDuplicatesOk}
               </button>
             </div>

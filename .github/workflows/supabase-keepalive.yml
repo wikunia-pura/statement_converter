@@ -21,7 +21,7 @@ jobs:
           # URL i publishable (anon) key są bezpieczne do commitowania — patrz SUPABASE_SETUP.md.
           # RLS blokuje dostęp do danych; zapytania zwrócą puste tablice,
           # ale każde z nich liczy się jako aktywność bazodanowa.
-          for table in banks kontrahenci adresy konto_typy history; do
+          for table in banks kontrahenci adresy konto_typy history odczyty_history; do
             curl --fail-with-body --silent --show-error \
               "https://xyvltgegptamtlzsdjwo.supabase.co/rest/v1/${table}?select=id&limit=1" \
               -H "apikey: sb_publishable_7iJwmFOM5lUI4tOTzbYLcg_VVOS5CXF" \

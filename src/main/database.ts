@@ -1,7 +1,23 @@
 import Store from 'electron-store';
 import path from 'path';
 import { app } from 'electron';
-import { Bank, ConversionHistory, AppSettings, Kontrahent, Adres, KontrahentTyp, ApartmentMapping, KontoTyp, BackupData } from '../shared/types';
+import {
+  Bank,
+  ConversionHistory,
+  AppSettings,
+  Kontrahent,
+  Adres,
+  KontrahentTyp,
+  ApartmentMapping,
+  KontoTyp,
+  BackupData,
+  OdczytyHistoryEntry,
+  ZgnJednostka,
+  MailingPole,
+  MailingSzablon,
+  MailingHistoryEntry,
+  MailingSmtpConfig,
+} from '../shared/types';
 import { getSupabase } from './supabaseClient';
 import { normalizeAccount } from '../shared/account-extractor';
 
@@ -15,9 +31,20 @@ interface SettingsStoreSchema {
     darkMode: boolean;
     language: 'pl' | 'en';
     aiConfidenceThreshold: number;
+    alwaysUseAI: boolean;
     skipUserApproval: boolean;
     contractorSortOrder: 'name-asc' | 'name-desc' | 'account-asc' | 'account-desc';
     sidebarCollapsed: boolean;
+    /** Release-notes version already shown on this machine ('' = never). */
+    lastSeenVersion: string;
+    /** Mailing: SMTP of the mailbox we send from. Never leaves this machine. */
+    smtpHost: string;
+    smtpPort: number;
+    smtpSecure: boolean;
+    smtpUser: string;
+    smtpPass: string;
+    smtpFromName: string;
+    smtpBccSelf: boolean;
   };
 }
 
@@ -33,11 +60,19 @@ function normalizeTypy(row: { typy?: unknown; typ?: unknown }): KontrahentTyp[] 
   return [((row.typ as KontrahentTyp) || 'Kontrahent')];
 }
 const ADRES_COLS =
-  'id, nazwa, alternativeNames:alternative_names, swrkIdentifiers:swrk_identifiers, accountNumbers:account_numbers, accountTypes:account_types, bankId:bank_id, apartmentMappings:apartment_mappings, createdAt:created_at';
+  'id, nazwa, alternativeNames:alternative_names, swrkIdentifiers:swrk_identifiers, accountNumbers:account_numbers, accountTypes:account_types, bankId:bank_id, apartmentMappings:apartment_mappings, zgnJednostkaId:zgn_jednostka_id, createdAt:created_at';
+const ZGN_COLS = 'id, nazwa, email, createdAt:created_at';
+const MAILING_POLE_COLS = 'id, nazwa, tekst, createdAt:created_at';
+const MAILING_SZABLON_COLS =
+  'id, nazwa, typ, temat, tresc, attachPdf:attach_pdf, createdAt:created_at';
+const MAILING_HISTORY_COLS =
+  'id, typ, templateName:template_name, status, errorMessage:error_message, adresId:adres_id, adresNazwa:adres_nazwa, jednostkaNazwa:jednostka_nazwa, jednostkaEmail:jednostka_email, subject, bodyHtml:body_html, bodyText:body_text, fieldValues:field_values, attachments, sentFrom:sent_from, sentAt:sent_at';
 const KONTO_TYP_COLS =
   'id, name, bankAccountSymbol:bank_account_symbol, apartmentPrefix:apartment_prefix, isDefault:is_default, createdAt:created_at';
 const HISTORY_COLS =
   'id, fileName:file_name, bankName:bank_name, converterName:converter_name, status, errorMessage:error_message, inputPath:input_path, outputPath:output_path, convertedAt:converted_at';
+const ODCZYTY_HISTORY_COLS =
+  'id, supplier, status, errorMessage:error_message, outputDir:output_dir, sources:source_files, outputs:output_files, readingCount:reading_count, skippedCount:skipped_count, convertedAt:converted_at';
 
 function unwrap<T>(data: T | null, error: { message: string } | null, context: string): T {
   if (error) throw new Error(`${context}: ${error.message}`);
@@ -113,9 +148,19 @@ class DatabaseService {
           darkMode: true,
           language: 'pl',
           aiConfidenceThreshold: 95,
+          alwaysUseAI: true,
           skipUserApproval: false,
           contractorSortOrder: 'name-asc',
           sidebarCollapsed: true,
+          lastSeenVersion: '',
+          // home.pl defaults — the mailbox this is built for. Overridable in Settings.
+          smtpHost: 'poczta.home.pl',
+          smtpPort: 465,
+          smtpSecure: true,
+          smtpUser: '',
+          smtpPass: '',
+          smtpFromName: '',
+          smtpBccSelf: false,
         },
       },
     });
@@ -339,6 +384,7 @@ class DatabaseService {
       accountTypes: a.accountTypes ?? {},
       bankId: a.bankId ?? null,
       apartmentMappings: a.apartmentMappings ?? [],
+      zgnJednostkaId: a.zgnJednostkaId ?? null,
     })) as Adres[];
     this.cache.adresy = this.cacheSet(data);
     return data;
@@ -433,6 +479,7 @@ class DatabaseService {
     accountNumbers?: string[],
     apartmentMappings?: ApartmentMapping[],
     accountTypes?: Record<string, number>,
+    zgnJednostkaId?: number | null,
   ): Promise<Adres> {
     const accounts = await this.sanitizeAccountNumbers(accountNumbers);
     const { data, error } = await getSupabase()
@@ -445,6 +492,7 @@ class DatabaseService {
         account_types: await this.sanitizeAccountTypes(accountTypes, accounts),
         bank_id: bankId ?? null,
         apartment_mappings: this.sanitizeApartmentMappings(apartmentMappings),
+        zgn_jednostka_id: zgnJednostkaId ?? null,
       })
       .select(ADRES_COLS)
       .single();
@@ -462,11 +510,13 @@ class DatabaseService {
     accountNumbers?: string[],
     apartmentMappings?: ApartmentMapping[],
     accountTypes?: Record<string, number>,
+    zgnJednostkaId?: number | null,
   ): Promise<void> {
     const patch: Record<string, unknown> = { nazwa };
     if (alternativeNames !== undefined) patch.alternative_names = alternativeNames;
     if (swrkIdentifiers !== undefined) patch.swrk_identifiers = swrkIdentifiers;
     if (bankId !== undefined) patch.bank_id = bankId;
+    if (zgnJednostkaId !== undefined) patch.zgn_jednostka_id = zgnJednostkaId;
     let sanitizedAccounts: string[] | undefined;
     if (accountNumbers !== undefined) {
       sanitizedAccounts = await this.sanitizeAccountNumbers(accountNumbers, id);
@@ -666,6 +716,272 @@ class DatabaseService {
     return { added: fresh.length, skipped: rows.length - fresh.length };
   }
 
+  // ------------------- Odczyty liczników — history -------------------
+
+  async addOdczytyHistory(data: Omit<OdczytyHistoryEntry, 'id' | 'convertedAt'>): Promise<void> {
+    const { error } = await getSupabase().from('odczyty_history').insert({
+      supplier: data.supplier,
+      status: data.status,
+      error_message: data.errorMessage || null,
+      output_dir: data.outputDir,
+      source_files: data.sources,
+      output_files: data.outputs,
+      reading_count: data.readingCount,
+      skipped_count: data.skippedCount,
+    });
+    if (error) throw new Error(`addOdczytyHistory: ${error.message}`);
+  }
+
+  async getOdczytyHistory(): Promise<OdczytyHistoryEntry[]> {
+    const rows = await fetchAllPaged<any>('getOdczytyHistory', (from, to) =>
+      getSupabase()
+        .from('odczyty_history')
+        .select(ODCZYTY_HISTORY_COLS)
+        .order('converted_at', { ascending: false })
+        .range(from, to),
+    );
+    return rows.map(r => ({
+      ...r,
+      errorMessage: r.errorMessage ?? undefined,
+      sources: Array.isArray(r.sources) ? r.sources : [],
+      outputs: Array.isArray(r.outputs) ? r.outputs : [],
+    })) as OdczytyHistoryEntry[];
+  }
+
+  async clearOdczytyHistory(): Promise<void> {
+    const { error } = await getSupabase().from('odczyty_history').delete().gt('id', 0);
+    if (error) throw new Error(`clearOdczytyHistory: ${error.message}`);
+  }
+
+  /** Merge-import keyed on (convertedAt, supplier), mirroring importHistory. */
+  async importOdczytyHistory(
+    rows: OdczytyHistoryEntry[],
+  ): Promise<{ added: number; skipped: number }> {
+    const key = (h: OdczytyHistoryEntry) => `${h.convertedAt}|${h.supplier}`;
+    const seen = new Set((await this.getOdczytyHistory()).map(key));
+    const fresh = rows.filter(h => !seen.has(key(h)));
+    await this.insertChunked(
+      'odczyty_history',
+      fresh.map(h => ({
+        supplier: h.supplier,
+        status: h.status,
+        error_message: h.errorMessage || null,
+        output_dir: h.outputDir,
+        source_files: h.sources,
+        output_files: h.outputs,
+        reading_count: h.readingCount,
+        skipped_count: h.skippedCount,
+        converted_at: h.convertedAt,
+      })),
+    );
+    return { added: fresh.length, skipped: rows.length - fresh.length };
+  }
+
+  // ------------------------ Mailing — jednostki ZGN ------------------------
+
+  async getZgnJednostki(): Promise<ZgnJednostka[]> {
+    const { data, error } = await getSupabase()
+      .from('zgn_jednostki')
+      .select(ZGN_COLS)
+      .order('nazwa', { ascending: true });
+    if (error) throw new Error(`getZgnJednostki: ${error.message}`);
+    return (data ?? []) as ZgnJednostka[];
+  }
+
+  async addZgnJednostka(nazwa: string, email: string): Promise<ZgnJednostka> {
+    const { data, error } = await getSupabase()
+      .from('zgn_jednostki')
+      .insert({ nazwa: nazwa.trim(), email: email.trim() })
+      .select(ZGN_COLS)
+      .single();
+    return unwrap(data, error, 'addZgnJednostka') as ZgnJednostka;
+  }
+
+  async updateZgnJednostka(id: number, nazwa: string, email: string): Promise<void> {
+    const { error } = await getSupabase()
+      .from('zgn_jednostki')
+      .update({ nazwa: nazwa.trim(), email: email.trim() })
+      .eq('id', id);
+    if (error) throw new Error(`updateZgnJednostka: ${error.message}`);
+  }
+
+  /**
+   * Delete a unit. `adresy.zgn_jednostka_id` is ON DELETE SET NULL, so the
+   * addresses survive — they simply stop being mailable until a unit is picked
+   * again. The caller warns about how many addresses that affects.
+   */
+  async deleteZgnJednostka(id: number): Promise<void> {
+    const { error } = await getSupabase().from('zgn_jednostki').delete().eq('id', id);
+    if (error) throw new Error(`deleteZgnJednostka: ${error.message}`);
+    this.invalidateCache('adresy');
+  }
+
+  // ------------------------ Mailing — pola dynamiczne ------------------------
+
+  async getMailingPola(): Promise<MailingPole[]> {
+    const { data, error } = await getSupabase()
+      .from('mailing_pola')
+      .select(MAILING_POLE_COLS)
+      .order('nazwa', { ascending: true });
+    if (error) throw new Error(`getMailingPola: ${error.message}`);
+    return (data ?? []) as MailingPole[];
+  }
+
+  async addMailingPole(nazwa: string, tekst: string): Promise<MailingPole> {
+    const { data, error } = await getSupabase()
+      .from('mailing_pola')
+      .insert({ nazwa: nazwa.trim(), tekst })
+      .select(MAILING_POLE_COLS)
+      .single();
+    return unwrap(data, error, 'addMailingPole') as MailingPole;
+  }
+
+  async updateMailingPole(id: number, nazwa: string, tekst: string): Promise<void> {
+    const { error } = await getSupabase()
+      .from('mailing_pola')
+      .update({ nazwa: nazwa.trim(), tekst })
+      .eq('id', id);
+    if (error) throw new Error(`updateMailingPole: ${error.message}`);
+  }
+
+  async deleteMailingPole(id: number): Promise<void> {
+    const { error } = await getSupabase().from('mailing_pola').delete().eq('id', id);
+    if (error) throw new Error(`deleteMailingPole: ${error.message}`);
+  }
+
+  // -------------------------- Mailing — szablony --------------------------
+
+  async getMailingSzablony(): Promise<MailingSzablon[]> {
+    const { data, error } = await getSupabase()
+      .from('mailing_szablony')
+      .select(MAILING_SZABLON_COLS)
+      .order('nazwa', { ascending: true });
+    if (error) throw new Error(`getMailingSzablony: ${error.message}`);
+    return (data ?? []) as MailingSzablon[];
+  }
+
+  async addMailingSzablon(
+    data: Omit<MailingSzablon, 'id' | 'createdAt'>,
+  ): Promise<MailingSzablon> {
+    const { data: row, error } = await getSupabase()
+      .from('mailing_szablony')
+      .insert({
+        nazwa: data.nazwa.trim(),
+        typ: data.typ,
+        temat: data.temat,
+        tresc: data.tresc,
+        attach_pdf: data.attachPdf,
+      })
+      .select(MAILING_SZABLON_COLS)
+      .single();
+    return unwrap(row, error, 'addMailingSzablon') as MailingSzablon;
+  }
+
+  async updateMailingSzablon(
+    id: number,
+    data: Omit<MailingSzablon, 'id' | 'createdAt'>,
+  ): Promise<void> {
+    const { error } = await getSupabase()
+      .from('mailing_szablony')
+      .update({
+        nazwa: data.nazwa.trim(),
+        typ: data.typ,
+        temat: data.temat,
+        tresc: data.tresc,
+        attach_pdf: data.attachPdf,
+      })
+      .eq('id', id);
+    if (error) throw new Error(`updateMailingSzablon: ${error.message}`);
+  }
+
+  async deleteMailingSzablon(id: number): Promise<void> {
+    const { error } = await getSupabase().from('mailing_szablony').delete().eq('id', id);
+    if (error) throw new Error(`deleteMailingSzablon: ${error.message}`);
+  }
+
+  // --------------------------- Mailing — historia ---------------------------
+
+  async addMailingHistory(entry: Omit<MailingHistoryEntry, 'id' | 'sentAt'>): Promise<void> {
+    const { error } = await getSupabase().from('mailing_history').insert({
+      typ: entry.typ,
+      template_name: entry.templateName,
+      status: entry.status,
+      error_message: entry.errorMessage || null,
+      adres_id: entry.adresId,
+      adres_nazwa: entry.adresNazwa,
+      jednostka_nazwa: entry.jednostkaNazwa,
+      jednostka_email: entry.jednostkaEmail,
+      subject: entry.subject,
+      body_html: entry.bodyHtml,
+      body_text: entry.bodyText,
+      field_values: entry.fieldValues,
+      attachments: entry.attachments,
+      sent_from: entry.sentFrom,
+    });
+    if (error) throw new Error(`addMailingHistory: ${error.message}`);
+  }
+
+  async getMailingHistory(): Promise<MailingHistoryEntry[]> {
+    const rows = await fetchAllPaged<any>('getMailingHistory', (from, to) =>
+      getSupabase()
+        .from('mailing_history')
+        .select(MAILING_HISTORY_COLS)
+        .order('sent_at', { ascending: false })
+        .range(from, to),
+    );
+    return rows.map(r => ({
+      ...r,
+      errorMessage: r.errorMessage ?? undefined,
+      adresId: r.adresId ?? null,
+      fieldValues: Array.isArray(r.fieldValues) ? r.fieldValues : [],
+      attachments: Array.isArray(r.attachments) ? r.attachments : [],
+    })) as MailingHistoryEntry[];
+  }
+
+  async clearMailingHistory(): Promise<void> {
+    const { error } = await getSupabase().from('mailing_history').delete().gt('id', 0);
+    if (error) throw new Error(`clearMailingHistory: ${error.message}`);
+  }
+
+  // ------------------------- Mailing — SMTP config -------------------------
+  // Machine-local, like every other setting: the password to a real mailbox
+  // must not travel through the shared Supabase project or into a backup file.
+
+  getMailingSmtp(): MailingSmtpConfig & { pass: string } {
+    // Booleans and numbers may be stored natively (store defaults) or as strings
+    // (written through setSetting), so accept both — the same tolerance the
+    // GET_SETTINGS handler applies to darkMode and friends.
+    const raw = (key: string): unknown => this.getSetting(key) as unknown;
+    const port = Number(raw('smtpPort'));
+    const secure = raw('smtpSecure');
+    const bccSelf = raw('smtpBccSelf');
+    return {
+      host: String(raw('smtpHost') || 'poczta.home.pl').trim(),
+      port: Number.isFinite(port) && port > 0 ? port : 465,
+      // Undefined ⇒ never configured; implicit TLS (465) is the safe default.
+      secure: secure === true || secure === 'true' || secure === undefined,
+      user: String(raw('smtpUser') || '').trim(),
+      pass: String(raw('smtpPass') || ''),
+      fromName: String(raw('smtpFromName') || ''),
+      bccSelf: bccSelf === true || bccSelf === 'true',
+    };
+  }
+
+  /**
+   * Persist the SMTP config. `pass` is optional on purpose: the renderer never
+   * receives the stored password, so an edit that leaves the field untouched
+   * passes `undefined` and must keep what's already there.
+   */
+  setMailingSmtp(config: MailingSmtpConfig & { pass?: string }): void {
+    this.setSetting('smtpHost', config.host.trim());
+    this.setSetting('smtpPort', String(config.port));
+    this.setSetting('smtpSecure', String(config.secure));
+    this.setSetting('smtpUser', config.user.trim());
+    this.setSetting('smtpFromName', config.fromName);
+    this.setSetting('smtpBccSelf', String(config.bccSelf));
+    if (config.pass !== undefined) this.setSetting('smtpPass', config.pass);
+  }
+
   // ---------------------------- App config ----------------------------
   // Shared secrets/config living in Supabase (`app_config`, authenticated
   // read-only). Keeps API keys out of the publicly downloadable binaries.
@@ -697,15 +1013,29 @@ class DatabaseService {
     this.settingsStore.set('settings', { ...settings, [key]: value });
   }
 
+  /**
+   * Settings as they may leave this machine — with the SMTP password blanked.
+   * Backups are pushed to a remote repository, and a mailbox password has no
+   * business travelling with them.
+   */
+  private settingsForExport(): AppSettings {
+    return { ...this.getSettings(), smtpPass: '' };
+  }
+
   exportSettings(): { settings: any } {
-    return { settings: this.settingsStore.get('settings') };
+    return { settings: this.settingsForExport() };
   }
 
   importSettings(data: { settings?: any }): void {
     if (data.settings) {
+      // Mirror of settingsForExport: an incoming blank password means "not in
+      // this file", not "clear mine" — restoring a backup must not log the app
+      // out of the mailbox.
+      const incoming = { ...data.settings };
+      if (!incoming.smtpPass) delete incoming.smtpPass;
       this.settingsStore.set('settings', {
         ...this.settingsStore.get('settings'),
-        ...data.settings,
+        ...incoming,
       });
     }
   }
@@ -714,21 +1044,54 @@ class DatabaseService {
   // Full snapshot of the shared Supabase data + this machine's settings.
   // Restore replaces the cloud data wholesale; because every install shares
   // one Supabase project, restoring affects all users — the UI double-confirms.
+  //
+  // EVERY new persisted table belongs in both methods below, in the same change
+  // that creates it: a table missing here is silently dropped by the next
+  // restore, on all installs at once. The full checklist is on `BackupData` in
+  // shared/types.ts.
 
   async exportFullBackup(appVersion: string): Promise<BackupData> {
-    const [banks, kontrahenci, adresy, kontoTypy, history] = await Promise.all([
+    const [
+      banks,
+      kontrahenci,
+      adresy,
+      kontoTypy,
+      history,
+      odczytyHistory,
+      zgnJednostki,
+      mailingPola,
+      mailingSzablony,
+      mailingHistory,
+    ] = await Promise.all([
       this.getAllBanks(),
       this.getAllKontrahenci(),
       this.getAllAdresy(),
       this.getKontoTypy(),
       this.getAllHistory(),
+      this.getOdczytyHistory(),
+      this.getZgnJednostki(),
+      this.getMailingPola(),
+      this.getMailingSzablony(),
+      this.getMailingHistory(),
     ]);
     return {
       format: 'filefunky-backup',
       formatVersion: 1,
       appVersion,
       createdAt: new Date().toISOString(),
-      data: { banks, kontrahenci, adresy, kontoTypy, history, settings: this.getSettings() },
+      data: {
+        banks,
+        kontrahenci,
+        adresy,
+        kontoTypy,
+        history,
+        odczytyHistory,
+        zgnJednostki,
+        mailingPola,
+        mailingSzablony,
+        mailingHistory,
+        settings: this.settingsForExport(),
+      },
     };
   }
 
@@ -782,7 +1145,19 @@ class DatabaseService {
    * failure can leave duplicates but never loses rows that weren't replaced yet.
    */
   async importFullBackup(backup: BackupData): Promise<void> {
-    const { banks, kontrahenci, adresy, kontoTypy, history, settings } = backup.data;
+    const {
+      banks,
+      kontrahenci,
+      adresy,
+      kontoTypy,
+      history,
+      odczytyHistory,
+      zgnJednostki,
+      mailingPola,
+      mailingSzablony,
+      mailingHistory,
+      settings,
+    } = backup.data;
 
     // Bypass the 60 s cache — the "rows to remove afterwards" list must reflect
     // the live table, including rows another instance wrote moments ago.
@@ -790,6 +1165,7 @@ class DatabaseService {
     this.invalidateCache('kontoTypy');
     const preexistingBankIds = (await this.getAllBanks()).map(b => b.id);
     const preexistingTypIds = (await this.getKontoTypy()).map(t => t.id);
+    const preexistingZgnIds = (await this.getZgnJednostki()).map(z => z.id);
 
     const bankIdMap = await this.insertRemapped(
       'banks',
@@ -816,6 +1192,22 @@ class DatabaseService {
       })),
     );
 
+    // Same alongside-then-swap dance as banks: adresy point at these rows, so
+    // the new units must exist before the addresses are written and the old ones
+    // can only go once nothing references them. Backups predating the Mailing
+    // module carry no units — then the map stays empty and every address lands
+    // with a null unit, exactly as it was.
+    const zgnIdMap = await this.insertRemapped(
+      'zgn_jednostki',
+      'id',
+      (zgnJednostki ?? []).map(z => z.id),
+      (zgnJednostki ?? []).map(z => ({
+        nazwa: z.nazwa,
+        email: z.email,
+        created_at: z.createdAt,
+      })),
+    );
+
     await this.deleteAllAdresy();
     await this.insertChunked(
       'adresy',
@@ -833,6 +1225,8 @@ class DatabaseService {
           account_types: accountTypes,
           bank_id: a.bankId != null ? bankIdMap.get(a.bankId) ?? null : null,
           apartment_mappings: a.apartmentMappings ?? [],
+          zgn_jednostka_id:
+            a.zgnJednostkaId != null ? zgnIdMap.get(a.zgnJednostkaId) ?? null : null,
           created_at: a.createdAt,
         };
       }),
@@ -840,6 +1234,7 @@ class DatabaseService {
 
     await this.deleteByIds('banks', preexistingBankIds);
     await this.deleteByIds('konto_typy', preexistingTypIds);
+    await this.deleteByIds('zgn_jednostki', preexistingZgnIds);
 
     await this.deleteAllKontrahenci();
     await this.insertChunked(
@@ -872,6 +1267,81 @@ class DatabaseService {
         converted_at: h.convertedAt,
       })),
     );
+
+    // Backups written before the meter-readings module carry no such key; leave
+    // the existing rows alone rather than wiping them on an old restore.
+    if (odczytyHistory) {
+      await this.clearOdczytyHistory();
+      await this.insertChunked(
+        'odczyty_history',
+        odczytyHistory.map(h => ({
+          supplier: h.supplier,
+          status: h.status,
+          error_message: h.errorMessage || null,
+          output_dir: h.outputDir,
+          source_files: h.sources,
+          output_files: h.outputs,
+          reading_count: h.readingCount,
+          skipped_count: h.skippedCount,
+          converted_at: h.convertedAt,
+        })),
+      );
+    }
+
+    // Mailing dictionaries and history: each key is absent in backups written
+    // before the module existed, so a missing key leaves the live rows alone
+    // instead of wiping them.
+    if (mailingPola) {
+      const { error } = await getSupabase().from('mailing_pola').delete().gt('id', 0);
+      if (error) throw new Error(`restore mailing_pola: ${error.message}`);
+      await this.insertChunked(
+        'mailing_pola',
+        mailingPola.map(p => ({ nazwa: p.nazwa, tekst: p.tekst, created_at: p.createdAt })),
+      );
+    }
+
+    if (mailingSzablony) {
+      const { error } = await getSupabase().from('mailing_szablony').delete().gt('id', 0);
+      if (error) throw new Error(`restore mailing_szablony: ${error.message}`);
+      await this.insertChunked(
+        'mailing_szablony',
+        mailingSzablony.map(s => ({
+          nazwa: s.nazwa,
+          typ: s.typ,
+          temat: s.temat,
+          tresc: s.tresc,
+          attach_pdf: s.attachPdf,
+          created_at: s.createdAt,
+        })),
+      );
+    }
+
+    if (mailingHistory) {
+      await this.clearMailingHistory();
+      await this.insertChunked(
+        'mailing_history',
+        mailingHistory.map(h => ({
+          typ: h.typ,
+          template_name: h.templateName,
+          status: h.status,
+          error_message: h.errorMessage || null,
+          // The addresses were re-inserted with fresh ids and the backup's
+          // history rows still carry the old ones; the name is what the history
+          // actually displays, so drop the stale link rather than mis-point it.
+          adres_id: null,
+          adres_nazwa: h.adresNazwa,
+          jednostka_nazwa: h.jednostkaNazwa,
+          jednostka_email: h.jednostkaEmail,
+          subject: h.subject,
+          body_html: h.bodyHtml,
+          body_text: h.bodyText,
+          field_values: h.fieldValues,
+          attachments: h.attachments,
+          sent_from: h.sentFrom,
+          sent_at: h.sentAt,
+        })),
+      );
+    }
 
     this.importSettings({ settings });
 

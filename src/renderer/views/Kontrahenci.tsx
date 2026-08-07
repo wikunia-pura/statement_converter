@@ -4,6 +4,7 @@ import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
 import ModalDismiss from '../components/Modal';
+import Icon from '../components/Icon';
 
 // Shared color scheme for the contractor-type pills — used both by the toggle
 // pills in the add/edit form and the read-only badges in the table.
@@ -298,7 +299,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
                 className="button button-danger"
                 onClick={handleDeleteAll}
               >
-                {t.deleteAllKontrahenci}
+                <Icon name="trash" size={14} />{' '}{t.deleteAllKontrahenci}
               </button>
             )}
             <button
@@ -306,27 +307,27 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
               onClick={handleImportFromFileFunky}
               disabled={isImporting}
             >
-              {t.importFromFileFunky}
+              <Icon name="upload" size={14} />{' '}{t.importFromFileFunky}
             </button>
             <button
               className="button button-import"
               onClick={handleImportFromDOM}
               disabled={isImporting}
             >
-              {t.importFromDOM}
+              <Icon name="upload" size={14} />{' '}{t.importFromDOM}
             </button>
             <button
               className="button button-export"
               onClick={handleExportToFile}
               disabled={kontrahenci.length === 0}
             >
-              {t.exportToFile}
+              <Icon name="download" size={14} />{' '}{t.exportToFile}
             </button>
             <button
               className="button button-primary"
               onClick={() => setShowAddKontrahent(true)}
               disabled={showAddKontrahent || editingKontrahent !== null}
-            >
+            ><Icon name="plus" size={14} />{' '}
               {t.addKontrahent}
             </button>
           </div>
@@ -443,8 +444,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
                       className="button button-primary"
                       onClick={handleAddAlternativeName}
                       disabled={!newAlternativeName.trim()}
-                    >
-                      + {t.addAlternativeName}
+                    ><Icon name="plus" size={14} />{' '}{t.addAlternativeName}
                     </button>
                   </div>
                 </div>
@@ -454,13 +454,13 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
                   className="button button-secondary"
                   onClick={handleCancelEdit}
                 >
-                  {t.cancel}
+                  <Icon name="x" size={14} />{' '}{t.cancel}
                 </button>
                 <button
                   className="button button-success"
                   onClick={editingKontrahent ? handleUpdateKontrahent : handleAddKontrahent}
                 >
-                  {editingKontrahent ? t.update : t.add}
+                  <Icon name="save" size={14} />{' '}{editingKontrahent ? t.update : t.add}
                 </button>
               </div>
             </div>
@@ -527,13 +527,13 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
                         <button
                           className="button button-small button-primary"
                           onClick={() => handleEditKontrahent(kontrahent)}
-                        >
+                        ><Icon name="edit" size={13} />{' '}
                           {t.edit}
                         </button>
                         <button
                           className="button button-small button-danger"
                           onClick={() => handleDeleteKontrahent(kontrahent.id)}
-                        >
+                        ><Icon name="trash" size={13} />{' '}
                           {t.delete}
                         </button>
                       </div>

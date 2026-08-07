@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Converter, ContractorSortOrder, BackupCounts } from '../../shared/types';
+import { Converter, ContractorSortOrder, BackupCounts, MailingSmtpStatus } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import Icon from '../components/Icon';
@@ -21,6 +21,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
   const [impexFolder, setImpexFolder] = useState('');
   const [swrkFolder, setSwrkFolder] = useState('');
   const [skipUserApproval, setSkipUserApproval] = useState(false);
+  const [alwaysUseAI, setAlwaysUseAI] = useState(true);
   const [contractorSortOrder, setContractorSortOrder] = useState<ContractorSortOrder>('name-asc');
   const [isLoading, setIsLoading] = useState(true);
   const [backupStatus, setBackupStatus] = useState<{
@@ -29,6 +30,20 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
     autoBackupCount: number;
   } | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
+  // SMTP of the mailbox the Mailing module sends from. The stored password never
+  // reaches the renderer, so `passwordSet` stands in for it and the input below
+  // stays empty unless the user is deliberately changing it.
+  const [smtp, setSmtp] = useState<MailingSmtpStatus>({
+    host: 'poczta.home.pl',
+    port: 465,
+    secure: true,
+    user: '',
+    fromName: '',
+    bccSelf: false,
+    passwordSet: false,
+  });
+  const [smtpPassword, setSmtpPassword] = useState('');
+  const [smtpBusy, setSmtpBusy] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -37,17 +52,21 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [convertersData, settings, backupInfo] = await Promise.all([
+      const [convertersData, settings, backupInfo, smtpStatus] = await Promise.all([
         window.electronAPI.getConverters(),
         window.electronAPI.getSettings(),
         window.electronAPI.backupGetStatus(),
+        window.electronAPI.mailingGetSmtp(),
       ]);
       setConverters(convertersData);
       setBackupStatus(backupInfo);
+      setSmtp(smtpStatus);
+      setSmtpPassword('');
       setOutputFolder(settings.outputFolder);
       setImpexFolder(settings.impexFolder || '');
       setSwrkFolder(settings.swrkFolder || '');
       setSkipUserApproval(settings.skipUserApproval ?? false);
+      setAlwaysUseAI(settings.alwaysUseAI !== false);
       setContractorSortOrder(settings.contractorSortOrder ?? 'name-asc');
     } catch (error) {
       console.error('Error loading data:', error);
@@ -114,6 +133,12 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
     setSkipUserApproval(newValue);
   };
 
+  const handleAlwaysUseAIToggle = async () => {
+    const newValue = !alwaysUseAI;
+    await window.electronAPI.setAlwaysUseAI(newValue);
+    setAlwaysUseAI(newValue);
+  };
+
   const handleLanguageChange = async (value: string) => {
     const newLanguage = value as Language;
     await window.electronAPI.setLanguage(newLanguage);
@@ -165,6 +190,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
           setImpexFolder(settings.impexFolder || '');
           setSwrkFolder(settings.swrkFolder || '');
           setSkipUserApproval(settings.skipUserApproval ?? false);
+          setAlwaysUseAI(settings.alwaysUseAI !== false);
           setContractorSortOrder(settings.contractorSortOrder ?? 'name-asc');
         } else if (result.error) {
           notify.error(`${t.importError}: ${result.error}`);
@@ -175,6 +201,50 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
     }
   };
 
+  const persistSmtp = async () => {
+    await window.electronAPI.mailingSetSmtp({
+      host: smtp.host,
+      port: smtp.port,
+      secure: smtp.secure,
+      user: smtp.user,
+      fromName: smtp.fromName,
+      bccSelf: smtp.bccSelf,
+      // `pass` is omitted when the field is untouched, so saving other changes
+      // cannot wipe a password the renderer was never shown.
+      ...(smtpPassword ? { pass: smtpPassword } : {}),
+    });
+    setSmtp((prev) => ({ ...prev, passwordSet: prev.passwordSet || smtpPassword.length > 0 }));
+    setSmtpPassword('');
+  };
+
+  const handleSaveSmtp = async () => {
+    setSmtpBusy(true);
+    try {
+      await persistSmtp();
+      notify.success(t.smtpSaved);
+    } catch (error: unknown) {
+      notify.error(error instanceof Error ? error.message : t.smtpSaveError);
+    } finally {
+      setSmtpBusy(false);
+    }
+  };
+
+  const handleTestSmtp = async () => {
+    setSmtpBusy(true);
+    try {
+      // Save first: the test runs against the stored config, so what gets
+      // verified is exactly what a real send will use.
+      await persistSmtp();
+      const result = await window.electronAPI.mailingTestSmtp();
+      if (result.ok) notify.success(t.smtpTestOk);
+      else notify.error(`${t.smtpTestFailed}: ${result.error}`);
+    } catch (error: unknown) {
+      notify.error(error instanceof Error ? error.message : t.smtpTestFailed);
+    } finally {
+      setSmtpBusy(false);
+    }
+  };
+
   const formatBackupCounts = (counts?: BackupCounts): string => {
     if (!counts) return '';
     return t.backupCounts
@@ -182,7 +252,12 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
       .replace('{kontrahenci}', String(counts.kontrahenci))
       .replace('{adresy}', String(counts.adresy))
       .replace('{kontoTypy}', String(counts.kontoTypy))
-      .replace('{history}', String(counts.history));
+      .replace('{history}', String(counts.history))
+      .replace('{odczytyHistory}', String(counts.odczytyHistory))
+      .replace('{zgnJednostki}', String(counts.zgnJednostki))
+      .replace('{mailingPola}', String(counts.mailingPola))
+      .replace('{mailingSzablony}', String(counts.mailingSzablony))
+      .replace('{mailingHistory}', String(counts.mailingHistory));
   };
 
   const handleCreateBackup = async () => {
@@ -257,7 +332,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
                   notify.info('Nie znaleziono aktualizacji');
                 }
               }}
-            >
+            ><Icon name="refresh" size={14} />{' '}
               Sprawdź aktualizacje
             </button>
             <button 
@@ -332,6 +407,23 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
               style={{ width: 'auto', minWidth: '180px' }}
             />
           </div>
+
+          <div className="settings-row">
+            <div className="settings-label">
+              <span className="settings-label-main" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <Icon name="bot" size={14} /> {t.alwaysUseAI}
+              </span>
+              <span className="settings-label-sub">{t.alwaysUseAIDesc}</span>
+            </div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={alwaysUseAI}
+                onChange={handleAlwaysUseAIToggle}
+              />
+              <span className="toggle-slider"></span>
+            </label>
+          </div>
         </div>
 
         {/* Output Folder Settings */}
@@ -342,7 +434,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
               <input type="text" value={outputFolder} readOnly />
               <button className="button button-primary" onClick={handleSelectOutputFolder}>
-                {t.change}
+                <Icon name="folder" size={14} />{' '}{t.change}
               </button>
             </div>
           </div>
@@ -368,7 +460,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
                 placeholder="Nie ustawiono (opcjonalnie)"
               />
               <button className="button button-primary" onClick={handleSelectImpexFolder}>
-                {t.change}
+                <Icon name="folder" size={14} />{' '}{t.change}
               </button>
               {impexFolder && (
                 <button
@@ -406,7 +498,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
                 placeholder={t.swrkFolderPlaceholder}
               />
               <button className="button button-primary" onClick={handleSelectSwrkFolder}>
-                {t.change}
+                <Icon name="folder" size={14} />{' '}{t.change}
               </button>
               {swrkFolder && (
                 <button
@@ -421,6 +513,133 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
                 </button>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Mailing — SMTP of the mailbox we send from (machine-local) */}
+        <div className="card">
+          <h2 style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Icon name="mail" size={20} /> {t.smtpTitle}
+          </h2>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: '13px', marginBottom: '18px', maxWidth: '80ch' }}>
+            {t.smtpHint}
+          </p>
+
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <div className="form-group" style={{ flex: '1 1 260px' }}>
+              <label>{t.smtpHost}</label>
+              <input
+                type="text"
+                value={smtp.host}
+                onChange={(e) => setSmtp({ ...smtp, host: e.target.value })}
+                placeholder="poczta.home.pl"
+              />
+            </div>
+            <div className="form-group" style={{ flex: '0 1 120px' }}>
+              <label>{t.smtpPort}</label>
+              <input
+                type="number"
+                value={smtp.port}
+                onChange={(e) => setSmtp({ ...smtp, port: Number(e.target.value) })}
+              />
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              marginBottom: '16px',
+            }}
+          >
+            <div>
+              <div style={{ fontSize: '13px' }}>{t.smtpSecure}</div>
+              <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>{t.smtpSecureHint}</div>
+            </div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={smtp.secure}
+                onChange={(e) =>
+                  // Port and TLS mode go together on home.pl; move the port with
+                  // the switch so the pair can't end up mismatched by accident.
+                  setSmtp({
+                    ...smtp,
+                    secure: e.target.checked,
+                    port: e.target.checked ? 465 : 587,
+                  })
+                }
+              />
+              <span className="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div className="form-group">
+            <label>{t.smtpUser}</label>
+            <input
+              type="email"
+              value={smtp.user}
+              onChange={(e) => setSmtp({ ...smtp, user: e.target.value })}
+              placeholder="np. biuro@twojafirma.pl"
+            />
+          </div>
+
+          <div className="form-group">
+            <label>{t.smtpPassword}</label>
+            <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '6px' }}>
+              {smtp.passwordSet ? t.smtpPasswordStored : t.smtpPasswordHint}
+            </div>
+            <input
+              type="password"
+              value={smtpPassword}
+              onChange={(e) => setSmtpPassword(e.target.value)}
+              placeholder={smtp.passwordSet ? t.smtpPasswordPlaceholderStored : t.smtpPasswordPlaceholder}
+              autoComplete="new-password"
+            />
+          </div>
+
+          <div className="form-group">
+            <label>{t.smtpFromName}</label>
+            <input
+              type="text"
+              value={smtp.fromName}
+              onChange={(e) => setSmtp({ ...smtp, fromName: e.target.value })}
+              placeholder={t.smtpFromNamePlaceholder}
+            />
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              marginBottom: '18px',
+            }}
+          >
+            <div>
+              <div style={{ fontSize: '13px' }}>{t.smtpBccSelf}</div>
+              <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>{t.smtpBccSelfHint}</div>
+            </div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={smtp.bccSelf}
+                onChange={(e) => setSmtp({ ...smtp, bccSelf: e.target.checked })}
+              />
+              <span className="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div className="button-group" style={{ marginTop: 0 }}>
+            <button className="button button-success" onClick={handleSaveSmtp} disabled={smtpBusy}>
+              <Icon name="save" size={14} /> {t.save}
+            </button>
+            <button className="button button-secondary" onClick={handleTestSmtp} disabled={smtpBusy}>
+              <Icon name="refresh" size={14} /> {t.smtpTest}
+            </button>
           </div>
         </div>
 

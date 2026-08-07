@@ -1,6 +1,6 @@
 // Type definitions for Electron API exposed via preload
 
-import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, KontrahentTyp, KontoTyp, BackupCounts } from '../shared/types';
+import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, MailingPole, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent } from '../shared/types';
 
 // Zaliczki shared types (referenced by the main-process helpers)
 export type ZaliczkiCategory =
@@ -93,6 +93,52 @@ export interface HomebankingMergeGroupResult {
   endDate: string | null;
 }
 
+export type OdczytySupplierId = 'piaskan' | 'techem' | 'metrona' | 'ista';
+
+/** Re-exported under the name the meter-readings views already use. */
+export type OdczytySkipped = OdczytySkippedRow;
+export type { OdczytyHistoryEntry } from '../shared/types';
+
+export interface OdczytyAnalyzedFile {
+  filePath: string;
+  fileName: string;
+  supplier: OdczytySupplierId;
+  supplierLabel: string;
+  /** Housing communities found in the file — one output file each. */
+  communities: string[];
+  latestDate: string | null;
+  readingCount: number;
+  /** Rows without a device number, reading value or date. */
+  skippedCount: number;
+  skipped: OdczytySkipped[];
+}
+
+export interface OdczytyOutputFile {
+  wm: string;
+  outputPath: string;
+  fileName: string;
+  date: string;
+  readingCount: number;
+}
+
+export interface OdczytySourceSummary {
+  fileName: string;
+  filePath: string;
+  supplierLabel: string | null;
+  readingCount: number;
+  skippedCount: number;
+  skipped: OdczytySkipped[];
+  error?: string;
+}
+
+export interface OdczytyConvertResult {
+  outputDir: string;
+  files: OdczytyOutputFile[];
+  sources: OdczytySourceSummary[];
+  readingCount: number;
+  skippedCount: number;
+}
+
 interface ConversionResult {
   success?: boolean;
   outputPath?: string;
@@ -134,6 +180,7 @@ interface ElectronAPI {
     accountNumbers?: string[],
     apartmentMappings?: ApartmentMapping[],
     accountTypes?: Record<string, number>,
+    zgnJednostkaId?: number | null,
   ) => Promise<Adres>;
   updateAdres: (
     id: number,
@@ -144,6 +191,7 @@ interface ElectronAPI {
     accountNumbers?: string[],
     apartmentMappings?: ApartmentMapping[],
     accountTypes?: Record<string, number>,
+    zgnJednostkaId?: number | null,
   ) => Promise<boolean>;
   deleteAdres: (id: number) => Promise<boolean>;
   deleteAllAdresy: () => Promise<boolean>;
@@ -171,6 +219,17 @@ interface ElectronAPI {
   detectAccountNumbers: (inputPath: string, bankId?: number | null) => Promise<string[]>;
   convertFileWithAI: (inputPath: string, bankId: number, fileName: string, adresId?: number | null, accountTypeId?: number | null) => Promise<ConversionResult>;
   finalizeConversion: (tempConversionId: string, decisions: ReviewDecision[]) => Promise<ConversionResult>;
+  rerunExpenseAI: (
+    tempConversionId: string,
+    indices: number[],
+    fileName: string,
+  ) => Promise<{
+    success: boolean;
+    error?: string;
+    updated?: TransactionForReview[];
+    matchedCount?: number;
+    processedCount?: number;
+  }>;
   touchConversion: (tempConversionId: string) => Promise<boolean>;
   openFile: (filePath: string) => Promise<boolean>;
 
@@ -182,8 +241,10 @@ interface ElectronAPI {
   setDarkMode: (enabled: boolean) => Promise<boolean>;
   setLanguage: (language: string) => Promise<boolean>;
   setSkipUserApproval: (enabled: boolean) => Promise<boolean>;
+  setAlwaysUseAI: (enabled: boolean) => Promise<boolean>;
   setContractorSortOrder: (sortOrder: string) => Promise<boolean>;
   setSidebarCollapsed: (collapsed: boolean) => Promise<boolean>;
+  setLastSeenVersion: (version: string) => Promise<boolean>;
   exportSettings: () => Promise<{ success: boolean; filePath?: string }>;
   importSettings: () => Promise<{ success: boolean; error?: string }>;
 
@@ -241,6 +302,73 @@ interface ElectronAPI {
     results?: HomebankingMergeGroupResult[];
     error?: string;
   }>;
+
+  // Odczyty liczników
+  odczytySelectFiles: () => Promise<{ fileName: string; filePath: string }[]>;
+  odczytyAnalyzeFile: (filePath: string) => Promise<{
+    data?: OdczytyAnalyzedFile;
+    error?: string;
+  }>;
+  odczytySelectOutputDir: () => Promise<string | null>;
+  odczytyConvert: (
+    filePaths: string[],
+    outputDir: string | null,
+  ) => Promise<{
+    success?: boolean;
+    result?: OdczytyConvertResult;
+    error?: string;
+  }>;
+  odczytyGetHistory: () => Promise<OdczytyHistoryEntry[]>;
+  odczytyClearHistory: () => Promise<boolean>;
+
+  // Mailing — jednostki ZGN
+  mailingGetZgn: () => Promise<ZgnJednostka[]>;
+  mailingAddZgn: (nazwa: string, email: string) => Promise<ZgnJednostka>;
+  mailingUpdateZgn: (id: number, nazwa: string, email: string) => Promise<boolean>;
+  mailingDeleteZgn: (id: number) => Promise<boolean>;
+
+  // Mailing — pola dynamiczne
+  mailingGetPola: () => Promise<MailingPole[]>;
+  mailingAddPole: (nazwa: string, tekst: string) => Promise<MailingPole>;
+  mailingUpdatePole: (id: number, nazwa: string, tekst: string) => Promise<boolean>;
+  mailingDeletePole: (id: number) => Promise<boolean>;
+
+  // Mailing — szablony
+  mailingGetSzablony: () => Promise<MailingSzablon[]>;
+  mailingAddSzablon: (data: Omit<MailingSzablon, 'id' | 'createdAt'>) => Promise<MailingSzablon>;
+  mailingUpdateSzablon: (
+    id: number,
+    data: Omit<MailingSzablon, 'id' | 'createdAt'>,
+  ) => Promise<boolean>;
+  mailingDeleteSzablon: (id: number) => Promise<boolean>;
+
+  // Mailing — wysyłka i historia
+  mailingSelectAttachments: () => Promise<{ fileName: string; filePath: string }[]>;
+  mailingSend: (request: {
+    typ: string;
+    templateId: number;
+    /** Subject and body for this send — may differ from the stored template. */
+    temat: string;
+    tresc: string;
+    adresIds: number[];
+    values: Record<string, string>;
+    attachPdf: boolean;
+    attachments: { fileName: string; filePath: string }[];
+  }) => Promise<{ success?: boolean; results?: MailingSendResult[]; error?: string }>;
+  mailingGetHistory: () => Promise<MailingHistoryEntry[]>;
+  mailingClearHistory: () => Promise<boolean>;
+  mailingGetFilesInfo: () => Promise<{ dir: string; fileCount: number; totalBytes: number }>;
+  mailingCleanupFiles: () => Promise<{
+    success?: boolean;
+    removedFiles?: number;
+    freedBytes?: number;
+    error?: string;
+  }>;
+  mailingGetSmtp: () => Promise<MailingSmtpStatus>;
+  /** `pass` omitted ⇒ the stored password stays as it is. */
+  mailingSetSmtp: (config: MailingSmtpConfig & { pass?: string }) => Promise<boolean>;
+  mailingTestSmtp: () => Promise<{ ok: true } | { ok: false; error: string }>;
+  onMailingProgress: (callback: (progress: MailingProgressEvent) => void) => () => void;
 
   // Auth (Supabase)
   authSignIn: (

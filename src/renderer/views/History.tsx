@@ -4,6 +4,7 @@ import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
 import ConversionHistoryTimeline from '../components/ConversionHistoryTimeline';
+import Icon from '../components/Icon';
 
 interface HistoryProps {
   language: Language;
@@ -90,18 +91,18 @@ const History: React.FC<HistoryProps> = ({ language }) => {
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             {history.length > 0 && (
               <button className="button button-danger" onClick={handleClearHistory}>
-                {t.clearHistory}
+                <Icon name="trash" size={14} />{' '}{t.clearHistory}
               </button>
             )}
             <button className="button button-import" onClick={handleImportHistory}>
-              {t.importFromFile}
+              <Icon name="upload" size={14} />{' '}{t.importFromFile}
             </button>
             <button
               className="button button-export"
               onClick={handleExportHistory}
               disabled={history.length === 0}
             >
-              {t.exportToFile}
+              <Icon name="download" size={14} />{' '}{t.exportToFile}
             </button>
           </div>
         </div>

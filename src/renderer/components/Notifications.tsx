@@ -192,7 +192,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
             </div>
             <div className="modal-footer">
               <button type="button" className="button button-primary" autoFocus onClick={dismissError}>
-                {okLabel}
+                <Icon name="check" size={14} />{' '}{okLabel}
               </button>
             </div>
           </div>
@@ -221,7 +221,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
                 className="button button-ghost"
                 autoFocus={currentConfirm.options.danger === true}
                 onClick={() => resolveConfirm(false)}
-              >
+              ><Icon name="x" size={14} />{' '}
                 {currentConfirm.options.cancelLabel ?? cancelLabel}
               </button>
               <button
@@ -229,7 +229,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
                 className={`button ${currentConfirm.options.danger ? 'button-danger' : 'button-primary'}`}
                 autoFocus={currentConfirm.options.danger !== true}
                 onClick={() => resolveConfirm(true)}
-              >
+              ><Icon name="check" size={14} />{' '}
                 {currentConfirm.options.confirmLabel ?? okLabel}
               </button>
             </div>

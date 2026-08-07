@@ -5,7 +5,15 @@ import path from 'path';
 import fs from 'fs';
 import DatabaseService from './database';
 import ConverterRegistry, { setDatabaseInstance } from './converterRegistry';
-import { IPC_CHANNELS, KontrahentTyp, DEFAULT_ACCOUNT_CONFIG, AccountConfig, countBackup } from '../shared/types';
+import {
+  IPC_CHANNELS,
+  KontrahentTyp,
+  DEFAULT_ACCOUNT_CONFIG,
+  AccountConfig,
+  countBackup,
+  MailingSzablon,
+  MailingSmtpConfig,
+} from '../shared/types';
 import { runAutoBackup, getBackupStatus, getBackupsDir, validateBackup } from './backupService';
 import { conversionCache } from './conversionCache';
 import * as authService from './authService';
@@ -29,6 +37,15 @@ import {
   mergeGroups as homebankingMergeGroups,
   MergeFileInput as HomebankingMergeFileInput,
 } from './homebanking/merger';
+import { parseOdczytyFile, OdczytReading, OdczytySkipped } from './odczyty/parser';
+import { writeOdczytyFiles, OdczytyOutputFile } from './odczyty/writer';
+import {
+  sendMailing,
+  MailingSendRequest,
+  getMailingFilesInfo,
+  cleanupMailingFiles,
+} from './mailing/service';
+import { verifySmtp } from './mailing/sender';
 
 // Log environment variable for testing
 log.debug('[MAIN] TEST_AI_BILLING_ERROR =', process.env.TEST_AI_BILLING_ERROR);
@@ -66,6 +83,29 @@ function isBillingError(error: any): boolean {
   
   return false;
 }
+
+/**
+ * Authentication failures (bad/revoked/malformed API key) are a configuration
+ * problem, not a hiccup — they deserve their own message so nobody has to read
+ * the log to learn that AI is off because the key is wrong.
+ */
+function isAuthError(error: any): boolean {
+  if (!error) return false;
+  if (error.status === 401 || error.status === 403) return true;
+  const message = (error.message || '').toLowerCase();
+  return (
+    message.includes('authentication_error') ||
+    message.includes('invalid x-api-key') ||
+    message.includes('api key is invalid') ||
+    message.includes('(401)') ||
+    message.includes('(403)')
+  );
+}
+
+const AI_FALLBACK_MESSAGE = 'Nie udało się użyć AI. Przeprowadzono standardową konwersję.';
+const AI_AUTH_FALLBACK_MESSAGE =
+  'Klucz API do AI jest nieprawidłowy lub wygasł — AI niedostępne. ' +
+  'Przeprowadzono standardową konwersję.';
 
 /**
  * Extract error message from any error type (Error instance, object with message, etc.)
@@ -693,8 +733,9 @@ function setupIpcHandlers() {
       accountNumbers?: string[],
       apartmentMappings?: import('../shared/types').ApartmentMapping[],
       accountTypes?: Record<string, number>,
+      zgnJednostkaId?: number | null,
     ) => {
-      return await database.addAdres(nazwa, alternativeNames, swrkIdentifiers, bankId, accountNumbers, apartmentMappings, accountTypes);
+      return await database.addAdres(nazwa, alternativeNames, swrkIdentifiers, bankId, accountNumbers, apartmentMappings, accountTypes, zgnJednostkaId);
     },
   );
 
@@ -710,8 +751,9 @@ function setupIpcHandlers() {
       accountNumbers?: string[],
       apartmentMappings?: import('../shared/types').ApartmentMapping[],
       accountTypes?: Record<string, number>,
+      zgnJednostkaId?: number | null,
     ) => {
-      await database.updateAdres(id, nazwa, alternativeNames, swrkIdentifiers, bankId, accountNumbers, apartmentMappings, accountTypes);
+      await database.updateAdres(id, nazwa, alternativeNames, swrkIdentifiers, bankId, accountNumbers, apartmentMappings, accountTypes, zgnJednostkaId);
       return true;
     },
   );
@@ -837,6 +879,22 @@ function setupIpcHandlers() {
       const typIdByName = new Map(
         (await database.getKontoTypy()).map(kt => [kt.name.trim().toLowerCase(), kt.id]),
       );
+      // City units resolved by name; a unit named in the file but missing here is
+      // created on the spot, so importing addresses doesn't silently drop their
+      // mailing recipients (the file carries the mailbox alongside the name).
+      const zgnIdByName = new Map(
+        (await database.getZgnJednostki()).map(j => [j.nazwa.trim().toLowerCase(), j.id]),
+      );
+      const resolveZgnId = async (nazwa: string, email: string): Promise<number | null> => {
+        const key = nazwa.trim().toLowerCase();
+        if (!key) return null;
+        const known = zgnIdByName.get(key);
+        if (known !== undefined) return known;
+        if (!email.trim()) return null;
+        const created = await database.addZgnJednostka(nazwa, email);
+        zgnIdByName.set(key, created.id);
+        return created.id;
+      };
 
       // Snapshot existing addresses once (by exact nazwa) — avoid an O(n²) full-table
       // refetch per data line. Each addAdres invalidates the DB cache, so without this
@@ -860,10 +918,12 @@ function setupIpcHandlers() {
       let accumulatedBankSet = false;
       let accumulatedMappings: import('../shared/types').ApartmentMapping[] = [];
       let accumulatedAccountTypes: Record<string, number> = {};
-      // Only overwrite mappings/types when the file actually carries them, so
-      // pre-MAP/TYP exports don't wipe existing data on import.
+      let accumulatedZgnId: number | null = null;
+      // Only overwrite mappings/types/units when the file actually carries them,
+      // so pre-MAP/TYP/ZGN exports don't wipe existing data on import.
       let sawMappings = false;
       let sawAccountTypes = false;
+      let sawZgn = false;
 
       const finalizeLastAdres = async () => {
         if (
@@ -873,7 +933,8 @@ function setupIpcHandlers() {
             accumulatedAccounts.length > 0 ||
             accumulatedBankSet ||
             sawMappings ||
-            sawAccountTypes)
+            sawAccountTypes ||
+            sawZgn)
         ) {
           try {
             await database.updateAdres(
@@ -885,6 +946,7 @@ function setupIpcHandlers() {
               accumulatedAccounts.length > 0 ? accumulatedAccounts : undefined,
               sawMappings ? accumulatedMappings : undefined,
               sawAccountTypes ? accumulatedAccountTypes : undefined,
+              sawZgn ? accumulatedZgnId : undefined,
             );
             lastAdres.alternativeNames = accumulatedAltNames;
             lastAdres.swrkIdentifiers = accumulatedSwrk;
@@ -892,6 +954,7 @@ function setupIpcHandlers() {
             if (accumulatedBankSet) lastAdres.bankId = accumulatedBankId;
             if (sawMappings) lastAdres.apartmentMappings = accumulatedMappings;
             if (sawAccountTypes) lastAdres.accountTypes = accumulatedAccountTypes;
+            if (sawZgn) lastAdres.zgnJednostkaId = accumulatedZgnId;
           } catch (e) {
             errors.push(`${lastAdres.nazwa}: ${getErrorMessage(e)}`);
           }
@@ -961,6 +1024,19 @@ function setupIpcHandlers() {
           continue;
         }
 
+        // Check if it's a ZGN: <unit name> | <email> line (Mailing recipient).
+        const zgnMatch = line.match(/^\s*ZGN:\s*([^|]+?)(?:\s*\|\s*(.+))?$/);
+        if (zgnMatch && lastAdres) {
+          sawZgn = true;
+          accumulatedZgnId = await resolveZgnId(zgnMatch[1], zgnMatch[2] ?? '');
+          if (accumulatedZgnId === null) {
+            errors.push(
+              `${lastAdres.nazwa}: nie udało się przypisać jednostki ZGN "${zgnMatch[1].trim()}" (brak e-maila w pliku)`,
+            );
+          }
+          continue;
+        }
+
         // Check if it's a BANK: <name> line (resolves to bank_id; unknown names ⇒ null/no link).
         const bankMatch = line.match(/^\s*BANK:\s*(.+)$/);
         if (bankMatch && lastAdres) {
@@ -978,7 +1054,8 @@ function setupIpcHandlers() {
           !nazwa.startsWith('SWRK:') &&
           !nazwa.startsWith('ACCT:') &&
           !nazwa.startsWith('BANK:') &&
-          !nazwa.startsWith('MAP:')
+          !nazwa.startsWith('MAP:') &&
+          !nazwa.startsWith('ZGN:')
         ) {
           // Finalize previous adres with accumulated alt names + SWRK + accounts + bank + mappings
           await finalizeLastAdres();
@@ -989,8 +1066,10 @@ function setupIpcHandlers() {
           accumulatedBankSet = false;
           accumulatedMappings = [];
           accumulatedAccountTypes = {};
+          accumulatedZgnId = null;
           sawMappings = false;
           sawAccountTypes = false;
+          sawZgn = false;
 
           // Check if not already exists (local snapshot lookup — populated once).
           const existing = adresByName.get(nazwa);
@@ -1039,6 +1118,7 @@ function setupIpcHandlers() {
       const allBanks = await database.getAllBanks();
       const bankNameById = new Map(allBanks.map(b => [b.id, b.name]));
       const typNameById = new Map((await database.getKontoTypy()).map(kt => [kt.id, kt.name]));
+      const zgnById = new Map((await database.getZgnJednostki()).map(j => [j.id, j]));
 
       // Create text content: simple list of nazwy with ALT: lines for alternative names
       const lines: string[] = [];
@@ -1061,6 +1141,15 @@ function setupIpcHandlers() {
         if (a.alternativeNames && a.alternativeNames.length > 0) {
           for (const altName of a.alternativeNames) {
             lines.push(`  ALT: ${altName}`);
+          }
+        }
+
+        // Optional city-unit link (Mailing). Exported by name + mailbox so the
+        // assignment survives a roundtrip between databases, where ids differ.
+        if (a.zgnJednostkaId) {
+          const jednostka = zgnById.get(a.zgnJednostkaId);
+          if (jednostka) {
+            lines.push(`  ZGN: ${jednostka.nazwa} | ${jednostka.email}`);
           }
         }
 
@@ -1386,6 +1475,178 @@ function setupIpcHandlers() {
     },
   );
 
+  // ---- Odczyty liczników (supplier workbooks → tab-separated IMPEX files) ----
+  ipcMain.handle(IPC_CHANNELS.ODCZYTY_SELECT_FILES, async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Excel', extensions: ['xlsx', 'xls', 'xlsm'] }],
+    });
+    if (result.canceled) return [];
+    return result.filePaths.map((p) => ({ fileName: path.basename(p), filePath: p }));
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ODCZYTY_SELECT_OUTPUT_DIR, async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ODCZYTY_GET_HISTORY, async () => {
+    try {
+      return await database.getOdczytyHistory();
+    } catch (error: unknown) {
+      log.error(
+        '[ODCZYTY] history read failed:',
+        error instanceof Error ? error.message : String(error),
+      );
+      return [];
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ODCZYTY_CLEAR_HISTORY, async () => {
+    await database.clearOdczytyHistory();
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ODCZYTY_ANALYZE_FILE, async (_event, filePath: string) => {
+    try {
+      if (!fs.existsSync(filePath)) {
+        return { error: 'Plik nie istnieje lub został usunięty' };
+      }
+      const parsed = parseOdczytyFile(filePath);
+      return {
+        data: {
+          filePath,
+          fileName: path.basename(filePath),
+          supplier: parsed.supplier,
+          supplierLabel: parsed.supplierLabel,
+          communities: parsed.communities,
+          latestDate: parsed.latestDate,
+          readingCount: parsed.readings.length,
+          skippedCount: parsed.skipped.length,
+          skipped: parsed.skipped,
+        },
+      };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      log.error('[ODCZYTY] analyze failed:', message);
+      return { error: message };
+    }
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.ODCZYTY_CONVERT,
+    async (_event, filePaths: string[], outputDirOverride: string | null) => {
+      try {
+        if (!filePaths || filePaths.length === 0) {
+          return { error: 'Brak plików do konwersji' };
+        }
+        // The IMPEX folder is the module's home; the override only kicks in when
+        // the user hasn't configured one yet and picked a folder in the dialog.
+        const outputDir =
+          outputDirOverride?.trim() || (database.getSetting('impexFolder') || '').trim();
+        if (!outputDir) {
+          return {
+            error: 'Folder IMPEX nie jest skonfigurowany (Ustawienia → Folder IMPEX).',
+          };
+        }
+
+        const readings: OdczytReading[] = [];
+        const sources: {
+          fileName: string;
+          filePath: string;
+          supplierLabel: string | null;
+          readingCount: number;
+          skippedCount: number;
+          skipped: OdczytySkipped[];
+          error?: string;
+        }[] = [];
+
+        for (const filePath of filePaths) {
+          const fileName = path.basename(filePath);
+          try {
+            if (!fs.existsSync(filePath)) {
+              throw new Error('Plik nie istnieje lub został usunięty');
+            }
+            const parsed = parseOdczytyFile(filePath);
+            readings.push(...parsed.readings);
+            sources.push({
+              fileName,
+              filePath,
+              supplierLabel: parsed.supplierLabel,
+              readingCount: parsed.readings.length,
+              skippedCount: parsed.skipped.length,
+              skipped: parsed.skipped,
+            });
+          } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : String(error);
+            log.error(`[ODCZYTY] parse failed for ${fileName}:`, message);
+            sources.push({
+              fileName,
+              filePath,
+              supplierLabel: null,
+              readingCount: 0,
+              skippedCount: 0,
+              skipped: [],
+              error: message,
+            });
+          }
+        }
+
+        if (readings.length === 0) {
+          const firstError = sources.find((s) => s.error)?.error;
+          return { error: firstError ?? 'Żaden z plików nie zawiera odczytów.' };
+        }
+
+        const files: OdczytyOutputFile[] = writeOdczytyFiles(readings, outputDir);
+        log.info(
+          `[ODCZYTY] wrote ${files.length} file(s) to ${outputDir} from ${filePaths.length} input file(s)`,
+        );
+
+        const skippedCount = sources.reduce((sum, s) => sum + s.skippedCount, 0);
+        // One operation can mix suppliers; label it with all of them.
+        const supplier =
+          [...new Set(sources.map((s) => s.supplierLabel).filter(Boolean))].join(' + ') || '—';
+        // History is a record, not the deliverable — a write failure here must
+        // not turn a completed conversion into a reported error.
+        try {
+          await database.addOdczytyHistory({
+            supplier,
+            status: sources.some((s) => s.error) ? 'error' : 'success',
+            errorMessage: sources.find((s) => s.error)?.error,
+            outputDir,
+            sources,
+            outputs: files,
+            readingCount: readings.length,
+            skippedCount,
+          });
+        } catch (historyError: unknown) {
+          log.error(
+            '[ODCZYTY] history write failed:',
+            historyError instanceof Error ? historyError.message : String(historyError),
+          );
+        }
+
+        return {
+          success: true,
+          result: {
+            outputDir,
+            files,
+            sources,
+            readingCount: readings.length,
+            skippedCount,
+          },
+        };
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        log.error('[ODCZYTY] convert failed:', message);
+        return { error: message };
+      }
+    },
+  );
+
   ipcMain.handle(
     IPC_CHANNELS.CONVERT_FILE,
     async (_, inputPath: string, bankId: number, fileName: string, adresId?: number | null, accountTypeId?: number | null) => {
@@ -1625,9 +1886,14 @@ function setupIpcHandlers() {
           }
           
           // For other AI errors, log and fallback to standard conversion
+          const authFailure = isAuthError(aiError);
+          const fallbackMessage = authFailure ? AI_AUTH_FALLBACK_MESSAGE : AI_FALLBACK_MESSAGE;
+          if (authFailure) {
+            log.error('[AI Error - Invalid API key]:', aiErrorMessage);
+          }
           log.warn('[AI Error - Falling back to standard conversion]:', aiErrorMessage);
           log.info('[Fallback] Attempting standard conversion without AI...');
-          
+
           try {
             // Perform conversion WITHOUT AI (fallback)
             const fallbackResult = await converterRegistry.convert(
@@ -1647,7 +1913,7 @@ function setupIpcHandlers() {
               return {
                 needsReview: true,
                 reviewData: fallbackResult.reviewData,
-                warningMessage: 'Nie udało się użyć AI. Przeprowadzono standardową konwersję.',
+                warningMessage: fallbackMessage,
               };
             }
 
@@ -1663,7 +1929,7 @@ function setupIpcHandlers() {
             return {
               success: true,
               outputPath: finalOutputPath,
-              warningMessage: 'Nie udało się użyć AI. Przeprowadzono standardową konwersję.',
+              warningMessage: fallbackMessage,
             };
           } catch (fallbackError: unknown) {
             // If even standard conversion fails, throw original AI error
@@ -1729,6 +1995,42 @@ function setupIpcHandlers() {
     }
   );
 
+  // Re-run AI contractor matching for selected expenses of an open review.
+  // Progress rides the same 'conversion:progress' channel the main conversion
+  // uses, so the review screen can render the familiar bar.
+  ipcMain.handle(
+    IPC_CHANNELS.RERUN_EXPENSE_AI,
+    async (event, tempConversionId: string, indices: number[], fileName: string) => {
+      try {
+        const result = await converterRegistry.rerunExpenseAI(
+          tempConversionId,
+          indices,
+          ({ completed, total, inFlight }) => {
+            try {
+              event.sender.send('conversion:progress', {
+                fileName,
+                phase: 'expense-ai',
+                label: inFlight > 0
+                  ? `AI: wydatki — ${completed}/${total} batchy (w toku: ${inFlight})`
+                  : `AI: wydatki — ${completed}/${total} batchy`,
+                aiBatchesCompleted: completed,
+                aiBatchesTotal: total,
+                percent: total > 0 ? Math.round((completed / total) * 100) : 0,
+              });
+            } catch {
+              // ignore — renderer may have closed
+            }
+          }
+        );
+        return { success: true, ...result };
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        log.error('[RERUN-EXPENSE-AI] failed:', errorMessage);
+        return { success: false, error: errorMessage };
+      }
+    }
+  );
+
   // Keep a pending conversion alive while its review screen is open (sliding
   // expiration heartbeat). Returns whether the entry still exists.
   ipcMain.handle(
@@ -1768,6 +2070,12 @@ function setupIpcHandlers() {
       darkMode: boolSetting('darkMode'),
       language: database.getSetting('language') || 'pl',
       skipUserApproval: boolSetting('skipUserApproval'),
+      // Defaults to on, including for installs that predate this setting: only
+      // an explicit false turns AI off.
+      alwaysUseAI: (() => {
+        const v = database.getSetting('alwaysUseAI') as unknown;
+        return !(v === false || v === 'false');
+      })(),
       contractorSortOrder: database.getSetting('contractorSortOrder') || 'name-asc',
       // Defaults to collapsed: an absent/undefined value (existing installs that
       // predate this setting) reads as collapsed; only an explicit false expands.
@@ -1775,6 +2083,9 @@ function setupIpcHandlers() {
         const v = database.getSetting('sidebarCollapsed') as unknown;
         return !(v === false || v === 'false');
       })(),
+      // Empty on installs that predate release notes, which is exactly right:
+      // they get the "what's new" screen on their first launch after updating.
+      lastSeenVersion: database.getSetting('lastSeenVersion') || '',
     };
   });
 
@@ -1808,6 +2119,11 @@ function setupIpcHandlers() {
     return true;
   });
 
+  ipcMain.handle(IPC_CHANNELS.SET_ALWAYS_USE_AI, async (_, enabled: boolean) => {
+    database.setSetting('alwaysUseAI', enabled.toString());
+    return true;
+  });
+
   ipcMain.handle(IPC_CHANNELS.SET_CONTRACTOR_SORT_ORDER, async (_, sortOrder: string) => {
     database.setSetting('contractorSortOrder', sortOrder);
     return true;
@@ -1815,6 +2131,11 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.SET_SIDEBAR_COLLAPSED, async (_, collapsed: boolean) => {
     database.setSetting('sidebarCollapsed', collapsed.toString());
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SET_LAST_SEEN_VERSION, async (_, version: string) => {
+    database.setSetting('lastSeenVersion', version);
     return true;
   });
 
@@ -2121,6 +2442,161 @@ function setupIpcHandlers() {
     return { path: log.transports.file.getFile().path };
   });
 
+  // ------------------- Mailing (zmiany stawek → jednostki) -------------------
+
+  ipcMain.handle(IPC_CHANNELS.MAILING_GET_ZGN, async () => {
+    return await database.getZgnJednostki();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MAILING_ADD_ZGN, async (_, nazwa: string, email: string) => {
+    return await database.addZgnJednostka(nazwa, email);
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.MAILING_UPDATE_ZGN,
+    async (_, id: number, nazwa: string, email: string) => {
+      await database.updateZgnJednostka(id, nazwa, email);
+      return true;
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.MAILING_DELETE_ZGN, async (_, id: number) => {
+    await database.deleteZgnJednostka(id);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MAILING_GET_POLA, async () => {
+    return await database.getMailingPola();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MAILING_ADD_POLE, async (_, nazwa: string, tekst: string) => {
+    return await database.addMailingPole(nazwa, tekst);
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.MAILING_UPDATE_POLE,
+    async (_, id: number, nazwa: string, tekst: string) => {
+      await database.updateMailingPole(id, nazwa, tekst);
+      return true;
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.MAILING_DELETE_POLE, async (_, id: number) => {
+    await database.deleteMailingPole(id);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MAILING_GET_SZABLONY, async () => {
+    return await database.getMailingSzablony();
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.MAILING_ADD_SZABLON,
+    async (_, data: Omit<MailingSzablon, 'id' | 'createdAt'>) => {
+      return await database.addMailingSzablon(data);
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.MAILING_UPDATE_SZABLON,
+    async (_, id: number, data: Omit<MailingSzablon, 'id' | 'createdAt'>) => {
+      await database.updateMailingSzablon(id, data);
+      return true;
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.MAILING_DELETE_SZABLON, async (_, id: number) => {
+    await database.deleteMailingSzablon(id);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MAILING_SELECT_ATTACHMENTS, async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openFile', 'multiSelections'],
+    });
+    if (result.canceled) return [];
+    return result.filePaths.map((p) => ({ fileName: path.basename(p), filePath: p }));
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MAILING_SEND, async (_, request: MailingSendRequest) => {
+    try {
+      const result = await sendMailing(
+        {
+          database,
+          smtp: database.getMailingSmtp(),
+          outputFolder: database.getSetting('outputFolder') || '',
+          onProgress: (event) => mainWindow?.webContents.send('mailing:progress', event),
+        },
+        request,
+      );
+      if ('error' in result) return { error: result.error };
+      return { success: true, results: result.results };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      log.error('[MAILING] send failed:', message);
+      return { error: message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MAILING_GET_HISTORY, async () => {
+    try {
+      return await database.getMailingHistory();
+    } catch (error: unknown) {
+      log.error(
+        '[MAILING] history read failed:',
+        error instanceof Error ? error.message : String(error),
+      );
+      return [];
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MAILING_CLEAR_HISTORY, async () => {
+    await database.clearMailingHistory();
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MAILING_GET_FILES_INFO, async () => {
+    try {
+      return getMailingFilesInfo(database.getSetting('outputFolder') || '');
+    } catch (error: unknown) {
+      log.error(
+        '[MAILING] files info failed:',
+        error instanceof Error ? error.message : String(error),
+      );
+      return { dir: '', fileCount: 0, totalBytes: 0 };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MAILING_CLEANUP_FILES, async () => {
+    try {
+      const result = cleanupMailingFiles(database.getSetting('outputFolder') || '');
+      return { success: true, ...result };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      log.error('[MAILING] cleanup failed:', message);
+      return { error: message };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MAILING_GET_SMTP, async () => {
+    // The password never crosses the bridge — the UI only needs to know that one
+    // is stored, so it can show "zapisane" instead of an empty field.
+    const { pass, ...config } = database.getMailingSmtp();
+    return { ...config, passwordSet: pass.length > 0 };
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.MAILING_SET_SMTP,
+    async (_, config: MailingSmtpConfig & { pass?: string }) => {
+      database.setMailingSmtp(config);
+      return true;
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.MAILING_TEST_SMTP, async () => {
+    return await verifySmtp(database.getMailingSmtp());
+  });
+
   // Auth (Supabase)
   ipcMain.handle(IPC_CHANNELS.AUTH_SIGN_IN, async (_, email: string, password: string) => {
     const result = await authService.signIn(email, password);
@@ -2306,20 +2782,62 @@ app.whenReady().then(() => {
  * Fetch the Anthropic key from the shared `app_config` table and hand it to
  * the converter registry. Needs a signed-in Supabase session; failures are
  * logged and retried on the next sign-in. A local ai-config.yml/env key
- * (dev override) short-circuits the fetch.
+ * (dev override) short-circuits the fetch — unless the API rejects it, in
+ * which case the cloud key takes over.
  */
 async function loadCloudAIKey(): Promise<void> {
   try {
-    if (converterRegistry.getAnthropicApiKey()) return;
-    const key = await database.getAppConfigValue('anthropic_api_key');
-    if (key) {
-      converterRegistry.setAnthropicApiKey(key);
-      log.info('[AI Config] Anthropic key loaded from Supabase app_config');
-    } else {
-      log.warn('[AI Config] No anthropic_api_key row in app_config — AI features disabled');
+    const localKey = converterRegistry.getAnthropicApiKey();
+    if (localKey) {
+      // A revoked dev key used to shadow the cloud one for good: the failure
+      // only surfaced mid-conversion as "AI unavailable". Verify it once here
+      // and step aside when the API itself rejects it.
+      if ((await isAnthropicKeyAccepted(localKey)) !== false) return;
+      log.warn(
+        '[AI Config] Local Anthropic key (ai-config.yml / env) rejected by the API ' +
+          '— falling back to the cloud key from app_config'
+      );
     }
+
+    const key = await database.getAppConfigValue('anthropic_api_key');
+    if (!key) {
+      log.warn('[AI Config] No anthropic_api_key row in app_config — AI features disabled');
+      return;
+    }
+    converterRegistry.setAnthropicApiKey(key, /* replace */ true);
+
+    // Report a dead cloud key at startup instead of at the first conversion.
+    const stored = converterRegistry.getAnthropicApiKey();
+    if ((await isAnthropicKeyAccepted(stored)) === false) {
+      log.error(
+        '[AI Config] Anthropic key from app_config is rejected by the API (401/403) — ' +
+          'AI stays disabled until the key is replaced in Supabase app_config'
+      );
+      return;
+    }
+    log.info('[AI Config] Anthropic key loaded from Supabase app_config');
   } catch (error) {
     log.warn(`[AI Config] Cloud key fetch failed: ${getErrorMessage(error)}`);
+  }
+}
+
+/**
+ * Cheap liveness check for an Anthropic key (a models list costs no tokens).
+ * Returns null when the answer is unknowable — offline, DNS down, 5xx — so a
+ * flaky network never discards a perfectly good key.
+ */
+async function isAnthropicKeyAccepted(key: string): Promise<boolean | null> {
+  if (!key) return false;
+  if (typeof fetch !== 'function') return null;
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/models?limit=1', {
+      headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (response.status === 401 || response.status === 403) return false;
+    return response.ok ? true : null;
+  } catch {
+    return null;
   }
 }
 

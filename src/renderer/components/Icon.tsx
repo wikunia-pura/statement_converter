@@ -39,7 +39,14 @@ type IconName =
   | 'edit'
   | 'save'
   | 'shield'
-  | 'menu';
+  | 'menu'
+  | 'mail'
+  | 'paperclip'
+  | 'align-left'
+  | 'align-center'
+  | 'align-right'
+  | 'align-justify'
+  | 'table';
 
 interface IconProps {
   name: IconName;
@@ -250,6 +257,51 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1 1 0 0 1 1.52 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z" />
   ),
   menu: <path d="M4 6h16M4 12h16M4 18h16" />,
+  mail: (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M3 7l9 6 9-6" />
+    </>
+  ),
+  paperclip: (
+    <path d="M21.4 11.05 12.3 20.2a5 5 0 0 1-7.07-7.07l8.49-8.49a3.33 3.33 0 1 1 4.71 4.71l-8.49 8.49a1.67 1.67 0 0 1-2.36-2.36l7.78-7.78" />
+  ),
+  'align-left': (
+    <>
+      <path d="M4 6h16" />
+      <path d="M4 12h10" />
+      <path d="M4 18h13" />
+    </>
+  ),
+  'align-center': (
+    <>
+      <path d="M4 6h16" />
+      <path d="M7 12h10" />
+      <path d="M5.5 18h13" />
+    </>
+  ),
+  'align-right': (
+    <>
+      <path d="M4 6h16" />
+      <path d="M10 12h10" />
+      <path d="M7 18h13" />
+    </>
+  ),
+  'align-justify': (
+    <>
+      <path d="M4 6h16" />
+      <path d="M4 12h16" />
+      <path d="M4 18h16" />
+    </>
+  ),
+  table: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M3 10h18" />
+      <path d="M3 15h18" />
+      <path d="M9 4v16" />
+    </>
+  ),
 };
 
 const Icon: React.FC<IconProps> = ({ name, size = 18, strokeWidth = 1.75, className }) => {

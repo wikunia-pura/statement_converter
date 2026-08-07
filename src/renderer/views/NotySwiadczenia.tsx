@@ -280,15 +280,15 @@ const NotySwiadczenia: React.FC<Props> = ({ language, files, setFiles }) => {
                                   className="button button-small button-primary"
                                   onClick={() => openOutput(f.outputPath)}
                                   style={{ whiteSpace: 'nowrap' }}
-                                >
-                                  {t.notyOpenFile}
+                                ><Icon name="folder" size={13} />{' '}
+                                  {t.openFile}
                                 </button>
                                 <button
                                   className="button button-small button-secondary"
                                   onClick={() => convertOne(f.filePath)}
                                   disabled={isProcessing}
                                   style={{ whiteSpace: 'nowrap' }}
-                                >
+                                ><Icon name="refresh" size={13} />{' '}
                                   {t.notyConvertAgain}
                                 </button>
                               </>
@@ -298,7 +298,7 @@ const NotySwiadczenia: React.FC<Props> = ({ language, files, setFiles }) => {
                                 onClick={() => convertOne(f.filePath)}
                                 disabled={isProcessing}
                                 style={{ whiteSpace: 'nowrap' }}
-                              >
+                              ><Icon name="arrow-right" size={13} />{' '}
                                 {t.notyConvert}
                               </button>
                             )}
@@ -306,7 +306,7 @@ const NotySwiadczenia: React.FC<Props> = ({ language, files, setFiles }) => {
                               className="button button-small button-danger"
                               onClick={() => removeFile(f.filePath)}
                               disabled={isProcessing}
-                            >
+                            ><Icon name="trash" size={13} />{' '}
                               {t.remove}
                             </button>
                           </div>

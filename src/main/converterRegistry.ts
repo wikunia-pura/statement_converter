@@ -13,6 +13,10 @@ import { AliorConverter } from '../converters/alior';
 import { PKOBiznesConverter } from '../converters/pko-biznes';
 import { PKOSAConverter } from '../converters/pko-sa';
 import { INGConverter } from '../converters/ing';
+import { AIExtractor } from '../shared/ai-extractor';
+import { ContractorMatcher } from '../shared/contractor-matcher';
+import { MatchCache, contractorSetFingerprint } from '../shared/match-cache';
+import { matchExpensesWithAI } from '../shared/expense-ai-matcher';
 import DatabaseService from './database';
 import { conversionCache } from './conversionCache';
 
@@ -96,6 +100,25 @@ interface AIConfig {
     openai_api_key: string;
     default_provider: 'anthropic' | 'openai';
   };
+}
+
+/**
+ * API keys are pasted by hand — into config/ai-config.yml or the Supabase
+ * `app_config` row — so they arrive with the usual paste damage: surrounding
+ * quotes, stray whitespace/newlines, or a doubled `sk-ant-` prefix when only
+ * the `…` of a `sk-ant-…` placeholder gets overwritten. Every one of those
+ * surfaces as an opaque 401 during a conversion, long after the paste, so
+ * repair them at load time instead.
+ */
+export function normalizeApiKey(raw: string | undefined | null): string {
+  let key = (raw ?? '').trim().replace(/^["']|["']$/g, '').trim();
+  while (key.startsWith('sk-ant-sk-ant-')) key = key.slice('sk-ant-'.length);
+  return key;
+}
+
+/** Safe-to-log key identity: never the secret itself. */
+export function keyFingerprint(key: string): string {
+  return key ? `…${key.slice(-4)} (${key.length} chars)` : '(none)';
 }
 
 class ConverterRegistry {
@@ -188,15 +211,32 @@ class ConverterRegistry {
       
       if (fs.existsSync(configPath)) {
         const fileContents = fs.readFileSync(configPath, 'utf8');
-        this.aiConfig = yaml.load(fileContents) as AIConfig;
-        console.log('[AI Config] Loaded from bundled config:', configPath);
-        return;
+        const loaded = yaml.load(fileContents) as AIConfig;
+        // A yml with only blank/placeholder keys must not shadow the cloud
+        // config, so treat it as "no local override" rather than as a key.
+        const anthropic = normalizeApiKey(loaded?.ai?.anthropic_api_key);
+        const openai = normalizeApiKey(loaded?.ai?.openai_api_key);
+        if (anthropic || openai) {
+          this.aiConfig = {
+            ai: {
+              anthropic_api_key: anthropic,
+              openai_api_key: openai,
+              default_provider: loaded?.ai?.default_provider ?? (anthropic ? 'anthropic' : 'openai'),
+            },
+          };
+          console.log(
+            `[AI Config] Loaded from bundled config: ${configPath} ` +
+              `(anthropic ${keyFingerprint(anthropic)})`
+          );
+          return;
+        }
+        console.log('[AI Config] Bundled config has no API keys — will use cloud config:', configPath);
       }
-      
+
       // Priority 2: Try environment variables (useful for deployment)
-      const anthropicKey = process.env.ANTHROPIC_API_KEY;
-      const openaiKey = process.env.OPENAI_API_KEY;
-      
+      const anthropicKey = normalizeApiKey(process.env.ANTHROPIC_API_KEY);
+      const openaiKey = normalizeApiKey(process.env.OPENAI_API_KEY);
+
       if (anthropicKey || openaiKey) {
         this.aiConfig = {
           ai: {
@@ -227,18 +267,28 @@ class ConverterRegistry {
    * Inject the Anthropic key fetched from the shared Supabase `app_config`
    * table (authenticated-only read). Release binaries are public, so the key
    * is deliberately NOT bundled — the cloud is the production source. A key
-   * from a local ai-config.yml / env (dev override) always wins.
+   * from a local ai-config.yml / env (dev override) wins, except when the
+   * caller has established it is rejected by the API (`replace`) — a revoked
+   * dev key must not permanently shadow the working cloud one.
    */
-  public setAnthropicApiKey(key: string): void {
-    if (!key || this.aiConfig?.ai?.anthropic_api_key) return;
+  public setAnthropicApiKey(key: string, replace = false): void {
+    const normalized = normalizeApiKey(key);
+    if (!normalized) return;
+    if (this.aiConfig?.ai?.anthropic_api_key && !replace) return;
+    if (normalized !== key.trim()) {
+      console.warn(
+        '[AI Config] Stored Anthropic key was malformed (duplicated prefix or stray quotes) ' +
+          '— repaired on load; fix the value in Supabase app_config.'
+      );
+    }
     this.aiConfig = {
       ai: {
-        anthropic_api_key: key,
+        anthropic_api_key: normalized,
         openai_api_key: this.aiConfig?.ai?.openai_api_key ?? '',
         default_provider: 'anthropic',
       },
     };
-    console.log('[AI Config] Anthropic key loaded from cloud config (app_config)');
+    console.log(`[AI Config] Anthropic key set from cloud config ${keyFingerprint(normalized)}`);
   }
 
   private loadConverters() {
@@ -666,47 +716,174 @@ class ConverterRegistry {
         || trn.extracted.matchedByManualMapping === true;
       
       if (needsReview) {
-        // For Santander, use 'value' (transaction amount) not 'realValue' (account balance)
-        // For other converters, 'realValue' is the absolute transaction amount
-        const amount = converterId === 'santander_xml' 
-          ? Math.abs(trn.normalized.value)
-          : trn.normalized.realValue;
-        
-        const review: TransactionForReview = {
-          index,
-          transactionType: trn.transactionType,
-          original: {
-            date: trn.normalized.exeDate,
-            amount: amount,
-            description: trn.normalized.descBase,
-            counterparty: trn.normalized.descOpt,
-          },
-          extracted: {
-            apartmentNumber: trn.extracted.apartmentNumber,
-            fullAddress: trn.extracted.fullAddress,
-            streetName: trn.extracted.streetName,
-            buildingNumber: trn.extracted.buildingNumber,
-            tenantName: trn.extracted.tenantName,
-            confidence,
-            reasoning: trn.extracted.reasoning,
-            matchedByManualMapping: trn.extracted.matchedByManualMapping === true,
-          },
-        };
-        
-        // Add contractor info for expenses
-        if (trn.transactionType === 'expense' && trn.matchedContractor) {
-          review.matchedContractor = {
-            contractorName: trn.matchedContractor.contractor?.nazwa || null,
-            contractorAccount: trn.matchedContractor.contractor?.kontoKontrahenta || null,
-            confidence: trn.matchedContractor.confidence,
-          };
-        }
-        
-        reviewTransactions.push(review);
+        reviewTransactions.push(this.toReviewTransaction(trn, index, converterId));
       }
     });
-    
+
     return reviewTransactions;
+  }
+
+  /**
+   * Map one processed transaction onto the renderer-facing review row.
+   * Shared with the on-demand expense re-match so a refreshed row is byte-for-byte
+   * the same shape the review screen was originally handed.
+   */
+  private toReviewTransaction(
+    trn: any,
+    index: number,
+    converterId: string
+  ): TransactionForReview {
+    const confidence = trn.transactionType === 'income'
+      ? trn.extracted.confidence.overall
+      : (trn.matchedContractor?.confidence || 0);
+
+    // For Santander, use 'value' (transaction amount) not 'realValue' (account balance)
+    // For other converters, 'realValue' is the absolute transaction amount
+    const amount = converterId === 'santander_xml'
+      ? Math.abs(trn.normalized.value)
+      : trn.normalized.realValue;
+
+    const review: TransactionForReview = {
+      index,
+      transactionType: trn.transactionType,
+      original: {
+        date: trn.normalized.exeDate,
+        amount: amount,
+        description: trn.normalized.descBase,
+        counterparty: trn.normalized.descOpt,
+      },
+      extracted: {
+        apartmentNumber: trn.extracted.apartmentNumber,
+        fullAddress: trn.extracted.fullAddress,
+        streetName: trn.extracted.streetName,
+        buildingNumber: trn.extracted.buildingNumber,
+        tenantName: trn.extracted.tenantName,
+        confidence,
+        reasoning: trn.extracted.reasoning,
+        matchedByManualMapping: trn.extracted.matchedByManualMapping === true,
+      },
+    };
+
+    // Add contractor info for expenses
+    if (trn.transactionType === 'expense' && trn.matchedContractor) {
+      review.matchedContractor = {
+        contractorName: trn.matchedContractor.contractor?.nazwa || null,
+        contractorAccount: trn.matchedContractor.contractor?.kontoKontrahenta || null,
+        confidence: trn.matchedContractor.confidence,
+      };
+    }
+
+    return review;
+  }
+
+  /**
+   * Re-run AI contractor matching for selected expenses of a pending conversion,
+   * on demand from the acceptance screen.
+   *
+   * The point of the feature is that the contractor set may have changed since
+   * the conversion ran — the user just added the missing vendor — so the matcher
+   * is rebuilt from the database on every call rather than reusing anything from
+   * the original conversion. Rows the user already resolved are filtered out by
+   * the caller; rows that already carry a contractor are skipped here as well,
+   * so a stray second click can't overwrite a match.
+   */
+  async rerunExpenseAI(
+    tempConversionId: string,
+    indices: number[],
+    onProgress?: (e: { completed: number; total: number; inFlight: number }) => void
+  ): Promise<{ updated: TransactionForReview[]; matchedCount: number; processedCount: number }> {
+    const cached = conversionCache.get(tempConversionId);
+    if (!cached) {
+      throw new Error('Conversion not found or expired. Please try again.');
+    }
+
+    const provider = this.aiConfig?.ai?.default_provider ?? 'none';
+    const apiKey = provider === 'anthropic'
+      ? this.aiConfig?.ai?.anthropic_api_key
+      : this.aiConfig?.ai?.openai_api_key;
+    if (!apiKey) {
+      throw new Error('AI nie jest skonfigurowane — brak klucza API.');
+    }
+
+    // Deduplicated: a repeated index would be sent to the AI twice and billed twice.
+    const targets = Array.from(new Set(Array.isArray(indices) ? indices : []))
+      .filter((i) => Number.isInteger(i) && i >= 0 && i < cached.processedTransactions.length)
+      .map((i) => ({ index: i, trn: cached.processedTransactions[i] }))
+      .filter(({ trn }) => trn.transactionType === 'expense' && !trn.matchedContractor?.contractor);
+
+    if (targets.length === 0) {
+      return { updated: [], matchedCount: 0, processedCount: 0 };
+    }
+
+    const contractors = dbInstance ? await dbInstance.getAllKontrahenci() : [];
+    if (contractors.length === 0) {
+      throw new Error('Brak kontrahentów w bazie — nie ma z czego wybierać.');
+    }
+
+    const contractorMatcher = new ContractorMatcher(contractors);
+    const aiExtractor = new AIExtractor({
+      aiProvider: provider,
+      apiKey,
+      batchSize: 20,
+      confidenceThresholds: { autoApprove: 85, needsReview: 70 },
+      contractors,
+      language: (dbInstance?.getSetting('language') || 'pl') as 'pl' | 'en',
+    });
+    const matchCache = new MatchCache(
+      path.join(app.getPath('userData'), 'match-cache.json'),
+      contractorSetFingerprint(contractors)
+    );
+
+    let total = 0;
+    let completed = 0;
+    let started = 0;
+    const matches = await matchExpensesWithAI(
+      targets.map(({ trn }) => trn.normalized),
+      {
+        aiExtractor,
+        contractorMatcher,
+        matchCache,
+        onProgress: (event) => {
+          if (event.type === 'planned') total = event.batches;
+          else if (event.type === 'started') started += 1;
+          else completed += 1;
+          onProgress?.({ completed, total, inFlight: started - completed });
+        },
+      }
+    );
+
+    let matchedCount = 0;
+    targets.forEach(({ index, trn }, i) => {
+      const match = matches[i];
+      if (match?.contractor) matchedCount++;
+
+      trn.matchedContractor = match;
+      trn.extracted = {
+        ...trn.extracted,
+        extractionMethod: 'ai',
+        reasoning: match?.reasoning,
+        warnings: match?.contractor ? [] : ['AI could not match contractor'],
+      };
+      // Mirror createProcessedTransaction's thresholds so the finalize-time
+      // summary counts a re-matched row the same as one matched during conversion.
+      const confidence = match?.confidence || 0;
+      trn.status = confidence >= 85
+        ? 'auto-approved'
+        : confidence >= 70
+          ? 'needs-review'
+          : 'needs-manual-input';
+      cached.processedTransactions[index] = trn;
+    });
+
+    conversionCache.updateProcessedTransactions(tempConversionId, cached.processedTransactions);
+
+    return {
+      updated: targets.map(({ index }) =>
+        this.toReviewTransaction(cached.processedTransactions[index], index, cached.converterId)
+      ),
+      matchedCount,
+      processedCount: targets.length,
+    };
   }
 
   /**

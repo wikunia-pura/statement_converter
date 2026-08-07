@@ -581,6 +581,22 @@ body.dark-mode .nav-item.active {
   border-radius: var(--r-sm);
 }
 
+/* Inline text trigger that reads as a link but is a real <button> (a11y). */
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.link-button:hover {
+  opacity: 0.8;
+}
+
 /* Selected/committed state for tonal buttons — stronger border + weight */
 .button.is-selected {
   font-weight: 700;
@@ -850,6 +866,63 @@ body.dark-mode .ui-select__trigger {
 
 .ui-select__option.is-selected.is-active {
   background: var(--accent-subtle);
+}
+
+/* Searchable variant (components/SearchableSelect.tsx): the filter box is pinned
+   at the top of the panel and only the option list scrolls, so the query stays
+   visible while scrolling a long dictionary. */
+.ui-select__menu--searchable {
+  overflow: hidden;
+  padding: 0;
+}
+
+.ui-select__search {
+  flex: none;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-md);
+  outline: none;
+}
+
+.ui-select__options {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+/* Two-line options: the label plus the detail that tells two similar entries
+   apart (a mailbox, a symbol, a field's sentence). */
+.ui-select__menu--searchable .ui-select__option {
+  white-space: normal;
+}
+
+.ui-select__option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-select__option-hint {
+  margin-top: 2px;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-select__empty {
+  padding: 10px;
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+  text-align: center;
 }
 
 option {
@@ -2466,6 +2539,82 @@ pre {
   margin-left: auto;
 }
 
+/* --- Module tab bar (Konwersja / Historia) ------------------------------- */
+.module-tabs {
+  display: flex;
+  gap: var(--s-1);
+  padding: 0 var(--s-8);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+.module-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--s-3) var(--s-4);
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.module-tab:hover {
+  color: var(--text-primary);
+}
+
+.module-tab.is-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+/* --- Meter-reading operation entry --------------------------------------
+   One operation reads several workbooks and writes one file per community, so
+   unlike a bank conversion it cannot be a single row — it stacks a header line,
+   its sources, its outputs and the skipped-rows link. */
+.odczyty-history-entry {
+  padding: var(--s-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.odczyty-history-entry:first-child {
+  border-top: none;
+}
+
+.odczyty-history-entry-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+
+.odczyty-history-entry-summary {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  margin-right: auto;
+}
+
+.odczyty-history-entry-sources,
+.odczyty-history-entry-skipped {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  margin-top: var(--s-2);
+}
+
+.odczyty-history-outputs {
+  margin-top: var(--s-2);
+  font-size: var(--fs-sm);
+}
+
+.odczyty-history-outputs td {
+  padding: 4px 8px;
+}
+
 /* Recent-activity panel inside the Converter view.
    Rather than stacking another identical white card under the files list (which
    reads as one continuous surface), break out of the card rhythm: a full-bleed,
@@ -2479,4 +2628,758 @@ pre {
   border-top: 3px solid var(--accent);
   border-radius: 0;
   box-shadow: inset 0 12px 16px -14px rgba(16, 24, 40, 0.25);
+}
+
+/* ==========================================================================
+   Co nowego (release notes) — the "what's new" view + the post-update modal.
+   See components/ReleaseNotes.tsx; content lives in shared/release-notes.ts.
+   ========================================================================== */
+
+/* Unread marker on a sidebar item; survives the collapse to an icon rail by
+   pinning itself to the item's top-right corner once the label is hidden. */
+.nav-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+  margin-left: auto;
+  flex-shrink: 0;
+  animation: wnDotPulse 2.4s ease-in-out infinite;
+}
+
+.sidebar.collapsed .nav-item {
+  position: relative;
+}
+
+.sidebar.collapsed .nav-dot {
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  margin-left: 0;
+}
+
+@keyframes wnDotPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* ------------------------------- Layout --------------------------------- */
+
+.whatsnew-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: var(--s-6);
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .whatsnew-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.wn-rail {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.wn-rail__label {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  padding: 0 var(--s-2) var(--s-2);
+}
+
+.wn-rail__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: var(--s-3);
+  border: 1px solid transparent;
+  border-radius: var(--r-lg);
+  background: transparent;
+  cursor: pointer;
+  transition: background-color var(--t-fast), border-color var(--t-fast);
+}
+
+.wn-rail__item:hover {
+  background: var(--bg-surface-hover);
+}
+
+.wn-rail__item.is-active {
+  background: var(--bg-surface);
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.wn-rail__version {
+  font-size: var(--fs-md);
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.wn-rail__item.is-active .wn-rail__version {
+  color: var(--accent);
+}
+
+.wn-rail__title {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.wn-rail__installed {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: var(--s-1);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--success);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* -------------------------------- Hero ---------------------------------- */
+
+.wn-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--r-xl);
+  padding: var(--s-8);
+  margin-bottom: var(--s-6);
+  color: #fff;
+  background: linear-gradient(135deg, #3f43cf 0%, #6248e8 45%, #8437c9 100%);
+  box-shadow: var(--shadow-lg);
+}
+
+.wn-hero--compact {
+  padding: var(--s-6);
+  margin-bottom: var(--s-5);
+}
+
+/* Soft light source in the top-right corner — keeps the flat gradient alive. */
+.wn-hero__glow {
+  position: absolute;
+  top: -140px;
+  right: -80px;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 70%);
+  pointer-events: none;
+}
+
+.wn-hero__content {
+  position: relative;
+}
+
+.wn-hero__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin-bottom: var(--s-3);
+}
+
+.wn-hero__version {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.wn-hero__date {
+  font-size: var(--fs-sm);
+  opacity: 0.85;
+}
+
+.wn-hero__title {
+  margin: 0 0 var(--s-2);
+  font-size: var(--fs-3xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: #fff;
+}
+
+.wn-hero--compact .wn-hero__title {
+  font-size: var(--fs-2xl);
+}
+
+/* Two class names on purpose: both the global `p { color: var(--text-secondary) }`
+   and `.modal-body p` would otherwise paint grey text onto the purple hero. */
+.wn-hero .wn-hero__tagline {
+  margin: 0;
+  max-width: 70ch;
+  font-size: var(--fs-lg);
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.wn-hero__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  margin-top: var(--s-6);
+}
+
+.wn-stat {
+  min-width: 110px;
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-lg);
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(2px);
+}
+
+.wn-stat__value {
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.wn-stat__label {
+  margin-top: 2px;
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.85;
+}
+
+/* ----------------------------- Highlight card ---------------------------- */
+
+.wn-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+.wn-card {
+  position: relative;
+  padding: var(--s-6);
+  padding-left: calc(var(--s-6) + 4px);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--t-base), transform var(--t-base);
+}
+
+.wn-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+/* Kind stripe down the left edge. */
+.wn-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: var(--s-5);
+  bottom: var(--s-5);
+  width: 4px;
+  border-radius: 0 var(--r-pill) var(--r-pill) 0;
+  background: var(--accent);
+}
+
+.wn-card--improved::before { background: var(--info); }
+.wn-card--fixed::before { background: var(--success); }
+
+.wn-card__head {
+  display: flex;
+  gap: var(--s-4);
+  align-items: flex-start;
+}
+
+.wn-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--r-lg);
+  background: var(--accent-subtle);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+}
+
+.wn-card--improved .wn-card__icon {
+  background: var(--info-bg);
+  color: var(--info);
+  border-color: var(--info-border);
+}
+
+.wn-card--fixed .wn-card__icon {
+  background: var(--success-bg);
+  color: var(--success);
+  border-color: var(--success-border);
+}
+
+.wn-card__headings {
+  min-width: 0;
+}
+
+.wn-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+.wn-kind--improved { background: var(--info-bg); color: var(--info); }
+.wn-kind--fixed { background: var(--success-bg); color: var(--success); }
+
+.wn-card__title {
+  margin: var(--s-2) 0 var(--s-1);
+  font-size: var(--fs-xl);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.wn-card__summary {
+  margin: 0;
+  max-width: 75ch;
+  font-size: var(--fs-base);
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.wn-card__details {
+  margin-top: var(--s-4);
+  padding-left: calc(40px + var(--s-4));
+}
+
+.wn-card__details p {
+  margin: 0 0 var(--s-2);
+  max-width: 78ch;
+  font-size: var(--fs-md);
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.wn-card__details p:last-child { margin-bottom: 0; }
+
+/* ------------------------- Blocks inside a card -------------------------- */
+
+.wn-block {
+  margin-top: var(--s-5);
+  padding-left: calc(40px + var(--s-4));
+}
+
+@media (max-width: 720px) {
+  .wn-block,
+  .wn-card__details {
+    padding-left: 0;
+  }
+}
+
+.wn-block__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: var(--s-3);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-tertiary);
+}
+
+/* Click path: Menu → Section → Button */
+.wn-trail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.wn-trail__chip {
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  background: var(--bg-surface-sunken);
+  border: 1px solid var(--border-default);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.wn-block--where .wn-trail__chip:last-child {
+  background: var(--accent-subtle);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.wn-trail__sep {
+  display: inline-flex;
+  color: var(--text-tertiary);
+}
+
+/* Numbered walkthrough. */
+.wn-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.wn-step {
+  position: relative;
+  display: flex;
+  gap: var(--s-3);
+  align-items: flex-start;
+}
+
+/* Connector line between consecutive step bubbles. */
+.wn-step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 26px;
+  bottom: calc(-1 * var(--s-3));
+  width: 2px;
+  background: var(--border-default);
+}
+
+.wn-step__num {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.wn-step__body {
+  padding-top: 2px;
+  min-width: 0;
+}
+
+.wn-step__do {
+  font-size: var(--fs-base);
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
+.wn-step__then {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: var(--fs-md);
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.wn-step__then > svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--success);
+}
+
+/* What to expect. */
+.wn-expect {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.wn-expect li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  font-size: var(--fs-md);
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.wn-expect li > svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--success);
+}
+
+/* Tip / warning callout. */
+.wn-note {
+  display: flex;
+  gap: var(--s-3);
+  align-items: flex-start;
+  margin-top: var(--s-5);
+  margin-left: calc(40px + var(--s-4));
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-lg);
+  font-size: var(--fs-md);
+  line-height: 1.6;
+}
+
+@media (max-width: 720px) {
+  .wn-note { margin-left: 0; }
+}
+
+.wn-note > svg { flex-shrink: 0; margin-top: 2px; }
+
+.wn-note--tip {
+  background: var(--info-bg);
+  border: 1px solid var(--info-border);
+  color: var(--text-primary);
+}
+
+.wn-note--tip > svg { color: var(--info); }
+
+.wn-note--warning {
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  color: var(--text-primary);
+}
+
+.wn-note--warning > svg { color: var(--warning); }
+
+/* ------------------------- Post-update modal ----------------------------- */
+
+.wn-modal {
+  width: min(920px, 92vw);
+  max-width: 920px;
+}
+
+.wn-modal__header {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.wn-modal__header > svg { color: var(--accent); }
+
+.wn-modal__body {
+  background: var(--bg-app);
+}
+
+.wn-modal__intro {
+  margin: 0 0 var(--s-5);
+  max-width: 80ch;
+  font-size: var(--fs-md);
+  line-height: 1.6;
+}
+
+/* ============================================================
+   Mailing — rich-text editor, recipient picker, history
+   ============================================================ */
+
+.rte {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  /* Not `hidden`: the toolbar's field picker and the insert-table popover open
+     downward and would be cut off at the editor's edge. The children round their
+     own outer corners instead, so the frame still looks like one box. */
+  overflow: visible;
+  background: var(--bg-input, var(--bg-app));
+}
+
+.rte-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-app);
+  border-radius: 8px 8px 0 0;
+  flex-wrap: wrap;
+}
+
+.rte-content {
+  padding: 12px 14px;
+  outline: none;
+  font-size: 14px;
+  line-height: 1.55;
+  overflow-y: auto;
+  max-height: 460px;
+  border-radius: 0 0 8px 8px;
+}
+
+.rte-content:empty::before,
+.rte-content[data-placeholder]:not([data-placeholder=''])::before {
+  content: attr(data-placeholder);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.rte-content p { margin: 0 0 10px; }
+.rte-content ul, .rte-content ol { margin: 0 0 10px 22px; padding: 0; }
+.rte-content h3 { margin: 0 0 10px; font-size: 16px; }
+
+/* Tables carry their borders as inline styles (Outlook needs them there), but
+   keep the app's generic table rules from restyling them inside the editor. */
+.rte-content table { border-collapse: collapse; margin: 8px 0; }
+.rte-content th, .rte-content td { min-width: 40px; text-align: left; }
+.rte-content tbody tr:hover { background: transparent; }
+
+/* A header row inside the letter is not a data-grid header: the app's global
+   <th> look (uppercase, letter-spaced, tertiary text on a tinted band) reads as
+   chrome, and the light shade the mail itself needs is written into the cell
+   inline — in dark mode that lands as a glaring white band with grey text on it.
+   Both are re-stated here in theme colours. Only the editor's rendering changes;
+   the saved HTML, and so the mail and the PDF, keep the light shade they need.
+   `!important` is the sole way for a stylesheet to beat an inline background,
+   and it also fixes templates saved before this rule existed. */
+.rte-content th {
+  background-color: var(--bg-surface-sunken) !important;
+  color: var(--text-primary);
+  font-size: inherit;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+  padding: 6px 8px;
+}
+
+/* The editor sits on --bg-app, which in dark mode is darker than the sunken
+   tint; shading the header row DOWN there would make it vanish, so lift it. */
+body.dark-mode .rte-content th {
+  background-color: var(--bg-surface-hover) !important;
+}
+
+/* Second toolbar row, shown only while the caret sits in a table. */
+.rte-toolbar--table {
+  gap: 6px;
+  background: var(--bg-surface-sunken, var(--bg-app));
+}
+
+.rte-toolbar__label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-right: 2px;
+}
+
+/* "Insert table" popover: rows/columns before inserting, so the user isn't left
+   adding a column at a time to a fixed 2×2 grid. */
+.rte-table-menu { position: relative; display: inline-flex; }
+
+.rte-table-panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 1000;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  min-width: 190px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.rte-table-panel__field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.rte-table-panel__field input { width: 70px; }
+
+.rte-table-panel__check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Recipient list: one row per community, with its resolved unit + mailbox. */
+.mailing-recipient {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  margin-bottom: 6px;
+}
+
+.mailing-recipient--missing { border-color: var(--danger); }
+.mailing-recipient__name { flex: 1 1 auto; font-weight: 500; }
+.mailing-recipient__unit { font-size: 12px; color: var(--text-tertiary); text-align: right; }
+
+/* Live preview of the rendered mail. No padding and no background of its own —
+   the mail shell inside paints the page tint and the card, so the container is
+   only a scrollable frame around it. */
+.mailing-preview {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 0;
+  overflow: hidden auto;
+  max-height: 460px;
+  /* The mail is a light document regardless of the app's theme; a dark-mode
+     inversion here would misrepresent what the recipient sees. */
+  color-scheme: light;
+}
+
+.mailing-preview .ff-body p { margin: 0 0 12px; }
+.mailing-preview .ff-body ul,
+.mailing-preview .ff-body ol { margin: 0 0 12px 22px; }
+
+/* The mail preview shows the real mail shell, which is a stack of layout tables
+   carrying their own inline colours and padding. The app's global table styling
+   (cell borders, row hover) would break that, so it is switched off inside the
+   preview and re-applied only to the tables the user writes in the body. */
+.mailing-preview table,
+.mailing-preview tr,
+.mailing-preview td,
+.mailing-preview th {
+  border: 0;
+  padding: 0;
+  background-image: none;
+  font-size: inherit;
+  text-transform: none;
+  letter-spacing: normal;
+  color: inherit;
+}
+
+.mailing-preview tbody tr:hover { background: transparent; }
+
+/* Tables inside the letter itself keep visible cells, matching what is sent. */
+.mailing-preview .ff-body table { border-collapse: collapse; }
+.mailing-preview .ff-body td,
+.mailing-preview .ff-body th {
+  border: 1px solid #cccccc;
+  padding: 6px 8px;
+  vertical-align: top;
 }

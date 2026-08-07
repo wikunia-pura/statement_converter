@@ -37,6 +37,16 @@ update public.kontrahenci
 alter table public.kontrahenci alter column typy set default '{Kontrahent}';
 alter table public.kontrahenci alter column typy set not null;
 
+-- City units ("jednostki ZGN") notified when a housing community changes its
+-- monthly-fee rates. One unit typically serves many communities, so it lives in
+-- its own dictionary and each address points at (at most) one of them.
+create table if not exists public.zgn_jednostki (
+  id          bigserial primary key,
+  nazwa       text        not null,
+  email       text        not null,
+  created_at  timestamptz not null default now()
+);
+
 create table if not exists public.adresy (
   id                 bigserial primary key,
   nazwa              text        not null,
@@ -57,6 +67,10 @@ alter table public.adresy
 -- Maps a canonical account number to a konto_typy id: { "<account>": <typ id> }.
 alter table public.adresy
   add column if not exists account_types jsonb not null default '{}'::jsonb;
+-- The city unit notified about this community's rate changes (Mailing module).
+alter table public.adresy
+  add column if not exists zgn_jednostka_id bigint
+    references public.zgn_jednostki(id) on delete set null;
 
 -- Global, configurable account types. Each maps a community bank account to the
 -- pair of accounting symbols the exporters emit (bank-account side + apartment
@@ -81,7 +95,12 @@ where not exists (select 1 from public.konto_typy);
 -- e.g. the Anthropic API key. Signed-in users can only READ; writes happen
 -- exclusively from the Supabase dashboard (SQL editor / table editor):
 --
---   insert into public.app_config (key, value) values ('anthropic_api_key', 'sk-ant-…')
+-- Paste the WHOLE key in place of the placeholder — it already starts with
+-- `sk-ant-`, so leaving a prefix behind yields `sk-ant-sk-ant-…` and every
+-- conversion fails with a 401:
+--
+--   insert into public.app_config (key, value)
+--     values ('anthropic_api_key', '<PASTE_FULL_KEY_HERE>')
 --     on conflict (key) do update set value = excluded.value, updated_at = now();
 create table if not exists public.app_config (
   key         text primary key,
@@ -101,6 +120,85 @@ create table if not exists public.history (
   converted_at    timestamptz not null default now()
 );
 
+-- Meter-reading conversions ("Odczyty liczników"). One row per operation — a
+-- single click can read several supplier workbooks and emit one file per
+-- housing community, so the sources and outputs are kept as JSON rather than
+-- flattened into rows: skipped source rows belong to a source file, not to an
+-- output file, and splitting them would need an artificial attribution rule.
+create table if not exists public.odczyty_history (
+  id             bigserial primary key,
+  supplier       text        not null,          -- 'ISTA', or 'ISTA + TECHEM' for a mixed run
+  status         text        not null check (status in ('success', 'error')),
+  error_message  text,
+  output_dir     text        not null default '',
+  -- [{ fileName, filePath, supplierLabel, readingCount, skippedCount, skipped: [...] }]
+  source_files   jsonb       not null default '[]'::jsonb,
+  -- [{ wm, fileName, outputPath, date, readingCount }]
+  output_files   jsonb       not null default '[]'::jsonb,
+  reading_count  integer     not null default 0,
+  skipped_count  integer     not null default 0,
+  converted_at   timestamptz not null default now()
+);
+
+create index if not exists odczyty_history_converted_at_idx
+  on public.odczyty_history (converted_at desc);
+
+-- ============================================================
+-- Mailing (rate-change notifications to city units)
+-- ============================================================
+
+-- User-defined dynamic fields. A field carries a fixed lead-in sentence
+-- (`tekst`); the value that completes it is typed once per send, so the same
+-- field can read "…w kwocie: 350,00 zł" one month and "…410,00 zł" the next.
+-- The built-in fields ("Adres Wspólnoty", "Data") are code-side, not rows here.
+create table if not exists public.mailing_pola (
+  id          bigserial primary key,
+  nazwa       text        not null,
+  tekst       text        not null default '',
+  created_at  timestamptz not null default now()
+);
+
+-- Message templates. Subject and body are authored with {{field}} placeholders
+-- resolved at send time; `attach_pdf` is the template's default for the
+-- "also attach the body as PDF" switch (the send screen can override it).
+create table if not exists public.mailing_szablony (
+  id          bigserial primary key,
+  nazwa       text        not null,
+  typ         text        not null default 'zgn-zaliczki',
+  temat       text        not null default '',
+  tresc       text        not null default '',
+  attach_pdf  boolean     not null default false,
+  created_at  timestamptz not null default now()
+);
+
+-- One row per (send, community): the rendered subject/body exactly as it went
+-- out, the resolved recipient, the field values used, and the attachments.
+-- `attachments` keeps file names + on-disk paths — the files themselves live in
+-- the local output folder and can be purged from the module's history tab.
+create table if not exists public.mailing_history (
+  id                bigserial primary key,
+  typ               text        not null default 'zgn-zaliczki',
+  template_name     text        not null default '',
+  status            text        not null check (status in ('success', 'error')),
+  error_message     text,
+  adres_id          bigint,
+  adres_nazwa       text        not null default '',
+  jednostka_nazwa   text        not null default '',
+  jednostka_email   text        not null default '',
+  subject           text        not null default '',
+  body_html         text        not null default '',
+  body_text         text        not null default '',
+  -- [{ nazwa, tekst, wartosc }]
+  field_values      jsonb       not null default '[]'::jsonb,
+  -- [{ fileName, filePath, kind: 'pdf' | 'custom' }]
+  attachments       jsonb       not null default '[]'::jsonb,
+  sent_from         text        not null default '',
+  sent_at           timestamptz not null default now()
+);
+
+create index if not exists mailing_history_sent_at_idx
+  on public.mailing_history (sent_at desc);
+
 -- ============================================================
 -- Row-Level Security
 -- Model: any signed-in user can read/write everything (shared data).
@@ -113,6 +211,11 @@ alter table public.kontrahenci enable row level security;
 alter table public.adresy      enable row level security;
 alter table public.konto_typy  enable row level security;
 alter table public.history     enable row level security;
+alter table public.odczyty_history enable row level security;
+alter table public.zgn_jednostki    enable row level security;
+alter table public.mailing_pola     enable row level security;
+alter table public.mailing_szablony enable row level security;
+alter table public.mailing_history  enable row level security;
 
 -- app_config: read-only for signed-in users; no insert/update/delete policy,
 -- so the anon/authenticated roles can never modify secrets.
@@ -125,6 +228,11 @@ drop policy if exists "authenticated_all" on public.kontrahenci;
 drop policy if exists "authenticated_all" on public.adresy;
 drop policy if exists "authenticated_all" on public.konto_typy;
 drop policy if exists "authenticated_all" on public.history;
+drop policy if exists "authenticated_all" on public.odczyty_history;
+drop policy if exists "authenticated_all" on public.zgn_jednostki;
+drop policy if exists "authenticated_all" on public.mailing_pola;
+drop policy if exists "authenticated_all" on public.mailing_szablony;
+drop policy if exists "authenticated_all" on public.mailing_history;
 
 create policy "authenticated_all" on public.banks
   for all to authenticated using (true) with check (true);
@@ -139,4 +247,19 @@ create policy "authenticated_all" on public.konto_typy
   for all to authenticated using (true) with check (true);
 
 create policy "authenticated_all" on public.history
+  for all to authenticated using (true) with check (true);
+
+create policy "authenticated_all" on public.odczyty_history
+  for all to authenticated using (true) with check (true);
+
+create policy "authenticated_all" on public.zgn_jednostki
+  for all to authenticated using (true) with check (true);
+
+create policy "authenticated_all" on public.mailing_pola
+  for all to authenticated using (true) with check (true);
+
+create policy "authenticated_all" on public.mailing_szablony
+  for all to authenticated using (true) with check (true);
+
+create policy "authenticated_all" on public.mailing_history
   for all to authenticated using (true) with check (true);

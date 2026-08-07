@@ -117,7 +117,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
           </div>
           <div className="update-actions">
             <button className="button button-secondary" onClick={handleDismiss}>
-              {t.close}
+              <Icon name="x" size={14} />{' '}{t.close}
             </button>
           </div>
         </div>
@@ -143,11 +143,11 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
           <div className="update-actions">
             {platform !== 'win32' && (
               <button className="button button-primary" onClick={handleOpenDownloads}>
-                {language === 'pl' ? 'Otwórz folder Pobrane' : 'Open Downloads'}
+                <Icon name="folder" size={14} />{' '}{language === 'pl' ? 'Otwórz folder Pobrane' : 'Open Downloads'}
               </button>
             )}
             <button className="button button-secondary" onClick={handleDismiss}>
-              {t.later}
+              <Icon name="x" size={14} />{' '}{t.later}
             </button>
           </div>
         </div>
@@ -169,10 +169,10 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
             ) : (
               <>
                 <button className="button button-primary" onClick={handleDownload}>
-                  {isMac ? t.openDownloadPage : t.download}
+                  <Icon name="download" size={14} />{' '}{isMac ? t.openDownloadPage : t.download}
                 </button>
                 <button className="button button-secondary" onClick={handleDismiss}>
-                  {t.skip}
+                  <Icon name="x" size={14} />{' '}{t.skip}
                 </button>
               </>
             )}
@@ -187,7 +187,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
           </div>
           <div className="update-actions">
             <button className="button button-secondary" onClick={handleDismiss}>
-              {t.close}
+              <Icon name="x" size={14} />{' '}{t.close}
             </button>
           </div>
         </div>

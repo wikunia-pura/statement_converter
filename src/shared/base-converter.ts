@@ -19,10 +19,15 @@ import { AIExtractor } from './ai-extractor';
 import { ExtractionCache } from './extraction-cache';
 import { MatchCache, contractorSetFingerprint } from './match-cache';
 import { ContractorMatcher, MatchedContractor } from './contractor-matcher';
+import {
+  EXPENSE_MATCH_TYPES,
+  DEFAULT_EXPENSE_AI_BATCH_SIZE,
+  createBatches,
+  matchExpensesWithAI,
+  runWithConcurrency,
+} from './expense-ai-matcher';
 import { Kontrahent, Adres, KontrahentTyp } from './types';
-import logger from './logger';
 
-const EXPENSE_MATCH_TYPES: KontrahentTyp[] = ['Kontrahent', 'Pozostałe koszty'];
 const INCOME_MATCH_TYPES: KontrahentTyp[] = ['Pozostałe przychody'];
 
 // ============================================================
@@ -248,9 +253,8 @@ export abstract class BaseConverter<TRaw> {
       useRegexFirst: config.useRegexFirst ?? true,
       skipNegativeAmounts: config.skipNegativeAmounts ?? false,
       skipBankFees: config.skipBankFees ?? true,
-      // Left undefined when not explicitly set, so shouldUseAIForExpenses() can
-      // fall back to AI availability (mirrors income AI). Coercing to false here
-      // would permanently disable expense AI even in AI conversion mode.
+      // Opt-in only — see shouldUseAIForExpenses(). Conversions leave it unset
+      // and expenses the matcher can't resolve come to acceptance unmatched.
       useAIForExpenses: config.useAIForExpenses,
       contractors: config.contractors,
       addresses: config.addresses,
@@ -343,13 +347,22 @@ export abstract class BaseConverter<TRaw> {
   }
 
   /**
-   * Whether AI is allowed for expense matching.
-   * Mirrors income AI: when an AI extractor is available (i.e. the user picked the
-   * AI conversion mode), expenses use AI too. An explicit `useAIForExpenses` in the
-   * config still wins, so callers can force it on/off independently.
+   * Whether AI is allowed for expense matching *during a conversion* — opt-in,
+   * and off unless a caller explicitly asks for it.
+   *
+   * Income is different: there, AI resolves an address the user cannot supply
+   * any other way, so it runs automatically. An expense only ever fails to match
+   * because the contractor is missing from the database or spelled differently
+   * there — something the user fixes in the acceptance screen, and re-matching
+   * before that fix is a call that can only return the same null. So the expense
+   * side is driven from the "Dopasuj ponownie" button instead, once the
+   * contractor list has actually changed.
+   *
+   * Note this does not disable the deterministic matcher or the MatchCache:
+   * recurring vendors still match during conversion without any AI call.
    */
   protected shouldUseAIForExpenses(): boolean {
-    return this.config.useAIForExpenses ?? !!this.aiExtractor;
+    return this.config.useAIForExpenses === true;
   }
 
   // ============================================================
@@ -492,30 +505,6 @@ export abstract class BaseConverter<TRaw> {
    */
   private yieldEventLoop(): Promise<void> {
     return new Promise((resolve) => setImmediate(resolve));
-  }
-
-  /**
-   * Run async tasks with a concurrency limit.
-   * Results preserve input order.
-   */
-  private async runWithConcurrency<T, R>(
-    items: T[],
-    limit: number,
-    worker: (item: T, index: number) => Promise<R>
-  ): Promise<R[]> {
-    const results: R[] = new Array(items.length);
-    let cursor = 0;
-
-    const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
-      while (true) {
-        const i = cursor++;
-        if (i >= items.length) return;
-        results[i] = await worker(items[i], i);
-      }
-    });
-
-    await Promise.all(runners);
-    return results;
   }
 
   /**
@@ -755,7 +744,7 @@ export abstract class BaseConverter<TRaw> {
     if (!this.aiExtractor) return;
 
     const batchSize = this.config.useBatchProcessing ? this.config.batchSize : 1;
-    const batches = this.createBatches(needsAI, batchSize);
+    const batches = createBatches(needsAI, batchSize);
     const concurrency = this.config.aiConcurrency ?? 3;
 
     this.aiBatchesTotal += batches.length;
@@ -768,7 +757,7 @@ export abstract class BaseConverter<TRaw> {
       `   Processing ${batches.length} income batches (${batchSize} txns each, concurrency=${concurrency})...`
     );
 
-    const batchResults = await this.runWithConcurrency(
+    const batchResults = await runWithConcurrency(
       batches,
       concurrency,
       async (batch, batchIdx) => {
@@ -845,147 +834,60 @@ export abstract class BaseConverter<TRaw> {
       return;
     }
 
-    const batchSize = this.config.useBatchProcessing ? 50 : 1;
-    const batches = this.createBatches(needsAI, batchSize);
-    const concurrency = this.config.aiConcurrency ?? 3;
-
-    this.aiBatchesTotal += batches.length;
-    this.emitProgress(
-      'expense-ai',
-      `AI: wydatki — 0/${batches.length} batchy`
-    );
-
-    console.log(
-      `   Processing ${batches.length} expense batches (${batchSize} txns each, concurrency=${concurrency})...`
-    );
-
-    const batchResults = await this.runWithConcurrency(
-      batches,
-      concurrency,
-      async (batch, batchIdx) => {
-        try {
-          this.aiBatchesStarted += 1;
-          this.emitProgress(
-            'expense-ai',
-            `AI: wydatki — ${this.aiBatchesCompleted}/${this.aiBatchesTotal} batchy (w toku: ${this.aiBatchesStarted - this.aiBatchesCompleted})`
-          );
-
-          const transactionsForAI = batch.map((item) =>
-            this.normalize(item.transaction)
-          );
-
-          // Full type-filtered catalog, used only as a fallback for transactions
-          // where fuzzy pre-filtering surfaces nothing (e.g. names corrupted by
-          // 35-char line wrapping that injects spaces — "La skowski", "GON TAREK").
-          // Without this the AI would receive an empty list and be forced to null.
-          //
-          // Such transactions get an empty candidate list and the catalog is passed
-          // separately, so it is rendered once per request (and prompt-cached)
-          // instead of being inlined under every fallback transaction — that
-          // duplication was ~14k tokens per fallback and dominated the AI bill.
-          const fullCatalog = this.contractorMatcher!.getAllByTypes(EXPENSE_MATCH_TYPES);
-          let needsFullCatalog = false;
-          const candidatesPerTransaction = transactionsForAI.map((t) => {
-            const top = this.contractorMatcher!.getTopCandidates(t, 10, EXPENSE_MATCH_TYPES);
-            if (top.length > 0) return top;
-            needsFullCatalog = true;
-            return [];
-          });
-
-          const matchedContractors =
-            await this.aiExtractor!.matchContractorsBatch(
-              transactionsForAI,
-              candidatesPerTransaction,
-              needsFullCatalog && fullCatalog.length > 0 ? fullCatalog : undefined
-            );
-
-          // Diagnostic logging: for every transaction, record what the AI was
-          // given (candidate IDs+names, whether the full-catalog fallback kicked
-          // in) and what it returned (matched contractor / null + confidence +
-          // reasoning). This makes "AI ran but didn't match X" inspectable in
-          // main.log instead of a black box.
-          transactionsForAI.forEach((t, j) => {
-            const cands = candidatesPerTransaction[j] || [];
-            // Empty candidates now means "drew from the shared full list".
-            const usedFallback = cands.length === 0 && needsFullCatalog;
-            const mc = matchedContractors[j];
-            const candStr = cands.length
-              ? cands.slice(0, 12).map((c) => `#${c.id}:${c.nazwa}`).join(' | ') +
-                (cands.length > 12 ? ` …(+${cands.length - 12})` : '')
-              : usedFallback
-                ? `pełna lista (${fullCatalog.length} poz., wysłana raz na zapytanie)`
-                : '(brak)';
-            logger.info(
-              `[EXPENSE-AI] desc-opt="${t.descOpt || ''}" desc-base="${t.descBase}" | ` +
-                `kandydaci(${usedFallback ? fullCatalog.length : cands.length}${usedFallback ? ', FALLBACK=pełna lista' : ''}): ${candStr} | ` +
-                `AI => ${mc.contractor ? `MATCH #${mc.contractor.id} "${mc.contractor.nazwa}" (conf ${mc.confidence})` : 'NULL'}` +
-                `${mc.reasoning ? ` | reasoning: ${mc.reasoning}` : ''}`
-            );
-          });
-
-          // Remember positive matches so the same recurring payment doesn't go
-          // to the AI again next month. Nulls are deliberately not cached — see
-          // MatchCache's header for why.
-          if (this.config.useCache) {
-            transactionsForAI.forEach((t, j) => {
-              const mc = matchedContractors[j];
-              if (mc.contractor && mc.confidence > 0) {
-                this.matchCache.set(t.descBase, t.descOpt, {
-                  contractorId: mc.contractor.id,
-                  confidence: mc.confidence,
-                  matchedIn: mc.matchedIn,
-                  reasoning: mc.reasoning,
-                });
-              }
-            });
+    const matchedContractors = await matchExpensesWithAI(
+      needsAI.map((item) => this.normalize(item.transaction)),
+      {
+        aiExtractor: this.aiExtractor,
+        contractorMatcher: this.contractorMatcher,
+        matchCache: this.config.useCache ? this.matchCache : undefined,
+        batchSize: this.config.useBatchProcessing ? DEFAULT_EXPENSE_AI_BATCH_SIZE : 1,
+        concurrency: this.config.aiConcurrency ?? 3,
+        onProgress: (event) => {
+          if (event.type === 'planned') {
+            this.aiBatchesTotal += event.batches;
+            this.emitProgress('expense-ai', `AI: wydatki — 0/${event.batches} batchy`);
+            return;
           }
-
-          const items: BaseProcessedTransaction<TRaw>[] = batch.map((b, j) => {
-            const matchedContractor = matchedContractors[j];
-            const extracted: BaseExtractedData = {
-              streetName: null,
-              buildingNumber: null,
-              apartmentNumber: null,
-              fullAddress: null,
-              tenantName: null,
-              confidence: {
-                address: 0,
-                apartment: 0,
-                tenantName: 0,
-                overall: 0,
-              },
-              extractionMethod: 'ai',
-              reasoning: matchedContractor.reasoning,
-              warnings: matchedContractor.contractor
-                ? []
-                : ['AI could not match contractor'],
-              rawData: this.buildRawData(b.transaction),
-            };
-            return this.createProcessedTransaction(
-              b.transaction,
-              extracted,
-              'expense',
-              matchedContractor
+          if (event.type === 'started') {
+            this.aiBatchesStarted += 1;
+            this.emitProgress(
+              'expense-ai',
+              `AI: wydatki — ${this.aiBatchesCompleted}/${this.aiBatchesTotal} batchy (w toku: ${this.aiBatchesStarted - this.aiBatchesCompleted})`
             );
-          });
-
+            return;
+          }
           this.aiBatchesCompleted += 1;
           this.emitProgress(
             'expense-ai',
             `AI: wydatki — ${this.aiBatchesCompleted}/${this.aiBatchesTotal} batchy`
           );
-
-          return items;
-        } catch (error) {
-          console.error(`   ❌ Expense batch ${batchIdx + 1} failed:`, error);
-          throw error;
-        }
+        },
       }
     );
 
-    for (const items of batchResults) {
-      processed.push(...items);
-    }
+    needsAI.forEach(({ transaction }, i) => {
+      const matchedContractor = matchedContractors[i];
+      const extracted: BaseExtractedData = {
+        streetName: null,
+        buildingNumber: null,
+        apartmentNumber: null,
+        fullAddress: null,
+        tenantName: null,
+        confidence: {
+          address: 0,
+          apartment: 0,
+          tenantName: 0,
+          overall: 0,
+        },
+        extractionMethod: 'ai',
+        reasoning: matchedContractor.reasoning,
+        warnings: matchedContractor.contractor ? [] : ['AI could not match contractor'],
+        rawData: this.buildRawData(transaction),
+      };
+      processed.push(
+        this.createProcessedTransaction(transaction, extracted, 'expense', matchedContractor)
+      );
+    });
   }
 
   // ============================================================
@@ -1128,17 +1030,6 @@ export abstract class BaseConverter<TRaw> {
       warnings,
       rawData: this.buildRawData(transaction),
     };
-  }
-
-  /**
-   * Split items into batches.
-   */
-  protected createBatches<T>(items: T[], batchSize: number): T[][] {
-    const batches: T[][] = [];
-    for (let i = 0; i < items.length; i += batchSize) {
-      batches.push(items.slice(i, i + batchSize));
-    }
-    return batches;
   }
 
   // ============================================================

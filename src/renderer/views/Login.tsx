@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Icon from '../components/Icon';
 
 interface LoginProps {
   onSignedIn: () => void;
@@ -70,7 +71,7 @@ const Login: React.FC<LoginProps> = ({ onSignedIn }) => {
           <div style={{ color: 'var(--danger, #c53030)', fontSize: 14 }}>{error}</div>
         )}
         <button type="submit" className="button button-primary" disabled={submitting}>
-          {submitting ? 'Logowanie…' : 'Zaloguj'}
+          <Icon name="arrow-right" size={14} />{' '}{submitting ? 'Logowanie…' : 'Zaloguj'}
         </button>
       </form>
     </div>

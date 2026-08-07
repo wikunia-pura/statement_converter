@@ -243,8 +243,8 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
                       <button
                         className="button button-small button-primary"
                         onClick={() => openOutput(lastResult.outputPath)}
-                      >
-                        {t.notyOpenFile}
+                      ><Icon name="folder" size={13} />{' '}
+                        {t.openFile}
                       </button>
                     </td>
                   </tr>
@@ -318,7 +318,7 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
                       className="button button-small button-danger"
                       onClick={() => removeFile(f.filePath)}
                       disabled={isProcessing}
-                    >
+                    ><Icon name="trash" size={13} />{' '}
                       {t.remove}
                     </button>
                   </td>

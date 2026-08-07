@@ -3,6 +3,7 @@ import { ConversionReviewData, ReviewDecision, TransactionForReview, Kontrahent,
 import { translations, Language } from '../translations';
 import { searchTransactionInPdf, PdfSearchMatch } from '../../shared/pdf-search';
 import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
+import { useNotify } from './Notifications';
 import Icon from './Icon';
 
 // Normalize like AddressMatcher (lowercase + strip Polish diacritics) so we can
@@ -447,6 +448,9 @@ interface TransactionCardProps {
   /** Persist an apartment-mapping rule under the current address and mark the
    *  given transaction as matched by it. Pass editId to update an existing rule. */
   onSaveApartmentMapping: (index: number, matchText: string, apartmentNumber: string, editId?: string) => Promise<void>;
+  /** Expense counterpart of the apartment rule: teach a contractor the spelling
+   *  this bank uses, so the deterministic matcher catches it next time — no AI. */
+  onSaveAlternativeName: (index: number, contractorId: number, alternativeName: string) => Promise<void>;
 }
 
 const TransactionCard: React.FC<TransactionCardProps> = ({
@@ -470,6 +474,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
   adresId,
   addressMappings,
   onSaveApartmentMapping,
+  onSaveAlternativeName,
 }) => {
   const [pdfResult, setPdfResult] = useState<PdfSearchMatch | null>(null);
   const [pdfSearching, setPdfSearching] = useState(false);
@@ -484,6 +489,14 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
   const [ruleSaving, setRuleSaving] = useState(false);
   const [ruleSaved, setRuleSaved] = useState(false);
   const [ruleError, setRuleError] = useState<string | null>(null);
+
+  // Alternative-name form (expense only)
+  const [altFormOpen, setAltFormOpen] = useState(false);
+  const [altContractorId, setAltContractorId] = useState<number | null>(null);
+  const [altName, setAltName] = useState('');
+  const [altSaving, setAltSaving] = useState(false);
+  const [altSaved, setAltSaved] = useState(false);
+  const [altError, setAltError] = useState<string | null>(null);
 
   const t = translations[language];
 
@@ -526,6 +539,37 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
       setRuleError(e instanceof Error ? e.message : 'Unknown error');
     } finally {
       setRuleSaving(false);
+    }
+  };
+
+  const openAltForm = () => {
+    // Default to the contractor the user just picked for this row — the usual
+    // flow is "assign it manually, then teach the matcher so it sticks".
+    setAltContractorId(manualContractorId ?? null);
+    // The bank's own rendering of the vendor is exactly the string that has to
+    // match next month, wrapping damage and all.
+    setAltName(trn.original.counterparty || trn.original.description || '');
+    setAltError(null);
+    setAltSaved(false);
+    setAltFormOpen(true);
+  };
+
+  const submitAltName = async () => {
+    const name = altName.trim();
+    if (!altContractorId || !name) {
+      setAltError(t.fillAllFields);
+      return;
+    }
+    setAltSaving(true);
+    setAltError(null);
+    try {
+      await onSaveAlternativeName(trn.index, altContractorId, name);
+      setAltSaved(true);
+      setAltFormOpen(false);
+    } catch (e: unknown) {
+      setAltError(e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setAltSaving(false);
     }
   };
 
@@ -903,6 +947,15 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
                 <Icon name={existingRule ? 'edit' : 'map-pin'} size={14} /> {existingRule ? t.editApartmentLink : t.linkApartment}
               </button>
             )}
+            {trn.transactionType === 'expense' && (
+              <button
+                onClick={() => (altFormOpen ? setAltFormOpen(false) : openAltForm())}
+                className={`button button-info${altFormOpen ? ' is-selected' : ''}`}
+                title={t.addAlternativeNameTooltip}
+              >
+                <Icon name="edit" size={14} /> {t.addAlternativeNameAction}
+              </button>
+            )}
           </div>
 
           {hasManualOverride && (
@@ -990,7 +1043,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
                     className="button button-small button-secondary"
                     onClick={() => setRuleFormOpen(false)}
                     disabled={ruleSaving}
-                  >
+                  ><Icon name="x" size={13} />{' '}
                     {t.cancel}
                   </button>
                 </div>
@@ -1032,6 +1085,70 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
                   disabled={manualContractorId !== undefined}
                 />
               </div>
+            </div>
+          )}
+
+          {/* Teach a contractor this bank's spelling (expense only). Saved onto the
+              contractor, so it applies to every future statement, not just this one. */}
+          {trn.transactionType === 'expense' && altFormOpen && (
+            <div style={{ marginTop: 'var(--s-3)' }}>
+              <div style={{
+                border: '1px solid var(--info)',
+                borderRadius: '6px',
+                padding: '12px',
+                backgroundColor: 'var(--info-bg)',
+              }}>
+                <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '8px' }}>
+                  {t.addAlternativeNameHint}
+                </div>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <div className="review-card__manual-field" style={{ flex: 1, minWidth: 260 }}>
+                    <label className="review-card__manual-label">{t.addAlternativeNameContractor}</label>
+                    <SearchableContractorSelect
+                      kontrahenci={kontrahenci}
+                      selectedContractorId={altContractorId}
+                      onChange={(contractorId) => { setAltContractorId(contractorId); if (altError) setAltError(null); }}
+                      placeholder={t.addAlternativeNameContractorPlaceholder}
+                      searchPlaceholder="Szukaj kontrahenta po nazwie, NIP lub koncie..."
+                    />
+                  </div>
+                  <div className="review-card__manual-field" style={{ flex: 2, minWidth: 260 }}>
+                    <label className="review-card__manual-label">{t.addAlternativeNameLabel}</label>
+                    <input
+                      type="text"
+                      value={altName}
+                      onChange={(e) => { setAltName((e.target as HTMLInputElement).value); if (altError) setAltError(null); }}
+                      placeholder={t.addAlternativeNamePlaceholder}
+                    />
+                  </div>
+                </div>
+                {altError && (
+                  <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '8px' }}>{altError}</div>
+                )}
+                <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                  <button
+                    type="button"
+                    className="button button-small button-success"
+                    onClick={submitAltName}
+                    disabled={altSaving || !altContractorId || !altName.trim()}
+                  >
+                    <Icon name="check" size={14} /> {altSaving ? '...' : t.addAlternativeNameSave}
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-small button-secondary"
+                    onClick={() => setAltFormOpen(false)}
+                    disabled={altSaving}
+                  ><Icon name="x" size={13} />{' '}
+                    {t.cancel}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          {trn.transactionType === 'expense' && altSaved && !altFormOpen && (
+            <div style={{ marginTop: 'var(--s-3)', fontSize: '12px', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Icon name="check-circle" size={14} /> {t.addAlternativeNameSaved}
             </div>
           )}
 
@@ -1105,6 +1222,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   onCancel,
 }) => {
   const t = translations[language];
+  const notify = useNotify();
   const [decisions, setDecisions] = useState<Map<number, ReviewDecision>>(new Map());
   
   // Manual inputs start empty - extracted values are shown in the input field as default
@@ -1116,6 +1234,11 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   const [kontrahenci, setKontrahenci] = useState<Kontrahent[]>([]);
   const [contractorSortOrder, setContractorSortOrder] = useState<ContractorSortOrder>('name-asc');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isRerunningExpenseAI, setIsRerunningExpenseAI] = useState(false);
+  const [rerunProgress, setRerunProgress] = useState<{ label: string; percent: number } | null>(null);
+  // Frozen at the start of a run: the candidate list shrinks once results merge,
+  // and the loader should keep showing what it actually set out to process.
+  const [expenseRerunCount, setExpenseRerunCount] = useState(0);
   const [filter, setFilter] = useState<'all' | 'income' | 'expense' | 'undecided'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
@@ -1166,6 +1289,89 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
     })();
     return () => { cancelled = true; };
   }, [reviewData.adresId]);
+
+  // Progress for the on-demand expense re-match. The main process reports it on
+  // the same channel a conversion uses, so it is filtered down to this file.
+  useEffect(() => {
+    if (!window.electronAPI?.onConversionProgress) return;
+    const unsubscribe = window.electronAPI.onConversionProgress((p: any) => {
+      if (p?.fileName !== reviewData.fileName) return;
+      setRerunProgress({ label: p.label, percent: p.percent });
+    });
+    return () => {
+      try { unsubscribe?.(); } catch { /* ignore */ }
+    };
+  }, [reviewData.fileName]);
+
+  /**
+   * Expenses worth sending back to the AI: still without a contractor, and not
+   * touched by the user in this session. Anything the user already decided,
+   * picked a contractor for, or typed into is left alone — a re-match must never
+   * overwrite work done two minutes ago in this very screen. Computed over the
+   * whole set, not the filtered view, so the active filter can't silently
+   * shrink the batch.
+   */
+  const expenseRerunIndices = useMemo(() => {
+    const untouched = (index: number) =>
+      !decisions.has(index) &&
+      !manualContractorIds.has(index) &&
+      !manualRemainingCostIds.has(index) &&
+      !manualInputs.has(index);
+    return reviewData.transactions
+      .filter(
+        (trn) =>
+          trn.transactionType === 'expense' &&
+          !trn.matchedContractor?.contractorName &&
+          untouched(trn.index),
+      )
+      .map((trn) => trn.index);
+  }, [reviewData.transactions, decisions, manualContractorIds, manualRemainingCostIds, manualInputs]);
+
+  const handleRerunExpenseAI = async () => {
+    if (isRerunningExpenseAI || expenseRerunIndices.length === 0) return;
+
+    setIsRerunningExpenseAI(true);
+    setExpenseRerunCount(expenseRerunIndices.length);
+    setRerunProgress({ label: t.rerunExpenseAIStarting, percent: 0 });
+    try {
+      const result = await window.electronAPI.rerunExpenseAI(
+        reviewData.tempConversionId,
+        expenseRerunIndices,
+        reviewData.fileName,
+      );
+
+      if (!result.success) {
+        notify.error(`${t.rerunExpenseAIFailed}: ${result.error ?? ''}`);
+        return;
+      }
+
+      // Merge the refreshed rows in place, matching how the apartment-mapping
+      // rule flow updates this screen. Indices are stable, so all per-row local
+      // state (decisions, manual picks) stays aligned.
+      for (const updated of result.updated ?? []) {
+        const target = reviewData.transactions.find((trn) => trn.index === updated.index);
+        if (target) {
+          target.extracted = updated.extracted;
+          target.matchedContractor = updated.matchedContractor;
+        }
+      }
+
+      const matched = result.matchedCount ?? 0;
+      const processed = result.processedCount ?? 0;
+      if (matched > 0) {
+        notify.success(`${t.rerunExpenseAIMatched} ${matched}/${processed}`);
+      } else {
+        notify.warning(t.rerunExpenseAINoMatches);
+      }
+    } catch (error) {
+      notify.error(
+        `${t.rerunExpenseAIFailed}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      setIsRerunningExpenseAI(false);
+      setRerunProgress(null);
+    }
+  };
 
   // Free-text search across every field of a transaction.
   const matchesSearch = (trn: TransactionForReview): boolean => {
@@ -1347,6 +1553,50 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   // The rule is auto-attached to reviewData.adresId (no address picker needed).
   // Afterwards the current transaction is treated as a confirmed match (same as
   // on subsequent runs): apartment filled in, flagged, and accepted.
+  /**
+   * Append a spelling to a contractor's alternative names, so the deterministic
+   * matcher resolves this vendor on every future statement without an AI call.
+   * The expense-side twin of handleSaveApartmentMapping.
+   */
+  const handleSaveAlternativeName = async (index: number, contractorId: number, alternativeName: string) => {
+    const phrase = alternativeName.trim();
+    if (!phrase) throw new Error(t.fillAllFields);
+
+    // Re-read rather than trust the list loaded on mount: the contractor may
+    // have been edited elsewhere since, and we are about to write its whole
+    // alternativeNames array back.
+    const all = await window.electronAPI.getKontrahenci();
+    const contractor = all.find((k) => k.id === contractorId);
+    if (!contractor) throw new Error(t.addAlternativeNameMissingContractor);
+
+    const existing = contractor.alternativeNames || [];
+    const normalized = phrase.toLowerCase();
+    if (
+      contractor.nazwa.trim().toLowerCase() === normalized ||
+      existing.some((n) => n.trim().toLowerCase() === normalized)
+    ) {
+      throw new Error(t.addAlternativeNameDuplicate);
+    }
+
+    const nextAlternatives = [...existing, phrase];
+    await window.electronAPI.updateKontrahent(
+      contractor.id,
+      contractor.nazwa,
+      contractor.kontoKontrahenta,
+      contractor.nip,
+      nextAlternatives,
+      contractor.typy,
+    );
+
+    // Reflect it locally so the pick-lists and any later save use fresh data.
+    setKontrahenci(all.map((k) => (k.id === contractorId ? { ...k, alternativeNames: nextAlternatives } : k)));
+
+    // Resolve this row too: teaching the matcher is almost always done right
+    // after deciding which contractor it is, so assign it instead of making the
+    // user pick the same contractor a second time in the dropdown.
+    handleManualContractorSelect(index, contractorId);
+  };
+
   const handleSaveApartmentMapping = async (index: number, matchText: string, apartmentNumber: string, editId?: string) => {
     if (reviewData.adresId == null) throw new Error(t.apartmentMappingNeedsAddress);
     const adresy = await window.electronAPI.getAdresy();
@@ -1671,6 +1921,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                   adresId={reviewData.adresId}
                   addressMappings={addressMappings}
                   onSaveApartmentMapping={handleSaveApartmentMapping}
+                  onSaveAlternativeName={handleSaveAlternativeName}
                 />
               );
             })}
@@ -1696,13 +1947,65 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                   <Icon name="arrow-right" size={18} /> WYDATKI ({expenseTransactions.length})
                 </span>
               </h3>
-              <button
-                onClick={handleMarkAllExpensesAsUnrecognized}
-                className="button button-danger button-small"
-              >
-                <Icon name="x" size={14} /> {t.markAllExpensesAsUnrecognized}
-              </button>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button
+                  onClick={handleRerunExpenseAI}
+                  className="button button-success button-small"
+                  disabled={isRerunningExpenseAI || expenseRerunIndices.length === 0}
+                  title={
+                    expenseRerunIndices.length === 0
+                      ? t.rerunExpenseAINothingToDo
+                      : t.rerunExpenseAITooltip
+                  }
+                >
+                  <Icon name="bot" size={14} />{' '}
+                  {isRerunningExpenseAI
+                    ? t.rerunExpenseAIRunning
+                    : `${t.rerunExpenseAI} (${expenseRerunIndices.length})`}
+                </button>
+                <button
+                  onClick={handleMarkAllExpensesAsUnrecognized}
+                  className="button button-danger button-small"
+                  disabled={isRerunningExpenseAI}
+                >
+                  <Icon name="x" size={14} /> {t.markAllExpensesAsUnrecognized}
+                </button>
+              </div>
             </div>
+
+            {/* Same loader as the file list on the converter view, so a long
+                re-match reads as "the app is working", not as a frozen screen. */}
+            {isRerunningExpenseAI && (
+              <div
+                className="processing-row"
+                style={{
+                  marginBottom: '15px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-default)',
+                }}
+              >
+                <div className="processing-loader">
+                  <div className="loader-spinner"></div>
+                  <div className="loader-content" style={{ flex: 1 }}>
+                    <span className="loader-text">
+                      {t.rerunExpenseAILoaderTitle}: <strong>{expenseRerunCount}</strong>
+                    </span>
+                    <span className="loader-subtext">
+                      {rerunProgress?.label ?? t.rerunExpenseAIStarting}
+                    </span>
+                    <div className="conversion-progress-bar">
+                      <div
+                        className="conversion-progress-bar-fill"
+                        style={{ width: `${rerunProgress?.percent ?? 0}%` }}
+                      />
+                      <span className="conversion-progress-bar-text">
+                        {rerunProgress?.percent ?? 0}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             {expenseTransactions.map((trn) => {
               const currentDecision = decisions.get(trn.index);
               const manualInput = manualInputs.get(trn.index);
@@ -1733,6 +2036,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                   adresId={reviewData.adresId}
                   addressMappings={addressMappings}
                   onSaveApartmentMapping={handleSaveApartmentMapping}
+                  onSaveAlternativeName={handleSaveAlternativeName}
                 />
               );
             })}

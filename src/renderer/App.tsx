@@ -9,6 +9,14 @@ import PodsumowanieZaliczek, { ZaliczkiFileEntry } from './views/PodsumowanieZal
 import NotySwiadczenia, { NotyFileEntry } from './views/NotySwiadczenia';
 import ScalanieWplat, { ScalanieFileEntry } from './views/ScalanieWplat';
 import Homebanking, { HomebankingFileEntry } from './views/Homebanking';
+import OdczytyLicznikow, { OdczytyFileEntry } from './views/OdczytyLicznikow';
+import OdczytyHistoria from './views/OdczytyHistoria';
+import Mailing, { MailingDraft, emptyMailingDraft } from './views/Mailing';
+import MailingSzablony from './views/MailingSzablony';
+import MailingPola from './views/MailingPola';
+import MailingHistoria from './views/MailingHistoria';
+import ModuleTabs from './components/ModuleTabs';
+import CoNowego from './views/CoNowego';
 import Login from './views/Login';
 import Logo from './components/Logo';
 import SplashScreen from './components/SplashScreen';
@@ -16,9 +24,11 @@ import Footer from './components/Footer';
 import Icon from './components/Icon';
 import UpdateNotification from './components/UpdateNotification';
 import BackupNotifier from './components/BackupNotifier';
+import WhatsNewModal from './components/WhatsNewModal';
 import { NotificationProvider } from './components/Notifications';
 import { translations, Language } from './translations';
 import { FileEntry } from '../shared/types';
+import { releaseForVersion, shouldShowWhatsNew } from '../shared/release-notes';
 
 interface NavItemProps {
   icon: React.ComponentProps<typeof Icon>['name'];
@@ -27,10 +37,12 @@ interface NavItemProps {
   onClick: () => void;
   /** Tooltip — defaults to the label (useful when the sidebar is collapsed to icons). */
   title?: string;
+  /** Unread marker (small dot) — stays visible when the rail is collapsed. */
+  badge?: boolean;
   style?: React.CSSProperties;
 }
 
-const NavItem: React.FC<NavItemProps> = ({ icon, label, active, onClick, title, style }) => (
+const NavItem: React.FC<NavItemProps> = ({ icon, label, active, onClick, title, badge, style }) => (
   <div
     className={`nav-item ${active ? 'active' : ''}`}
     onClick={onClick}
@@ -39,20 +51,23 @@ const NavItem: React.FC<NavItemProps> = ({ icon, label, active, onClick, title, 
   >
     <Icon name={icon} />
     <span className="nav-label">{label}</span>
+    {badge && <span className="nav-dot" aria-hidden="true" />}
   </div>
 );
 
 type View =
   | 'converter'
   | 'settings'
-  | 'history'
   | 'kontrahenci'
   | 'adresy'
   | 'banki'
   | 'podsumowanie'
   | 'noty'
   | 'scalanie'
-  | 'homebanking';
+  | 'homebanking'
+  | 'odczyty'
+  | 'mailing'
+  | 'conowego';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('converter');
@@ -68,6 +83,15 @@ const App: React.FC = () => {
   const [notyFiles, setNotyFiles] = useState<NotyFileEntry[]>([]);
   const [scalanieFiles, setScalanieFiles] = useState<ScalanieFileEntry[]>([]);
   const [homebankingFiles, setHomebankingFiles] = useState<HomebankingFileEntry[]>([]);
+  const [odczytyFiles, setOdczytyFiles] = useState<OdczytyFileEntry[]>([]);
+  // Each module keeps its own Konwersja/Historia tab, so switching modules and
+  // coming back lands where the user left off.
+  const [converterTab, setConverterTab] = useState<'convert' | 'history'>('convert');
+  const [odczytyTab, setOdczytyTab] = useState<'convert' | 'history'>('convert');
+  const [mailingTab, setMailingTab] = useState<'send' | 'templates' | 'fields' | 'history'>('send');
+  // The send form lives here so a detour to Adresy (to attach a missing city
+  // unit) or to the templates tab doesn't throw away a half-filled mailing.
+  const [mailingDraft, setMailingDraft] = useState<MailingDraft>(emptyMailingDraft);
   // When the Converter asks "+ Add address with this account", we switch to the
   // Adresy view and pass this value through one render so the modal can prefill it.
   const [adresyPrefillAccount, setAdresyPrefillAccount] = useState<string | null>(null);
@@ -76,6 +100,9 @@ const App: React.FC = () => {
   const [sessionChecked, setSessionChecked] = useState(false);
   // Funky intro shown once when the app opens; self-dismisses after its animation.
   const [showSplash, setShowSplash] = useState(true);
+  // Release notes: the version this machine has already been shown. Undefined
+  // until settings load, so the modal can't flash before we know the answer.
+  const [lastSeenVersion, setLastSeenVersion] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     loadAppVersion();
@@ -117,6 +144,7 @@ const App: React.FC = () => {
       setDarkMode(settings.darkMode);
       setLanguage(settings.language || 'pl');
       setSidebarCollapsed(settings.sidebarCollapsed);
+      setLastSeenVersion(settings.lastSeenVersion ?? '');
       applyDarkMode(settings.darkMode);
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -148,6 +176,19 @@ const App: React.FC = () => {
 
   const t = translations[language];
 
+  // Release notes for the running build. `unreadRelease` drives both the nav dot
+  // and the one-time modal; it stays false while settings are still loading.
+  const currentRelease = releaseForVersion(appVersion);
+  const hasUnreadRelease =
+    lastSeenVersion !== undefined && shouldShowWhatsNew(appVersion, lastSeenVersion);
+
+  /** Remember the shown release as read, so neither the modal nor the dot returns. */
+  const markReleaseSeen = () => {
+    if (!currentRelease) return;
+    setLastSeenVersion(currentRelease.version);
+    void window.electronAPI.setLastSeenVersion(currentRelease.version);
+  };
+
   const splash = showSplash ? (
     <SplashScreen onDone={() => setShowSplash(false)} />
   ) : null;
@@ -178,6 +219,19 @@ const App: React.FC = () => {
     <div className="app">
       <UpdateNotification language={language} />
       <BackupNotifier language={language} />
+      {/* First launch on a new version: greet with the release notes. Waits for
+          the splash so the two animations don't fight over the screen. */}
+      {currentRelease && hasUnreadRelease && !showSplash && (
+        <WhatsNewModal
+          release={currentRelease}
+          language={language}
+          onClose={markReleaseSeen}
+          onOpenFullView={() => {
+            markReleaseSeen();
+            setCurrentView('conowego');
+          }}
+        />
+      )}
       <div className="app-body">
       <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header">
@@ -224,6 +278,18 @@ const App: React.FC = () => {
             active={currentView === 'homebanking'}
             onClick={() => setCurrentView('homebanking')}
           />
+          <NavItem
+            icon="zap"
+            label={t.odczyty}
+            active={currentView === 'odczyty'}
+            onClick={() => setCurrentView('odczyty')}
+          />
+          <NavItem
+            icon="mail"
+            label={t.mailing}
+            active={currentView === 'mailing'}
+            onClick={() => setCurrentView('mailing')}
+          />
           <div className="nav-divider" />
           <NavItem
             icon="map-pin"
@@ -245,16 +311,21 @@ const App: React.FC = () => {
           />
           <div className="nav-divider" />
           <NavItem
+            icon="sparkles"
+            label={t.whatsNew}
+            title={hasUnreadRelease ? t.whatsNewNavDot : t.whatsNew}
+            badge={hasUnreadRelease}
+            active={currentView === 'conowego'}
+            onClick={() => {
+              setCurrentView('conowego');
+              markReleaseSeen();
+            }}
+          />
+          <NavItem
             icon="settings"
             label={t.settings}
             active={currentView === 'settings'}
             onClick={() => setCurrentView('settings')}
-          />
-          <NavItem
-            icon="history"
-            label={t.history}
-            active={currentView === 'history'}
-            onClick={() => setCurrentView('history')}
           />
           <div className="nav-divider" />
           <NavItem
@@ -269,18 +340,32 @@ const App: React.FC = () => {
 
       <div className="main-content">
         {currentView === 'converter' && (
-          <Converter
-            language={language}
-            files={files}
-            setFiles={setFiles}
-            selectedBank={selectedBank}
-            setSelectedBank={setSelectedBank}
-            onAddAdresWithAccount={(acc) => {
-              setAdresyPrefillAccount(acc);
-              setCurrentView('adresy');
-            }}
-            onNavigateToHistory={() => setCurrentView('history')}
-          />
+          <>
+            <ModuleTabs
+              tabs={[
+                { id: 'convert', label: t.tabConversion, icon: 'folder' },
+                { id: 'history', label: t.tabHistory, icon: 'history' },
+              ]}
+              active={converterTab}
+              onChange={(id) => setConverterTab(id as 'convert' | 'history')}
+            />
+            {converterTab === 'convert' ? (
+              <Converter
+                language={language}
+                files={files}
+                setFiles={setFiles}
+                selectedBank={selectedBank}
+                setSelectedBank={setSelectedBank}
+                onAddAdresWithAccount={(acc) => {
+                  setAdresyPrefillAccount(acc);
+                  setCurrentView('adresy');
+                }}
+                onNavigateToHistory={() => setConverterTab('history')}
+              />
+            ) : (
+              <History language={language} />
+            )}
+          </>
         )}
         {currentView === 'kontrahenci' && <Kontrahenci language={language} />}
         {currentView === 'adresy' && (
@@ -321,6 +406,57 @@ const App: React.FC = () => {
             setFiles={setHomebankingFiles}
           />
         )}
+        {currentView === 'odczyty' && (
+          <>
+            <ModuleTabs
+              tabs={[
+                { id: 'convert', label: t.tabConversion, icon: 'zap' },
+                { id: 'history', label: t.tabHistory, icon: 'history' },
+              ]}
+              active={odczytyTab}
+              onChange={(id) => setOdczytyTab(id as 'convert' | 'history')}
+            />
+            {odczytyTab === 'convert' ? (
+              <OdczytyLicznikow
+                language={language}
+                files={odczytyFiles}
+                setFiles={setOdczytyFiles}
+                onNavigateToHistory={() => setOdczytyTab('history')}
+              />
+            ) : (
+              <OdczytyHistoria language={language} />
+            )}
+          </>
+        )}
+        {currentView === 'mailing' && (
+          <>
+            <ModuleTabs
+              tabs={[
+                { id: 'send', label: t.mailingTabSend, icon: 'mail' },
+                { id: 'templates', label: t.mailingTabTemplates, icon: 'file-text' },
+                { id: 'fields', label: t.mailingTabFields, icon: 'sparkles' },
+                { id: 'history', label: t.tabHistory, icon: 'history' },
+              ]}
+              active={mailingTab}
+              onChange={(id) => setMailingTab(id as 'send' | 'templates' | 'fields' | 'history')}
+            />
+            {mailingTab === 'send' && (
+              <Mailing
+                language={language}
+                draft={mailingDraft}
+                setDraft={setMailingDraft}
+                onNavigateToHistory={() => setMailingTab('history')}
+                onNavigateToTemplates={() => setMailingTab('templates')}
+              />
+            )}
+            {mailingTab === 'templates' && <MailingSzablony language={language} />}
+            {mailingTab === 'fields' && <MailingPola language={language} />}
+            {mailingTab === 'history' && <MailingHistoria language={language} />}
+          </>
+        )}
+        {currentView === 'conowego' && (
+          <CoNowego language={language} appVersion={appVersion} />
+        )}
         {currentView === 'settings' && (
           <Settings
             darkMode={darkMode}
@@ -329,7 +465,6 @@ const App: React.FC = () => {
             onLanguageChange={handleLanguageChange}
           />
         )}
-        {currentView === 'history' && <History language={language} />}
       </div>
       </div>
       <Footer language={language} appVersion={appVersion} />

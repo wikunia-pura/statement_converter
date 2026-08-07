@@ -8,7 +8,6 @@ import Icon from '../components/Icon';
 import Loader from '../components/Loader';
 import ModalDismiss from '../components/Modal';
 import Select from '../components/Select';
-import kapitanBombaImg from '../assets/kapitan_bomba.jpg';
 import BankIllustration from '../components/BankIllustration';
 import { findAdresByAccountNumbers, normalizeAccount } from '../../shared/account-extractor';
 import { resolveOutputFilePath } from '../../shared/outputPaths';
@@ -239,11 +238,13 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   const [isLoading, setIsLoading] = useState(true);
   const [showDuplicatesModal, setShowDuplicatesModal] = useState(false);
   const [duplicateFiles, setDuplicateFiles] = useState<string[]>([]);
-  const [showAIWarningModal, setShowAIWarningModal] = useState(false);
-  const [filesNeedingAI, setFilesNeedingAI] = useState<{fileName: string; fileId: string; totalTransactions: number; lowConfidenceCount: number}[]>([]);
   const [reviewData, setReviewData] = useState<ConversionReviewData | null>(null);
   const [conversionQueue, setConversionQueue] = useState<string[]>([]);
   const [skipUserApproval, setSkipUserApproval] = useState(false);
+  // Whether conversions call the AI. Read once from settings; the whole queue
+  // runs on the same value, so a file can no longer silently fall back to the
+  // non-AI path just because it wasn't first in line.
+  const [alwaysUseAI, setAlwaysUseAI] = useState(true);
   const [outputFolder, setOutputFolder] = useState('');
   const [isProcessingQueue, setIsProcessingQueue] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(document.body.classList.contains('dark-mode'));
@@ -251,6 +252,8 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   const [progressByFile, setProgressByFile] = useState<Record<string, { label: string; percent: number }>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<FileEntry[]>(files);
+  // Read from the queue callback, which outlives the render that scheduled it.
+  const alwaysUseAIRef = useRef(alwaysUseAI);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const menuPlacement = useDropdownPlacement(dropdownRef, openDropdownId !== null, 120);
 
@@ -258,6 +261,10 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   useEffect(() => {
     filesRef.current = files;
   }, [files]);
+
+  useEffect(() => {
+    alwaysUseAIRef.current = alwaysUseAI;
+  }, [alwaysUseAI]);
 
   // Heartbeat: while a review screen is open, keep its pending conversion alive
   // in the main-process cache (sliding expiration) so a long or interrupted
@@ -412,6 +419,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     try {
       const settings = await window.electronAPI.getSettings();
       setSkipUserApproval(settings.skipUserApproval ?? false);
+      setAlwaysUseAI(settings.alwaysUseAI !== false);
       setOutputFolder(settings.outputFolder ?? '');
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -648,42 +656,14 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   const handleConvert = async (fileId: string) => {
     // Get file from ref to ensure we have latest state
     const currentFile = filesRef.current.find((f) => f.id === fileId);
-    
+
     if (!currentFile || !currentFile.bankId || !currentFile.adresId) return;
 
-    // First analyze file to check if AI is needed
-    try {
-      const summary = await window.electronAPI.analyzeFile(
-        currentFile.filePath,
-        currentFile.bankId,
-        currentFile.adresId
-      );
-
-      // If AI is needed, show warning modal
-      if (summary.needsAI) {
-        setFilesNeedingAI([{
-          fileName: currentFile.fileName,
-          fileId: currentFile.id,
-          totalTransactions: summary.totalTransactions,
-          lowConfidenceCount: summary.lowConfidenceCount
-        }]);
-        setShowAIWarningModal(true);
-        return;
-      }
-
-      // Otherwise proceed with normal conversion
-      await performConversion(fileId, false);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      setFiles((prevFiles) =>
-        prevFiles.map((f) =>
-          f.id === fileId
-            ? { ...f, status: 'error' as const, errorMessage }
-            : f
-        )
-      );
-      notify.error(`Błąd analizy pliku: ${errorMessage}`);
-    }
+    // No pre-analysis pass here: it only ever existed to populate the AI prompt
+    // modal, and its result is not reused by the AI conversion path (see the
+    // memo note in converterRegistry), so running it would parse and match the
+    // file a second time for nothing.
+    await performConversion(fileId, alwaysUseAIRef.current);
   };
 
   // A pending conversion that expired/was lost from the main-process cache is
@@ -841,12 +821,14 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
       }
       
       const [nextFileId, ...remainingQueue] = prevQueue;
-      
-      // Process next file in background
+
+      // Every queued file uses the same AI setting as the first one. This used
+      // to be hard-coded to false, so in a multi-file batch only the first file
+      // actually reached the AI — the rest silently converted without it.
       setTimeout(() => {
-        performConversion(nextFileId, false);
+        performConversion(nextFileId, alwaysUseAIRef.current);
       }, 100);
-      
+
       return remainingQueue;
     });
   };
@@ -1038,66 +1020,11 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     
     if (filesToConvert.length === 0) return;
 
-    // Analyze all files first
-    const analysisResults: {fileName: string; fileId: string; totalTransactions: number; lowConfidenceCount: number}[] = [];
-    
-    for (const file of filesToConvert) {
-      try {
-        const summary = await window.electronAPI.analyzeFile(
-          file.filePath,
-          file.bankId!,
-          file.adresId
-        );
-
-        if (summary.needsAI) {
-          analysisResults.push({
-            fileName: file.fileName,
-            fileId: file.id,
-            totalTransactions: summary.totalTransactions,
-            lowConfidenceCount: summary.lowConfidenceCount
-          });
-        }
-      } catch (error) {
-        console.error(`Error analyzing ${file.fileName}:`, error);
-      }
-    }
-
-    // If any files need AI, show warning modal
-    if (analysisResults.length > 0) {
-      setFilesNeedingAI(analysisResults);
-      setShowAIWarningModal(true);
-      return;
-    }
-
     // Convert files sequentially - start with first, rest go to queue
     setIsProcessingQueue(true);
-    if (filesToConvert.length > 0) {
-      const [firstFile, ...restFiles] = filesToConvert;
-      setConversionQueue(restFiles.map(f => f.id));
-      await performConversion(firstFile.id, false);
-    }
-  };
-
-  const handleProceedWithAI = async (fileIds: string[]) => {
-    setShowAIWarningModal(false);
-    // Convert files sequentially - start with first, rest go to queue
-    setIsProcessingQueue(true);
-    if (fileIds.length > 0) {
-      const [firstFile, ...restFiles] = fileIds;
-      setConversionQueue(restFiles);
-      await performConversion(firstFile, true);
-    }
-  };
-
-  const handleSkipAI = async (fileIds: string[]) => {
-    setShowAIWarningModal(false);
-    // Convert files sequentially without AI
-    setIsProcessingQueue(true);
-    if (fileIds.length > 0) {
-      const [firstFile, ...restFiles] = fileIds;
-      setConversionQueue(restFiles);
-      await performConversion(firstFile, false);
-    }
+    const [firstFile, ...restFiles] = filesToConvert;
+    setConversionQueue(restFiles.map(f => f.id));
+    await performConversion(firstFile.id, alwaysUseAIRef.current);
   };
 
   const handleRemoveFile = (fileId: string) => {
@@ -1211,11 +1138,11 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                     opacity: 0.5, 
                     cursor: 'not-allowed' 
                   } : {}}
-                >
+                ><Icon name="arrow-right" size={14} />{' '}
                   {t.convertAll}
                 </button>
                 <button className="button button-danger" onClick={handleClearAll}>
-                  {t.clearAll}
+                  <Icon name="trash" size={14} />{' '}{t.clearAll}
                 </button>
               </div>
             </div>
@@ -1360,7 +1287,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                                   className="button button-small button-secondary"
                                   onClick={() => onAddAdresWithAccount(file.detectedAccounts![0])}
                                   style={{ fontSize: '11px', padding: '4px 8px' }}
-                                >
+                                ><Icon name="plus" size={13} />{' '}
                                   {t.accountDetectedNoMatchAction}
                                 </button>
                               </div>
@@ -1416,8 +1343,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                                 whiteSpace: 'nowrap',
                               }}
                               title="Dodaj PDF wyciągu bankowego (opcjonalne)"
-                            >
-                              + PDF
+                            ><Icon name="upload" size={13} />{' '}PDF
                             </button>
                           )}
                         </td>
@@ -1461,7 +1387,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                                   <button
                                     className="button button-small button-primary"
                                     onClick={() => setOpenDropdownId(openDropdownId === file.id ? null : file.id)}
-                                  >
+                                  ><Icon name="folder" size={13} />{' '}
                                     {t.open} ▾
                                   </button>
                                   {openDropdownId === file.id && (
@@ -1525,7 +1451,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                                 <button
                                   className="button button-small button-secondary"
                                   onClick={() => handleConvert(file.id)}
-                                >
+                                ><Icon name="refresh" size={13} />{' '}
                                   {t.convertAgain}
                                 </button>
                               </>
@@ -1540,14 +1466,14 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                                   opacity: 0.5, 
                                   cursor: 'not-allowed' 
                                 } : {}}
-                              >
+                              ><Icon name="arrow-right" size={13} />{' '}
                                 {t.convert}
                               </button>
                             )}
                             <button
                               className="button button-small button-danger"
                               onClick={() => handleRemoveFile(file.id)}
-                            >
+                            ><Icon name="trash" size={13} />{' '}
                               {t.remove}
                             </button>
                           </div>
@@ -1592,7 +1518,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
               </h2>
               {onNavigateToHistory && (
                 <button className="button button-small button-secondary" onClick={onNavigateToHistory}>
-                  {t.goToFullHistory} →
+                  <Icon name="history" size={13} />{' '}{t.goToFullHistory} →
                 </button>
               )}
             </div>
@@ -1616,99 +1542,6 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
             onSkip={handleSkipFile}
             onCancel={handleCancelReview}
           />
-        )}
-
-        {/* AI Warning Modal */}
-        {showAIWarningModal && (
-          <div className="modal-overlay" onClick={() => setShowAIWarningModal(false)}>
-            <div className="modal" onClick={(e) => e.stopPropagation()}>
-              <ModalDismiss onClose={() => setShowAIWarningModal(false)} />
-              <div className="modal-header">
-                <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                  <span>Tempe Huje</span>
-                  <img src={kapitanBombaImg} alt="Kapitan Bomba" style={{ width: '80px', height: '80px', borderRadius: '8px' }} />
-                </h2>
-              </div>
-              <div className="modal-body" style={{ padding: '20px' }}>
-                <p style={{ marginBottom: '15px', fontSize: '14px', color: 'var(--text-tertiary)' }}>
-                  Galaktyka Kurvix została opanowana przez złych kosmitów. Pokonać ich może tylko załoga Gwiezdnego Patrolu, na czele której stoi... File Funky!
-                </p>
-                <div style={{
-                  background: 'var(--bg-surface-sunken)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '8px',
-                  padding: '15px',
-                  maxHeight: '300px',
-                  overflowY: 'auto'
-                }}>
-                  {filesNeedingAI.map((file, index) => (
-                    <div key={index} style={{
-                      padding: '12px',
-                      marginBottom: '10px',
-                      background: 'var(--bg-surface)',
-                      borderRadius: '4px',
-                      fontSize: '13px'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-                          <Icon name="file-text" size={16} />
-                          <span style={{ fontWeight: '600', fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.fileName}</span>
-                        </div>
-                        <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                          <button
-                            className="button button-small button-secondary"
-                            onClick={() => {
-                              setShowAIWarningModal(false);
-                              performConversion(file.fileId, false);
-                            }}
-                          >
-                            Bez AI (nie polecam)
-                          </button>
-                          <button
-                            className="button button-small button-success"
-                            onClick={() => {
-                              setShowAIWarningModal(false);
-                              performConversion(file.fileId, true);
-                            }}
-                          >
-                            <Icon name="bot" size={14} /> Napierdalamy!
-                          </button>
-                        </div>
-                      </div>
-                      <div style={{ paddingLeft: '24px', fontSize: '12px', color: 'var(--text-tertiary)' }}>
-                        <div>Transakcje: {file.totalTransactions}</div>
-                        <div style={{ color: 'var(--danger)', fontWeight: '500' }}>
-                          Wymaga weryfikacji (confidence {'<'} 70%): {file.lowConfidenceCount}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="modal-footer" style={{ padding: '15px 20px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between' }}>
-                <button 
-                  className="button button-secondary" 
-                  onClick={() => setShowAIWarningModal(false)}
-                >
-                  Zamknij
-                </button>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button 
-                    className="button button-secondary" 
-                    onClick={() => handleSkipAI(filesNeedingAI.map(f => f.fileId))}
-                  >
-                    Bez AI dla wszystkich (nie polecam)
-                  </button>
-                  <button 
-                    className="button button-success" 
-                    onClick={() => handleProceedWithAI(filesNeedingAI.map(f => f.fileId))}
-                  >
-                    Napierdalamy wszystko!
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
         )}
 
         {/* Duplicates Modal */}
@@ -1754,7 +1587,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                 <button 
                   className="button button-primary" 
                   onClick={() => setShowDuplicatesModal(false)}
-                >
+                ><Icon name="check" size={14} />{' '}
                   Rozumiem
                 </button>
               </div>

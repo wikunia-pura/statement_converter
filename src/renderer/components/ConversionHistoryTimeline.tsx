@@ -358,7 +358,7 @@ const ConversionHistoryTimeline: React.FC<ConversionHistoryTimelineProps> = ({
                                         onClick={() =>
                                           setOpenDropdownId(openDropdownId === entry.id ? null : entry.id)
                                         }
-                                      >
+                                      ><Icon name="folder" size={13} />{' '}
                                         {t.open} ▾
                                       </button>
                                       {openDropdownId === entry.id && (

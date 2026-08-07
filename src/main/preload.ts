@@ -39,6 +39,7 @@ const IPC_CHANNELS = {
   DETECT_ACCOUNT_NUMBERS: 'files:detect-account-numbers',
   CONVERT_FILE_WITH_AI: 'files:convert-with-ai',
   FINALIZE_CONVERSION: 'files:finalize-conversion',
+  RERUN_EXPENSE_AI: 'files:rerun-expense-ai',
   TOUCH_CONVERSION: 'files:touch-conversion',
   SELECT_PDF: 'files:select-pdf',
   EXTRACT_PDF_TEXT: 'files:extract-pdf-text',
@@ -50,8 +51,10 @@ const IPC_CHANNELS = {
   SET_DARK_MODE: 'settings:set-dark-mode',
   SET_LANGUAGE: 'settings:set-language',
   SET_SKIP_USER_APPROVAL: 'settings:set-skip-user-approval',
+  SET_ALWAYS_USE_AI: 'settings:set-always-use-ai',
   SET_CONTRACTOR_SORT_ORDER: 'settings:set-contractor-sort-order',
   SET_SIDEBAR_COLLAPSED: 'settings:set-sidebar-collapsed',
+  SET_LAST_SEEN_VERSION: 'settings:set-last-seen-version',
   EXPORT_SETTINGS: 'settings:export',
   IMPORT_SETTINGS: 'settings:import',
   GET_HISTORY: 'history:get-all',
@@ -78,6 +81,33 @@ const IPC_CHANNELS = {
   HOMEBANKING_ANALYZE_FILE: 'homebanking:analyze-file',
   HOMEBANKING_SELECT_OUTPUT_DIR: 'homebanking:select-output-dir',
   HOMEBANKING_MERGE: 'homebanking:merge',
+  ODCZYTY_SELECT_FILES: 'odczyty:select-files',
+  ODCZYTY_ANALYZE_FILE: 'odczyty:analyze-file',
+  ODCZYTY_SELECT_OUTPUT_DIR: 'odczyty:select-output-dir',
+  ODCZYTY_CONVERT: 'odczyty:convert',
+  ODCZYTY_GET_HISTORY: 'odczyty:get-history',
+  ODCZYTY_CLEAR_HISTORY: 'odczyty:clear-history',
+  MAILING_GET_ZGN: 'mailing:get-zgn',
+  MAILING_ADD_ZGN: 'mailing:add-zgn',
+  MAILING_UPDATE_ZGN: 'mailing:update-zgn',
+  MAILING_DELETE_ZGN: 'mailing:delete-zgn',
+  MAILING_GET_POLA: 'mailing:get-pola',
+  MAILING_ADD_POLE: 'mailing:add-pole',
+  MAILING_UPDATE_POLE: 'mailing:update-pole',
+  MAILING_DELETE_POLE: 'mailing:delete-pole',
+  MAILING_GET_SZABLONY: 'mailing:get-szablony',
+  MAILING_ADD_SZABLON: 'mailing:add-szablon',
+  MAILING_UPDATE_SZABLON: 'mailing:update-szablon',
+  MAILING_DELETE_SZABLON: 'mailing:delete-szablon',
+  MAILING_SELECT_ATTACHMENTS: 'mailing:select-attachments',
+  MAILING_SEND: 'mailing:send',
+  MAILING_GET_HISTORY: 'mailing:get-history',
+  MAILING_CLEAR_HISTORY: 'mailing:clear-history',
+  MAILING_GET_FILES_INFO: 'mailing:get-files-info',
+  MAILING_CLEANUP_FILES: 'mailing:cleanup-files',
+  MAILING_GET_SMTP: 'mailing:get-smtp',
+  MAILING_SET_SMTP: 'mailing:set-smtp',
+  MAILING_TEST_SMTP: 'mailing:test-smtp',
   AUTH_SIGN_IN: 'auth:sign-in',
   AUTH_SIGN_OUT: 'auth:sign-out',
   AUTH_GET_SESSION: 'auth:get-session',
@@ -119,6 +149,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     accountNumbers?: string[],
     apartmentMappings?: import('../shared/types').ApartmentMapping[],
     accountTypes?: Record<string, number>,
+    zgnJednostkaId?: number | null,
   ) =>
     ipcRenderer.invoke(
       IPC_CHANNELS.ADD_ADRES,
@@ -129,6 +160,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       accountNumbers,
       apartmentMappings,
       accountTypes,
+      zgnJednostkaId,
     ),
   updateAdres: (
     id: number,
@@ -139,6 +171,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     accountNumbers?: string[],
     apartmentMappings?: import('../shared/types').ApartmentMapping[],
     accountTypes?: Record<string, number>,
+    zgnJednostkaId?: number | null,
   ) =>
     ipcRenderer.invoke(
       IPC_CHANNELS.UPDATE_ADRES,
@@ -150,6 +183,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       accountNumbers,
       apartmentMappings,
       accountTypes,
+      zgnJednostkaId,
     ),
   deleteAdres: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ADRES, id),
   deleteAllAdresy: () => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ALL_ADRESY),
@@ -184,6 +218,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.CONVERT_FILE_WITH_AI, inputPath, bankId, fileName, adresId, accountTypeId),
   finalizeConversion: (tempConversionId: string, decisions: any[]) =>
     ipcRenderer.invoke(IPC_CHANNELS.FINALIZE_CONVERSION, tempConversionId, decisions),
+  rerunExpenseAI: (tempConversionId: string, indices: number[], fileName: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.RERUN_EXPENSE_AI, tempConversionId, indices, fileName),
   touchConversion: (tempConversionId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.TOUCH_CONVERSION, tempConversionId),
   openFile: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.OPEN_FILE, filePath),
@@ -202,10 +238,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.SET_LANGUAGE, language),
   setSkipUserApproval: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_SKIP_USER_APPROVAL, enabled),
+  setAlwaysUseAI: (enabled: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_ALWAYS_USE_AI, enabled),
   setContractorSortOrder: (sortOrder: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_CONTRACTOR_SORT_ORDER, sortOrder),
   setSidebarCollapsed: (collapsed: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_SIDEBAR_COLLAPSED, collapsed),
+  setLastSeenVersion: (version: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_LAST_SEEN_VERSION, version),
   exportSettings: () => ipcRenderer.invoke(IPC_CHANNELS.EXPORT_SETTINGS),
   importSettings: () => ipcRenderer.invoke(IPC_CHANNELS.IMPORT_SETTINGS),
 
@@ -252,6 +292,52 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.HOMEBANKING_SELECT_OUTPUT_DIR),
   homebankingMerge: (files: unknown[], outputDir: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.HOMEBANKING_MERGE, files, outputDir),
+
+  // Odczyty liczników
+  odczytySelectFiles: () => ipcRenderer.invoke(IPC_CHANNELS.ODCZYTY_SELECT_FILES),
+  odczytyAnalyzeFile: (filePath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ODCZYTY_ANALYZE_FILE, filePath),
+  odczytySelectOutputDir: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.ODCZYTY_SELECT_OUTPUT_DIR),
+  odczytyConvert: (filePaths: string[], outputDir: string | null) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ODCZYTY_CONVERT, filePaths, outputDir),
+  odczytyGetHistory: () => ipcRenderer.invoke(IPC_CHANNELS.ODCZYTY_GET_HISTORY),
+  odczytyClearHistory: () => ipcRenderer.invoke(IPC_CHANNELS.ODCZYTY_CLEAR_HISTORY),
+
+  // Mailing
+  mailingGetZgn: () => ipcRenderer.invoke(IPC_CHANNELS.MAILING_GET_ZGN),
+  mailingAddZgn: (nazwa: string, email: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.MAILING_ADD_ZGN, nazwa, email),
+  mailingUpdateZgn: (id: number, nazwa: string, email: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.MAILING_UPDATE_ZGN, id, nazwa, email),
+  mailingDeleteZgn: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.MAILING_DELETE_ZGN, id),
+  mailingGetPola: () => ipcRenderer.invoke(IPC_CHANNELS.MAILING_GET_POLA),
+  mailingAddPole: (nazwa: string, tekst: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.MAILING_ADD_POLE, nazwa, tekst),
+  mailingUpdatePole: (id: number, nazwa: string, tekst: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.MAILING_UPDATE_POLE, id, nazwa, tekst),
+  mailingDeletePole: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.MAILING_DELETE_POLE, id),
+  mailingGetSzablony: () => ipcRenderer.invoke(IPC_CHANNELS.MAILING_GET_SZABLONY),
+  mailingAddSzablon: (data: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.MAILING_ADD_SZABLON, data),
+  mailingUpdateSzablon: (id: number, data: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.MAILING_UPDATE_SZABLON, id, data),
+  mailingDeleteSzablon: (id: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.MAILING_DELETE_SZABLON, id),
+  mailingSelectAttachments: () => ipcRenderer.invoke(IPC_CHANNELS.MAILING_SELECT_ATTACHMENTS),
+  mailingSend: (request: unknown) => ipcRenderer.invoke(IPC_CHANNELS.MAILING_SEND, request),
+  mailingGetHistory: () => ipcRenderer.invoke(IPC_CHANNELS.MAILING_GET_HISTORY),
+  mailingClearHistory: () => ipcRenderer.invoke(IPC_CHANNELS.MAILING_CLEAR_HISTORY),
+  mailingGetFilesInfo: () => ipcRenderer.invoke(IPC_CHANNELS.MAILING_GET_FILES_INFO),
+  mailingCleanupFiles: () => ipcRenderer.invoke(IPC_CHANNELS.MAILING_CLEANUP_FILES),
+  mailingGetSmtp: () => ipcRenderer.invoke(IPC_CHANNELS.MAILING_GET_SMTP),
+  mailingSetSmtp: (config: unknown) => ipcRenderer.invoke(IPC_CHANNELS.MAILING_SET_SMTP, config),
+  mailingTestSmtp: () => ipcRenderer.invoke(IPC_CHANNELS.MAILING_TEST_SMTP),
+  onMailingProgress: (callback: (progress: any) => void) => {
+    const listener = (_event: unknown, progress: any) => callback(progress);
+    ipcRenderer.on('mailing:progress', listener);
+    return () => ipcRenderer.off('mailing:progress', listener);
+  },
 
   // App info
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION),

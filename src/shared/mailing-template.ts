@@ -25,6 +25,18 @@ import {
 export const FIELD_ADDRESS = 'Adres Wspólnoty';
 /** Field substituting today's date in Polish format (dd.mm.yyyy). */
 export const FIELD_DATE = 'Data';
+/**
+ * Field expanding into a two-column table: each row is one dynamic field's
+ * sentence and the value typed for it.
+ *
+ * The rows are decided in two steps. The template names the fields its table may
+ * use (`MailingSzablon.tableFields`) — five out of a fifty-entry dictionary — and
+ * the send screen ticks which of those five actually go out, with their values. A
+ * rate-change letter lists different positions every month, so neither a fixed
+ * table in the template nor a template per combination would survive contact with
+ * the next month.
+ */
+export const FIELD_TABLE = 'Tabela pól';
 
 /**
  * Fields every template can use without defining them. They resolve from the
@@ -33,10 +45,21 @@ export const FIELD_DATE = 'Data';
 export const BUILTIN_MAILING_FIELDS: { nazwa: string; opis: string }[] = [
   { nazwa: FIELD_ADDRESS, opis: 'Nazwa wybranej wspólnoty' },
   { nazwa: FIELD_DATE, opis: 'Dzisiejsza data (dd.mm.rrrr)' },
+  {
+    nazwa: FIELD_TABLE,
+    opis:
+      'Tabela: zdanie pola w pierwszej kolumnie, wartość w drugiej. Pola dla niej ' +
+      'wybierasz w szablonie, a wiersze zaznaczasz przy wysyłce.',
+  },
 ];
 
 export function isBuiltinField(nazwa: string): boolean {
   return BUILTIN_MAILING_FIELDS.some((f) => normalizeFieldName(f.nazwa) === normalizeFieldName(nazwa));
+}
+
+/** True for the `{{Tabela pól}}` placeholder, whatever its spelling. */
+export function isFieldTableField(nazwa: string): boolean {
+  return normalizeFieldName(nazwa) === normalizeFieldName(FIELD_TABLE);
 }
 
 /** Collapse whitespace and case so `{{ data }}` and `{{Data}}` are one field. */
@@ -78,6 +101,11 @@ export interface MailingRenderContext {
   pola: MailingPole[];
   /** Values typed once per send, keyed by field name (any spelling/case). */
   values: Record<string, string>;
+  /**
+   * Fields ticked for `{{Tabela pól}}`, in the order they should appear as rows.
+   * Empty or absent ⇒ the placeholder renders as nothing at all.
+   */
+  tableFields?: string[];
 }
 
 /** Today in the Polish format users expect in a letter. */
@@ -87,7 +115,12 @@ export function formatPolishDate(date: Date): string {
   return `${dd}.${mm}.${date.getFullYear()}`;
 }
 
-function lookupValue(values: Record<string, string>, nazwa: string): string {
+/**
+ * A field's value, matched however the name is spelled. Exported because the
+ * send screen has to read a value back the same way rendering resolves it — the
+ * table rows and the placeholder inputs can name one field differently.
+ */
+export function readFieldValue(values: Record<string, string>, nazwa: string): string {
   const key = normalizeFieldName(nazwa);
   for (const [k, v] of Object.entries(values)) {
     if (normalizeFieldName(k) === key) return (v ?? '').trim();
@@ -105,11 +138,19 @@ function resolveField(nazwa: string, ctx: MailingRenderContext): string {
   const key = normalizeFieldName(nazwa);
   if (key === normalizeFieldName(FIELD_ADDRESS)) return ctx.adresNazwa;
   if (key === normalizeFieldName(FIELD_DATE)) return ctx.dateText;
+  // Only reachable from renderPlain — the subject line, where a table cannot go.
+  // The rows are still written out rather than dropped, so a placeholder pasted
+  // into the subject by mistake is visible instead of silently swallowed.
+  if (isFieldTableField(nazwa)) {
+    return collectFieldTableRows(ctx)
+      .map((row) => [row.label, row.value].filter(Boolean).join(' '))
+      .join('; ');
+  }
 
   const pole = ctx.pola.find((p) => normalizeFieldName(p.nazwa) === key);
   if (!pole) return fieldPlaceholder(nazwa);
 
-  const value = lookupValue(ctx.values, nazwa);
+  const value = readFieldValue(ctx.values, nazwa);
   const tekst = (pole.tekst ?? '').trim();
   if (tekst && value) return `${tekst} ${value}`;
   return tekst || value;
@@ -124,28 +165,133 @@ export function renderPlain(text: string, ctx: MailingRenderContext): string {
  * Substitute every placeholder in the HTML body. Resolved values are escaped, so
  * an ampersand or a `<` typed into a field value can't break the markup (or the
  * PDF) — the surrounding HTML is the user's own formatting and stays untouched.
+ *
+ * `{{Tabela pól}}` is the one placeholder that resolves to markup rather than to
+ * text, so it is substituted in its own pass, before (and outside) the escaping
+ * one.
  */
 export function renderHtml(html: string, ctx: MailingRenderContext): string {
-  return (html ?? '').replace(PLACEHOLDER_RE, (_all, nazwa: string) =>
-    escapeHtml(resolveField(nazwa, ctx)),
+  const tableHtml = buildFieldTableHtml(ctx);
+  return (
+    (html ?? '')
+      // The editor wraps whatever the user types in a block element, so the
+      // placeholder normally sits alone inside a <p>. Replacing the paragraph as
+      // a whole keeps a <table> out of a <p>, which is markup mail clients
+      // re-shuffle in their own ways (and Outlook renders with extra spacing).
+      .replace(FIELD_TABLE_BLOCK_RE, () => tableHtml)
+      .replace(PLACEHOLDER_RE, (_all, nazwa: string) =>
+        isFieldTableField(nazwa) ? tableHtml : escapeHtml(resolveField(nazwa, ctx)),
+      )
   );
 }
 
-/** The field values used by a send, in template order — stored in the history. */
+/** One row of the `{{Tabela pól}}` table, as it will be rendered. */
+export interface MailingTableRow {
+  /** First column: the field's fixed sentence (its name when it has none). */
+  label: string;
+  /** Second column: the value typed for this send. */
+  value: string;
+}
+
+/**
+ * Rows of the field table, in `ctx.tableFields` order and deduplicated — the
+ * same field ticked twice is one row. Fields no longer in the dictionary keep
+ * their name as the label rather than disappearing, so a deleted field shows up
+ * as something to fix instead of as a silently missing position.
+ */
+export function collectFieldTableRows(ctx: MailingRenderContext): MailingTableRow[] {
+  const rows: MailingTableRow[] = [];
+  const seen = new Set<string>();
+  for (const nazwa of ctx.tableFields ?? []) {
+    const key = normalizeFieldName(nazwa);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    const pole = ctx.pola.find((p) => normalizeFieldName(p.nazwa) === key);
+    rows.push({
+      label: (pole?.tekst ?? '').trim() || (pole?.nazwa ?? nazwa).trim(),
+      value: readFieldValue(ctx.values, nazwa),
+    });
+  }
+  return rows;
+}
+
+/**
+ * Look of a generated table, inline on every element. Mail clients drop `<style>`
+ * blocks (Outlook's Word renderer first among them), so a border set anywhere
+ * else is a border that may not arrive — and a borderless two-column table stops
+ * reading as a table at all.
+ *
+ * Shared with the editor's own table tool: a table the app generates and one the
+ * user draws by hand must look the same in the sent mail.
+ */
+export const MAIL_TABLE_STYLE = 'border-collapse:collapse;width:100%;margin:8px 0;';
+export const MAIL_TABLE_CELL_STYLE = 'border:1px solid #cccccc;padding:6px 8px;vertical-align:top;';
+export const MAIL_TABLE_HEADER_CELL_STYLE = 'background-color:#f2f2f2;text-align:left;';
+/** Value column: narrow and bold, so the amounts line up and read as the point. */
+const MAIL_TABLE_VALUE_CELL_STYLE = 'width:34%;font-weight:600;';
+
+/**
+ * The field table as mail-safe HTML. Empty string when nothing is ticked: an
+ * empty table would leave a stray box in the letter, and the user's own text
+ * around the placeholder still reads correctly without it.
+ */
+export function buildFieldTableHtml(ctx: MailingRenderContext): string {
+  const rows = collectFieldTableRows(ctx);
+  if (rows.length === 0) return '';
+  const body = rows
+    .map(
+      (row) =>
+        `<tr><td style="${MAIL_TABLE_CELL_STYLE}">${escapeHtml(row.label)}</td>` +
+        `<td style="${MAIL_TABLE_CELL_STYLE}${MAIL_TABLE_VALUE_CELL_STYLE}">` +
+        `${escapeHtml(row.value)}</td></tr>`,
+    )
+    .join('');
+  return (
+    `<table style="${MAIL_TABLE_STYLE}" cellpadding="0" cellspacing="0" border="0">` +
+    `<tbody>${body}</tbody></table>`
+  );
+}
+
+/**
+ * The table placeholder alone in its own block element, `<br>` padding included —
+ * that is how the rich-text editor stores a placeholder on its own line. Built
+ * from `FIELD_TABLE` so the accepted spellings stay those `normalizeFieldName`
+ * accepts: any casing, any run of whitespace.
+ */
+const FIELD_TABLE_BLOCK_RE = new RegExp(
+  `<(p|div)[^>]*>\\s*(?:<br\\s*/?>\\s*)*` +
+    `\\{\\{\\s*${FIELD_TABLE.trim().split(/\s+/).join('\\s+')}\\s*\\}\\}` +
+    `\\s*(?:<br\\s*/?>\\s*)*</\\1>`,
+  'gi',
+);
+
+/**
+ * The field values used by a send, in template order — stored in the history.
+ * The fields ticked for `{{Tabela pól}}` follow the ones written into the text:
+ * they carry values too, and a record missing them would not say what was sent.
+ */
 export function collectFieldValues(
   usedFields: string[],
   ctx: MailingRenderContext,
 ): MailingFieldValue[] {
-  return usedFields
-    .filter((nazwa) => !isBuiltinField(nazwa))
-    .map((nazwa) => {
-      const pole = ctx.pola.find((p) => normalizeFieldName(p.nazwa) === normalizeFieldName(nazwa));
-      return {
-        nazwa: pole?.nazwa ?? nazwa,
-        tekst: pole?.tekst ?? '',
-        wartosc: lookupValue(ctx.values, nazwa),
-      };
+  const names = [
+    ...usedFields.filter((nazwa) => !isBuiltinField(nazwa)),
+    ...(ctx.tableFields ?? []),
+  ];
+  const seen = new Set<string>();
+  const values: MailingFieldValue[] = [];
+  for (const nazwa of names) {
+    const key = normalizeFieldName(nazwa);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    const pole = ctx.pola.find((p) => normalizeFieldName(p.nazwa) === key);
+    values.push({
+      nazwa: pole?.nazwa ?? nazwa,
+      tekst: pole?.tekst ?? '',
+      wartosc: readFieldValue(ctx.values, nazwa),
     });
+  }
+  return values;
 }
 
 export function escapeHtml(text: string): string {
@@ -156,7 +302,10 @@ export function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
-const BLOCK_END_RE = /<\/(p|div|h[1-6]|li|ul|ol|tr|blockquote)\s*>/gi;
+const BLOCK_END_RE = /<\/(p|div|h[1-6]|li|ul|ol|table|blockquote)\s*>/gi;
+/** Cells of one row, then the row itself — see `htmlToPlainText`. */
+const CELL_END_RE = /<\/(td|th)\s*>/gi;
+const ROW_END_RE = /<\/tr\s*>/gi;
 
 /**
  * Plain-text alternative of the HTML body. Mail clients that refuse HTML (and
@@ -167,6 +316,12 @@ export function htmlToPlainText(html: string): string {
   return (html ?? '')
     .replace(/<(script|style)[\s\S]*?<\/\1>/gi, '')
     .replace(/<br\s*\/?>/gi, '\n')
+    // A table becomes a tab-separated block: without the cell separator the two
+    // columns run into one word ("…w kwocie:350,00 zł"), and with a blank line
+    // per row a rate table reads as a series of paragraphs instead of a list.
+    // Cells before rows before the table, so each rule still finds its tag.
+    .replace(CELL_END_RE, '\t')
+    .replace(ROW_END_RE, '\n')
     .replace(BLOCK_END_RE, '\n\n')
     .replace(/<li[^>]*>/gi, '• ')
     .replace(/<[^>]+>/g, '')

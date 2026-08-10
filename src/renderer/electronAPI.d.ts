@@ -16,12 +16,43 @@ export interface ZaliczkiPropertyData {
   values: Partial<Record<ZaliczkiCategory, number | null>>;
 }
 
+/** An arithmetic finding from checking a page against the totals printed on it. */
+export interface ZaliczkiWarning {
+  property: string;
+  check:
+    | 'swiadczenia_sum'
+    | 'razem_total_sum'
+    | 'components_missing'
+    | 'empty_property'
+    | 'page_failed';
+  severity: 'error' | 'warning';
+  message: string;
+}
+
+export interface ZaliczkiStats {
+  pages: number;
+  fromCache: number;
+  escalated: number;
+  failed: number;
+  wholeFileFallback: boolean;
+}
+
 export interface ZaliczkiExtractionResult {
   filename: string;
   month: number | null;
   year: number | null;
   properties: ZaliczkiPropertyData[];
   rawResponse: string;
+  warnings: ZaliczkiWarning[];
+  stats: ZaliczkiStats;
+}
+
+export interface ZaliczkiProgress {
+  filePath: string;
+  totalPages: number;
+  donePages: number;
+  fromCache: number;
+  stage: 'splitting' | 'extracting' | 'done';
 }
 
 export interface ZaliczkiEditedFile {
@@ -263,10 +294,14 @@ interface ElectronAPI {
   // Zaliczki
   zaliczkiGetModels: () => Promise<{ models: readonly ZaliczkiModel[]; default: string }>;
   zaliczkiSelectPdfs: () => Promise<{ fileName: string; filePath: string }[]>;
-  zaliczkiExtractPdf: (filePath: string, model: string) =>
+  /** `force` skips the per-page cache and re-asks the model. */
+  zaliczkiExtractPdf: (filePath: string, model: string, force?: boolean) =>
     Promise<{ data?: ZaliczkiExtractionResult; error?: string }>;
   zaliczkiGenerateXlsx: (files: ZaliczkiEditedFile[], year: number) =>
     Promise<{ success?: boolean; filePath?: string; canceled?: boolean; error?: string }>;
+  zaliczkiCacheStats: () => Promise<{ entries: number; bytes: number }>;
+  zaliczkiClearCache: () => Promise<{ removed: number }>;
+  onZaliczkiProgress: (callback: (progress: ZaliczkiProgress) => void) => () => void;
 
   // Noty Świadczenia
   notySelectPdfs: () => Promise<{ fileName: string; filePath: string }[]>;
@@ -352,6 +387,8 @@ interface ElectronAPI {
     tresc: string;
     adresIds: number[];
     values: Record<string, string>;
+    /** Fields making up the `{{Tabela pól}}` table in the body, in row order. */
+    tableFields: string[];
     attachPdf: boolean;
     attachments: { fileName: string; filePath: string }[];
   }) => Promise<{ success?: boolean; results?: MailingSendResult[]; error?: string }>;

@@ -60,6 +60,12 @@ export interface MailingSendRequest {
   adresIds: number[];
   /** Dynamic-field values, keyed by field name. One set for the whole send. */
   values: Record<string, string>;
+  /**
+   * Fields making up the `{{Tabela pól}}` table in the body, in row order. The
+   * send screen ticks them per mailing, so the table's rows change from send to
+   * send while the template stays the same. Absent ⇒ no table.
+   */
+  tableFields?: string[];
   /** Attach the rendered body as a PDF (defaults from the template in the UI). */
   attachPdf: boolean;
   /** Extra files picked by the user; the same set goes to every community. */
@@ -251,6 +257,7 @@ export async function sendMailing(
         dateText,
         pola: pola as MailingPole[],
         values: request.values,
+        tableFields: request.tableFields ?? [],
       };
       const subject = renderPlain(request.temat, ctx);
       const renderedBody = renderHtml(request.tresc, ctx);

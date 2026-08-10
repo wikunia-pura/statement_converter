@@ -24,6 +24,7 @@ import {
   ZALICZKI_MODELS,
   extractZaliczkiFromPdf,
 } from './zaliczki/extractor';
+import { cacheStats, clearCache } from './zaliczki/extractionCache';
 import { buildWorkbookFromEdited, EditedFile } from './zaliczki/excelWriter';
 import { extractNotaFromPdf } from './notySwiadczenia/extractor';
 import { buildNotaWorkbook } from './notySwiadczenia/excelWriter';
@@ -1268,7 +1269,7 @@ function setupIpcHandlers() {
 
   ipcMain.handle(
     IPC_CHANNELS.ZALICZKI_EXTRACT_PDF,
-    async (_event, filePath: string, model: string) => {
+    async (_event, filePath: string, model: string, force?: boolean) => {
       const apiKey = converterRegistry.getAnthropicApiKey();
       if (!apiKey) {
         return {
@@ -1276,7 +1277,11 @@ function setupIpcHandlers() {
         };
       }
       try {
-        const extraction = await extractZaliczkiFromPdf(filePath, apiKey, model);
+        const extraction = await extractZaliczkiFromPdf(filePath, apiKey, model, {
+          force: force === true,
+          onProgress: (progress) =>
+            mainWindow?.webContents.send('zaliczki:progress', progress),
+        });
         return { data: extraction };
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1285,6 +1290,14 @@ function setupIpcHandlers() {
       }
     },
   );
+
+  ipcMain.handle(IPC_CHANNELS.ZALICZKI_CACHE_STATS, async () => cacheStats());
+
+  ipcMain.handle(IPC_CHANNELS.ZALICZKI_CLEAR_CACHE, async () => {
+    const removed = clearCache();
+    log.info(`[ZALICZKI] Cache wyczyszczony: ${removed} wpisów`);
+    return { removed };
+  });
 
   ipcMain.handle(
     IPC_CHANNELS.ZALICZKI_GENERATE_XLSX,

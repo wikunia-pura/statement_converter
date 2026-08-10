@@ -1,12 +1,14 @@
 import React, { useMemo, useRef } from 'react';
 import { MailingPole } from '../../shared/types';
 import { translations, Language } from '../translations';
+import Icon from './Icon';
 import RichTextEditor from './RichTextEditor';
 import SearchableSelect, { SearchableOption } from './SearchableSelect';
 import {
   BUILTIN_MAILING_FIELDS,
   extractUsedFields,
   fieldPlaceholder,
+  isFieldTableField,
   normalizeFieldName,
 } from '../../shared/mailing-template';
 
@@ -50,13 +52,20 @@ const FieldPicker: React.FC<FieldPickerProps> = ({
 );
 
 /**
- * Fields offered by both pickers, built-ins first. `value` is the exact text
+ * Fields offered by a picker, built-ins first. `value` is the exact text
  * inserted, so neither picker has to know how a placeholder is spelled.
+ *
+ * `fieldTable: false` drops the `{{Tabela pól}}` entry — it resolves to a table,
+ * which a subject line cannot hold.
  */
-export function useMailingFieldOptions(pola: MailingPole[]): SearchableOption[] {
+export function useMailingFieldOptions(
+  pola: MailingPole[],
+  options?: { fieldTable?: boolean },
+): SearchableOption[] {
+  const fieldTable = options?.fieldTable ?? true;
   return useMemo(
     () => [
-      ...BUILTIN_MAILING_FIELDS.map((f) => ({
+      ...BUILTIN_MAILING_FIELDS.filter((f) => fieldTable || !isFieldTableField(f.nazwa)).map((f) => ({
         value: fieldPlaceholder(f.nazwa),
         label: f.nazwa,
         hint: f.opis,
@@ -68,7 +77,7 @@ export function useMailingFieldOptions(pola: MailingPole[]): SearchableOption[] 
         hint: p.tekst || undefined,
       })),
     ],
-    [pola],
+    [pola, fieldTable],
   );
 }
 
@@ -126,7 +135,13 @@ const MailingComposer: React.FC<MailingComposerProps> = ({
   const t = translations[language];
   const subjectRef = useRef<HTMLInputElement>(null);
   const fieldOptions = useMailingFieldOptions(pola);
+  const subjectFieldOptions = useMailingFieldOptions(pola, { fieldTable: false });
   const unknownFields = useUnknownFields(pola, temat, tresc);
+  /** Drives the hint explaining where the table's rows come from. */
+  const usesFieldTable = useMemo(
+    () => extractUsedFields(tresc).some(isFieldTableField),
+    [tresc],
+  );
 
   /** Insert a placeholder into the subject at the caret, then restore the caret. */
   const insertIntoSubject = (placeholder: string) => {
@@ -158,7 +173,7 @@ const MailingComposer: React.FC<MailingComposerProps> = ({
           placeholder={t.mailingSubjectPlaceholder}
         />
         <FieldPicker
-          options={fieldOptions}
+          options={subjectFieldOptions}
           label={t.mailingInsertFieldSubject}
           placeholder={t.mailingInsertFieldPick}
           searchPlaceholder={t.mailingInsertFieldSearch}
@@ -208,6 +223,12 @@ const MailingComposer: React.FC<MailingComposerProps> = ({
           }}
         />
       </div>
+
+      {usesFieldTable && (
+        <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '10px' }}>
+          <Icon name="info" size={13} /> {t.mailingFieldTableInBodyNote}
+        </div>
+      )}
 
       {unknownFields.length > 0 && (
         <div style={{ fontSize: '12px', color: 'var(--danger)', marginBottom: '10px' }}>

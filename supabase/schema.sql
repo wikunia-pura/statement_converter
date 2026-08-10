@@ -162,14 +162,22 @@ create table if not exists public.mailing_pola (
 -- resolved at send time; `attach_pdf` is the template's default for the
 -- "also attach the body as PDF" switch (the send screen can override it).
 create table if not exists public.mailing_szablony (
-  id          bigserial primary key,
-  nazwa       text        not null,
-  typ         text        not null default 'zgn-zaliczki',
-  temat       text        not null default '',
-  tresc       text        not null default '',
-  attach_pdf  boolean     not null default false,
-  created_at  timestamptz not null default now()
+  id           bigserial primary key,
+  nazwa        text        not null,
+  typ          text        not null default 'zgn-zaliczki',
+  temat        text        not null default '',
+  tresc        text        not null default '',
+  attach_pdf   boolean     not null default false,
+  -- Field names offered by this template's {{Tabela pól}} table, in row order:
+  -- ["Zaliczka remontowy", "Zaliczka eksploatacja"]. The shortlist, not the
+  -- choice — the send screen ticks which of them actually go out.
+  table_fields jsonb       not null default '[]'::jsonb,
+  created_at   timestamptz not null default now()
 );
+
+-- Idempotent migration for deployments created before the field table existed.
+alter table public.mailing_szablony
+  add column if not exists table_fields jsonb not null default '[]'::jsonb;
 
 -- One row per (send, community): the rendered subject/body exactly as it went
 -- out, the resolved recipient, the field values used, and the attachments.

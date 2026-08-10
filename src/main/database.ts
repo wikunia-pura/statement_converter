@@ -64,7 +64,7 @@ const ADRES_COLS =
 const ZGN_COLS = 'id, nazwa, email, createdAt:created_at';
 const MAILING_POLE_COLS = 'id, nazwa, tekst, createdAt:created_at';
 const MAILING_SZABLON_COLS =
-  'id, nazwa, typ, temat, tresc, attachPdf:attach_pdf, createdAt:created_at';
+  'id, nazwa, typ, temat, tresc, attachPdf:attach_pdf, tableFields:table_fields, createdAt:created_at';
 const MAILING_HISTORY_COLS =
   'id, typ, templateName:template_name, status, errorMessage:error_message, adresId:adres_id, adresNazwa:adres_nazwa, jednostkaNazwa:jednostka_nazwa, jednostkaEmail:jednostka_email, subject, bodyHtml:body_html, bodyText:body_text, fieldValues:field_values, attachments, sentFrom:sent_from, sentAt:sent_at';
 const KONTO_TYP_COLS =
@@ -871,6 +871,7 @@ class DatabaseService {
         temat: data.temat,
         tresc: data.tresc,
         attach_pdf: data.attachPdf,
+        table_fields: data.tableFields ?? [],
       })
       .select(MAILING_SZABLON_COLS)
       .single();
@@ -889,6 +890,7 @@ class DatabaseService {
         temat: data.temat,
         tresc: data.tresc,
         attach_pdf: data.attachPdf,
+        table_fields: data.tableFields ?? [],
       })
       .eq('id', id);
     if (error) throw new Error(`updateMailingSzablon: ${error.message}`);
@@ -1311,6 +1313,8 @@ class DatabaseService {
           temat: s.temat,
           tresc: s.tresc,
           attach_pdf: s.attachPdf,
+          // Absent in backups written before the field table existed.
+          table_fields: s.tableFields ?? [],
           created_at: s.createdAt,
         })),
       );

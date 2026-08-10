@@ -31,7 +31,14 @@ function normalize(s: string | undefined | null): string {
 type MonthlyValues = Partial<Record<ZaliczkiCategory, number | null>>;
 type MergedData = Map<string, Map<number, MonthlyValues>>;
 
-function mergeResults(results: ExtractionResult[]): MergedData {
+/**
+ * All the workbook needs from an extraction. Kept structural so the writer does
+ * not have to be updated whenever extraction gains metadata (warnings, stats),
+ * and so the renderer's edited table can be passed straight in.
+ */
+export type WorkbookSource = Pick<ExtractionResult, 'month' | 'properties'>;
+
+function mergeResults(results: WorkbookSource[]): MergedData {
   // Group all raw property names by normalized form; pick longest as canonical.
   const groups = new Map<string, string[]>();
   for (const r of results) {
@@ -86,7 +93,7 @@ const BORDER: Partial<ExcelJS.Borders> = {
 const MONEY_FMT = '0.00" zł"';
 
 export async function buildWorkbook(
-  results: ExtractionResult[],
+  results: WorkbookSource[],
   year: number,
 ): Promise<Buffer> {
   const merged = mergeResults(results);
@@ -220,12 +227,8 @@ export async function buildWorkbookFromEdited(
   files: EditedFile[],
   year: number,
 ): Promise<Buffer> {
-  const results: ExtractionResult[] = files.map((f) => ({
-    filename: f.filename,
-    month: f.month,
-    year: f.year,
-    properties: f.properties,
-    rawResponse: '',
-  }));
-  return buildWorkbook(results, year);
+  return buildWorkbook(
+    files.map((f) => ({ month: f.month, properties: f.properties })),
+    year,
+  );
 }

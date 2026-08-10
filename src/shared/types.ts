@@ -303,6 +303,16 @@ export interface MailingSzablon {
   tresc: string;
   /** Template default for "also attach the body as a PDF"; overridable per send. */
   attachPdf: boolean;
+  /**
+   * Dynamic fields this template offers for its `{{Tabela pól}}` table, in row
+   * order — the shortlist, not the choice. The dictionary can hold dozens of
+   * fields while one letter concerns five of them; the send screen then ticks
+   * which of these five actually go out and types their values.
+   *
+   * Names, not ids: a placeholder in the body already refers to a field by name,
+   * and matching stays case- and whitespace-insensitive throughout.
+   */
+  tableFields: string[];
   createdAt: string;
 }
 
@@ -460,9 +470,14 @@ export interface AppSettings {
  * `AppSettings` needs none of this — it is spread whole — but a secret added
  * there must be blanked in `settingsForExport`, like `smtpPass`.
  *
- * Out of scope on purpose: `app_config` (infrastructure, not user data) and the
+ * Out of scope on purpose: `app_config` (infrastructure, not user data), the
  * module files on disk (mailing PDFs, attachment copies) — history entries stay
- * readable without them.
+ * readable without them — and `userData/zaliczki-cache` (the per-page OCR
+ * results for "Podsumowanie zaliczek"). That cache is derived, not authored: its
+ * keys are content hashes of pages inside the user's own PDFs, every entry can be
+ * rebuilt from those PDFs, and it is invalidated wholesale whenever the
+ * extraction prompt changes. Losing it costs one re-run's money and minutes,
+ * never information — so it is excluded deliberately, not by omission.
  */
 export interface BackupData {
   format: 'filefunky-backup';
@@ -603,6 +618,8 @@ export const IPC_CHANNELS = {
   ZALICZKI_EXTRACT_PDF: 'zaliczki:extract-pdf',
   ZALICZKI_GENERATE_XLSX: 'zaliczki:generate-xlsx',
   ZALICZKI_GET_MODELS: 'zaliczki:get-models',
+  ZALICZKI_CACHE_STATS: 'zaliczki:cache-stats',
+  ZALICZKI_CLEAR_CACHE: 'zaliczki:clear-cache',
 
   // Noty Świadczenia (correction notices for housing community settlements)
   NOTY_SELECT_PDFS: 'noty:select-pdfs',

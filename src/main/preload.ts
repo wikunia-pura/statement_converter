@@ -70,6 +70,8 @@ const IPC_CHANNELS = {
   ZALICZKI_EXTRACT_PDF: 'zaliczki:extract-pdf',
   ZALICZKI_GENERATE_XLSX: 'zaliczki:generate-xlsx',
   ZALICZKI_GET_MODELS: 'zaliczki:get-models',
+  ZALICZKI_CACHE_STATS: 'zaliczki:cache-stats',
+  ZALICZKI_CLEAR_CACHE: 'zaliczki:clear-cache',
   NOTY_SELECT_PDFS: 'noty:select-pdfs',
   NOTY_SELECT_OUTPUT_DIR: 'noty:select-output-dir',
   NOTY_CONVERT: 'noty:convert',
@@ -264,10 +266,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Zaliczki
   zaliczkiGetModels: () => ipcRenderer.invoke(IPC_CHANNELS.ZALICZKI_GET_MODELS),
   zaliczkiSelectPdfs: () => ipcRenderer.invoke(IPC_CHANNELS.ZALICZKI_SELECT_PDFS),
-  zaliczkiExtractPdf: (filePath: string, model: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.ZALICZKI_EXTRACT_PDF, filePath, model),
+  zaliczkiExtractPdf: (filePath: string, model: string, force?: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZALICZKI_EXTRACT_PDF, filePath, model, force),
   zaliczkiGenerateXlsx: (files: unknown[], year: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.ZALICZKI_GENERATE_XLSX, files, year),
+  zaliczkiCacheStats: () => ipcRenderer.invoke(IPC_CHANNELS.ZALICZKI_CACHE_STATS),
+  zaliczkiClearCache: () => ipcRenderer.invoke(IPC_CHANNELS.ZALICZKI_CLEAR_CACHE),
+  onZaliczkiProgress: (callback: (progress: unknown) => void) => {
+    const listener = (_event: unknown, progress: unknown) => callback(progress);
+    ipcRenderer.on('zaliczki:progress', listener);
+    return () => ipcRenderer.off('zaliczki:progress', listener);
+  },
 
   // Noty Świadczenia
   notySelectPdfs: () => ipcRenderer.invoke(IPC_CHANNELS.NOTY_SELECT_PDFS),

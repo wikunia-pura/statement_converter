@@ -1,6 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
 import SearchableSelect, { SearchableOption } from './SearchableSelect';
+import {
+  MAIL_TABLE_CELL_STYLE,
+  MAIL_TABLE_HEADER_CELL_STYLE,
+  MAIL_TABLE_STYLE,
+} from '../../shared/mailing-template';
 
 export interface RichTextEditorHandle {
   /** Insert text at the caret (or at the end when the editor isn't focused). */
@@ -50,16 +55,17 @@ interface RichTextEditorProps {
   fieldOptions?: SearchableOption[];
 }
 
-/** Border and padding of a generated cell, inline so Outlook keeps them too. */
-const CELL_STYLE = 'border:1px solid #cccccc;padding:6px 8px;vertical-align:top;';
 /**
- * Header cells keep their light shade inline: the mail is a light-only document
- * and a background set in a `<style>` block is the first thing Outlook's Word
- * renderer drops. The editor overrides it for dark mode in CSS (`.rte-content
- * th`), so what you see follows the app theme while what you send stays light.
+ * Border, padding and header shade of a generated cell — inline, so Outlook keeps
+ * them, and taken from shared/mailing-template so a table drawn here looks like
+ * the one the app generates for `{{Tabela pól}}`.
+ *
+ * The editor overrides the header shade for dark mode in CSS (`.rte-content th`),
+ * so what you see follows the app theme while what you send stays light.
  */
-const HEADER_CELL_STYLE = 'background-color:#f2f2f2;text-align:left;';
-const TABLE_STYLE = 'border-collapse:collapse;width:100%;margin:8px 0;';
+const CELL_STYLE = MAIL_TABLE_CELL_STYLE;
+const HEADER_CELL_STYLE = MAIL_TABLE_HEADER_CELL_STYLE;
+const TABLE_STYLE = MAIL_TABLE_STYLE;
 
 /**
  * Small contentEditable editor producing the HTML that becomes both the mail body

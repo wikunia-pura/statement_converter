@@ -376,6 +376,19 @@ export const translations = {
     zaliczkiDuplicatesTitle: 'Wykryto duplikaty',
     zaliczkiDuplicatesMessage: 'Następujące pliki zostały już dodane do listy i nie zostaną dodane ponownie:',
     zaliczkiDuplicatesOk: 'Rozumiem',
+    zaliczkiPageProgress: 'strona',
+    zaliczkiFromCacheShort: 'z pamięci',
+    zaliczkiSplitting: 'dzielenie na strony…',
+    zaliczkiChecksTitle: 'Kontrola kwot',
+    zaliczkiChecksAllOk: 'Wszystkie kwoty się zgadzają — sumy składników pasują do „Razem świadczenia”.',
+    zaliczkiStatsPages: 'stron',
+    zaliczkiStatsCached: 'z pamięci (bez ponownych kosztów)',
+    zaliczkiStatsEscalated: 'ponowionych',
+    zaliczkiStatsFailed: 'nieudanych',
+    zaliczkiCacheInfo: 'Pamięć odczytów',
+    zaliczkiCacheClear: 'Wyczyść pamięć odczytów',
+    zaliczkiCacheCleared: 'Wyczyszczono pamięć odczytów',
+    zaliczkiCacheHint: 'Raz odczytana strona nie jest wysyłana do modelu ponownie — dlatego powtórny OCR tego samego pliku jest natychmiastowy i darmowy.',
 
     // Noty Świadczenia
     notySwiadczenia: 'Noty Świadczenia',
@@ -534,6 +547,36 @@ export const translations = {
       'Wpisz wartości, które uzupełnią zdania z pól dynamicznych. Jedna wartość obowiązuje dla całej wysyłki — wszystkie zaznaczone wspólnoty dostaną tę samą kwotę.',
     mailingValuePlaceholder: 'np. 350,00 zł',
     mailingUnknownFieldInTemplate: 'Pole {field} nie istnieje w słowniku — zostanie wysłane dosłownie.',
+
+    mailingFieldTableTitle: 'Tabela pól dynamicznych',
+    mailingFieldTableHint:
+      'Pola udostępnione przez szablon dla tabeli w treści maila. Zaznacz te, które mają w niej wystąpić, i wpisz ich wartości — wpisanie wartości samo zaznacza pole. W pierwszej kolumnie maila pojawi się stałe zdanie pola, w drugiej wartość. Wiersze idą w kolejności z tej listy (ustawia się ją w szablonie).',
+    mailingFieldTableInTable: 'W tabeli',
+    mailingFieldTableRowLabel: 'Pierwsza kolumna (zdanie pola)',
+    mailingFieldTableRowCount: 'Wierszy w tabeli: {count} z {total} dostępnych',
+    mailingFieldTableEmptyNote:
+      'Nic nie zaznaczono — tabela nie pojawi się w mailu, reszta treści zostaje bez zmian.',
+    mailingFieldTableMissingValues: 'Bez wartości (druga kolumna będzie pusta): {names}',
+    mailingFieldTableNoFields:
+      'Brak pól dynamicznych do wyboru — dodaj je w zakładce „Pola dynamiczne”.',
+    mailingFieldTableNoPool:
+      'Ten szablon ma w treści tabelę pól, ale nie udostępnia dla niej żadnego pola. Wybierz je w szablonie, w sekcji „Pola dostępne w tabeli”.',
+    mailingFieldTableGoToTemplate: 'Otwórz szablony',
+    mailingFieldTableInBodyNote:
+      'W treści jest tabela pól ({{Tabela pól}}) — jej wiersze bierze się z pól wybranych poniżej, a które z nich faktycznie wejdą do maila, zaznaczasz przy wysyłce.',
+
+    mailingTemplateTableFields: 'Pola dostępne w tabeli',
+    mailingTemplateTableFieldsHint:
+      'Krótka lista pól dynamicznych dla wstawki {{Tabela pól}} — tylko te pojawią się przy wysyłce do zaznaczenia. Kolejność na liście to kolejność wierszy w mailu.',
+    mailingTemplateTableFieldAdd: 'Dodaj pole do tabeli…',
+    mailingTemplateTableFieldsAllPicked: 'Wszystkie pola są już na liście.',
+    mailingTemplateTableFieldUp: 'Wyżej',
+    mailingTemplateTableFieldDown: 'Niżej',
+    mailingTemplateTableFieldMissing: 'Pole usunięte ze słownika',
+    mailingTemplateTableNoPlaceholder:
+      'Pola są wybrane, ale w treści nie ma wstawki {{Tabela pól}} — tabela się nie pojawi. Wstaw ją listą „Wstaw pole…” w miejscu, gdzie ma stanąć.',
+    mailingTemplateTableNoFieldsPicked:
+      'W treści jest wstawka {{Tabela pól}}, ale nie wybrano dla niej żadnego pola — przy wysyłce nie będzie czego zaznaczyć.',
 
     mailingRecipientsTitle: 'Wspólnoty i adresaci',
     mailingRecipientsHint:
@@ -1113,6 +1156,19 @@ export const translations = {
     zaliczkiDuplicatesTitle: 'Duplicates detected',
     zaliczkiDuplicatesMessage: 'The following files have already been added and will not be added again:',
     zaliczkiDuplicatesOk: 'Got it',
+    zaliczkiPageProgress: 'page',
+    zaliczkiFromCacheShort: 'cached',
+    zaliczkiSplitting: 'splitting into pages…',
+    zaliczkiChecksTitle: 'Amount checks',
+    zaliczkiChecksAllOk: 'All amounts add up — components match “Razem świadczenia”.',
+    zaliczkiStatsPages: 'pages',
+    zaliczkiStatsCached: 'from cache (no repeat cost)',
+    zaliczkiStatsEscalated: 're-asked',
+    zaliczkiStatsFailed: 'failed',
+    zaliczkiCacheInfo: 'Extraction cache',
+    zaliczkiCacheClear: 'Clear extraction cache',
+    zaliczkiCacheCleared: 'Extraction cache cleared',
+    zaliczkiCacheHint: 'A page that has been read once is never sent to the model again — which is why re-running OCR on the same file is instant and free.',
 
     // Noty Świadczenia
     notySwiadczenia: 'Settlement Notices',
@@ -1271,6 +1327,36 @@ export const translations = {
       'Fill in the values completing each field sentence. One value applies to the whole send — every selected community receives the same amount.',
     mailingValuePlaceholder: 'e.g. 350.00 PLN',
     mailingUnknownFieldInTemplate: 'Field {field} is not defined — it will be sent literally.',
+
+    mailingFieldTableTitle: 'Dynamic field table',
+    mailingFieldTableHint:
+      'The fields this template offers for the table in the body. Tick the ones that should appear in it and type their values — typing a value ticks the field for you. The first column of the mail shows the field sentence, the second one the value. Rows follow the order of this list (set in the template).',
+    mailingFieldTableInTable: 'In table',
+    mailingFieldTableRowLabel: 'First column (field sentence)',
+    mailingFieldTableRowCount: 'Rows in the table: {count} of {total} available',
+    mailingFieldTableEmptyNote:
+      'Nothing ticked — the table will not appear in the mail; the rest of the body is unchanged.',
+    mailingFieldTableMissingValues: 'No value yet (the second column stays empty): {names}',
+    mailingFieldTableNoFields:
+      'No dynamic fields to pick — add them in the "Dynamic fields" tab.',
+    mailingFieldTableNoPool:
+      'This template has a field table in its body but offers no field for it. Pick them in the template, under "Fields available in the table".',
+    mailingFieldTableGoToTemplate: 'Open templates',
+    mailingFieldTableInBodyNote:
+      'The body contains the field table ({{Tabela pól}}) — its rows come from the fields picked below, and which of them actually go out is ticked at send time.',
+
+    mailingTemplateTableFields: 'Fields available in the table',
+    mailingTemplateTableFieldsHint:
+      'The shortlist of dynamic fields for the {{Tabela pól}} placeholder — only these are offered for ticking at send time. Their order here is the row order in the mail.',
+    mailingTemplateTableFieldAdd: 'Add a field to the table…',
+    mailingTemplateTableFieldsAllPicked: 'Every field is already on the list.',
+    mailingTemplateTableFieldUp: 'Move up',
+    mailingTemplateTableFieldDown: 'Move down',
+    mailingTemplateTableFieldMissing: 'Field deleted from the dictionary',
+    mailingTemplateTableNoPlaceholder:
+      'Fields are picked, but the body has no {{Tabela pól}} placeholder — the table will not appear. Insert it with the "Insert a field…" list where it should go.',
+    mailingTemplateTableNoFieldsPicked:
+      'The body has the {{Tabela pól}} placeholder, but no field is picked for it — there will be nothing to tick at send time.',
 
     mailingRecipientsTitle: 'Communities and recipients',
     mailingRecipientsHint:

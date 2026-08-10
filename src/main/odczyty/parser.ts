@@ -6,8 +6,13 @@
  * Every supplier ships the same three facts in a different shape:
  *   - PIASKAN (.xls, legacy BIFF): "Nr Urządzenia" + six month columns headed
  *     "2026.6.30"… — the newest column holds the readings. WM = "Budynek".
- *   - TECHEM:  "Numer urządzenia" + a single date column (header is an Excel
- *     date serial). WM = "Adres".
+ *   - TECHEM:  "Numer urządzenia" + a single date column. TECHEM comes in three
+ *     shapes, told apart by a marker column:
+ *       · portal ("Nr budynku"): date header is an Excel serial, WM = "Adres";
+ *       · other portal ("Numer systemowy"): date header is text `30.06.26`,
+ *         WM = "Ulica";
+ *       · typed by hand ("DATA STANU KONCOWEGO"): upper-case unaccented
+ *         headers, named "WARTOSC ODCZYTU" + per-row date, WM = "ULICA".
  *   - METRONA: "Meter no." + "Reading" + a per-row "Reading date".
  *     WM is derived from "Address", which also carries the flat number.
  *   - ISTA:    "Nr urządzenia" + six month columns headed "30.06.2026"… —
@@ -144,6 +149,11 @@ export function parseCellDate(cell: Cell): string | null {
   m = text.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/); // 30.06.2026
   if (m) return isoFromParts(Number(m[3]), Number(m[2]), Number(m[1]));
 
+  // 30.06.26 — TECHEM's other portal heads its reading column this way. Meter
+  // readings are always contemporary, so a two-digit year is a 2000s year.
+  m = text.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2})$/);
+  if (m) return isoFromParts(2000 + Number(m[3]), Number(m[2]), Number(m[1]));
+
   return null;
 }
 
@@ -186,10 +196,20 @@ interface SupplierSpec {
   device: string[];
   /** Header names identifying the housing-community column. */
   wm: string[];
-  /** Extra header that disambiguates suppliers sharing a device column name. */
+  /**
+   * Extra header that disambiguates suppliers sharing a device column name —
+   * and, for TECHEM, which of its three export shapes this sheet is.
+   */
   marker: string[];
   /** Columns copied into a skipped-row report so the row is easy to locate. */
   context: string[];
+  /**
+   * Header of the column holding the reading. Without it the reading lives in
+   * the newest of the date-headed columns to the right of the device column.
+   */
+  value?: string[];
+  /** Header of the per-row reading date; only meaningful alongside `value`. */
+  date?: string[];
 }
 
 const SUPPLIER_SPECS: SupplierSpec[] = [
@@ -199,6 +219,8 @@ const SUPPLIER_SPECS: SupplierSpec[] = [
     wm: ['Address'],
     marker: ['Reading date'],
     context: ['Address', 'Usage', 'Location no.'],
+    value: ['Reading'],
+    date: ['Reading date'],
   },
   {
     id: 'techem',
@@ -206,6 +228,26 @@ const SUPPLIER_SPECS: SupplierSpec[] = [
     wm: ['Adres'],
     marker: ['Nr budynku'],
     context: ['Nr lokalu', 'Pomieszczenie', 'Typ urządzenia'],
+  },
+  {
+    // TECHEM's other portal: the flat sits in its own column, so "Ulica" is
+    // already the community name; the reading column is headed `30.06.26`.
+    id: 'techem',
+    device: ['Numer urządzenia'],
+    wm: ['Ulica'],
+    marker: ['Numer systemowy'],
+    context: ['Numer mieszkania', 'Pomieszczenie', 'Rodzaj urządzenia'],
+  },
+  {
+    // TECHEM typed by hand: upper-case, unaccented headers (normHeader folds
+    // both away) and named value + date columns rather than a date-headed one.
+    id: 'techem',
+    device: ['Numer urządzenia'],
+    wm: ['Ulica'],
+    marker: ['Data stanu końcowego'],
+    context: ['Numer mieszkania', 'Pomieszczenie', 'Typ licznika'],
+    value: ['Wartość odczytu'],
+    date: ['Data stanu końcowego'],
   },
   {
     id: 'ista',
@@ -355,12 +397,12 @@ function parseSheet(
   // Which column holds the value, and where the date comes from.
   let valueCol = -1;
   let fixedDate: string | null = null;
-  let dateCol = -1; // per-row date (METRONA only)
+  let dateCol = -1; // per-row date column, when the spec names one
   let olderColumns: DateColumn[] = [];
 
-  if (spec.id === 'metrona') {
-    valueCol = findColumn(header, 'Reading');
-    dateCol = findColumn(header, 'Reading date');
+  if (spec.value) {
+    valueCol = findColumn(header, ...spec.value);
+    dateCol = spec.date ? findColumn(header, ...spec.date) : -1;
   } else {
     const dateColumns = findDateColumns(header, deviceCol);
     if (dateColumns.length === 0) return; // sheet has no reading columns at all

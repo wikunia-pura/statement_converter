@@ -1,15 +1,161 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { MailingPole, MailingSzablon, MailingTyp } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
 import Icon from '../components/Icon';
 import MailingComposer from '../components/MailingComposer';
+import SearchableSelect, { SearchableOption } from '../components/SearchableSelect';
+import {
+  extractUsedFields,
+  isFieldTableField,
+  normalizeFieldName,
+} from '../../shared/mailing-template';
 import { MAILING_TYPE_OPTIONS } from './Mailing';
 
 interface Props {
   language: Language;
 }
+
+interface FieldTablePickerProps {
+  language: Language;
+  /** The whole dictionary — the pool is a shortlist out of this. */
+  pola: MailingPole[];
+  /** Field names currently on the shortlist, in row order. */
+  selected: string[];
+  /** True when the body actually contains the `{{Tabela pól}}` placeholder. */
+  inBody: boolean;
+  onChange: (selected: string[]) => void;
+}
+
+/**
+ * The shortlist of dynamic fields this template's table offers. A searchable
+ * "add" dropdown plus an ordered list, rather than a checkbox per dictionary
+ * entry: the dictionary grows with every rate a community can change, and one
+ * letter concerns a handful of them — picking 5 out of 50 must not mean scrolling
+ * past 45. The order here is the order of the rows in the sent mail.
+ */
+const FieldTablePicker: React.FC<FieldTablePickerProps> = ({
+  language,
+  pola,
+  selected,
+  inBody,
+  onChange,
+}) => {
+  const t = translations[language];
+
+  /** Dictionary fields not on the shortlist yet. */
+  const options = useMemo<SearchableOption[]>(
+    () =>
+      pola
+        .filter((p) => !selected.some((name) => normalizeFieldName(name) === normalizeFieldName(p.nazwa)))
+        .map((p) => ({ value: p.nazwa, label: p.nazwa, hint: p.tekst || undefined })),
+    [pola, selected],
+  );
+
+  const move = (index: number, delta: number) => {
+    const target = index + delta;
+    if (target < 0 || target >= selected.length) return;
+    const next = [...selected];
+    [next[index], next[target]] = [next[target], next[index]];
+    onChange(next);
+  };
+
+  return (
+    <div className="form-group">
+      <label>{t.mailingTemplateTableFields}</label>
+      <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px', maxWidth: '80ch' }}>
+        {t.mailingTemplateTableFieldsHint}
+      </div>
+
+      <SearchableSelect
+        // Empty on purpose: picking adds to the list below, so the trigger stays
+        // an "add another field" action.
+        value=""
+        options={options}
+        onChange={(nazwa) => onChange([...selected, nazwa])}
+        placeholder={t.mailingTemplateTableFieldAdd}
+        searchPlaceholder={t.mailingInsertFieldSearch}
+        emptyText={
+          pola.length === 0
+            ? t.mailingFieldTableNoFields
+            : options.length === 0
+              ? t.mailingTemplateTableFieldsAllPicked
+              : t.mailingInsertFieldNoMatch
+        }
+        size="sm"
+        style={{ maxWidth: '420px', marginBottom: selected.length > 0 ? '10px' : 0 }}
+      />
+
+      {selected.map((nazwa, index) => {
+        const pole = pola.find((p) => normalizeFieldName(p.nazwa) === normalizeFieldName(nazwa));
+        return (
+          <div
+            key={nazwa}
+            className={`mailing-recipient${!pole ? ' mailing-recipient--missing' : ''}`}
+          >
+            <span className="mailing-recipient__name">
+              {index + 1}. {pole?.tekst || nazwa}
+            </span>
+            <div className="mailing-recipient__unit">
+              {pole ? (
+                nazwa
+              ) : (
+                <span style={{ color: 'var(--danger)' }}>{t.mailingTemplateTableFieldMissing}</span>
+              )}
+            </div>
+            <button
+              type="button"
+              className="button button-ghost button-icon"
+              onClick={() => move(index, -1)}
+              disabled={index === 0}
+              title={t.mailingTemplateTableFieldUp}
+              aria-label={t.mailingTemplateTableFieldUp}
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              className="button button-ghost button-icon"
+              onClick={() => move(index, 1)}
+              disabled={index === selected.length - 1}
+              title={t.mailingTemplateTableFieldDown}
+              aria-label={t.mailingTemplateTableFieldDown}
+            >
+              ↓
+            </button>
+            <button
+              type="button"
+              className="alternative-name-remove"
+              onClick={() =>
+                onChange(
+                  selected.filter((name) => normalizeFieldName(name) !== normalizeFieldName(nazwa)),
+                )
+              }
+              title={t.delete}
+              aria-label={t.delete}
+            >
+              ×
+            </button>
+          </div>
+        );
+      })}
+
+      {/* The two halves of the feature can be set up in either order, so neither
+          missing half is an error — but silently producing no table would be. */}
+      {selected.length > 0 && !inBody && (
+        <div style={{ fontSize: '12px', color: 'var(--accent)', marginTop: '8px' }}>
+          <Icon name="alert-triangle" size={13} /> {t.mailingTemplateTableNoPlaceholder}
+        </div>
+      )}
+      {selected.length === 0 && inBody && (
+        <div style={{ fontSize: '12px', color: 'var(--accent)', marginTop: '8px' }}>
+          <Icon name="alert-triangle" size={13} /> {t.mailingTemplateTableNoFieldsPicked}
+        </div>
+      )}
+    </div>
+  );
+};
 
 /**
  * Template library. A template is a subject and a formatted body, both written
@@ -32,6 +178,7 @@ const MailingSzablony: React.FC<Props> = ({ language }) => {
     temat: string;
     tresc: string;
     attachPdf: boolean;
+    tableFields: string[];
   } | null>(null);
 
   useEffect(() => {
@@ -55,7 +202,15 @@ const MailingSzablony: React.FC<Props> = ({ language }) => {
   };
 
   const startNew = () =>
-    setEditing({ id: null, nazwa: '', typ: 'zgn-zaliczki', temat: '', tresc: '', attachPdf: false });
+    setEditing({
+      id: null,
+      nazwa: '',
+      typ: 'zgn-zaliczki',
+      temat: '',
+      tresc: '',
+      attachPdf: false,
+      tableFields: [],
+    });
 
   const startEdit = (szablon: MailingSzablon) =>
     setEditing({
@@ -65,6 +220,8 @@ const MailingSzablony: React.FC<Props> = ({ language }) => {
       temat: szablon.temat,
       tresc: szablon.tresc,
       attachPdf: szablon.attachPdf,
+      // Absent on templates saved before the field table existed.
+      tableFields: szablon.tableFields ?? [],
     });
 
   const handleSave = async () => {
@@ -86,6 +243,7 @@ const MailingSzablony: React.FC<Props> = ({ language }) => {
         temat: editing.temat,
         tresc: editing.tresc,
         attachPdf: editing.attachPdf,
+        tableFields: editing.tableFields,
       };
       if (editing.id !== null) {
         await window.electronAPI.mailingUpdateSzablon(editing.id, payload);
@@ -121,6 +279,7 @@ const MailingSzablony: React.FC<Props> = ({ language }) => {
         temat: szablon.temat,
         tresc: szablon.tresc,
         attachPdf: szablon.attachPdf,
+        tableFields: szablon.tableFields ?? [],
       });
       await load();
     } catch (err: unknown) {
@@ -232,6 +391,16 @@ const MailingSzablony: React.FC<Props> = ({ language }) => {
               setEditing((prev) => (prev ? { ...prev, ...patch } : prev))
             }
             onDirty={() => { if (error) setError(null); }}
+          />
+
+          <FieldTablePicker
+            language={language}
+            pola={pola}
+            selected={editing.tableFields}
+            inBody={extractUsedFields(editing.tresc).some(isFieldTableField)}
+            onChange={(tableFields) =>
+              setEditing((prev) => (prev ? { ...prev, tableFields } : prev))
+            }
           />
 
           <div

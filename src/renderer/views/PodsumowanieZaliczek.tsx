@@ -7,6 +7,7 @@ import type {
   ZaliczkiCategory,
   ZaliczkiEditedFile,
   ZaliczkiExtractionResult,
+  ZaliczkiProgress,
   ZaliczkiPropertyData,
 } from '../electronAPI';
 
@@ -44,6 +45,11 @@ const CATEGORIES: ZaliczkiCategory[] = [
 const MONTH_SHORT = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze',
                      'lip', 'sie', 'wrz', 'paź', 'lis', 'gru'];
 
+/**
+ * Files handled at once. Pages within a file are dispatched by the main process,
+ * which caps page requests globally — so this only controls how many files show
+ * progress at the same time, not how much load reaches the API.
+ */
 const OCR_CONCURRENCY = 4;
 
 const ROMAN_TO_MONTH: Record<string, number> = {
@@ -52,7 +58,9 @@ const ROMAN_TO_MONTH: Record<string, number> = {
 };
 
 function monthFromFilename(name: string): { month: number | null; year: number | null } {
-  const m = name.match(/\b(XII|XI|IX|VIII|VII|VI|IV|V|III|II|I)[ .\-_]*(\d{4})/);
+  // Keep in sync with monthFromFilename in main/zaliczki/extractor.ts. Longest
+  // first, so XII/XI win before X; bare `X` (October) used to be missing.
+  const m = name.match(/\b(XII|XI|X|IX|VIII|VII|VI|IV|V|III|II|I)[ .\-_]*(\d{4})/);
   if (!m) return { month: null, year: null };
   return { month: ROMAN_TO_MONTH[m[1]] ?? null, year: parseInt(m[2], 10) };
 }
@@ -75,6 +83,8 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
   const [dragOver, setDragOver] = useState(false);
   const [showDuplicatesModal, setShowDuplicatesModal] = useState(false);
   const [duplicateFiles, setDuplicateFiles] = useState<string[]>([]);
+  const [progress, setProgress] = useState<Record<string, ZaliczkiProgress>>({});
+  const [cacheInfo, setCacheInfo] = useState<{ entries: number; bytes: number } | null>(null);
   const filesRef = useRef<FileEntry[]>(files);
 
   useEffect(() => {
@@ -84,6 +94,18 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
   useEffect(() => {
     window.electronAPI.zaliczkiGetModels().then(({ default: def }) => {
       setModel(def);
+    });
+  }, []);
+
+  const refreshCacheInfo = () => {
+    window.electronAPI.zaliczkiCacheStats().then(setCacheInfo).catch(() => setCacheInfo(null));
+  };
+
+  useEffect(() => {
+    refreshCacheInfo();
+    // Per-page progress arrives from the main process, which owns page dispatch.
+    return window.electronAPI.onZaliczkiProgress((p) => {
+      setProgress((prev) => ({ ...prev, [p.filePath]: p }));
     });
   }, []);
 
@@ -204,7 +226,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
     );
   };
 
-  const runOcrForFiles = async (targets: FileEntry[]) => {
+  const runOcrForFiles = async (targets: FileEntry[], force = false) => {
     if (targets.length === 0) return;
     setIsProcessing(true);
     setStatusMessage('');
@@ -214,7 +236,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
       setFiles((prev) =>
         prev.map((f) => (f.filePath === entry.filePath ? { ...f, status: 'running' } : f)),
       );
-      const resp = await window.electronAPI.zaliczkiExtractPdf(entry.filePath, model);
+      const resp = await window.electronAPI.zaliczkiExtractPdf(entry.filePath, model, force);
       setFiles((prev) =>
         prev.map((f) => {
           if (f.filePath !== entry.filePath) return f;
@@ -246,6 +268,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
     await Promise.all(workers);
 
     setIsProcessing(false);
+    refreshCacheInfo();
   };
 
   const runOcrAll = () => {
@@ -258,9 +281,21 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
     return runOcrForFiles(toProcess);
   };
 
-  const runOcrOne = (filePath: string) => {
+  /**
+   * `force` re-asks the model instead of reusing cached pages. Only the explicit
+   * "OCR ponownie" action passes it — a first run on an already-seen page should
+   * stay free.
+   */
+  const runOcrOne = (filePath: string, force = false) => {
     const entry = filesRef.current.find((f) => f.filePath === filePath);
-    if (entry) return runOcrForFiles([entry]);
+    if (entry) return runOcrForFiles([entry], force);
+  };
+
+  const clearOcrCache = async () => {
+    const { removed } = await window.electronAPI.zaliczkiClearCache();
+    setStatusMessage(`${t.zaliczkiCacheCleared} (${removed})`);
+    setStatusIsError(false);
+    refreshCacheInfo();
   };
 
   const doneFiles = useMemo(() => files.filter((f) => f.status === 'done' && f.result), [files]);
@@ -442,7 +477,9 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                             <span className="loader-text">
                               {t.zaliczkiStatusRunning}: <strong>{f.fileName}</strong>
                             </span>
-                            <span className="loader-subtext">{t.zaliczkiOcrRunning}</span>
+                            <span className="loader-subtext">
+                              {describeProgress(progress[f.filePath], t)}
+                            </span>
                           </div>
                         </div>
                       </td>
@@ -500,7 +537,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                             {f.status === 'done' && (
                               <button
                                 className="button button-small button-secondary"
-                                onClick={() => runOcrOne(f.filePath)}
+                                onClick={() => runOcrOne(f.filePath, true)}
                                 disabled={isProcessing}
                                 style={{ whiteSpace: 'nowrap' }}
                               ><Icon name="refresh" size={13} />{' '}
@@ -560,12 +597,45 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
         </div>
       )}
 
-      {files.filter((f) => f.status === 'done' && f.result).map((f) => (
+      {files.filter((f) => f.status === 'done' && f.result).map((f) => {
+        const warnings = f.result!.warnings ?? [];
+        const errors = warnings.filter((w) => w.severity === 'error');
+        const notices = warnings.filter((w) => w.severity === 'warning');
+        // Properties the checks flagged, so the reviewer can find them in a
+        // 28-row table instead of re-reading every number.
+        const flagged = new Set(errors.map((w) => w.property));
+        const stats = f.result!.stats;
+        return (
         <div className="card" key={`edit-${f.filePath}`} style={{ marginTop: '15px' }}>
           <h3 style={{ marginBottom: '10px' }}>
             {f.fileName}
             {f.result?.month ? ` — ${MONTH_SHORT[f.result.month - 1]} ${f.result.year}` : ''}
           </h3>
+          {stats && (
+            <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '10px' }}>
+              {stats.pages} {t.zaliczkiStatsPages}
+              {stats.fromCache > 0 && ` · ${stats.fromCache} ${t.zaliczkiStatsCached}`}
+              {stats.escalated > 0 && ` · ${stats.escalated} ${t.zaliczkiStatsEscalated}`}
+              {stats.failed > 0 && ` · ${stats.failed} ${t.zaliczkiStatsFailed}`}
+            </div>
+          )}
+          <div
+            className={`zaliczki-status ${errors.length > 0 ? 'zaliczki-status-error' : notices.length > 0 ? 'zaliczki-status-warning' : 'zaliczki-status-success'}`}
+            style={{ marginBottom: '12px', display: 'block' }}
+          >
+            <strong>{t.zaliczkiChecksTitle}</strong>
+            {warnings.length === 0 ? (
+              <div style={{ marginTop: '4px', fontSize: '13px' }}>{t.zaliczkiChecksAllOk}</div>
+            ) : (
+              <ul style={{ margin: '6px 0 0 18px', fontSize: '13px', lineHeight: 1.5 }}>
+                {[...errors, ...notices].map((w, i) => (
+                  <li key={i}>
+                    <strong>{w.property}</strong> — {w.message}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '10px' }}>
             {t.zaliczkiEditHint}
           </div>
@@ -590,7 +660,17 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                         type="text"
                         value={p.property}
                         onChange={(e) => updateProperty(f.filePath, idx, 'property', e.target.value)}
-                        style={{ width: '100%' }}
+                        style={{
+                          width: '100%',
+                          ...(flagged.has(p.property)
+                            ? { borderColor: 'var(--danger)', borderWidth: '2px' }
+                            : {}),
+                        }}
+                        title={
+                          flagged.has(p.property)
+                            ? errors.find((w) => w.property === p.property)?.message
+                            : undefined
+                        }
                       />
                     </td>
                     {CATEGORIES.map((c) => (
@@ -623,7 +703,31 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
           ><Icon name="plus" size={13} />{' '}{t.zaliczkiAddRow}
           </button>
         </div>
-      ))}
+        );
+      })}
+
+      {cacheInfo && cacheInfo.entries > 0 && (
+        <div className="card" style={{ marginTop: '15px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: '260px' }}>
+              <strong style={{ fontSize: '13px' }}>
+                {t.zaliczkiCacheInfo}: {cacheInfo.entries} {t.zaliczkiStatsPages} (
+                {Math.max(1, Math.round(cacheInfo.bytes / 1024))} KB)
+              </strong>
+              <div style={{ fontSize: '12px', opacity: 0.7, marginTop: '4px' }}>
+                {t.zaliczkiCacheHint}
+              </div>
+            </div>
+            <button
+              className="button button-small button-secondary"
+              onClick={clearOcrCache}
+              disabled={isProcessing}
+            >
+              <Icon name="trash" size={13} /> {t.zaliczkiCacheClear}
+            </button>
+          </div>
+        </div>
+      )}
 
       {showDuplicatesModal && (
         <div className="modal-overlay" onClick={() => setShowDuplicatesModal(false)}>
@@ -735,6 +839,20 @@ const MonthYearPicker: React.FC<MonthYearPickerProps> = ({
     </div>
   );
 };
+
+/**
+ * "strona 7/28 · 3 z pamięci" — the file-level spinner used to say only "OCR
+ * w toku…" for the whole document, which on a 28-page scan looked like a hang.
+ */
+function describeProgress(
+  p: ZaliczkiProgress | undefined,
+  t: (typeof translations)[Language],
+): string {
+  if (!p || p.stage === 'splitting') return t.zaliczkiSplitting;
+  if (p.totalPages <= 1) return t.zaliczkiOcrRunning;
+  const cached = p.fromCache > 0 ? ` · ${p.fromCache} ${t.zaliczkiFromCacheShort}` : '';
+  return `${t.zaliczkiPageProgress} ${Math.min(p.donePages + 1, p.totalPages)}/${p.totalPages}${cached}`;
+}
 
 function shortCat(c: ZaliczkiCategory): string {
   const map: Record<ZaliczkiCategory, string> = {

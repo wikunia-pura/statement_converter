@@ -21,7 +21,9 @@ import {
   fieldPlaceholder,
   formatPolishDate,
   isBuiltinField,
+  isFieldTableField,
   normalizeFieldName,
+  readFieldValue,
   renderHtml,
   renderPlain,
 } from '../../shared/mailing-template';
@@ -42,6 +44,12 @@ export interface MailingDraft {
   adresIds: number[];
   /** Field values keyed by field name — one set for the whole send. */
   values: Record<string, string>;
+  /**
+   * Dynamic fields ticked for the `{{Tabela pól}}` table in the body. Per send,
+   * not per template: which positions a letter lists changes from month to month,
+   * and the values for them are typed here anyway.
+   */
+  tableFields: string[];
   attachments: { fileName: string; filePath: string }[];
   /** null ⇒ follow the template's default. */
   attachPdf: boolean | null;
@@ -68,6 +76,7 @@ export const emptyMailingDraft: MailingDraft = {
   templateId: null,
   adresIds: [],
   values: {},
+  tableFields: [],
   attachments: [],
   attachPdf: null,
   temat: '',
@@ -179,6 +188,10 @@ const Mailing: React.FC<Props> = ({
       tresc: template.tresc,
       loadedFromTemplateId: template.id,
       edited: false,
+      // Another template offers another shortlist for its table, so the ticks
+      // from the previous one mean nothing here. Re-loading the *same* template's
+      // text (a typo fixed in the other tab) keeps them.
+      tableFields: sameTemplate ? prev.tableFields : [],
     }));
   }, [template, draft.loadedFromTemplateId, draft.edited, draft.temat, draft.tresc, setDraft]);
 
@@ -248,6 +261,86 @@ const Mailing: React.FC<Props> = ({
       }));
   }, [template, draft.temat, draft.tresc, pola]);
 
+  /** True once the body asks for the field table, i.e. the picker below matters. */
+  const usesFieldTable = useMemo(
+    () => extractUsedFields(draft.tresc).some(isFieldTableField),
+    [draft.tresc],
+  );
+
+  /**
+   * The template's shortlist, resolved against the dictionary and kept in the
+   * template's own order — that order is the order of the rows in the mail.
+   * A field deleted from the dictionary since the template was written is dropped
+   * rather than sent as a row with no sentence.
+   */
+  const tableFieldPool = useMemo(
+    () =>
+      (template?.tableFields ?? [])
+        .map((name) => pola.find((p) => normalizeFieldName(p.nazwa) === normalizeFieldName(name)))
+        .filter((p): p is MailingPole => !!p),
+    [template, pola],
+  );
+
+  /**
+   * Ticked fields, in the pool's order — exactly the rows that will be sent, so
+   * the preview, the mail and the history entry all read from this one list.
+   * Empty when the body no longer holds the placeholder (it can be deleted while
+   * editing this send): the ticks then describe a table nobody will receive.
+   */
+  const tableFieldNames = useMemo(
+    () =>
+      usesFieldTable
+        ? tableFieldPool
+            .filter((p) =>
+              draft.tableFields.some(
+                (name) => normalizeFieldName(name) === normalizeFieldName(p.nazwa),
+              ),
+            )
+            .map((p) => p.nazwa)
+        : [],
+    [usesFieldTable, tableFieldPool, draft.tableFields],
+  );
+
+  /** Ticked fields still waiting for a value — a row with an empty cell. */
+  const tableFieldsWithoutValue = useMemo(
+    () => tableFieldNames.filter((name) => !readFieldValue(draft.values, name)),
+    [tableFieldNames, draft.values],
+  );
+
+  /**
+   * Store a field's value under exactly one spelling. The same field can be named
+   * differently by a placeholder and by a table row (`{{zaliczka}}` against the
+   * dictionary's `Zaliczka`), and two entries differing only in case would make
+   * the resolved value depend on key order.
+   */
+  const setFieldValue = (nazwa: string, wartosc: string) =>
+    setDraft((prev) => {
+      const key = normalizeFieldName(nazwa);
+      const values: Record<string, string> = {};
+      for (const [k, v] of Object.entries(prev.values)) {
+        if (normalizeFieldName(k) !== key) values[k] = v;
+      }
+      values[nazwa] = wartosc;
+      return { ...prev, values };
+    });
+
+  const toggleTableField = (nazwa: string, checked: boolean) =>
+    setDraft((prev) => {
+      const key = normalizeFieldName(nazwa);
+      const without = prev.tableFields.filter((name) => normalizeFieldName(name) !== key);
+      return { ...prev, tableFields: checked ? [...without, nazwa] : without };
+    });
+
+  /**
+   * Typing a value into a row of the table is the clearest possible statement
+   * that the row belongs in this mail, so it ticks the box too. The box stays
+   * ticked if the value is cleared again — unticking is the user's call.
+   */
+  const setTableFieldValue = (nazwa: string, wartosc: string) => {
+    setFieldValue(nazwa, wartosc);
+    if (wartosc.trim()) toggleTableField(nazwa, true);
+  };
+
   const attachPdf = draft.attachPdf ?? template?.attachPdf ?? false;
 
   /** Preview rendered against the first selected community, as it will be sent. */
@@ -258,6 +351,7 @@ const Mailing: React.FC<Props> = ({
       dateText: formatPolishDate(new Date()),
       pola,
       values: draft.values,
+      tableFields: tableFieldNames,
     };
     return {
       // The draft's text, not the template's — this is what will be sent.
@@ -273,6 +367,7 @@ const Mailing: React.FC<Props> = ({
     selectedAdresy,
     pola,
     draft.values,
+    tableFieldNames,
     t.mailingPreviewNoAddress,
   ]);
 
@@ -340,6 +435,8 @@ const Mailing: React.FC<Props> = ({
         tresc: draft.tresc,
         adresIds: draft.adresIds,
         values: draft.values,
+        // Only the fields that survive as rows — the same list the preview used.
+        tableFields: tableFieldNames,
         attachPdf,
         attachments: draft.attachments,
       });
@@ -453,17 +550,101 @@ const Mailing: React.FC<Props> = ({
               )}
               <input
                 type="text"
-                value={draft.values[name] ?? ''}
-                onChange={(e) =>
-                  setDraft((prev) => ({
-                    ...prev,
-                    values: { ...prev.values, [name]: e.target.value },
-                  }))
-                }
+                value={draft.values[name] ?? readFieldValue(draft.values, name)}
+                onChange={(e) => setFieldValue(name, e.target.value)}
                 placeholder={t.mailingValuePlaceholder}
               />
             </div>
           ))}
+        </div>
+      )}
+
+      {usesFieldTable && (
+        <div className="card">
+          <h2 style={{ marginBottom: '8px' }}>{t.mailingFieldTableTitle}</h2>
+          <div style={{ fontSize: '13px', opacity: 0.75, marginBottom: '16px', maxWidth: '80ch' }}>
+            {t.mailingFieldTableHint}
+          </div>
+
+          {tableFieldPool.length > 0 ? (
+            <>
+              <table>
+                <thead>
+                  <tr>
+                    <th style={{ width: '52px' }}>{t.mailingFieldTableInTable}</th>
+                    <th>{t.mailingFieldTableRowLabel}</th>
+                    <th style={{ width: '32%' }}>{t.mailingFieldValue}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tableFieldPool.map((p) => {
+                    const checked = tableFieldNames.some(
+                      (name) => normalizeFieldName(name) === normalizeFieldName(p.nazwa),
+                    );
+                    return (
+                      <tr key={p.id}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => toggleTableField(p.nazwa, e.target.checked)}
+                            aria-label={p.nazwa}
+                          />
+                        </td>
+                        <td>
+                          <div>{p.tekst || p.nazwa}</div>
+                          {p.tekst && (
+                            <div style={{ fontSize: '12px', opacity: 0.6 }}>{p.nazwa}</div>
+                          )}
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            // Always editable — typing here ticks the box, which is
+                            // one gesture instead of two for the common case.
+                            value={draft.values[p.nazwa] ?? readFieldValue(draft.values, p.nazwa)}
+                            onChange={(e) => setTableFieldValue(p.nazwa, e.target.value)}
+                            placeholder={t.mailingValuePlaceholder}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              <div style={{ fontSize: '13px', opacity: 0.8, marginTop: '12px' }}>
+                {t.mailingFieldTableRowCount
+                  .replace('{count}', String(tableFieldNames.length))
+                  .replace('{total}', String(tableFieldPool.length))}
+              </div>
+              {tableFieldNames.length === 0 && (
+                <div style={{ fontSize: '12px', opacity: 0.75, marginTop: '6px' }}>
+                  <Icon name="info" size={13} /> {t.mailingFieldTableEmptyNote}
+                </div>
+              )}
+              {tableFieldsWithoutValue.length > 0 && (
+                <div style={{ fontSize: '12px', color: 'var(--accent)', marginTop: '6px' }}>
+                  <Icon name="alert-triangle" size={13} />{' '}
+                  {t.mailingFieldTableMissingValues.replace(
+                    '{names}',
+                    tableFieldsWithoutValue.join(', '),
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="empty-state">
+              <div>{t.mailingFieldTableNoPool}</div>
+              <button
+                className="button button-primary button-small"
+                style={{ marginTop: '10px' }}
+                onClick={onNavigateToTemplates}
+              >
+                {t.mailingFieldTableGoToTemplate}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

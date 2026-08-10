@@ -84,6 +84,143 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '6.1.0',
+    date: '2026-08-10',
+    title: 'Tabela stawek w mailu, tańszy i pewniejszy OCR zaliczek, dwa nowe pliki TECHEM',
+    tagline:
+      'Trzy rzeczy. W mailingu wstawisz do treści tabelę, której wiersze wybierasz osobno przy każdej wysyłce. Podsumowanie zaliczek czyta PDF-y strona po stronie, pamięta raz odczytane strony (powtórny OCR jest darmowy) i samo sprawdza, czy kwoty się sumują. Odczyty liczników rozpoznają wszystkie trzy układy plików od TECHEM, a nie tylko jeden.',
+    stats: [
+      { value: '2', label: 'kolumny w tabeli pól' },
+      { value: '0 zł', label: 'za powtórny OCR strony' },
+      { value: '3', label: 'układy plików TECHEM' },
+    ],
+    highlights: [
+      {
+        id: 'mailing-tabela-pol',
+        kind: 'new',
+        icon: 'table',
+        title: 'Tabela pól dynamicznych w treści maila',
+        summary:
+          'Nowe pole wbudowane „Tabela pól” wstawia do treści tabelę o dwóch kolumnach: po lewej stałe zdanie pola dynamicznego, po prawej wartość. W szablonie wybierasz raz, z których pól ta tabela może korzystać, a przy każdej wysyłce zaznaczasz, które z nich mają w niej faktycznie wystąpić.',
+        details: [
+          'Do tej pory każda pozycja musiała być wpisana w treść szablonu na sztywno. Jeśli w jednym miesiącu zmieniały się dwie stawki, a w następnym pięć, trzeba było trzymać kilka szablonów albo ręcznie kasować zdania przed wysyłką.',
+          'Teraz szablon zostaje jeden i pracuje na dwóch poziomach. W szablonie ustalasz krótką listę pól dla tabeli — np. pięć z pięćdziesięciu, jakie masz w słowniku — i ich kolejność. Przy wysyłce widzisz tylko te pięć: odhaczasz trzy, które w tym miesiącu się zmieniły, i wpisujesz dla nich kwoty.',
+          'Niezaznaczone pola nie pojawiają się nigdzie — nie zostaje po nich ani puste zdanie, ani pusty wiersz. Tabela wygląda tak samo w mailu i w załączonym PDF-ie, a w podglądzie widzisz ją dokładnie w takiej formie, w jakiej pójdzie do jednostki.',
+        ],
+        where: ['Menu boczne', 'Mailing'],
+        steps: [
+          {
+            do: 'Wejdź w „Mailing” → zakładka „Szablony” i otwórz szablon przyciskiem „Edytuj” (albo dodaj nowy).',
+            then: 'Otworzy się edytor z tytułem i treścią wiadomości.',
+          },
+          {
+            do: 'Ustaw kursor w treści tam, gdzie ma stanąć tabela, i z listy „Wstaw pole…” (prawy górny róg paska narzędzi) wybierz „Tabela pól”.',
+            then: 'W treści pojawi się wstawka „{{Tabela pól}}”, a pod edytorem informacja, że pola dla tabeli wybiera się poniżej.',
+          },
+          {
+            do: 'Zjedź do sekcji „Pola dostępne w tabeli” i listą „Dodaj pole do tabeli…” dodaj te pola dynamiczne, które ta tabela ma móc pokazywać. Strzałkami ↑ ↓ ustaw ich kolejność, krzyżykiem usuń pomyłkę. Zapisz szablon przyciskiem „Zapisz”.',
+            then: 'Pola pojawią się na numerowanej liście — ta kolejność to kolejność wierszy w mailu.',
+          },
+          {
+            do: 'Przejdź do zakładki „Wysyłka” i wybierz ten szablon.',
+            then: 'Nad listą wspólnot pojawi się karta „Tabela pól dynamicznych”, a w niej dokładnie te pola, które udostępnia szablon — nie cały słownik.',
+          },
+          {
+            do: 'W kolumnie „Wartość” wpisz kwoty dla pól, które mają wejść do maila (np. 350,00 zł).',
+            then: 'Wpisanie wartości samo zaznacza kwadracik w kolumnie „W tabeli”; możesz też zaznaczać i odznaczać ręcznie. Pod tabelą widzisz, ile wierszy pójdzie z ilu dostępnych, a podgląd na dole ekranu aktualizuje się od razu.',
+          },
+        ],
+        expect: [
+          'Wiersze idą w kolejności ustawionej w szablonie, niezależnie od tego, w jakiej kolejności je zaznaczasz przy wysyłce.',
+          'Jeśli nie zaznaczysz nic, tabela w ogóle nie pojawi się w mailu — reszta treści zostaje bez zmian.',
+          'Pole zaznaczone bez wartości wychodzi z pustą drugą kolumną — aplikacja wypisuje takie pola pod tabelą na pomarańczowo, żeby dało się to złapać przed wysłaniem.',
+          'W historii wysyłek zapisują się wszystkie wartości z tabeli, więc po miesiącach widać, co dokładnie wysłano.',
+        ],
+        note: {
+          type: 'tip',
+          text: 'Zmiana szablonu na inny czyści zaznaczenia — nowy szablon udostępnia własną listę pól. Wstawki „Tabela pól” nie da się wstawić do tytułu wiadomości: tytuł jest zwykłym tekstem, tabela nie ma się gdzie w nim zmieścić.',
+        },
+      },
+      {
+        id: 'zaliczki-strony-pamiec-kontrola',
+        kind: 'improved',
+        icon: 'file-text',
+        title: 'Zaliczki: strona po stronie, z pamięcią odczytów i kontrolą kwot',
+        summary:
+          'Podsumowanie zaliczek dzieli teraz PDF na pojedyncze strony i czyta każdą osobno. Raz odczytana strona zapisuje się na dysku, więc powtórny OCR tego samego pliku jest natychmiastowy i nic nie kosztuje. Po odczycie aplikacja sama sprawdza, czy kwoty się sumują, i pokazuje, które wspólnoty obejrzeć.',
+        details: [
+          'Wcześniej cały plik szedł do modelu w jednym zapytaniu. Jeden problem na jednej stronie przewracał odczyt całego pliku — a przy powtórce płaciło się za wszystko od nowa. Zdarzało się też, że model dopisywał do odpowiedzi swoje rozważania i wtedy odczyt kończył się błędem, mimo że same liczby były w środku poprawne. Teraz każda strona to osobne zapytanie i osobny wynik: kłopotliwa strona nie psuje pozostałych, a dopisana proza nie przeszkadza.',
+          'W trakcie pracy widzisz, na której stronie jest aplikacja („strona 7/15”) i ile stron wzięła z pamięci. Po odczycie pod plikiem stoi podsumowanie: ile stron, ile z pamięci, ile ponowionych, ile nieudanych.',
+          'Kontrola kwot korzysta z tego, że te dokumenty same podają sumy: składniki świadczeń muszą dać „Razem świadczenia”, a części — sumę całkowitą. Jeśli coś się nie zgadza, aplikacja ponawia tę jedną stronę mocniejszym modelem, a gdy nadal nie gra — wypisuje wspólnotę w sekcji „Kontrola kwot” i podświetla jej wiersz w tabeli. Nie musisz sprawdzać po kolei 28 wierszy, tylko te wskazane.',
+        ],
+        where: ['Menu boczne', 'Podsumowanie zaliczek'],
+        steps: [
+          {
+            do: 'Kliknij „Podsumowanie zaliczek” w menu po lewej i wrzuć PDF-y jak dotąd.',
+            then: 'W kolumnie statusu zamiast samego „OCR…” lecą teraz konkretne strony: „dzielenie na strony…”, potem „strona 3/15 · 2 z pamięci”.',
+          },
+          {
+            do: 'Poczekaj na koniec odczytu i zjedź do tabeli z wynikami pliku.',
+            then: 'Nad tabelą stoi linijka „15 stron · 4 z pamięci (bez ponownych kosztów)”, a pod nią sekcja „Kontrola kwot”: albo zielona informacja, że wszystkie kwoty się zgadzają, albo lista wspólnot do obejrzenia. Wskazane wiersze są w tabeli podświetlone.',
+          },
+          {
+            do: 'Popraw ręcznie to, co trzeba, i wygeneruj Excel tak samo jak wcześniej.',
+            then: 'Plik wychodzi bez zmian w formacie — poprawki wpisane w tabeli są w nim uwzględnione.',
+          },
+          {
+            do: 'Jeśli chcesz odczytać plik od zera, użyj „OCR ponownie” przy tym pliku.',
+            then: 'Tylko ten przycisk pomija pamięć i pyta model jeszcze raz. Zwykłe dodanie tego samego pliku korzysta z pamięci, czyli jest darmowe.',
+          },
+        ],
+        expect: [
+          'Pod listą plików pojawia się karta „Pamięć odczytów” z liczbą zapamiętanych stron i ich rozmiarem, a obok przycisk „Wyczyść pamięć odczytów”. Czyszczenie nic nie psuje — kosztuje tylko tyle, że następny odczyt tych stron znów pójdzie do modelu.',
+          'Pamięć siedzi lokalnie na tym komputerze i nie wchodzi do kopii zapasowej: to dane odtwarzalne z Twoich PDF-ów, nie dane księgowe.',
+          'Nazwy plików z rzymską dziesiątką („X 2026”) są teraz poprawnie rozpoznawane jako październik — wcześniej samotne „X” umykało i miesiąc trzeba było ustawiać ręcznie.',
+        ],
+        note: {
+          type: 'tip',
+          text: 'Nieudana strona nie blokuje pliku: pozostałe wchodzą do tabeli normalnie, a przy ponownym uruchomieniu OCR-u aplikacja dopyta tylko o te strony, których jeszcze nie ma.',
+        },
+      },
+      {
+        id: 'techem-dwa-nowe-uklady',
+        kind: 'improved',
+        icon: 'zap',
+        title: 'TECHEM z drugiego portalu i TECHEM wypełniany ręcznie',
+        summary:
+          'Do tej pory moduł „Odczyty liczników” przyjmował tylko jeden układ pliku od TECHEM. Dwa pozostałe kończyły się komunikatem „Nie rozpoznano formatu pliku”. Teraz działają wszystkie trzy.',
+        details: [
+          'Pierwszy nowy układ to eksport z drugiego portalu TECHEM: wspólnota stoi w kolumnie „Ulica” (a nie „Adres”), numer mieszkania ma własną kolumnę, a odczyty są pod nagłówkiem z datą zapisaną krótko, np. „30.06.26”.',
+          'Drugi to zestawienie wypełniane ręcznie: nagłówki są WIELKIMI LITERAMI i bez polskich znaków („NUMER URZADZENIA”, „ULICA”, „WARTOSC ODCZYTU”), a data odczytu stoi przy każdym wierszu w kolumnie „DATA STANU KONCOWEGO” zamiast w nagłówku.',
+          'Aplikacja sama rozpoznaje, który to układ — nie wybierasz tego nigdzie z listy. Pliki od PIASKAN, METRONA i ISTA oraz dotychczasowy plik TECHEM czytają się dokładnie tak samo jak wcześniej.',
+        ],
+        where: ['Menu boczne', 'Odczyty liczników'],
+        steps: [
+          {
+            do: 'Kliknij „Odczyty liczników” w menu po lewej (ikona błyskawicy).',
+            then: 'Otworzy się ekran z polem na pliki i tabelą rozpoznanych plików.',
+          },
+          {
+            do: 'Przeciągnij na pole plik .xls od TECHEM — obojętnie z którego portalu, albo ten wypełniany ręcznie.',
+            then: 'W kolumnie „Dostawca” pojawi się „TECHEM”, a obok nazwa wspólnoty, data odczytu i liczba odczytów. Wcześniej w tym miejscu wyskakiwał czerwony komunikat „Nie rozpoznano formatu pliku”.',
+          },
+          {
+            do: 'Kliknij „Konwertuj”.',
+            then: 'Pliki TXT trafiają do folderu IMPEX — po jednym na wspólnotę, dokładnie jak przy pozostałych dostawcach.',
+          },
+        ],
+        expect: [
+          'Wynik jest identyczny niezależnie od układu pliku wejściowego: numer urządzenia, data w formacie 2026.06.30 i wartość odczytu z przecinkiem.',
+          'Wiersze bez odczytu (pusta komórka albo myślnik „-”) nadal nie blokują konwersji — trafiają do „Pominiętych wierszy bez odczytu” z numerem wiersza takim, jak widzisz go w Excelu.',
+        ],
+        note: {
+          type: 'tip',
+          text: 'Jeżeli plik od TECHEM nadal się nie rozpoznaje, sprawdź, czy nie usunięto z niego wiersza nagłówków — to po nazwach kolumn aplikacja poznaje dostawcę i układ.',
+        },
+      },
+    ],
+  },
+  {
     version: '6.0.1',
     date: '2026-08-07',
     title: 'Mailing do jednostek miasta, odczyty liczników i tańsze dopasowania',

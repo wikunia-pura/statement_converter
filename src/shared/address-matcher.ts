@@ -14,13 +14,121 @@
  */
 
 import { Adres } from './types';
+import { isLetteredApartment, letteredApartmentInText } from './apartment-account';
+
+/**
+ * The letter part of an apartment number — the `A` in `17A`.
+ *
+ * Appended to every apartment capture group in this file. Two deliberate limits:
+ *
+ *  - **Glued only.** The letter must sit directly against the digits. A payer who
+ *    writes "BOGUNKI 5/27 A" while their own address says "M.27" means apartment
+ *    27, and treating the stray "A" as part of the number would invent a lokal
+ *    27A — the same class of mis-booking, just in the other direction.
+ *  - **Exactly one letter.** `(?![A-Za-z])` stops the group from eating into a
+ *    following word, which matters because MT940 subfields are concatenated
+ *    without a separator, so a field boundary can put text right after a number.
+ *
+ * Capturing the letter is not what makes this safe, though — see
+ * letteredApartmentInText() and the needsAccount flag. If a lettered number ever
+ * slipped past these groups, the result would be a bare "17", which is precisely
+ * the bug. So the guard is built to notice the letter in the text independently
+ * of whether any capture group managed to grab it.
+ */
+const APT_LETTER = String.raw`(?:[A-Za-z](?![A-Za-z]))?`;
+
+/**
+ * Apartment-extraction patterns, in the priority order extractApartmentNumber
+ * applies them: explicit identifiers, then apartment prefixes, then address
+ * shapes, then a bare leading number.
+ *
+ * Hoisted to module scope for the same two reasons as the generic patterns below:
+ * they compile once instead of on every transaction, and the shared APT_LETTER
+ * fragment is interpolated in exactly one place per pattern, so the letter cannot
+ * be forgotten in one of them the way it originally was in all of them.
+ */
+const APT_PATTERNS = {
+  /** "Wspolnotanr 27 - Identyfikator lokalu 26" (Santander-specific) */
+  wspolnota: new RegExp(
+    String.raw`wspolnotanr\s+(\d+)\s*-\s*identyfikator\s+lokalu\s+(\d+${APT_LETTER})`,
+    'i',
+  ),
+  /** "identyfikator lokalu X/Y" or "identyfikator: X/Y" → building=X, apartment=Y */
+  identSlash: new RegExp(
+    String.raw`identyfikator(?:\s+lokalu)?[:\s]+(\d+)\/(\d+${APT_LETTER})`,
+    'i',
+  ),
+  /** "identyfikator lokalu XX" (standalone, no slash) */
+  identStandalone: new RegExp(
+    String.raw`identyfikator\s+lokalu\s+(\d+${APT_LETTER})(?!\s*\/)`,
+    'i',
+  ),
+  /** "lokal ID X/Y" (Santander-specific) */
+  lokalId: new RegExp(String.raw`lokal\s+id\s+(\d+)\/(\d+${APT_LETTER})`, 'i'),
+  /** "ID LOKALU X/Y" or "ID. LOKALU X/Y" */
+  idLokaluSlash: new RegExp(String.raw`id\.?\s+lokalu\s+(\d+)\/(\d+${APT_LETTER})`, 'i'),
+  /** "ID LOKALU XX" (standalone, no slash) */
+  idLokaluStandalone: new RegExp(
+    String.raw`id\.?\s+lokalu\s+(\d+${APT_LETTER})(?!\s*\/\d)`,
+    'i',
+  ),
+  /** "ID: X/Y" or "ID.X/Y" (Santander-style, more general ID with slash) */
+  idGeneralSlash: new RegExp(String.raw`\bid[:\s\.]+(\d+)\/(\d+${APT_LETTER})`, 'i'),
+  /** "lokal numer: 111" / "lokal nr: 111" / "lokal: 111" / "lokal 111" */
+  lokal: new RegExp(
+    String.raw`lokal(?:\s+numer|\s+nr)?[:\s]+(\d+${APT_LETTER})(?![\d\/])`,
+    'i',
+  ),
+  /** "lokalu: 17" / "lokalu 17" */
+  lokalu: new RegExp(String.raw`lokalu[:\s]+(\d+${APT_LETTER})(?![\d\/])`, 'i'),
+  /** "mieszkanie 111", "lok. 111", "loc. 111", "m. 111", "m.111" */
+  prefix: new RegExp(
+    String.raw`\b(?:mieszkanie|lok\.?|loc\.?|lokal)\s*(\d+${APT_LETTER})|\bm\.?\s*(\d+${APT_LETTER})(?!\s*pln)`,
+    'i',
+  ),
+  /**
+   * "AL. LOTNIKÓW 20/82", "ALEJA LOTNIKÓW20/51" — street prefix, building may
+   * carry a letter (2A), apartment may too (17A). Years are excluded so a date
+   * like "20/2026" is not read as apartment 2026.
+   */
+  addressWithPrefix: new RegExp(
+    String.raw`(?:aleja|al\.|ulica|ul\.)\s*[\wąćęłńóśźżĄĆĘŁŃÓŚŹŻ\s]+?\s*(\d{1,3}[A-Z]?)\/(?!(?:19|20)\d{2})(\d{1,4}${APT_LETTER})`,
+    'i',
+  ),
+  /** "Lotników 20/33" — no street prefix, street name must be 4+ chars. */
+  streetSlash: new RegExp(
+    String.raw`(?<!czynsz|zaliczka|zaliczki|fundusz|remontowy|remontowa|opłata|oplata|rata|wpłata|wplata|przelew|należność|naleznosc)\s+([a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ]{4,})\s+(\d{1,3}[A-Z]?)\/(?!(?:19|20)\d{2})(\d{1,4}${APT_LETTER})`,
+    'i',
+  ),
+  /** Glued postal code: "lok. 5602-668" → apartment=56, postal=02-668 */
+  postalGlued: new RegExp(
+    String.raw`\b(?:mieszkanie|lok\.?|loc\.|lokal)\s*(\d{1,3}${APT_LETTER})(0[0-9]-\d{3})`,
+    'i',
+  ),
+  /** Number at the very beginning of the text: "109 CZYNSZ ZA..." */
+  leadingNumber: new RegExp(String.raw`^(\d{1,4}${APT_LETTER})(?!\s*pln)\s`, 'i'),
+} as const;
 
 // Generic fallback patterns — hoisted to module scope so they're compiled once,
 // not rebuilt on every extractAddress() call.
-const GENERIC_PATTERN_1 =
-  /(?:aleja|al|ulica|ul)\.?\s+([\wąćęłńóśźż]+(?:\s+[\wąćęłńóśźż]+)?)\s+(\d+)\s*[/\s]?\s*(?:m\.?\s*)?(?:lok\.?\s*)?(\d+)?/i;
-const GENERIC_PATTERN_2 =
-  /([\wąćęłńóśźż]+(?:\s+[\wąćęłńóśźż]+)?)\s+(\d+)\s*[/\s]?\s*(?:m\.?\s*)?(?:lok\.?\s*)?(\d+)?/i;
+const GENERIC_PATTERN_1 = new RegExp(
+  String.raw`(?:aleja|al|ulica|ul)\.?\s+([\wąćęłńóśźż]+(?:\s+[\wąćęłńóśźż]+)?)\s+(\d+)\s*[/\s]?\s*(?:m\.?\s*)?(?:lok\.?\s*)?(\d+${APT_LETTER})?`,
+  'i',
+);
+const GENERIC_PATTERN_2 = new RegExp(
+  String.raw`([\wąćęłńóśźż]+(?:\s+[\wąćęłńóśźż]+)?)\s+(\d+)\s*[/\s]?\s*(?:m\.?\s*)?(?:lok\.?\s*)?(\d+${APT_LETTER})?`,
+  'i',
+);
+/**
+ * Splits a configured address name into street + building number: "Bogunki 5",
+ * "Bachmacka 6A".
+ *
+ * The optional letter is load-bearing. Without it a name like "Bachmacka 6A"
+ * parsed to *no* building number, and extractAddress skips every variation whose
+ * building is unknown — so the known-address path silently never ran for such a
+ * community, leaving it on the generic fallback patterns.
+ */
+const ADDRESS_NAME = /^(.+?)\s+(\d+[A-Za-z]?)$/;
 const STREET_BLACKLIST =
   /^(czynsz|zaliczka|zaliczki|fundusz|remontowy|remontowa|opłata|oplata|rata|wpłata|wplata|przelew|należność|naleznosc|płatność|platnosc|faktura|rachunek|za\s+)/i;
 
@@ -57,6 +165,14 @@ export interface AddressMatchResult {
   warnings: string[];
   /** True when the apartment number came from a user-defined ApartmentMapping rule. */
   matchedByManualMapping: boolean;
+  /** Account symbol from the matching rule's "konto lokalu", when the rule set one. */
+  accountOverride: string | null;
+  /**
+   * True when the apartment number carries a letter (17A) and no account symbol
+   * is known for it, so the transaction must not be booked automatically. The
+   * confidence is held below the review threshold whenever this is set.
+   */
+  needsAccount: boolean;
 }
 
 // === INTERNAL PRECOMPUTED TYPES ===
@@ -78,6 +194,8 @@ interface CompiledMapping {
   streetName: string;
   buildingNumber: string | null;
   fullAddress: string;
+  /** Explicit account symbol from the rule, or null to use the default prefix rule. */
+  accountOverride: string | null;
 }
 
 /** All transaction-independent derived data for one address. */
@@ -100,13 +218,13 @@ export class AddressMatcher {
   }
 
   private compileAddress(addr: Adres): CompiledAddress {
-    const mainParsed = addr.nazwa.match(/^(.+?)\s+(\d+)$/);
+    const mainParsed = addr.nazwa.match(ADDRESS_NAME);
     const mainStreet = mainParsed ? mainParsed[1] : addr.nazwa;
     const mainBuilding = mainParsed ? mainParsed[2] : null;
 
     const nameVariations = [addr.nazwa, ...(addr.alternativeNames || [])];
     const variations: CompiledVariation[] = nameVariations.map(addrName => {
-      const addressMatch = addrName.match(/^(.+?)\s+(\d+)$/);
+      const addressMatch = addrName.match(ADDRESS_NAME);
       const street = addressMatch ? addressMatch[1].toLowerCase() : addrName.toLowerCase();
       const building = addressMatch ? addressMatch[2] : mainBuilding;
 
@@ -116,7 +234,7 @@ export class AddressMatcher {
         const streetAscii = this.normalizePolishChars(street);
         const flexibleStreet = this.flexifyStreetName(streetAscii);
         streetPattern = new RegExp(
-          `(${flexibleStreet})\\s*${this.escapeRegex(building)}\\s*[/\\s]?\\s*(?:m\\.?\\s*)?(?:lok\\.?\\s*)?(?:loc\\.?\\s*)?([0-9]+)?`,
+          `(${flexibleStreet})\\s*${this.escapeRegex(building)}\\s*[/\\s]?\\s*(?:m\\.?\\s*)?(?:lok\\.?\\s*)?(?:loc\\.?\\s*)?([0-9]+${APT_LETTER})?`,
           'i',
         );
       }
@@ -130,14 +248,15 @@ export class AddressMatcher {
     });
 
     // Parse street/building context from the address name for apartment mappings.
-    const parsed = addr.nazwa.match(/^(.+?)\s+(\d+)$/);
+    const parsed = addr.nazwa.match(ADDRESS_NAME);
     const mapStreet = parsed ? parsed[1] : addr.nazwa;
     const mapBuilding = parsed ? parsed[2] : null;
     const mappings: CompiledMapping[] = (addr.apartmentMappings || [])
       .map(mapping => {
         const needle = this.normalizePolishChars((mapping.matchText || '').trim().toLowerCase());
-        const apartment = (mapping.apartmentNumber || '').trim();
+        const apartment = this.normalizeApartment((mapping.apartmentNumber || '').trim());
         if (!needle || !apartment) return null;
+        const accountOverride = (mapping.kontoLokalu || '').trim();
         return {
           needle,
           apartment,
@@ -146,6 +265,7 @@ export class AddressMatcher {
           fullAddress: mapBuilding
             ? `${mapStreet} ${mapBuilding}/${apartment}`
             : `${mapStreet} ${apartment}`,
+          accountOverride: accountOverride || null,
         };
       })
       .filter((m): m is CompiledMapping => m !== null);
@@ -173,6 +293,8 @@ export class AddressMatcher {
         confidence: { address: 100, apartment: 100, tenantName: 0, overall: 95 },
         warnings: [],
         matchedByManualMapping: false,
+        accountOverride: null,
+        needsAccount: false,
       };
     }
 
@@ -288,6 +410,34 @@ export class AddressMatcher {
       }
     }
 
+    // 10. Lettered-apartment guard.
+    //
+    // Two distinct dangers, and only the second one is about our own regexes:
+    //
+    //  a) We *did* read a letter ("17A"). The number is right, but no account
+    //     symbol can be derived for it, so booking must wait for the user.
+    //  b) The text clearly shows a lettered apartment while we ended up with a
+    //     plain number. That is the mis-booking case — 17A landing on lokal 17 —
+    //     and it must be caught even though no capture group produced the letter,
+    //     because a missed letter looks exactly like a correct plain number.
+    //
+    // Both push the transaction below the review threshold. Under-booking costs a
+    // click; over-confident booking moves money to the wrong owner.
+    const letteredInText = letteredApartmentInText(combinedText);
+    const apartmentIsLettered = isLetteredApartment(apartmentNumber);
+    const letterLost = !!letteredInText && !!apartmentNumber && !apartmentIsLettered;
+    const needsAccount = apartmentIsLettered || letterLost;
+
+    if (apartmentIsLettered) {
+      warnings.push(
+        `Apartment "${apartmentNumber}" has a letter — its account symbol must be set by the user (apartment rule or review)`
+      );
+    } else if (letterLost) {
+      warnings.push(
+        `Text mentions apartment "${letteredInText}" but "${apartmentNumber}" was recognized — verify before booking`
+      );
+    }
+
     return {
       streetName,
       buildingNumber,
@@ -295,9 +445,23 @@ export class AddressMatcher {
       fullAddress,
       tenantName,
       isZGN: false,
-      confidence,
+      confidence: needsAccount ? this.holdBackForReview(confidence) : confidence,
       warnings,
       matchedByManualMapping: false,
+      accountOverride: null,
+      needsAccount,
+    };
+  }
+
+  /**
+   * Push confidence below the review threshold (70) while keeping the relative
+   * scores readable, so a held-back transaction still shows why it was matched.
+   */
+  private holdBackForReview(confidence: ConfidenceScores): ConfidenceScores {
+    return {
+      ...confidence,
+      apartment: Math.min(confidence.apartment, 40),
+      overall: Math.min(confidence.overall, 40),
     };
   }
 
@@ -322,6 +486,23 @@ export class AddressMatcher {
 
         const tenantName = this.extractTenantName(counterpartyName || combinedText);
 
+        // A rule pointing at a lettered apartment is only bookable when it also
+        // carries the account symbol — otherwise the rule states *which* apartment
+        // this is, but not where to book it, and the user still has to say.
+        const needsAccount =
+          isLetteredApartment(mapping.apartment) && !mapping.accountOverride;
+        const warnings = needsAccount
+          ? [
+              `Rule matched apartment "${mapping.apartment}" but the rule has no account symbol ("konto lokalu") — set one to book it automatically`,
+            ]
+          : [];
+        const confidence = {
+          address: 95,
+          apartment: needsAccount ? 40 : 95,
+          tenantName: tenantName ? 95 : 0,
+          overall: needsAccount ? 40 : 95,
+        };
+
         return {
           streetName: mapping.streetName,
           buildingNumber: mapping.buildingNumber,
@@ -329,14 +510,11 @@ export class AddressMatcher {
           fullAddress: mapping.fullAddress,
           tenantName,
           isZGN: false,
-          confidence: {
-            address: 95,
-            apartment: 95,
-            tenantName: tenantName ? 95 : 0,
-            overall: 95,
-          },
-          warnings: [],
+          confidence,
+          warnings,
           matchedByManualMapping: true,
+          accountOverride: mapping.accountOverride,
+          needsAccount,
         };
       }
     }
@@ -352,84 +530,74 @@ export class AddressMatcher {
 
   private extractApartmentNumber(text: string): ApartmentExtraction | null {
     const normalized = text.toLowerCase();
+    const found = (
+      building: string | null,
+      apartment: string,
+      source: ApartmentExtraction['source'],
+    ): ApartmentExtraction => ({
+      building,
+      apartment: this.normalizeApartment(apartment),
+      source,
+    });
 
     // === IDENTIFIERS (highest priority) ===
     // These are explicit building/apartment references from property management systems.
 
-    // "Wspolnotanr 27 - Identyfikator lokalu 26" (Santander-specific)
-    const wspolnotaMatch = normalized.match(
-      /wspolnotanr\s+(\d+)\s*-\s*identyfikator\s+lokalu\s+(\d+)/i
-    );
+    const wspolnotaMatch = normalized.match(APT_PATTERNS.wspolnota);
     if (wspolnotaMatch) {
-      return { building: wspolnotaMatch[1], apartment: wspolnotaMatch[2], source: 'identifier' };
+      return found(wspolnotaMatch[1], wspolnotaMatch[2], 'identifier');
     }
 
-    // "identyfikator lokalu X/Y" or "identyfikator: X/Y" → building=X, apartment=Y
-    const identSlash = normalized.match(
-      /identyfikator(?:\s+lokalu)?[:\s]+(\d+)\/(\d+)/i
-    );
+    const identSlash = normalized.match(APT_PATTERNS.identSlash);
     if (identSlash) {
-      return { building: identSlash[1], apartment: identSlash[2], source: 'identifier' };
+      return found(identSlash[1], identSlash[2], 'identifier');
     }
 
-    // "identyfikator lokalu XX" (standalone, no slash)
-    const identStandalone = normalized.match(
-      /identyfikator\s+lokalu\s+(\d+)(?!\s*\/)/i
-    );
+    const identStandalone = normalized.match(APT_PATTERNS.identStandalone);
     if (identStandalone) {
-      return { building: null, apartment: identStandalone[1], source: 'identifier' };
+      return found(null, identStandalone[1], 'identifier');
     }
 
-    // "lokal ID X/Y" (Santander-specific)
-    const lokalIdMatch = normalized.match(/lokal\s+id\s+(\d+)\/(\d+)/i);
+    const lokalIdMatch = normalized.match(APT_PATTERNS.lokalId);
     if (lokalIdMatch) {
-      return { building: lokalIdMatch[1], apartment: lokalIdMatch[2], source: 'identifier' };
+      return found(lokalIdMatch[1], lokalIdMatch[2], 'identifier');
     }
 
-    // "ID LOKALU X/Y" or "ID. LOKALU X/Y"
-    const idLokaluSlash = normalized.match(/id\.?\s+lokalu\s+(\d+)\/(\d+)/i);
+    const idLokaluSlash = normalized.match(APT_PATTERNS.idLokaluSlash);
     if (idLokaluSlash) {
-      return { building: idLokaluSlash[1], apartment: idLokaluSlash[2], source: 'identifier' };
+      return found(idLokaluSlash[1], idLokaluSlash[2], 'identifier');
     }
 
-    // "ID LOKALU XX" (standalone, no slash)
-    const idLokaluStandalone = normalized.match(/id\.?\s+lokalu\s+(\d+)(?!\s*\/\d)/i);
+    const idLokaluStandalone = normalized.match(APT_PATTERNS.idLokaluStandalone);
     if (idLokaluStandalone) {
-      return { building: null, apartment: idLokaluStandalone[1], source: 'identifier' };
+      return found(null, idLokaluStandalone[1], 'identifier');
     }
 
-    // "ID: X/Y" or "ID.X/Y" (Santander-style, more general ID with slash)
-    const idGeneralSlash = normalized.match(/\bid[:\s\.]+(\d+)\/(\d+)/i);
+    const idGeneralSlash = normalized.match(APT_PATTERNS.idGeneralSlash);
     if (idGeneralSlash) {
-      return { building: idGeneralSlash[1], apartment: idGeneralSlash[2], source: 'identifier' };
+      return found(idGeneralSlash[1], idGeneralSlash[2], 'identifier');
     }
 
-    // "lokal numer: 111" / "lokal nr: 111" / "lokal: 111" / "lokal 111"
-    const lokalMatch = normalized.match(
-      /lokal(?:\s+numer|\s+nr)?[:\s]+(\d+)(?![\d\/])/i
-    );
+    const lokalMatch = normalized.match(APT_PATTERNS.lokal);
     if (lokalMatch) {
-      return { building: null, apartment: lokalMatch[1], source: 'identifier' };
+      return found(null, lokalMatch[1], 'identifier');
     }
 
-    // "lokalu X" (standalone, e.g., "lokalu: 17" or "lokalu 17")
-    const lokaluMatch = normalized.match(/lokalu[:\s]+(\d+)(?![\d\/])/i);
+    const lokaluMatch = normalized.match(APT_PATTERNS.lokalu);
     if (lokaluMatch) {
-      return { building: null, apartment: lokaluMatch[1], source: 'identifier' };
+      return found(null, lokaluMatch[1], 'identifier');
     }
 
     // === PREFIX PATTERNS (higher priority than address patterns) ===
     // "mieszkanie X", "lok. X", "m. X" etc. - explicit apartment references
     // These are treated as identifiers (trusted without address validation)
-
-    // "mieszkanie 111", "lok. 111", "lok 111", "loc. 111", "lokal 111", "m. 111", "m.111"
-    const prefixMatch = normalized.match(
-      /\b(?:mieszkanie|lok\.?|loc\.?|lokal)\s*(\d+)|\bm\.?\s*(\d+)(?!\s*pln)/i
-    );
+    const prefixMatch = normalized.match(APT_PATTERNS.prefix);
     if (prefixMatch) {
       const apt = prefixMatch[1] || prefixMatch[2];
-      if (apt && apt.length <= 4) {
-        return { building: null, apartment: apt, source: 'identifier' };
+      // Length is measured on the digits alone, so "128A" is not rejected as
+      // 4-digits-plus for carrying a letter.
+      if (apt && this.apartmentDigits(apt).length <= 4) {
+        return found(null, apt, 'identifier');
       }
     }
 
@@ -437,51 +605,27 @@ export class AddressMatcher {
     // Extract apartment from address format: "Street XX/YY"
     // NOTE: Exclude dates (MM/20XX or XX/19XX patterns)
     // NOTE: Exclude common non-street words (CZYNSZ, ZALICZKA, FUNDUSZ, REMONTOWY, etc.)
-
-    // "AL. LOTNIKÓW 20/82" or "ALEJA LOTNIKÓW20/51" (with street prefix)
-    // Exclude dates: use negative lookahead to prevent matching 19XX or 20XX as apartment
-    // Support building numbers with optional letter: 2A, 2B, etc.
-    const addressWithPrefix = text.match(
-      /(?:aleja|al\.|ulica|ul\.)\s*[\wąćęłńóśźżĄĆĘŁŃÓŚŹŻ\s]+?\s*(\d{1,3}[A-Z]?)\/(?!(?:19|20)\d{2})(\d{1,4})/i
-    );
-    if (addressWithPrefix && addressWithPrefix[2].length <= 3) {
-      return {
-        building: addressWithPrefix[1],
-        apartment: addressWithPrefix[2],
-        source: 'address-pattern',
-      };
+    const addressWithPrefix = text.match(APT_PATTERNS.addressWithPrefix);
+    if (addressWithPrefix && this.apartmentDigits(addressWithPrefix[2]).length <= 3) {
+      return found(addressWithPrefix[1], addressWithPrefix[2], 'address-pattern');
     }
 
-    // "Lotników 20/33" (without prefix, street name must be 4+ chars)
-    // Exclude dates: apartment cannot be 19XX or 20XX (years)
-    // Exclude common non-street words with negative lookbehind
-    // Support building numbers with optional letter: 2A, 2B, etc.
-    const streetSlash = text.match(
-      /(?<!czynsz|zaliczka|zaliczki|fundusz|remontowy|remontowa|opłata|oplata|rata|wpłata|wplata|przelew|należność|naleznosc)\s+([a-ząćęłńóśźżA-ZĄĆĘŁŃÓŚŹŻ]{4,})\s+(\d{1,3}[A-Z]?)\/(?!(?:19|20)\d{2})(\d{1,4})/i
-    );
-    if (streetSlash && streetSlash[3].length <= 3) {
-      return {
-        building: streetSlash[2],
-        apartment: streetSlash[3],
-        source: 'address-pattern',
-      };
+    const streetSlash = text.match(APT_PATTERNS.streetSlash);
+    if (streetSlash && this.apartmentDigits(streetSlash[3]).length <= 3) {
+      return found(streetSlash[2], streetSlash[3], 'address-pattern');
     }
 
     // === POSTAL CODE PATTERNS ===
-
-    // Handle glued postal codes: "lok. 5602-668" → apartment=56, postal=02-668
-    const postalGlued = normalized.match(
-      /\b(?:mieszkanie|lok\.?|loc\.|lokal)\s*(\d{1,3})(0[0-9]-\d{3})/i
-    );
+    const postalGlued = normalized.match(APT_PATTERNS.postalGlued);
     if (postalGlued) {
-      return { building: null, apartment: postalGlued[1], source: 'identifier' };
+      return found(null, postalGlued[1], 'identifier');
     }
 
     // === FALLBACK ===
     // Number at the very beginning of text (e.g., "109 CZYNSZ ZA...")
-    const fallbackMatch = normalized.match(/^(\d{1,4})(?!\s*pln)\s/i);
+    const fallbackMatch = normalized.match(APT_PATTERNS.leadingNumber);
     if (fallbackMatch) {
-      return { building: null, apartment: fallbackMatch[1], source: 'fallback' };
+      return found(null, fallbackMatch[1], 'fallback');
     }
 
     return null;
@@ -524,7 +668,9 @@ export class AddressMatcher {
           // IMPORTANT: If the known address pattern itself captured an apartment number (match[2]),
           // prefer it over existingApartment which may come from an unrelated address
           // (e.g., tenant's home address like "Belwederska 5/7" vs managed property "Głogowa 26/9")
-          const apartment = match[2] || existingApartment || null;
+          const apartment = match[2]
+            ? this.normalizeApartment(match[2])
+            : existingApartment || null;
           const building = variation.building;
 
           return {
@@ -546,7 +692,8 @@ export class AddressMatcher {
     if (match1) {
       const streetName = this.capitalizeStreet(match1[1]);
       const buildingNumber = match1[2];
-      const apartmentNumber = existingApartment || match1[3] || null;
+      const apartmentNumber =
+        existingApartment || (match1[3] ? this.normalizeApartment(match1[3]) : null);
 
       return {
         streetName,
@@ -568,7 +715,8 @@ export class AddressMatcher {
       if (!STREET_BLACKLIST.test(streetCandidate)) {
         const streetName = this.capitalizeStreet(match2[1]);
         const buildingNumber = match2[2];
-        const apartmentNumber = existingApartment || match2[3] || null;
+        const apartmentNumber =
+          existingApartment || (match2[3] ? this.normalizeApartment(match2[3]) : null);
 
         return {
           streetName,
@@ -730,6 +878,22 @@ export class AddressMatcher {
   // ============================================================
   // UTILITIES
   // ============================================================
+
+  /**
+   * Canonical form of an apartment number: trimmed, letter upper-cased.
+   *
+   * Most patterns run against a lower-cased copy of the text, so a match yields
+   * "17a". Left alone, "17a" and "17A" would become two different apartments and
+   * therefore two different accounts for the same owner.
+   */
+  private normalizeApartment(value: string): string {
+    return value.trim().toUpperCase();
+  }
+
+  /** The digits of an apartment number, without the optional trailing letter. */
+  private apartmentDigits(value: string): string {
+    return value.replace(/[A-Za-z]+$/, '');
+  }
 
   private capitalizeStreet(street: string): string {
     return street

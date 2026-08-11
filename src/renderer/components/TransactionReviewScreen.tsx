@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { ConversionReviewData, ReviewDecision, TransactionForReview, Kontrahent, KontrahentTyp, ApartmentMapping, ContractorSortOrder } from '../../shared/types';
+import { ConversionReviewData, ReviewDecision, TransactionForReview, Kontrahent, KontrahentTyp, ApartmentMapping, ContractorSortOrder, DEFAULT_ACCOUNT_CONFIG } from '../../shared/types';
+import { composeApartmentAccount, isAccountSymbol, isLetteredApartment } from '../../shared/apartment-account';
 import { translations, Language } from '../translations';
 import { searchTransactionInPdf, PdfSearchMatch } from '../../shared/pdf-search';
 import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
@@ -428,6 +429,10 @@ interface TransactionCardProps {
   idx: number;
   currentDecision: ReviewDecision | undefined;
   manualInput: string | undefined;
+  /** "Konto lokalu" suffix typed for this row (the part after the prefix). */
+  manualAccount: string | undefined;
+  /** Fixed part of every apartment account in this conversion ("204"). */
+  apartmentPrefix: string;
   manualContractorId: number | undefined;
   manualRemainingIncomeId: number | undefined;
   manualRemainingCostId: number | undefined;
@@ -436,6 +441,7 @@ interface TransactionCardProps {
   remainingCostEntries: Kontrahent[];
   handleDecision: (index: number, action: 'accept' | 'reject' | 'clarify') => void;
   handleManualInput: (index: number, value: string) => void;
+  handleManualAccountInput: (index: number, value: string) => void;
   handleManualContractorSelect: (index: number, contractorId: number | null) => void;
   handleManualRemainingIncomeSelect: (index: number, entryId: number | null) => void;
   handleManualRemainingCostSelect: (index: number, entryId: number | null) => void;
@@ -447,7 +453,7 @@ interface TransactionCardProps {
   addressMappings: ApartmentMapping[];
   /** Persist an apartment-mapping rule under the current address and mark the
    *  given transaction as matched by it. Pass editId to update an existing rule. */
-  onSaveApartmentMapping: (index: number, matchText: string, apartmentNumber: string, editId?: string) => Promise<void>;
+  onSaveApartmentMapping: (index: number, matchText: string, apartmentNumber: string, editId?: string, kontoLokalu?: string) => Promise<void>;
   /** Expense counterpart of the apartment rule: teach a contractor the spelling
    *  this bank uses, so the deterministic matcher catches it next time — no AI. */
   onSaveAlternativeName: (index: number, contractorId: number, alternativeName: string) => Promise<void>;
@@ -458,6 +464,8 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
   idx,
   currentDecision,
   manualInput,
+  manualAccount,
+  apartmentPrefix,
   manualContractorId,
   manualRemainingIncomeId,
   manualRemainingCostId,
@@ -466,6 +474,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
   remainingCostEntries,
   handleDecision,
   handleManualInput,
+  handleManualAccountInput,
   handleManualContractorSelect,
   handleManualRemainingIncomeSelect,
   handleManualRemainingCostSelect,
@@ -486,6 +495,8 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
   const [ruleFormOpen, setRuleFormOpen] = useState(false);
   const [ruleMatchText, setRuleMatchText] = useState('');
   const [ruleApartment, setRuleApartment] = useState('');
+  /** Optional account symbol for the rule — required for a lettered apartment. */
+  const [ruleAccount, setRuleAccount] = useState('');
   const [ruleSaving, setRuleSaving] = useState(false);
   const [ruleSaved, setRuleSaved] = useState(false);
   const [ruleError, setRuleError] = useState<string | null>(null);
@@ -513,9 +524,14 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
     if (existingRule) {
       setRuleMatchText(existingRule.matchText);
       setRuleApartment(existingRule.apartmentNumber);
+      setRuleAccount(existingRule.kontoLokalu || '');
     } else {
       setRuleMatchText(trn.original.counterparty || '');
       setRuleApartment((manualInput && manualInput.trim()) || trn.extracted.apartmentNumber || '');
+      // Carry over an account the user already typed for this row, so "assign it
+      // once, then make it stick" needs no retyping.
+      const typed = manualAccount && composeApartmentAccount(apartmentPrefix, manualAccount);
+      setRuleAccount(typed || trn.extracted.accountOverride || '');
     }
     setRuleError(null);
     setRuleSaved(false);
@@ -525,14 +541,25 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
   const submitRule = async () => {
     const mt = ruleMatchText.trim();
     const apt = ruleApartment.trim();
+    const account = ruleAccount.trim();
     if (!mt || !apt) {
       setRuleError(t.fillAllFields);
+      return;
+    }
+    if (account && !isAccountSymbol(account)) {
+      setRuleError(t.apartmentMappingAccountInvalid);
+      return;
+    }
+    // A lettered apartment is unbookable without a symbol, so a rule that omits it
+    // would silently keep sending this payer back to this screen every month.
+    if (!account && isLetteredApartment(apt)) {
+      setRuleError(t.apartmentMappingAccountRequired);
       return;
     }
     setRuleSaving(true);
     setRuleError(null);
     try {
-      await onSaveApartmentMapping(trn.index, mt, apt, existingRule?.id);
+      await onSaveApartmentMapping(trn.index, mt, apt, existingRule?.id, account || undefined);
       setRuleSaved(true);
       setRuleFormOpen(false);
     } catch (e: unknown) {
@@ -827,19 +854,27 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
       const manualApt = manualInput?.trim();
       const isManuallyEdited = manualApt && manualApt.length > 0 && manualApt !== extractedApt;
       const displayValue = isManuallyEdited ? manualApt : extractedApt;
-      
+      // A lettered apartment was read correctly but has no account to go to, so the
+      // box must not look like a finished match — the number alone is not a booking.
+      const awaitingAccount = !isManuallyEdited && trn.extracted.needsAccount === true;
+
       if (displayValue && displayValue.length > 0) {
+        const tone = awaitingAccount
+          ? { color: 'var(--warning)', bg: 'rgba(220, 220, 170, 0.2)', icon: 'alert-triangle' as const }
+          : isManuallyEdited
+            ? { color: 'var(--accent)', bg: 'rgba(197, 134, 192, 0.2)', icon: 'edit' as const }
+            : { color: 'var(--success)', bg: 'rgba(78, 201, 176, 0.2)', icon: 'check-circle' as const };
         return (
           <div style={{ marginBottom: '15px' }}>
-            <div style={{ 
+            <div style={{
               padding: '12px 16px',
-              backgroundColor: isManuallyEdited ? 'rgba(197, 134, 192, 0.2)' : 'rgba(78, 201, 176, 0.2)',
-              border: isManuallyEdited ? '2px solid var(--accent)' : '2px solid var(--success)',
+              backgroundColor: tone.bg,
+              border: `2px solid ${tone.color}`,
               borderRadius: '6px',
             }}>
               <div style={{
                 fontSize: '11px',
-                color: isManuallyEdited ? 'var(--accent)' : 'var(--success)',
+                color: tone.color,
                 fontWeight: 600,
                 textTransform: 'uppercase',
                 letterSpacing: '0.5px',
@@ -848,20 +883,27 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
                 alignItems: 'center',
                 gap: '6px',
               }}>
-                <Icon name={isManuallyEdited ? 'edit' : 'check-circle'} size={12} />
-                {isManuallyEdited
-                  ? (language === 'pl' ? 'Numer lokalu (ręcznie wpisany)' : 'Apartment number (manually entered)')
-                  : (language === 'pl' ? 'Zmatchowany numer lokalu' : 'Matched apartment number')
+                <Icon name={tone.icon} size={12} />
+                {awaitingAccount
+                  ? t.apartmentNeedsAccountLabel
+                  : isManuallyEdited
+                    ? (language === 'pl' ? 'Numer lokalu (ręcznie wpisany)' : 'Apartment number (manually entered)')
+                    : (language === 'pl' ? 'Zmatchowany numer lokalu' : 'Matched apartment number')
                 }
               </div>
-              <div style={{ 
-                fontSize: '24px', 
+              <div style={{
+                fontSize: '24px',
                 fontWeight: 700,
-                color: isManuallyEdited ? 'var(--accent)' : 'var(--success)',
+                color: tone.color,
                 letterSpacing: '1px',
               }}>
                 {displayValue}
               </div>
+              {awaitingAccount && (
+                <div style={{ fontSize: '12px', color: tone.color, marginTop: '6px', lineHeight: 1.4 }}>
+                  {t.apartmentNeedsAccountHint}
+                </div>
+              )}
             </div>
           </div>
         );
@@ -901,7 +943,14 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
 
     {/* Action zone — decision + manual input + status */}
     {(() => {
-      const hasManualOverride = !!(manualInput && manualInput.trim().length > 0)
+      const hasManualNumber = !!(manualInput && manualInput.trim().length > 0);
+      const hasManualAccount = !!(manualAccount && manualAccount.trim().length > 0);
+      const manualNumberIsLettered = hasManualNumber && isLetteredApartment(manualInput!.trim());
+      const composedManualAccount = hasManualAccount
+        ? composeApartmentAccount(apartmentPrefix, manualAccount!)
+        : null;
+      const hasManualOverride = hasManualNumber
+        || hasManualAccount
         || manualContractorId !== undefined
         || manualRemainingIncomeId !== undefined
         || manualRemainingCostId !== undefined;
@@ -913,7 +962,11 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
           </h4>
 
           <div className="review-card__actions-row">
-            {((trn.transactionType === 'expense' && trn.matchedContractor?.contractorName) || (trn.transactionType === 'income' && trn.extracted.apartmentNumber)) && (
+            {/* No "Akceptuj" for an apartment with no account: accepting would look
+                like a decision while the payment still ends up unrecognized. Such a
+                row is resolved by giving an account, not by confirming the number. */}
+            {((trn.transactionType === 'expense' && trn.matchedContractor?.contractorName)
+              || (trn.transactionType === 'income' && trn.extracted.apartmentNumber && trn.extracted.needsAccount !== true)) && (
               <button
                 onClick={() => handleDecision(trn.index, 'accept')}
                 disabled={hasManualOverride}
@@ -964,18 +1017,52 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
             </div>
           )}
 
-          {/* Manual Input (only for income) */}
+          {/* Manual Input (only for income) — three mutually exclusive ways to say
+              where this payment goes: the apartment number, the account symbol
+              outright, or a "Pozostałe przychody" entry. Each disables the others,
+              so two of them can never disagree about one transaction. */}
           {trn.transactionType === 'income' && (
             <div className="review-card__manual">
               <div className="review-card__manual-field" style={{ maxWidth: 220 }}>
-                <label className="review-card__manual-label">Numer mieszkania</label>
+                <label className="review-card__manual-label">{t.manualApartmentNumber}</label>
                 <input
                   type="text"
                   value={manualInput || ''}
                   onChange={(e) => handleManualInput(trn.index, (e.target as HTMLInputElement).value)}
                   placeholder="np. 42, ZGN"
-                  disabled={manualRemainingIncomeId !== undefined}
+                  disabled={manualRemainingIncomeId !== undefined || hasManualAccount}
                 />
+                {manualNumberIsLettered && (
+                  <div className="review-card__manual-hint review-card__manual-hint--warning">
+                    <Icon name="alert-triangle" size={12} /> {t.manualApartmentLetterBlocked}
+                  </div>
+                )}
+              </div>
+              <div className="review-card__manual-field" style={{ maxWidth: 220 }}>
+                <label className="review-card__manual-label">{t.manualApartmentAccount}</label>
+                <div className="review-card__account-input">
+                  <span className="review-card__account-prefix">{apartmentPrefix}-</span>
+                  <input
+                    type="text"
+                    value={manualAccount || ''}
+                    onChange={(e) => handleManualAccountInput(trn.index, (e.target as HTMLInputElement).value)}
+                    placeholder={t.manualApartmentAccountPlaceholder}
+                    disabled={manualRemainingIncomeId !== undefined || hasManualNumber}
+                  />
+                </div>
+                {/* The composed symbol is echoed back rather than padded silently:
+                    conventions for lettered apartments vary, so the user has to see
+                    exactly what will land in the accounting file. */}
+                {composedManualAccount && (
+                  <div className="review-card__manual-hint review-card__manual-hint--ok">
+                    {t.manualApartmentAccountPreview}: <strong>{composedManualAccount}</strong>
+                  </div>
+                )}
+                {manualAccount && manualAccount.trim().length > 0 && !composedManualAccount && (
+                  <div className="review-card__manual-hint review-card__manual-hint--warning">
+                    <Icon name="alert-triangle" size={12} /> {t.manualApartmentAccountInvalid}
+                  </div>
+                )}
               </div>
               <div className="review-card__manual-field" style={{ maxWidth: 350 }}>
                 <label className="review-card__manual-label">
@@ -987,7 +1074,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
                   onChange={(entryId) => handleManualRemainingIncomeSelect(trn.index, entryId)}
                   placeholder={language === 'pl' ? 'Wybierz pozostały przychód...' : 'Select remaining income...'}
                   searchPlaceholder={language === 'pl' ? 'Szukaj po nazwie...' : 'Search by name...'}
-                  disabled={!!(manualInput && manualInput.trim().length > 0)}
+                  disabled={hasManualNumber || hasManualAccount}
                 />
               </div>
             </div>
@@ -1025,6 +1112,21 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
                       placeholder={t.apartmentMappingApartmentPlaceholder}
                     />
                   </div>
+                  <div className="review-card__manual-field" style={{ maxWidth: 190 }}>
+                    <label className="review-card__manual-label">
+                      {t.apartmentMappingAccount}
+                      {isLetteredApartment(ruleApartment.trim()) && ' *'}
+                    </label>
+                    <input
+                      type="text"
+                      value={ruleAccount}
+                      onChange={(e) => { setRuleAccount((e.target as HTMLInputElement).value); if (ruleError) setRuleError(null); }}
+                      placeholder={`${apartmentPrefix}-00017A`}
+                    />
+                  </div>
+                </div>
+                <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '6px' }}>
+                  {t.apartmentMappingAccountHint}
                 </div>
                 {ruleError && (
                   <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '8px' }}>{ruleError}</div>
@@ -1227,6 +1329,13 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   
   // Manual inputs start empty - extracted values are shown in the input field as default
   const [manualInputs, setManualInputs] = useState<Map<number, string>>(new Map());
+  /**
+   * "Konto lokalu" suffixes typed per row — the part after the prefix, e.g. "00017A".
+   * Kept apart from manualInputs because the two are different statements: one names
+   * the apartment and lets the app derive the account, the other names the account
+   * outright. Lettered apartments can only be booked through this one.
+   */
+  const [manualAccounts, setManualAccounts] = useState<Map<number, string>>(new Map());
   const [manualContractorIds, setManualContractorIds] = useState<Map<number, number | null>>(new Map());
   const [manualRemainingIncomeIds, setManualRemainingIncomeIds] = useState<Map<number, number | null>>(new Map());
   const [manualRemainingCostIds, setManualRemainingCostIds] = useState<Map<number, number | null>>(new Map());
@@ -1243,6 +1352,10 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   const [searchTerm, setSearchTerm] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [addressMappings, setAddressMappings] = useState<ApartmentMapping[]>([]);
+
+  // Fixed part of every apartment account in this conversion, decided by the
+  // account type of the community account the file belongs to.
+  const apartmentPrefix = reviewData.apartmentPrefix || DEFAULT_ACCOUNT_CONFIG.apartmentPrefix;
 
   // Filter kontrahenci by type, then order per the user's preference so every
   // pick-list in the review screen is sorted consistently. A contractor can hold
@@ -1444,7 +1557,13 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
       newManualInputs.delete(index);
       setManualInputs(newManualInputs);
     }
-    
+
+    if (manualAccounts.has(index)) {
+      const newManualAccounts = new Map(manualAccounts);
+      newManualAccounts.delete(index);
+      setManualAccounts(newManualAccounts);
+    }
+
     // Clear manual contractor selection if switching away from manual
     if (manualContractorIds.has(index)) {
       const newManualContractorIds = new Map(manualContractorIds);
@@ -1468,7 +1587,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   const handleManualInput = (index: number, value: string) => {
     const newManualInputs = new Map(manualInputs);
     const newDecisions = new Map(decisions);
-    
+
     // If value is empty or only whitespace, remove from manual inputs and clear decision
     if (!value || value.trim().length === 0) {
       newManualInputs.delete(index);
@@ -1476,14 +1595,54 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
     } else {
       // Set manual input and create manual decision
       newManualInputs.set(index, value);
-      newDecisions.set(index, {
-        index,
-        action: 'manual',
-        manualApartmentNumber: value,
-      });
+      // A lettered number ("17A") names the apartment but not its account, and the
+      // app must not invent one — the row stays undecided until the user uses
+      // "Konto lokalu" instead. The field shows why.
+      if (isLetteredApartment(value.trim())) {
+        newDecisions.delete(index);
+      } else {
+        newDecisions.set(index, {
+          index,
+          action: 'manual',
+          manualApartmentNumber: value,
+        });
+      }
     }
-    
+
     setManualInputs(newManualInputs);
+    setDecisions(newDecisions);
+  };
+
+  /**
+   * "Konto lokalu": the user states the account symbol outright. Used for lettered
+   * apartments, whose symbol the app is not allowed to derive — see
+   * resolveApartmentAccount. The value stored is the suffix; the prefix is fixed by
+   * the account type and only shown.
+   */
+  const handleManualAccountInput = (index: number, value: string) => {
+    const newManualAccounts = new Map(manualAccounts);
+    const newDecisions = new Map(decisions);
+
+    const account = composeApartmentAccount(apartmentPrefix, value);
+    if (!value || value.trim().length === 0) {
+      newManualAccounts.delete(index);
+      newDecisions.delete(index);
+    } else {
+      newManualAccounts.set(index, value);
+      // While the symbol is still incomplete there is nothing to book yet, so no
+      // decision is recorded — the row stays undecided rather than half-decided.
+      if (account) {
+        newDecisions.set(index, {
+          index,
+          action: 'manual',
+          manualApartmentAccount: account,
+        });
+      } else {
+        newDecisions.delete(index);
+      }
+    }
+
+    setManualAccounts(newManualAccounts);
     setDecisions(newDecisions);
   };
 
@@ -1597,7 +1756,13 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
     handleManualContractorSelect(index, contractorId);
   };
 
-  const handleSaveApartmentMapping = async (index: number, matchText: string, apartmentNumber: string, editId?: string) => {
+  const handleSaveApartmentMapping = async (
+    index: number,
+    matchText: string,
+    apartmentNumber: string,
+    editId?: string,
+    kontoLokalu?: string,
+  ) => {
     if (reviewData.adresId == null) throw new Error(t.apartmentMappingNeedsAddress);
     const adresy = await window.electronAPI.getAdresy();
     const adres = adresy.find(a => a.id === reviewData.adresId);
@@ -1608,12 +1773,16 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
     if (current.some(m => m.id !== editId && m.matchText.trim().toLowerCase() === normalized)) {
       throw new Error(t.apartmentMappingDuplicate);
     }
+    const account = kontoLokalu?.trim() || undefined;
     let nextMappings;
     if (editId) {
-      // Edit the existing rule in place.
-      nextMappings = current.map(m =>
-        m.id === editId ? { ...m, matchText, apartmentNumber } : m,
-      );
+      // Edit the existing rule in place. Clearing the account field must actually
+      // clear it, so the key is dropped rather than left at its old value.
+      nextMappings = current.map(m => {
+        if (m.id !== editId) return m;
+        const { kontoLokalu: _drop, ...rest } = m;
+        return { ...rest, matchText, apartmentNumber, ...(account ? { kontoLokalu: account } : {}) };
+      });
     } else {
       const newMapping = {
         id: (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
@@ -1621,6 +1790,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
           : `m-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         matchText,
         apartmentNumber,
+        ...(account ? { kontoLokalu: account } : {}),
       };
       nextMappings = [...current, newMapping];
     }
@@ -1642,13 +1812,22 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
       trn.extracted.apartmentNumber = apartmentNumber;
       trn.extracted.matchedByManualMapping = true;
       trn.extracted.confidence = 95;
+      trn.extracted.accountOverride = account ?? null;
+      trn.extracted.needsAccount = false;
     }
-    // Clear any manual override for this transaction, then accept it.
+    // Clear any manual override for this transaction, then book it.
     setManualInputs(prev => { const m = new Map(prev); m.delete(index); return m; });
+    setManualAccounts(prev => { const m = new Map(prev); m.delete(index); return m; });
     setManualRemainingIncomeIds(prev => { const m = new Map(prev); m.delete(index); return m; });
     setDecisions(prev => {
       const m = new Map(prev);
-      m.set(index, { index, action: 'accept' });
+      // Carry the value explicitly instead of a bare 'accept'. The rule was created
+      // after the conversion ran, so the main process still holds the pre-rule
+      // extraction for this row; 'accept' would book that, not what was just
+      // defined — and for a lettered apartment there would be nothing to book.
+      m.set(index, account
+        ? { index, action: 'manual', manualApartmentAccount: account }
+        : { index, action: 'manual', manualApartmentNumber: apartmentNumber });
       return m;
     });
   };
@@ -1895,6 +2074,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
             {incomeTransactions.map((trn) => {
               const currentDecision = decisions.get(trn.index);
               const manualInput = manualInputs.get(trn.index);
+              const manualAccount = manualAccounts.get(trn.index);
               const manualRemainingIncomeId = manualRemainingIncomeIds.get(trn.index) ?? undefined;
               const idx = transactionPosition.get(trn) ?? -1;
               
@@ -1905,6 +2085,8 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                   idx={idx}
                   currentDecision={currentDecision}
                   manualInput={manualInput}
+                  manualAccount={manualAccount}
+                  apartmentPrefix={apartmentPrefix}
                   manualContractorId={undefined}
                   manualRemainingIncomeId={manualRemainingIncomeId}
                   manualRemainingCostId={undefined}
@@ -1913,6 +2095,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                   remainingCostEntries={remainingCostEntries}
                   handleDecision={handleDecision}
                   handleManualInput={handleManualInput}
+                  handleManualAccountInput={handleManualAccountInput}
                   handleManualContractorSelect={handleManualContractorSelect}
                   handleManualRemainingIncomeSelect={handleManualRemainingIncomeSelect}
                   handleManualRemainingCostSelect={handleManualRemainingCostSelect}
@@ -2009,6 +2192,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
             {expenseTransactions.map((trn) => {
               const currentDecision = decisions.get(trn.index);
               const manualInput = manualInputs.get(trn.index);
+              const manualAccount = manualAccounts.get(trn.index);
               const manualContractorId = manualContractorIds.get(trn.index) ?? undefined;
               const manualRemainingCostId = manualRemainingCostIds.get(trn.index) ?? undefined;
               const idx = transactionPosition.get(trn) ?? -1;
@@ -2020,6 +2204,8 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                   idx={idx}
                   currentDecision={currentDecision}
                   manualInput={manualInput}
+                  manualAccount={manualAccount}
+                  apartmentPrefix={apartmentPrefix}
                   manualContractorId={manualContractorId}
                   manualRemainingIncomeId={undefined}
                   manualRemainingCostId={manualRemainingCostId}
@@ -2028,6 +2214,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                   remainingCostEntries={remainingCostEntries}
                   handleDecision={handleDecision}
                   handleManualInput={handleManualInput}
+                  handleManualAccountInput={handleManualAccountInput}
                   handleManualContractorSelect={handleManualContractorSelect}
                   handleManualRemainingIncomeSelect={handleManualRemainingIncomeSelect}
                   handleManualRemainingCostSelect={handleManualRemainingCostSelect}

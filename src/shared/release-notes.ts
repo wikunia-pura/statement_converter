@@ -84,6 +84,109 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '6.2.0',
+    date: '2026-08-11',
+    title: 'Lokale z literą (17A) już nie trafiają na cudze konto',
+    tagline:
+      'Wpłata za lokal 17A była rozpoznawana jako lokal 17 i księgowana na konto innego właściciela — bez żadnego ostrzeżenia. Teraz aplikacja widzi literę, sama takiej wpłaty nie księguje i pyta Cię o konto. Do reguł lokali doszło pole „Konto lokalu”, a w akceptacji obok „Numeru mieszkania” jest nowe pole „Konto lokalu”.',
+    stats: [
+      { value: '17A ≠ 17', label: 'rozróżniane numery lokali' },
+      { value: '8', label: 'banków objętych poprawką' },
+      { value: '1', label: 'nowe pole w regułach lokali' },
+    ],
+    highlights: [
+      {
+        id: 'lokale-z-litera-nie-ksieguja-sie-same',
+        kind: 'fixed',
+        icon: 'alert-triangle',
+        title: 'Lokal z literą nie zaksięguje się sam na numer bez litery',
+        summary:
+          'Do tej pory z opisu „UL.BOGUNKI 5 M.17A” aplikacja czytała lokal „17”, dawała temu 95% pewności i księgowała wpłatę na 204-000017 — czyli na konto właściciela lokalu 17. Teraz czyta „17A”, wie że nie zna konta takiego lokalu, i zostawia wpłatę w nierozpoznanych do Twojej decyzji.',
+        details: [
+          'To był najgroźniejszy rodzaj błędu: cichy. Wpłata dostawała najwyższą pewność, więc nie pokazywała się na ekranie akceptacji, w pliku księgowym wyglądała normalnie, a pieniądze były już na koncie innej osoby. Nic w aplikacji nie sygnalizowało, że coś jest nie tak.',
+          'Aplikacja nie próbuje sama wymyślić konta dla lokalu z literą, bo wspólnoty numerują je różnie — u jednej będzie to 204-00017A, u innej coś zupełnie innego. Zamiast zgadywać, pyta Ciebie. Konto podane raz w regule lokalu wystarczy: kolejne wpłaty od tego płatnika zaksięgują się już bez pytania.',
+          'Poprawka obejmuje wszystkie osiem banków, ponieważ każdy z nich korzystał z tej samej, wspólnej logiki rozpoznawania adresu. Zabezpieczenie działa też wtedy, gdy litera pojawi się w formacie, którego nie przewidzieliśmy: jeśli w opisie widać lokal z literą, a rozpoznany numer jej nie ma, wpłata i tak trafia do akceptacji.',
+          'Litera musi być przyklejona do cyfr — z opisu „BOGUNKI 5/27 A”, gdzie adres płatnika mówi „M.27”, dalej wychodzi lokal 27. Luźna litera obok numeru nie tworzy nowego lokalu.',
+        ],
+        where: ['Menu boczne', 'Konwerter', 'Akceptacja'],
+        steps: [
+          {
+            do: 'Przekonwertuj wyciąg jak zawsze i wejdź na ekran akceptacji.',
+            then: 'Wpłata za lokal z literą ma teraz pomarańczową ramkę z napisem „Numer lokalu rozpoznany — brak konta” i widocznym numerem, np. 17A.',
+          },
+          {
+            do: 'Wpisz konto w nowym polu „Konto lokalu” — po lewej stronie pola stoi na szaro stały prefiks (np. „204-”), Ty dopisujesz tylko dalszą część, np. 00017A.',
+            then: 'Pod polem od razu widzisz pełny symbol, który wejdzie do pliku księgowego: „W pliku księgowym: 204-00017A”. Pola „Numer mieszkania” i „Pozostałe przychody” zostają w tym momencie zablokowane, żeby dwa wpisy nie walczyły o jedną wpłatę.',
+          },
+          {
+            do: 'Jeśli ten płatnik wpłaca co miesiąc, kliknij „Powiąż lokal” i zapisz regułę — numer lokalu i konto są już w formularzu wypełnione.',
+            then: 'Od następnego wyciągu ta wpłata rozpozna się sama, z właściwym kontem. Nadal pokaże się do akceptacji, tak jak każda wpłata dopasowana regułą.',
+          },
+          {
+            do: 'Dokończ akceptację i wygeneruj plik księgowy jak zwykle.',
+          },
+        ],
+        expect: [
+          'Jeśli nie podasz konta, wpłata wyląduje w sekcji „NIEROZPOZNANE” pliku księgowego — nigdy na koncie lokalu bez litery.',
+          'W polu „Numer mieszkania” nie da się wpisać „17A”: aplikacja wyjaśni, że taki lokal wpisuje się w polu „Konto lokalu”, bo z samego numeru nie potrafi wyliczyć konta.',
+          'Zwykłe numery lokali działają dokładnie jak dotąd — sprawdzone na 93 transakcjach z dwóch wyciągów: zmieniły się tylko te dwie, które dotyczyły lokalu 17A.',
+        ],
+        note: {
+          type: 'warning',
+          text: 'Ta poprawka działa od teraz w przód. Wyciągi zaksięgowane wcześniej mogą zawierać wpłaty, które trafiły na numer bez litery — jeśli masz w którejś wspólnocie lokale z literą, warto sprawdzić ich salda.',
+        },
+      },
+      {
+        id: 'konto-lokalu-w-regulach',
+        kind: 'new',
+        icon: 'wallet',
+        title: 'Własne konto lokalu w regułach lokali',
+        summary:
+          'Reguła lokalu ma nowe, opcjonalne pole „Konto lokalu”. Jeśli je wypełnisz, wpłata pójdzie dokładnie na to konto — zamiast na domyślne, składane z prefiksu i numeru dopełnionego zerami (np. 204-000025).',
+        details: [
+          'Domyślna zasada wystarcza dla zwykłych numerów, ale nie dla każdego przypadku: lokale z literą, lokale zapisane w planie kont po swojemu, wyjątki po podziale mieszkania. Dotąd takie wpłaty trzeba było co miesiąc przypisywać ręcznie.',
+          'Dla lokalu z literą to pole jest wymagane — bez niego reguła powiedziałaby, o który lokal chodzi, ale nie gdzie zaksięgować, i wpłata wracałaby do akceptacji przy każdym wyciągu. Aplikacja o tym przypomni przy zapisie.',
+        ],
+        where: ['Menu boczne', 'Adresy', 'Reguły lokali'],
+        steps: [
+          {
+            do: 'Wejdź w „Adresy” i przy wybranej wspólnocie kliknij „Reguły lokali”.',
+            then: 'Otworzy się lista reguł — ma teraz dodatkową kolumnę „Konto lokalu (opcjonalnie)”.',
+          },
+          {
+            do: 'Kliknij „Dodaj regułę” albo „Edytuj” przy istniejącej.',
+            then: 'W formularzu, pod „Numerem lokalu”, jest pole „Konto lokalu (opcjonalnie)” z wyjaśnieniem, kiedy je wypełnić.',
+          },
+          {
+            do: 'Wpisz pełny symbol konta, np. 204-00017A, i zapisz.',
+            then: 'Gwiazdka przy nazwie pola pojawia się automatycznie, gdy numer lokalu ma literę — wtedy konto jest wymagane.',
+          },
+        ],
+        expect: [
+          'Puste pole = zachowanie jak dotąd, czyli konto składane z prefiksu i numeru lokalu.',
+          'Konto z reguły wygrywa z domyślną zasadą, a Twój ręczny wpis na ekranie akceptacji wygrywa z regułą.',
+          'Reguły z kontem wchodzą do kopii zapasowej i do eksportu adresów do pliku TXT (segment „KONTO:”), więc przenoszą się razem z resztą konfiguracji.',
+        ],
+      },
+      {
+        id: 'numery-budynkow-z-litera',
+        kind: 'fixed',
+        icon: 'building',
+        title: 'Adresy z literą w numerze budynku są w końcu rozpoznawane',
+        summary:
+          'Wspólnota zapisana jako np. „Bachmacka 6A” była pomijana przy dopasowywaniu adresu — aplikacja nie potrafiła odczytać „6A” jako numeru budynku i schodziła na ogólne, mniej pewne wzorce. Z opisu „UL. BACHMACKA 6A M.12” wychodziły wtedy bzdury w rodzaju budynku 12 i lokalu 12.',
+        details: [
+          'Ten sam brak litery, który psuł numery lokali, psuł też numery budynków. Efekt był inny i trudniejszy do zauważenia: adres formalnie się „zgadzał”, pewność wynosiła 95%, a numer budynku i lokalu bywał wzięty z zupełnie innego miejsca opisu.',
+          'Nic tu nie trzeba klikać ani ustawiać — poprawka działa od razu dla wszystkich wspólnot, które mają literę w numerze budynku.',
+        ],
+        expect: [
+          'Z „UL. BACHMACKA 6A/12” wychodzi budynek 6A i lokal 12.',
+          'Adresy bez litery w numerze budynku działają bez zmian.',
+        ],
+      },
+    ],
+  },
+  {
     version: '6.1.0',
     date: '2026-08-10',
     title: 'Tabela stawek w mailu, tańszy i pewniejszy OCR zaliczek, dwa nowe pliki TECHEM',

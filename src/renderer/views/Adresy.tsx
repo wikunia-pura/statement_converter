@@ -3,6 +3,7 @@ import { Adres, Bank, ApartmentMapping, KontoTyp, ZgnJednostka } from '../../sha
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import { normalizeAccount } from '../../shared/account-extractor';
+import { isAccountSymbol, isLetteredApartment } from '../../shared/apartment-account';
 import Icon from '../components/Icon';
 import Loader from '../components/Loader';
 import ModalDismiss from '../components/Modal';
@@ -333,6 +334,7 @@ const ApartmentMappingFormModal: React.FC<ApartmentMappingFormModalProps> = ({
   const t = translations[language];
   const [matchText, setMatchText] = useState(editing?.matchText || '');
   const [apartmentNumber, setApartmentNumber] = useState(editing?.apartmentNumber || '');
+  const [kontoLokalu, setKontoLokalu] = useState(editing?.kontoLokalu || '');
   const [note, setNote] = useState(editing?.note || '');
   const [error, setError] = useState<string | null>(null);
 
@@ -350,10 +352,22 @@ const ApartmentMappingFormModal: React.FC<ApartmentMappingFormModalProps> = ({
       setError(t.apartmentMappingDuplicate);
       return;
     }
+    const konto = kontoLokalu.trim();
+    if (konto && !isAccountSymbol(konto)) {
+      setError(t.apartmentMappingAccountInvalid);
+      return;
+    }
+    // Without a symbol a lettered apartment stays unbookable, so the rule would
+    // send this payer back to the acceptance screen every single month.
+    if (!konto && isLetteredApartment(apt)) {
+      setError(t.apartmentMappingAccountRequired);
+      return;
+    }
     onSubmit({
       id: editing?.id || newMappingId(),
       matchText: mt,
       apartmentNumber: apt,
+      ...(konto ? { kontoLokalu: konto } : {}),
       ...(note.trim() ? { note: note.trim() } : {}),
     });
   };
@@ -384,6 +398,22 @@ const ApartmentMappingFormModal: React.FC<ApartmentMappingFormModalProps> = ({
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setApartmentNumber(e.target.value); if (error) setError(null); }}
               placeholder={t.apartmentMappingApartmentPlaceholder}
             />
+          </div>
+          <div className="form-group">
+            <label>
+              {t.apartmentMappingAccount}
+              {isLetteredApartment(apartmentNumber.trim()) && <span style={{ color: 'red' }}> *</span>}
+            </label>
+            <input
+              type="text"
+              value={kontoLokalu}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setKontoLokalu(e.target.value); if (error) setError(null); }}
+              placeholder={t.apartmentMappingAccountPlaceholder}
+              style={{ fontFamily: 'monospace' }}
+            />
+            <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '4px' }}>
+              {t.apartmentMappingAccountHint}
+            </div>
           </div>
           <div className="form-group">
             <label>{t.apartmentMappingNote}</label>
@@ -510,6 +540,7 @@ const ApartmentMappingsModal: React.FC<ApartmentMappingsModalProps> = ({
                 <tr>
                   <th>{t.apartmentMappingMatchText}</th>
                   <th>{t.apartmentMappingApartment}</th>
+                  <th>{t.apartmentMappingAccount}</th>
                   <th>{t.apartmentMappingNote}</th>
                   <th>{t.actions}</th>
                 </tr>
@@ -519,6 +550,7 @@ const ApartmentMappingsModal: React.FC<ApartmentMappingsModalProps> = ({
                   <tr key={m.id}>
                     <td style={{ wordBreak: 'break-word' }}>{m.matchText}</td>
                     <td style={{ fontWeight: 600 }}>{m.apartmentNumber}</td>
+                    <td style={{ fontFamily: 'monospace' }}>{m.kontoLokalu || '—'}</td>
                     <td style={{ wordBreak: 'break-word', opacity: 0.8 }}>{m.note || '—'}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '8px' }}>

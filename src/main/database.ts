@@ -20,6 +20,7 @@ import {
 } from '../shared/types';
 import { getSupabase } from './supabaseClient';
 import { normalizeAccount } from '../shared/account-extractor';
+import { isAccountSymbol } from '../shared/apartment-account';
 
 // Settings remain machine-local: dark mode, folder paths, language, etc. are
 // per-user-machine UI prefs that shouldn't sync across installs.
@@ -437,10 +438,15 @@ class DatabaseService {
       const key = matchText.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
+      // An account symbol is only stored when it actually is one — a bare "17A"
+      // here would name the apartment while claiming to be its account, and the
+      // exporters would have no way to tell the difference.
+      const kontoLokalu = (m.kontoLokalu ?? '').trim();
       out.push({
         id: m.id || `${Date.now()}-${out.length}`,
         matchText,
         apartmentNumber,
+        ...(isAccountSymbol(kontoLokalu) ? { kontoLokalu } : {}),
         ...(m.note && m.note.trim() ? { note: m.note.trim() } : {}),
       });
     }

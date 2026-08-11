@@ -501,6 +501,12 @@ IMPORTANT:
 - If you can't find data with confidence, mark it as null
 - Normalize street names to match the primary name from the known addresses list
 - Normalize names to Title Case
+- Apartment numbers may carry a letter: "M.17A", "5/17A", "lokalu 17A". Keep the
+  letter — apartment 17A and apartment 17 are different apartments with different
+  owners, so dropping it books the payment to the wrong person. Upper-case it ("17a"
+  becomes "17A"). Only keep a letter that is written against the digits: in
+  "BOGUNKI 5/27 A" the stray "A" is separated by a space and is not part of the
+  number, so the apartment is "27"
 
 Return ONLY valid JSON matching the required schema.`;
   }
@@ -617,9 +623,39 @@ Example 3:
     "tenantName": "Daniel Koska",
     "confidence": { "address": 0, "apartment": 70, "tenantName": 85 },
     "reasoning": "Only apartment number 'lokalu 17' found, different address in desc-opt, name extracted"
+  }
+
+Example 4 (lettered apartment — the letter must survive):
+  DESC-BASE: "${addr1Upper}M17A"
+  DESC-OPT: "CEZARY GUZ 02-692 WARSZAWAUL.${addr1Upper} 5 M.17A"
+
+  Extraction:
+  {
+    "streetName": "${addr1.nazwa}",
+    "buildingNumber": "5",
+    "apartmentNumber": "17A",
+    "fullAddress": "${addr1.nazwa} 5/17A",
+    "tenantName": "Cezary Guz",
+    "confidence": { "address": 95, "apartment": 95, "tenantName": 90 },
+    "reasoning": "Both fields agree on 17A; the letter is glued to the digits so it belongs to the number, and 17A is a different apartment than 17"
+  }
+
+Example 5 (a separated letter is NOT part of the number):
+  DESC-BASE: "OPŁATA EKSPLOATACYJNA, ${addr1Upper} 5/27 A, WARSZAWA"
+  DESC-OPT: "MAREK SOSIŃSKI 02-692 WARSZAWA UL. ${addr1Upper} 5 M.27"
+
+  Extraction:
+  {
+    "streetName": "${addr1.nazwa}",
+    "buildingNumber": "5",
+    "apartmentNumber": "27",
+    "fullAddress": "${addr1.nazwa} 5/27",
+    "tenantName": "Marek Sosiński",
+    "confidence": { "address": 95, "apartment": 95, "tenantName": 90 },
+    "reasoning": "The 'A' is separated by a space and desc-opt confirms M.27, so the apartment is 27"
   }`;
     }
-    
+
     return `Examples of correct extractions:
 
 Example 1:
@@ -650,6 +686,21 @@ Example 2:
     "tenantName": "Daniel Koska",
     "confidence": { "address": 0, "apartment": 70, "tenantName": 85 },
     "reasoning": "Only apartment number 'lokalu 17' found, different address in desc-opt, name extracted"
+  }
+
+Example 3 (lettered apartment — the letter must survive):
+  DESC-BASE: "EXAMPLE STREET 5M17A"
+  DESC-OPT: "CEZARY GUZ 02-692 WARSZAWAUL.EXAMPLE STREET 5 M.17A"
+
+  Extraction:
+  {
+    "streetName": "Example Street",
+    "buildingNumber": "5",
+    "apartmentNumber": "17A",
+    "fullAddress": "Example Street 5/17A",
+    "tenantName": "Cezary Guz",
+    "confidence": { "address": 95, "apartment": 95, "tenantName": 90 },
+    "reasoning": "Both fields agree on 17A; the letter is glued to the digits so it belongs to the number, and 17A is a different apartment than 17"
   }`;
   }
 

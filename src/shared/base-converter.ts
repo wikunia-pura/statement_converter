@@ -27,6 +27,7 @@ import {
   runWithConcurrency,
 } from './expense-ai-matcher';
 import { Kontrahent, Adres, KontrahentTyp } from './types';
+import { needsExplicitAccount } from './apartment-account';
 
 const INCOME_MATCH_TYPES: KontrahentTyp[] = ['Pozostałe przychody'];
 
@@ -99,6 +100,16 @@ export interface BaseExtractedData {
   rawData: Record<string, any>;
   /** True when the apartment number came from a user-defined ApartmentMapping rule. */
   matchedByManualMapping?: boolean;
+  /**
+   * Account symbol that overrides the default `prefix + zero-padded number` rule.
+   * Set from an apartment rule's "konto lokalu", or by the user in the review screen.
+   */
+  accountOverride?: string | null;
+  /**
+   * True when the apartment number carries a letter (17A) and no account symbol is
+   * known for it, so the transaction must not be booked automatically.
+   */
+  needsAccount?: boolean;
 }
 
 /**
@@ -775,12 +786,21 @@ export abstract class BaseConverter<TRaw> {
             await this.aiExtractor!.extractBatch(transactionsForAI);
 
           const items: BaseProcessedTransaction<TRaw>[] = batch.map((b, j) => {
+            const norm = transactionsForAI[j];
             const extractedData: BaseExtractedData = {
               ...extracted[j],
               rawData: this.buildRawData(b.transaction),
+              // The model is asked to keep the letter in "17A", but a dropped one
+              // looks exactly like a correct plain number, so it is checked against
+              // the text here. Without this, an AI answer of "17" for text saying
+              // "17A" would be booked with the model's own high confidence.
+              needsAccount: needsExplicitAccount(
+                extracted[j].apartmentNumber,
+                null,
+                `${norm.descBase} ${norm.descOpt}`
+              ),
             };
             if (this.config.useCache) {
-              const norm = this.normalize(b.transaction);
               this.cache.set(norm.descBase, norm.descOpt, extractedData as any);
             }
             return this.createProcessedTransaction(

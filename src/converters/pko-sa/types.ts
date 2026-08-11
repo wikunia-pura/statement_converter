@@ -85,6 +85,16 @@ export interface ExtractedData {
   warnings: string[];
   /** True when the apartment number came from a user-defined ApartmentMapping rule. */
   matchedByManualMapping?: boolean;
+  /**
+   * Account symbol that overrides the default `prefix + zero-padded number` rule.
+   * Set from an apartment rule's "konto lokalu", or by the user in the review screen.
+   */
+  accountOverride?: string | null;
+  /**
+   * True when the apartment number carries a letter (17A) and no account symbol is
+   * known for it, so the transaction must not be booked automatically.
+   */
+  needsAccount?: boolean;
 
   // Raw data for review
   rawData: {

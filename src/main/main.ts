@@ -1010,16 +1010,27 @@ function setupIpcHandlers() {
           continue;
         }
 
-        // Check if it's a MAP: <matchText> => <apartment> [| <note>] line
-        // (user-defined apartment-number rule).
-        const mapMatch = line.match(/^\s*MAP:\s*(.+)=>\s*([^|]+?)(?:\s*\|\s*(.+))?$/);
+        // Check if it's a MAP: <matchText> => <apartment> [| KONTO: <symbol>] [| <note>]
+        // line (user-defined apartment-number rule).
+        //
+        // The account segment is optional and recognised by its "KONTO:" tag rather
+        // than by position, so files written before the field existed — which have
+        // the note sitting in that same slot — still import as notes.
+        const mapMatch = line.match(/^\s*MAP:\s*(.+)=>\s*([^|]+?)((?:\s*\|\s*[^|]+)*)$/);
         if (mapMatch && lastAdres) {
           sawMappings = true;
-          const note = mapMatch[3]?.trim();
+          const segments = (mapMatch[3] || '')
+            .split('|')
+            .map(s => s.trim())
+            .filter(s => s.length > 0);
+          const kontoSegment = segments.find(s => /^KONTO:/i.test(s));
+          const kontoLokalu = kontoSegment?.replace(/^KONTO:\s*/i, '').trim();
+          const note = segments.filter(s => s !== kontoSegment).join(' | ').trim();
           accumulatedMappings.push({
             id: '', // DB layer assigns a stable id via sanitizeApartmentMappings
             matchText: mapMatch[1].trim(),
             apartmentNumber: mapMatch[2].trim(),
+            ...(kontoLokalu ? { kontoLokalu } : {}),
             ...(note ? { note } : {}),
           });
           continue;
@@ -1173,11 +1184,12 @@ function setupIpcHandlers() {
         // Add apartment-number mapping rules if present
         if (a.apartmentMappings && a.apartmentMappings.length > 0) {
           for (const m of a.apartmentMappings) {
-            lines.push(
-              m.note
-                ? `  MAP: ${m.matchText} => ${m.apartmentNumber} | ${m.note}`
-                : `  MAP: ${m.matchText} => ${m.apartmentNumber}`,
-            );
+            const segments = [
+              ...(m.kontoLokalu ? [`KONTO: ${m.kontoLokalu}`] : []),
+              ...(m.note ? [m.note] : []),
+            ];
+            const suffix = segments.length > 0 ? ` | ${segments.join(' | ')}` : '';
+            lines.push(`  MAP: ${m.matchText} => ${m.apartmentNumber}${suffix}`);
           }
         }
       }

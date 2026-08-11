@@ -4,6 +4,7 @@
  */
 
 import { ProcessedTransaction } from './types';
+import { resolveApartmentAccount } from '../../shared/apartment-account';
 
 export interface CsvExportOptions {
   separator?: string;
@@ -55,8 +56,9 @@ export class CsvExporter {
     const recognizedIncome: ProcessedTransaction[] = [];
 
     for (const transaction of incomeTransactions) {
-      const apartmentNumber = this.extractApartmentNumber(transaction);
-      if (apartmentNumber === null) {
+      // Unrecognized when there is no apartment *or* when no account symbol may
+      // be derived for it (a lettered apartment without an explicit account).
+      if (this.resolveAccount(transaction) === null) {
         unrecognizedIncome.push(transaction);
       } else {
         recognizedIncome.push(transaction);
@@ -85,7 +87,7 @@ export class CsvExporter {
 
     // Process recognized income (2 lines each)
     for (const transaction of recognizedIncome) {
-      const apartmentNumber = this.extractApartmentNumber(transaction)!;
+      const account = this.resolveAccount(transaction)!;
       const date = this.formatDate(transaction.original.exeDate);
       const description = this.cleanDescription(transaction.original.descBase);
       const amount = this.formatAmount(transaction.original.value);
@@ -109,7 +111,7 @@ export class CsvExporter {
         tresc: description,
         kwota: amount,
         k_wn: '   -',
-        k_ma: this.formatAccountNumber(apartmentNumber),
+        k_ma: account,
       }));
     }
 
@@ -193,6 +195,7 @@ export class CsvExporter {
         const date = this.formatDate(transaction.original.exeDate);
         const amount = this.formatAmount(transaction.original.value);
         const apartmentNumber = this.extractApartmentNumber(transaction);
+        const account = this.resolveAccount(transaction);
 
         lines.push(`Pozycja #${i + 1}`);
         lines.push(`Data: ${date}`);
@@ -202,12 +205,12 @@ export class CsvExporter {
           lines.push(`Opis opcjonalny: ${transaction.original.descOpt}`);
         }
         
-        if (apartmentNumber) {
+        if (account) {
           lines.push(`Rozpoznane mieszkanie: ${apartmentNumber}`);
-          lines.push(`Konto lokalu: ${this.formatAccountNumber(apartmentNumber)}`);
+          lines.push(`Konto lokalu: ${account}`);
           lines.push(`Księgowanie:`);
           lines.push(`  Linia 1: k_wn = ${this.options.bankAccountSymbol}, k_ma = ---`);
-          lines.push(`  Linia 2: k_wn = ---, k_ma = ${this.formatAccountNumber(apartmentNumber)}`);
+          lines.push(`  Linia 2: k_wn = ---, k_ma = ${account}`);
           if (transaction.extracted?.tenantName) {
             lines.push(`Nazwa najemcy: ${transaction.extracted.tenantName}`);
           }
@@ -374,18 +377,25 @@ export class CsvExporter {
   }
 
   /**
-   * Format apartment number to account format: 204-XXXXXX
+   * The account this income must be booked to, or null when it cannot be booked.
+   *
+   * Delegates to the shared resolver so every converter agrees; in particular a
+   * lettered apartment ("17A") resolves to null unless an account symbol was
+   * supplied, because deriving one from the digits alone would book the money
+   * onto a different apartment.
    */
-  private formatAccountNumber(apartmentNumber: string): string {
-    const prefix = this.options.apartmentPrefix;
-    // Handle ZGN special case - all zeros
-    if (apartmentNumber.toUpperCase() === 'ZGN') {
-      return `${prefix}-000000`;
+  private resolveAccount(transaction: ProcessedTransaction): string | null {
+    // needsAccount means the letter evidence and the recognized number disagree, or
+    // the number carries a letter of its own. Either way an account was never
+    // established, so the row stays unrecognized until the user names one.
+    if (transaction.extracted?.needsAccount && !transaction.extracted?.accountOverride) {
+      return null;
     }
-    // If NOT pure digits (contains letters, dashes, etc), it's an account symbol - use as-is
-    if (!/^\d+$/.test(apartmentNumber)) return apartmentNumber;
-    // Pure digits - it's an apartment number, format as {prefix}-XXXXXX
-    return `${prefix}-${apartmentNumber.padStart(6, '0')}`;
+    return resolveApartmentAccount(
+      transaction.extracted?.apartmentNumber ?? null,
+      transaction.extracted?.accountOverride ?? null,
+      this.options.apartmentPrefix
+    );
   }
 
   /**

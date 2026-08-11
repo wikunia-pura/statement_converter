@@ -52,6 +52,8 @@ export class RegexExtractor {
       extractionMethod: 'regex',
       warnings: result.warnings,
       matchedByManualMapping: result.matchedByManualMapping,
+      accountOverride: result.accountOverride,
+      needsAccount: result.needsAccount,
       rawData: { description, counterpartyName, counterpartyAddress },
     };
   }

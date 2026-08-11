@@ -2,8 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
 import { app } from 'electron';
-import { Converter, TransactionForReview, ConversionReviewData, CLARIFICATION_ACCOUNT } from '../shared/types';
+import { Converter, TransactionForReview, ConversionReviewData, CLARIFICATION_ACCOUNT, DEFAULT_ACCOUNT_CONFIG } from '../shared/types';
 import { readFileWithEncoding, writeFileWin1250 } from '../shared/encoding';
+import { isAccountSymbol, isLetteredApartment, needsExplicitAccount } from '../shared/apartment-account';
 import type { ConversionProgressCallback } from '../shared/base-converter';
 import { SantanderXmlConverter } from '../converters/santander-xml';
 import { PKOBPMT940Converter } from '../converters/pko-mt940';
@@ -710,10 +711,15 @@ class ConverterRegistry {
       // 1. Confidence below threshold (<70%), OR
       // 2. Income transaction without apartment number (regardless of confidence), OR
       // 3. Apartment number came from a user-defined mapping rule — always shown
-      //    for confirmation ("assign, but show for acceptance").
+      //    for confirmation ("assign, but show for acceptance"), OR
+      // 4. Income transaction whose apartment carries a letter with no account
+      //    symbol to book it to (17A). Checked independently of confidence because
+      //    the AI can return such a number with a high score of its own, and the
+      //    alternative to asking the user is booking onto the wrong apartment.
       const needsReview = confidence < 70
         || (trn.transactionType === 'income' && !trn.extracted.apartmentNumber)
-        || trn.extracted.matchedByManualMapping === true;
+        || trn.extracted.matchedByManualMapping === true
+        || (trn.transactionType === 'income' && this.needsAccountDecision(trn));
       
       if (needsReview) {
         reviewTransactions.push(this.toReviewTransaction(trn, index, converterId));
@@ -721,6 +727,35 @@ class ConverterRegistry {
     });
 
     return reviewTransactions;
+  }
+
+  /**
+   * Apartment-account prefix handed to the review screen, so the "Konto lokalu"
+   * field shows the same fixed part the exporters will use.
+   */
+  private apartmentPrefixOf(
+    accountConfig?: { bankAccountSymbol: string; apartmentPrefix: string }
+  ): string {
+    return accountConfig?.apartmentPrefix || DEFAULT_ACCOUNT_CONFIG.apartmentPrefix;
+  }
+
+  /**
+   * True when the recognized apartment cannot be turned into an account symbol on
+   * its own, so only the user can say where the money goes.
+   *
+   * Re-derived from the transaction rather than trusting `extracted.needsAccount`:
+   * that flag comes from the regex matcher, and a result produced by the AI or read
+   * back from the extraction cache does not carry it. The AI can also return a
+   * confident plain "17" for text that says "17A" — which is the original bug — so
+   * the transaction text is re-read here as the evidence.
+   */
+  private needsAccountDecision(trn: any): boolean {
+    const text = `${trn.normalized?.descBase ?? ''} ${trn.normalized?.descOpt ?? ''}`;
+    return needsExplicitAccount(
+      trn.extracted?.apartmentNumber,
+      trn.extracted?.accountOverride,
+      text,
+    );
   }
 
   /**
@@ -761,6 +796,8 @@ class ConverterRegistry {
         confidence,
         reasoning: trn.extracted.reasoning,
         matchedByManualMapping: trn.extracted.matchedByManualMapping === true,
+        accountOverride: trn.extracted.accountOverride ?? null,
+        needsAccount: this.needsAccountDecision(trn),
       },
     };
 
@@ -909,11 +946,13 @@ class ConverterRegistry {
         if (!trn.extracted.apartmentNumber && trn.extracted.fullAddress) {
           // Try to extract apartment number from fullAddress
           // Patterns: "Street 81/48", "Street 81 m. 48", "Street 81 lok. 48", "ZGN"
+          // Each keeps an optional trailing letter so "Street 5/17A" yields "17A"
+          // and not "17" — the two are different apartments.
           const patterns = [
-            /\/(\d+)$/,  // "/48" at end
-            /m\.?\s*(\d+)$/i,  // "m. 48" or "m.48" at end
-            /lok\.?\s*(\d+)$/i,  // "lok. 48" or "lok.48" at end
-            /mieszkanie\s*(\d+)$/i,  // "mieszkanie 48" at end
+            /\/(\d+[A-Za-z]?)$/,  // "/48", "/17A" at end
+            /m\.?\s*(\d+[A-Za-z]?)$/i,  // "m. 48" or "m.48" at end
+            /lok\.?\s*(\d+[A-Za-z]?)$/i,  // "lok. 48" or "lok.48" at end
+            /mieszkanie\s*(\d+[A-Za-z]?)$/i,  // "mieszkanie 48" at end
           ];
           
           for (const pattern of patterns) {
@@ -937,9 +976,12 @@ class ConverterRegistry {
           extractedFrom: 'fullAddress'
         };
       } else if (decision.action === 'reject') {
-        // Clear apartmentNumber - mark as unrecognized
+        // Clear apartmentNumber - mark as unrecognized. The account override goes
+        // with it: it belongs to the apartment that was just rejected, and left
+        // behind it would still decide where the money lands.
         trn.extracted.apartmentNumber = null;
-        
+        trn.extracted.accountOverride = null;
+
         // Mark as reviewed by user
         trn.reviewedByUser = {
           action: 'reject',
@@ -950,6 +992,11 @@ class ConverterRegistry {
         // actually booked (not left unrecognized) in both preview and accounting files.
         if (trn.transactionType === 'income') {
           trn.extracted.apartmentNumber = CLARIFICATION_ACCOUNT;
+          // "Wyjaśnij" replaces the destination outright, so any override from an
+          // apartment rule must not keep pointing somewhere else, and the
+          // lettered-apartment hold no longer applies — the user just decided.
+          trn.extracted.accountOverride = null;
+          trn.extracted.needsAccount = false;
           if (trn.extracted.confidence) {
             trn.extracted.confidence.overall = 100;
             trn.extracted.confidence.apartment = 100;
@@ -991,8 +1038,11 @@ class ConverterRegistry {
           // Use user-selected "Pozostałe przychody" entry (for income)
           const selectedEntry = contractors.find(k => k.id === decision.manualRemainingIncomeId);
           if (selectedEntry) {
-            // Set apartment number to the account of the remaining income entry
+            // Set apartment number to the account of the remaining income entry.
+            // The entry's own account is the destination now, so drop any override.
             trn.extracted.apartmentNumber = selectedEntry.kontoKontrahenta;
+            trn.extracted.accountOverride = null;
+            trn.extracted.needsAccount = false;
             trn.extracted.confidence.overall = 100;
             trn.extracted.confidence.apartment = 100;
             
@@ -1003,19 +1053,45 @@ class ConverterRegistry {
               manualRemainingIncomeId: decision.manualRemainingIncomeId
             };
           }
+        } else if (decision.manualApartmentAccount) {
+          // User typed the account symbol directly ("Konto lokalu"). This is how a
+          // lettered apartment gets booked: the number stays 17A for the record,
+          // while the symbol the user gave decides where the money lands.
+          const account = decision.manualApartmentAccount.trim();
+          if (isAccountSymbol(account)) {
+            trn.extracted.accountOverride = account;
+            trn.extracted.needsAccount = false;
+            trn.extracted.confidence.overall = 100;
+            trn.extracted.confidence.apartment = 100;
+
+            trn.reviewedByUser = {
+              action: 'manual',
+              originalValue: originalApartmentNumber,
+              manualValue: account
+            };
+          }
         } else if (decision.manualApartmentNumber) {
           // Use user-provided apartmentNumber (for income)
-          trn.extracted.apartmentNumber = decision.manualApartmentNumber;
-          // Boost confidence since user manually entered it
-          trn.extracted.confidence.overall = 100;
-          trn.extracted.confidence.apartment = 100;
-          
-          // Mark as reviewed by user
-          trn.reviewedByUser = {
-            action: 'manual',
-            originalValue: originalApartmentNumber,
-            manualValue: decision.manualApartmentNumber
-          };
+          const manual = decision.manualApartmentNumber.trim();
+          // A bare lettered number is refused on purpose: it names the apartment
+          // but not its account, and the app must not derive one. The review screen
+          // blocks this too — this is the server-side half of the same rule.
+          if (!isLetteredApartment(manual)) {
+            trn.extracted.apartmentNumber = manual;
+            trn.extracted.accountOverride = null;
+            // The user typed this number, so the hold is answered.
+            trn.extracted.needsAccount = false;
+            // Boost confidence since user manually entered it
+            trn.extracted.confidence.overall = 100;
+            trn.extracted.confidence.apartment = 100;
+
+            // Mark as reviewed by user
+            trn.reviewedByUser = {
+              action: 'manual',
+              originalValue: originalApartmentNumber,
+              manualValue: manual
+            };
+          }
         }
         
         if (decision.manualRemainingCostId && trn.matchedContractor) {
@@ -1328,6 +1404,7 @@ class ConverterRegistry {
                 adresId: adresId || null,
                 adresName,
                 transactions: reviewTransactions,
+                apartmentPrefix: this.apartmentPrefixOf(accountConfig),
               },
             };
             
@@ -1593,6 +1670,7 @@ class ConverterRegistry {
                 adresId: adresId || null,
                 adresName,
                 transactions: reviewTransactions,
+                apartmentPrefix: this.apartmentPrefixOf(accountConfig),
               },
             };
             
@@ -1828,6 +1906,7 @@ class ConverterRegistry {
                 adresId: adresId || null,
                 adresName,
                 transactions: reviewTransactions,
+                apartmentPrefix: this.apartmentPrefixOf(accountConfig),
               },
             };
 
@@ -2066,6 +2145,7 @@ class ConverterRegistry {
                 adresId: adresId || null,
                 adresName,
                 transactions: reviewTransactions,
+                apartmentPrefix: this.apartmentPrefixOf(accountConfig),
               },
             };
 
@@ -2301,6 +2381,7 @@ class ConverterRegistry {
                 adresId: adresId || null,
                 adresName,
                 transactions: reviewTransactions,
+                apartmentPrefix: this.apartmentPrefixOf(accountConfig),
               },
             };
 
@@ -2520,6 +2601,7 @@ class ConverterRegistry {
                 adresId: adresId || null,
                 adresName,
                 transactions: reviewTransactions,
+                apartmentPrefix: this.apartmentPrefixOf(accountConfig),
               },
             };
 
@@ -2755,6 +2837,7 @@ class ConverterRegistry {
                 adresId: adresId || null,
                 adresName,
                 transactions: reviewTransactions,
+                apartmentPrefix: this.apartmentPrefixOf(accountConfig),
               },
             };
 
@@ -2982,6 +3065,7 @@ class ConverterRegistry {
                 adresId: adresId || null,
                 adresName,
                 transactions: reviewTransactions,
+                apartmentPrefix: this.apartmentPrefixOf(accountConfig),
               },
             };
 

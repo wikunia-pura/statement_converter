@@ -74,6 +74,15 @@ export interface ApartmentMapping {
   /** Phrase to look for in the transaction text (substring, normalized). */
   matchText: string;
   apartmentNumber: string;
+  /**
+   * Account symbol to book this apartment to, overriding the default
+   * `prefix + zero-padded number` rule (e.g. "204-00017A" for apartment 17A).
+   *
+   * Required for lettered apartments: their numbering convention differs between
+   * communities, so the app refuses to invent a symbol and books them only when
+   * the user has stated one here or in the review screen.
+   */
+  kontoLokalu?: string;
   /** Optional human-readable note. */
   note?: string;
 }
@@ -165,6 +174,14 @@ export interface TransactionForReview {
     reasoning?: string;
     /** True when the apartment number came from a user-defined ApartmentMapping rule. */
     matchedByManualMapping?: boolean;
+    /** Explicit account symbol from the matching rule's "konto lokalu", when set. */
+    accountOverride?: string | null;
+    /**
+     * True when the recognized apartment number carries a letter (17A) and no
+     * account symbol is known for it — the transaction cannot be booked until the
+     * user supplies one. Drives the review screen's warning.
+     */
+    needsAccount?: boolean;
   };
   // For expenses
   matchedContractor?: {
@@ -186,6 +203,13 @@ export interface ReviewDecision {
   index: number; // Matches TransactionForReview.index
   action: 'accept' | 'reject' | 'manual' | 'clarify';
   manualApartmentNumber?: string; // Used when action is 'manual' for income
+  /**
+   * Full account symbol typed by the user in the review screen ("Konto lokalu"),
+   * used when action is 'manual' for income. Mutually exclusive with
+   * manualApartmentNumber and manualRemainingIncomeId — it is the way to book a
+   * lettered apartment, whose symbol the app must not derive on its own.
+   */
+  manualApartmentAccount?: string;
   manualContractorId?: number; // Used when action is 'manual' for expense
   manualRemainingIncomeId?: number; // Used when action is 'manual' for income - "Pozostałe przychody" entry
   manualRemainingCostId?: number; // Used when action is 'manual' for expense - "Pozostałe koszty" entry
@@ -200,6 +224,13 @@ export interface ConversionReviewData {
   adresName: string | null;
   transactions: TransactionForReview[];
   pdfLines?: string[];  // Extracted PDF text lines for cross-reference
+  /**
+   * Apartment-account prefix resolved for this conversion ("204", "205"), taken
+   * from the KontoTyp of the community account the file belongs to. The review
+   * screen shows it as the fixed part of the "Konto lokalu" field, so the user
+   * sees the exact symbol that will land in the accounting file.
+   */
+  apartmentPrefix?: string;
 }
 
 export interface ConversionHistory {

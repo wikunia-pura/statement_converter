@@ -7,6 +7,7 @@
  */
 
 import { ProcessedTransaction } from './types';
+import { resolveApartmentAccount } from '../../shared/apartment-account';
 
 export interface CsvExportOptions {
   separator?: string;
@@ -53,8 +54,9 @@ export class CsvExporter {
     const recognizedIncome: ProcessedTransaction[] = [];
 
     for (const transaction of incomeTransactions) {
-      const aptNum = this.extractApartmentNumber(transaction);
-      if (aptNum === null) {
+      // Unrecognized when there is no apartment *or* when no account symbol may
+      // be derived for it (a lettered apartment without an explicit account).
+      if (this.resolveAccount(transaction) === null) {
         unrecognizedIncome.push(transaction);
       } else {
         recognizedIncome.push(transaction);
@@ -77,7 +79,7 @@ export class CsvExporter {
 
     // Recognized income — 2 lines each
     for (const transaction of recognizedIncome) {
-      const aptNum = this.extractApartmentNumber(transaction)!;
+      const account = this.resolveAccount(transaction)!;
       const date = this.formatDate(transaction.original.dateFormatted);
       const description = this.cleanDescription(transaction);
       const amount = this.formatAmount(transaction.original.amountAbsolute);
@@ -89,7 +91,7 @@ export class CsvExporter {
 
       lines.push(this.createLine({
         nr_dok: docNumber, nr_poz: position++, data_p: date,
-        tresc: description, kwota: amount, k_wn: '   -', k_ma: this.formatAccountNumber(aptNum),
+        tresc: description, kwota: amount, k_wn: '   -', k_ma: account,
       }));
     }
 
@@ -155,6 +157,7 @@ export class CsvExporter {
         const date = this.formatDate(transaction.original.dateFormatted);
         const amount = this.formatAmount(transaction.original.amountAbsolute);
         const aptNum = this.extractApartmentNumber(transaction);
+        const account = this.resolveAccount(transaction);
 
         lines.push(`Pozycja #${i + 1}`);
         lines.push(`Data: ${date}`);
@@ -162,12 +165,12 @@ export class CsvExporter {
         lines.push(`Opis: ${transaction.original.description}`);
         lines.push(`Kontrahent: ${transaction.original.counterparty}`);
 
-        if (aptNum) {
+        if (account) {
           lines.push(`Rozpoznane mieszkanie: ${aptNum}`);
-          lines.push(`Konto lokalu: ${this.formatAccountNumber(aptNum)}`);
+          lines.push(`Konto lokalu: ${account}`);
           lines.push(`Księgowanie:`);
           lines.push(`  Linia 1: k_wn = ${this.options.bankAccountSymbol}, k_ma = ---`);
-          lines.push(`  Linia 2: k_wn = ---, k_ma = ${this.formatAccountNumber(aptNum)}`);
+          lines.push(`  Linia 2: k_wn = ---, k_ma = ${account}`);
           if (transaction.extracted?.tenantName) {
             lines.push(`Nazwa najemcy: ${transaction.extracted.tenantName}`);
           }
@@ -304,13 +307,26 @@ export class CsvExporter {
     return null;
   }
 
-  private formatAccountNumber(apartmentNumber: string): string {
-    const prefix = this.options.apartmentPrefix;
-    if (apartmentNumber.toUpperCase() === 'ZGN') return `${prefix}-000000`;
-    // If NOT pure digits (contains letters, dashes, etc), it's an account symbol - use as-is
-    if (!/^\d+$/.test(apartmentNumber)) return apartmentNumber;
-    // Pure digits - it's an apartment number, format as 204-XXXXXX
-    return `${prefix}-${apartmentNumber.padStart(6, '0')}`;
+  /**
+   * The account this income must be booked to, or null when it cannot be booked.
+   *
+   * Delegates to the shared resolver so every converter agrees; in particular a
+   * lettered apartment ("17A") resolves to null unless an account symbol was
+   * supplied, because deriving one from the digits alone would book the money
+   * onto a different apartment.
+   */
+  private resolveAccount(transaction: ProcessedTransaction): string | null {
+    // needsAccount means the letter evidence and the recognized number disagree, or
+    // the number carries a letter of its own. Either way an account was never
+    // established, so the row stays unrecognized until the user names one.
+    if (transaction.extracted?.needsAccount && !transaction.extracted?.accountOverride) {
+      return null;
+    }
+    return resolveApartmentAccount(
+      transaction.extracted?.apartmentNumber ?? null,
+      transaction.extracted?.accountOverride ?? null,
+      this.options.apartmentPrefix
+    );
   }
 
   /**

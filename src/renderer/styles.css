@@ -663,6 +663,55 @@ body.dark-mode .nav-item.active {
   color: var(--text-secondary);
 }
 
+/* "Konto lokalu": the prefix is fixed by the account type, so it sits inside the
+   field as static text and only the suffix is editable. */
+.review-card__account-input {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: var(--bg-input, var(--bg-elevated));
+}
+
+.review-card__account-prefix {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-family: monospace;
+  font-size: var(--fs-md);
+  color: var(--text-secondary);
+  background: var(--bg-subtle, rgba(127, 127, 127, 0.12));
+  border-right: 1px solid var(--border-default);
+  user-select: none;
+}
+
+.review-card__account-input input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-radius: 0;
+  font-family: monospace;
+  background: transparent;
+}
+
+.review-card__manual-hint {
+  margin-top: 5px;
+  font-size: var(--fs-sm);
+  line-height: 1.35;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.review-card__manual-hint--warning {
+  color: var(--warning);
+}
+
+.review-card__manual-hint--ok {
+  color: var(--text-secondary);
+}
+
 .review-card__status {
   margin-top: var(--s-4);
   padding: 8px 10px;

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { MailingPole } from '../../shared/types';
+import { MailingPole, MailingPoleTyp } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
@@ -8,11 +8,33 @@ import ModalDismiss from '../components/Modal';
 import {
   BUILTIN_MAILING_FIELDS,
   fieldPlaceholder,
+  formatFieldValue,
   normalizeFieldName,
 } from '../../shared/mailing-template';
 
 interface Props {
   language: Language;
+}
+
+/** What the add/edit form submits — one dictionary entry, minus its id. */
+interface FieldFormData {
+  nazwa: string;
+  tekst: string;
+  jednostka: string;
+  typWartosci: MailingPoleTyp;
+}
+
+/** The value kinds, in the order the switch offers them. */
+const VALUE_TYPES: MailingPoleTyp[] = ['tekst', 'data', 'godzina'];
+
+/** The user-facing name of a value kind, in the app's language. */
+function valueTypeLabel(
+  typWartosci: MailingPoleTyp,
+  t: (typeof translations)[Language],
+): string {
+  if (typWartosci === 'data') return t.mailingFieldValueTypeDate;
+  if (typWartosci === 'godzina') return t.mailingFieldValueTypeTime;
+  return t.mailingFieldValueTypeText;
 }
 
 interface FieldFormModalProps {
@@ -22,7 +44,7 @@ interface FieldFormModalProps {
   isSaving: boolean;
   /** Submit-time error surfaced from the parent (name clash, API failure). */
   error: string | null;
-  onSubmit: (data: { nazwa: string; tekst: string }) => void;
+  onSubmit: (data: FieldFormData) => void;
   onCancel: () => void;
 }
 
@@ -42,7 +64,28 @@ const FieldFormModal: React.FC<FieldFormModalProps> = ({
   const t = translations[language];
   const [nazwa, setNazwa] = useState(editing?.nazwa || '');
   const [tekst, setTekst] = useState(editing?.tekst || '');
+  const [jednostka, setJednostka] = useState(editing?.jednostka || '');
+  const [typWartosci, setTypWartosci] = useState<MailingPoleTyp>(
+    editing?.typWartosci || 'tekst',
+  );
   const [localError, setLocalError] = useState<string | null>(null);
+
+  /** A unit after a date or an hour would be nonsense, so it is text-only. */
+  const usesUnit = typWartosci === 'tekst';
+
+  /**
+   * The sample value as the letter will show it. A field with a unit gets the
+   * bare number — the default sample already says "zł", and "350,00 zł zł/m²"
+   * would teach the user to type the currency twice.
+   */
+  const valueSample =
+    typWartosci === 'data'
+      ? t.mailingFieldValueSampleDate
+      : typWartosci === 'godzina'
+        ? t.mailingFieldValueSampleTime
+        : jednostka.trim()
+          ? formatFieldValue(t.mailingFieldValueSampleBare, { jednostka })
+          : t.mailingFieldValueSample;
 
   const handleSubmit = () => {
     const n = nazwa.trim();
@@ -50,7 +93,9 @@ const FieldFormModal: React.FC<FieldFormModalProps> = ({
       setLocalError(t.mailingFieldNameRequired);
       return;
     }
-    onSubmit({ nazwa: n, tekst });
+    // The unit is dropped rather than kept hidden: a field switched to a date
+    // must not carry a "zł/m²" that reappears if it is switched back later.
+    onSubmit({ nazwa: n, tekst, jednostka: usesUnit ? jednostka.trim() : '', typWartosci });
   };
 
   return (
@@ -87,11 +132,66 @@ const FieldFormModal: React.FC<FieldFormModalProps> = ({
               }}
             />
           </div>
+          <div className="form-group">
+            <label>{t.mailingFieldValueType}</label>
+            <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
+              {t.mailingFieldValueTypeHint}
+            </div>
+            {/* The same segmented switch as the editor's "Wstaw" control — one
+                visual language for "pick one of a few" inside the module. */}
+            <div className="ff-part-toggle" role="group" aria-label={t.mailingFieldValueType}>
+              {VALUE_TYPES.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  className={`ff-part-toggle__item${typWartosci === option ? ' is-active' : ''}`}
+                  aria-pressed={typWartosci === option}
+                  onClick={() => setTypWartosci(option)}
+                >
+                  {valueTypeLabel(option, t)}
+                </button>
+              ))}
+            </div>
+          </div>
+          {usesUnit && (
+            <div className="form-group">
+              <label>{t.mailingFieldUnit}</label>
+              <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
+                {t.mailingFieldUnitHint}
+              </div>
+              <input
+                type="text"
+                value={jednostka}
+                onChange={(e) => setJednostka(e.target.value)}
+                placeholder={t.mailingFieldUnitPlaceholder}
+                style={{ maxWidth: '220px' }}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSubmit();
+                  }
+                }}
+              />
+            </div>
+          )}
 
-          {(nazwa.trim() || tekst.trim()) && (
-            <div style={{ fontSize: '12px', opacity: 0.75 }}>
-              {t.mailingFieldPreview}: <code>{fieldPlaceholder(nazwa || '…')}</code> →{' '}
-              <em>{[tekst.trim(), t.mailingFieldValueSample].filter(Boolean).join(' ')}</em>
+          {(nazwa.trim() || tekst.trim() || (usesUnit && jednostka.trim())) && (
+            <div style={{ fontSize: '12px', opacity: 0.75, display: 'grid', gap: '4px' }}>
+              <div>{t.mailingFieldPreview}:</div>
+              <div>
+                <code>{fieldPlaceholder(nazwa || '…')}</code> →{' '}
+                <em>{[tekst.trim(), valueSample].filter(Boolean).join(' ')}</em>
+              </div>
+              {/* The two halves separately — this is where a user meets them, and
+                  seeing what each resolves to is shorter than explaining it. */}
+              <div>
+                <code>{fieldPlaceholder(nazwa || '…', 'label')}</code> →{' '}
+                <em>{tekst.trim() || nazwa.trim() || '…'}</em>
+              </div>
+              <div>
+                <code>{fieldPlaceholder(nazwa || '…', 'value')}</code> →{' '}
+                <em>{valueSample}</em>
+              </div>
             </div>
           )}
 
@@ -148,7 +248,7 @@ const MailingPola: React.FC<Props> = ({ language }) => {
     }
   };
 
-  const handleFormSubmit = async (data: { nazwa: string; tekst: string }) => {
+  const handleFormSubmit = async (data: FieldFormData) => {
     const editingId = formState?.editing?.id ?? null;
     // The name is the placeholder key, so a clash would make one of the two
     // fields unreachable — and silently substitute the wrong sentence.
@@ -166,9 +266,20 @@ const MailingPola: React.FC<Props> = ({ language }) => {
     setError(null);
     try {
       if (editingId !== null) {
-        await window.electronAPI.mailingUpdatePole(editingId, data.nazwa, data.tekst);
+        await window.electronAPI.mailingUpdatePole(
+          editingId,
+          data.nazwa,
+          data.tekst,
+          data.jednostka,
+          data.typWartosci,
+        );
       } else {
-        await window.electronAPI.mailingAddPole(data.nazwa, data.tekst);
+        await window.electronAPI.mailingAddPole(
+          data.nazwa,
+          data.tekst,
+          data.jednostka,
+          data.typWartosci,
+        );
       }
       setFormState(null);
       await load();
@@ -215,6 +326,9 @@ const MailingPola: React.FC<Props> = ({ language }) => {
             <div style={{ fontSize: '13px', opacity: 0.75, maxWidth: '80ch' }}>
               {t.mailingFieldsHint}
             </div>
+            <div style={{ fontSize: '12px', opacity: 0.7, maxWidth: '80ch', marginTop: '8px' }}>
+              {t.mailingFieldPlaceholderPartsHint}
+            </div>
           </div>
           <button
             className="button button-primary"
@@ -237,17 +351,30 @@ const MailingPola: React.FC<Props> = ({ language }) => {
                 <th>{t.mailingFieldName}</th>
                 <th>{t.mailingFieldPlaceholder}</th>
                 <th>{t.mailingFieldText}</th>
+                <th>{t.mailingFieldUnit}</th>
                 <th>{t.actions}</th>
               </tr>
             </thead>
             <tbody>
               {pola.map((p) => (
                 <tr key={p.id}>
-                  <td>{p.nazwa}</td>
+                  <td>
+                    <div>{p.nazwa}</div>
+                    {/* Only the non-default kinds are called out — a dictionary
+                        of text fields labelled "tekst" fifty times says nothing. */}
+                    {p.typWartosci !== 'tekst' && (
+                      <div style={{ fontSize: '12px', opacity: 0.6 }}>
+                        {valueTypeLabel(p.typWartosci, t)}
+                      </div>
+                    )}
+                  </td>
                   <td style={{ fontFamily: 'monospace', fontSize: '12px' }}>
-                    {fieldPlaceholder(p.nazwa)}
+                    <div>{fieldPlaceholder(p.nazwa)}</div>
+                    <div style={{ opacity: 0.6 }}>{fieldPlaceholder(p.nazwa, 'label')}</div>
+                    <div style={{ opacity: 0.6 }}>{fieldPlaceholder(p.nazwa, 'value')}</div>
                   </td>
                   <td>{p.tekst || '—'}</td>
+                  <td>{p.jednostka || '—'}</td>
                   <td>
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button

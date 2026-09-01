@@ -14,13 +14,14 @@ import {
   OdczytyHistoryEntry,
   ZgnJednostka,
   MailingPole,
+  MailingPoleTyp,
   MailingSzablon,
   MailingHistoryEntry,
   MailingSmtpConfig,
 } from '../shared/types';
 import { getSupabase } from './supabaseClient';
 import { normalizeAccount } from '../shared/account-extractor';
-import { isAccountSymbol } from '../shared/apartment-account';
+import { buildApartmentMapping, mappingTargets } from '../shared/apartment-mapping';
 
 // Settings remain machine-local: dark mode, folder paths, language, etc. are
 // per-user-machine UI prefs that shouldn't sync across installs.
@@ -63,7 +64,8 @@ function normalizeTypy(row: { typy?: unknown; typ?: unknown }): KontrahentTyp[] 
 const ADRES_COLS =
   'id, nazwa, alternativeNames:alternative_names, swrkIdentifiers:swrk_identifiers, accountNumbers:account_numbers, accountTypes:account_types, bankId:bank_id, apartmentMappings:apartment_mappings, zgnJednostkaId:zgn_jednostka_id, createdAt:created_at';
 const ZGN_COLS = 'id, nazwa, email, createdAt:created_at';
-const MAILING_POLE_COLS = 'id, nazwa, tekst, createdAt:created_at';
+const MAILING_POLE_COLS =
+  'id, nazwa, tekst, jednostka, typWartosci:typ_wartosci, createdAt:created_at';
 const MAILING_SZABLON_COLS =
   'id, nazwa, typ, temat, tresc, attachPdf:attach_pdf, tableFields:table_fields, createdAt:created_at';
 const MAILING_HISTORY_COLS =
@@ -424,7 +426,12 @@ class DatabaseService {
 
   /**
    * Drop blank entries and ensure every mapping has a stable id and trimmed
-   * fields. A mapping needs both matchText and apartmentNumber to be usable.
+   * fields. A mapping needs a matchText and at least one apartment to be usable.
+   *
+   * The apartment list (one or many) is normalized by buildApartmentMapping: it
+   * trims, deduplicates and keeps only real account symbols — a bare "17A" in the
+   * account field would name the apartment while claiming to be its account, and
+   * the exporters would have no way to tell the difference.
    */
   private sanitizeApartmentMappings(raw: ApartmentMapping[] | undefined): ApartmentMapping[] {
     if (!raw || raw.length === 0) return [];
@@ -432,23 +439,17 @@ class DatabaseService {
     const seen = new Set<string>();
     for (const m of raw) {
       const matchText = (m.matchText ?? '').trim();
-      const apartmentNumber = (m.apartmentNumber ?? '').trim();
-      if (!matchText || !apartmentNumber) continue;
+      if (!matchText) continue;
       // Guard against duplicate phrases (case-insensitive) within one address.
       const key = matchText.toLowerCase();
       if (seen.has(key)) continue;
+      const mapping = buildApartmentMapping(
+        { id: m.id || `${Date.now()}-${out.length}`, matchText, note: m.note },
+        mappingTargets(m),
+      );
+      if (!mapping) continue;
       seen.add(key);
-      // An account symbol is only stored when it actually is one — a bare "17A"
-      // here would name the apartment while claiming to be its account, and the
-      // exporters would have no way to tell the difference.
-      const kontoLokalu = (m.kontoLokalu ?? '').trim();
-      out.push({
-        id: m.id || `${Date.now()}-${out.length}`,
-        matchText,
-        apartmentNumber,
-        ...(isAccountSymbol(kontoLokalu) ? { kontoLokalu } : {}),
-        ...(m.note && m.note.trim() ? { note: m.note.trim() } : {}),
-      });
+      out.push(mapping);
     }
     return out;
   }
@@ -833,19 +834,40 @@ class DatabaseService {
     return (data ?? []) as MailingPole[];
   }
 
-  async addMailingPole(nazwa: string, tekst: string): Promise<MailingPole> {
+  async addMailingPole(
+    nazwa: string,
+    tekst: string,
+    jednostka: string,
+    typWartosci: MailingPoleTyp,
+  ): Promise<MailingPole> {
     const { data, error } = await getSupabase()
       .from('mailing_pola')
-      .insert({ nazwa: nazwa.trim(), tekst })
+      .insert({
+        nazwa: nazwa.trim(),
+        tekst,
+        jednostka: jednostka.trim(),
+        typ_wartosci: typWartosci,
+      })
       .select(MAILING_POLE_COLS)
       .single();
     return unwrap(data, error, 'addMailingPole') as MailingPole;
   }
 
-  async updateMailingPole(id: number, nazwa: string, tekst: string): Promise<void> {
+  async updateMailingPole(
+    id: number,
+    nazwa: string,
+    tekst: string,
+    jednostka: string,
+    typWartosci: MailingPoleTyp,
+  ): Promise<void> {
     const { error } = await getSupabase()
       .from('mailing_pola')
-      .update({ nazwa: nazwa.trim(), tekst })
+      .update({
+        nazwa: nazwa.trim(),
+        tekst,
+        jednostka: jednostka.trim(),
+        typ_wartosci: typWartosci,
+      })
       .eq('id', id);
     if (error) throw new Error(`updateMailingPole: ${error.message}`);
   }
@@ -1304,7 +1326,16 @@ class DatabaseService {
       if (error) throw new Error(`restore mailing_pola: ${error.message}`);
       await this.insertChunked(
         'mailing_pola',
-        mailingPola.map(p => ({ nazwa: p.nazwa, tekst: p.tekst, created_at: p.createdAt })),
+        // `jednostka` and `typ_wartosci` default for backups written before
+        // those columns existed — both are NOT NULL, so an undefined would fail
+        // the whole restore.
+        mailingPola.map(p => ({
+          nazwa: p.nazwa,
+          tekst: p.tekst,
+          jednostka: p.jednostka ?? '',
+          typ_wartosci: p.typWartosci ?? 'tekst',
+          created_at: p.createdAt,
+        })),
       );
     }
 

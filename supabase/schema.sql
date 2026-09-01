@@ -155,8 +155,28 @@ create table if not exists public.mailing_pola (
   id          bigserial primary key,
   nazwa       text        not null,
   tekst       text        not null default '',
+  -- Unit appended to the typed value ("zł/m²", "%"). Part of the field, not of
+  -- the value, so "20" typed at send time goes out as "20 zł/m²".
+  jednostka     text      not null default '',
+  -- How the value is entered at send time: free text (as before), a date
+  -- (picked, rendered dd.mm.rrrr) or an hour (picked, rendered gg:mm).
+  typ_wartosci  text      not null default 'tekst'
+                          check (typ_wartosci in ('tekst', 'data', 'godzina')),
   created_at  timestamptz not null default now()
 );
+
+-- Idempotent migrations for deployments created before units / value kinds.
+alter table public.mailing_pola
+  add column if not exists jednostka text not null default '';
+alter table public.mailing_pola
+  add column if not exists typ_wartosci text not null default 'tekst';
+-- Separate from the column add so the constraint also lands on databases where
+-- the column already exists (there `add column if not exists` does nothing).
+alter table public.mailing_pola
+  drop constraint if exists mailing_pola_typ_wartosci_check;
+alter table public.mailing_pola
+  add constraint mailing_pola_typ_wartosci_check
+  check (typ_wartosci in ('tekst', 'data', 'godzina'));
 
 -- Message templates. Subject and body are authored with {{field}} placeholders
 -- resolved at send time; `attach_pdf` is the template's default for the

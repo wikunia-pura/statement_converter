@@ -216,7 +216,7 @@ export const translations = {
     // Apartment mappings (reguły numeru lokalu dla "dziwnych" wpłat)
     apartmentMappings: 'Reguły lokali',
     apartmentMappingsTitle: 'Reguły numeru lokalu',
-    apartmentMappingsHint: 'Reguły przypisujące numer lokalu nietypowym, powtarzalnym wpłatom (np. od stałego płatnika z innego banku). Fraza jest dopasowywana jako fragment tekstu transakcji (nazwa płatnika + opis). Dopasowana wpłata dostaje numer lokalu, ale i tak pojawi się do akceptacji.',
+    apartmentMappingsHint: 'Reguły przypisujące numer lokalu nietypowym, powtarzalnym wpłatom (np. od stałego płatnika z innego banku). Fraza jest dopasowywana jako fragment tekstu transakcji (nazwa płatnika + opis). Dopasowana wpłata dostaje numer lokalu, ale i tak pojawi się do akceptacji. Jeśli reguła wskazuje kilka lokali jednego płatnika, wpłata nie dostaje numeru — wybierasz go na ekranie akceptacji.',
     apartmentMappingMatchText: 'Fraza (np. nazwa płatnika)',
     apartmentMappingMatchTextPlaceholder: 'np. VARGYAS BARBARA',
     apartmentMappingApartment: 'Numer lokalu',
@@ -231,6 +231,22 @@ export const translations = {
     addApartmentMapping: 'Dodaj regułę',
     noApartmentMappings: 'Brak reguł dla tego adresu.',
     apartmentMappingDuplicate: 'Reguła z tą frazą już istnieje.',
+    // Reguła może wskazywać kilka lokali jednego płatnika — wtedy wyboru
+    // dokonuje użytkownik na ekranie akceptacji.
+    apartmentMappingApartments: 'Lokale',
+    apartmentMappingApartmentsHint: 'Jeden płatnik może mieć kilka lokali w tej wspólnocie i płacić za wszystkie z jednego konta, tym samym opisem. Dodaj wtedy każdy lokal osobno — aplikacja nie zgadnie, o który chodzi, więc przy każdej wpłacie zapyta Cię na ekranie akceptacji.',
+    apartmentMappingAddApartment: 'Dodaj kolejny lokal',
+    apartmentMappingRemoveApartment: 'Usuń ten lokal z reguły',
+    apartmentMappingApartmentDuplicate: 'Ten lokal jest już na liście reguły.',
+    apartmentMappingApartmentsCount: 'lokali w regule',
+    mappingChoiceLabel: 'Reguła wskazuje kilka lokali — wybierz jeden',
+    mappingChoiceHint: 'Ten płatnik ma w regule więcej niż jeden lokal, więc z opisu wpłaty nie wynika, za który lokal płaci. Kliknij właściwy lokal — kwota trafi na wskazane konto.',
+    mappingChoicePending: 'WYBIERZ LOKAL',
+    mappingChoiceSelectedLabel: 'Lokal wybrany z reguły',
+    mappingChoiceStatus: 'Wybrano lokal z reguły',
+    mappingChoiceNoAccount: 'brak konta w regule',
+    mappingChoiceNoAccountHint: 'Ten lokal ma literę, a reguła nie podaje dla niego konta — dopisz je w regule („Edytuj powiązanie”) albo wpisz konto ręcznie w polu „Konto lokalu”.',
+    mappingChoiceClear: 'Wyczyść wybór lokalu',
     matchedByMapping: 'Dopasowano regułą',
     linkApartment: 'Powiąż lokal',
     editApartmentLink: 'Edytuj powiązanie',
@@ -558,7 +574,7 @@ export const translations = {
 
     mailingValuesTitle: 'Wartości pól dynamicznych',
     mailingValuesHint:
-      'Wpisz wartości, które uzupełnią zdania z pól dynamicznych. Jedna wartość obowiązuje dla całej wysyłki — wszystkie zaznaczone wspólnoty dostaną tę samą kwotę.',
+      'Wpisz wartości, które uzupełnią zdania z pól dynamicznych. Jedna wartość obowiązuje dla całej wysyłki — wszystkie zaznaczone wspólnoty dostaną tę samą kwotę. Jeśli obok pola widnieje jednostka, wpisz samą wartość — jednostka dopisze się sama.',
     mailingValuePlaceholder: 'np. 350,00 zł',
     mailingUnknownFieldInTemplate: 'Pole {field} nie istnieje w słowniku — zostanie wysłane dosłownie.',
 
@@ -631,7 +647,15 @@ export const translations = {
     mailingEditedNotice:
       'Treść zmieniona na potrzeby tej wysyłki — szablon zostaje bez zmian.',
     mailingPreviewHint: 'Dokładnie ta treść zostanie wysłana (i zapisana do PDF, jeśli włączone).',
-    mailingPreviewForFirst: 'Podgląd dla pierwszej zaznaczonej wspólnoty: {name}',
+    mailingPreviewPickAddress: 'Podgląd dla wspólnoty',
+    mailingPreviewSearchAddress: 'Szukaj wśród adresatów…',
+    mailingPreviewPosition: '{index} z {total}',
+    mailingPreviewPrev: 'Poprzednia wspólnota',
+    mailingPreviewNext: 'Następna wspólnota',
+    mailingPreviewThis: 'Podejrzyj mail tej wspólnoty',
+    mailingPreviewRecipient: 'Mail poleci na: {email}',
+    mailingPreviewNoAddressNote:
+      'Nie wybrano jeszcze wspólnoty, więc w miejscu jej nazwy podglądu widać {placeholder}. Dodaj adresatów powyżej, żeby zobaczyć mail każdej wspólnoty.',
     mailingPreviewNoAddress: '[nazwa wspólnoty]',
 
     mailingSend: 'Wyślij',
@@ -680,13 +704,24 @@ export const translations = {
     mailingInsertFieldPick: 'Wybierz pole dynamiczne…',
     mailingInsertFieldSearch: 'Szukaj pola…',
     mailingInsertFieldNoMatch: 'Brak pola pasującego do wyszukiwania.',
+    mailingInsertFieldMode: 'Wstaw:',
+    mailingFieldPartFull: 'całość',
+    mailingFieldPartLabel: 'opis',
+    mailingFieldPartValue: 'wartość',
+    mailingFieldChipHint:
+      'Pole dynamiczne. Kliknij, aby przełączyć: całość → sam opis → sama wartość. Backspace usuwa całe pole.',
+    mailingFieldChipBuiltinHint: 'Pole wbudowane — podstawia się samo przy wysyłce.',
+    mailingFieldChipUnknown:
+      'Nie ma takiego pola dynamicznego — nie zostanie podstawione i zostanie w treści jako {{nazwa}}.',
+    mailingFieldPartsHint:
+      'Pola dynamiczne są w treści pigułkami, a nie tekstem w nawiasach. Przełącznikiem „Wstaw” decydujesz, co wstawiasz: „całość” (stałe zdanie i wartość razem), „opis” (samo stałe zdanie) albo „wartość” (sama kwota). Dzięki temu opis możesz wstawić do jednej kolumny tabeli, a wartość do drugiej. Kliknięcie pigułki przełącza ją między tymi trzema wariantami.',
     mailingUnknownFields: 'Nieznane pola w szablonie (nie zostaną podstawione)',
     mailingNoFieldsHintForTemplates:
       'Nie masz jeszcze pól dynamicznych. Dodaj je w zakładce „Pola dynamiczne”, żeby wstawiać do szablonu gotowe zdania z kwotami.',
 
     mailingFieldsTitle: 'Pola dynamiczne',
     mailingFieldsHint:
-      'Pole dynamiczne to nazwa plus stałe zdanie. W szablonie wstawiasz nazwę, przy wysyłce wpisujesz wartość — w treści pojawia się zdanie z tą wartością.',
+      'Pole dynamiczne to nazwa plus stałe zdanie i jednostka. W szablonie wstawiasz nazwę, przy wysyłce wpisujesz samą wartość — w treści pojawia się zdanie z tą wartością i jednostką (np. „20 zł/m²”). Pole może też przyjmować datę albo godzinę — wtedy przy wysyłce wybierasz je z kalendarza lub zegara.',
     mailingFieldName: 'Nazwa pola',
     mailingFieldNamePlaceholder: 'np. Zaliczka fundusz remontowy',
     mailingFieldNameRequired: 'Podaj nazwę pola.',
@@ -694,9 +729,25 @@ export const translations = {
     mailingFieldText: 'Stałe zdanie',
     mailingFieldTextHint: 'Tekst, który poprzedzi wpisaną wartość.',
     mailingFieldTextPlaceholder: 'np. Zmianie uległa zaliczka na fundusz remontowy w kwocie:',
+    mailingFieldValueType: 'Typ wartości',
+    mailingFieldValueTypeHint:
+      'Czym uzupełnisz to pole przy wysyłce. „tekst” — wpisujesz cokolwiek (kwotę, zdanie). „data” — wybierasz dzień z kalendarza, w liście wychodzi 14.09.2026. „godzina” — wybierasz godzinę, w liście wychodzi 18:00. Data i godzina nie mają jednostki.',
+    mailingFieldValueTypeText: 'tekst',
+    mailingFieldValueTypeDate: 'data',
+    mailingFieldValueTypeTime: 'godzina',
+    mailingFieldUnit: 'Jednostka',
+    mailingFieldUnitHint:
+      'Dopisek po wartości — ta sama w każdej wysyłce, więc nie musisz go wpisywać razem z kwotą. Zostaw puste, jeśli wartość ma zostać sama.',
+    mailingFieldUnitPlaceholder: 'np. zł/m²',
     mailingFieldValue: 'Wartość',
     mailingFieldValueSample: '350,00 zł',
+    /** Sample used when the field carries a unit — the unit supplies the "zł". */
+    mailingFieldValueSampleBare: '350,00',
+    mailingFieldValueSampleDate: '14.09.2026',
+    mailingFieldValueSampleTime: '18:00',
     mailingFieldPlaceholder: 'Wstawka do szablonu',
+    mailingFieldPlaceholderPartsHint:
+      'Każde pole można wstawić w trzech wariantach: całe (stałe zdanie i wartość razem), samo stałe zdanie („opis”) albo samą wartość. Dwa ostatnie służą do tabel: opis w jednej kolumnie, wartość w drugiej. W szablonie nie wpisujesz tego z ręki — wybierasz przełącznikiem obok pola „Wstaw”.',
     mailingFieldPreview: 'W treści pojawi się',
     mailingFieldAdd: 'Dodaj pole',
     mailingFieldConfirmDelete: 'Usunąć to pole? Szablony, które go używają, przestaną je podstawiać.',
@@ -1010,7 +1061,7 @@ export const translations = {
     // Apartment mappings (apartment-number rules for "weird" payments)
     apartmentMappings: 'Apartment rules',
     apartmentMappingsTitle: 'Apartment number rules',
-    apartmentMappingsHint: 'Rules that map unusual, recurring payments to an apartment number (e.g. a regular payer from another bank). The phrase is matched as a substring of the transaction text (payer name + description). A matched payment gets the apartment number but still shows up for acceptance.',
+    apartmentMappingsHint: 'Rules that map unusual, recurring payments to an apartment number (e.g. a regular payer from another bank). The phrase is matched as a substring of the transaction text (payer name + description). A matched payment gets the apartment number but still shows up for acceptance. When a rule names several apartments of one payer, the payment gets no number — you pick one on the acceptance screen.',
     apartmentMappingMatchText: 'Phrase (e.g. payer name)',
     apartmentMappingMatchTextPlaceholder: 'e.g. VARGYAS BARBARA',
     apartmentMappingApartment: 'Apartment number',
@@ -1025,6 +1076,22 @@ export const translations = {
     addApartmentMapping: 'Add rule',
     noApartmentMappings: 'No rules for this address.',
     apartmentMappingDuplicate: 'A rule with this phrase already exists.',
+    // A rule may name several apartments of one payer — then the user picks on
+    // the acceptance screen.
+    apartmentMappingApartments: 'Apartments',
+    apartmentMappingApartmentsHint: 'One payer may own several apartments in this community and pay for all of them from one account with the same description. Add each apartment separately — the app will not guess which one a transfer is for, so it asks you on the acceptance screen every time.',
+    apartmentMappingAddApartment: 'Add another apartment',
+    apartmentMappingRemoveApartment: 'Remove this apartment from the rule',
+    apartmentMappingApartmentDuplicate: 'This apartment is already on the rule.',
+    apartmentMappingApartmentsCount: 'apartments in the rule',
+    mappingChoiceLabel: 'The rule names several apartments — pick one',
+    mappingChoiceHint: 'This payer has more than one apartment on the rule, so the payment text does not say which one they are paying for. Click the right apartment — the amount goes to that account.',
+    mappingChoicePending: 'PICK AN APARTMENT',
+    mappingChoiceSelectedLabel: 'Apartment picked from the rule',
+    mappingChoiceStatus: 'Apartment picked from the rule',
+    mappingChoiceNoAccount: 'no account on the rule',
+    mappingChoiceNoAccountHint: 'This apartment carries a letter and the rule gives no account for it — add one to the rule ("Edit link"), or type an account in "Apartment account".',
+    mappingChoiceClear: 'Clear the apartment choice',
     matchedByMapping: 'Matched by rule',
     linkApartment: 'Link apartment',
     editApartmentLink: 'Edit link',
@@ -1352,7 +1419,7 @@ export const translations = {
 
     mailingValuesTitle: 'Dynamic field values',
     mailingValuesHint:
-      'Fill in the values completing each field sentence. One value applies to the whole send — every selected community receives the same amount.',
+      'Fill in the values completing each field sentence. One value applies to the whole send — every selected community receives the same amount. Where a unit is shown beside the box, type the value alone — the unit is added for you.',
     mailingValuePlaceholder: 'e.g. 350.00 PLN',
     mailingUnknownFieldInTemplate: 'Field {field} is not defined — it will be sent literally.',
 
@@ -1424,7 +1491,15 @@ export const translations = {
     mailingResetToTemplate: 'Restore from template',
     mailingEditedNotice: 'Content edited for this send — the template is unchanged.',
     mailingPreviewHint: 'This is exactly what will be sent (and written to PDF, when enabled).',
-    mailingPreviewForFirst: 'Preview for the first selected community: {name}',
+    mailingPreviewPickAddress: 'Preview for community',
+    mailingPreviewSearchAddress: 'Search the recipients…',
+    mailingPreviewPosition: '{index} of {total}',
+    mailingPreviewPrev: 'Previous community',
+    mailingPreviewNext: 'Next community',
+    mailingPreviewThis: "Preview this community's mail",
+    mailingPreviewRecipient: 'This mail goes to: {email}',
+    mailingPreviewNoAddressNote:
+      'No community picked yet, so the preview shows {placeholder} instead of a name. Add recipients above to see each community\'s own mail.',
     mailingPreviewNoAddress: '[community name]',
 
     mailingSend: 'Send',
@@ -1473,13 +1548,24 @@ export const translations = {
     mailingInsertFieldPick: 'Pick a dynamic field…',
     mailingInsertFieldSearch: 'Search fields…',
     mailingInsertFieldNoMatch: 'No field matches the search.',
+    mailingInsertFieldMode: 'Insert:',
+    mailingFieldPartFull: 'whole',
+    mailingFieldPartLabel: 'description',
+    mailingFieldPartValue: 'value',
+    mailingFieldChipHint:
+      'Dynamic field. Click to switch: whole → description only → value only. Backspace removes the whole field.',
+    mailingFieldChipBuiltinHint: 'Built-in field — it substitutes itself when the mail goes out.',
+    mailingFieldChipUnknown:
+      'No such dynamic field — it will not be substituted and stays in the text as {{name}}.',
+    mailingFieldPartsHint:
+      'Dynamic fields appear as pills, not as text in braces. The "Insert" switch decides what you place: "whole" (the fixed sentence and the value together), "description" (the sentence alone) or "value" (the amount alone) — so the description can go into one table column and the value into the next. Clicking a pill switches it between the three.',
     mailingUnknownFields: 'Unknown fields in the template (they will not be substituted)',
     mailingNoFieldsHintForTemplates:
       'You have no dynamic fields yet. Add them in the "Dynamic fields" tab to insert ready-made sentences with amounts.',
 
     mailingFieldsTitle: 'Dynamic fields',
     mailingFieldsHint:
-      'A dynamic field is a name plus a fixed sentence. You insert the name into a template and type the value at send time — the body shows the sentence with that value.',
+      'A dynamic field is a name plus a fixed sentence and a unit. You insert the name into a template and type the bare value at send time — the body shows the sentence with that value and its unit (e.g. "20 PLN/m²"). A field can also take a date or a time, picked from a calendar or a clock at send time.',
     mailingFieldName: 'Field name',
     mailingFieldNamePlaceholder: 'e.g. Renovation fund rate',
     mailingFieldNameRequired: 'Enter a field name.',
@@ -1487,9 +1573,24 @@ export const translations = {
     mailingFieldText: 'Fixed sentence',
     mailingFieldTextHint: 'Text placed before the typed value.',
     mailingFieldTextPlaceholder: 'e.g. The renovation fund rate has changed to:',
+    mailingFieldValueType: 'Value type',
+    mailingFieldValueTypeHint:
+      'How this field is filled in at send time. "text" — type anything (an amount, a sentence). "date" — pick a day from the calendar; the letter reads 14.09.2026. "time" — pick an hour; the letter reads 18:00. Dates and times take no unit.',
+    mailingFieldValueTypeText: 'text',
+    mailingFieldValueTypeDate: 'date',
+    mailingFieldValueTypeTime: 'time',
+    mailingFieldUnit: 'Unit',
+    mailingFieldUnitHint:
+      'Written after the value — the same in every send, so it need not be typed with the amount. Leave empty for the value to stand alone.',
+    mailingFieldUnitPlaceholder: 'e.g. PLN/m²',
     mailingFieldValue: 'Value',
     mailingFieldValueSample: '350.00 PLN',
+    mailingFieldValueSampleBare: '350.00',
+    mailingFieldValueSampleDate: '14.09.2026',
+    mailingFieldValueSampleTime: '18:00',
     mailingFieldPlaceholder: 'Template placeholder',
+    mailingFieldPlaceholderPartsHint:
+      'Every field can be placed in three forms: whole (the fixed sentence and the value together), the sentence alone ("description"), or the value alone. The last two are for tables: the description in one column, the value in the next. You never type these by hand — the switch beside the "Insert" picker chooses the form.',
     mailingFieldPreview: 'The body will show',
     mailingFieldAdd: 'Add field',
     mailingFieldConfirmDelete: 'Delete this field? Templates using it will stop substituting it.',

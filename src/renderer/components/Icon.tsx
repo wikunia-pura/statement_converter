@@ -31,6 +31,7 @@ type IconName =
   | 'refresh'
   | 'clipboard'
   | 'chevron-down'
+  | 'chevron-left'
   | 'chevron-right'
   | 'download'
   | 'coins'
@@ -46,7 +47,9 @@ type IconName =
   | 'align-center'
   | 'align-right'
   | 'align-justify'
-  | 'table';
+  | 'eye'
+  | 'table'
+  | 'calendar';
 
 interface IconProps {
   name: IconName;
@@ -218,6 +221,7 @@ const PATHS: Record<IconName, React.ReactNode> = {
     </>
   ),
   'chevron-down': <path d="M6 9l6 6 6-6" />,
+  'chevron-left': <path d="M15 6l-6 6 6 6" />,
   'chevron-right': <path d="M9 6l6 6-6 6" />,
   download: (
     <>
@@ -294,12 +298,26 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M4 18h16" />
     </>
   ),
+  eye: (
+    <>
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
   table: (
     <>
       <rect x="3" y="4" width="18" height="16" rx="2" />
       <path d="M3 10h18" />
       <path d="M3 15h18" />
       <path d="M9 4v16" />
+    </>
+  ),
+  calendar: (
+    <>
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M16 3v4" />
+      <path d="M8 3v4" />
+      <path d="M3 11h18" />
     </>
   ),
 };

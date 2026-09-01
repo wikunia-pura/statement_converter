@@ -27,7 +27,12 @@ import {
   runWithConcurrency,
 } from './expense-ai-matcher';
 import { Kontrahent, Adres, KontrahentTyp } from './types';
-import { needsExplicitAccount } from './apartment-account';
+import {
+  needsExplicitAccount,
+  apartmentGlueInText,
+  apartmentWidthImplausible,
+  HELD_BACK_CONFIDENCE,
+} from './apartment-account';
 
 const INCOME_MATCH_TYPES: KontrahentTyp[] = ['Pozostałe przychody'];
 
@@ -584,8 +589,12 @@ export abstract class BaseConverter<TRaw> {
           extracted &&
           extracted.confidence.overall >= this.regexAcceptThreshold()
         ) {
-          // Optionally cache
-          if (this.shouldCacheRegexResults()) {
+          // Optionally cache — never a rule match, though. The cache is consulted
+          // before the matcher runs, so a cached rule match would freeze the rule's
+          // answer: editing the rule (or adding a second apartment to it) would
+          // change nothing for this payer until the entry expired. Re-running a
+          // rule costs a substring search, so there is nothing to save here.
+          if (this.shouldCacheRegexResults() && !extracted.matchedByManualMapping) {
             const norm = this.normalize(transaction);
             this.cache.set(norm.descBase, norm.descOpt, extracted as any);
           }
@@ -787,6 +796,17 @@ export abstract class BaseConverter<TRaw> {
 
           const items: BaseProcessedTransaction<TRaw>[] = batch.map((b, j) => {
             const norm = transactionsForAI[j];
+            const aiText = `${norm.descBase} ${norm.descOpt}`;
+            const aiApartment = extracted[j].apartmentNumber;
+            // The glue guard has to run again here, for the same reason the letter
+            // check does: by this point the matcher's own result is gone, and the
+            // model read the same unseparated "M.202-620" the regexes did. An
+            // answer of 202 would arrive carrying the model's own confidence, so
+            // the evidence is re-read from the text rather than trusted from the
+            // producer — whichever producer it was.
+            const gluedNumber =
+              !!apartmentGlueInText(aiText, aiApartment) ||
+              apartmentWidthImplausible(aiApartment);
             const extractedData: BaseExtractedData = {
               ...extracted[j],
               rawData: this.buildRawData(b.transaction),
@@ -794,11 +814,20 @@ export abstract class BaseConverter<TRaw> {
               // looks exactly like a correct plain number, so it is checked against
               // the text here. Without this, an AI answer of "17" for text saying
               // "17A" would be booked with the model's own high confidence.
-              needsAccount: needsExplicitAccount(
-                extracted[j].apartmentNumber,
-                null,
-                `${norm.descBase} ${norm.descOpt}`
-              ),
+              needsAccount: needsExplicitAccount(aiApartment, null, aiText),
+              confidence: gluedNumber
+                ? {
+                    ...extracted[j].confidence,
+                    apartment: Math.min(
+                      extracted[j].confidence.apartment,
+                      HELD_BACK_CONFIDENCE
+                    ),
+                    overall: Math.min(
+                      extracted[j].confidence.overall,
+                      HELD_BACK_CONFIDENCE
+                    ),
+                  }
+                : extracted[j].confidence,
             };
             if (this.config.useCache) {
               this.cache.set(norm.descBase, norm.descOpt, extractedData as any);

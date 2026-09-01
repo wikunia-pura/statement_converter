@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { ConversionReviewData, ReviewDecision, TransactionForReview, Kontrahent, KontrahentTyp, ApartmentMapping, ContractorSortOrder, DEFAULT_ACCOUNT_CONFIG } from '../../shared/types';
-import { composeApartmentAccount, isAccountSymbol, isLetteredApartment } from '../../shared/apartment-account';
+import { ConversionReviewData, ReviewDecision, TransactionForReview, Kontrahent, KontrahentTyp, ApartmentMapping, ApartmentMappingTarget, ContractorSortOrder, DEFAULT_ACCOUNT_CONFIG } from '../../shared/types';
+import { composeApartmentAccount, isLetteredApartment, resolveApartmentAccount } from '../../shared/apartment-account';
+import { buildApartmentMapping, mappingTargets } from '../../shared/apartment-mapping';
+import ApartmentTargetsEditor, {
+  ApartmentTargetDraft,
+  apartmentTargetDrafts,
+  apartmentTargetsFromDrafts,
+  validateApartmentTargets,
+} from './ApartmentTargetsEditor';
 import { translations, Language } from '../translations';
 import { searchTransactionInPdf, PdfSearchMatch } from '../../shared/pdf-search';
 import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
@@ -423,6 +430,110 @@ const PdfPanel: React.FC<PdfPanelProps> = ({ searchResult, searching, searchFiel
   );
 };
 
+interface ApartmentChoicePanelProps {
+  language: Language;
+  /** The rule's apartments, in the order the rule lists them. */
+  targets: ApartmentMappingTarget[];
+  /** Fixed part of every apartment account in this conversion ("204"). */
+  apartmentPrefix: string;
+  /** The phrase that matched, shown so the user can tell which rule this is. */
+  matchText: string;
+  note?: string;
+  selected: ApartmentMappingTarget | undefined;
+  onSelect: (target: ApartmentMappingTarget | null) => void;
+}
+
+/**
+ * "Which of this payer's apartments is this?" — the acceptance-screen half of a
+ * multi-apartment rule.
+ *
+ * The rule identified the payer, so the app knows the shortlist but not the
+ * answer; showing the shortlist as buttons keeps the decision to one click while
+ * making it impossible to book the transfer onto an apartment the rule never
+ * mentioned. Each option carries the account it would post to, because that is
+ * the part that actually moves the money.
+ */
+const ApartmentChoicePanel: React.FC<ApartmentChoicePanelProps> = ({
+  language,
+  targets,
+  apartmentPrefix,
+  matchText,
+  note,
+  selected,
+  onSelect,
+}) => {
+  const t = translations[language];
+  const resolved = selected
+    ? resolveApartmentAccount(selected.apartmentNumber, selected.kontoLokalu ?? null, apartmentPrefix)
+    : null;
+  // A lettered apartment with no account on the rule cannot be picked: the rule
+  // says which apartment it is but not where to book it, and the app must not
+  // invent the symbol. The row is then resolved by the "Konto lokalu" field below.
+  const unbookable = targets.filter(
+    (target) => !resolveApartmentAccount(target.apartmentNumber, target.kontoLokalu ?? null, apartmentPrefix),
+  );
+
+  return (
+    <div className={`mapping-choice${selected ? ' mapping-choice--resolved' : ''}`}>
+      <div className="mapping-choice__label">
+        <Icon name={selected ? 'check-circle' : 'map-pin'} size={12} />
+        {selected ? t.mappingChoiceSelectedLabel : t.mappingChoicePending}
+      </div>
+      <div className="mapping-choice__hint">
+        {selected ? t.mappingChoiceLabel : t.mappingChoiceHint}
+      </div>
+      <div className="mapping-choice__options">
+        {targets.map((target) => {
+          const account = resolveApartmentAccount(
+            target.apartmentNumber,
+            target.kontoLokalu ?? null,
+            apartmentPrefix,
+          );
+          const isSelected = selected?.apartmentNumber === target.apartmentNumber;
+          return (
+            <button
+              key={target.apartmentNumber}
+              type="button"
+              className={`mapping-choice__option${isSelected ? ' is-selected' : ''}`}
+              onClick={() => onSelect(isSelected ? null : target)}
+              disabled={!account}
+              title={account ? `${target.apartmentNumber} → ${account}` : t.mappingChoiceNoAccountHint}
+            >
+              <span className="mapping-choice__number">{target.apartmentNumber}</span>
+              <span className="mapping-choice__account">{account || t.mappingChoiceNoAccount}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="mapping-choice__footer">
+        <span>
+          <Icon name="map-pin" size={11} /> {matchText}
+          {note ? ` — ${note}` : ''}
+        </span>
+        {selected && resolved && (
+          <>
+            <strong style={{ fontFamily: 'monospace' }}>
+              {t.manualApartmentAccountPreview}: {resolved}
+            </strong>
+            <button
+              type="button"
+              className="button button-small button-secondary"
+              onClick={() => onSelect(null)}
+            >
+              <Icon name="x" size={12} /> {t.mappingChoiceClear}
+            </button>
+          </>
+        )}
+      </div>
+      {unbookable.length > 0 && (
+        <div className="review-card__manual-hint review-card__manual-hint--warning">
+          <Icon name="alert-triangle" size={12} /> {t.mappingChoiceNoAccountHint}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // TransactionCard sub-component
 interface TransactionCardProps {
   trn: TransactionForReview;
@@ -453,7 +564,16 @@ interface TransactionCardProps {
   addressMappings: ApartmentMapping[];
   /** Persist an apartment-mapping rule under the current address and mark the
    *  given transaction as matched by it. Pass editId to update an existing rule. */
-  onSaveApartmentMapping: (index: number, matchText: string, apartmentNumber: string, editId?: string, kontoLokalu?: string) => Promise<void>;
+  onSaveApartmentMapping: (
+    index: number,
+    matchText: string,
+    targets: ApartmentMappingTarget[],
+    editId?: string,
+  ) => Promise<void>;
+  /** Which of a multi-apartment rule's apartments the user picked for this row. */
+  mappingChoice: ApartmentMappingTarget | undefined;
+  /** Book this row onto one of the rule's apartments (null clears the choice). */
+  onChooseMappingTarget: (index: number, target: ApartmentMappingTarget | null) => void;
   /** Expense counterpart of the apartment rule: teach a contractor the spelling
    *  this bank uses, so the deterministic matcher catches it next time — no AI. */
   onSaveAlternativeName: (index: number, contractorId: number, alternativeName: string) => Promise<void>;
@@ -483,6 +603,8 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
   adresId,
   addressMappings,
   onSaveApartmentMapping,
+  mappingChoice,
+  onChooseMappingTarget,
   onSaveAlternativeName,
 }) => {
   const [pdfResult, setPdfResult] = useState<PdfSearchMatch | null>(null);
@@ -494,9 +616,14 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
   // Apartment-mapping rule form (income only)
   const [ruleFormOpen, setRuleFormOpen] = useState(false);
   const [ruleMatchText, setRuleMatchText] = useState('');
-  const [ruleApartment, setRuleApartment] = useState('');
-  /** Optional account symbol for the rule — required for a lettered apartment. */
-  const [ruleAccount, setRuleAccount] = useState('');
+  /**
+   * The rule's apartments, each with its optional account symbol. A list rather
+   * than a single field because one payer can own several apartments — and because
+   * editing a rule that already has several must not quietly drop the extra ones.
+   */
+  const [ruleTargetDrafts, setRuleTargetDrafts] = useState<ApartmentTargetDraft[]>(
+    apartmentTargetDrafts([]),
+  );
   const [ruleSaving, setRuleSaving] = useState(false);
   const [ruleSaved, setRuleSaved] = useState(false);
   const [ruleError, setRuleError] = useState<string | null>(null);
@@ -517,21 +644,48 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
     if (trn.transactionType !== 'income') return null;
     if (!trn.extracted.matchedByManualMapping) return null;
     const hay = normalizeForMapping(`${trn.original.description} ${trn.original.counterparty}`);
-    return addressMappings.find(m => hay.includes(normalizeForMapping(m.matchText.trim()))) || null;
+    // Some converters glue MT940 continuation lines together without a separator
+    // and others join them with a space, so a phrase straddling a line break can
+    // differ from this text by whitespace alone. Retry without it before giving up:
+    // failing to recognize the rule here would cost the user the apartment picker.
+    const squeezed = hay.replace(/\s+/g, '');
+    return addressMappings.find(m => {
+      const needle = normalizeForMapping(m.matchText.trim());
+      return hay.includes(needle) || squeezed.includes(needle.replace(/\s+/g, ''));
+    }) || null;
   }, [addressMappings, trn]);
+
+  /**
+   * The apartments the matched rule points at. More than one means the rule knows
+   * the payer but not which of their apartments this transfer is for — the matcher
+   * then leaves the number empty on purpose, and this row is resolved by picking
+   * one of these instead of by accepting an extracted number.
+   */
+  const ruleTargets = React.useMemo<ApartmentMappingTarget[]>(
+    () => (existingRule ? mappingTargets(existingRule) : []),
+    [existingRule],
+  );
+  const needsApartmentChoice = trn.transactionType === 'income' && ruleTargets.length > 1;
 
   const openRuleForm = () => {
     if (existingRule) {
       setRuleMatchText(existingRule.matchText);
-      setRuleApartment(existingRule.apartmentNumber);
-      setRuleAccount(existingRule.kontoLokalu || '');
+      setRuleTargetDrafts(apartmentTargetDrafts(mappingTargets(existingRule)));
     } else {
       setRuleMatchText(trn.original.counterparty || '');
-      setRuleApartment((manualInput && manualInput.trim()) || trn.extracted.apartmentNumber || '');
-      // Carry over an account the user already typed for this row, so "assign it
-      // once, then make it stick" needs no retyping.
-      const typed = manualAccount && composeApartmentAccount(apartmentPrefix, manualAccount);
-      setRuleAccount(typed || trn.extracted.accountOverride || '');
+      // Carry over what the user already stated for this row — the apartment they
+      // typed, or the account — so "assign it once, then make it stick" needs no
+      // retyping.
+      const typedAccount = manualAccount && composeApartmentAccount(apartmentPrefix, manualAccount);
+      setRuleTargetDrafts(
+        apartmentTargetDrafts([
+          {
+            apartmentNumber:
+              (manualInput && manualInput.trim()) || trn.extracted.apartmentNumber || '',
+            kontoLokalu: typedAccount || trn.extracted.accountOverride || '',
+          },
+        ]),
+      );
     }
     setRuleError(null);
     setRuleSaved(false);
@@ -540,26 +694,24 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
 
   const submitRule = async () => {
     const mt = ruleMatchText.trim();
-    const apt = ruleApartment.trim();
-    const account = ruleAccount.trim();
-    if (!mt || !apt) {
+    if (!mt) {
       setRuleError(t.fillAllFields);
       return;
     }
-    if (account && !isAccountSymbol(account)) {
-      setRuleError(t.apartmentMappingAccountInvalid);
-      return;
-    }
-    // A lettered apartment is unbookable without a symbol, so a rule that omits it
-    // would silently keep sending this payer back to this screen every month.
-    if (!account && isLetteredApartment(apt)) {
-      setRuleError(t.apartmentMappingAccountRequired);
+    const targetsError = validateApartmentTargets(ruleTargetDrafts, language);
+    if (targetsError) {
+      setRuleError(targetsError);
       return;
     }
     setRuleSaving(true);
     setRuleError(null);
     try {
-      await onSaveApartmentMapping(trn.index, mt, apt, existingRule?.id, account || undefined);
+      await onSaveApartmentMapping(
+        trn.index,
+        mt,
+        apartmentTargetsFromDrafts(ruleTargetDrafts),
+        existingRule?.id,
+      );
       setRuleSaved(true);
       setRuleFormOpen(false);
     } catch (e: unknown) {
@@ -850,6 +1002,22 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
 
     {/* Highlighted Apartment Number Box (for income) */}
     {trn.transactionType === 'income' && (() => {
+      // A rule with several apartments has no number to highlight until the user
+      // picks one, so the picker stands where the matched number normally would.
+      if (needsApartmentChoice) {
+        return (
+          <ApartmentChoicePanel
+            language={language}
+            targets={ruleTargets}
+            apartmentPrefix={apartmentPrefix}
+            matchText={existingRule?.matchText || ''}
+            note={existingRule?.note}
+            selected={mappingChoice}
+            onSelect={(target) => onChooseMappingTarget(trn.index, target)}
+          />
+        );
+      }
+
       const extractedApt = trn.extracted.apartmentNumber;
       const manualApt = manualInput?.trim();
       const isManuallyEdited = manualApt && manualApt.length > 0 && manualApt !== extractedApt;
@@ -951,6 +1119,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
         : null;
       const hasManualOverride = hasManualNumber
         || hasManualAccount
+        || mappingChoice !== undefined
         || manualContractorId !== undefined
         || manualRemainingIncomeId !== undefined
         || manualRemainingCostId !== undefined;
@@ -1093,7 +1262,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
                 <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '8px' }}>
                   {t.apartmentMappingsHint}
                 </div>
-                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
                   <div className="review-card__manual-field" style={{ flex: 2, minWidth: 240 }}>
                     <label className="review-card__manual-label">{t.apartmentMappingMatchText}</label>
                     <input
@@ -1103,29 +1272,21 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
                       placeholder={t.apartmentMappingMatchTextPlaceholder}
                     />
                   </div>
-                  <div className="review-card__manual-field" style={{ maxWidth: 140 }}>
-                    <label className="review-card__manual-label">{t.apartmentMappingApartment}</label>
-                    <input
-                      type="text"
-                      value={ruleApartment}
-                      onChange={(e) => { setRuleApartment((e.target as HTMLInputElement).value); if (ruleError) setRuleError(null); }}
-                      placeholder={t.apartmentMappingApartmentPlaceholder}
-                    />
-                  </div>
-                  <div className="review-card__manual-field" style={{ maxWidth: 190 }}>
-                    <label className="review-card__manual-label">
-                      {t.apartmentMappingAccount}
-                      {isLetteredApartment(ruleApartment.trim()) && ' *'}
-                    </label>
-                    <input
-                      type="text"
-                      value={ruleAccount}
-                      onChange={(e) => { setRuleAccount((e.target as HTMLInputElement).value); if (ruleError) setRuleError(null); }}
-                      placeholder={`${apartmentPrefix}-00017A`}
+                  <div className="review-card__manual-field" style={{ flex: 3, minWidth: 320 }}>
+                    <label className="review-card__manual-label">{t.apartmentMappingApartments}</label>
+                    <ApartmentTargetsEditor
+                      language={language}
+                      drafts={ruleTargetDrafts}
+                      onChange={(next) => { setRuleTargetDrafts(next); if (ruleError) setRuleError(null); }}
+                      accountPlaceholder={`np. ${apartmentPrefix}-00017A`}
+                      disabled={ruleSaving}
                     />
                   </div>
                 </div>
                 <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '6px' }}>
+                  {t.apartmentMappingApartmentsHint}
+                </div>
+                <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '4px' }}>
                   {t.apartmentMappingAccountHint}
                 </div>
                 {ruleError && (
@@ -1136,7 +1297,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
                     type="button"
                     className="button button-small button-success"
                     onClick={submitRule}
-                    disabled={ruleSaving || !ruleMatchText.trim() || !ruleApartment.trim()}
+                    disabled={ruleSaving || !ruleMatchText.trim() || apartmentTargetsFromDrafts(ruleTargetDrafts).length === 0}
                   >
                     <Icon name="check" size={14} /> {ruleSaving ? '...' : (existingRule ? t.update : t.saveApartmentMappingRule)}
                   </button>
@@ -1275,6 +1436,13 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
               if (trn.transactionType === 'income' && currentDecision.manualRemainingIncomeId) {
                 const entry = remainingIncomeEntries.find(k => k.id === currentDecision.manualRemainingIncomeId);
                 label = `Pozostały przychód: ${entry?.nazwa || 'Nieznany'} (${entry?.kontoKontrahenta || ''})`;
+              } else if (trn.transactionType === 'income' && mappingChoice) {
+                const account = resolveApartmentAccount(
+                  mappingChoice.apartmentNumber,
+                  mappingChoice.kontoLokalu ?? null,
+                  apartmentPrefix,
+                );
+                label = `${t.mappingChoiceStatus}: ${mappingChoice.apartmentNumber}${account ? ` → ${account}` : ''}`;
               } else if (trn.transactionType === 'income' && currentDecision.manualApartmentNumber) {
                 label = `Ręcznie wpisano mieszkanie: ${currentDecision.manualApartmentNumber}`;
               } else if (trn.transactionType === 'expense' && currentDecision.manualRemainingCostId) {
@@ -1339,6 +1507,14 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   const [manualContractorIds, setManualContractorIds] = useState<Map<number, number | null>>(new Map());
   const [manualRemainingIncomeIds, setManualRemainingIncomeIds] = useState<Map<number, number | null>>(new Map());
   const [manualRemainingCostIds, setManualRemainingCostIds] = useState<Map<number, number | null>>(new Map());
+  /**
+   * Which apartment the user picked for a row matched by a rule that names several
+   * of them. Its own map rather than a manualInput, because the pair (apartment,
+   * account) comes from the rule as one unit — the two manual fields are mutually
+   * exclusive precisely so a hand-typed pair can never disagree, and a pick from a
+   * rule needs both halves at once.
+   */
+  const [mappingChoices, setMappingChoices] = useState<Map<number, ApartmentMappingTarget>>(new Map());
   
   const [kontrahenci, setKontrahenci] = useState<Kontrahent[]>([]);
   const [contractorSortOrder, setContractorSortOrder] = useState<ContractorSortOrder>('name-asc');
@@ -1558,6 +1734,14 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
       setManualInputs(newManualInputs);
     }
 
+    // Accept/reject/clarify replace the destination outright, so a pick from a
+    // multi-apartment rule must not stay highlighted as if it still applied.
+    if (mappingChoices.has(index)) {
+      const next = new Map(mappingChoices);
+      next.delete(index);
+      setMappingChoices(next);
+    }
+
     if (manualAccounts.has(index)) {
       const newManualAccounts = new Map(manualAccounts);
       newManualAccounts.delete(index);
@@ -1584,9 +1768,64 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
     }
   };
 
+  /** Forget a rule pick for this row — used whenever a competing assignment wins. */
+  const clearMappingChoice = (index: number) => {
+    setMappingChoices(prev => {
+      if (!prev.has(index)) return prev;
+      const next = new Map(prev);
+      next.delete(index);
+      return next;
+    });
+  };
+
+  /**
+   * Book this row onto one of the apartments its rule names (null clears the pick).
+   *
+   * The decision carries both halves of the rule's entry: the account symbol is
+   * what the exporters book to, the number is what makes the record readable. They
+   * come from one rule entry, so unlike two hand-typed fields they cannot disagree.
+   * A lettered apartment with no account on the rule is not offered at all — there
+   * would be nothing to book it to — so `resolveApartmentAccount` never fails here.
+   */
+  const handleMappingChoice = (index: number, target: ApartmentMappingTarget | null) => {
+    const newDecisions = new Map(decisions);
+
+    if (!target) {
+      setMappingChoices(prev => {
+        const next = new Map(prev);
+        next.delete(index);
+        return next;
+      });
+      newDecisions.delete(index);
+      setDecisions(newDecisions);
+      return;
+    }
+
+    const account = resolveApartmentAccount(
+      target.apartmentNumber,
+      target.kontoLokalu ?? null,
+      apartmentPrefix,
+    );
+    if (!account) return;
+
+    setMappingChoices(prev => new Map(prev).set(index, target));
+    // The other ways of resolving this row are mutually exclusive with the pick.
+    setManualInputs(prev => { const m = new Map(prev); m.delete(index); return m; });
+    setManualAccounts(prev => { const m = new Map(prev); m.delete(index); return m; });
+    setManualRemainingIncomeIds(prev => { const m = new Map(prev); m.delete(index); return m; });
+    newDecisions.set(index, {
+      index,
+      action: 'manual',
+      manualApartmentNumber: target.apartmentNumber,
+      manualApartmentAccount: account,
+    });
+    setDecisions(newDecisions);
+  };
+
   const handleManualInput = (index: number, value: string) => {
     const newManualInputs = new Map(manualInputs);
     const newDecisions = new Map(decisions);
+    clearMappingChoice(index);
 
     // If value is empty or only whitespace, remove from manual inputs and clear decision
     if (!value || value.trim().length === 0) {
@@ -1622,6 +1861,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   const handleManualAccountInput = (index: number, value: string) => {
     const newManualAccounts = new Map(manualAccounts);
     const newDecisions = new Map(decisions);
+    clearMappingChoice(index);
 
     const account = composeApartmentAccount(apartmentPrefix, value);
     if (!value || value.trim().length === 0) {
@@ -1671,6 +1911,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   const handleManualRemainingIncomeSelect = (index: number, entryId: number | null) => {
     const newIds = new Map(manualRemainingIncomeIds);
     const newDecisions = new Map(decisions);
+    clearMappingChoice(index);
     
     if (entryId === null) {
       newIds.delete(index);
@@ -1759,9 +2000,8 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   const handleSaveApartmentMapping = async (
     index: number,
     matchText: string,
-    apartmentNumber: string,
+    targets: ApartmentMappingTarget[],
     editId?: string,
-    kontoLokalu?: string,
   ) => {
     if (reviewData.adresId == null) throw new Error(t.apartmentMappingNeedsAddress);
     const adresy = await window.electronAPI.getAdresy();
@@ -1773,27 +2013,25 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
     if (current.some(m => m.id !== editId && m.matchText.trim().toLowerCase() === normalized)) {
       throw new Error(t.apartmentMappingDuplicate);
     }
-    const account = kontoLokalu?.trim() || undefined;
-    let nextMappings;
-    if (editId) {
-      // Edit the existing rule in place. Clearing the account field must actually
-      // clear it, so the key is dropped rather than left at its old value.
-      nextMappings = current.map(m => {
-        if (m.id !== editId) return m;
-        const { kontoLokalu: _drop, ...rest } = m;
-        return { ...rest, matchText, apartmentNumber, ...(account ? { kontoLokalu: account } : {}) };
-      });
-    } else {
-      const newMapping = {
-        id: (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
-          ? crypto.randomUUID()
-          : `m-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    // Editing rebuilds the rule from the form, so clearing an account or removing an
+    // apartment actually takes effect; only the note (which this form has no field
+    // for) is carried over from the stored rule.
+    const edited = editId ? current.find(m => m.id === editId) : undefined;
+    const mapping = buildApartmentMapping(
+      {
+        id: editId
+          || ((typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+            ? crypto.randomUUID()
+            : `m-${Date.now()}-${Math.random().toString(36).slice(2)}`),
         matchText,
-        apartmentNumber,
-        ...(account ? { kontoLokalu: account } : {}),
-      };
-      nextMappings = [...current, newMapping];
-    }
+        note: edited?.note,
+      },
+      targets,
+    );
+    if (!mapping) throw new Error(t.fillAllFields);
+    const nextMappings = editId
+      ? current.map(m => (m.id === editId ? mapping : m))
+      : [...current, mapping];
     await window.electronAPI.updateAdres(
       adres.id,
       adres.nazwa,
@@ -1806,28 +2044,40 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
     setAddressMappings(nextMappings);
 
     // Reflect the rule immediately in this view: the transaction now counts as a
-    // match (apartment filled, flagged), just like it would on the next run.
+    // match (flagged, apartment filled), just like it would on the next run.
+    const ruleTargets = mappingTargets(mapping);
+    const single = ruleTargets.length === 1 ? ruleTargets[0] : null;
     const trn = reviewData.transactions.find(t => t.index === index);
     if (trn) {
-      trn.extracted.apartmentNumber = apartmentNumber;
       trn.extracted.matchedByManualMapping = true;
       trn.extracted.confidence = 95;
-      trn.extracted.accountOverride = account ?? null;
+      // Several apartments ⇒ the row has a shortlist, not an answer: exactly the
+      // state the matcher produces for such a rule, so this screen behaves the same
+      // whether the rule was written now or before the conversion ran.
+      trn.extracted.apartmentNumber = single ? single.apartmentNumber : null;
+      trn.extracted.accountOverride = single?.kontoLokalu ?? null;
       trn.extracted.needsAccount = false;
     }
     // Clear any manual override for this transaction, then book it.
     setManualInputs(prev => { const m = new Map(prev); m.delete(index); return m; });
     setManualAccounts(prev => { const m = new Map(prev); m.delete(index); return m; });
     setManualRemainingIncomeIds(prev => { const m = new Map(prev); m.delete(index); return m; });
+    clearMappingChoice(index);
     setDecisions(prev => {
       const m = new Map(prev);
+      if (!single) {
+        // Nothing to book yet — the user has just said this payer owns several
+        // apartments, and the picker now asks which one this transfer is for.
+        m.delete(index);
+        return m;
+      }
       // Carry the value explicitly instead of a bare 'accept'. The rule was created
       // after the conversion ran, so the main process still holds the pre-rule
       // extraction for this row; 'accept' would book that, not what was just
       // defined — and for a lettered apartment there would be nothing to book.
-      m.set(index, account
-        ? { index, action: 'manual', manualApartmentAccount: account }
-        : { index, action: 'manual', manualApartmentNumber: apartmentNumber });
+      m.set(index, single.kontoLokalu
+        ? { index, action: 'manual', manualApartmentAccount: single.kontoLokalu }
+        : { index, action: 'manual', manualApartmentNumber: single.apartmentNumber });
       return m;
     });
   };
@@ -2104,6 +2354,8 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                   adresId={reviewData.adresId}
                   addressMappings={addressMappings}
                   onSaveApartmentMapping={handleSaveApartmentMapping}
+                  mappingChoice={mappingChoices.get(trn.index)}
+                  onChooseMappingTarget={handleMappingChoice}
                   onSaveAlternativeName={handleSaveAlternativeName}
                 />
               );
@@ -2223,6 +2475,8 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                   adresId={reviewData.adresId}
                   addressMappings={addressMappings}
                   onSaveApartmentMapping={handleSaveApartmentMapping}
+                  mappingChoice={mappingChoices.get(trn.index)}
+                  onChooseMappingTarget={handleMappingChoice}
                   onSaveAlternativeName={handleSaveAlternativeName}
                 />
               );

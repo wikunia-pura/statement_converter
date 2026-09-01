@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Adres,
   MailingPole,
@@ -17,6 +17,7 @@ import SearchableSelect, { SearchableOption } from '../components/SearchableSele
 import { MAILING_LOGO_SVG_DATA_URI } from '../../shared/mailing-logo';
 import {
   buildMailShell,
+  extractFieldRefs,
   extractUsedFields,
   fieldPlaceholder,
   formatPolishDate,
@@ -115,6 +116,25 @@ const Mailing: React.FC<Props> = ({
   const [isSending, setIsSending] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [results, setResults] = useState<MailingSendResult[] | null>(null);
+  /**
+   * Community whose mail the preview shows. Every recipient gets its own text —
+   * its name goes into the subject and the body, and it goes to its own city
+   * unit's mailbox — so proofreading only the first one leaves the rest unseen.
+   *
+   * Kept out of the draft: it says nothing about what gets sent, only about what
+   * is being looked at. `null` (and an id no longer on the list) falls back to
+   * the first recipient, so removing the previewed one can't blank the preview.
+   */
+  const [previewAdresId, setPreviewAdresId] = useState<number | null>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Whether the message-body card is unfolded. Not in the draft either: the
+   * template's wording is the norm, so the card stays folded until someone
+   * actually wants to rewrite this one send. A draft that already carries edits
+   * opens unfolded — that is someone coming back to a rewrite in progress.
+   */
+  const [messageOpen, setMessageOpen] = useState(draft.edited);
 
   useEffect(() => {
     void load();
@@ -248,17 +268,29 @@ const Mailing: React.FC<Props> = ({
     [selectedAdresy, jednostki],
   );
 
-  /** Fields the chosen template actually uses, minus the built-in ones. */
+  /**
+   * Fields the chosen template actually uses and still needs a value for, minus
+   * the built-in ones.
+   *
+   * A field placed only as its description (`{{Woda|opis}}` — the label column of
+   * a table the user drew by hand) renders its fixed sentence and nothing else, so
+   * it gets no input here: an empty box that changes nothing in the letter reads
+   * as something forgotten.
+   */
   const fieldsToFill = useMemo(() => {
     if (!template) return [];
     // Read from the draft, so a field added while editing this send immediately
     // gets its own value input instead of silently going out unsubstituted.
-    return extractUsedFields(draft.temat, draft.tresc)
-      .filter((name) => !isBuiltinField(name))
-      .map((name) => ({
-        name,
-        pole: pola.find((p) => normalizeFieldName(p.nazwa) === normalizeFieldName(name)),
-      }));
+    const needsValue = new Map<string, string>();
+    for (const ref of extractFieldRefs(draft.temat, draft.tresc)) {
+      if (isBuiltinField(ref.nazwa) || ref.part === 'label') continue;
+      const key = normalizeFieldName(ref.nazwa);
+      if (!needsValue.has(key)) needsValue.set(key, ref.nazwa);
+    }
+    return [...needsValue.values()].map((name) => ({
+      name,
+      pole: pola.find((p) => normalizeFieldName(p.nazwa) === normalizeFieldName(name)),
+    }));
   }, [template, draft.temat, draft.tresc, pola]);
 
   /** True once the body asks for the field table, i.e. the picker below matters. */
@@ -300,6 +332,17 @@ const Mailing: React.FC<Props> = ({
         : [],
     [usesFieldTable, tableFieldPool, draft.tableFields],
   );
+
+  /**
+   * The HTML input a field's value is typed into. A date or an hour picked from
+   * the browser's own control cannot be spelled two ways, which is the whole
+   * point of giving the field a kind.
+   */
+  const valueInputType = (pole?: MailingPole): 'text' | 'date' | 'time' => {
+    if (pole?.typWartosci === 'data') return 'date';
+    if (pole?.typWartosci === 'godzina') return 'time';
+    return 'text';
+  };
 
   /** Ticked fields still waiting for a value — a row with an empty cell. */
   const tableFieldsWithoutValue = useMemo(
@@ -343,11 +386,57 @@ const Mailing: React.FC<Props> = ({
 
   const attachPdf = draft.attachPdf ?? template?.attachPdf ?? false;
 
-  /** Preview rendered against the first selected community, as it will be sent. */
+  /**
+   * Recipient the preview is showing. Resolved from the list rather than trusted
+   * as stored, so an id left behind by a removed recipient quietly becomes the
+   * first one instead of previewing a community that is no longer being mailed.
+   */
+  const previewAdres = useMemo(
+    () => selectedAdresy.find((a) => a.id === previewAdresId) ?? selectedAdresy[0] ?? null,
+    [selectedAdresy, previewAdresId],
+  );
+
+  const previewIndex = previewAdres ? selectedAdresy.findIndex((a) => a.id === previewAdres.id) : -1;
+  const previewJednostka = previewAdres ? jednostkaFor(previewAdres) : undefined;
+
+  /** The recipients, as the preview picker's options — mailbox on the second line. */
+  const previewOptions = useMemo<SearchableOption[]>(
+    () =>
+      selectedAdresy.map((a) => {
+        const jednostka = jednostkaFor(a);
+        return {
+          value: String(a.id),
+          label: a.nazwa,
+          hint: jednostka ? `${jednostka.nazwa} — ${jednostka.email}` : t.mailingNoUnitForAddress,
+          keywords: (a.alternativeNames ?? []).join(' '),
+        };
+      }),
+    [selectedAdresy, jednostki, t.mailingNoUnitForAddress],
+  );
+
+  /**
+   * Walk the recipient list. Wraps around: flipping through a dozen letters is
+   * the point of the arrows, and a button that dead-ends at the last one reads as
+   * broken.
+   */
+  const stepPreview = (delta: number) => {
+    if (selectedAdresy.length === 0) return;
+    const from = previewIndex < 0 ? 0 : previewIndex;
+    const next = (from + delta + selectedAdresy.length) % selectedAdresy.length;
+    setPreviewAdresId(selectedAdresy[next].id);
+  };
+
+  /** Preview a recipient picked from the list above, and bring the preview along. */
+  const showPreviewFor = (id: number) => {
+    setPreviewAdresId(id);
+    previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  /** Preview rendered against the chosen community, exactly as it will be sent. */
   const preview = useMemo(() => {
     if (!template) return null;
     const ctx = {
-      adresNazwa: selectedAdresy[0]?.nazwa ?? t.mailingPreviewNoAddress,
+      adresNazwa: previewAdres?.nazwa ?? t.mailingPreviewNoAddress,
       dateText: formatPolishDate(new Date()),
       pola,
       values: draft.values,
@@ -364,7 +453,7 @@ const Mailing: React.FC<Props> = ({
     template,
     draft.temat,
     draft.tresc,
-    selectedAdresy,
+    previewAdres,
     pola,
     draft.values,
     tableFieldNames,
@@ -446,6 +535,18 @@ const Mailing: React.FC<Props> = ({
       }
       const sent = response.results ?? [];
       setResults(sent);
+      // Wysłane wspólnoty schodzą z listy adresatów: kolejny mailing startuje z
+      // czystą listą, a nieudane zostają zaznaczone, żeby dało się je ponowić
+      // bez szukania ich od nowa.
+      const deliveredIds = new Set(
+        sent.filter((r) => r.status === 'success').map((r) => r.adresId),
+      );
+      if (deliveredIds.size > 0) {
+        setDraft((prev) => ({
+          ...prev,
+          adresIds: prev.adresIds.filter((id) => !deliveredIds.has(id)),
+        }));
+      }
       const failed = sent.filter((r) => r.status === 'error').length;
       if (failed === 0) {
         notify.success(t.mailingSendSuccess.replace('{count}', String(sent.length)));
@@ -528,125 +629,6 @@ const Mailing: React.FC<Props> = ({
           )}
         </div>
       </div>
-
-      {fieldsToFill.length > 0 && (
-        <div className="card">
-          <h2 style={{ marginBottom: '8px' }}>{t.mailingValuesTitle}</h2>
-          <div style={{ fontSize: '13px', opacity: 0.75, marginBottom: '16px', maxWidth: '80ch' }}>
-            {t.mailingValuesHint}
-          </div>
-          {fieldsToFill.map(({ name, pole }) => (
-            <div className="form-group" key={name}>
-              <label>{pole?.nazwa ?? name}</label>
-              {pole?.tekst && (
-                <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '6px' }}>
-                  „{pole.tekst}”
-                </div>
-              )}
-              {!pole && (
-                <div style={{ fontSize: '12px', color: 'var(--danger)', marginBottom: '6px' }}>
-                  {t.mailingUnknownFieldInTemplate.replace('{field}', fieldPlaceholder(name))}
-                </div>
-              )}
-              <input
-                type="text"
-                value={draft.values[name] ?? readFieldValue(draft.values, name)}
-                onChange={(e) => setFieldValue(name, e.target.value)}
-                placeholder={t.mailingValuePlaceholder}
-              />
-            </div>
-          ))}
-        </div>
-      )}
-
-      {usesFieldTable && (
-        <div className="card">
-          <h2 style={{ marginBottom: '8px' }}>{t.mailingFieldTableTitle}</h2>
-          <div style={{ fontSize: '13px', opacity: 0.75, marginBottom: '16px', maxWidth: '80ch' }}>
-            {t.mailingFieldTableHint}
-          </div>
-
-          {tableFieldPool.length > 0 ? (
-            <>
-              <table>
-                <thead>
-                  <tr>
-                    <th style={{ width: '52px' }}>{t.mailingFieldTableInTable}</th>
-                    <th>{t.mailingFieldTableRowLabel}</th>
-                    <th style={{ width: '32%' }}>{t.mailingFieldValue}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tableFieldPool.map((p) => {
-                    const checked = tableFieldNames.some(
-                      (name) => normalizeFieldName(name) === normalizeFieldName(p.nazwa),
-                    );
-                    return (
-                      <tr key={p.id}>
-                        <td>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => toggleTableField(p.nazwa, e.target.checked)}
-                            aria-label={p.nazwa}
-                          />
-                        </td>
-                        <td>
-                          <div>{p.tekst || p.nazwa}</div>
-                          {p.tekst && (
-                            <div style={{ fontSize: '12px', opacity: 0.6 }}>{p.nazwa}</div>
-                          )}
-                        </td>
-                        <td>
-                          <input
-                            type="text"
-                            // Always editable — typing here ticks the box, which is
-                            // one gesture instead of two for the common case.
-                            value={draft.values[p.nazwa] ?? readFieldValue(draft.values, p.nazwa)}
-                            onChange={(e) => setTableFieldValue(p.nazwa, e.target.value)}
-                            placeholder={t.mailingValuePlaceholder}
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-
-              <div style={{ fontSize: '13px', opacity: 0.8, marginTop: '12px' }}>
-                {t.mailingFieldTableRowCount
-                  .replace('{count}', String(tableFieldNames.length))
-                  .replace('{total}', String(tableFieldPool.length))}
-              </div>
-              {tableFieldNames.length === 0 && (
-                <div style={{ fontSize: '12px', opacity: 0.75, marginTop: '6px' }}>
-                  <Icon name="info" size={13} /> {t.mailingFieldTableEmptyNote}
-                </div>
-              )}
-              {tableFieldsWithoutValue.length > 0 && (
-                <div style={{ fontSize: '12px', color: 'var(--accent)', marginTop: '6px' }}>
-                  <Icon name="alert-triangle" size={13} />{' '}
-                  {t.mailingFieldTableMissingValues.replace(
-                    '{names}',
-                    tableFieldsWithoutValue.join(', '),
-                  )}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="empty-state">
-              <div>{t.mailingFieldTableNoPool}</div>
-              <button
-                className="button button-primary button-small"
-                style={{ marginTop: '10px' }}
-                onClick={onNavigateToTemplates}
-              >
-                {t.mailingFieldTableGoToTemplate}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
 
       <div className="card">
         <div
@@ -733,10 +715,15 @@ const Mailing: React.FC<Props> = ({
           <div>
             {selectedAdresy.map((adres) => {
               const jednostka = jednostkaFor(adres);
+              const previewing = previewAdres?.id === adres.id;
               return (
                 <div
                   key={adres.id}
-                  className={`mailing-recipient${!jednostka ? ' mailing-recipient--missing' : ''}`}
+                  className={
+                    'mailing-recipient' +
+                    (!jednostka ? ' mailing-recipient--missing' : '') +
+                    (previewing ? ' mailing-recipient--previewing' : '')
+                  }
                 >
                   <span className="mailing-recipient__name">{adres.nazwa}</span>
                   <div className="mailing-recipient__unit">
@@ -749,6 +736,20 @@ const Mailing: React.FC<Props> = ({
                       <span style={{ color: 'var(--danger)' }}>{t.mailingNoUnitForAddress}</span>
                     )}
                   </div>
+                  {/* Straight from the list to that community's own letter — the
+                      picker in the preview card does the same, this is the shortcut
+                      for the row you are already looking at. */}
+                  {template && (
+                    <button
+                      type="button"
+                      className="button button-small button-ghost button-icon"
+                      onClick={() => showPreviewFor(adres.id)}
+                      title={t.mailingPreviewThis}
+                      aria-label={t.mailingPreviewThis}
+                    >
+                      <Icon name="eye" size={14} />
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="alternative-name-remove"
@@ -764,6 +765,298 @@ const Mailing: React.FC<Props> = ({
           </div>
         )}
       </div>
+
+      {fieldsToFill.length > 0 && (
+        <div className="card">
+          <h2 style={{ marginBottom: '8px' }}>{t.mailingValuesTitle}</h2>
+          <div style={{ fontSize: '13px', opacity: 0.75, marginBottom: '16px', maxWidth: '80ch' }}>
+            {t.mailingValuesHint}
+          </div>
+          {fieldsToFill.map(({ name, pole }) => (
+            <div className="form-group" key={name}>
+              <label>{pole?.nazwa ?? name}</label>
+              {pole?.tekst && (
+                <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '6px' }}>
+                  „{pole.tekst}”
+                </div>
+              )}
+              {!pole && (
+                <div style={{ fontSize: '12px', color: 'var(--danger)', marginBottom: '6px' }}>
+                  {t.mailingUnknownFieldInTemplate.replace('{field}', fieldPlaceholder(name))}
+                </div>
+              )}
+              {/* The unit sits beside the box rather than in it: it is part of
+                  what the letter will say, but not part of what you type. */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type={valueInputType(pole)}
+                  value={draft.values[name] ?? readFieldValue(draft.values, name)}
+                  onChange={(e) => setFieldValue(name, e.target.value)}
+                  placeholder={t.mailingValuePlaceholder}
+                  // A picker is a fixed-width control; only free text wants the
+                  // full row. `pole` is absent for an unknown field — text.
+                  style={valueInputType(pole) !== 'text' ? { maxWidth: '220px' } : undefined}
+                />
+                {pole?.jednostka && (
+                  <span style={{ fontSize: '13px', opacity: 0.75, whiteSpace: 'nowrap' }}>
+                    {pole.jednostka}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {usesFieldTable && (
+        <div className="card">
+          <h2 style={{ marginBottom: '8px' }}>{t.mailingFieldTableTitle}</h2>
+          <div style={{ fontSize: '13px', opacity: 0.75, marginBottom: '16px', maxWidth: '80ch' }}>
+            {t.mailingFieldTableHint}
+          </div>
+
+          {tableFieldPool.length > 0 ? (
+            <>
+              <table>
+                <thead>
+                  <tr>
+                    <th style={{ width: '52px' }}>{t.mailingFieldTableInTable}</th>
+                    <th>{t.mailingFieldTableRowLabel}</th>
+                    <th style={{ width: '32%' }}>{t.mailingFieldValue}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tableFieldPool.map((p) => {
+                    const checked = tableFieldNames.some(
+                      (name) => normalizeFieldName(name) === normalizeFieldName(p.nazwa),
+                    );
+                    return (
+                      <tr key={p.id}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => toggleTableField(p.nazwa, e.target.checked)}
+                            aria-label={p.nazwa}
+                          />
+                        </td>
+                        <td>
+                          <div>{p.tekst || p.nazwa}</div>
+                          {p.tekst && (
+                            <div style={{ fontSize: '12px', opacity: 0.6 }}>{p.nazwa}</div>
+                          )}
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type={valueInputType(p)}
+                              // Always editable — typing here ticks the box, which is
+                              // one gesture instead of two for the common case.
+                              value={draft.values[p.nazwa] ?? readFieldValue(draft.values, p.nazwa)}
+                              onChange={(e) => setTableFieldValue(p.nazwa, e.target.value)}
+                              placeholder={t.mailingValuePlaceholder}
+                            />
+                            {p.jednostka && (
+                              <span style={{ fontSize: '13px', opacity: 0.75, whiteSpace: 'nowrap' }}>
+                                {p.jednostka}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              <div style={{ fontSize: '13px', opacity: 0.8, marginTop: '12px' }}>
+                {t.mailingFieldTableRowCount
+                  .replace('{count}', String(tableFieldNames.length))
+                  .replace('{total}', String(tableFieldPool.length))}
+              </div>
+              {tableFieldNames.length === 0 && (
+                <div style={{ fontSize: '12px', opacity: 0.75, marginTop: '6px' }}>
+                  <Icon name="info" size={13} /> {t.mailingFieldTableEmptyNote}
+                </div>
+              )}
+              {tableFieldsWithoutValue.length > 0 && (
+                <div style={{ fontSize: '12px', color: 'var(--accent)', marginTop: '6px' }}>
+                  <Icon name="alert-triangle" size={13} />{' '}
+                  {t.mailingFieldTableMissingValues.replace(
+                    '{names}',
+                    tableFieldsWithoutValue.join(', '),
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="empty-state">
+              <div>{t.mailingFieldTableNoPool}</div>
+              <button
+                className="button button-primary button-small"
+                style={{ marginTop: '10px' }}
+                onClick={onNavigateToTemplates}
+              >
+                {t.mailingFieldTableGoToTemplate}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {preview && (
+        <div className="card" ref={previewRef}>
+          <h2 style={{ marginBottom: '8px' }}>{t.mailingPreviewTitle}</h2>
+          <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '12px' }}>
+            {t.mailingPreviewHint}
+          </div>
+
+          {selectedAdresy.length > 0 ? (
+            <div className="mailing-preview-picker">
+              <span className="mailing-preview-picker__label">{t.mailingPreviewPickAddress}</span>
+              <SearchableSelect
+                value={previewAdres ? String(previewAdres.id) : ''}
+                options={previewOptions}
+                onChange={(v) => setPreviewAdresId(Number(v))}
+                searchPlaceholder={t.mailingPreviewSearchAddress}
+                emptyText={t.mailingNoMatchingAddress}
+                size="sm"
+                ariaLabel={t.mailingPreviewPickAddress}
+                style={{ flex: '1 1 300px', maxWidth: '420px' }}
+              />
+              {selectedAdresy.length > 1 && (
+                <div className="mailing-preview-nav">
+                  <button
+                    type="button"
+                    className="button button-small button-secondary button-icon"
+                    onClick={() => stepPreview(-1)}
+                    title={t.mailingPreviewPrev}
+                    aria-label={t.mailingPreviewPrev}
+                  >
+                    <Icon name="chevron-left" size={14} />
+                  </button>
+                  <span className="mailing-preview-nav__count">
+                    {t.mailingPreviewPosition
+                      .replace('{index}', String(previewIndex + 1))
+                      .replace('{total}', String(selectedAdresy.length))}
+                  </span>
+                  <button
+                    type="button"
+                    className="button button-small button-secondary button-icon"
+                    onClick={() => stepPreview(1)}
+                    title={t.mailingPreviewNext}
+                    aria-label={t.mailingPreviewNext}
+                  >
+                    <Icon name="chevron-right" size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: '12px', opacity: 0.75, marginBottom: '12px', maxWidth: '80ch' }}>
+              <Icon name="info" size={13} />{' '}
+              {t.mailingPreviewNoAddressNote.replace('{placeholder}', t.mailingPreviewNoAddress)}
+            </div>
+          )}
+
+          {/* The mailbox belongs in the preview: the letter names the community,
+              but it is delivered to that community's city unit — a mismatch there
+              is exactly what proofreading per recipient is for. */}
+          {previewAdres && (
+            <div className="mailing-preview-recipient">
+              {previewJednostka ? (
+                <>
+                  <Icon name="mail" size={13} />{' '}
+                  {t.mailingPreviewRecipient.replace('{email}', previewJednostka.email)}
+                </>
+              ) : (
+                <span style={{ color: 'var(--danger)' }}>
+                  <Icon name="alert-triangle" size={13} /> {t.mailingNoUnitForAddress}
+                </span>
+              )}
+            </div>
+          )}
+
+          <div className="form-group">
+            <label>{t.mailingSubject}</label>
+            <div style={{ fontSize: '14px', fontWeight: 500 }}>{preview.subject || '—'}</div>
+          </div>
+          <div
+            className="mailing-preview"
+            // Content is the user's own template, rendered with escaped field
+            // values — the same string that becomes the mail body and the PDF.
+            dangerouslySetInnerHTML={{ __html: preview.html }}
+          />
+        </div>
+      )}
+
+      {template && (
+        <div className="card">
+          {/* Most sends go out on the template's own wording, so the body starts
+              folded — a one-line reminder instead of a wall of text. */}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'flex-start',
+              gap: '12px',
+            }}
+          >
+            <h2 style={{ margin: 0 }}>
+              <button
+                type="button"
+                className="card-collapse-toggle"
+                onClick={() => setMessageOpen((open) => !open)}
+                aria-expanded={messageOpen}
+              >
+                <Icon name={messageOpen ? 'chevron-down' : 'chevron-right'} size={16} />
+                {t.mailingMessageTitle}
+              </button>
+            </h2>
+            {draft.edited && (
+              <button className="button button-secondary" onClick={resetToTemplate}>
+                <Icon name="refresh" size={14} /> {t.mailingResetToTemplate}
+              </button>
+            )}
+          </div>
+
+          {/* Visible folded too: knowing this send no longer matches the template
+              is exactly what would make you unfold the card. */}
+          {draft.edited && (
+            <div
+              style={{
+                fontSize: '12px',
+                color: 'var(--accent)',
+                marginTop: '10px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <Icon name="edit" size={14} /> {t.mailingEditedNotice}
+            </div>
+          )}
+
+          {messageOpen && (
+            <>
+              <div
+                style={{ fontSize: '13px', opacity: 0.75, maxWidth: '80ch', margin: '10px 0 15px' }}
+              >
+                {t.mailingMessageHint}
+              </div>
+
+              <MailingComposer
+                language={language}
+                temat={draft.temat}
+                tresc={draft.tresc}
+                pola={pola}
+                bodyNote={t.mailingMessageBodyNote}
+                onChange={(patch) => setDraft((prev) => ({ ...prev, ...patch, edited: true }))}
+              />
+            </>
+          )}
+        </div>
+      )}
 
       <div className="card">
         <h2 style={{ marginBottom: '15px' }}>{t.mailingAttachmentsTitle}</h2>
@@ -822,77 +1115,6 @@ const Mailing: React.FC<Props> = ({
           </button>
         </div>
       </div>
-
-      {template && (
-        <div className="card">
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-start',
-              gap: '12px',
-              marginBottom: '15px',
-            }}
-          >
-            <div>
-              <h2 style={{ margin: '0 0 8px' }}>{t.mailingMessageTitle}</h2>
-              <div style={{ fontSize: '13px', opacity: 0.75, maxWidth: '80ch' }}>
-                {t.mailingMessageHint}
-              </div>
-            </div>
-            {draft.edited && (
-              <button className="button button-secondary" onClick={resetToTemplate}>
-                <Icon name="refresh" size={14} /> {t.mailingResetToTemplate}
-              </button>
-            )}
-          </div>
-
-          {draft.edited && (
-            <div
-              style={{
-                fontSize: '12px',
-                color: 'var(--accent)',
-                marginBottom: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
-            >
-              <Icon name="edit" size={14} /> {t.mailingEditedNotice}
-            </div>
-          )}
-
-          <MailingComposer
-            language={language}
-            temat={draft.temat}
-            tresc={draft.tresc}
-            pola={pola}
-            bodyNote={t.mailingMessageBodyNote}
-            onChange={(patch) => setDraft((prev) => ({ ...prev, ...patch, edited: true }))}
-          />
-        </div>
-      )}
-
-      {preview && (
-        <div className="card">
-          <h2 style={{ marginBottom: '8px' }}>{t.mailingPreviewTitle}</h2>
-          <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '12px' }}>
-            {selectedAdresy.length > 1
-              ? t.mailingPreviewForFirst.replace('{name}', selectedAdresy[0].nazwa)
-              : t.mailingPreviewHint}
-          </div>
-          <div className="form-group">
-            <label>{t.mailingSubject}</label>
-            <div style={{ fontSize: '14px', fontWeight: 500 }}>{preview.subject || '—'}</div>
-          </div>
-          <div
-            className="mailing-preview"
-            // Content is the user's own template, rendered with escaped field
-            // values — the same string that becomes the mail body and the PDF.
-            dangerouslySetInnerHTML={{ __html: preview.html }}
-          />
-        </div>
-      )}
 
       <div className="card">
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>

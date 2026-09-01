@@ -1,6 +1,6 @@
 // Type definitions for Electron API exposed via preload
 
-import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, MailingPole, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent } from '../shared/types';
+import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent } from '../shared/types';
 
 // Zaliczki shared types (referenced by the main-process helpers)
 export type ZaliczkiCategory =
@@ -364,8 +364,19 @@ interface ElectronAPI {
 
   // Mailing — pola dynamiczne
   mailingGetPola: () => Promise<MailingPole[]>;
-  mailingAddPole: (nazwa: string, tekst: string) => Promise<MailingPole>;
-  mailingUpdatePole: (id: number, nazwa: string, tekst: string) => Promise<boolean>;
+  mailingAddPole: (
+    nazwa: string,
+    tekst: string,
+    jednostka: string,
+    typWartosci: MailingPoleTyp,
+  ) => Promise<MailingPole>;
+  mailingUpdatePole: (
+    id: number,
+    nazwa: string,
+    tekst: string,
+    jednostka: string,
+    typWartosci: MailingPoleTyp,
+  ) => Promise<boolean>;
   mailingDeletePole: (id: number) => Promise<boolean>;
 
   // Mailing — szablony

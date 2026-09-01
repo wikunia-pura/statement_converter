@@ -412,6 +412,29 @@ body.dark-mode .nav-item.active {
   margin-bottom: var(--s-4);
 }
 
+/* Card heading that folds its own card away. Sits inside the h2 so the heading
+   keeps its outline semantics while the whole title stays a click target. */
+.card-collapse-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.card-collapse-toggle:hover { color: var(--accent); }
+
+.card-collapse-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: var(--r-sm);
+}
+
 /* Divider between sections inside a single card (e.g. drop zone ↔ file list). */
 .card-separator {
   border: none;
@@ -712,6 +735,135 @@ body.dark-mode .nav-item.active {
   color: var(--text-secondary);
 }
 
+/* ==========================================================================
+   Apartment rule — repeatable apartment rows (ApartmentTargetsEditor)
+   One rule may point at several apartments of the same payer; each row is an
+   apartment plus, optionally, the account it must be booked to.
+   ========================================================================== */
+
+.apt-targets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.apt-targets__row {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) minmax(150px, 2fr) auto;
+  gap: var(--s-2);
+  align-items: start;
+}
+
+.apt-targets__label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.apt-targets__remove {
+  padding: 8px 10px;
+}
+
+/* ==========================================================================
+   Apartment rule — picking one of the rule's apartments during acceptance
+   ========================================================================== */
+
+.mapping-choice {
+  margin-bottom: 15px;
+  padding: 12px 16px;
+  border: 2px solid var(--info);
+  border-radius: 6px;
+  background: var(--info-bg);
+}
+
+.mapping-choice--resolved {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+
+.mapping-choice__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--info);
+}
+
+.mapping-choice--resolved .mapping-choice__label {
+  color: var(--accent);
+}
+
+.mapping-choice__hint {
+  margin-bottom: 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.mapping-choice__options {
+  display: flex;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+
+.mapping-choice__option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 12px;
+  min-width: 120px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.mapping-choice__option:hover:not(:disabled) {
+  border-color: var(--info);
+}
+
+.mapping-choice__option:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.mapping-choice__option.is-selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.mapping-choice__number {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.mapping-choice__account {
+  font-family: monospace;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.mapping-choice__footer {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 .review-card__status {
   margin-top: var(--s-4);
   padding: 8px 10px;
@@ -751,6 +903,8 @@ input[type='text'],
 input[type='number'],
 input[type='email'],
 input[type='password'],
+input[type='date'],
+input[type='time'],
 textarea,
 select {
   width: 100%;
@@ -766,6 +920,8 @@ select {
 
 input[type='text']:hover,
 input[type='number']:hover,
+input[type='date']:hover,
+input[type='time']:hover,
 select:hover {
   border-color: var(--text-tertiary);
 }
@@ -774,6 +930,8 @@ input[type='text']:focus,
 input[type='number']:focus,
 input[type='email']:focus,
 input[type='password']:focus,
+input[type='date']:focus,
+input[type='time']:focus,
 textarea:focus,
 select:focus {
   outline: none;
@@ -790,6 +948,14 @@ select {
   background-position: right 12px center;
   background-size: 12px;
   cursor: pointer;
+}
+
+/* The calendar / clock button inside these inputs is browser chrome, not our
+   markup — `color-scheme` is the only handle on it, and without it the glyph
+   stays dark on a dark surface. */
+body.dark-mode input[type='date'],
+body.dark-mode input[type='time'] {
+  color-scheme: dark;
 }
 
 body.dark-mode select {
@@ -3320,6 +3486,146 @@ body.dark-mode .rte-content th {
   background-color: var(--bg-surface-hover) !important;
 }
 
+/* --- Dynamic fields as pills -------------------------------------------
+   A placeholder is stored as `{{Nazwa}}`, but braces are a poor thing to edit:
+   one stray keystroke breaks them, and a body full of them stops reading as a
+   letter. Both mailing editors render them as non-editable pills instead
+   (components/fieldChips.tsx) and convert back on the way out, so nothing but
+   the editor ever sees a pill. */
+.ff-chip {
+  display: inline-flex;
+  align-items: baseline;
+  padding: 1px 8px;
+  border: 1px solid var(--accent-border);
+  border-radius: var(--r-pill);
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  /* The pill is one atom in the text flow: the caret never lands inside it and
+     Backspace takes the whole placeholder. */
+  vertical-align: baseline;
+  /* Two pills side by side otherwise touch, and the position between them — the
+     one a comma or a space goes into — has no width to be clicked on. */
+  margin: 0 1px;
+}
+
+.ff-chip:hover {
+  border-color: var(--accent);
+}
+
+/* Which half of the field this pill places — absent for the whole field, which
+   is both the default and the common case. */
+.ff-chip__part {
+  margin-left: 6px;
+  padding-left: 6px;
+  border-left: 1px solid var(--accent-border);
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+/* A placeholder naming no defined field. It is left in the sent text verbatim,
+   so it has to look wrong here rather than only in the warning below the form. */
+.ff-chip--unknown {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+/* Built-ins substitute themselves and have no halves to switch between. */
+.ff-chip--builtin {
+  cursor: default;
+}
+
+/* --- Insert control: which half, then which field ----------------------- */
+.ff-insert {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+
+.ff-insert__label {
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+}
+
+.ff-part-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--bg-surface);
+}
+
+.ff-part-toggle__item {
+  padding: 4px 9px;
+  border: none;
+  border-left: 1px solid var(--border-subtle);
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.ff-part-toggle__item:first-child {
+  border-left: none;
+}
+
+.ff-part-toggle__item:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface-hover);
+}
+
+.ff-part-toggle__item.is-active {
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* --- Subject line ------------------------------------------------------
+   A contentEditable, because a text input can only hold characters and the
+   subject carries pills too. It has to be indistinguishable from the app's
+   inputs, so the border, padding and focus ring are the same tokens. */
+.chip-input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--fs-base);
+  line-height: 1.55;
+  outline: none;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+  /* One logical line, but a long subject still wraps instead of scrolling out
+     of sight — Enter is refused by the editor, so no block can appear here. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chip-input:hover {
+  border-color: var(--text-tertiary);
+}
+
+.chip-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.chip-input[data-placeholder]:not([data-placeholder=''])::before {
+  content: attr(data-placeholder);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
 /* Second toolbar row, shown only while the caret sits in a table. */
 .rte-toolbar--table {
   gap: 6px;
@@ -3384,8 +3690,49 @@ body.dark-mode .rte-content th {
 }
 
 .mailing-recipient--missing { border-color: var(--danger); }
+/* The row whose letter the preview below is showing — the list and the preview
+   have to agree on that at a glance, or clicking through a dozen recipients
+   loses track of which one is on screen. */
+.mailing-recipient--previewing {
+  border-color: var(--accent);
+  background: var(--bg-surface-hover);
+}
 .mailing-recipient__name { flex: 1 1 auto; font-weight: 500; }
 .mailing-recipient__unit { font-size: 12px; color: var(--text-tertiary); text-align: right; }
+
+/* Picker above the preview: which recipient's letter is being read. Wraps on a
+   narrow window so the arrows drop under the dropdown rather than squeezing it. */
+.mailing-preview-picker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.mailing-preview-picker__label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.mailing-preview-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mailing-preview-nav__count {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  min-width: 56px;
+  text-align: center;
+}
+
+.mailing-preview-recipient {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-bottom: 12px;
+}
 
 /* Live preview of the rendered mail. No padding and no background of its own —
    the mail shell inside paints the page tint and the card, so the container is
@@ -3395,7 +3742,7 @@ body.dark-mode .rte-content th {
   border-radius: 8px;
   padding: 0;
   overflow: hidden auto;
-  max-height: 460px;
+  max-height: 598px;
   /* The mail is a light document regardless of the app's theme; a dark-mode
      inversion here would misrepresent what the recipient sees. */
   color-scheme: light;

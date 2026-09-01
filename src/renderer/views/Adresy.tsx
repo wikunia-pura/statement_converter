@@ -3,7 +3,13 @@ import { Adres, Bank, ApartmentMapping, KontoTyp, ZgnJednostka } from '../../sha
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import { normalizeAccount } from '../../shared/account-extractor';
-import { isAccountSymbol, isLetteredApartment } from '../../shared/apartment-account';
+import { buildApartmentMapping, mappingTargets } from '../../shared/apartment-mapping';
+import ApartmentTargetsEditor, {
+  ApartmentTargetDraft,
+  apartmentTargetDrafts,
+  apartmentTargetsFromDrafts,
+  validateApartmentTargets,
+} from '../components/ApartmentTargetsEditor';
 import Icon from '../components/Icon';
 import Loader from '../components/Loader';
 import ModalDismiss from '../components/Modal';
@@ -333,15 +339,15 @@ const ApartmentMappingFormModal: React.FC<ApartmentMappingFormModalProps> = ({
 }) => {
   const t = translations[language];
   const [matchText, setMatchText] = useState(editing?.matchText || '');
-  const [apartmentNumber, setApartmentNumber] = useState(editing?.apartmentNumber || '');
-  const [kontoLokalu, setKontoLokalu] = useState(editing?.kontoLokalu || '');
+  const [targets, setTargets] = useState<ApartmentTargetDraft[]>(
+    apartmentTargetDrafts(editing ? mappingTargets(editing) : []),
+  );
   const [note, setNote] = useState(editing?.note || '');
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = () => {
     const mt = matchText.trim();
-    const apt = apartmentNumber.trim();
-    if (!mt || !apt) {
+    if (!mt) {
       setError(t.fillAllFields);
       return;
     }
@@ -352,29 +358,25 @@ const ApartmentMappingFormModal: React.FC<ApartmentMappingFormModalProps> = ({
       setError(t.apartmentMappingDuplicate);
       return;
     }
-    const konto = kontoLokalu.trim();
-    if (konto && !isAccountSymbol(konto)) {
-      setError(t.apartmentMappingAccountInvalid);
+    const targetsError = validateApartmentTargets(targets, language);
+    if (targetsError) {
+      setError(targetsError);
       return;
     }
-    // Without a symbol a lettered apartment stays unbookable, so the rule would
-    // send this payer back to the acceptance screen every single month.
-    if (!konto && isLetteredApartment(apt)) {
-      setError(t.apartmentMappingAccountRequired);
+    const mapping = buildApartmentMapping(
+      { id: editing?.id || newMappingId(), matchText: mt, note },
+      apartmentTargetsFromDrafts(targets),
+    );
+    if (!mapping) {
+      setError(t.fillAllFields);
       return;
     }
-    onSubmit({
-      id: editing?.id || newMappingId(),
-      matchText: mt,
-      apartmentNumber: apt,
-      ...(konto ? { kontoLokalu: konto } : {}),
-      ...(note.trim() ? { note: note.trim() } : {}),
-    });
+    onSubmit(mapping);
   };
 
   return (
     <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); onCancel(); }} style={{ zIndex: 1100 }}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 620 }}>
         <ModalDismiss onClose={onCancel} />
         <div className="modal-header">
           {editing ? t.edit : t.addApartmentMapping}
@@ -391,26 +393,16 @@ const ApartmentMappingFormModal: React.FC<ApartmentMappingFormModalProps> = ({
             />
           </div>
           <div className="form-group">
-            <label>{t.apartmentMappingApartment} <span style={{ color: 'red' }}>*</span></label>
-            <input
-              type="text"
-              value={apartmentNumber}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setApartmentNumber(e.target.value); if (error) setError(null); }}
-              placeholder={t.apartmentMappingApartmentPlaceholder}
+            <label>{t.apartmentMappingApartments} <span style={{ color: 'red' }}>*</span></label>
+            <ApartmentTargetsEditor
+              language={language}
+              drafts={targets}
+              onChange={(next) => { setTargets(next); if (error) setError(null); }}
+              accountPlaceholder={t.apartmentMappingAccountPlaceholder}
             />
-          </div>
-          <div className="form-group">
-            <label>
-              {t.apartmentMappingAccount}
-              {isLetteredApartment(apartmentNumber.trim()) && <span style={{ color: 'red' }}> *</span>}
-            </label>
-            <input
-              type="text"
-              value={kontoLokalu}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setKontoLokalu(e.target.value); if (error) setError(null); }}
-              placeholder={t.apartmentMappingAccountPlaceholder}
-              style={{ fontFamily: 'monospace' }}
-            />
+            <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '8px' }}>
+              {t.apartmentMappingApartmentsHint}
+            </div>
             <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '4px' }}>
               {t.apartmentMappingAccountHint}
             </div>
@@ -435,7 +427,7 @@ const ApartmentMappingFormModal: React.FC<ApartmentMappingFormModalProps> = ({
           <button
             className="button button-success"
             onClick={handleSubmit}
-            disabled={isSaving || !matchText.trim() || !apartmentNumber.trim()}
+            disabled={isSaving || !matchText.trim() || apartmentTargetsFromDrafts(targets).length === 0}
           >
             <Icon name="save" size={14} />{' '}{editing ? t.update : t.add}
           </button>
@@ -511,7 +503,13 @@ const ApartmentMappingsModal: React.FC<ApartmentMappingsModalProps> = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
+      {/* Wider than the usual modal: a match phrase is a whole payer name plus their
+          address, and squeezed into 640px it breaks mid-word into an unreadable column. */}
+      <div
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: 'min(1180px, calc(100vw - 48px))', maxWidth: 'none' }}
+      >
         <ModalDismiss onClose={onClose} />
         <div className="modal-header">
           {t.apartmentMappingsTitle} — {adres.nazwa}
@@ -535,45 +533,72 @@ const ApartmentMappingsModal: React.FC<ApartmentMappingsModalProps> = ({
           )}
 
           {mappings.length > 0 ? (
-            <table>
-              <thead>
-                <tr>
-                  <th>{t.apartmentMappingMatchText}</th>
-                  <th>{t.apartmentMappingApartment}</th>
-                  <th>{t.apartmentMappingAccount}</th>
-                  <th>{t.apartmentMappingNote}</th>
-                  <th>{t.actions}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mappings.map((m) => (
-                  <tr key={m.id}>
-                    <td style={{ wordBreak: 'break-word' }}>{m.matchText}</td>
-                    <td style={{ fontWeight: 600 }}>{m.apartmentNumber}</td>
-                    <td style={{ fontFamily: 'monospace' }}>{m.kontoLokalu || '—'}</td>
-                    <td style={{ wordBreak: 'break-word', opacity: 0.8 }}>{m.note || '—'}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button
-                          className="button button-small button-primary"
-                          onClick={() => setFormState({ editing: m })}
-                          disabled={isSaving}
-                        ><Icon name="edit" size={13} />{' '}
-                          {t.edit}
-                        </button>
-                        <button
-                          className="button button-small button-danger"
-                          onClick={() => handleDelete(m.id)}
-                          disabled={isSaving}
-                        ><Icon name="trash" size={13} />{' '}
-                          {t.delete}
-                        </button>
-                      </div>
-                    </td>
+            /* Fixed layout with a budget per column: the short columns keep just what
+               they need and the phrase takes every remaining pixel. Below the table's
+               min width the wrapper scrolls instead of clipping the action buttons. */
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ tableLayout: 'fixed', minWidth: 820 }}>
+                <colgroup>
+                  <col />
+                  <col style={{ width: '96px' }} />
+                  <col style={{ width: '140px' }} />
+                  <col style={{ width: '180px' }} />
+                  <col style={{ width: '200px' }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>{t.apartmentMappingMatchText}</th>
+                    <th>{t.apartmentMappingApartments}</th>
+                    <th>{t.apartmentMappingAccount}</th>
+                    <th>{t.apartmentMappingNote}</th>
+                    <th>{t.actions}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {mappings.map((m) => {
+                    // One line per apartment in both columns, so a rule's apartment
+                    // and its account stay on the same line of the same row.
+                    const targets = mappingTargets(m);
+                    return (
+                    <tr key={m.id}>
+                      <td style={{ overflowWrap: 'anywhere' }}>{m.matchText}</td>
+                      <td style={{ fontWeight: 600 }}>
+                        {targets.map((target) => (
+                          <div key={target.apartmentNumber}>{target.apartmentNumber}</div>
+                        ))}
+                      </td>
+                      <td style={{ fontFamily: 'monospace', overflowWrap: 'anywhere' }}>
+                        {targets.map((target) => (
+                          <div key={target.apartmentNumber}>{target.kontoLokalu || '—'}</div>
+                        ))}
+                      </td>
+                      <td style={{ overflowWrap: 'anywhere', opacity: 0.8 }}>{m.note || '—'}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            className="button button-small button-primary"
+                            onClick={() => setFormState({ editing: m })}
+                            disabled={isSaving}
+                            style={{ whiteSpace: 'nowrap' }}
+                          ><Icon name="edit" size={13} />{' '}
+                            {t.edit}
+                          </button>
+                          <button
+                            className="button button-small button-danger"
+                            onClick={() => handleDelete(m.id)}
+                            disabled={isSaving}
+                            style={{ whiteSpace: 'nowrap' }}
+                          ><Icon name="trash" size={13} />{' '}
+                            {t.delete}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <div className="empty-state">{t.noApartmentMappings}</div>
           )}

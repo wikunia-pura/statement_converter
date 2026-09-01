@@ -1,5 +1,10 @@
 /**
- * Regression harness for lettered apartment numbers (17A vs 17).
+ * Regression harness for apartment numbers the matcher can silently get wrong:
+ * a lost letter (17A vs 17), and address codes glued onto the number by a bank
+ * that writes fixed-width fields with no separator (M.202-620 vs M.2 02-620).
+ *
+ * Both land in the same place — a plausible-looking number, high confidence, no
+ * warning — so both belong to the same gate.
  *
  * The bug this guards against moved real money: a payment for apartment 17A was
  * recognized as apartment 17 with 95% confidence, so it never surfaced for review
@@ -11,7 +16,9 @@
  *
  *   1. Cases — the letter survives where it should, is *not* invented where a
  *      stray letter merely sits nearby, and a lettered apartment never resolves to
- *      an account symbol unless one was stated explicitly.
+ *      an account symbol unless one was stated explicitly. The same section covers
+ *      rules that name several apartments of one payer: those must resolve to no
+ *      apartment at all, so nothing is booked until the user picks one.
  *   2. Statement files — the whole pipeline over the real MT940 files, asserting
  *      what actually reaches k_ma in the accounting output. This is the layer that
  *      would have caught the original bug: the matcher is only half the story, the
@@ -34,6 +41,13 @@ import {
   needsExplicitAccount,
   resolveApartmentAccount,
 } from '../src/shared/apartment-account';
+import {
+  buildApartmentMapping,
+  formatApartmentMappingLine,
+  hasApartmentChoice,
+  mappingTargets,
+  parseApartmentMappingLine,
+} from '../src/shared/apartment-mapping';
 import { PKOBPMT940Parser } from '../src/converters/pko-mt940/parser';
 import { RegexExtractor } from '../src/converters/pko-mt940/regex-extractor';
 import { CsvExporter } from '../src/converters/pko-mt940/csv-exporter';
@@ -57,6 +71,8 @@ function check(name: string, actual: unknown, expected: unknown): void {
 
 const bogunki: Adres[] = [{ id: 1, nazwa: 'Bogunki 5', createdAt: '' }];
 const bachmacka: Adres[] = [{ id: 2, nazwa: 'Bachmacka 6A', createdAt: '' }];
+/** The BOŚ camt.052 community, whose payer names arrive with the postal code glued on. */
+const pulawska: Adres[] = [{ id: 4, nazwa: 'Puławska 116', createdAt: '' }];
 const withRules: Adres[] = [
   {
     id: 1,
@@ -70,6 +86,33 @@ const withRules: Adres[] = [
   },
 ];
 
+/** Rules whose phrase points at several apartments of the same payer. */
+const withMultiRules: Adres[] = [
+  {
+    id: 3,
+    nazwa: 'Bogunki 5',
+    createdAt: '',
+    apartmentMappings: [
+      {
+        id: 'm1',
+        matchText: 'MARIA WIELOLOKALOWA',
+        apartmentNumber: '25',
+        additionalApartments: [
+          { apartmentNumber: '31' },
+          { apartmentNumber: '17A', kontoLokalu: '204-00017A' },
+        ],
+      },
+      {
+        id: 'm2',
+        matchText: 'PIOTR JEDEN',
+        apartmentNumber: '12',
+        // Same apartment twice plus a blank row: still a one-apartment rule.
+        additionalApartments: [{ apartmentNumber: '12' }, { apartmentNumber: '  ' }],
+      },
+    ],
+  },
+];
+
 interface Case {
   name: string;
   addresses: Adres[];
@@ -79,6 +122,8 @@ interface Case {
   account: string | null;
   /** Whether the row must be held back for the user instead of booked silently. */
   heldBack: boolean;
+  /** Apartments the user must choose between; empty unless the rule names several. */
+  choices?: string[];
 }
 
 const CASES: Case[] = [
@@ -173,6 +218,123 @@ const CASES: Case[] = [
     account: '204-000025',
     heldBack: true, // rules always show up for acceptance
   },
+  {
+    // The multi-apartment case: the rule knows the payer, not which of her three
+    // apartments this transfer is for. Booking any of them would be a guess with
+    // somebody's money, so no number is returned and nothing is booked — the
+    // apartments come back as choices for the acceptance screen instead.
+    name: 'reguła z kilkoma lokalami nie księguje żadnego z nich',
+    addresses: withMultiRules,
+    description: 'OPLATA EKSPLOATACYJNA',
+    counterparty: 'MARIA WIELOLOKALOWA 02-692 WARSZAWA',
+    apartment: null,
+    account: null,
+    heldBack: true,
+    choices: ['25', '31', '17A'],
+  },
+  {
+    name: 'powtórzony lokal w regule to nadal jeden lokal (księguje się sam)',
+    addresses: withMultiRules,
+    description: 'CZYNSZ',
+    counterparty: 'PIOTR JEDEN',
+    apartment: '12',
+    account: '204-000012',
+    heldBack: true, // rules always show up for acceptance
+    choices: [],
+  },
+
+  // ── Address codes glued onto the apartment number ────────────────────────
+  //
+  // The bank writes name, street, postal code and city into one field of fixed
+  // width, so "M.2" and "02-620" arrive as "M.202-620". Read greedily that is
+  // apartment 202 at 95% confidence, and 8 of 10 payers in a single statement
+  // were booked to a stranger's lokal that way. The postal code's dash sits at a
+  // fixed offset, so the split back is forced, not guessed.
+  {
+    name: 'sklejony kod pocztowy: M.202-620 to lokal 2, nie 202',
+    addresses: pulawska,
+    description: 'OPŁATA ZA CZYNSZ',
+    counterparty:
+      'JOANNA WOJCIECHOWSKA  GABINET STMATOLOGICZNYUL. PUŁAWSKA 116  M.202-620 WARSZAWA',
+    apartment: '2',
+    account: '204-000002',
+    heldBack: false,
+  },
+  {
+    // The split is anchored on the dash, so it does not depend on how many
+    // apartments the building has — a three-digit lokal survives it intact.
+    name: 'sklejony kod pocztowy nie zależy od wielkości budynku (lokal 702)',
+    addresses: pulawska,
+    description: 'CZYNSZ',
+    counterparty: 'JAN WIELKI UL. PUŁAWSKA 116 M.70202-620 WARSZAWA',
+    apartment: '702',
+    account: '204-000702',
+    heldBack: false,
+  },
+  {
+    name: 'sklejony kod pocztowy po ukośniku: 116/1802-620 to lokal 18',
+    addresses: pulawska,
+    description: 'CZYNSZ',
+    counterparty: 'Krzysztof DrzewiczPuławska 116/1802-620 Warszawa',
+    apartment: '18',
+    account: '204-000018',
+    heldBack: false,
+  },
+  {
+    // Non-Warsaw code: the pattern is NN-NNN, not 0N-NNN.
+    name: 'kod pocztowy spoza Warszawy: M.8322-300 to lokal 83',
+    addresses: pulawska,
+    description: 'CZYNSZ',
+    counterparty: 'ALEKSANDRA JANECZEKUL.PCK 25 M.8322-300 KRASNYSTAW',
+    apartment: '83',
+    account: '204-000083',
+    heldBack: false,
+  },
+  {
+    // A NIP's dashes contain a false postal code ("521-332-10-09" → "21-332"),
+    // which shreds the text unless the NIP is taken out first.
+    name: 'NIP w tekście nie rozwala odczytu lokalu',
+    addresses: pulawska,
+    description: 'CZYNSZ',
+    counterparty:
+      'Wspólnota Mieszkaniowa Puławska 116|ul. Puławska 116/10 02-620 Warszawa|NIP 521-332-10-09',
+    apartment: '10',
+    account: '204-000010',
+    heldBack: false,
+  },
+  {
+    // The mirror image of the glued case: a code sitting loose behind the
+    // building number used to be read as apartment 02, i.e. lokal 2.
+    name: 'sam kod pocztowy za numerem budynku to nie lokal',
+    addresses: pulawska,
+    description: 'CZYNSZ',
+    counterparty: 'Wspólnota Mieszkaniowa||Puławska 116 02-620 Warszawa',
+    apartment: null,
+    account: null,
+    heldBack: false,
+  },
+  {
+    // Glue we cannot split: the number runs into a word. Held back rather than
+    // booked — the account still resolves, but nobody books at 40% confidence.
+    name: 'nierozłożona sklejka z literami wstrzymuje wpłatę',
+    addresses: pulawska,
+    description: 'CZYNSZ',
+    counterparty: 'JAN NOWAK UL. PUŁAWSKA 116 M.26WARSZAWA',
+    apartment: '26',
+    account: '204-000026',
+    heldBack: true,
+  },
+  {
+    // A postal code written without its dash leaves no anchor to split on, so
+    // the number swallows it. Width alone gives it away.
+    name: 'numer lokalu za szeroki, by był prawdziwy, wstrzymuje wpłatę',
+    addresses: pulawska,
+    description: 'CZYNSZ',
+    counterparty: 'JAN NOWAK UL. PUŁAWSKA 116 M.2602620 WARSZAWA',
+    apartment: '2602620',
+    account: '204-2602620',
+    heldBack: true,
+  },
 ];
 
 console.log('\n1. Matcher i wyznaczanie konta');
@@ -187,6 +349,97 @@ for (const c of CASES) {
   check('numer lokalu', r.apartmentNumber, c.apartment);
   check('konto', account, c.account);
   check('wstrzymane do decyzji', heldBack, c.heldBack);
+  check('lokale do wyboru', r.apartmentChoices.map(target => target.apartmentNumber), c.choices ?? []);
+  // A rule with a choice must never be sent to the AI to have the missing number
+  // invented — that gate is the overall confidence, so it stays high on purpose.
+  if ((c.choices?.length ?? 0) > 1) {
+    check('nie idzie do AI (pewność ≥ 90)', r.confidence.overall >= 90, true);
+  }
+}
+
+// ── 1b. Picking one of a rule's apartments ─────────────────────────────────
+//
+// The acceptance screen offers exactly the rule's apartments and books the one
+// the user clicks, with the account the rule gives for it.
+
+console.log('\n1b. Wybór lokalu z reguły');
+{
+  const targets = mappingTargets(withMultiRules[0].apartmentMappings![0]);
+  check('reguła oferuje trzy lokale', targets.map(t => t.apartmentNumber), ['25', '31', '17A']);
+  check('reguła z kilkoma lokalami wymaga wyboru', hasApartmentChoice(withMultiRules[0].apartmentMappings![0]), true);
+  check('reguła z jednym lokalem nie wymaga wyboru', hasApartmentChoice(withMultiRules[0].apartmentMappings![1]), false);
+  check(
+    'wybór lokalu 31 → konto domyślne',
+    resolveApartmentAccount(targets[1].apartmentNumber, targets[1].kontoLokalu ?? null, PREFIX),
+    '204-000031',
+  );
+  check(
+    'wybór lokalu 17A → konto z reguły',
+    resolveApartmentAccount(targets[2].apartmentNumber, targets[2].kontoLokalu ?? null, PREFIX),
+    '204-00017A',
+  );
+
+  // Storage shape: one apartment stays exactly what it always was, so old readers
+  // and old exports keep working.
+  const single = buildApartmentMapping({ id: 'x', matchText: 'A B' }, [{ apartmentNumber: '25' }]);
+  check('jeden lokal → bez additionalApartments', single, {
+    id: 'x',
+    matchText: 'A B',
+    apartmentNumber: '25',
+  });
+  const many = buildApartmentMapping({ id: 'y', matchText: 'A B', note: 'dwa lokale' }, [
+    { apartmentNumber: ' 25 ' },
+    { apartmentNumber: '25' },
+    { apartmentNumber: '31', kontoLokalu: '17A' },
+    { apartmentNumber: '' },
+  ]);
+  check('lista lokali: trim, dedup, konto tylko jako symbol', many, {
+    id: 'y',
+    matchText: 'A B',
+    apartmentNumber: '25',
+    additionalApartments: [{ apartmentNumber: '31' }],
+    note: 'dwa lokale',
+  });
+  check('reguła bez lokalu nie powstaje', buildApartmentMapping({ id: 'z', matchText: 'A B' }, []), null);
+}
+
+// ── 1c. Eksport i import adresów do TXT ────────────────────────────────────
+//
+// The address book travels between installs as a TXT file, so a rule has to
+// survive the round trip — including a rule written by a build that had never
+// heard of a second apartment.
+
+console.log('\n1c. Format MAP: w eksporcie adresów');
+{
+  const roundTrip = (mapping: any) => parseApartmentMappingLine(formatApartmentMappingLine(mapping));
+  const single = { id: 'a', matchText: 'ANNA ZWYKLA', apartmentNumber: '25', note: 'wpłaca z konta w AT' };
+  check('jeden lokal — postać linii', formatApartmentMappingLine(single as any),
+    'MAP: ANNA ZWYKLA => 25 | wpłaca z konta w AT');
+  check('jeden lokal — powrót z pliku', roundTrip(single), { ...single, id: '' });
+
+  const withKonto = { id: 'b', matchText: 'CEZARY GUZ', apartmentNumber: '17A', kontoLokalu: '204-00017A' };
+  check('lokal z kontem — postać linii', formatApartmentMappingLine(withKonto as any),
+    'MAP: CEZARY GUZ => 17A | KONTO: 204-00017A');
+  check('lokal z kontem — powrót z pliku', roundTrip(withKonto), { ...withKonto, id: '' });
+
+  const multi = {
+    id: 'c',
+    matchText: 'MARIA WIELOLOKALOWA',
+    apartmentNumber: '25',
+    kontoLokalu: '204-000025',
+    additionalApartments: [{ apartmentNumber: '31' }, { apartmentNumber: '17A', kontoLokalu: '204-00017A' }],
+    note: 'trzy lokale',
+  };
+  check('kilka lokali — postać linii', formatApartmentMappingLine(multi as any),
+    'MAP: MARIA WIELOLOKALOWA => 25=204-000025; 31; 17A=204-00017A | trzy lokale');
+  check('kilka lokali — powrót z pliku', roundTrip(multi), { ...multi, id: '' });
+
+  // Older files: the note used to sit in the slot the account now uses, and it
+  // must still come back as a note rather than as an account.
+  check('stary plik — notatka w miejscu konta', parseApartmentMappingLine('  MAP: JAN K => 12 | wpłaca z Austrii'),
+    { id: '', matchText: 'JAN K', apartmentNumber: '12', note: 'wpłaca z Austrii' });
+  check('linia bez lokalu jest odrzucana', parseApartmentMappingLine('MAP: JAN K => '), null);
+  check('linia, która nie jest regułą', parseApartmentMappingLine('  ACCT: 12345'), null);
 }
 
 // ── 2. Account helper edge cases ───────────────────────────────────────────
@@ -288,6 +541,72 @@ if (FILES.length === 0) {
       }
     }
   }
+}
+
+// ── 4. Reguła z kilkoma lokalami na prawdziwym pliku ───────────────────────
+//
+// The matcher is only half the story — the exporter decides where the money
+// goes. So: take a real payer out of a real statement, give them a rule with two
+// apartments, and check both ends. Nothing may be booked before the user picks,
+// and the picked apartment's account must be exactly what lands in the file.
+
+console.log('\n4. Reguła wielolokalowa na prawdziwym pliku');
+if (FILES.length === 0) {
+  console.log('  (pominięto — brak plików w test-data/Wierzbno)');
+} else {
+  const content = readFileWithEncoding(path.join(DIR, FILES[0]));
+  const stmt = new PKOBPMT940Parser().parse(content);
+  const incomeRaw = stmt.transactions.filter(t => t.debitCredit === 'C');
+  // A payer whose name the plain matcher resolves on its own — so any change in
+  // the outcome below can only come from the rule.
+  const payer = incomeRaw.find(t => (t.details.counterpartyName || '').trim().length > 6)!;
+  const phrase = payer.details.counterpartyName.trim().split(/\s+/).slice(0, 2).join(' ');
+
+  const withPayerRule: Adres[] = [
+    {
+      id: 9,
+      nazwa: 'Bogunki 5',
+      createdAt: '',
+      apartmentMappings: [
+        {
+          id: 'p1',
+          matchText: phrase,
+          apartmentNumber: '31',
+          additionalApartments: [{ apartmentNumber: '44' }],
+        },
+      ],
+    },
+  ];
+
+  const extractor = new RegexExtractor(withPayerRule);
+  const extracted = extractor.extract(payer);
+  console.log(`\n  płatnik „${phrase}" z regułą na lokale 31 i 44`);
+  check('reguła zadziałała', extracted.matchedByManualMapping, true);
+  check('bez wybranego lokalu nie ma numeru', extracted.apartmentNumber, null);
+  check('bez wybranego lokalu nie ma konta',
+    resolveApartmentAccount(extracted.apartmentNumber, extracted.accountOverride, PREFIX), null);
+
+  const exportWith = (extractedData: any) => {
+    const processed = [{
+      original: payer,
+      extracted: extractedData,
+      transactionType: 'income',
+      status: 'auto-approved',
+    }];
+    const exporter = new CsvExporter({ bankAccountSymbol: '131-1', apartmentPrefix: PREFIX });
+    return exporter.export(processed as any);
+  };
+
+  const untouched = exportWith(extracted);
+  check('nietknięta wpłata nie trafia na żadne konto lokalu',
+    /204-0000(31|44)/.test(untouched), false);
+
+  // What ConverterRegistry does with the pick: apartment number for the record,
+  // account symbol for the booking.
+  const picked = { ...extracted, apartmentNumber: '44', accountOverride: '204-000044' };
+  const afterPick = exportWith(picked);
+  check('po wyborze lokal 44 ląduje na 204-000044', afterPick.includes('204-000044'), true);
+  check('drugi lokal reguły nie pojawia się w pliku', afterPick.includes('204-000031'), false);
 }
 
 console.log(`\n${failures === 0 ? '✓ wszystkie sprawdzenia przeszły' : `✗ nieudanych sprawdzeń: ${failures}`}\n`);

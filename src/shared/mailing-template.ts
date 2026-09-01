@@ -4,12 +4,19 @@
  * the mail actually goes out. Any divergence here would mean the user proofreads
  * one text and sends another.
  *
- * Placeholder syntax is `{{Nazwa pola}}`: readable in the editor, and the same
- * string the "insert field" button writes. Names are matched case-insensitively
- * and whitespace-insensitively so a stray space inside the braces still resolves.
+ * Placeholder syntax is `{{Nazwa pola}}`, optionally with a part modifier —
+ * `{{Nazwa pola|opis}}` for the field's fixed sentence alone and
+ * `{{Nazwa pola|wartość}}` for the typed value alone. Names are matched
+ * case-insensitively and whitespace-insensitively so a stray space inside the
+ * braces still resolves.
+ *
+ * The editors show every placeholder as a pill rather than as braces, but the
+ * braces stay the stored form: one string in the database, in the history and
+ * over the IPC boundary, understood identically by the renderer and the main
+ * process. The pills are decoration the editor puts on and takes off again.
  */
 
-import { MailingFieldValue, MailingPole } from './types';
+import { MailingFieldValue, MailingPole, MailingPoleTyp } from './types';
 import {
   LOGO_ACCENT_COLOR,
   LOGO_BAND_COLOR,
@@ -53,6 +60,65 @@ export const BUILTIN_MAILING_FIELDS: { nazwa: string; opis: string }[] = [
   },
 ];
 
+/**
+ * Which half of a dynamic field a placeholder stands for.
+ *
+ * `full` is the original (and default) form: the field's fixed sentence followed
+ * by the typed value. The two halves can also be placed separately, because
+ * nothing in a rendered mail can move a "sentence value" string across a table
+ * cell border — a rate table wants the sentence in one column and the amount in
+ * the next, and that has to be decided where the text is written.
+ */
+export type MailingFieldPart = 'full' | 'label' | 'value';
+
+/** Separator between a field's name and its part modifier inside `{{ }}`. */
+const FIELD_PART_SEPARATOR = '|';
+
+/** The token written after the separator for each part (none for `full`). */
+const FIELD_PART_TOKEN: Record<MailingFieldPart, string> = {
+  full: '',
+  label: 'opis',
+  value: 'wartość',
+};
+
+/**
+ * Modifiers accepted when reading a placeholder back. The app only ever writes
+ * the Polish spellings above; the diacritic-free and English forms are accepted
+ * so a hand-typed `{{Zimna woda|wartosc}}` resolves instead of silently becoming
+ * an unknown field.
+ */
+const FIELD_PART_BY_TOKEN: Record<string, MailingFieldPart> = {
+  opis: 'label',
+  label: 'label',
+  'wartość': 'value',
+  wartosc: 'value',
+  value: 'value',
+};
+
+/** A placeholder taken apart: which field, and which half of it. */
+export interface MailingFieldRef {
+  /** Field name, with the part modifier stripped off. */
+  nazwa: string;
+  part: MailingFieldPart;
+}
+
+/**
+ * Split `Zimna woda|wartość` into the field and the half it names.
+ *
+ * An unrecognized suffix stays part of the name rather than being dropped: a
+ * field genuinely called "Woda|ciepła" keeps resolving, and a typo like
+ * `|wartosci` shows up as an unknown field — visible and fixable — instead of
+ * quietly resolving to the whole field.
+ */
+export function parseFieldRef(raw: string): MailingFieldRef {
+  const text = (raw ?? '').trim();
+  const at = text.lastIndexOf(FIELD_PART_SEPARATOR);
+  if (at <= 0) return { nazwa: text, part: 'full' };
+  const part = FIELD_PART_BY_TOKEN[normalizeFieldName(text.slice(at + 1))];
+  if (!part) return { nazwa: text, part: 'full' };
+  return { nazwa: text.slice(0, at).trim(), part };
+}
+
 export function isBuiltinField(nazwa: string): boolean {
   return BUILTIN_MAILING_FIELDS.some((f) => normalizeFieldName(f.nazwa) === normalizeFieldName(nazwa));
 }
@@ -67,26 +133,60 @@ export function normalizeFieldName(nazwa: string): string {
   return nazwa.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
-/** The exact string inserted into a template for a field. */
-export function fieldPlaceholder(nazwa: string): string {
-  return `{{${nazwa.trim()}}}`;
+/** The exact string inserted into a template for a field (or one of its halves). */
+export function fieldPlaceholder(nazwa: string, part: MailingFieldPart = 'full'): string {
+  const token = FIELD_PART_TOKEN[part];
+  const name = nazwa.trim();
+  return token ? `{{${name}${FIELD_PART_SEPARATOR}${token}}}` : `{{${name}}}`;
 }
 
-const PLACEHOLDER_RE = /\{\{\s*([^{}]+?)\s*\}\}/g;
+const PLACEHOLDER_SOURCE = String.raw`\{\{\s*([^{}]+?)\s*\}\}`;
+const PLACEHOLDER_RE = new RegExp(PLACEHOLDER_SOURCE, 'g');
 
 /**
- * Names of every placeholder appearing in the given texts, in first-seen order,
- * spelled as they were written. Drives both the "fill these in" list on the send
- * screen and the unknown-field warning.
+ * A fresh placeholder matcher. Exported for the editors, which scan text nodes
+ * one at a time: a shared `/g` regex carries `lastIndex` between calls, so the
+ * second node would be searched from the wrong offset.
+ */
+export function placeholderRegExp(): RegExp {
+  return new RegExp(PLACEHOLDER_SOURCE, 'g');
+}
+
+/**
+ * Every placeholder in the given texts, in first-seen order and deduplicated by
+ * field *and* part. The same field written twice — once as `|opis`, once as
+ * `|wartość` — is two refs here, which is what the "does this field still need a
+ * value?" question depends on.
+ */
+export function extractFieldRefs(...texts: string[]): MailingFieldRef[] {
+  const seen = new Set<string>();
+  const refs: MailingFieldRef[] = [];
+  for (const text of texts) {
+    for (const match of (text ?? '').matchAll(PLACEHOLDER_RE)) {
+      const ref = parseFieldRef(match[1]);
+      const key = `${normalizeFieldName(ref.nazwa)}\u0000${ref.part}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      refs.push(ref);
+    }
+  }
+  return refs;
+}
+
+/**
+ * Names of every field used in the given texts, in first-seen order, spelled as
+ * they were written. Drives both the "fill these in" list on the send screen and
+ * the unknown-field warning.
+ *
+ * One entry per field, whichever halves of it the text places: `{{Woda|opis}}`
+ * in one table cell and `{{Woda|wartość}}` in the next are one field to fill in,
+ * not two.
  */
 export function extractUsedFields(...texts: string[]): string[] {
   const seen = new Map<string, string>();
-  for (const text of texts) {
-    for (const match of (text ?? '').matchAll(PLACEHOLDER_RE)) {
-      const raw = match[1].trim();
-      const key = normalizeFieldName(raw);
-      if (!seen.has(key)) seen.set(key, raw);
-    }
+  for (const ref of extractFieldRefs(...texts)) {
+    const key = normalizeFieldName(ref.nazwa);
+    if (!seen.has(key)) seen.set(key, ref.nazwa);
   }
   return [...seen.values()];
 }
@@ -129,12 +229,73 @@ export function readFieldValue(values: Record<string, string>, nazwa: string): s
 }
 
 /**
- * Resolve one placeholder to its final text. A user-defined field renders as its
- * lead-in sentence followed by the typed value ("…w kwocie: 350,00 zł"); either
- * half may be empty. An unknown name is left as-is rather than silently deleted —
- * a visible `{{Foo}}` in the preview is a bug the user can see and fix.
+ * The parts of a field that decide how its value reads in the letter. Both
+ * `MailingPole` (the dictionary entry) and `MailingFieldValue` (what a send
+ * recorded) satisfy it, so the live preview and the history format identically.
  */
-function resolveField(nazwa: string, ctx: MailingRenderContext): string {
+export interface MailingValueFormat {
+  jednostka?: string;
+  typWartosci?: MailingPoleTyp;
+}
+
+/** ISO value of `<input type="date">`, the form a picked date is stored in. */
+const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+/** ISO value of `<input type="time">` — `HH:mm`, optionally with seconds. */
+const ISO_TIME_RE = /^(\d{2}):(\d{2})(?::\d{2})?$/;
+
+/**
+ * A picked date or time as the letter spells it: `2026-09-14` ⇒ `14.09.2026`,
+ * `18:00:00` ⇒ `18:00`. Text fields pass through untouched.
+ *
+ * Anything that isn't in the picker's own format is passed through as typed
+ * rather than blanked: a value entered before the field became a date is worth
+ * showing (and fixing) in the preview, and a silently empty position in a rate
+ * letter is the one outcome nobody can spot.
+ *
+ * The date is split by string, not through `new Date`: parsing `2026-09-14` as
+ * UTC and printing it in local time is how a date turns into the day before.
+ */
+function formatTypedValue(wartosc: string, typWartosci?: MailingPoleTyp): string {
+  const value = (wartosc ?? '').trim();
+  if (!value) return '';
+  if (typWartosci === 'data') {
+    const iso = ISO_DATE_RE.exec(value);
+    return iso ? `${iso[3]}.${iso[2]}.${iso[1]}` : value;
+  }
+  if (typWartosci === 'godzina') {
+    const iso = ISO_TIME_RE.exec(value);
+    return iso ? `${iso[1]}:${iso[2]}` : value;
+  }
+  return value;
+}
+
+/**
+ * A field's value as the letter shows it: spelled for its kind, then its unit —
+ * `20` + `zł/m²` ⇒ `20 zł/m²`, `2026-09-14` (a date field) ⇒ `14.09.2026`.
+ *
+ * The unit never appears on its own. An empty value means the position was left
+ * out of this send, and a lone "zł/m²" in the letter would read as an amount
+ * someone forgot to fill in rather than as a position that isn't there.
+ */
+export function formatFieldValue(wartosc: string, format?: MailingValueFormat): string {
+  const value = formatTypedValue(wartosc, format?.typWartosci);
+  const unit = (format?.jednostka ?? '').trim();
+  if (!value) return '';
+  return unit ? `${value} ${unit}` : value;
+}
+
+/**
+ * Resolve one placeholder to its final text. A user-defined field renders as its
+ * lead-in sentence followed by the typed value and its unit ("…w kwocie: 350,00
+ * zł"); either half may be empty, and `|opis` / `|wartość` ask for one half
+ * alone. An unknown name is left as-is rather than silently deleted — a visible
+ * `{{Foo}}` in the preview is a bug the user can see and fix.
+ *
+ * Built-in fields ignore the modifier: they resolve from the send context and
+ * have no sentence/value halves to separate.
+ */
+function resolveField(raw: string, ctx: MailingRenderContext): string {
+  const { nazwa, part } = parseFieldRef(raw);
   const key = normalizeFieldName(nazwa);
   if (key === normalizeFieldName(FIELD_ADDRESS)) return ctx.adresNazwa;
   if (key === normalizeFieldName(FIELD_DATE)) return ctx.dateText;
@@ -148,10 +309,15 @@ function resolveField(nazwa: string, ctx: MailingRenderContext): string {
   }
 
   const pole = ctx.pola.find((p) => normalizeFieldName(p.nazwa) === key);
-  if (!pole) return fieldPlaceholder(nazwa);
+  if (!pole) return fieldPlaceholder(nazwa, part);
 
-  const value = readFieldValue(ctx.values, nazwa);
+  const value = formatFieldValue(readFieldValue(ctx.values, nazwa), pole);
   const tekst = (pole.tekst ?? '').trim();
+  // A sentence-less field falls back to its own name, the same way a field-table
+  // row does: an empty first column reads as a missing position, and the name is
+  // at least something the user recognizes and can fix.
+  if (part === 'label') return tekst || pole.nazwa.trim();
+  if (part === 'value') return value;
   if (tekst && value) return `${tekst} ${value}`;
   return tekst || value;
 }
@@ -189,7 +355,7 @@ export function renderHtml(html: string, ctx: MailingRenderContext): string {
 export interface MailingTableRow {
   /** First column: the field's fixed sentence (its name when it has none). */
   label: string;
-  /** Second column: the value typed for this send. */
+  /** Second column: the value typed for this send, with the field's unit. */
   value: string;
 }
 
@@ -209,7 +375,7 @@ export function collectFieldTableRows(ctx: MailingRenderContext): MailingTableRo
     const pole = ctx.pola.find((p) => normalizeFieldName(p.nazwa) === key);
     rows.push({
       label: (pole?.tekst ?? '').trim() || (pole?.nazwa ?? nazwa).trim(),
-      value: readFieldValue(ctx.values, nazwa),
+      value: formatFieldValue(readFieldValue(ctx.values, nazwa), pole),
     });
   }
   return rows;
@@ -289,6 +455,8 @@ export function collectFieldValues(
       nazwa: pole?.nazwa ?? nazwa,
       tekst: pole?.tekst ?? '',
       wartosc: readFieldValue(ctx.values, nazwa),
+      jednostka: pole?.jednostka ?? '',
+      typWartosci: pole?.typWartosci ?? 'tekst',
     });
   }
   return values;

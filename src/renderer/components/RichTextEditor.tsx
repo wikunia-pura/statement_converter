@@ -1,17 +1,17 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
-import SearchableSelect, { SearchableOption } from './SearchableSelect';
 import {
   MAIL_TABLE_CELL_STYLE,
   MAIL_TABLE_HEADER_CELL_STYLE,
   MAIL_TABLE_STYLE,
 } from '../../shared/mailing-template';
-
-export interface RichTextEditorHandle {
-  /** Insert text at the caret (or at the end when the editor isn't focused). */
-  insertText: (text: string) => void;
-  focus: () => void;
-}
+import {
+  CHIP_CLASS,
+  FieldChipLabels,
+  FieldInsertPicker,
+  MailingFieldOption,
+  usePlaceholderChips,
+} from './fieldChips';
 
 export interface RichTextEditorLabels {
   bold: string;
@@ -35,10 +35,6 @@ export interface RichTextEditorLabels {
   tableAddColumn: string;
   tableDeleteColumn: string;
   tableDelete: string;
-  /** Only needed when `fieldOptions` is passed. */
-  insertField: string;
-  insertFieldSearch: string;
-  insertFieldNoMatch: string;
 }
 
 interface RichTextEditorProps {
@@ -49,10 +45,12 @@ interface RichTextEditorProps {
   /** Labels for the formatting buttons, so the parent owns the translations. */
   labels: RichTextEditorLabels;
   /**
-   * Placeholders offered in the toolbar; picking one inserts its `value` at the
-   * caret. Omit to hide the picker — the editor works the same without it.
+   * Dynamic fields offered in the toolbar. They also decide which pills read as
+   * defined: a placeholder naming none of them is flagged in place.
    */
-  fieldOptions?: SearchableOption[];
+  fields: MailingFieldOption[];
+  /** Labels for the pills and the insert control. */
+  fieldLabels: FieldChipLabels;
 }
 
 /**
@@ -74,20 +72,27 @@ const TABLE_STYLE = MAIL_TABLE_STYLE;
  * zero dependencies — the alternative is shipping an editor framework for bold,
  * lists, alignment and a table.
  *
- * The DOM is only written from props when the incoming value differs from what
- * the element already holds; assigning innerHTML on every keystroke would move
- * the caret to the start of the text.
+ * Dynamic fields show as pills rather than as `{{braces}}`; `usePlaceholderChips`
+ * owns that translation, the prop syncing and the caret bookkeeping, so what is
+ * left here is the formatting toolbar.
  */
-const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEditorProps>(
-  ({ value, onChange, placeholder, minHeight = 220, labels, fieldOptions }, ref) => {
-    const editorRef = useRef<HTMLDivElement>(null);
-    /**
-     * Last caret position seen inside the editor. The toolbar's field picker has a
-     * text input, and typing in it moves the document selection out of the editor
-     * — without this the insertion would land at the end of the body instead of
-     * where the user left the caret.
-     */
-    const savedRangeRef = useRef<Range | null>(null);
+const RichTextEditor: React.FC<RichTextEditorProps> = ({
+  value,
+  onChange,
+  placeholder,
+  minHeight = 220,
+  labels,
+  fields,
+  fieldLabels,
+}) => {
+    const {
+      elementRef: editorRef,
+      handlers,
+      insertField,
+      ensureCaretInside,
+      emit,
+      withoutChips,
+    } = usePlaceholderChips({ value, onChange, fields, labels: fieldLabels });
     const tablePanelRef = useRef<HTMLDivElement>(null);
     const [tablePanelOpen, setTablePanelOpen] = useState(false);
     const [newRows, setNewRows] = useState(2);
@@ -96,16 +101,6 @@ const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEditorProp
     // Whether the caret currently sits in a table — the row/column buttons only
     // make sense then, and showing them always would suggest they do nothing.
     const [inTable, setInTable] = useState(false);
-
-    useEffect(() => {
-      const el = editorRef.current;
-      if (el && el.innerHTML !== value) el.innerHTML = value || '';
-    }, [value]);
-
-    const emit = useCallback(() => {
-      const el = editorRef.current;
-      if (el) onChange(el.innerHTML);
-    }, [onChange]);
 
     /** The table cell holding the caret, or null when it is outside a table. */
     const currentCell = useCallback((): HTMLTableCellElement | null => {
@@ -129,12 +124,11 @@ const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEditorProp
         const selection = window.getSelection();
         if (!el || !selection || selection.rangeCount === 0) return;
         if (!selection.anchorNode || !el.contains(selection.anchorNode)) return;
-        savedRangeRef.current = selection.getRangeAt(0).cloneRange();
         setInTable(currentCell() !== null);
       };
       document.addEventListener('selectionchange', onSelectionChange);
       return () => document.removeEventListener('selectionchange', onSelectionChange);
-    }, [currentCell]);
+    }, [currentCell, editorRef]);
 
     useEffect(() => {
       if (!tablePanelOpen) return;
@@ -146,32 +140,6 @@ const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEditorProp
       document.addEventListener('mousedown', onMouseDown);
       return () => document.removeEventListener('mousedown', onMouseDown);
     }, [tablePanelOpen]);
-
-    /**
-     * Put the caret inside the editor. Formatting and insert commands act on the
-     * document selection, so when focus was elsewhere they would otherwise apply
-     * outside the editor (or do nothing at all).
-     */
-    const ensureCaretInside = useCallback(() => {
-      const el = editorRef.current;
-      if (!el) return;
-      el.focus();
-      const selection = window.getSelection();
-      if (selection && selection.rangeCount > 0 && el.contains(selection.anchorNode)) return;
-      // The remembered caret, when it still points into the current content —
-      // a stale range would throw or insert in the wrong place.
-      const saved = savedRangeRef.current;
-      if (selection && saved && el.contains(saved.startContainer)) {
-        selection.removeAllRanges();
-        selection.addRange(saved);
-        return;
-      }
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      range.collapse(false);
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-    }, []);
 
     const exec = (command: string, argument?: string) => {
       ensureCaretInside();
@@ -217,6 +185,20 @@ const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEditorProp
         selection?.addRange(range);
       }
 
+      // The commands below would relocate the field pills, so they run on the
+      // plain `{{…}}` text and the pills go back on afterwards.
+      withoutChips(() => clearFormattingCommands(el));
+    };
+
+    /** The actual clearing, with no pill in the DOM to be dragged around. */
+    const clearFormattingCommands = (el: HTMLElement) => {
+      const selection = window.getSelection();
+      const noSelection =
+        !selection ||
+        selection.rangeCount === 0 ||
+        selection.isCollapsed ||
+        !el.contains(selection.anchorNode);
+
       document.execCommand('styleWithCSS', false, 'true');
       document.execCommand('removeFormat');
       document.execCommand('unlink');
@@ -246,7 +228,6 @@ const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEditorProp
         after?.removeAllRanges();
         after?.addRange(caret);
       }
-      emit();
     };
 
     /**
@@ -255,12 +236,17 @@ const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEditorProp
      * structure is deliberately kept — the user asked to clear formatting, not to
      * lose their table — but cells fall back to the border/padding that makes it
      * readable as a table.
+     *
+     * Pills are skipped: they are spans, so the unwrapping below would dissolve
+     * every dynamic field in the letter into its own caption — a placeholder lost
+     * to a formatting command, which is not what "clear formatting" may ever mean.
      */
     const stripInlineFormatting = (root: HTMLElement, range: Range | null) => {
       const touched: HTMLElement[] = [];
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
       while (walker.nextNode()) {
         const node = walker.currentNode as HTMLElement;
+        if (node.closest(`.${CHIP_CLASS}`)) continue;
         if (!range || range.intersectsNode(node)) touched.push(node);
       }
       for (const node of touched) {
@@ -366,16 +352,6 @@ const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEditorProp
         setInTable(false);
       });
 
-    React.useImperativeHandle(ref, () => ({
-      insertText: (text: string) => {
-        if (!editorRef.current) return;
-        ensureCaretInside();
-        document.execCommand('insertText', false, text);
-        emit();
-      },
-      focus: () => editorRef.current?.focus(),
-    }));
-
     const isEmpty = !value || value === '<br>' || value === '<p></p>';
 
     return (
@@ -469,26 +445,15 @@ const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEditorProp
             <Icon name="x" size={14} />
           </button>
 
-          {fieldOptions && fieldOptions.length > 0 && (
+          {fields.length > 0 && (
             <>
               <span className="toolbar-divider" />
-              <SearchableSelect
-                // Always empty: this is an action ("insert this here"), so the
-                // trigger keeps inviting the next insertion.
-                value=""
-                options={fieldOptions}
-                onChange={(placeholderText) => {
-                  ensureCaretInside();
-                  document.execCommand('insertText', false, placeholderText);
-                  emit();
-                }}
-                placeholder={labels.insertField}
-                searchPlaceholder={labels.insertFieldSearch}
-                emptyText={labels.insertFieldNoMatch}
-                size="sm"
-                title={labels.insertField}
-                ariaLabel={labels.insertField}
-                style={{ width: '220px', marginLeft: 'auto' }}
+              <FieldInsertPicker
+                fields={fields}
+                labels={fieldLabels}
+                onInsert={insertField}
+                compact
+                style={{ marginLeft: 'auto' }}
               />
             </>
           )}
@@ -520,25 +485,12 @@ const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEditorProp
           className="rte-content"
           contentEditable
           suppressContentEditableWarning
-          onInput={emit}
-          onBlur={emit}
-          // Strip formatting from pasted text: a fragment copied out of Word
-          // carries markup that renders differently in a mail client than in the
-          // PDF, which is exactly the divergence this module must avoid.
-          onPaste={(e) => {
-            e.preventDefault();
-            const text = e.clipboardData.getData('text/plain');
-            document.execCommand('insertText', false, text);
-            emit();
-          }}
+          {...handlers}
           style={{ minHeight }}
           data-placeholder={isEmpty ? placeholder ?? '' : ''}
         />
       </div>
     );
-  },
-);
-
-RichTextEditor.displayName = 'RichTextEditor';
+};
 
 export default RichTextEditor;

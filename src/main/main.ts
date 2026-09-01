@@ -11,12 +11,14 @@ import {
   DEFAULT_ACCOUNT_CONFIG,
   AccountConfig,
   countBackup,
+  MailingPoleTyp,
   MailingSzablon,
   MailingSmtpConfig,
 } from '../shared/types';
 import { runAutoBackup, getBackupStatus, getBackupsDir, validateBackup } from './backupService';
 import { conversionCache } from './conversionCache';
 import * as authService from './authService';
+import { formatApartmentMappingLine, parseApartmentMappingLine } from '../shared/apartment-mapping';
 import { extractPdfText } from '../shared/pdf-utils';
 import { extractAccountNumbersFromFile } from '../shared/account-extractor-node';
 import {
@@ -1010,29 +1012,17 @@ function setupIpcHandlers() {
           continue;
         }
 
-        // Check if it's a MAP: <matchText> => <apartment> [| KONTO: <symbol>] [| <note>]
-        // line (user-defined apartment-number rule).
-        //
-        // The account segment is optional and recognised by its "KONTO:" tag rather
-        // than by position, so files written before the field existed — which have
-        // the note sitting in that same slot — still import as notes.
-        const mapMatch = line.match(/^\s*MAP:\s*(.+)=>\s*([^|]+?)((?:\s*\|\s*[^|]+)*)$/);
-        if (mapMatch && lastAdres) {
-          sawMappings = true;
-          const segments = (mapMatch[3] || '')
-            .split('|')
-            .map(s => s.trim())
-            .filter(s => s.length > 0);
-          const kontoSegment = segments.find(s => /^KONTO:/i.test(s));
-          const kontoLokalu = kontoSegment?.replace(/^KONTO:\s*/i, '').trim();
-          const note = segments.filter(s => s !== kontoSegment).join(' | ').trim();
-          accumulatedMappings.push({
-            id: '', // DB layer assigns a stable id via sanitizeApartmentMappings
-            matchText: mapMatch[1].trim(),
-            apartmentNumber: mapMatch[2].trim(),
-            ...(kontoLokalu ? { kontoLokalu } : {}),
-            ...(note ? { note } : {}),
-          });
+        // Check if it's a MAP: line (user-defined apartment-number rule). The
+        // format — one apartment or several, each with an optional account — lives
+        // next to its writer in shared/apartment-mapping.ts.
+        if (/^\s*MAP:/.test(line) && lastAdres) {
+          const mapping = parseApartmentMappingLine(line);
+          // Only a readable rule counts as "this file carries rules" — otherwise a
+          // garbled line would make the import wipe the address's existing rules.
+          if (mapping) {
+            sawMappings = true;
+            accumulatedMappings.push(mapping);
+          }
           continue;
         }
 
@@ -1184,12 +1174,7 @@ function setupIpcHandlers() {
         // Add apartment-number mapping rules if present
         if (a.apartmentMappings && a.apartmentMappings.length > 0) {
           for (const m of a.apartmentMappings) {
-            const segments = [
-              ...(m.kontoLokalu ? [`KONTO: ${m.kontoLokalu}`] : []),
-              ...(m.note ? [m.note] : []),
-            ];
-            const suffix = segments.length > 0 ? ` | ${segments.join(' | ')}` : '';
-            lines.push(`  MAP: ${m.matchText} => ${m.apartmentNumber}${suffix}`);
+            lines.push(`  ${formatApartmentMappingLine(m)}`);
           }
         }
       }
@@ -2494,14 +2479,24 @@ function setupIpcHandlers() {
     return await database.getMailingPola();
   });
 
-  ipcMain.handle(IPC_CHANNELS.MAILING_ADD_POLE, async (_, nazwa: string, tekst: string) => {
-    return await database.addMailingPole(nazwa, tekst);
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.MAILING_ADD_POLE,
+    async (_, nazwa: string, tekst: string, jednostka: string, typWartosci: MailingPoleTyp) => {
+      return await database.addMailingPole(nazwa, tekst, jednostka ?? '', typWartosci ?? 'tekst');
+    },
+  );
 
   ipcMain.handle(
     IPC_CHANNELS.MAILING_UPDATE_POLE,
-    async (_, id: number, nazwa: string, tekst: string) => {
-      await database.updateMailingPole(id, nazwa, tekst);
+    async (
+      _,
+      id: number,
+      nazwa: string,
+      tekst: string,
+      jednostka: string,
+      typWartosci: MailingPoleTyp,
+    ) => {
+      await database.updateMailingPole(id, nazwa, tekst, jednostka ?? '', typWartosci ?? 'tekst');
       return true;
     },
   );

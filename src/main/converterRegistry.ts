@@ -1059,6 +1059,12 @@ class ConverterRegistry {
           // while the symbol the user gave decides where the money lands.
           const account = decision.manualApartmentAccount.trim();
           if (isAccountSymbol(account)) {
+            // A pick from a multi-apartment rule sends both halves: the account
+            // decides where the money goes, the number says which apartment that
+            // was — and unlike a typed pair, these two come from one rule entry and
+            // cannot contradict each other.
+            const pickedNumber = decision.manualApartmentNumber?.trim();
+            if (pickedNumber) trn.extracted.apartmentNumber = pickedNumber;
             trn.extracted.accountOverride = account;
             trn.extracted.needsAccount = false;
             trn.extracted.confidence.overall = 100;
@@ -1067,7 +1073,7 @@ class ConverterRegistry {
             trn.reviewedByUser = {
               action: 'manual',
               originalValue: originalApartmentNumber,
-              manualValue: account
+              manualValue: pickedNumber ? `${pickedNumber} (${account})` : account
             };
           }
         } else if (decision.manualApartmentNumber) {

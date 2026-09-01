@@ -1,9 +1,13 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo } from 'react';
 import { MailingPole } from '../../shared/types';
 import { translations, Language } from '../translations';
 import Icon from './Icon';
 import RichTextEditor from './RichTextEditor';
-import SearchableSelect, { SearchableOption } from './SearchableSelect';
+import {
+  ChipTextInput,
+  FieldChipLabels,
+  MailingFieldOption,
+} from './fieldChips';
 import {
   BUILTIN_MAILING_FIELDS,
   extractUsedFields,
@@ -12,48 +16,10 @@ import {
   normalizeFieldName,
 } from '../../shared/mailing-template';
 
-interface FieldPickerProps {
-  options: SearchableOption[];
-  label: string;
-  placeholder: string;
-  searchPlaceholder: string;
-  emptyText: string;
-  onInsert: (placeholderText: string) => void;
-}
-
 /**
- * Insert a field's placeholder at the caret. A searchable dropdown rather than a
- * row of chips: the dictionary grows with every rate a community can change, and
- * a wrapped wall of pills stops being scannable well before that.
- */
-const FieldPicker: React.FC<FieldPickerProps> = ({
-  options,
-  label,
-  placeholder,
-  searchPlaceholder,
-  emptyText,
-  onInsert,
-}) => (
-  <div style={{ marginTop: '8px' }}>
-    <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '6px' }}>{label}</div>
-    <SearchableSelect
-      // Always empty: this dropdown is an action ("insert this here"), not a
-      // stored choice, so the trigger keeps inviting the next insertion.
-      value=""
-      options={options}
-      onChange={onInsert}
-      placeholder={placeholder}
-      searchPlaceholder={searchPlaceholder}
-      emptyText={emptyText}
-      size="sm"
-      style={{ maxWidth: '360px' }}
-    />
-  </div>
-);
-
-/**
- * Fields offered by a picker, built-ins first. `value` is the exact text
- * inserted, so neither picker has to know how a placeholder is spelled.
+ * Fields offered by the insert pickers, built-ins first. The pills read the same
+ * list, so a field missing from it shows up flagged in the text instead of going
+ * out unsubstituted.
  *
  * `fieldTable: false` drops the `{{Tabela pól}}` entry — it resolves to a table,
  * which a subject line cannot hold.
@@ -61,23 +27,39 @@ const FieldPicker: React.FC<FieldPickerProps> = ({
 export function useMailingFieldOptions(
   pola: MailingPole[],
   options?: { fieldTable?: boolean },
-): SearchableOption[] {
+): MailingFieldOption[] {
   const fieldTable = options?.fieldTable ?? true;
   return useMemo(
     () => [
       ...BUILTIN_MAILING_FIELDS.filter((f) => fieldTable || !isFieldTableField(f.nazwa)).map((f) => ({
-        value: fieldPlaceholder(f.nazwa),
-        label: f.nazwa,
+        nazwa: f.nazwa,
         hint: f.opis,
         keywords: 'wbudowane builtin',
+        builtin: true,
       })),
-      ...pola.map((p) => ({
-        value: fieldPlaceholder(p.nazwa),
-        label: p.nazwa,
-        hint: p.tekst || undefined,
-      })),
+      ...pola.map((p) => ({ nazwa: p.nazwa, hint: p.tekst || undefined })),
     ],
     [pola, fieldTable],
+  );
+}
+
+/** Wording for the pills and the insert control, from the app's translations. */
+export function useFieldChipLabels(language: Language): FieldChipLabels {
+  const t = translations[language];
+  return useMemo(
+    () => ({
+      partFull: t.mailingFieldPartFull,
+      partLabel: t.mailingFieldPartLabel,
+      partValue: t.mailingFieldPartValue,
+      insertMode: t.mailingInsertFieldMode,
+      chipHint: t.mailingFieldChipHint,
+      chipBuiltinHint: t.mailingFieldChipBuiltinHint,
+      chipUnknown: t.mailingFieldChipUnknown,
+      insertField: t.mailingInsertFieldShort,
+      insertFieldSearch: t.mailingInsertFieldSearch,
+      insertFieldNoMatch: t.mailingInsertFieldNoMatch,
+    }),
+    [t],
   );
 }
 
@@ -133,9 +115,9 @@ const MailingComposer: React.FC<MailingComposerProps> = ({
   bodyNote,
 }) => {
   const t = translations[language];
-  const subjectRef = useRef<HTMLInputElement>(null);
-  const fieldOptions = useMailingFieldOptions(pola);
-  const subjectFieldOptions = useMailingFieldOptions(pola, { fieldTable: false });
+  const fields = useMailingFieldOptions(pola);
+  const subjectFields = useMailingFieldOptions(pola, { fieldTable: false });
+  const chipLabels = useFieldChipLabels(language);
   const unknownFields = useUnknownFields(pola, temat, tresc);
   /** Drives the hint explaining where the table's rows come from. */
   const usesFieldTable = useMemo(
@@ -143,42 +125,19 @@ const MailingComposer: React.FC<MailingComposerProps> = ({
     [tresc],
   );
 
-  /** Insert a placeholder into the subject at the caret, then restore the caret. */
-  const insertIntoSubject = (placeholder: string) => {
-    const input = subjectRef.current;
-    const start = input?.selectionStart ?? temat.length;
-    const end = input?.selectionEnd ?? temat.length;
-    onChange({ temat: temat.slice(0, start) + placeholder + temat.slice(end) });
-    requestAnimationFrame(() => {
-      input?.focus();
-      const caret = start + placeholder.length;
-      input?.setSelectionRange(caret, caret);
-    });
-  };
-
   return (
     <>
       <div className="form-group">
         <label>
           {t.mailingSubject} <span style={{ color: 'red' }}>*</span>
         </label>
-        <input
-          ref={subjectRef}
-          type="text"
+        <ChipTextInput
           value={temat}
-          onChange={(e) => {
-            onChange({ temat: e.target.value });
-            onDirty?.();
-          }}
+          onChange={(next) => onChange({ temat: next })}
+          onDirty={onDirty}
+          fields={subjectFields}
+          labels={chipLabels}
           placeholder={t.mailingSubjectPlaceholder}
-        />
-        <FieldPicker
-          options={subjectFieldOptions}
-          label={t.mailingInsertFieldSubject}
-          placeholder={t.mailingInsertFieldPick}
-          searchPlaceholder={t.mailingInsertFieldSearch}
-          emptyText={t.mailingInsertFieldNoMatch}
-          onInsert={insertIntoSubject}
         />
       </div>
 
@@ -188,7 +147,8 @@ const MailingComposer: React.FC<MailingComposerProps> = ({
           {bodyNote ?? t.mailingLogoNote}
         </div>
         <RichTextEditor
-          fieldOptions={fieldOptions}
+          fields={fields}
+          fieldLabels={chipLabels}
           value={tresc}
           onChange={(html) => {
             onChange({ tresc: html });
@@ -217,11 +177,11 @@ const MailingComposer: React.FC<MailingComposerProps> = ({
             tableAddColumn: t.rteTableAddColumn,
             tableDeleteColumn: t.rteTableDeleteColumn,
             tableDelete: t.rteTableDelete,
-            insertField: t.mailingInsertFieldShort,
-            insertFieldSearch: t.mailingInsertFieldSearch,
-            insertFieldNoMatch: t.mailingInsertFieldNoMatch,
           }}
         />
+        <div style={{ fontSize: '12px', opacity: 0.75, marginTop: '8px', maxWidth: '90ch' }}>
+          <Icon name="info" size={13} /> {t.mailingFieldPartsHint}
+        </div>
       </div>
 
       {usesFieldTable && (

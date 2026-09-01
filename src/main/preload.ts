@@ -321,10 +321,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.MAILING_UPDATE_ZGN, id, nazwa, email),
   mailingDeleteZgn: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.MAILING_DELETE_ZGN, id),
   mailingGetPola: () => ipcRenderer.invoke(IPC_CHANNELS.MAILING_GET_POLA),
-  mailingAddPole: (nazwa: string, tekst: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.MAILING_ADD_POLE, nazwa, tekst),
-  mailingUpdatePole: (id: number, nazwa: string, tekst: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.MAILING_UPDATE_POLE, id, nazwa, tekst),
+  mailingAddPole: (nazwa: string, tekst: string, jednostka: string, typWartosci: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.MAILING_ADD_POLE, nazwa, tekst, jednostka, typWartosci),
+  mailingUpdatePole: (
+    id: number,
+    nazwa: string,
+    tekst: string,
+    jednostka: string,
+    typWartosci: string,
+  ) =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.MAILING_UPDATE_POLE,
+      id,
+      nazwa,
+      tekst,
+      jednostka,
+      typWartosci,
+    ),
   mailingDeletePole: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.MAILING_DELETE_POLE, id),
   mailingGetSzablony: () => ipcRenderer.invoke(IPC_CHANNELS.MAILING_GET_SZABLONY),
   mailingAddSzablon: (data: unknown) =>

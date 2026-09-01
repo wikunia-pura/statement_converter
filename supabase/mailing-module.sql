@@ -39,8 +39,26 @@ create table if not exists public.mailing_pola (
   id          bigserial primary key,
   nazwa       text        not null,
   tekst       text        not null default '',
+  -- Jednostka dopisywana po wpisanej wartości ("zł/m²", "%"). Należy do pola,
+  -- a nie do wartości — wpisane przy wysyłce "20" wychodzi jako "20 zł/m²".
+  jednostka     text      not null default '',
+  -- Czym uzupełnia się pole przy wysyłce: 'tekst' (dowolny wpis), 'data'
+  -- (kalendarz, w liście dd.mm.rrrr) albo 'godzina' (zegar, w liście gg:mm).
+  typ_wartosci  text      not null default 'tekst'
+                          check (typ_wartosci in ('tekst', 'data', 'godzina')),
   created_at  timestamptz not null default now()
 );
+
+-- Migracje dla baz założonych przed jednostkami i typami pól (idempotentne).
+alter table public.mailing_pola
+  add column if not exists jednostka text not null default '';
+alter table public.mailing_pola
+  add column if not exists typ_wartosci text not null default 'tekst';
+alter table public.mailing_pola
+  drop constraint if exists mailing_pola_typ_wartosci_check;
+alter table public.mailing_pola
+  add constraint mailing_pola_typ_wartosci_check
+  check (typ_wartosci in ('tekst', 'data', 'godzina'));
 
 -- Szablony wiadomości. Tytuł i treść pisane są ze wstawkami {{pole}},
 -- podstawianymi przy wysyłce; `attach_pdf` to domyślna wartość przełącznika

@@ -5,7 +5,7 @@ import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
 import Icon from '../components/Icon';
 import ModalDismiss from '../components/Modal';
-import { buildMailShell } from '../../shared/mailing-template';
+import { buildMailShell, formatFieldValue } from '../../shared/mailing-template';
 import { MAILING_LOGO_SVG_DATA_URI } from '../../shared/mailing-logo';
 import { MAILING_TYPE_OPTIONS } from './Mailing';
 
@@ -129,7 +129,8 @@ const MailingDetailsModal: React.FC<DetailsModalProps> = ({ entry, language, onC
                     <tr key={f.nazwa}>
                       <td>{f.nazwa}</td>
                       <td>{f.tekst || '—'}</td>
-                      <td>{f.wartosc || '—'}</td>
+                      {/* With the unit, exactly as the sent letter read it. */}
+                      <td>{formatFieldValue(f.wartosc, f) || '—'}</td>
                     </tr>
                   ))}
                 </tbody>

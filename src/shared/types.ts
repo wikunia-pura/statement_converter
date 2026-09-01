@@ -83,8 +83,29 @@ export interface ApartmentMapping {
    * the user has stated one here or in the review screen.
    */
   kontoLokalu?: string;
+  /**
+   * Further apartments the same phrase may mean, beyond the primary one above.
+   *
+   * One payer often owns several apartments in the community and pays for all of
+   * them from the same account with the same description, so the phrase alone
+   * cannot say which one a given transfer is for. Listing them here keeps the
+   * rule honest: the matcher stops guessing and the acceptance screen asks the
+   * user to pick from exactly these apartments.
+   *
+   * Empty/absent ⇒ a single-apartment rule, matched and booked as before. Read
+   * it through `mappingTargets()` (shared/apartment-mapping.ts) rather than
+   * touching this field directly — the primary apartment is part of the list.
+   */
+  additionalApartments?: ApartmentMappingTarget[];
   /** Optional human-readable note. */
   note?: string;
+}
+
+/** One apartment an ApartmentMapping may point at, with its optional account. */
+export interface ApartmentMappingTarget {
+  apartmentNumber: string;
+  /** Account symbol for this apartment; see ApartmentMapping.kontoLokalu. */
+  kontoLokalu?: string;
 }
 
 export interface Adres {
@@ -206,8 +227,13 @@ export interface ReviewDecision {
   /**
    * Full account symbol typed by the user in the review screen ("Konto lokalu"),
    * used when action is 'manual' for income. Mutually exclusive with
-   * manualApartmentNumber and manualRemainingIncomeId — it is the way to book a
-   * lettered apartment, whose symbol the app must not derive on its own.
+   * manualRemainingIncomeId — it is the way to book a lettered apartment, whose
+   * symbol the app must not derive on its own.
+   *
+   * The one case where it travels together with `manualApartmentNumber` is a pick
+   * from a multi-apartment rule: the rule states both, so they cannot disagree —
+   * the symbol decides where the money goes, the number keeps the record readable.
+   * Typed by hand the two stay mutually exclusive (the UI disables the other field).
    */
   manualApartmentAccount?: string;
   manualContractorId?: number; // Used when action is 'manual' for expense
@@ -311,6 +337,13 @@ export interface OdczytyHistoryEntry {
 export type MailingTyp = 'zgn-zaliczki';
 
 /**
+ * Kind of value a dynamic field takes. `tekst` is the original behaviour and the
+ * default — anything typed goes out verbatim; `data` and `godzina` swap the
+ * send screen's box for a picker and fix the spelling of what it produces.
+ */
+export type MailingPoleTyp = 'tekst' | 'data' | 'godzina';
+
+/**
  * A user-defined dynamic field usable in a subject or body as `{{nazwa}}`.
  * `tekst` is the fixed lead-in ("Zmianie uległa zaliczka na fundusz remontowy w
  * kwocie:"); the value completing it is typed once per send, so the same field
@@ -321,6 +354,21 @@ export interface MailingPole {
   id: number;
   nazwa: string;
   tekst: string;
+  /**
+   * How the value completing this field is entered and written out:
+   * free text, a date (picked at send time, rendered dd.mm.rrrr) or a time
+   * (rendered gg:mm). The dictionary decides it once, so a letter announcing a
+   * meeting cannot go out with the date spelled three different ways.
+   */
+  typWartosci: MailingPoleTyp;
+  /**
+   * Unit written after the typed value ("zł/m²", "%", "zł") — the half of the
+   * amount that never changes between sends, so it belongs to the field rather
+   * than being retyped with every value. Empty ⇒ the value stands alone.
+   *
+   * Nothing to do with `ZgnJednostka`, the city unit a mail is addressed to.
+   */
+  jednostka: string;
   createdAt: string;
 }
 
@@ -351,7 +399,16 @@ export interface MailingSzablon {
 export interface MailingFieldValue {
   nazwa: string;
   tekst: string;
+  /** The typed value alone, without the unit — see `jednostka`. */
   wartosc: string;
+  /**
+   * The field's unit at send time. Absent in rows written before units existed,
+   * and kept per row rather than read back from the dictionary: renaming a
+   * field's unit must not rewrite what an already sent letter said.
+   */
+  jednostka?: string;
+  /** The field's kind at send time — same reasoning as `jednostka`. */
+  typWartosci?: MailingPoleTyp;
 }
 
 export interface MailingAttachment {

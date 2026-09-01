@@ -27,11 +27,23 @@ export class ExtractionCache {
   }
 
   /**
+   * Version of the extraction logic whose answers this cache may serve.
+   *
+   * Part of the key, so entries written by an older reading of the text simply
+   * stop being found. Without it a fix to extraction is invisible for the 30 days
+   * an entry lives: the cache is consulted *before* the regex path runs, so a
+   * payer whose glued postal code was once booked as apartment 202 would keep
+   * being served that 202 long after the code stopped producing it — and the fix
+   * would look like it had not worked. Bump on every change to how text is read.
+   */
+  private static readonly KEY_VERSION = 'v2';
+
+  /**
    * Generate cache key from desc fields
    */
   private getCacheKey(descBase: string, descOpt: string): string {
     const normalized = `${descBase.toLowerCase().trim()}|${descOpt.toLowerCase().trim()}`;
-    return normalized;
+    return `${ExtractionCache.KEY_VERSION}|${normalized}`;
   }
 
   /**

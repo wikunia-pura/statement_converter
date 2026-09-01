@@ -84,6 +84,365 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '6.3.0',
+    date: '2026-09-01',
+    title: 'Jeden płatnik, kilka lokali — reguła pyta, na który zaksięgować',
+    tagline:
+      'Właściciel dwóch lokali płaci za oba z jednego konta, tym samym opisem. Reguła lokalu mogła dotąd wskazać tylko jeden lokal, więc drugą wpłatę trzeba było poprawiać ręcznie przy każdym wyciągu. Teraz w regule wpisujesz wszystkie lokale takiego płatnika, a na ekranie akceptacji wybierasz jednym kliknięciem, o który lokal chodzi w danej wpłacie. Drugi duży wątek tego wydania to Mailing: pola dynamiczne są w treści pigułkami nie do rozjechania, opis i wartość można rozdzielić na dwie kolumny tabeli, a samo pole ma teraz jednostkę („zł/m²”) i typ — tekst, data albo godzina.',
+    stats: [
+      { value: 'kilka', label: 'lokali w jednej regule' },
+      { value: '1 klik', label: 'wybór lokalu w akceptacji' },
+      { value: '0', label: 'wpłat na zgadnięty lokal' },
+      { value: '3 typy', label: 'wartości pola w mailingu' },
+    ],
+    highlights: [
+      {
+        id: 'kilka-lokali-w-regule',
+        kind: 'new',
+        icon: 'building',
+        title: 'Reguła lokalu może wskazywać więcej niż jeden lokal',
+        summary:
+          'W formularzu reguły zamiast jednego pola „Numer lokalu” jest lista lokali: przyciskiem „Dodaj kolejny lokal” dopisujesz drugi, trzeci i każdy następny, a przy każdym z nich możesz podać własne konto lokalu.',
+        details: [
+          'Reguła lokalu rozpoznaje płatnika po frazie z opisu przelewu — najczęściej po nazwisku. Jeśli ten sam właściciel ma w tej wspólnocie dwa lokale i płaci za oba tak samo, fraza mówi kto zapłacił, ale nie za co. Dotąd reguła musiała wybrać jeden lokal, więc wpłaty za drugi lądowały na koncie pierwszego albo trzeba je było co miesiąc przypisywać ręcznie.',
+          'Kolejność lokali w regule jest tą samą kolejnością, w jakiej zobaczysz je do wyboru na ekranie akceptacji — warto ustawić najczęstszy lokal jako pierwszy.',
+          'Lokal z literą (np. 17A) nadal wymaga podania konta — aplikacja nie zgaduje, jak Twoja wspólnota numeruje takie lokale. Reguła bez konta dla takiego lokalu nie zapisze się i powie dlaczego.',
+        ],
+        where: ['Menu boczne', 'Adresy', 'Reguły lokali'],
+        steps: [
+          {
+            do: 'Wejdź w „Adresy” i przy wybranej wspólnocie kliknij „Reguły lokali”.',
+            then: 'Otworzy się lista reguł. Kolumna „Lokale” pokazuje teraz wszystkie lokale danej reguły — jeden pod drugim, a obok, w tej samej linii, konto każdego z nich.',
+          },
+          {
+            do: 'Kliknij „Dodaj regułę” (albo „Edytuj” przy istniejącej) i wpisz frazę, np. nazwisko płatnika.',
+            then: 'Pod frazą jest sekcja „Lokale” z jednym wierszem: numer lokalu i konto lokalu.',
+          },
+          {
+            do: 'Kliknij „Dodaj kolejny lokal” i wpisz drugi numer. Powtórz dla każdego lokalu tego płatnika.',
+            then: 'Każdy wiersz ma własne pole konta i własny kosz do usunięcia. Konto zostaw puste, jeśli ma być domyślne (prefiks + numer dopełniony zerami, np. 204-000031).',
+          },
+          {
+            do: 'Zapisz regułę przyciskiem „Zapisz”.',
+            then: 'Aplikacja sprawdzi, czy ten sam lokal nie został wpisany dwa razy i czy każdy lokal z literą ma podane konto.',
+          },
+        ],
+        expect: [
+          'Reguła z jednym lokalem działa dokładnie jak dotąd — wpłata dostaje numer lokalu i pojawia się do akceptacji z gotowym „Akceptuj”.',
+          'Reguła z kilkoma lokalami niczego nie księguje sama: wpłata czeka na Twój wybór na ekranie akceptacji.',
+          'Wszystkie lokale reguły wchodzą do kopii zapasowej i do eksportu adresów do pliku TXT, więc przenoszą się razem z resztą konfiguracji. Plik z regułą jednolokalową otwiera się bez zmian także w starszej wersji aplikacji.',
+        ],
+      },
+      {
+        id: 'wybor-lokalu-w-akceptacji',
+        kind: 'new',
+        icon: 'map-pin',
+        title: 'Na ekranie akceptacji wybierasz lokal z listy z reguły',
+        summary:
+          'Wpłata dopasowana regułą z kilkoma lokalami pokazuje niebieską ramkę „WYBIERZ LOKAL” z kafelkiem na każdy lokal z reguły. Na kafelku widzisz numer lokalu i konto, na które pójdzie kwota — jedno kliknięcie i wpłata jest przypisana.',
+        details: [
+          'Aplikacja nie proponuje tu żadnego lokalu „na start” i nie podpowiada domyślnego. Gdyby zgadywała, najczęściej trafiałaby dobrze — a kilka razy w roku zaksięgowałaby czynsz na konto drugiego lokalu tego samego właściciela, w sposób niewidoczny w pliku księgowym. Dlatego wybór należy do Ciebie.',
+          'Do wyboru dostajesz dokładnie te lokale, które ma reguła — nic więcej. Jeśli wpłata jest jednak za coś innego, pola „Numer mieszkania”, „Konto lokalu” i „Pozostałe przychody” pod ramką działają jak zwykle; użycie któregokolwiek z nich anuluje wybór z reguły.',
+          'Kafelek lokalu z literą, dla którego reguła nie podaje konta, jest nieaktywny — nie ma na co księgować. Ramka mówi wtedy, żeby dopisać konto w regule („Edytuj powiązanie”) albo wpisać je ręcznie w polu „Konto lokalu”.',
+        ],
+        where: ['Menu boczne', 'Konwerter', 'Akceptacja'],
+        steps: [
+          {
+            do: 'Przekonwertuj wyciąg jak zawsze i wejdź na ekran akceptacji.',
+            then: 'Wpłata od płatnika z regułą wielolokalową ma w miejscu ramki z numerem lokalu niebieską ramkę „WYBIERZ LOKAL”, a pod nią kafelki: duży numer lokalu i pod nim konto, np. „31” i „204-000031”.',
+          },
+          {
+            do: 'Kliknij kafelek właściwego lokalu.',
+            then: 'Ramka zmienia się na fioletową „Lokal wybrany z reguły”, wybrany kafelek jest obramowany, a na dole widzisz „W pliku księgowym: 204-000031”. Karta transakcji robi się fioletowa jak przy każdym ręcznym przypisaniu.',
+          },
+          {
+            do: 'Pomyliłeś się? Kliknij inny kafelek albo „Wyczyść wybór lokalu”.',
+            then: 'Wpłata wraca do stanu „czeka na wybór”. Przyciski „Oznacz jako nierozpoznane” i „Do wyjaśnienia” są nieaktywne, dopóki wybór jest aktywny — najpierw go wyczyść.',
+          },
+          {
+            do: 'Chcesz dopisać do reguły kolejny lokal bez wychodzenia z akceptacji? Kliknij „Edytuj powiązanie”.',
+            then: 'Formularz reguły ma tę samą listę lokali z przyciskiem „Dodaj kolejny lokal”. Po zapisaniu ramka od razu pokazuje nowy zestaw lokali do wyboru.',
+          },
+          {
+            do: 'Dokończ akceptację i wygeneruj plik księgowy jak zwykle.',
+          },
+        ],
+        expect: [
+          'Wpłata, przy której nikt nie wybrał lokalu, trafia do sekcji „NIEROZPOZNANE” pliku księgowego — nigdy na jeden z lokali reguły „w ciemno”.',
+          'W pliku księgowym wybrany lokal ląduje na koncie widocznym na kafelku: z reguły, jeśli reguła je podaje, albo domyślnym (prefiks + numer dopełniony zerami).',
+          'Wybór dotyczy tylko tej jednej wpłaty. Kolejny przelew od tego samego płatnika znów zapyta, bo znów może być za którykolwiek z jego lokali.',
+        ],
+      },
+      {
+        id: 'reguly-dzialaja-od-razu',
+        kind: 'improved',
+        icon: 'refresh',
+        title: 'Zmiana w regule działa od najbliższej konwersji',
+        summary:
+          'Wpłaty rozpoznane przez regułę nie są już zapamiętywane w pamięci podręcznej. Poprawiony numer lokalu, dopisane konto albo dodany drugi lokal działają od razu na następnym wyciągu — nie trzeba czekać, aż wpis się przedawni.',
+        details: [
+          'Pamięć podręczna jest sprawdzana przed regułami, więc raz zapamiętana odpowiedź przesłaniała późniejszą zmianę reguły dla tego samego płatnika. Przy jednym lokalu dawało to zaskakujące „poprawiłem regułę, a nic się nie zmieniło”; przy kilku lokalach wpłata w ogóle nie zapytałaby o wybór.',
+          'Nic nie trzeba czyścić ani ustawiać — dopasowanie reguły to zwykłe szukanie frazy w tekście, więc liczenie go za każdym razem nic nie kosztuje. Pamięć podręczna dalej oszczędza wywołania AI dla pozostałych wpłat.',
+        ],
+        expect: [
+          'Po zmianie reguły wystarczy przekonwertować wyciąg ponownie — nowa wersja reguły zadziała natychmiast.',
+        ],
+      },
+      {
+        id: 'pola-dynamiczne-jako-pigulki',
+        kind: 'improved',
+        icon: 'mail',
+        title: 'Pola dynamiczne w mailingu są pigułkami, nie tekstem w nawiasach',
+        summary:
+          'W tytule i treści wiadomości pole dynamiczne wygląda jak kolorowa pigułka z nazwą pola, a nie jak {{Nazwa pola}}. Pigułki nie da się przypadkiem rozjechać — Backspace usuwa całe pole, nigdy pół nawiasu.',
+        details: [
+          'Nawiasy klamrowe łatwo było uszkodzić: skasowana jedna klamra albo literówka w nazwie i pole cicho przestawało się podstawiać — w wysłanym mailu zostawało „{{Zaliczka}}” zamiast kwoty. Pigułka jest jednym elementem: albo jest cała, albo jej nie ma.',
+          'Pole, którego nie ma w słowniku „Pola dynamiczne”, jest czerwoną pigułką od razu w treści — nie trzeba wypatrywać ostrzeżenia pod formularzem.',
+          'Zapis się nie zmienił: w bazie, w historii wysyłek i w PDF-ie dalej siedzi ten sam tekst z nawiasami, więc stare szablony otwierają się bez żadnej przeróbki i od razu z pigułkami.',
+        ],
+        where: ['Menu boczne', 'Mailing', 'Szablony'],
+        steps: [
+          {
+            do: 'Wejdź w „Mailing” → „Szablony” i kliknij „Edytuj” przy dowolnym szablonie.',
+            then: 'Pola dynamiczne w tytule i w treści są teraz pigułkami z nazwą pola. Najedź na pigułkę — podpowiedź mówi, co robi kliknięcie.',
+          },
+          {
+            do: 'Ustaw kursor w treści i wybierz pole z listy „Wstaw pole…” w pasku narzędzi.',
+            then: 'Pigułka wskakuje dokładnie tam, gdzie stał kursor, a nie na początek pisma.',
+          },
+          {
+            do: 'Chcesz usunąć pole? Postaw kursor za pigułką i naciśnij Backspace.',
+            then: 'Znika całe pole, jednym naciśnięciem.',
+          },
+        ],
+        expect: [
+          'Wysyłany mail i PDF wyglądają dokładnie tak samo jak wcześniej — zmienił się tylko wygląd edytora.',
+          'Wklejenie tekstu z nawiasami (np. z maila od kogoś) też zamienia je w pigułki.',
+        ],
+      },
+      {
+        id: 'opis-i-wartosc-pola-osobno',
+        kind: 'new',
+        icon: 'table',
+        title: 'Opis pola w jednej kolumnie, wartość w drugiej',
+        summary:
+          'Jedno pole dynamiczne można teraz wstawić w trzech wariantach: całe (stałe zdanie i kwota razem), sam opis albo samą wartość. Dzięki temu w tabeli narysowanej w treści wstawiasz opis „Zimna woda” do kolumny A, a kwotę do kolumny B — z tego samego pola.',
+        details: [
+          'Do tej pory pole podstawiało się zawsze jako „stałe zdanie + wartość”, jednym ciągiem. W tabeli to nie działało: nic w mailu nie przeniesie połowy takiego tekstu za krawędź komórki, więc tabelę z opisami w jednej kolumnie i kwotami w drugiej dawała tylko wbudowana „Tabela pól” — z jej stałym układem dwóch kolumn.',
+          'Teraz układ tabeli rysujesz sam: dowolna liczba kolumn, nagłówki, tekst między komórkami — a pola dynamiczne wstawiasz do tych komórek, do których chcesz.',
+          'Wartość wpisujesz przy wysyłce tak samo jak dotąd, raz na pole. Jeśli w piśmie użyłeś wyłącznie opisu pola, aplikacja nie pyta o jego wartość — nie byłoby jej gdzie pokazać.',
+        ],
+        where: ['Menu boczne', 'Mailing', 'Szablony'],
+        steps: [
+          {
+            do: 'W edytorze treści szablonu kliknij ikonę tabeli, ustaw np. 2 kolumny i 4 wiersze, i kliknij „Wstaw tabelę”.',
+            then: 'W treści pojawia się pusta tabela z widocznymi obramowaniami.',
+          },
+          {
+            do: 'Ustaw kursor w pierwszej komórce lewej kolumny. W pasku narzędzi, przy „Wstaw:”, kliknij „opis” i wybierz pole, np. „Zimna woda”.',
+            then: 'W komórce pojawia się pigułka „Zimna woda” z dopiskiem „opis” — w wysłanym mailu będzie tu samo stałe zdanie tego pola.',
+          },
+          {
+            do: 'Przejdź do komórki obok, przy „Wstaw:” kliknij „wartość” i wybierz to samo pole.',
+            then: 'Pigułka ma dopisek „wartość” — tu wejdzie sama kwota wpisana przy wysyłce.',
+          },
+          {
+            do: 'Powtórz dla kolejnych wierszy. Pomyliłeś wariant? Kliknij pigułkę.',
+            then: 'Pigułka przełącza się po kolei: całość → opis → wartość.',
+          },
+          {
+            do: 'Zapisz szablon, wejdź w „Mailing”, wybierz go i wpisz wartości pól.',
+            then: 'Podgląd pod formularzem pokazuje gotową tabelę: opisy w jednej kolumnie, kwoty w drugiej.',
+          },
+        ],
+        expect: [
+          'Jedno pole to nadal jedna wartość do wpisania przy wysyłce, nawet jeśli w piśmie stoi w dwóch komórkach.',
+          'Wbudowana „Tabela pól” działa bez zmian — jeśli jej układ Ci wystarcza, nic nie musisz przestawiać.',
+          'Pole bez stałego zdania wstawione jako „opis” pokazuje swoją nazwę, żeby komórka nie została pusta.',
+        ],
+      },
+      {
+        id: 'jednostka-pola-dynamicznego',
+        kind: 'new',
+        icon: 'mail',
+        title: 'Pole dynamiczne ma własną jednostkę — przy wysyłce wpisujesz samą liczbę',
+        summary:
+          'W formularzu pola dynamicznego doszło pole „Jednostka”, np. „zł/m²”. Jednostka dopisuje się w treści zaraz po wartości: wpisujesz przy wysyłce „20”, a w liście jest „20 zł/m²”.',
+        details: [
+          'Jednostka jest tą częścią kwoty, która nie zmienia się między wysyłkami — a mimo to trzeba ją było co miesiąc wklepywać razem z liczbą, przy każdej pozycji z osobna. Wystarczyło raz napisać „20 zł/m2” zamiast „20 zł/m²” i jedno pismo miało dwa różne zapisy tej samej stawki.',
+          'Jednostka jest opcjonalna. Pole bez jednostki działa dokładnie jak dotąd, więc żadnego istniejącego pola ani szablonu nie trzeba poprawiać.',
+          'Wpisana wartość i jednostka są sklejane spacją, więc jednostkę wpisujesz bez wiodącej spacji — samo „zł/m²”.',
+          'Jednostka dopisuje się tylko wtedy, gdy wartość jest wypełniona. Pominięta pozycja zostaje pusta, zamiast pokazać w piśmie samo „zł/m²”.',
+        ],
+        where: ['Menu boczne', 'Mailing', 'Pola dynamiczne'],
+        steps: [
+          {
+            do: 'Wejdź w „Mailing” → „Pola dynamiczne” i kliknij „Dodaj pole” (albo „Edytuj” przy istniejącym).',
+            then: 'Pod „Stałym zdaniem” jest nowe pole „Jednostka”.',
+          },
+          {
+            do: 'Wpisz jednostkę, np. „zł/m²”.',
+            then: 'Podgląd pod formularzem od razu pokazuje, co pojawi się w treści: „350,00 zł/m²” dla przykładowej wartości — czyli jednostka stoi po wartości.',
+          },
+          {
+            do: 'Zapisz pole przyciskiem „Zapisz”.',
+            then: 'Na liście pól doszła kolumna „Jednostka”, więc od razu widzisz, które pola ją mają.',
+          },
+          {
+            do: 'Wejdź w „Mailing”, wybierz szablon używający tego pola i wpisz wartość — samą liczbę, np. „20”.',
+            then: 'Obok pola do wpisania widnieje jednostka („zł/m²”), a podgląd pisma pokazuje „20 zł/m²”.',
+          },
+        ],
+        expect: [
+          'Jednostka wchodzi wszędzie tam, gdzie wchodzi wartość: w zdanie pola, we wstawkę „wartość”, w kolumnę kwot „Tabeli pól” i w PDF.',
+          'W „Historii wysyłek” kwoty są pokazane z jednostką z chwili wysyłki — późniejsza zmiana jednostki w słowniku nie przepisuje tego, co już poszło.',
+          'Jednostki wchodzą do kopii zapasowej razem z polami. Kopia zrobiona starszą wersją wczytuje się bez zmian — pola po prostu nie mają jednostki.',
+        ],
+      },
+      {
+        id: 'typ-pola-data-godzina',
+        kind: 'new',
+        icon: 'calendar',
+        title: 'Pole dynamiczne może być datą albo godziną',
+        summary:
+          'W formularzu pola doszedł przełącznik „Typ wartości”: tekst, data albo godzina. Przy wysyłce pole typu „data” wybierasz z kalendarza, a „godzina” z zegara — w liście wychodzi zawsze „14.09.2026” i „18:00”, w jednym zapisie.',
+        details: [
+          'Termin zebrania czy dzień wejścia nowej stawki był dotąd zwykłym tekstem, więc w jednym piśmie potrafiło stanąć „14.09.2026”, w drugim „14 września”, a w trzecim „14/09/26” — literówka w dacie w piśmie do jednostki jest kosztowna, bo nikt jej nie zweryfikuje. Kalendarz nie pozwala wpisać dnia, którego nie ma.',
+          'To wybór dla całej wysyłki, tak samo jak każda inna wartość pola: jedna data trafia do wszystkich zaznaczonych wspólnot. Pole zakłada się raz („Termin zebrania”) i używa co miesiąc z nową datą.',
+          'Nie mylić z wbudowanym polem „Data”, które podstawia dzisiejszą datę i o nic nie pyta. Tutaj datę wybierasz Ty — i może być dowolna, także przyszła.',
+          'Data i godzina nie mają jednostki, więc przy tych dwóch typach pole „Jednostka” znika z formularza. Wszystkie dotychczasowe pola są typu „tekst” i działają bez żadnej zmiany.',
+        ],
+        where: ['Menu boczne', 'Mailing', 'Pola dynamiczne'],
+        steps: [
+          {
+            do: 'Wejdź w „Mailing” → „Pola dynamiczne” i kliknij „Dodaj pole”.',
+            then: 'Pod „Stałym zdaniem” jest przełącznik „Typ wartości” z trzema pozycjami: tekst, data, godzina. Nowe pole startuje jako „tekst”.',
+          },
+          {
+            do: 'Wpisz nazwę, np. „Termin zebrania”, stałe zdanie „Zebranie odbędzie się dnia:” i kliknij „data”.',
+            then: 'Podgląd pod formularzem pokazuje „Zebranie odbędzie się dnia: 14.09.2026”, a pole „Jednostka” znika — data jej nie potrzebuje.',
+          },
+          {
+            do: 'Zapisz pole. Tak samo załóż drugie, np. „Godzina zebrania” z typem „godzina”.',
+            then: 'Na liście pól pod nazwą widnieje typ („data”, „godzina”), więc od razu wiadomo, które pole o co poprosi.',
+          },
+          {
+            do: 'Wstaw oba pola do szablonu i wejdź w „Mailing” → wybierz ten szablon.',
+            then: 'W sekcji „Wartości pól dynamicznych” pole daty ma kalendarz, a pole godziny — zegar. Nie ma czego wpisać z ręki.',
+          },
+          {
+            do: 'Wybierz datę i godzinę, po czym zerknij na podgląd pisma.',
+            then: 'W treści widnieje „Zebranie odbędzie się dnia: 14.09.2026” i „18:00”.',
+          },
+        ],
+        expect: [
+          'Typ zmienisz w każdej chwili — pole zapisane wcześniej jako tekst wystarczy wyedytować i przełączyć na „data”.',
+          'Data i godzina działają wszędzie tam, gdzie zwykła wartość: we wstawce „wartość”, w „Tabeli pól”, w PDF i w historii wysyłek.',
+          'Typ pola wchodzi do kopii zapasowej. Kopia zrobiona starszą wersją wczytuje się bez zmian — jej pola są po prostu tekstowe.',
+        ],
+      },
+      {
+        id: 'sklejony-kod-pocztowy-w-adresie',
+        kind: 'fixed',
+        icon: 'alert-triangle',
+        title: 'Kod pocztowy sklejony z numerem lokalu nie wysyła już wpłaty na cudze konto',
+        summary:
+          'W wyciągach, w których bank zapisuje adres płatnika jednym ciągiem — „UL. PUŁAWSKA 116 M.202-620 WARSZAWA” — aplikacja czytała numer lokalu razem z kodem pocztowym i księgowała taką wpłatę na lokal 202 zamiast na lokal 2. Teraz kod pocztowy jest odcinany, a numer lokalu odczytywany poprawnie.',
+        details: [
+          'Bank wpisuje nazwę, ulicę, kod pocztowy i miasto do jednego pola o stałej szerokości, bez odstępu między nimi. „M.2” i „02-620” sklejają się wtedy w „M.202-620”, a aplikacja brała stąd lokal 202 — z pełną pewnością, bez ostrzeżenia i bez pytania, więc wpłata cicho szła na konto innego właściciela. W jednym wyciągu potrafiło tak przejść 8 z 10 wpłat od mieszkańców.',
+          'Rozdzielenie jest pewne, a nie zgadywane: myślnik w kodzie pocztowym stoi zawsze w tym samym miejscu, więc dwie cyfry przed nim należą do kodu, a wszystko wcześniej to numer lokalu. Dlatego działa niezależnie od wielkości budynku — „M.70202-620” to lokal 702 — i dla kodów spoza Warszawy, np. „M.8322-300” to lokal 83 w Krasnymstawie.',
+          'Przy okazji zniknęła odwrotna pomyłka: sam kod pocztowy stojący za numerem budynku („Puławska 116 02-620”) był czytany jako lokal 02, czyli lokal 2 — też bez żadnego sygnału, że coś jest nie tak.',
+          'Jeśli bank sklei numer lokalu z czymś, czego aplikacja nie umie rozdzielić, wpłata nie księguje się „na oko”. Trafia do sprawdzenia na ekranie akceptacji, a w ostrzeżeniu jest napisane, co dokleiło się do numeru.',
+        ],
+        where: ['Menu boczne', 'Konwerter', 'Akceptacja'],
+        steps: [
+          {
+            do: 'Przekonwertuj wyciąg jak zawsze i wejdź na ekran akceptacji.',
+            then: 'Numery lokali przy wpłatach od mieszkańców zgadzają się z tym, co widać w PDF-ie wyciągu — np. „2”, a nie „202”.',
+          },
+          {
+            do: 'Przejrzyj wpłaty oznaczone do sprawdzenia.',
+            then: 'Wpłata, przy której numeru lokalu nie dało się odczytać pewnie, czeka na Twoją decyzję zamiast zaksięgować się sama, i pokazuje, co przykleiło się do numeru.',
+          },
+        ],
+        expect: [
+          'Nie trzeba nic czyścić ani przestawiać — poprawka działa od najbliższej konwersji, także dla płatników, których aplikacja zapamiętała wcześniej z błędnym numerem lokalu.',
+          'Poprawka dotyczy wszystkich banków, nie tylko BOŚ — sklejone adresy z pozostałych formatów wyciągów są czytane tak samo.',
+        ],
+        note: {
+          type: 'warning',
+          text: 'Wyciągi przekonwertowane wcześniejszymi wersjami mogły trafić na zły lokal. Jeśli księgowałeś wyciągi, w których adres płatnika jest sklejony w jeden ciąg, warto sprawdzić numery lokali przy wpłatach mieszkańców.',
+        },
+      },
+      {
+        id: 'mailing-czysci-adresatow-po-wyslaniu',
+        kind: 'improved',
+        icon: 'mail',
+        title: 'Po wysłaniu mailingu lista adresatów czyści się sama',
+        summary:
+          'Wspólnoty, do których mail poszedł, znikają z listy adresatów zaraz po wysyłce. Nie trzeba ich odklikiwać jedna po drugiej, żeby wysłać kolejny mailing, i nie ma jak wysłać drugi raz tego samego maila do tej samej wspólnoty.',
+        details: [
+          'Dotąd po wysyłce zaznaczenie zostawało takie samo, a mailing wysyła się jednym przyciskiem — wystarczyło poprawić treść i kliknąć „Wyślij”, żeby te same wspólnoty dostały maila po raz drugi.',
+          'Wspólnota, do której mail nie doszedł, zostaje na liście zaznaczona. Poprawiasz to, co nie zadziałało (najczęściej adres jednostki miasta), i wysyłasz ponownie — bez szukania jej od nowa w wyszukiwarce adresatów.',
+          'Reszta formularza zostaje bez zmian: szablon, wpisane wartości pól, zaznaczone pola do tabeli i załączniki. Kolejny mailing tego samego typu robisz więc tylko przez dobranie nowych wspólnot.',
+        ],
+        where: ['Menu boczne', 'Mailing', 'Wyślij'],
+        steps: [
+          {
+            do: 'Przygotuj mailing jak zwykle — wybierz szablon, dobierz wspólnoty, wpisz wartości pól i kliknij „Wyślij”.',
+            then: 'Po wysyłce pod przyciskiem pojawia się tabela wyników z nazwą każdej wspólnoty i statusem, a sekcja „Adresaci” wyżej jest już pusta — licznik pokazuje „wybrano 0”.',
+          },
+          {
+            do: 'Jeśli przy którejś wspólnocie w wynikach jest czerwony status, przewiń do „Adresaci”.',
+            then: 'Właśnie te wspólnoty zostały na liście — gotowe do ponowienia po naprawieniu przyczyny.',
+          },
+        ],
+        expect: [
+          'Tabela wyników zostaje na ekranie po wyczyszczeniu adresatów — widzisz, do kogo mail poszedł, także po opróżnieniu listy.',
+          'Przycisk „Wyślij” jest nieaktywny, dopóki nie dobierzesz kolejnych adresatów.',
+          'Historia mailingów zapisuje się tak jak dotąd — przycisk „Przejdź do historii” nad tabelą wyników.',
+        ],
+      },
+      {
+        id: 'mailing-podglad-kazdej-wspolnoty',
+        kind: 'new',
+        icon: 'eye',
+        title: 'Podgląd maila dla każdej wspólnoty osobno',
+        summary:
+          'W sekcji „Podgląd wiadomości” doszła lista adresatów: wybierasz wspólnotę z rozwijanej listy albo przechodzisz strzałkami „‹ ›” po kolejnych, i widzisz dokładnie ten mail, który do niej poleci — z jej nazwą w tytule i treści oraz adresem skrzynki, na którą trafi.',
+        details: [
+          'Dotąd podgląd pokazywał zawsze pierwszą zaznaczoną wspólnotę. Mail każdej kolejnej różni się jej nazwą w tytule i w treści oraz skrzynką jednostki ZGN, na którą idzie — przy wysyłce do dwudziestu wspólnot dziewiętnaście listów widziałeś dopiero po wysłaniu, w historii.',
+          'Na liście adresatów każdy wiersz ma teraz przycisk z ikoną oka: kliknięcie przenosi podgląd na tę wspólnotę i przewija ekran do podglądu. Wiersz, którego mail jest właśnie na ekranie, zostaje podświetlony.',
+          'Wybór wspólnoty w podglądzie nie zmienia niczego w wysyłce — decyduje tylko o tym, który list czytasz. Lista adresatów, treść, wartości pól i załączniki zostają bez zmian.',
+        ],
+        where: ['Menu boczne', 'Mailing', 'Podgląd wiadomości'],
+        steps: [
+          {
+            do: 'Przygotuj mailing jak zwykle — wybierz szablon i dobierz wspólnoty w sekcji „Wspólnoty i adresaci”.',
+            then: 'Sekcja „Podgląd wiadomości” niżej pokazuje mail pierwszej wspólnoty z listy.',
+          },
+          {
+            do: 'W podglądzie rozwiń listę „Podgląd dla wspólnoty” i wybierz wspólnotę — możesz wpisać kilka liter jej nazwy, żeby ją znaleźć.',
+            then: 'Tytuł i treść przeliczają się na tę wspólnotę, a nad tytułem widać „Mail poleci na: …” z adresem jej jednostki ZGN.',
+          },
+          {
+            do: 'Klikaj strzałki „‹” i „›” obok listy, żeby przejrzeć wszystkie listy po kolei.',
+            then: 'Licznik między strzałkami mówi, na której wspólnocie jesteś, np. „3 z 12”. Po ostatniej wracasz do pierwszej.',
+          },
+          {
+            do: 'Chcesz sprawdzić konkretną wspólnotę z listy adresatów? Kliknij przy niej ikonę oka.',
+            then: 'Podgląd przeskakuje na tę wspólnotę, ekran przewija się do podglądu, a jej wiersz na liście adresatów jest podświetlony.',
+          },
+        ],
+        expect: [
+          'Podgląd pokazuje to samo, co zostanie wysłane (i zapisane do PDF, jeśli PDF jest włączony) — razem z logo INTER-EJ na górze.',
+          'Jeśli usuniesz z listy adresatów wspólnotę, która była w podglądzie, podgląd wróci do pierwszej z listy — nie zostaje pusty.',
+          'Przy pustej liście adresatów podgląd działa jak dotąd: w miejscu nazwy wspólnoty widać „[nazwa wspólnoty]”.',
+        ],
+      },
+    ],
+  },
+  {
     version: '6.2.0',
     date: '2026-08-11',
     title: 'Lokale z literą (17A) już nie trafiają na cudze konto',

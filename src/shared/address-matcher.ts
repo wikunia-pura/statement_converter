@@ -13,8 +13,16 @@
  * the regex-extractor files to restore old behavior.
  */
 
-import { Adres } from './types';
-import { isLetteredApartment, letteredApartmentInText } from './apartment-account';
+import { Adres, ApartmentMappingTarget } from './types';
+import {
+  isLetteredApartment,
+  letteredApartmentInText,
+  stripAddressCodes,
+  apartmentGlueInText,
+  apartmentWidthImplausible,
+  HELD_BACK_CONFIDENCE,
+} from './apartment-account';
+import { mappingTargets } from './apartment-mapping';
 
 /**
  * The letter part of an apartment number — the `A` in `17A`.
@@ -173,6 +181,18 @@ export interface AddressMatchResult {
    * confidence is held below the review threshold whenever this is set.
    */
   needsAccount: boolean;
+  /**
+   * The apartments a matched rule offers, when the rule names more than one.
+   * Empty for every other kind of match.
+   *
+   * While this is non-empty, `apartmentNumber` is deliberately null: the rule
+   * recognized the payer, not the apartment, and picking one of several owned by
+   * the same person is a decision only the user can make. Leaving the number out
+   * is what keeps the money safe — nothing downstream can book a transaction with
+   * no apartment, so an ignored row lands in "NIEROZPOZNANE" instead of on a
+   * plausible-looking wrong account.
+   */
+  apartmentChoices: ApartmentMappingTarget[];
 }
 
 // === INTERNAL PRECOMPUTED TYPES ===
@@ -187,15 +207,22 @@ interface CompiledVariation {
   knownWithoutSpaces: string;
 }
 
-/** A precomputed apartment-mapping rule (street/building/apartment fixed at build time). */
-interface CompiledMapping {
-  needle: string;
+/** One apartment a rule points at, normalized at build time. */
+interface CompiledMappingTarget {
   apartment: string;
-  streetName: string;
-  buildingNumber: string | null;
-  fullAddress: string;
   /** Explicit account symbol from the rule, or null to use the default prefix rule. */
   accountOverride: string | null;
+}
+
+/** A precomputed apartment-mapping rule (street/building/apartments fixed at build time). */
+interface CompiledMapping {
+  needle: string;
+  streetName: string;
+  buildingNumber: string | null;
+  /** Address without an apartment — used when the rule offers several. */
+  baseAddress: string;
+  /** Never empty; more than one entry means the user has to pick. */
+  targets: CompiledMappingTarget[];
 }
 
 /** All transaction-independent derived data for one address. */
@@ -254,18 +281,19 @@ export class AddressMatcher {
     const mappings: CompiledMapping[] = (addr.apartmentMappings || [])
       .map(mapping => {
         const needle = this.normalizePolishChars((mapping.matchText || '').trim().toLowerCase());
-        const apartment = this.normalizeApartment((mapping.apartmentNumber || '').trim());
-        if (!needle || !apartment) return null;
-        const accountOverride = (mapping.kontoLokalu || '').trim();
+        const targets: CompiledMappingTarget[] = mappingTargets(mapping)
+          .map(target => ({
+            apartment: this.normalizeApartment(target.apartmentNumber),
+            accountOverride: (target.kontoLokalu || '').trim() || null,
+          }))
+          .filter(target => target.apartment.length > 0);
+        if (!needle || targets.length === 0) return null;
         return {
           needle,
-          apartment,
           streetName: mapStreet,
           buildingNumber: mapBuilding,
-          fullAddress: mapBuilding
-            ? `${mapStreet} ${mapBuilding}/${apartment}`
-            : `${mapStreet} ${apartment}`,
-          accountOverride: accountOverride || null,
+          baseAddress: mapBuilding ? `${mapStreet} ${mapBuilding}` : mapStreet,
+          targets,
         };
       })
       .filter((m): m is CompiledMapping => m !== null);
@@ -295,6 +323,7 @@ export class AddressMatcher {
         matchedByManualMapping: false,
         accountOverride: null,
         needsAccount: false,
+        apartmentChoices: [],
       };
     }
 
@@ -302,17 +331,25 @@ export class AddressMatcher {
     //     "weird" recurring payments the matcher can't otherwise resolve).
     //     High confidence (95) so the regex path accepts it and AI is skipped;
     //     the matchedByManualMapping flag still forces the transaction into review.
+    //     A rule naming several apartments returns no number and offers them as
+    //     `apartmentChoices` instead — see matchApartmentMapping.
     const mappingMatch = this.matchApartmentMapping(combinedText, counterpartyName);
     if (mappingMatch) {
       return mappingMatch;
     }
 
-    // 2. Extract apartment/identifier from text (merged patterns from both converters)
-    const apartmentResult = this.extractApartmentNumber(combinedText);
+    // 2. Take the address codes out, then extract apartment/identifier from text.
+    //    Both extractors below read the stripped text, because the glued postal
+    //    code fools them in opposite directions: the apartment patterns read
+    //    "M.202-620" as apartment 202, and the known-address path reads the plain
+    //    "Puławska 116 02-620" as apartment 02. Stripping happens *after* the
+    //    rules above, so a rule whose phrase contains a postal code still matches.
+    const scanText = stripAddressCodes(combinedText);
+    const apartmentResult = this.extractApartmentNumber(scanText);
 
     // 3. Match address against known properties
     const addressResult = this.extractAddress(
-      combinedText,
+      scanText,
       apartmentResult?.apartment || null
     );
 
@@ -438,6 +475,27 @@ export class AddressMatcher {
       );
     }
 
+    // 10b. Glue guard — the same shape of danger as (b) above, one field over.
+    //
+    // Step 2 removes the address codes we can split deterministically. This
+    // catches what is left: a number standing on a field boundary the bank did
+    // not separate, or one so wide it has plainly swallowed its neighbour. Either
+    // way the digits may belong to two fields, and a wrong apartment number is
+    // indistinguishable from a right one once it reaches the books.
+    const glueResidue = apartmentGlueInText(combinedText, apartmentNumber);
+    const implausibleWidth = apartmentWidthImplausible(apartmentNumber);
+    const gluedNumber = !!glueResidue || implausibleWidth;
+
+    if (implausibleWidth) {
+      warnings.push(
+        `Apartment "${apartmentNumber}" is too wide to be a real one — it has absorbed glued text; verify before booking`
+      );
+    } else if (glueResidue) {
+      warnings.push(
+        `Apartment "${apartmentNumber}" runs straight into "${glueResidue.trim()}" — the field boundary is unclear; verify before booking`
+      );
+    }
+
     return {
       streetName,
       buildingNumber,
@@ -445,11 +503,13 @@ export class AddressMatcher {
       fullAddress,
       tenantName,
       isZGN: false,
-      confidence: needsAccount ? this.holdBackForReview(confidence) : confidence,
+      confidence:
+        needsAccount || gluedNumber ? this.holdBackForReview(confidence) : confidence,
       warnings,
       matchedByManualMapping: false,
       accountOverride: null,
       needsAccount,
+      apartmentChoices: [],
     };
   }
 
@@ -460,8 +520,8 @@ export class AddressMatcher {
   private holdBackForReview(confidence: ConfidenceScores): ConfidenceScores {
     return {
       ...confidence,
-      apartment: Math.min(confidence.apartment, 40),
-      overall: Math.min(confidence.overall, 40),
+      apartment: Math.min(confidence.apartment, HELD_BACK_CONFIDENCE),
+      overall: Math.min(confidence.overall, HELD_BACK_CONFIDENCE),
     };
   }
 
@@ -486,14 +546,54 @@ export class AddressMatcher {
 
         const tenantName = this.extractTenantName(counterpartyName || combinedText);
 
+        // A rule naming several apartments identifies the payer but not which of
+        // their apartments this transfer is for — one owner, one account, one
+        // description, several apartments. So no number is returned at all and the
+        // apartments travel as choices for the acceptance screen.
+        //
+        // The confidence stays high on purpose, even without a number: it is what
+        // tells the pipeline the text is understood, so the transaction is not sent
+        // to the AI to have the missing apartment invented. The empty number is
+        // what keeps it out of the books until the user picks.
+        if (mapping.targets.length > 1) {
+          return {
+            streetName: mapping.streetName,
+            buildingNumber: mapping.buildingNumber,
+            apartmentNumber: null,
+            fullAddress: mapping.baseAddress,
+            tenantName,
+            isZGN: false,
+            confidence: {
+              address: 95,
+              apartment: 95,
+              tenantName: tenantName ? 95 : 0,
+              overall: 95,
+            },
+            warnings: [
+              `Rule matched ${mapping.targets.length} apartments (${mapping.targets
+                .map(target => target.apartment)
+                .join(', ')}) — the user picks one on the acceptance screen`,
+            ],
+            matchedByManualMapping: true,
+            accountOverride: null,
+            needsAccount: false,
+            apartmentChoices: mapping.targets.map(target => ({
+              apartmentNumber: target.apartment,
+              ...(target.accountOverride ? { kontoLokalu: target.accountOverride } : {}),
+            })),
+          };
+        }
+
+        const [target] = mapping.targets;
+
         // A rule pointing at a lettered apartment is only bookable when it also
         // carries the account symbol — otherwise the rule states *which* apartment
         // this is, but not where to book it, and the user still has to say.
         const needsAccount =
-          isLetteredApartment(mapping.apartment) && !mapping.accountOverride;
+          isLetteredApartment(target.apartment) && !target.accountOverride;
         const warnings = needsAccount
           ? [
-              `Rule matched apartment "${mapping.apartment}" but the rule has no account symbol ("konto lokalu") — set one to book it automatically`,
+              `Rule matched apartment "${target.apartment}" but the rule has no account symbol ("konto lokalu") — set one to book it automatically`,
             ]
           : [];
         const confidence = {
@@ -506,15 +606,18 @@ export class AddressMatcher {
         return {
           streetName: mapping.streetName,
           buildingNumber: mapping.buildingNumber,
-          apartmentNumber: mapping.apartment,
-          fullAddress: mapping.fullAddress,
+          apartmentNumber: target.apartment,
+          fullAddress: mapping.buildingNumber
+            ? `${mapping.streetName} ${mapping.buildingNumber}/${target.apartment}`
+            : `${mapping.streetName} ${target.apartment}`,
           tenantName,
           isZGN: false,
           confidence,
           warnings,
           matchedByManualMapping: true,
-          accountOverride: mapping.accountOverride,
+          accountOverride: target.accountOverride,
           needsAccount,
+          apartmentChoices: [],
         };
       }
     }

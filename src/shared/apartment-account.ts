@@ -66,6 +66,112 @@ export function letteredApartmentInText(text: string | null | undefined): string
 }
 
 /**
+ * Postal code and dashed NIP — the fixed-shape tokens a bank glues onto an
+ * apartment number when it writes a fixed-width address field with no separator.
+ *
+ * "M.202-620 WARSZAWA" is apartment 2 in 02-620, not apartment 202. The dash of a
+ * Polish postal code sits at a fixed offset, so the two digits in front of it
+ * always belong to the code and whatever precedes them is the apartment. That
+ * makes the split deterministic rather than a guess, and independent of how large
+ * the building is: apartment 702 in the same code reads back as "M.70202-620" and
+ * splits just as cleanly.
+ *
+ * Two details below look like defects and are load-bearing:
+ *
+ *  - **NIP is removed first.** Its dashes form a false postal code — scanning
+ *    "521-332-10-09" finds "21-332" and shreds the number. Taking the whole NIP
+ *    out first leaves nothing for the postal pattern to misread.
+ *  - **POSTAL_CODE has no left-hand boundary.** A `\b` or `(?<!\d)` there is the
+ *    intuitive guard and breaks the exact case this exists for: in "M.202-620" the
+ *    digit in front of the code *is* the apartment number.
+ */
+const NIP_DASHED = /\b\d{3}-\d{3}-\d{2}-\d{2}\b/g;
+const POSTAL_CODE = /\d{2}-\d{3}(?!\d)/g;
+
+/**
+ * Transaction text with the address codes taken out, for apartment and address
+ * extraction only.
+ *
+ * Removed rather than spaced apart, because re-separating the fields fixes the
+ * glued case and leaves its mirror image: a bare postal code behind a building
+ * number ("Puławska 116 02-620") is otherwise read as apartment 02, which books a
+ * payment onto lokal 2. Both readings die with the code itself.
+ */
+export function stripAddressCodes(text: string | null | undefined): string {
+  return (text ?? '').replace(NIP_DASHED, ' ').replace(POSTAL_CODE, ' ');
+}
+
+/** A number in a position that reads as an apartment: after a slash or a marker. */
+const APARTMENT_MARKER = String.raw`(?:\/|\bm\.?\s*|\blok\.?\s*|\bloc\.?\s*|\blokal\s*|\blokalu[:\s]*|\bmieszkanie\s*)`;
+
+/** Characters that legitimately end an apartment number. */
+const APARTMENT_END = /[\s,.;:|)]/;
+
+/**
+ * The text glued to the right of the recognized apartment number, or null when
+ * the number ends cleanly.
+ *
+ * This is the net for glue we have *not* taught stripAddressCodes to remove. The
+ * bank separates fields with a separator or with nothing at all, so a number that
+ * runs straight into a letter is standing on a field boundary we failed to split,
+ * and the digits we took may belong to two fields. What is glued does not matter
+ * and is not guessed — only that something is.
+ *
+ * Deliberately conservative in three ways, all to keep it from firing on correct
+ * readings:
+ *
+ *  - It runs on the *stripped* text, so a postal code we already removed is not
+ *    re-reported as glue. Reading the raw text here would flag every correct
+ *    answer for the very payers this fix repairs.
+ *  - `(?![0-9])` pins the match to an occurrence where the number is the whole
+ *    digit run, so apartment 2 is not "found" inside "lok. 25". Digits glued to
+ *    digits need no coverage here: a greedy `\d+` swallows them, and the
+ *    over-wide result is what apartmentWidthImplausible() is for.
+ *  - A number it cannot find at all is reported clean, not suspicious. An
+ *    apartment can reach us from the known-address path with no marker in front
+ *    of it ("Puławska 116 10"), and absence of evidence is not evidence.
+ */
+export function apartmentGlueInText(
+  text: string | null | undefined,
+  apartmentNumber: string | null | undefined
+): string | null {
+  const apartment = (apartmentNumber ?? '').trim();
+  // Digits plus at most one letter — never ZGN or an account symbol like 235-1,
+  // and safe to interpolate into a pattern for that same reason.
+  if (!/^\d+[A-Za-z]?$/.test(apartment)) return null;
+
+  const scan = stripAddressCodes(text);
+  const match = scan.match(new RegExp(`${APARTMENT_MARKER}${apartment}(?![0-9])`, 'i'));
+  if (!match || match.index === undefined) return null;
+
+  const rest = scan.slice(match.index + match[0].length);
+  if (rest === '' || APARTMENT_END.test(rest[0])) return null;
+  return rest.slice(0, 12);
+}
+
+/**
+ * True when the number is too wide to be a real apartment, which means it has
+ * absorbed something that was glued to it.
+ *
+ * Independent of position and of whether any de-gluing worked, so it still holds
+ * when a bank invents a shape we have never seen — a postal code written without
+ * its dash, say, which leaves no anchor to split on. Four digits is the line:
+ * housing communities here run to a few hundred lokale, so 1000+ is not a number
+ * anyone lives at.
+ */
+export function apartmentWidthImplausible(
+  apartmentNumber: string | null | undefined
+): boolean {
+  return /^\d{4,}[A-Za-z]?$/.test((apartmentNumber ?? '').trim());
+}
+
+/**
+ * Confidence a doubtful reading is capped at — under every review threshold, so
+ * such a transaction reaches the user instead of the books.
+ */
+export const HELD_BACK_CONFIDENCE = 40;
+
+/**
  * True when the recognized apartment must not be booked without the user naming an
  * account: either it carries a letter itself, or the text shows a lettered
  * apartment while the recognized number has no letter (the mis-booking case).

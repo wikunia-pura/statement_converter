@@ -406,8 +406,10 @@ export const translations = {
     kalFilterTentativeHint: 'W tym miesiącu pokaż tylko spotkania z niepotwierdzonym terminem.',
     kalWarnChanged: 'Zmieniony termin: {count} — nikt tego jeszcze nie potwierdził',
     kalWarnTentative: 'Termin wstępny: {count}',
-    kalWarnShowThese: 'Pokaż',
-    kalWarnShowAll: 'Pokaż wszystkie',
+    kalFilterOn: 'FILTR WŁĄCZONY',
+    kalFilterOff: 'Filtr wyłączony',
+    kalFilterOnHint: 'Filtr włączony — kliknij, aby go wyłączyć i pokazać wszystkie spotkania.',
+    kalFilterOffHint: 'Kliknij, aby włączyć filtr i zostawić na widoku tylko te spotkania.',
 
     // Kalendarz — dokumenty na spotkanie
     kalDocsSent: 'Dokumenty wysłane',
@@ -1544,8 +1546,10 @@ export const translations = {
     kalFilterTentativeHint: 'In this month, show only meetings whose date is not confirmed.',
     kalWarnChanged: 'Moved dates: {count} — nobody has acknowledged them yet',
     kalWarnTentative: 'Tentative dates: {count}',
-    kalWarnShowThese: 'Show',
-    kalWarnShowAll: 'Show all',
+    kalFilterOn: 'FILTER ON',
+    kalFilterOff: 'Filter off',
+    kalFilterOnHint: 'Filter is on — click to turn it off and show every meeting.',
+    kalFilterOffHint: 'Click to turn the filter on and leave only these meetings in view.',
 
     // Calendar — documents for a meeting
     kalDocsSent: 'Documents sent',

@@ -1273,7 +1273,11 @@ const Kalendarz: React.FC<Props> = ({
           </div>
         </header>
 
-        {/* ------------------------- What needs attention ------------------- */}
+        {/* ------------------------- What needs attention -------------------
+            Each strip is one switch, not two actions: the box on the left shows
+            whether the filter is on, and the same click that turns it on turns
+            it off again. "Pokaż / Pokaż wszystkie" used to sit here and read as
+            two different buttons wearing one. */}
         {(alerts.changed > 0 || alerts.tentative > 0) && (
           <div className="kal-warnings">
             {alerts.changed > 0 && (
@@ -1284,12 +1288,18 @@ const Kalendarz: React.FC<Props> = ({
                 }`}
                 onClick={() => setStateFilter(stateFilter === 'changed' ? 'all' : 'changed')}
                 aria-pressed={stateFilter === 'changed'}
+                title={stateFilter === 'changed' ? t.kalFilterOnHint : t.kalFilterOffHint}
               >
+                <span className="kal-warning__box" aria-hidden="true">
+                  {stateFilter === 'changed' && <Icon name="check" size={12} />}
+                </span>
                 <Icon name="alert-triangle" size={16} />
-                <span>
+                <span className="kal-warning__text">
                   {t.kalWarnChanged.replace('{count}', String(alerts.changed))}
                 </span>
-                <em>{stateFilter === 'changed' ? t.kalWarnShowAll : t.kalWarnShowThese}</em>
+                <span className="kal-warning__state">
+                  {stateFilter === 'changed' ? t.kalFilterOn : t.kalFilterOff}
+                </span>
               </button>
             )}
             {alerts.tentative > 0 && (
@@ -1300,12 +1310,18 @@ const Kalendarz: React.FC<Props> = ({
                 }`}
                 onClick={() => setStateFilter(stateFilter === 'tentative' ? 'all' : 'tentative')}
                 aria-pressed={stateFilter === 'tentative'}
+                title={stateFilter === 'tentative' ? t.kalFilterOnHint : t.kalFilterOffHint}
               >
+                <span className="kal-warning__box" aria-hidden="true">
+                  {stateFilter === 'tentative' && <Icon name="check" size={12} />}
+                </span>
                 <Icon name="clock" size={16} />
-                <span>
+                <span className="kal-warning__text">
                   {t.kalWarnTentative.replace('{count}', String(alerts.tentative))}
                 </span>
-                <em>{stateFilter === 'tentative' ? t.kalWarnShowAll : t.kalWarnShowThese}</em>
+                <span className="kal-warning__state">
+                  {stateFilter === 'tentative' ? t.kalFilterOn : t.kalFilterOff}
+                </span>
               </button>
             )}
           </div>
@@ -1363,24 +1379,34 @@ const Kalendarz: React.FC<Props> = ({
             <span className="kal-filters__sep" aria-hidden="true" />
             <button
               type="button"
-              className={`kal-filter kal-filter--changed${
+              className={`kal-filter kal-filter--state kal-filter--changed${
                 stateFilter === 'changed' ? ' is-active' : ''
               }`}
               onClick={() => setStateFilter(stateFilter === 'changed' ? 'all' : 'changed')}
               aria-pressed={stateFilter === 'changed'}
-              title={t.kalFilterChangedHint}
+              title={
+                stateFilter === 'changed' ? t.kalFilterOnHint : t.kalFilterChangedHint
+              }
             >
+              <span className="kal-filter__box" aria-hidden="true">
+                {stateFilter === 'changed' && <Icon name="check" size={10} />}
+              </span>
               <Icon name="alert-triangle" size={12} /> {t.kalFilterChanged}
             </button>
             <button
               type="button"
-              className={`kal-filter kal-filter--tentative${
+              className={`kal-filter kal-filter--state kal-filter--tentative${
                 stateFilter === 'tentative' ? ' is-active' : ''
               }`}
               onClick={() => setStateFilter(stateFilter === 'tentative' ? 'all' : 'tentative')}
               aria-pressed={stateFilter === 'tentative'}
-              title={t.kalFilterTentativeHint}
+              title={
+                stateFilter === 'tentative' ? t.kalFilterOnHint : t.kalFilterTentativeHint
+              }
             >
+              <span className="kal-filter__box" aria-hidden="true">
+                {stateFilter === 'tentative' && <Icon name="check" size={10} />}
+              </span>
               <Icon name="clock" size={12} /> {t.kalFilterTentative}
             </button>
           </div>

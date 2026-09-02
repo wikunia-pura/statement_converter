@@ -154,7 +154,11 @@ export const RELEASES: Release[] = [
           },
           {
             do: 'Kliknij ten pasek u góry.',
-            then: 'Kalendarz pokazuje tylko spotkania ze zmienionym terminem. Drugie kliknięcie wraca do wszystkich.',
+            then: 'Kwadracik po lewej zaznacza się, napis zmienia się na „FILTR WŁĄCZONY”, pasek dostaje obwódkę — a kalendarz pokazuje tylko spotkania ze zmienionym terminem.',
+          },
+          {
+            do: 'Kliknij ten sam pasek jeszcze raz.',
+            then: 'Filtr się wyłącza i wracają wszystkie spotkania. Ten sam przełącznik jest w pasku narzędzi, jako „Zmieniony termin”.',
           },
           {
             do: 'Na karcie spotkania kliknij „Zapoznałem się”.',
@@ -164,7 +168,7 @@ export const RELEASES: Release[] = [
         expect: [
           'W siatce miesiąca takie spotkanie ma pomarańczowy kafelek z trójkątem — widać je bez wchodzenia w dzień.',
           'Zmiana samej nazwy, opisu, lokalizacji czy uczestników nie oznacza spotkania — liczy się wyłącznie data i godzina.',
-          'Filtr „Zmieniony termin” w pasku narzędzi zawęża wyświetlany miesiąc i panel dnia — tak samo jak licznik u góry, więc oba mówią o tym samym.',
+          'Filtr „Zmieniony termin” w pasku narzędzi i pasek u góry to jeden i ten sam przełącznik — włączony w jednym miejscu jest zaznaczony w obu.',
         ],
       },
       {

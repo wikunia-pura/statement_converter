@@ -2568,20 +2568,59 @@ body.dark-mode .bank-illustration-svg {
   transition: background var(--t-fast), border-color var(--t-fast);
 }
 
-.kal-warning em {
-  font-style: normal;
-  font-weight: 500;
-  opacity: 0.8;
-  text-decoration: underline;
+.kal-warning__text { flex: 1; min-width: 0; }
+
+/* The switch itself. A box that fills with a tick is the one control everyone
+   already reads as on/off — and it makes the strip's second click obvious,
+   which a "Pokaż wszystkie" label never did. */
+.kal-warning__box {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid currentColor;
+  border-radius: var(--r-sm);
+  opacity: 0.55;
+  transition: opacity var(--t-fast), background var(--t-fast);
+}
+
+/* The state, spelled out. Small, and only loud once the filter is on. */
+.kal-warning__state {
+  flex-shrink: 0;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.6;
 }
 
 .kal-warning:hover {
   border-color: var(--warning);
 }
 
+.kal-warning:hover .kal-warning__box { opacity: 0.85; }
+
+/* On: filled box, a solid border, a ring, and the state label at full strength.
+   Four signals rather than one, because this is the state the whole month is
+   being read through. */
+/* Ring rather than a thicker border: growing the border on activation moves the
+   button's own contents by two pixels, and a row of filters that jiggles as you
+   click it reads as a bug. */
 .kal-warning.is-active {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--warning) 28%, transparent);
+  border-color: var(--warning);
+  box-shadow:
+    inset 0 0 0 1px var(--warning),
+    0 0 0 3px color-mix(in srgb, var(--warning) 22%, transparent);
 }
+
+.kal-warning.is-active .kal-warning__box {
+  opacity: 1;
+  background: color-mix(in srgb, var(--warning) 22%, transparent);
+}
+
+.kal-warning.is-active .kal-warning__state { opacity: 1; }
 
 /* A tentative date is a plan, not a problem — it gets the calmer palette. */
 .kal-warning--tentative {
@@ -2590,11 +2629,18 @@ body.dark-mode .bank-illustration-svg {
   color: var(--info);
 }
 
-.kal-warning--tentative:hover { border-color: var(--info); }
-
 .kal-warning--tentative.is-active {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--info) 28%, transparent);
+  border-color: var(--info);
+  box-shadow:
+    inset 0 0 0 1px var(--info),
+    0 0 0 3px color-mix(in srgb, var(--info) 22%, transparent);
 }
+
+.kal-warning--tentative.is-active .kal-warning__box {
+  background: color-mix(in srgb, var(--info) 22%, transparent);
+}
+
+.kal-warning--tentative:hover { border-color: var(--info); }
 
 .kal-filters__sep {
   width: 1px;
@@ -2603,16 +2649,50 @@ body.dark-mode .bank-illustration-svg {
   background: var(--border-default);
 }
 
+/* Same switch, chip-sized: the toolbar and the strip above it are two ways to
+   flip one filter, so they have to look like it. */
+.kal-filter__box {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid currentColor;
+  border-radius: 4px;
+  opacity: 0.5;
+  transition: opacity var(--t-fast), background var(--t-fast);
+}
+
+.kal-filter--state:hover .kal-filter__box { opacity: 0.8; }
+
+.kal-filter--state.is-active .kal-filter__box { opacity: 1; }
+
+.kal-filter--state.is-active { font-weight: 650; }
+
+/* The tick's fill and the ring name their colour outright rather than going
+   through currentColor — one less thing depending on how a browser resolves
+   color-mix against an inherited value. */
 .kal-filter--changed.is-active {
   border-color: var(--warning);
   background: var(--warning-bg);
   color: var(--warning);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--warning) 20%, transparent);
+}
+
+.kal-filter--changed.is-active .kal-filter__box {
+  background: color-mix(in srgb, var(--warning) 24%, transparent);
 }
 
 .kal-filter--tentative.is-active {
   border-color: var(--info);
   background: var(--info-bg);
   color: var(--info);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--info) 20%, transparent);
+}
+
+.kal-filter--tentative.is-active .kal-filter__box {
+  background: color-mix(in srgb, var(--info) 24%, transparent);
 }
 
 /* Confirmed / tentative, as two radios that look like what they do. */

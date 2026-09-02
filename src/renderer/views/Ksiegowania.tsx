@@ -14,12 +14,15 @@ import Select from '../components/Select';
 import MonthIllustration, { monthAccent } from '../components/MonthIllustration';
 import {
   countAlerts,
+  formatStamp,
   hasAnyAlert,
   sentByMailingIds,
   spotkaniaFromToday,
   SpotkaniaAlerts,
   SpotkanieStateFilter,
+  upcomingSpotkania,
 } from '../../shared/calendar';
+import MeetingsIllustration from '../components/MeetingsIllustration';
 import { resolveOutputFilePath } from '../../shared/outputPaths';
 import {
   AddressBookingGroup,
@@ -115,10 +118,27 @@ const STATE_ICON: Record<AddressBookingGroup['state'], React.ComponentProps<type
 const CalendarAlerts: React.FC<{
   alerts: SpotkaniaAlerts;
   language: Language;
+  locale: string;
+  /** The next meeting from now on, or null when nothing is scheduled. */
+  next: Spotkanie | null;
+  /** How many are still ahead, for the line shown when there is no next one. */
+  upcomingCount: number;
   onOpen?: (filter: SpotkanieStateFilter) => void;
-}> = ({ alerts, language, onOpen }) => {
+}> = ({ alerts, language, locale, next, upcomingCount, onOpen }) => {
   const t = translations[language];
   const anything = hasAnyAlert(alerts);
+  const outstanding = alerts.overdue + alerts.changed + alerts.noDocs + alerts.tentative;
+
+  // Two facts, the same shape the month bar uses: how much is waiting, and the
+  // one thing that happens next — which is what a dashboard is asked first.
+  const facts = [
+    anything ? t.ksKalFactsOutstanding.replace('{count}', String(outstanding)) : t.ksKalFactsNone,
+    next
+      ? t.ksKalFactsNext
+          .replace('{when}', formatStamp(next.startsAt, locale))
+          .replace('{name}', next.nazwa)
+      : t.ksKalFactsNoUpcoming.replace('{count}', String(upcomingCount)),
+  ];
 
   const kinds: {
     filter: SpotkanieStateFilter;
@@ -164,19 +184,28 @@ const CalendarAlerts: React.FC<{
 
   return (
     <section className="ks-area ks-area--kal">
-      <header className="ks-area__banner">
-        <span className="ks-area__icon" aria-hidden="true">
-          <Icon name="calendar" size={22} />
-        </span>
-        <div className="ks-area__id">
-          <span className="ks-area__eyebrow">{t.ksKalEyebrow}</span>
-          <h2 className="ks-area__title">{t.ksKalTitle}</h2>
-          <p className="ks-area__sub">{t.ksKalNote}</p>
+      {/* Built like the month bar below it — art, tint, glow, then the type —
+          so the two banners read as one family. */}
+      <header className="ks-kal-hero">
+        <div className="ks-kal-hero__art">
+          <MeetingsIllustration />
         </div>
+
+        <div className="ks-kal-hero__id">
+          <span className="ks-kal-hero__eyebrow">
+            <Icon name="calendar" size={13} /> {t.ksKalEyebrow}
+          </span>
+          <h2 className="ks-kal-hero__title">{t.ksKalTitle}</h2>
+          <p className="ks-kal-hero__facts">{facts.join(' · ')}</p>
+          <p className="ks-kal-hero__sub">{t.ksKalNote}</p>
+        </div>
+
         {onOpen && (
-          <button type="button" className="ks-area__action" onClick={() => onOpen('all')}>
-            {t.ksKalOpenAll} <Icon name="arrow-right" size={13} />
-          </button>
+          <div className="ks-kal-hero__nav">
+            <button type="button" className="ks-area__action" onClick={() => onOpen('all')}>
+              {t.ksKalOpenAll} <Icon name="arrow-right" size={13} />
+            </button>
+          </div>
         )}
       </header>
 
@@ -296,6 +325,10 @@ const Ksiegowania: React.FC<Props> = ({
       }),
     [spotkania, spotkaniaTypy, spotkaniaMailingi],
   );
+
+  /** What is next, and how much is ahead — the banner's two facts. */
+  const kalUpcoming = useMemo(() => upcomingSpotkania(spotkania, 5), [spotkania]);
+  const kalNext = kalUpcoming[0] ?? null;
 
   const rows = useMemo(() => toBookingRows(history, adresy), [history, adresy]);
   const months = useMemo(() => monthsWithData(rows), [rows]);
@@ -475,7 +508,14 @@ const Ksiegowania: React.FC<Props> = ({
     <div className="content-body">
       <div className="ksieg">
         {/* -------------------- Area one: the calendar ---------------------- */}
-        <CalendarAlerts alerts={kalAlerts} language={language} onOpen={onShowInCalendar} />
+        <CalendarAlerts
+          alerts={kalAlerts}
+          language={language}
+          locale={locale}
+          next={kalNext}
+          upcomingCount={kalUpcoming.length}
+          onOpen={onShowInCalendar}
+        />
 
         {/* -------------------- Area two: the month's bookings -------------- */}
         <section className="ks-area ks-area--ksieg">

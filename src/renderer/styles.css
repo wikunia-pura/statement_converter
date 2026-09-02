@@ -1357,79 +1357,124 @@ tbody tr:hover {
    inside either. Before this the meetings sat between the booking tiles and the
    booking list, where they read as a third row of the bookings — and as though
    they were scoped to the month on screen. */
+/* Both areas are bare: each one's banner is already a card, and a box around
+   a card would be one card too many. What separates them is the gap. */
 .ks-area {
   display: flex;
   flex-direction: column;
-  gap: var(--s-3);
-  padding: var(--s-3);
+  gap: var(--s-4);
+}
+
+/* Built like the month bar: the same grid, the same tint-over-surface trick,
+   the same blurred glow — so the dashboard's two banners are one family and
+   neither looks like the plain sibling of the other. */
+.ks-kal-hero {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--s-4) var(--s-5);
+  padding: var(--s-5) var(--s-6);
   border: 1px solid var(--border-default);
   border-radius: var(--r-xl);
-  background: var(--bg-surface-sunken);
-}
-
-/* The bookings area holds the month bar, which is a card in its own right, so
-   the area around it stays bare — two nested cards would be one too many. */
-.ks-area--ksieg {
-  border: none;
-  padding: 0;
-  background: transparent;
-  gap: var(--s-4);
-}
-
-.ks-area__banner {
-  display: flex;
-  align-items: center;
-  gap: var(--s-4);
-  padding: var(--s-4) var(--s-5);
-  border-radius: var(--r-lg);
   background: var(--bg-surface);
-  border: 1px solid var(--border-default);
   box-shadow: var(--shadow-sm);
 }
 
-.ks-area__icon {
-  flex-shrink: 0;
+/* The brand's indigo laid OVER the surface rather than mixed into it, so one
+   value tints the whole banner in both themes. */
+.ks-kal-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  opacity: 0.07;
+  pointer-events: none;
+}
+
+.ks-kal-hero::after {
+  content: '';
+  position: absolute;
+  left: -70px;
+  top: -90px;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.14;
+  filter: blur(34px);
+  pointer-events: none;
+}
+
+.ks-kal-hero > * {
+  position: relative;
+}
+
+.ks-kal-hero__art {
+  align-self: center;
+  width: 104px;
+}
+
+.ks-kal-hero__id {
+  min-width: 0;
+  align-self: center;
+}
+
+.ks-kal-hero__eyebrow {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--r-lg);
-  color: var(--accent);
-  background: var(--accent-subtle);
-  border: 1px solid var(--accent-border);
-}
-
-.ks-area__id {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.ks-area__eyebrow {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
+  gap: var(--s-2);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--text-tertiary);
 }
 
-.ks-area__title {
-  margin: 0;
-  font-size: var(--fs-xl);
+.ks-kal-hero__title {
+  margin: 2px 0 0;
+  font-size: 27px;
+  line-height: 1.1;
   font-weight: 700;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.025em;
   color: var(--text-primary);
+}
+
+.ks-kal-hero__facts {
+  margin: var(--s-2) 0 0;
+  font-size: var(--fs-md);
+  font-weight: 550;
+  color: var(--accent);
 }
 
 /* Says outright that these numbers are not the month's — the mistake the old
    placement invited. */
-.ks-area__sub {
-  margin: 2px 0 0;
+.ks-kal-hero__sub {
+  margin: 3px 0 0;
   font-size: var(--fs-md);
   color: var(--text-secondary);
+}
+
+.ks-kal-hero__nav {
+  align-self: center;
+  justify-self: end;
+}
+
+body.dark-mode .ks-kal-hero__facts {
+  color: var(--accent-hover);
+}
+
+/* Narrow: the art goes, exactly as the month bar drops its own. */
+@media (max-width: 1180px) {
+  .ks-kal-hero { grid-template-columns: auto minmax(0, 1fr); }
+  .ks-kal-hero__nav { grid-column: 1 / span 2; justify-self: start; }
+}
+
+@media (max-width: 860px) {
+  .ks-kal-hero__art { display: none; }
+  .ks-kal-hero { grid-template-columns: minmax(0, 1fr); }
+  .ks-kal-hero__nav { grid-column: 1; }
+  .ks-kal-hero__title { font-size: 23px; }
 }
 
 .ks-area__action {
@@ -1473,10 +1518,6 @@ tbody tr:hover {
 
 .ks-kal__clear > svg { flex-shrink: 0; }
 
-@media (max-width: 720px) {
-  .ks-area__banner { flex-wrap: wrap; }
-  .ks-area__action { order: 3; }
-}
 
 .ks-kal__tiles {
   display: grid;

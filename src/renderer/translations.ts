@@ -438,6 +438,10 @@ export const translations = {
       'Liczone od dziś w przód, niezależnie od miesiąca poniżej. Kliknij kafelek, aby otworzyć ' +
       'Kalendarz z tym filtrem.',
     ksKalOpenAll: 'Otwórz Kalendarz',
+    ksKalFactsOutstanding: '{count} do zrobienia',
+    ksKalFactsNone: 'nic nie czeka',
+    ksKalFactsNext: 'najbliższe: {when} — {name}',
+    ksKalFactsNoUpcoming: 'brak zaplanowanych spotkań',
     ksKalAllClear: 'Nic nie czeka — żadnego przesuniętego terminu, wstępnej daty ani zaległych dokumentów.',
     ksKalOpen: 'Otwórz Kalendarz: {what}',
     ksKalOverdue: 'Wysyłka po terminie',
@@ -1605,6 +1609,10 @@ export const translations = {
       'Counted from today on, whatever month is shown below. Click a tile to open the Calendar ' +
       'with that filter.',
     ksKalOpenAll: 'Open the Calendar',
+    ksKalFactsOutstanding: '{count} to do',
+    ksKalFactsNone: 'nothing outstanding',
+    ksKalFactsNext: 'next: {when} — {name}',
+    ksKalFactsNoUpcoming: 'nothing scheduled',
     ksKalAllClear: 'Nothing outstanding — no moved dates, no tentative ones, no documents overdue.',
     ksKalOpen: 'Open the Calendar: {what}',
     ksKalOverdue: 'Sending overdue',

@@ -30,6 +30,8 @@ export interface ConvertResult {
   bankName?: string;
   converterId?: string;
   inputPath?: string;
+  /** Community the conversion belonged to, echoed back so the history row keeps it. */
+  adresId?: number | null;
   warningMessage?: string;
   error?: string;
 }
@@ -1387,7 +1389,8 @@ class ConverterRegistry {
               outputPath,
               result.processed,
               output,
-              accountConfig
+              accountConfig,
+              adresId ?? null
             );
             
             // Get address name from database
@@ -1653,7 +1656,8 @@ class ConverterRegistry {
               outputPath,
               result.processed,
               output,
-              accountConfig
+              accountConfig,
+              adresId ?? null
             );
             
             // Get address name from database
@@ -1890,7 +1894,8 @@ class ConverterRegistry {
               outputPath,
               result.processed,
               output,
-              accountConfig
+              accountConfig,
+              adresId ?? null
             );
 
             let adresName: string | null = null;
@@ -2129,7 +2134,8 @@ class ConverterRegistry {
               outputPath,
               result.processed,
               output,
-              accountConfig
+              accountConfig,
+              adresId ?? null
             );
 
             let adresName: string | null = null;
@@ -2365,7 +2371,8 @@ class ConverterRegistry {
               outputPath,
               result.processed,
               output,
-              accountConfig
+              accountConfig,
+              adresId ?? null
             );
 
             let adresName: string | null = null;
@@ -2585,7 +2592,8 @@ class ConverterRegistry {
               outputPath,
               result.processed,
               output,
-              accountConfig
+              accountConfig,
+              adresId ?? null
             );
 
             let adresName: string | null = null;
@@ -2821,7 +2829,8 @@ class ConverterRegistry {
               outputPath,
               result.processed,
               output,
-              accountConfig
+              accountConfig,
+              adresId ?? null
             );
 
             let adresName: string | null = null;
@@ -3049,7 +3058,8 @@ class ConverterRegistry {
               outputPath,
               result.processed,
               output,
-              accountConfig
+              accountConfig,
+              adresId ?? null
             );
 
             let adresName: string | null = null;
@@ -3333,6 +3343,7 @@ class ConverterRegistry {
         bankName: cached.bankName,
         converterId: cached.converterId,
         inputPath: cached.inputPath,
+        adresId: cached.adresId ?? null,
       };
     } catch (error) {
       throw error;

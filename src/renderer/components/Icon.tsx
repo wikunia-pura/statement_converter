@@ -49,7 +49,12 @@ type IconName =
   | 'align-justify'
   | 'eye'
   | 'table'
-  | 'calendar';
+  | 'calendar'
+  | 'book'
+  | 'file-check'
+  | 'clock'
+  | 'user-plus'
+  | 'home';
 
 interface IconProps {
   name: IconName;
@@ -115,6 +120,26 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
       <path d="M14 3v6h6" />
       <path d="M8 13h8M8 17h5" />
+    </>
+  ),
+  'file-check': (
+    <>
+      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+      <path d="M14 3v6h6" />
+      <path d="M9 15l2 2 4-4" />
+    </>
+  ),
+  home: (
+    <>
+      <path d="M3 10.5L12 3l9 7.5" />
+      <path d="M5 9.6V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.6" />
+      <path d="M9.5 21v-6h5v6" />
+    </>
+  ),
+  book: (
+    <>
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
     </>
   ),
   check: <path d="M5 12l4 4 10-10" />,
@@ -310,6 +335,19 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M3 10h18" />
       <path d="M3 15h18" />
       <path d="M9 4v16" />
+    </>
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7.5V12l3.2 2" />
+    </>
+  ),
+  'user-plus': (
+    <>
+      <path d="M15 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-4A3.5 3.5 0 0 0 4 18.5V20" />
+      <circle cx="9.5" cy="8" r="3.5" />
+      <path d="M18 8v6M15 11h6" />
     </>
   ),
   calendar: (

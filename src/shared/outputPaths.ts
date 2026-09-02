@@ -40,3 +40,33 @@ export function accountingOutputPath(outputPath: string): string {
 export function resolveOutputFilePath(outputPath: string, type: 'preview' | 'accounting'): string {
   return type === 'preview' ? podgladOutputPath(outputPath) : accountingOutputPath(outputPath);
 }
+
+/**
+ * Address part of a generated output filename, sanitized for the filesystem.
+ * Shared with the main process (which builds the names) so the renderer can
+ * read an address back out of a historical `outputPath` — see
+ * `adresPartOfOutputPath`.
+ */
+export function sanitizeForFilename(name: string): string {
+  return name
+    .replace(/[<>:"/\\|?*]/g, '') // Remove invalid filename characters
+    .replace(/\s+/g, '_')          // Replace spaces with underscores
+    .replace(/_+/g, '_')           // Collapse multiple underscores
+    .replace(/^_|_$/g, '')         // Remove leading/trailing underscores
+    .substring(0, 50);             // Limit length
+}
+
+/**
+ * Inverse of the `{address}_{YYYYMMDD}_{HHMMSS}.txt` naming used for generated
+ * files: returns the sanitized address part, or null when the name doesn't
+ * follow that shape. Used to attribute history rows written before the address
+ * was stored alongside them.
+ */
+export function adresPartOfOutputPath(outputPath: string): string | null {
+  if (!outputPath) return null;
+  const { fileName } = splitPath(outputPath);
+  const base = fileName.replace(/\.[^.]+$/, '');
+  const match = base.match(/^(.*)_\d{8}_\d{6}$/);
+  const part = match?.[1]?.trim();
+  return part ? part : null;
+}

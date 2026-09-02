@@ -117,8 +117,39 @@ create table if not exists public.history (
   error_message   text,
   input_path      text        not null,
   output_path     text        not null,
-  converted_at    timestamptz not null default now()
+  converted_at    timestamptz not null default now(),
+  -- Community the file was converted for. The id is the convenience link; the
+  -- name is the durable one (a restore renumbers adresy), and rows written
+  -- before these columns existed carry neither — the "Księgowania" view then
+  -- reads the community out of the generated filename.
+  adres_id        bigint      references public.adresy(id) on delete set null,
+  adres_nazwa     text,
+  -- The user's own "already posted in the DOM program" tick. Nothing reads DOM;
+  -- this is the record of what has been booked there, shared by the team.
+  booked_in_dom     boolean   not null default false,
+  booked_in_dom_at  timestamptz,
+  booked_in_dom_by  text
 );
+
+-- Idempotent migrations for deployments created before the Księgowania view.
+-- Backfilling the community of older rows is a one-off, kept out of here: see
+-- supabase/ksiegowania-dom.sql.
+alter table public.history
+  add column if not exists adres_id bigint references public.adresy(id) on delete set null;
+alter table public.history
+  add column if not exists adres_nazwa text;
+alter table public.history
+  add column if not exists booked_in_dom boolean not null default false;
+alter table public.history
+  add column if not exists booked_in_dom_at timestamptz;
+alter table public.history
+  add column if not exists booked_in_dom_by text;
+
+-- The Księgowania view reads one month at a time, per community.
+create index if not exists history_converted_at_idx
+  on public.history (converted_at desc);
+create index if not exists history_adres_id_idx
+  on public.history (adres_id);
 
 -- Meter-reading conversions ("Odczyty liczników"). One row per operation — a
 -- single click can read several supplier workbooks and emit one file per
@@ -228,6 +259,124 @@ create index if not exists mailing_history_sent_at_idx
   on public.mailing_history (sent_at desc);
 
 -- ============================================================
+-- Kalendarz (spotkania)
+-- ============================================================
+
+-- A readable mirror of the application's accounts, so a meeting's participants
+-- can be picked from the people who actually have access. `auth.users` is not
+-- reachable with the publishable key (and must not be), hence the mirror: it
+-- carries only the id, the mailbox and the display name.
+create table if not exists public.app_users (
+  id           uuid        primary key,
+  email        text        not null,
+  display_name text,
+  created_at   timestamptz not null default now()
+);
+
+-- One function for insert/update/delete: the participant picker must not offer
+-- an account that was revoked, and must show a mailbox the moment it changes.
+create or replace function public.sync_app_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op = 'DELETE' then
+    delete from public.app_users where id = old.id;
+    return old;
+  end if;
+
+  insert into public.app_users (id, email, display_name, created_at)
+  values (
+    new.id,
+    coalesce(new.email, ''),
+    nullif(
+      btrim(
+        coalesce(
+          new.raw_user_meta_data ->> 'full_name',
+          new.raw_user_meta_data ->> 'name',
+          ''
+        )
+      ),
+      ''
+    ),
+    coalesce(new.created_at, now())
+  )
+  on conflict (id) do update
+    set email        = excluded.email,
+        -- Keep a name already there when the new payload carries none, so a
+        -- password change doesn't blank out what the picker displays.
+        display_name = coalesce(excluded.display_name, app_users.display_name);
+  return new;
+end;
+$$;
+
+drop trigger if exists sync_app_user_upsert on auth.users;
+create trigger sync_app_user_upsert
+  after insert or update of email, raw_user_meta_data on auth.users
+  for each row execute function public.sync_app_user();
+
+drop trigger if exists sync_app_user_delete on auth.users;
+create trigger sync_app_user_delete
+  after delete on auth.users
+  for each row execute function public.sync_app_user();
+
+-- Backfill the accounts that existed before the trigger did.
+insert into public.app_users (id, email, display_name, created_at)
+select
+  u.id,
+  coalesce(u.email, ''),
+  nullif(
+    btrim(
+      coalesce(u.raw_user_meta_data ->> 'full_name', u.raw_user_meta_data ->> 'name', '')
+    ),
+    ''
+  ),
+  coalesce(u.created_at, now())
+from auth.users u
+on conflict (id) do update
+  set email = excluded.email;
+
+-- The kinds of meeting, defined by the user inside the calendar module rather
+-- than hard-coded. `kolor` is what makes a month of meetings readable, so a
+-- type always has one.
+create table if not exists public.spotkania_typy (
+  id         bigserial   primary key,
+  nazwa      text        not null,
+  kolor      text        not null default '#5b5ff6',
+  opis       text        not null default '',
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.spotkania (
+  id          bigserial   primary key,
+  nazwa       text        not null,
+  -- ON DELETE SET NULL on both links: removing a type or a community must not
+  -- take the meetings with it — the record of what happened outlives both.
+  typ_id      bigint      references public.spotkania_typy(id) on delete set null,
+  adres_id    bigint      references public.adresy(id) on delete set null,
+  -- The community's NAME, kept alongside the id for the same reason `history`
+  -- keeps it: a restore renumbers `adresy`, and the name is what the link is
+  -- re-pointed through afterwards.
+  adres_nazwa text        not null default '',
+  starts_at   timestamptz not null,
+  -- Optional: a meeting with no stated end is a point in the day, not an error.
+  ends_at     timestamptz,
+  opis        text        not null default '',
+  -- [{ userId, email, displayName }] — snapshotted from `app_users` on save, so
+  -- a participant stays readable after their account is removed.
+  uczestnicy  jsonb       not null default '[]'::jsonb,
+  created_by  text        not null default '',
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+-- The calendar reads one month at a time; the community filter reads by address.
+create index if not exists spotkania_starts_at_idx on public.spotkania (starts_at);
+create index if not exists spotkania_adres_id_idx  on public.spotkania (adres_id);
+
+-- ============================================================
 -- Row-Level Security
 -- Model: any signed-in user can read/write everything (shared data).
 -- Anonymous users have no access.
@@ -244,11 +393,21 @@ alter table public.zgn_jednostki    enable row level security;
 alter table public.mailing_pola     enable row level security;
 alter table public.mailing_szablony enable row level security;
 alter table public.mailing_history  enable row level security;
+alter table public.app_users        enable row level security;
+alter table public.spotkania_typy   enable row level security;
+alter table public.spotkania        enable row level security;
 
 -- app_config: read-only for signed-in users; no insert/update/delete policy,
 -- so the anon/authenticated roles can never modify secrets.
 drop policy if exists "authenticated_read" on public.app_config;
 create policy "authenticated_read" on public.app_config
+  for select to authenticated using (true);
+
+-- app_users: read-only for signed-in users. Only the auth trigger writes it, so
+-- there is no insert/update/delete policy — the mirror can never drift because
+-- a client edited it.
+drop policy if exists "authenticated_read" on public.app_users;
+create policy "authenticated_read" on public.app_users
   for select to authenticated using (true);
 
 drop policy if exists "authenticated_all" on public.banks;
@@ -261,6 +420,8 @@ drop policy if exists "authenticated_all" on public.zgn_jednostki;
 drop policy if exists "authenticated_all" on public.mailing_pola;
 drop policy if exists "authenticated_all" on public.mailing_szablony;
 drop policy if exists "authenticated_all" on public.mailing_history;
+drop policy if exists "authenticated_all" on public.spotkania_typy;
+drop policy if exists "authenticated_all" on public.spotkania;
 
 create policy "authenticated_all" on public.banks
   for all to authenticated using (true) with check (true);
@@ -290,4 +451,10 @@ create policy "authenticated_all" on public.mailing_szablony
   for all to authenticated using (true) with check (true);
 
 create policy "authenticated_all" on public.mailing_history
+  for all to authenticated using (true) with check (true);
+
+create policy "authenticated_all" on public.spotkania_typy
+  for all to authenticated using (true) with check (true);
+
+create policy "authenticated_all" on public.spotkania
   for all to authenticated using (true) with check (true);

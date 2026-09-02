@@ -1,6 +1,6 @@
 // Type definitions for Electron API exposed via preload
 
-import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent } from '../shared/types';
+import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent, AppUser, SpotkanieTyp, Spotkanie, SpotkanieInput } from '../shared/types';
 
 // Zaliczki shared types (referenced by the main-process helpers)
 export type ZaliczkiCategory =
@@ -275,6 +275,7 @@ interface ElectronAPI {
   setAlwaysUseAI: (enabled: boolean) => Promise<boolean>;
   setContractorSortOrder: (sortOrder: string) => Promise<boolean>;
   setSidebarCollapsed: (collapsed: boolean) => Promise<boolean>;
+  setCalendarHoverCard: (enabled: boolean) => Promise<boolean>;
   setLastSeenVersion: (version: string) => Promise<boolean>;
   exportSettings: () => Promise<{ success: boolean; filePath?: string }>;
   importSettings: () => Promise<{ success: boolean; error?: string }>;
@@ -284,6 +285,11 @@ interface ElectronAPI {
   clearHistory: () => Promise<boolean>;
   importHistoryFromFile: () => Promise<{ success: boolean; added?: number; skipped?: number; error?: string }>;
   exportHistoryToFile: () => Promise<{ success: boolean; count?: number; filePath?: string; error?: string }>;
+  /** Tick / untick "posted in DOM" for the given history rows (Księgowania view). */
+  setHistoryBookedInDom: (
+    ids: number[],
+    booked: boolean,
+  ) => Promise<{ success: boolean; updated?: number; error?: string }>;
 
   // Backup
   backupExport: () => Promise<{ success: boolean; filePath?: string; counts?: BackupCounts; error?: string }>;
@@ -417,6 +423,24 @@ interface ElectronAPI {
   mailingSetSmtp: (config: MailingSmtpConfig & { pass?: string }) => Promise<boolean>;
   mailingTestSmtp: () => Promise<{ ok: true } | { ok: false; error: string }>;
   onMailingProgress: (callback: (progress: MailingProgressEvent) => void) => () => void;
+
+  // Kalendarz — spotkania, ich typy i konta do listy uczestników
+  /** The application's accounts, offered by the participant picker. */
+  getAppUsers: () => Promise<AppUser[]>;
+  getSpotkaniaTypy: () => Promise<SpotkanieTyp[]>;
+  addSpotkanieTyp: (nazwa: string, kolor: string, opis: string) => Promise<SpotkanieTyp>;
+  updateSpotkanieTyp: (
+    id: number,
+    nazwa: string,
+    kolor: string,
+    opis: string,
+  ) => Promise<boolean>;
+  deleteSpotkanieTyp: (id: number) => Promise<boolean>;
+  getSpotkania: () => Promise<Spotkanie[]>;
+  /** `createdBy` is filled in by the main process from the session. */
+  addSpotkanie: (input: SpotkanieInput) => Promise<Spotkanie>;
+  updateSpotkanie: (id: number, input: SpotkanieInput) => Promise<boolean>;
+  deleteSpotkanie: (id: number) => Promise<boolean>;
 
   // Auth (Supabase)
   authSignIn: (

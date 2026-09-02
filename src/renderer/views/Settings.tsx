@@ -22,6 +22,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
   const [swrkFolder, setSwrkFolder] = useState('');
   const [skipUserApproval, setSkipUserApproval] = useState(false);
   const [alwaysUseAI, setAlwaysUseAI] = useState(true);
+  const [calendarHoverCard, setCalendarHoverCard] = useState(false);
   const [contractorSortOrder, setContractorSortOrder] = useState<ContractorSortOrder>('name-asc');
   const [isLoading, setIsLoading] = useState(true);
   const [backupStatus, setBackupStatus] = useState<{
@@ -67,6 +68,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
       setSwrkFolder(settings.swrkFolder || '');
       setSkipUserApproval(settings.skipUserApproval ?? false);
       setAlwaysUseAI(settings.alwaysUseAI !== false);
+      setCalendarHoverCard(settings.calendarHoverCard ?? false);
       setContractorSortOrder(settings.contractorSortOrder ?? 'name-asc');
     } catch (error) {
       console.error('Error loading data:', error);
@@ -139,6 +141,12 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
     setAlwaysUseAI(newValue);
   };
 
+  const handleCalendarHoverCardToggle = async () => {
+    const newValue = !calendarHoverCard;
+    await window.electronAPI.setCalendarHoverCard(newValue);
+    setCalendarHoverCard(newValue);
+  };
+
   const handleLanguageChange = async (value: string) => {
     const newLanguage = value as Language;
     await window.electronAPI.setLanguage(newLanguage);
@@ -191,6 +199,7 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
           setSwrkFolder(settings.swrkFolder || '');
           setSkipUserApproval(settings.skipUserApproval ?? false);
           setAlwaysUseAI(settings.alwaysUseAI !== false);
+          setCalendarHoverCard(settings.calendarHoverCard ?? false);
           setContractorSortOrder(settings.contractorSortOrder ?? 'name-asc');
         } else if (result.error) {
           notify.error(`${t.importError}: ${result.error}`);
@@ -257,7 +266,9 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
       .replace('{zgnJednostki}', String(counts.zgnJednostki))
       .replace('{mailingPola}', String(counts.mailingPola))
       .replace('{mailingSzablony}', String(counts.mailingSzablony))
-      .replace('{mailingHistory}', String(counts.mailingHistory));
+      .replace('{mailingHistory}', String(counts.mailingHistory))
+      .replace('{spotkaniaTypy}', String(counts.spotkaniaTypy))
+      .replace('{spotkania}', String(counts.spotkania));
   };
 
   const handleCreateBackup = async () => {
@@ -420,6 +431,26 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
                 type="checkbox"
                 checked={alwaysUseAI}
                 onChange={handleAlwaysUseAIToggle}
+              />
+              <span className="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div className="settings-row">
+            <div className="settings-label">
+              <span
+                className="settings-label-main"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Icon name="calendar" size={14} /> {t.calendarHoverCard}
+              </span>
+              <span className="settings-label-sub">{t.calendarHoverCardDesc}</span>
+            </div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={calendarHoverCard}
+                onChange={handleCalendarHoverCardToggle}
               />
               <span className="toggle-slider"></span>
             </label>

@@ -84,6 +84,401 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '6.5.0',
+    date: '2026-09-02',
+    title: 'Dwa nowe ekrany: pulpit „Księgowania” i „Kalendarz”',
+    tagline:
+      'Aplikacja otwiera się teraz na pulpicie: u góry pasek z nazwą miesiąca i jego własną grafiką, pod nim cztery kategorie do klikania (niezaksięgowane, oczekujące na DOM, oznaczone w DOM, błędy), a niżej wspólnoty — każda jako pełnej szerokości wiersz z liczbami po prawej i dużym zielonym przyciskiem „Zaksięguj w DOM”. Drugą nowością jest „Kalendarz” tuż pod pulpitem: cały miesiąc jak na ściennym kalendarzu, a obok panel wybranego dnia. Spotkanie zaczynasz od typu i wspólnoty — tytuł składa się z nich sam — a uczestników dobierasz z kont, które mają dostęp do aplikacji.',
+    stats: [
+      { value: '2', label: 'nowe ekrany w menu' },
+      { value: 'pulpit', label: 'nowy start aplikacji' },
+      { value: '1 klik', label: 'zaksięgowanie wspólnoty w DOM' },
+      { value: '12', label: 'grafik — po jednej na miesiąc' },
+    ],
+    highlights: [
+      {
+        id: 'pulpit-ksiegowania',
+        kind: 'new',
+        icon: 'home',
+        title: 'Pulpit: pierwszy ekran po uruchomieniu',
+        summary:
+          'Aplikacja startuje na „Pulpicie” — widoku księgowań wybranego miesiąca od strony wspólnot. W menu po lewej jest on na samej górze, nad „Kalendarzem” i „Konwerterem”.',
+        details: [
+          'Pytanie, z którym siada się do pracy, brzmi „co jeszcze zostało w tym miesiącu”, a nie „jaki plik wrzucić”. Pulpit odpowiada na nie od razu po włączeniu: bez klikania, bez szukania w historii.',
+          'Ten sam widok jest dodatkowo zakładką w „Konwerterze” (obok „Konwersja” i „Historia”), żeby po skonwertowaniu plików nie trzeba było wracać do menu. To jeden i ten sam ekran — wybrany miesiąc i kategoria są wspólne, więc przechodząc między nimi wracasz do tego samego miejsca.',
+          'Księgowaniem jest wygenerowany plik księgowy — to jedyna miara, jaką aplikacja przyjmuje. Konwersja zakończona błędem nic nie wygenerowała, więc nie liczy się jako zrobiona i jest pokazywana osobno.',
+        ],
+        where: ['Menu boczne', 'Pulpit'],
+        steps: [
+          {
+            do: 'Uruchom aplikację.',
+            then: 'Otworzy się „Pulpit” z bieżącym miesiącem: pasek miesiąca, kafelki kategorii, pasek postępu i lista wspólnot.',
+          },
+          {
+            do: 'Chcesz wrócić tu z innego widoku? Kliknij „Pulpit” na samej górze menu po lewej.',
+            then: 'Wracasz do tego samego miesiąca i tej samej kategorii, na której skończyłaś.',
+          },
+        ],
+        expect: [
+          'Lista pokazuje wszystkie wspólnoty z widoku „Adresy” — także te, dla których w tym miesiącu nie było jeszcze żadnej konwersji, bo to one są „do zrobienia”.',
+          'Konwersje sprzed tej wersji też trafiają do właściwej wspólnoty: nazwa wygenerowanego pliku zaczyna się od nazwy wspólnoty i po niej są rozpoznawane. Czego nie da się przypisać, ląduje w wierszu „Bez przypisanej wspólnoty” i nie znika.',
+        ],
+      },
+      {
+        id: 'pasek-miesiaca',
+        kind: 'new',
+        icon: 'calendar',
+        title: 'Pasek miesiąca — z nazwą miesiąca i jego własną grafiką',
+        summary:
+          'U góry pulpitu jest nazwa miesiąca dużą czcionką, obok niej rysunek pory roku (inny dla każdego z dwunastu miesięcy), a w jednej linii obok: strzałki, wybór miesiąca z listy, „Dziś” i odświeżanie.',
+        details: [
+          'Cały widok dotyczy jednego miesiąca, więc miesiąc jest tytułem tego ekranu — nie napisem „Księgowania” w kącie. Grafika i delikatny kolor tła zmieniają się razem z nim, więc od razu wiadomo, że przełączenie się udało: styczeń to bałwan, marzec krokusy w śniegu, lipiec parasol na plaży, październik dynia, grudzień choinka.',
+          'Pod paskiem miesiąca jest pasek postępu „Zaksięgowane w DOM” — procent plików tego miesiąca, które są już oznaczone.',
+        ],
+        where: ['Pulpit', 'pasek miesiąca'],
+        steps: [
+          {
+            do: 'Kliknij strzałkę ‹ po lewej stronie nazwy miesiąca.',
+            then: 'Cały pulpit — grafika, kafelki, pasek postępu i lista — przeskakuje na poprzedni miesiąc.',
+          },
+          {
+            do: 'Chcesz skoczyć dalej? Rozwiń nazwę miesiąca i wybierz go z listy.',
+            then: 'Lista podpowiada miesiące, w których cokolwiek się działo, oraz bieżący.',
+          },
+          {
+            do: 'Kliknij „Dziś”, żeby wrócić do bieżącego miesiąca. Przycisk z kółeczkiem obok odświeża dane.',
+            then: 'Odświeżenie nie czyści ekranu — dane po prostu się aktualizują, np. gdy ktoś z zespołu oznaczał pliki w tym samym czasie.',
+          },
+        ],
+        expect: [
+          'Wiersz z nazwą miesiąca zawiera też podsumowanie: ile wspólnot, ile plików księgowych i ile czeka na DOM.',
+        ],
+      },
+      {
+        id: 'kategorie-ksiegowan',
+        kind: 'new',
+        icon: 'bar-chart',
+        title: 'Cztery kategorie, w których liczą się wspólnoty',
+        summary:
+          'Kafelki pod paskiem miesiąca to filtry: „Wszystkie”, „Niezaksięgowane”, „Oczekujące na DOM”, „Oznaczone w DOM”, „Błędy”. Każdy liczy wspólnoty — nie pliki — więc liczba na kafelku to dokładnie tyle wierszy, ile zobaczysz po kliknięciu.',
+        details: [
+          '„Niezaksięgowane” to wspólnoty, dla których w tym miesiącu nie powstał żaden plik księgowy. „Oczekujące na DOM” to te, które plik mają, ale nie jest jeszcze (w całości) oznaczony. „Oznaczone w DOM” to zamknięte tematy. „Błędy” to wspólnoty, przy których konwersja się nie udała, więc pliku nie ma wcale.',
+          'Liczby dotyczące plików — ile ich powstało i ile jest oznaczonych — są w pasku miesiąca i na pasku postępu. Jedna jednostka na kafelkach, druga w pasku: dzięki temu żadna liczba nie znaczy dwóch rzeczy naraz.',
+        ],
+        where: ['Pulpit', 'kafelki kategorii'],
+        steps: [
+          {
+            do: 'Kliknij kafelek „Oczekujące na DOM”.',
+            then: 'Na liście zostają tylko wspólnoty z plikiem bez oznaczenia; kafelek zostaje podświetlony, żeby było jasne, że widzisz wycinek.',
+          },
+          {
+            do: 'Zawężaj dalej polem wyszukiwania pod kafelkami — po nazwie wspólnoty, nazwie pliku, banku.',
+            then: 'Wyszukiwanie działa razem z kategorią, a wiersze pasujące do frazy rozwijają się same.',
+          },
+          {
+            do: 'Kolejność zmienisz listą po prawej: „Do zrobienia najpierw”, „Alfabetycznie”, „Ostatnia aktywność”.',
+            then: 'Domyślnie na górze są błędy, potem wspólnoty czekające na DOM, dalej te bez pliku, a na końcu zamknięte.',
+          },
+          {
+            do: 'Oznaczaj spokojnie kolejne wspólnoty — lista nie przestawia się pod kursorem.',
+            then: 'Wiersz, który oznaczyłaś, zostaje dokładnie tam, gdzie był: robi się zielony i zmienia status na „W DOM”, ale nie ucieka na koniec listy ani nie znika, nawet gdy przestał pasować do wybranego kafelka. Gdy kolejność przestanie się zgadzać z wybranym sortowaniem, obok listy sortowania pojawia się przycisk „Przesortuj”.',
+          },
+          {
+            do: 'Skończyłaś partię i chcesz poukładać listę na nowo? Kliknij „Przesortuj” (albo kółeczko odświeżania w pasku miesiąca).',
+            then: 'Lista układa się od nowa według wybranego sortowania i kafelka — oznaczone wspólnoty schodzą na dół albo wypadają z filtra.',
+          },
+          {
+            do: 'Wróć do pełnej listy kafelkiem „Wszystkie”.',
+            then: 'Znów widzisz wszystkie wspólnoty tego miesiąca.',
+          },
+        ],
+        expect: [
+          'Kafelki liczą wybrany miesiąc, nie całą historię — po przełączeniu miesiąca liczby zmieniają się razem z listą.',
+          'Kolejność układa się na nowo także wtedy, gdy zmienisz kafelek, sortowanie, frazę w wyszukiwaniu albo miesiąc — czyli zawsze, gdy sama o to poprosisz.',
+        ],
+      },
+      {
+        id: 'wiersz-wspolnoty',
+        kind: 'new',
+        icon: 'map-pin',
+        title: 'Wspólnota to jeden wiersz na całą szerokość',
+        summary:
+          'Nazwa i status po lewej, liczby (pliki / w DOM / czeka / błędy) po prawej, obok nich mały pasek postępu, a na końcu duży zielony przycisk „Zaksięguj w DOM”. Kolorowa krawędź z lewej mówi, w jakim stanie jest wspólnota.',
+        details: [
+          'Wiersz jest szeroki i jednoznaczny: te same informacje w tych samych miejscach w każdej wspólnocie, więc listę da się przelecieć wzrokiem, a nie czytać po kolei.',
+          'Pod nazwą jest linia z bankiem i datą ostatniej konwersji. Jeśli w tym miesiącu nie było żadnej, pisze, kiedy było ostatnie księgowanie tej wspólnoty — albo że nie było go nigdy.',
+        ],
+        where: ['Pulpit', 'lista wspólnot'],
+        steps: [
+          {
+            do: 'Kliknij duży zielony przycisk „Zaksięguj w DOM” po prawej stronie wiersza.',
+            then: 'Wszystkie nieoznaczone pliki tej wspólnoty z tego miesiąca dostają znacznik naraz — liczba na przycisku mówi z góry, ilu plików to dotyczy. Wiersz robi się zielony i zmienia status na „W DOM”.',
+          },
+          {
+            do: 'Gdy wszystko jest już oznaczone, na miejscu przycisku jest napis „Zaksięgowane w DOM” i mały link „Zdejmij”.',
+            then: 'Link zdejmuje oznaczenia z całej wspólnoty, razem z datą i podpisem osoby, która je postawiła.',
+          },
+          {
+            do: 'Kliknij w wiersz (albo w strzałkę po lewej), żeby zobaczyć pliki.',
+            then: 'Wiersz rozwija się w listę: kolumny „Data”, „Plik wejściowy → plik księgowy”, „Akcje” i — po prawej stronie każdej linii — „W DOM” z własnym przyciskiem „Zaksięguj w DOM” dla tego jednego pliku.',
+          },
+        ],
+        expect: [
+          'Wspólnota bez pliku księgowego nie ma przycisku — nie ma czego księgować, dopóki plik nie powstanie.',
+          'Znaczniki zapisują się we wspólnej bazie, razem z datą i adresem e-mail osoby, która je postawiła, więc cały zespół widzi to samo.',
+        ],
+      },
+      {
+        id: 'pliki-w-wierszu',
+        kind: 'new',
+        icon: 'file-check',
+        title: 'W rozwiniętym wierszu: z jakiego wyciągu powstał który plik',
+        summary:
+          'Każdy plik to jedna linia: data, para „plik wejściowy → plik księgowy” do otwarcia jednym kliknięciem, „Podgląd” i skrót do historii, a na samym końcu linii własny przycisk „Zaksięguj w DOM” — dla tego jednego pliku.',
+        details: [
+          'To ta sama konwersja, którą widzisz w zakładce „Historia” — tylko pokazana od strony wyniku. Strzałka między kafelkami mówi wprost, który wyciąg dał który plik księgowy.',
+        ],
+        where: ['Pulpit', 'wspólnota', 'lista plików'],
+        steps: [
+          {
+            do: 'Kliknij lewy kafelek z nazwą wyciągu.',
+            then: 'Otworzy się plik wejściowy, z którego powstało księgowanie.',
+          },
+          {
+            do: 'Kliknij prawy kafelek z nazwą pliku księgowego.',
+            then: 'Otworzy się wygenerowany plik księgowy — ten sam, który wgrywasz do DOM.',
+          },
+          {
+            do: 'Oznaczasz pojedynczy plik? Kliknij zielony przycisk „Zaksięguj w DOM” na końcu tej linii.',
+            then: 'Ten sam przycisk co dla całej wspólnoty, tylko dla jednego pliku: linia od razu robi się zielona, w miejscu przycisku pojawia się napis „W DOM” z linkiem „Zdejmij”, a w linii — data oznaczenia i kto je postawił. Reszta plików wspólnoty zostaje nietknięta.',
+          },
+          {
+            do: 'Pomyłka? Kliknij „Zdejmij” pod napisem „W DOM” w tej samej linii.',
+            then: 'Oznaczenie schodzi tylko z tego pliku, razem z datą i podpisem; wraca przycisk „Zaksięguj w DOM”.',
+          },
+          {
+            do: 'Chcesz zobaczyć tę konwersję w kontekście dnia i banku? Kliknij ikonę zegara („Pokaż w historii”).',
+            then: 'Aplikacja przechodzi do „Konwerter → Historia” i wpisuje nazwę tego pliku w wyszukiwanie, więc wpis jest od razu rozwinięty.',
+          },
+        ],
+        expect: [
+          'Pliki otwierają się z dysku komputera, na którym powstały. Jeśli konwersję zrobił ktoś inny na swoim komputerze, zobaczysz „Plik nie istnieje lub został usunięty” — sam wpis i znacznik DOM pozostają widoczne dla wszystkich.',
+          'Nieudana konwersja nie ma przycisku — na jego miejscu jest czerwona plakietka „Błąd”, a w linii treść błędu zamiast pliku księgowego.',
+        ],
+        note: {
+          type: 'tip',
+          text: 'Znaczniki DOM wchodzą do kopii zapasowej i do eksportu historii do pliku, więc przenoszą się na inny komputer razem z resztą danych.',
+        },
+      },
+      {
+        id: 'historia-zapamietuje-wspolnote',
+        kind: 'improved',
+        icon: 'clipboard',
+        title: 'Historia konwersji zapamiętuje wspólnotę',
+        summary:
+          'Każda konwersja zapisuje teraz w historii, dla której wspólnoty była zrobiona — także ta zatwierdzona na ekranie akceptacji i ta, która skończyła się błędem.',
+        details: [
+          'Dotąd historia pamiętała plik, bank i konwerter, ale nie adres — wspólnotę dało się odczytać tylko z nazwy wygenerowanego pliku. Teraz adres jest zapisany wprost, razem z nazwą wspólnoty, więc pulpit grupuje wpisy pewnie, a nie po nazwie pliku.',
+          'Nazwa jest zapisywana obok numeru celowo: po odtworzeniu kopii zapasowej wspólnoty dostają nowe numery, a nazwa zostaje ta sama — i po niej wpisy wracają na swoje miejsce.',
+        ],
+        where: ['Pulpit'],
+        expect: [
+          'Konwersje z błędem także dostają adres, więc widać, przy której wspólnocie trzeba wrócić do pliku.',
+          'Starsze wpisy nie znikają: gdy adresu nie ma, jest odczytywany z nazwy wygenerowanego pliku, a gdy i to nie wychodzi — wpis trafia do wiersza „Bez przypisanej wspólnoty”.',
+        ],
+      },
+      {
+        id: 'kalendarz-modul',
+        kind: 'new',
+        icon: 'calendar',
+        title: 'Kalendarz: miesiąc po lewej, wybrany dzień po prawej',
+        summary:
+          'W menu po lewej, zaraz pod „Pulpitem”, jest nowa pozycja „Kalendarz”. Otwiera siatkę miesiąca — tydzień od poniedziałku — a obok niej panel, który pokazuje wszystkie szczegóły dnia, na który klikniesz.',
+        details: [
+          'Kalendarz zajmuje całą wysokość okna — tygodnie dzielą ją między siebie, więc pod miesiącem nie ma pustego miejsca. Gdy tygodnie są naprawdę zajęte, siatka przewija się zamiast ściskać kratki.',
+          'W kratce dnia mieszczą się najwyżej trzy spotkania, bo więcej przestaje być czytelne — resztę zwija w „+2 więcej”, a kliknięcie tego napisu pokazuje cały dzień w panelu obok.',
+          'W kratce każde spotkanie zostaje jedną linią, więc dłuższa nazwa jest przycięta wielokropkiem — całą przeczytasz najechaniem na nią myszką, bez klikania i bez rozpychania kalendarza.',
+          'Do wyboru są dwie podpowiedzi. Domyślnie działa zwykła systemowa: pokazuje godzinę i pełną nazwę, ale trzeba na nią chwilę poczekać. W „Ustawieniach” (sekcja „Wygląd”) możesz włączyć „Podpowiedź spotkania w kalendarzu” — wtedy pojawia się natychmiast i jest w niej więcej: godzina, cała nazwa, typ, wspólnota, lista uczestników i początek notatki.',
+          'Miesiąc przełączasz strzałkami przy jego nazwie, tak samo jak na „Pulpicie”. Wybrany miesiąc zostaje zapamiętany — jeśli przejdziesz do innego modułu i wrócisz, wracasz do tego samego miesiąca.',
+          'Na dole panelu jest lista „Najbliższe spotkania”, licząc od teraz — także z innych miesięcy. Kliknięcie pozycji z tej listy przenosi kalendarz na jej miesiąc i dzień.',
+        ],
+        where: ['Menu boczne', 'Kalendarz', 'Kalendarz'],
+        steps: [
+          {
+            do: 'Kliknij „Kalendarz” w menu po lewej.',
+            then: 'Otworzy się bieżący miesiąc. Dzisiejszy dzień ma numer w kolorowym kółku, a wybrany dzień jest obramowany.',
+          },
+          {
+            do: 'Kliknij dowolny dzień w siatce.',
+            then: 'Panel po prawej zmienia nagłówek na ten dzień i pokazuje jego spotkania — albo informację, że tego dnia nic nie ma.',
+          },
+          {
+            do: 'Kliknij konkretne spotkanie w kratce dnia.',
+            then: 'Panel po prawej podświetla to spotkanie ramką, więc od razu widać, o które z kilku chodzi.',
+          },
+          {
+            do: 'Kliknij to samo spotkanie dwukrotnie.',
+            then: 'Otwiera się formularz edycji tego spotkania — bez szukania przycisku „Edytuj” w panelu obok.',
+          },
+          {
+            do: 'Kliknij dwukrotnie puste miejsce w dowolnym dniu.',
+            then: 'Otwiera się formularz nowego spotkania z datą już ustawioną na ten dzień.',
+          },
+          {
+            do: 'Chcesz zawęzić widok? Wpisz frazę w pole wyszukiwania nad kalendarzem.',
+            then: 'Zostają tylko spotkania pasujące nazwą, wspólnotą, notatką, typem lub adresem e-mail uczestnika — w siatce i w panelu jednocześnie.',
+          },
+        ],
+        expect: [
+          'Kalendarz jest wspólny dla całego zespołu: spotkanie dodane na jednym komputerze widzą wszyscy zalogowani. Przy każdym spotkaniu widać, kto je dodał.',
+          'Natychmiastowa podpowiedź po najechaniu na spotkanie jest domyślnie wyłączona — włącza się ją w „Ustawieniach” → „Wygląd” → „Podpowiedź spotkania w kalendarzu”. Ustawienie jest lokalne, każdy na swoim komputerze decyduje sam.',
+          'Przycisk z kółeczkiem przy nazwie miesiąca odświeża dane bez czyszczenia ekranu — przydaje się, gdy ktoś dopisywał spotkania w tym samym czasie.',
+        ],
+      },
+      {
+        id: 'kalendarz-nowe-spotkanie',
+        kind: 'new',
+        icon: 'clock',
+        title: 'Nowe spotkanie: najpierw typ i adres, tytuł pisze się sam',
+        summary:
+          'Najszybciej: kliknij dwukrotnie dzień w kalendarzu. Można też przyciskiem „Nowe spotkanie” nad kalendarzem albo znakiem „+”, który pojawia się w kratce dnia po najechaniu na nią myszką. Formularz zaczyna od dwóch pól: typu spotkania i adresu wspólnoty. Z nich sam składa tytuł — „Zebranie wspólnoty — ul. Puławska 116” — który możesz nadpisać.',
+        details: [
+          'Typ i adres to jedyne dwie rzeczy, o których naprawdę decydujesz, a nazwa spotkania to prawie zawsze ich powtórzenie. Dlatego są pierwsze, a tytuł powstaje z nich: zmieniasz typ albo adres i tytuł zmienia się razem z nimi. W momencie, w którym zaczniesz pisać w polu tytułu, przestaje się aktualizować — pod polem widać, że jest już wpisany ręcznie, a obok napisu „Nazwa spotkania” pojawia się „Odtwórz z typu i adresu”, gdy chcesz wrócić do podpowiedzi.',
+          'Gdy wypełnisz tylko jedno z dwóch pól, tytułem zostaje to jedno — sam myślnik bez drugiej połowy byłby gorszy niż krótka nazwa. Oba pola są opcjonalne: spotkanie wewnętrzne nie musi mieć wspólnoty.',
+          'Godzina „do” jest opcjonalna — spotkanie bez podanego końca to po prostu punkt w dniu. Przy nowym spotkaniu podpowiada się godzina o jedną godzinę późniejsza niż początek, a gdy przesuniesz początek za koniec, koniec przesuwa się sam.',
+          'Wspólnotę wybierasz z tej samej listy adresów, z której korzysta konwerter — pole ma wyszukiwanie, więc wystarczy wpisać dwie litery nazwy. Nazwa wspólnoty zapisuje się razem ze spotkaniem, nie tylko odnośnik do niej, więc spotkanie pozostaje czytelne nawet po odtworzeniu kopii zapasowej albo po usunięciu adresu z listy.',
+        ],
+        where: ['Kalendarz', 'Nowe spotkanie'],
+        steps: [
+          {
+            do: 'Kliknij dwukrotnie dzień, w którym ma być spotkanie. (Można też najechać na kratkę i kliknąć „+” w jej prawym górnym rogu.)',
+            then: 'Otworzy się formularz z datą już ustawioną na ten dzień.',
+          },
+          {
+            do: 'Wybierz „Typ spotkania” z pierwszej listy.',
+            then: 'W polu „Nazwa spotkania” od razu pojawia się nazwa typu. Jeśli nie masz jeszcze żadnego typu, formularz podpowie zakładkę „Typy spotkań”.',
+          },
+          {
+            do: 'Obok wybierz wspólnotę w polu „Adres / wspólnota” — wpisz dwie litery nazwy, żeby ją znaleźć.',
+            then: 'Tytuł uzupełnia się do pełnej postaci: „typ — adres”.',
+          },
+          {
+            do: 'Tytuł Ci nie pasuje? Kliknij w pole i popraw je.',
+            then: 'Od tej chwili tytuł jest Twój — zmiana typu albo adresu go nie nadpisze. Wrócisz do podpowiedzi linkiem „Odtwórz z typu i adresu”.',
+          },
+          {
+            do: 'Ustaw godzinę „od”, a jeśli chcesz — także „do”. Godzinę „do” możesz zostawić puste.',
+          },
+          {
+            do: 'Na koniec kliknij „Dodaj”.',
+            then: 'Kalendarz przeskakuje na dzień tego spotkania i podświetla je w panelu — od razu widać, że się zapisało.',
+          },
+        ],
+        expect: [
+          'Spotkanie zmienisz dwuklikiem na nim w kalendarzu albo przyciskiem „Edytuj” pod nim w panelu po prawej. Usuwa się je przyciskiem „Usuń” obok — z potwierdzeniem, bo nie da się tego cofnąć.',
+          'Przy edycji tytuł zachowuje się rozsądnie: jeśli był złożony z typu i adresu, dalej za nimi chodzi; jeśli ktoś wpisał go ręcznie, zostaje nietknięty.',
+          'Jeśli przy edycji przeniesiesz spotkanie na inny miesiąc, kalendarz sam przełączy się na ten miesiąc po zapisaniu.',
+        ],
+        note: {
+          type: 'tip',
+          text: 'Pole „Opis / notatki” to dobre miejsce na miejsce spotkania, agendę albo listę rzeczy do przygotowania — jest pokazywane w całości w panelu dnia.',
+        },
+      },
+      {
+        id: 'kalendarz-typy',
+        kind: 'new',
+        icon: 'clipboard',
+        title: 'Typy spotkań definiujesz sam — razem z kolorem',
+        summary:
+          'Druga zakładka modułu, „Typy spotkań”, to Twój własny słownik: sam decydujesz, jakie rodzaje spotkań prowadzi biuro. Każdy typ ma nazwę, kolor i opcjonalny opis.',
+        details: [
+          'Kolor jest częścią typu, nie pojedynczego spotkania — dzięki temu w siatce miesiąca od razu widać, czego dotyczy dany dzień, bez czytania nazw. Do wyboru jest dziesięć kolorów, które są czytelne w jasnym i ciemnym motywie, a obok nich pole na własny kolor.',
+          'Kolorowe przyciski nad kalendarzem to filtry typów: kliknięcie zostawia tylko spotkania tego typu, kolejne kliknięcie zdejmuje filtr.',
+          'Kolumna „Spotkania” w tabeli typów pokazuje, ile spotkań korzysta z danego typu — zanim go usuniesz, wiesz, ilu spotkań to dotknie.',
+        ],
+        where: ['Kalendarz', 'Typy spotkań'],
+        steps: [
+          {
+            do: 'W module „Kalendarz” kliknij zakładkę „Typy spotkań” u góry.',
+            then: 'Zobaczysz tabelę typów — na początku pustą.',
+          },
+          {
+            do: 'Kliknij „Dodaj typ” i wpisz nazwę, np. „Zebranie wspólnoty”.',
+          },
+          {
+            do: 'Wybierz kolor, klikając jeden z kwadracików.',
+            then: 'Pod spodem widzisz podgląd: dokładnie tak ten typ będzie wyglądał w kalendarzu.',
+          },
+          {
+            do: 'Kliknij „Dodaj”, a potem wróć na zakładkę „Kalendarz”.',
+            then: 'Nowy typ jest już na liście w formularzu spotkania i jako kolorowy filtr nad kalendarzem.',
+          },
+        ],
+        expect: [
+          'Usunięcie typu nie usuwa spotkań — zostają, tylko bez typu (w kalendarzu jako „Bez typu”). Aplikacja ostrzega o tym i podaje liczbę takich spotkań.',
+          'Dwa typy o tej samej nazwie nie przejdą — byłyby nie do rozróżnienia na listach.',
+        ],
+      },
+      {
+        id: 'kalendarz-uczestnicy',
+        kind: 'new',
+        icon: 'users',
+        title: 'Uczestnicy z kont, które mają dostęp do aplikacji',
+        summary:
+          'W formularzu spotkania jest pole „Uczestnicy”. Lista do wyboru to konta założone dla Waszego zespołu — te same, którymi logujecie się do aplikacji. Nie trzeba przepisywać adresów e-mail, a całe biuro dodasz jednym kliknięciem.',
+        details: [
+          'Przy napisie „Uczestnicy” są dwa skróty: „Dodaj wszystkich” wstawia wszystkie konta naraz (w nawiasie widać ile), a „Wyczyść” zdejmuje całą listę. Zebranie zarządu jest zwykle dla całego biura, więc nie ma sensu wybierać piętnastu osób po jednej.',
+          'Pole ma wyszukiwanie, więc wystarczy wpisać kilka liter imienia albo adresu. Każde kliknięcie dopisuje kolejną osobę pod polem, a krzyżyk przy nazwisku ją zdejmuje. Twoje własne konto jest oznaczone dopiskiem „(Ty)”.',
+          'Uczestnicy zapisują się razem ze spotkaniem — także ich adres e-mail i nazwa. Dzięki temu lista obecności starego spotkania pozostaje czytelna, nawet jeśli ktoś w międzyczasie przestanie mieć konto.',
+          'Uczestnika znajdziesz też wyszukiwaniem nad kalendarzem: wpisany adres e-mail zostawia w widoku tylko spotkania, w których ta osoba bierze udział.',
+        ],
+        where: ['Kalendarz', 'Nowe spotkanie', 'Uczestnicy'],
+        steps: [
+          {
+            do: 'W formularzu spotkania kliknij pole „Dodaj uczestnika…”.',
+            then: 'Rozwinie się lista kont z polem wyszukiwania na górze.',
+          },
+          {
+            do: 'Wpisz kilka liter, żeby zawęzić listę, i kliknij osobę.',
+            then: 'Osoba pojawia się jako plakietka pod polem; lista do wyboru przestaje ją proponować.',
+          },
+          {
+            do: 'Pomyłkę zdejmiesz krzyżykiem na plakietce.',
+          },
+          {
+            do: 'Spotkanie jest dla wszystkich? Kliknij „Dodaj wszystkich” przy napisie „Uczestnicy”.',
+            then: 'Wszystkie konta pojawiają się jako plakietki; „Wyczyść” obok zdejmuje je z powrotem.',
+          },
+        ],
+        expect: [
+          'Lista uczestników pokazuje się przy spotkaniu w panelu dnia — po nazwie, a gdy konto jej nie ma, po adresie e-mail.',
+          'Jeśli lista kont jest pusta, formularz to napisze. Nowe konta zakłada administrator w panelu Supabase — aplikacja ich nie tworzy.',
+        ],
+        note: {
+          type: 'warning',
+          text: 'Dodanie uczestnika nie wysyła powiadomienia ani zaproszenia — to zapis w kalendarzu, nie e-mail. Do wysyłki wiadomości służy moduł „Mailing”.',
+        },
+      },
+      {
+        id: 'kalendarz-w-kopii',
+        kind: 'improved',
+        icon: 'shield',
+        title: 'Spotkania i typy spotkań wchodzą do kopii zapasowej',
+        summary:
+          'Kalendarz jest objęty tym samym backupem co reszta danych: codzienna kopia i ręczny eksport zapisują spotkania i typy spotkań, a odtworzenie kopii je przywraca.',
+        details: [
+          'W podsumowaniu kopii — tym, które pokazuje się po utworzeniu backupu i przed odtworzeniem — są teraz dwie nowe pozycje: „typy spotkań” i „spotkania”.',
+          'Oznaczenia „w DOM” z pulpitu też jadą w kopii: razem z każdym wpisem historii zapisuje się, czy jest zaksięgowany, kiedy został oznaczony i przez kogo.',
+          'Po odtworzeniu kopii spotkania trafiają z powrotem do właściwych wspólnot: powiązanie odtwarza się po nazwie wspólnoty, bo numery adresów po odtworzeniu są inne. Tak samo działa to już w „Księgowaniach”.',
+        ],
+        where: ['Ustawienia', 'Kopia zapasowa'],
+        expect: [
+          'Kopie zapasowe zrobione starszymi wersjami dalej działają — po prostu nie zawierają spotkań, a ich odtworzenie nie rusza tych, które są w bazie.',
+        ],
+      },
+    ],
+  },
+  {
     version: '6.3.0',
     date: '2026-09-01',
     title: 'Jeden płatnik, kilka lokali — reguła pyta, na który zaksięgować',

@@ -18,6 +18,11 @@ import {
   MailingSzablon,
   MailingHistoryEntry,
   MailingSmtpConfig,
+  AppUser,
+  SpotkanieTyp,
+  Spotkanie,
+  SpotkanieInput,
+  SpotkanieUczestnik,
 } from '../shared/types';
 import { getSupabase } from './supabaseClient';
 import { normalizeAccount } from '../shared/account-extractor';
@@ -37,6 +42,8 @@ interface SettingsStoreSchema {
     skipUserApproval: boolean;
     contractorSortOrder: 'name-asc' | 'name-desc' | 'account-asc' | 'account-desc';
     sidebarCollapsed: boolean;
+    /** Kalendarz: instant hover card over a meeting in the month grid. */
+    calendarHoverCard: boolean;
     /** Release-notes version already shown on this machine ('' = never). */
     lastSeenVersion: string;
     /** Mailing: SMTP of the mailbox we send from. Never leaves this machine. */
@@ -73,7 +80,11 @@ const MAILING_HISTORY_COLS =
 const KONTO_TYP_COLS =
   'id, name, bankAccountSymbol:bank_account_symbol, apartmentPrefix:apartment_prefix, isDefault:is_default, createdAt:created_at';
 const HISTORY_COLS =
-  'id, fileName:file_name, bankName:bank_name, converterName:converter_name, status, errorMessage:error_message, inputPath:input_path, outputPath:output_path, convertedAt:converted_at';
+  'id, fileName:file_name, bankName:bank_name, converterName:converter_name, status, errorMessage:error_message, inputPath:input_path, outputPath:output_path, convertedAt:converted_at, adresId:adres_id, adresNazwa:adres_nazwa, bookedInDom:booked_in_dom, bookedInDomAt:booked_in_dom_at, bookedInDomBy:booked_in_dom_by';
+const APP_USER_COLS = 'id, email, displayName:display_name, createdAt:created_at';
+const SPOTKANIE_TYP_COLS = 'id, nazwa, kolor, opis, createdAt:created_at';
+const SPOTKANIE_COLS =
+  'id, nazwa, typId:typ_id, adresId:adres_id, adresNazwa:adres_nazwa, startsAt:starts_at, endsAt:ends_at, opis, uczestnicy, createdBy:created_by, createdAt:created_at, updatedAt:updated_at';
 const ODCZYTY_HISTORY_COLS =
   'id, supplier, status, errorMessage:error_message, outputDir:output_dir, sources:source_files, outputs:output_files, readingCount:reading_count, skippedCount:skipped_count, convertedAt:converted_at';
 
@@ -155,6 +166,7 @@ class DatabaseService {
           skipUserApproval: false,
           contractorSortOrder: 'name-asc',
           sidebarCollapsed: true,
+          calendarHoverCard: false,
           lastSeenVersion: '',
           // home.pl defaults — the mailbox this is built for. Overridable in Settings.
           smtpHost: 'poczta.home.pl',
@@ -671,7 +683,19 @@ class DatabaseService {
     errorMessage?: string;
     inputPath: string;
     outputPath: string;
+    /** Community the file was converted for — powers the "Księgowania" view. */
+    adresId?: number | null;
   }): Promise<void> {
+    // The name is stored next to the id on purpose: a restore renumbers the
+    // addresses, and the name is what the Księgowania view falls back to.
+    let adresNazwa: string | null = null;
+    if (data.adresId != null) {
+      try {
+        adresNazwa = (await this.getAdresById(data.adresId))?.nazwa ?? null;
+      } catch {
+        adresNazwa = null; // best-effort label; never fail a conversion over it
+      }
+    }
     const { error } = await getSupabase().from('history').insert({
       file_name: data.fileName,
       bank_name: data.bankName,
@@ -680,6 +704,8 @@ class DatabaseService {
       error_message: data.errorMessage || null,
       input_path: data.inputPath,
       output_path: data.outputPath,
+      adres_id: data.adresId ?? null,
+      adres_nazwa: adresNazwa,
     });
     if (error) throw new Error(`addConversionHistory: ${error.message}`);
   }
@@ -692,7 +718,27 @@ class DatabaseService {
         .order('converted_at', { ascending: false })
         .range(from, to),
     );
-    return rows.map(h => ({ ...h, errorMessage: h.errorMessage ?? undefined })) as ConversionHistory[];
+    return rows.map(h => ({
+      ...h,
+      errorMessage: h.errorMessage ?? undefined,
+      bookedInDom: h.bookedInDom === true,
+    })) as ConversionHistory[];
+  }
+
+  /**
+   * Tick / untick "posted in the DOM program" for whole batches of history rows
+   * at once — the Księgowania view marks a single file, a community's month or
+   * everything shown, and all three land here.
+   */
+  async setHistoryBookedInDom(ids: number[], booked: boolean, by?: string | null): Promise<void> {
+    if (ids.length === 0) return;
+    const patch = booked
+      ? { booked_in_dom: true, booked_in_dom_at: new Date().toISOString(), booked_in_dom_by: by ?? null }
+      : { booked_in_dom: false, booked_in_dom_at: null, booked_in_dom_by: null };
+    for (const slice of DatabaseService.chunk(ids)) {
+      const { error } = await getSupabase().from('history').update(patch).in('id', slice);
+      if (error) throw new Error(`setHistoryBookedInDom: ${error.message}`);
+    }
   }
 
   async clearHistory(): Promise<void> {
@@ -718,6 +764,13 @@ class DatabaseService {
         input_path: h.inputPath,
         output_path: h.outputPath,
         converted_at: h.convertedAt,
+        // Ids come from whichever install wrote the file, so only the name is
+        // trustworthy here; the view resolves the community from it.
+        adres_id: null,
+        adres_nazwa: h.adresNazwa ?? null,
+        booked_in_dom: h.bookedInDom === true,
+        booked_in_dom_at: h.bookedInDom ? h.bookedInDomAt ?? null : null,
+        booked_in_dom_by: h.bookedInDom ? h.bookedInDomBy ?? null : null,
       })),
     );
     return { added: fresh.length, skipped: rows.length - fresh.length };
@@ -1012,6 +1065,138 @@ class DatabaseService {
     if (config.pass !== undefined) this.setSetting('smtpPass', config.pass);
   }
 
+  // ------------------------------ Kalendarz ------------------------------
+
+  /**
+   * The application's accounts, as the participant picker offers them.
+   *
+   * Read from `public.app_users`, the trigger-maintained mirror of `auth.users`
+   * — the publishable key cannot query the auth schema, and giving it that
+   * reach would hand every client the whole user table. See supabase/kalendarz.sql.
+   */
+  async getAppUsers(): Promise<AppUser[]> {
+    const { data, error } = await getSupabase()
+      .from('app_users')
+      .select(APP_USER_COLS)
+      .order('email', { ascending: true });
+    if (error) throw new Error(`getAppUsers: ${error.message}`);
+    return (data ?? []) as AppUser[];
+  }
+
+  async getSpotkaniaTypy(): Promise<SpotkanieTyp[]> {
+    const { data, error } = await getSupabase()
+      .from('spotkania_typy')
+      .select(SPOTKANIE_TYP_COLS)
+      .order('nazwa', { ascending: true });
+    if (error) throw new Error(`getSpotkaniaTypy: ${error.message}`);
+    return (data ?? []) as SpotkanieTyp[];
+  }
+
+  async addSpotkanieTyp(nazwa: string, kolor: string, opis: string): Promise<SpotkanieTyp> {
+    const { data, error } = await getSupabase()
+      .from('spotkania_typy')
+      .insert({ nazwa: nazwa.trim(), kolor: kolor.trim(), opis })
+      .select(SPOTKANIE_TYP_COLS)
+      .single();
+    return unwrap(data, error, 'addSpotkanieTyp') as SpotkanieTyp;
+  }
+
+  async updateSpotkanieTyp(
+    id: number,
+    nazwa: string,
+    kolor: string,
+    opis: string,
+  ): Promise<void> {
+    const { error } = await getSupabase()
+      .from('spotkania_typy')
+      .update({ nazwa: nazwa.trim(), kolor: kolor.trim(), opis })
+      .eq('id', id);
+    if (error) throw new Error(`updateSpotkanieTyp: ${error.message}`);
+  }
+
+  /**
+   * Delete a type. `spotkania.typ_id` is ON DELETE SET NULL, so the meetings
+   * survive as untyped rather than disappearing with the dictionary entry — the
+   * caller warns about how many that affects.
+   */
+  async deleteSpotkanieTyp(id: number): Promise<void> {
+    const { error } = await getSupabase().from('spotkania_typy').delete().eq('id', id);
+    if (error) throw new Error(`deleteSpotkanieTyp: ${error.message}`);
+  }
+
+  async getSpotkania(): Promise<Spotkanie[]> {
+    const rows = await fetchAllPaged<any>('getSpotkania', (from, to) =>
+      getSupabase()
+        .from('spotkania')
+        .select(SPOTKANIE_COLS)
+        .order('starts_at', { ascending: false })
+        .range(from, to),
+    );
+    return rows.map(r => ({
+      ...r,
+      typId: r.typId ?? null,
+      adresId: r.adresId ?? null,
+      adresNazwa: r.adresNazwa ?? '',
+      endsAt: r.endsAt ?? null,
+      opis: r.opis ?? '',
+      uczestnicy: Array.isArray(r.uczestnicy) ? (r.uczestnicy as SpotkanieUczestnik[]) : [],
+      createdBy: r.createdBy ?? '',
+    })) as Spotkanie[];
+  }
+
+  /**
+   * Shape one meeting for the table. Shared by insert and update so the two can
+   * never disagree, and the one invariant lives in a single place: an end before
+   * its start would silently reorder the day, so it is rejected rather than
+   * stored or quietly dropped.
+   */
+  private static spotkaniePayload(input: SpotkanieInput): Record<string, unknown> {
+    const nazwa = input.nazwa.trim();
+    if (!nazwa) throw new Error('Spotkanie musi mieć nazwę.');
+    if (!input.startsAt) throw new Error('Spotkanie musi mieć datę i godzinę.');
+    if (
+      input.endsAt &&
+      new Date(input.endsAt).getTime() <= new Date(input.startsAt).getTime()
+    ) {
+      throw new Error('Godzina zakończenia musi być późniejsza niż godzina rozpoczęcia.');
+    }
+    return {
+      nazwa,
+      typ_id: input.typId,
+      adres_id: input.adresId,
+      adres_nazwa: input.adresNazwa.trim(),
+      starts_at: input.startsAt,
+      ends_at: input.endsAt,
+      opis: input.opis,
+      uczestnicy: input.uczestnicy,
+    };
+  }
+
+  async addSpotkanie(input: SpotkanieInput, createdBy: string): Promise<Spotkanie> {
+    const { data, error } = await getSupabase()
+      .from('spotkania')
+      .insert({ ...DatabaseService.spotkaniePayload(input), created_by: createdBy })
+      .select(SPOTKANIE_COLS)
+      .single();
+    return unwrap(data, error, 'addSpotkanie') as Spotkanie;
+  }
+
+  async updateSpotkanie(id: number, input: SpotkanieInput): Promise<void> {
+    const { error } = await getSupabase()
+      .from('spotkania')
+      .update({
+        ...DatabaseService.spotkaniePayload(input),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+    if (error) throw new Error(`updateSpotkanie: ${error.message}`);
+  }
+
+  async deleteSpotkanie(id: number): Promise<void> {
+    const { error } = await getSupabase().from('spotkania').delete().eq('id', id);
+    if (error) throw new Error(`deleteSpotkanie: ${error.message}`);
+  }
+
   // ---------------------------- App config ----------------------------
   // Shared secrets/config living in Supabase (`app_config`, authenticated
   // read-only). Keeps API keys out of the publicly downloadable binaries.
@@ -1092,6 +1277,8 @@ class DatabaseService {
       mailingPola,
       mailingSzablony,
       mailingHistory,
+      spotkaniaTypy,
+      spotkania,
     ] = await Promise.all([
       this.getAllBanks(),
       this.getAllKontrahenci(),
@@ -1103,6 +1290,8 @@ class DatabaseService {
       this.getMailingPola(),
       this.getMailingSzablony(),
       this.getMailingHistory(),
+      this.getSpotkaniaTypy(),
+      this.getSpotkania(),
     ]);
     return {
       format: 'filefunky-backup',
@@ -1120,6 +1309,11 @@ class DatabaseService {
         mailingPola,
         mailingSzablony,
         mailingHistory,
+        spotkaniaTypy,
+        spotkania,
+        // `app_users` is deliberately absent: it is a mirror of the Supabase
+        // auth accounts, rebuilt by a trigger, not data this app authors. The
+        // participants stored on each meeting carry their own snapshot.
         settings: this.settingsForExport(),
       },
     };
@@ -1186,6 +1380,8 @@ class DatabaseService {
       mailingPola,
       mailingSzablony,
       mailingHistory,
+      spotkaniaTypy,
+      spotkania,
       settings,
     } = backup.data;
 
@@ -1283,6 +1479,15 @@ class DatabaseService {
       }),
     );
 
+    // The addresses above were re-inserted with fresh ids, so the backup's
+    // history rows point at numbers that no longer mean anything. The name is
+    // what the Księgowania view actually resolves a community by, so re-point
+    // the link through it and leave it null when the community is gone.
+    this.invalidateCache('adresy');
+    const adresIdByNazwa = new Map(
+      (await this.getAllAdresy()).map(a => [a.nazwa.trim().toLowerCase(), a.id] as const),
+    );
+
     await this.clearHistory();
     await this.insertChunked(
       'history',
@@ -1295,6 +1500,11 @@ class DatabaseService {
         input_path: h.inputPath,
         output_path: h.outputPath,
         converted_at: h.convertedAt,
+        adres_id: h.adresNazwa ? adresIdByNazwa.get(h.adresNazwa.trim().toLowerCase()) ?? null : null,
+        adres_nazwa: h.adresNazwa ?? null,
+        booked_in_dom: h.bookedInDom === true,
+        booked_in_dom_at: h.bookedInDom ? h.bookedInDomAt ?? null : null,
+        booked_in_dom_by: h.bookedInDom ? h.bookedInDomBy ?? null : null,
       })),
     );
 
@@ -1382,6 +1592,56 @@ class DatabaseService {
           sent_at: h.sentAt,
         })),
       );
+    }
+
+    // Kalendarz. Gated on the meetings rather than on the types, because the two
+    // keys are written together and the types only exist to be pointed at: a
+    // backup with types but no meetings would replace the dictionary out from
+    // under live meetings, nulling their type.
+    if (spotkania) {
+      const preexistingSpotkanieTypIds = (await this.getSpotkaniaTypy()).map(t => t.id);
+      // Same alongside-then-swap dance as banks: the new types must exist before
+      // the meetings that reference them, and the old ones can only go once
+      // nothing points at them any more.
+      const spotkanieTypIdMap = await this.insertRemapped(
+        'spotkania_typy',
+        'id',
+        (spotkaniaTypy ?? []).map(t => t.id),
+        (spotkaniaTypy ?? []).map(t => ({
+          nazwa: t.nazwa,
+          kolor: t.kolor,
+          opis: t.opis,
+          created_at: t.createdAt,
+        })),
+      );
+
+      const { error: wipeError } = await getSupabase().from('spotkania').delete().gt('id', 0);
+      if (wipeError) throw new Error(`restore spotkania: ${wipeError.message}`);
+      await this.insertChunked(
+        'spotkania',
+        spotkania.map(m => ({
+          nazwa: m.nazwa,
+          typ_id: m.typId != null ? spotkanieTypIdMap.get(m.typId) ?? null : null,
+          // The addresses above were re-inserted with fresh ids, so the backup's
+          // number means nothing now; the name is what survives a restore, and
+          // it is also what the meeting displays.
+          adres_id: m.adresNazwa
+            ? adresIdByNazwa.get(m.adresNazwa.trim().toLowerCase()) ?? null
+            : null,
+          adres_nazwa: m.adresNazwa ?? '',
+          starts_at: m.startsAt,
+          ends_at: m.endsAt ?? null,
+          opis: m.opis ?? '',
+          // The participants are a snapshot of accounts, whose ids are auth
+          // uuids — stable across a restore, so they travel verbatim.
+          uczestnicy: m.uczestnicy ?? [],
+          created_by: m.createdBy ?? '',
+          created_at: m.createdAt,
+          updated_at: m.updatedAt,
+        })),
+      );
+
+      await this.deleteByIds('spotkania_typy', preexistingSpotkanieTypIds);
     }
 
     this.importSettings({ settings });

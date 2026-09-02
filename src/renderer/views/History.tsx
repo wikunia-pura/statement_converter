@@ -8,9 +8,14 @@ import Icon from '../components/Icon';
 
 interface HistoryProps {
   language: Language;
+  /**
+   * Text to search for as soon as the view opens — set by "Pokaż w historii" in
+   * the Księgowania tab, so a booking can be traced back to its history entry.
+   */
+  searchSeed?: string;
 }
 
-const History: React.FC<HistoryProps> = ({ language }) => {
+const History: React.FC<HistoryProps> = ({ language, searchSeed }) => {
   const t = translations[language];
   const notify = useNotify();
   const [history, setHistory] = useState<ConversionHistory[]>([]);
@@ -107,7 +112,11 @@ const History: React.FC<HistoryProps> = ({ language }) => {
           </div>
         </div>
 
-        <ConversionHistoryTimeline history={history} language={language} />
+        <ConversionHistoryTimeline
+          history={history}
+          language={language}
+          searchSeed={searchSeed}
+        />
       </div>
     </div>
   );

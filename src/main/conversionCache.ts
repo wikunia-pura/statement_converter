@@ -28,6 +28,12 @@ interface CachedConversion {
   previewOutput: string;
   /** Accounting symbols chosen for this conversion (bank-account side + apartment prefix). */
   accountConfig?: { bankAccountSymbol: string; apartmentPrefix: string };
+  /**
+   * Community the file is being converted for. Kept here so the history row
+   * written after the review knows its address — the finalize call only carries
+   * the conversion id, and this survives a main-process restart with it.
+   */
+  adresId?: number | null;
   createdAt: Date;
   /** Sliding-expiration timestamp; refreshed on every read/touch. */
   lastAccessedAt: Date;
@@ -121,7 +127,8 @@ class ConversionCache {
     outputPath: string,
     processedTransactions: any[],
     previewOutput: string,
-    accountConfig?: { bankAccountSymbol: string; apartmentPrefix: string }
+    accountConfig?: { bankAccountSymbol: string; apartmentPrefix: string },
+    adresId?: number | null
   ): string {
     this.ensureLoaded();
     const id = this.generateId();
@@ -137,6 +144,7 @@ class ConversionCache {
       processedTransactions,
       previewOutput,
       accountConfig,
+      adresId: adresId ?? null,
       createdAt: now,
       lastAccessedAt: now,
     });

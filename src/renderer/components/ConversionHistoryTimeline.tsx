@@ -13,6 +13,12 @@ interface ConversionHistoryTimelineProps {
   showSearch?: boolean;
   /** How many of the most-recent days start expanded (default 0 — all collapsed). */
   initialExpandedDays?: number;
+  /**
+   * Pre-fills the search box (and re-fills it whenever the value changes), so
+   * another view can hand the timeline something to find. The user stays free to
+   * edit or clear it afterwards.
+   */
+  searchSeed?: string;
 }
 
 /** Local YYYY-MM-DD key for grouping, independent of timezone printing quirks. */
@@ -56,10 +62,11 @@ const ConversionHistoryTimeline: React.FC<ConversionHistoryTimelineProps> = ({
   language,
   showSearch = true,
   initialExpandedDays = 0,
+  searchSeed,
 }) => {
   const t = translations[language];
   const notify = useNotify();
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(searchSeed ?? '');
   // Explicit user overrides only; untouched days fall back to the index default.
   const [dayOverrides, setDayOverrides] = useState<Record<string, boolean>>({});
   // Banks start collapsed; this holds the ids the user has expanded.
@@ -70,6 +77,12 @@ const ConversionHistoryTimeline: React.FC<ConversionHistoryTimelineProps> = ({
   const menuPlacement = useDropdownPlacement(dropdownRef, openDropdownId !== null, 120);
 
   const locale = language === 'en' ? 'en-US' : 'pl-PL';
+
+  // A fresh seed (a different file handed over from Księgowania) replaces what
+  // is in the box; an unchanged one leaves the user's own edits alone.
+  useEffect(() => {
+    if (searchSeed !== undefined) setSearchTerm(searchSeed);
+  }, [searchSeed]);
 
   // Detect dark mode changes (inline dropdown styling depends on it).
   useEffect(() => {

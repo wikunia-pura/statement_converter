@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Converter from './views/Converter';
 import Settings from './views/Settings';
 import History from './views/History';
+import Ksiegowania from './views/Ksiegowania';
 import Kontrahenci from './views/Kontrahenci';
 import Adresy from './views/Adresy';
 import Banki from './views/Banki';
@@ -15,6 +16,8 @@ import Mailing, { MailingDraft, emptyMailingDraft } from './views/Mailing';
 import MailingSzablony from './views/MailingSzablony';
 import MailingPola from './views/MailingPola';
 import MailingHistoria from './views/MailingHistoria';
+import Kalendarz from './views/Kalendarz';
+import KalendarzTypy from './views/KalendarzTypy';
 import ModuleTabs from './components/ModuleTabs';
 import CoNowego from './views/CoNowego';
 import Login from './views/Login';
@@ -28,6 +31,7 @@ import WhatsNewModal from './components/WhatsNewModal';
 import { NotificationProvider } from './components/Notifications';
 import { translations, Language } from './translations';
 import { FileEntry } from '../shared/types';
+import { BookingFilter, currentMonthKey } from '../shared/bookings';
 import { releaseForVersion, shouldShowWhatsNew } from '../shared/release-notes';
 
 interface NavItemProps {
@@ -56,6 +60,7 @@ const NavItem: React.FC<NavItemProps> = ({ icon, label, active, onClick, title, 
 );
 
 type View =
+  | 'pulpit'
   | 'converter'
   | 'settings'
   | 'kontrahenci'
@@ -67,10 +72,13 @@ type View =
   | 'homebanking'
   | 'odczyty'
   | 'mailing'
+  | 'kalendarz'
   | 'conowego';
 
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<View>('converter');
+  // The dashboard is where the app opens: the month's bookings are the question
+  // the user comes here with, and converting files is the answer to it.
+  const [currentView, setCurrentView] = useState<View>('pulpit');
   const [darkMode, setDarkMode] = useState(false);
   const [language, setLanguage] = useState<Language>('pl');
   // Sidebar starts collapsed (icon-only rail); the user can pin it expanded and
@@ -86,9 +94,18 @@ const App: React.FC = () => {
   const [odczytyFiles, setOdczytyFiles] = useState<OdczytyFileEntry[]>([]);
   // Each module keeps its own Konwersja/Historia tab, so switching modules and
   // coming back lands where the user left off.
-  const [converterTab, setConverterTab] = useState<'convert' | 'history'>('convert');
+  const [converterTab, setConverterTab] = useState<'convert' | 'bookings' | 'history'>('convert');
+  // Księgowania: month + filter live here so a detour to Konwersja or Historia
+  // comes back to the same month, and "Pokaż w historii" can seed the search.
+  const [ksiegMonth, setKsiegMonth] = useState<string>(() => currentMonthKey());
+  const [ksiegFilter, setKsiegFilter] = useState<BookingFilter>('all');
+  const [historySearchSeed, setHistorySearchSeed] = useState<string>('');
   const [odczytyTab, setOdczytyTab] = useState<'convert' | 'history'>('convert');
   const [mailingTab, setMailingTab] = useState<'send' | 'templates' | 'fields' | 'history'>('send');
+  const [kalendarzTab, setKalendarzTab] = useState<'calendar' | 'types'>('calendar');
+  // Kalendarz: the month lives here so a detour to "Typy spotkań" — or to any
+  // other module — comes back to the month the user was looking at.
+  const [kalMonth, setKalMonth] = useState<string>(() => currentMonthKey());
   // The send form lives here so a detour to Adresy (to attach a missing city
   // unit) or to the templates tab doesn't throw away a half-filled mailing.
   const [mailingDraft, setMailingDraft] = useState<MailingDraft>(emptyMailingDraft);
@@ -249,6 +266,19 @@ const App: React.FC = () => {
         </div>
         <div className="sidebar-nav">
           <NavItem
+            icon="home"
+            label={t.pulpit}
+            active={currentView === 'pulpit'}
+            onClick={() => setCurrentView('pulpit')}
+          />
+          <NavItem
+            icon="calendar"
+            label={t.kalendarz}
+            active={currentView === 'kalendarz'}
+            onClick={() => setCurrentView('kalendarz')}
+          />
+          <div className="nav-divider" />
+          <NavItem
             icon="folder"
             label={t.converter}
             active={currentView === 'converter'}
@@ -339,17 +369,33 @@ const App: React.FC = () => {
       </div>
 
       <div className="main-content">
+        {currentView === 'pulpit' && (
+          <Ksiegowania
+            language={language}
+            monthKey={ksiegMonth}
+            setMonthKey={setKsiegMonth}
+            filter={ksiegFilter}
+            setFilter={setKsiegFilter}
+            userEmail={session.email}
+            onShowInHistory={(query) => {
+              setHistorySearchSeed(query);
+              setConverterTab('history');
+              setCurrentView('converter');
+            }}
+          />
+        )}
         {currentView === 'converter' && (
           <>
             <ModuleTabs
               tabs={[
                 { id: 'convert', label: t.tabConversion, icon: 'folder' },
+                { id: 'bookings', label: t.tabBookings, icon: 'book' },
                 { id: 'history', label: t.tabHistory, icon: 'history' },
               ]}
               active={converterTab}
-              onChange={(id) => setConverterTab(id as 'convert' | 'history')}
+              onChange={(id) => setConverterTab(id as 'convert' | 'bookings' | 'history')}
             />
-            {converterTab === 'convert' ? (
+            {converterTab === 'convert' && (
               <Converter
                 language={language}
                 files={files}
@@ -362,8 +408,23 @@ const App: React.FC = () => {
                 }}
                 onNavigateToHistory={() => setConverterTab('history')}
               />
-            ) : (
-              <History language={language} />
+            )}
+            {converterTab === 'bookings' && (
+              <Ksiegowania
+                language={language}
+                monthKey={ksiegMonth}
+                setMonthKey={setKsiegMonth}
+                filter={ksiegFilter}
+                setFilter={setKsiegFilter}
+                userEmail={session.email}
+                onShowInHistory={(query) => {
+                  setHistorySearchSeed(query);
+                  setConverterTab('history');
+                }}
+              />
+            )}
+            {converterTab === 'history' && (
+              <History language={language} searchSeed={historySearchSeed} />
             )}
           </>
         )}
@@ -452,6 +513,29 @@ const App: React.FC = () => {
             {mailingTab === 'templates' && <MailingSzablony language={language} />}
             {mailingTab === 'fields' && <MailingPola language={language} />}
             {mailingTab === 'history' && <MailingHistoria language={language} />}
+          </>
+        )}
+        {currentView === 'kalendarz' && (
+          <>
+            <ModuleTabs
+              tabs={[
+                { id: 'calendar', label: t.kalTabCalendar, icon: 'calendar' },
+                { id: 'types', label: t.kalTabTypes, icon: 'clipboard' },
+              ]}
+              active={kalendarzTab}
+              onChange={(id) => setKalendarzTab(id as 'calendar' | 'types')}
+            />
+            {kalendarzTab === 'calendar' ? (
+              <Kalendarz
+                language={language}
+                monthKey={kalMonth}
+                setMonthKey={setKalMonth}
+                userEmail={session.email}
+                onManageTypes={() => setKalendarzTab('types')}
+              />
+            ) : (
+              <KalendarzTypy language={language} />
+            )}
           </>
         )}
         {currentView === 'conowego' && (

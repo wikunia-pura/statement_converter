@@ -3779,3 +3779,1720 @@ body.dark-mode .rte-content th {
   padding: 6px 8px;
   vertical-align: top;
 }
+
+
+/* ==========================================================================
+   Księgowania — the dashboard (views/Ksiegowania.tsx).
+
+   Three bands, in the order the work happens: which month am I looking at →
+   which category do I care about → the communities themselves, one full-width
+   row each, with the "post it in DOM" button always in the same place.
+   Colours go through tokens, except the month tint, which is the season's own.
+   ========================================================================== */
+
+.ksieg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+/* ------------------------------ Month bar ------------------------------- */
+
+.ksieg-hero {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  gap: var(--s-4) var(--s-5);
+  padding: var(--s-5) var(--s-6);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-xl);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+/* The month's own colour, laid over the surface rather than mixed into it, so
+   one variable retints the whole bar in both themes. */
+.ksieg-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--month-accent, #5b5ff6);
+  opacity: 0.09;
+  pointer-events: none;
+}
+
+.ksieg-hero::after {
+  content: '';
+  position: absolute;
+  left: -70px;
+  top: -90px;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  background: var(--month-accent, #5b5ff6);
+  opacity: 0.16;
+  filter: blur(34px);
+  pointer-events: none;
+}
+
+.ksieg-hero > * {
+  position: relative;
+}
+
+.ksieg-hero__art {
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 116px;
+}
+
+.month-art {
+  width: 116px;
+  height: 87px;
+  display: block;
+  filter: drop-shadow(0 5px 9px rgba(16, 24, 40, 0.14));
+}
+
+.month-art__scene {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: monthFloat 5.6s ease-in-out infinite;
+}
+
+@keyframes monthFloat {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-2.5px); }
+}
+
+body.dark-mode .month-art {
+  filter: drop-shadow(0 5px 12px rgba(0, 0, 0, 0.55)) saturate(0.9) brightness(0.94);
+}
+
+.ksieg-hero__id {
+  min-width: 0;
+  align-self: center;
+}
+
+.ksieg-hero__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.ksieg-hero__month {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+  margin: 2px 0 0;
+  font-size: 34px;
+  line-height: 1.05;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+}
+
+.ksieg-hero__month span {
+  font-size: 21px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text-tertiary);
+}
+
+.ksieg-hero__facts {
+  margin: var(--s-2) 0 0;
+  font-size: var(--fs-md);
+  color: var(--text-secondary);
+}
+
+/* One line, always: nowrap plus a nav that drops to its own grid row when the
+   window gets narrow (see the media queries at the end of this block). */
+.ksieg-hero__nav {
+  grid-column: 3;
+  justify-self: end;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex-wrap: nowrap;
+}
+
+.ksieg-nav-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+
+.ksieg-nav-arrow:hover:not(:disabled) {
+  background: var(--accent-subtle);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.ksieg-nav-arrow:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.ksieg-nav-select {
+  width: auto;
+  flex: 0 0 auto;
+  min-width: 172px;
+}
+
+.ksieg-nav-select .ui-select__trigger {
+  height: 36px;
+  font-weight: 600;
+  font-size: var(--fs-base);
+}
+
+.ksieg-nav-today {
+  flex: 0 0 auto;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+
+.ksieg-nav-today:hover:not(:disabled) {
+  background: var(--accent-subtle);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.ksieg-nav-today:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ------------------------------ Progress -------------------------------- */
+
+.ksieg-hero__progress {
+  grid-column: 2 / span 2;
+}
+
+.ksieg-progress__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s-3);
+  margin-bottom: var(--s-2);
+}
+
+.ksieg-progress__label {
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.ksieg-progress__value {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.ksieg-progress__value strong {
+  margin-left: var(--s-2);
+  font-size: var(--fs-lg);
+  color: var(--success);
+}
+
+.ksieg-progress__track {
+  height: 8px;
+  border-radius: var(--r-pill);
+  background: var(--bg-surface-sunken);
+  overflow: hidden;
+}
+
+.ksieg-progress__fill {
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, var(--accent), var(--success));
+  transition: width var(--t-base);
+}
+
+/* --------------------------- Category tiles ----------------------------- */
+
+.ksieg-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  gap: var(--s-3);
+}
+
+.ksieg-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s-4) var(--s-4) var(--s-4) var(--s-5);
+  text-align: left;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  font: inherit;
+  color: var(--text-primary);
+  overflow: hidden;
+  transition: transform var(--t-fast), box-shadow var(--t-base), border-color var(--t-fast);
+}
+
+.ksieg-tile::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--border-strong);
+}
+
+.ksieg-tile--accent::before  { background: var(--accent); }
+.ksieg-tile--success::before { background: var(--success); }
+.ksieg-tile--warning::before { background: var(--warning); }
+.ksieg-tile--danger::before  { background: var(--danger); }
+
+.ksieg-tile:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.ksieg-tile.is-active {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.ksieg-tile__icon { display: inline-flex; color: var(--text-tertiary); }
+.ksieg-tile--accent  .ksieg-tile__icon { color: var(--accent); }
+.ksieg-tile--success .ksieg-tile__icon { color: var(--success); }
+.ksieg-tile--warning .ksieg-tile__icon { color: var(--warning); }
+.ksieg-tile--danger  .ksieg-tile__icon { color: var(--danger); }
+
+.ksieg-tile__value {
+  font-size: var(--fs-3xl);
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.ksieg-tile__label {
+  font-size: var(--fs-md);
+  font-weight: 550;
+}
+
+.ksieg-tile__hint {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+/* ------------------------------- Toolbar -------------------------------- */
+
+.ksieg-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.ksieg-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 0 var(--s-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+
+.ksieg-search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.ksieg-search > svg { color: var(--text-tertiary); flex-shrink: 0; }
+
+.ksieg-search input {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  padding: 9px 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  font-size: var(--fs-base);
+  color: var(--text-primary);
+}
+
+.ksieg-search input:hover,
+.ksieg-search input:focus {
+  border: none;
+  box-shadow: none;
+  outline: none;
+}
+
+.ksieg-search button {
+  display: inline-flex;
+  padding: 4px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.ksieg-search button:hover { color: var(--text-primary); background: var(--bg-surface-hover); }
+
+.ksieg-toolbar__count {
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.ksieg-toolbar__sort {
+  width: auto;
+  flex: 0 0 auto;
+  min-width: 200px;
+}
+
+/* Only shown while the list is out of order on purpose (a tick changed a
+   community's state but its row was held in place) — see Ksiegowania.tsx. */
+.ksieg-resort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0 var(--s-3);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--r-md);
+  background: var(--accent-subtle);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+
+.ksieg-resort:hover { background: var(--bg-surface); border-color: var(--accent); }
+
+.ksieg-resort:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* --------------------------- One community row -------------------------- */
+
+.ksieg-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+/* The row is the page: full width, its own card, its status readable from the
+   left edge, and the action pinned to the right. */
+.ksieg-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-left: 4px solid var(--border-strong);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--t-base), border-color var(--t-fast);
+}
+
+.ksieg-row:hover,
+.ksieg-row.is-open { box-shadow: var(--shadow-md); }
+
+.ksieg-row--todo    { border-left-color: var(--warning); }
+.ksieg-row--partial { border-left-color: var(--accent); }
+.ksieg-row--done    { border-left-color: var(--success); }
+.ksieg-row--missing { border-left-color: var(--border-strong); }
+
+.ksieg-row__head {
+  display: grid;
+  grid-template-columns: 18px 32px minmax(0, 1fr) auto 92px;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-4) var(--s-3) var(--s-4) var(--s-5);
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--r-xl) 0 0 var(--r-xl);
+}
+
+.ksieg-row__head:hover { background: var(--bg-surface-hover); }
+
+/* Once open, the head is a band with a body under it — square off that edge. */
+.ksieg-row.is-open .ksieg-row__head { border-radius: var(--r-xl) 0 0 0; }
+
+.ksieg-row__head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.ksieg-row__chev { color: var(--text-tertiary); display: inline-flex; }
+
+.ksieg-row__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bg-surface-sunken);
+  color: var(--text-tertiary);
+}
+
+.ksieg-row--todo .ksieg-row__glyph    { background: var(--warning-bg); color: var(--warning); }
+.ksieg-row--partial .ksieg-row__glyph { background: var(--accent-subtle); color: var(--accent); }
+.ksieg-row--done .ksieg-row__glyph    { background: var(--success-bg); color: var(--success); }
+
+.ksieg-row__id {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ksieg-row__name {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-width: 0;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.ksieg-row__name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ksieg-row__name .status-badge { flex-shrink: 0; }
+
+.ksieg-row__sub {
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ksieg-state--done {
+  background: var(--success-bg);
+  color: var(--success);
+  border-color: var(--success-border);
+}
+
+.ksieg-state--partial {
+  background: var(--accent-subtle);
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+
+.ksieg-state--todo {
+  background: var(--warning-bg);
+  color: var(--warning);
+  border-color: var(--warning-border);
+}
+
+.ksieg-state--missing {
+  background: var(--bg-surface-sunken);
+  color: var(--text-tertiary);
+  border-color: var(--border-default);
+}
+
+.ksieg-row__metrics {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--s-5);
+}
+
+.ksieg-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 42px;
+  line-height: 1.15;
+}
+
+.ksieg-metric b {
+  font-size: var(--fs-xl);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.ksieg-metric i {
+  font-style: normal;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.ksieg-metric--ok b   { color: var(--success); }
+.ksieg-metric--wait b { color: var(--warning); }
+.ksieg-metric--err b  { color: var(--danger); }
+
+.ksieg-row__gauge {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 92px;
+}
+
+.ksieg-row__gauge-bar {
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--bg-surface-sunken);
+  overflow: hidden;
+}
+
+.ksieg-row__gauge-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--success);
+  transition: width var(--t-base);
+}
+
+.ksieg-row__gauge-val {
+  font-size: var(--fs-xs);
+  text-align: right;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* -------------------------- The DOM action ------------------------------ */
+
+.ksieg-row__cta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: var(--s-4) var(--s-5) var(--s-4) var(--s-3);
+}
+
+/* Deliberately the loudest thing on the row: it is the only action here. */
+.ksieg-book {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  height: 44px;
+  padding: 0 18px;
+  border: none;
+  border-radius: var(--r-lg);
+  background: var(--success);
+  color: #ffffff;
+  font: inherit;
+  font-size: var(--fs-base);
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.14), 0 8px 18px -8px rgba(31, 107, 67, 0.6);
+  transition: transform var(--t-fast), box-shadow var(--t-base), background var(--t-fast);
+}
+
+.ksieg-book:hover:not(:disabled) {
+  background: var(--success-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(16, 24, 40, 0.16), 0 12px 24px -10px rgba(31, 107, 67, 0.7);
+}
+
+.ksieg-book:active:not(:disabled) { transform: translateY(0); }
+
+.ksieg-book:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.ksieg-book:disabled { opacity: 0.6; cursor: progress; }
+
+.ksieg-book__count {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.24);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Dark mode's --success is a light green; white on it would be unreadable. */
+body.dark-mode .ksieg-book {
+  color: #0b1a12;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 22px -10px rgba(108, 183, 140, 0.55);
+}
+
+body.dark-mode .ksieg-book__count { background: rgba(11, 26, 18, 0.18); }
+
+/* The same button, one file's worth — quieter, but unmistakably the same act. */
+.ksieg-book--sm {
+  height: 32px;
+  padding: 0 var(--s-3);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.1);
+}
+
+.ksieg-book--sm:hover:not(:disabled) {
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.14), 0 6px 14px -8px rgba(31, 107, 67, 0.55);
+}
+
+body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
+
+.ksieg-book-done {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.ksieg-book-done__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--fs-md);
+  font-weight: 650;
+  color: var(--success);
+  white-space: nowrap;
+}
+
+.ksieg-book-done--sm .ksieg-book-done__label { font-size: var(--fs-sm); }
+
+.ksieg-book-undo {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.ksieg-book-undo:hover:not(:disabled) { color: var(--danger); }
+.ksieg-book-undo:disabled { opacity: 0.5; cursor: progress; }
+
+.ksieg-book-none {
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+/* --------------------- Files inside an expanded row --------------------- */
+
+.ksieg-row__body {
+  grid-column: 1 / span 2;
+  border-top: 1px solid var(--border-subtle);
+  padding: var(--s-3) var(--s-5) var(--s-4);
+}
+
+.ksieg-row__note {
+  margin: 0 0 var(--s-3);
+  max-width: 78ch;
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+}
+
+.ksieg-files-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-3) 0;
+  font-size: var(--fs-md);
+  color: var(--text-tertiary);
+}
+
+.ksieg-files { display: flex; flex-direction: column; }
+
+/* One grid shared by the header and every file row, so the columns line up. */
+.ksieg-files__head,
+.ksieg-file {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) auto auto;
+  gap: var(--s-4);
+  align-items: center;
+}
+
+.ksieg-files__head {
+  padding: 0 var(--s-2) var(--s-2);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.ksieg-files__head span:nth-last-child(2),
+.ksieg-files__head span:last-child { text-align: right; }
+
+.ksieg-file {
+  padding: var(--s-3) var(--s-2);
+  border-top: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+}
+
+.ksieg-file.is-booked  { background: var(--success-bg); }
+.ksieg-file--failed    { background: var(--danger-bg); }
+
+.ksieg-file__when {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.ksieg-file__files {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ksieg-file__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--s-3);
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.ksieg-file__stamp { color: var(--success); font-weight: 550; }
+.ksieg-file__error { color: var(--danger); }
+
+.ksieg-file__actions {
+  display: flex;
+  gap: var(--s-2);
+  justify-content: flex-end;
+}
+
+/* Fixed floor so the button and the "W DOM" state line up down the column. */
+.ksieg-file__book {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 152px;
+}
+
+/* input file → generated file, so the relation is visible, not implied. */
+.ksieg-flow {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.ksieg-flow__arrow { color: var(--text-tertiary); flex-shrink: 0; }
+
+.ksieg-node {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  max-width: 100%;
+  padding: 4px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-pill);
+  background: var(--bg-surface);
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+
+.ksieg-node:hover:not(:disabled) {
+  border-color: var(--accent-border);
+  background: var(--accent-subtle);
+}
+
+.ksieg-node:disabled { cursor: default; opacity: 0.7; }
+
+.ksieg-node > svg { color: var(--text-tertiary); flex-shrink: 0; }
+.ksieg-node--out > svg { color: var(--success); }
+
+.ksieg-node--missing {
+  border-style: dashed;
+  color: var(--danger);
+  cursor: default;
+  background: none;
+}
+
+.ksieg-node--missing > svg { color: var(--danger); }
+
+.ksieg-node__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 32ch;
+}
+
+/* ----------------------------- Empty state ------------------------------ */
+
+.ksieg-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  min-height: 200px;
+  padding: var(--s-8) var(--s-4);
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: var(--fs-md);
+  background: var(--bg-surface);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--r-xl);
+}
+
+.ksieg-empty > svg { opacity: 0.5; }
+
+/* ------------------------------ Responsive ------------------------------ */
+
+/* Below this the row's numbers and the month nav stop fitting next to the
+   names; both drop to their own line rather than squeezing. */
+@media (max-width: 1200px) {
+  .ksieg-row__head { grid-template-columns: 18px 32px minmax(0, 1fr) auto; }
+  .ksieg-row__gauge { display: none; }
+}
+
+@media (max-width: 1100px) {
+  .ksieg-hero { grid-template-columns: auto minmax(0, 1fr); }
+  .ksieg-hero__art { grid-row: 1; }
+  .ksieg-hero__nav { grid-column: 1 / span 2; grid-row: 2; justify-self: start; }
+  .ksieg-hero__progress { grid-column: 1 / span 2; grid-row: 3; }
+}
+
+@media (max-width: 980px) {
+  .ksieg-row__metrics { display: none; }
+  .ksieg-files__head { display: none; }
+  .ksieg-file {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s-2);
+    border: 1px solid var(--border-default);
+    margin-bottom: var(--s-2);
+    padding: var(--s-3);
+  }
+  .ksieg-file__actions,
+  .ksieg-file__book { justify-content: flex-start; }
+}
+
+@media (max-width: 760px) {
+  .ksieg-hero__art { display: none; }
+  .ksieg-hero { grid-template-columns: minmax(0, 1fr); }
+  .ksieg-hero__nav,
+  .ksieg-hero__progress { grid-column: 1; }
+  .ksieg-hero__month { font-size: 27px; }
+  .ksieg-row { grid-template-columns: minmax(0, 1fr); }
+  .ksieg-row__head,
+  .ksieg-row.is-open .ksieg-row__head { border-radius: var(--r-xl) var(--r-xl) 0 0; }
+  .ksieg-row__cta { padding: 0 var(--s-5) var(--s-4); justify-content: flex-start; }
+  .ksieg-row__body { grid-column: 1; }
+}
+
+/* ==========================================================================
+   Kalendarz — the month grid, the selected day, and the meeting form
+   ========================================================================== */
+
+/* Fills the scroll viewport rather than ending wherever the month happens to:
+   a calendar with dead space under it reads as a widget, not as the view. */
+.kal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  min-height: 100%;
+}
+
+/* The month bar is shared with Księgowania (.ksieg-hero); only the toolbar
+   differs, because the type filters need room to wrap. */
+.kal .ksieg-toolbar {
+  flex-wrap: wrap;
+  row-gap: var(--s-2);
+}
+
+.kal-new { flex: 0 0 auto; white-space: nowrap; }
+
+/* ------------------------------ Type filters ----------------------------- */
+
+.kal-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.kal-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px var(--s-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-pill);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  font-weight: 550;
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+
+.kal-filter:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+/* Active state is carried by the type's own colour, so the filter row and the
+   chips in the grid always agree on what a type looks like. */
+.kal-filter.is-active {
+  border-color: color-mix(in srgb, var(--chip, var(--accent)) 55%, var(--border-default));
+  background: color-mix(in srgb, var(--chip, var(--accent)) 14%, var(--bg-surface));
+  color: var(--text-primary);
+}
+
+/* -------------------------------- The chip -------------------------------- */
+
+/* One meeting, as small as it can be and still be read: a colour, a time, a
+   name. Used in the grid, in the day panel's type label and in the type form's
+   preview — the same object in three places, so it is one class. */
+.kal-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 7px;
+  border: 1px solid color-mix(in srgb, var(--chip, var(--accent)) 32%, transparent);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--chip, var(--accent)) 13%, var(--bg-surface));
+  color: var(--text-primary);
+  font-size: var(--fs-xs);
+  line-height: 1.35;
+  text-align: left;
+}
+
+.kal-chip__dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--chip, var(--accent));
+}
+
+.kal-chip__time {
+  flex: 0 0 auto;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+/* One line per meeting. The name is cut with an ellipsis rather than wrapped,
+   because the hover card carries it in full the moment the mouse arrives — and
+   a chip that stays one line keeps the whole week's rows the same height. */
+.kal-chip__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kal-chip--button {
+  width: 100%;
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+
+.kal-chip--button:hover {
+  background: color-mix(in srgb, var(--chip, var(--accent)) 24%, var(--bg-surface));
+  border-color: color-mix(in srgb, var(--chip, var(--accent)) 55%, transparent);
+}
+
+/* ------------------------- Month grid + day panel ------------------------- */
+
+.kal-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 384px;
+  gap: var(--s-4);
+  /* Takes whatever the hero and the toolbar leave, and stretches both columns
+     to it; `min-height: 0` is what lets the children scroll instead of pushing. */
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.kal-grid {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-xl);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.kal-grid__scroll {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.kal-grid__head {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  /* Sticky rather than outside the scroller: inside, its columns share the
+     scrollbar's width with the body below and stay aligned with it. */
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-surface-sunken);
+}
+
+.kal-grid__head > span {
+  padding: var(--s-2) var(--s-3);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+/* A one-pixel gap over a border-coloured ground draws the grid lines without
+   double borders where cells meet. */
+.kal-grid__body {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  /* Rows share the leftover height, so four-row and six-row months both fill
+     the grid. The floor is the row's own content, so a busy week grows its row
+     and the container scrolls, instead of spilling into the row below. */
+  grid-auto-rows: minmax(min-content, 1fr);
+  flex: 1;
+  gap: 1px;
+  background: var(--border-subtle);
+}
+
+.kal-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  /* Only the floor for an empty day: a cell with meetings in it is sized by its
+     own content (see `grid-auto-rows`), so this is what lets a six-week month
+     still fit on a laptop screen instead of scrolling. */
+  min-height: 76px;
+  padding: 6px 7px 8px;
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition: background var(--t-fast);
+  /* A double-click opens the form; without this it would also highlight the day
+     number or the meeting name on the way. */
+  user-select: none;
+}
+
+.kal-cell:hover { background: var(--bg-surface-hover); }
+.kal-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.kal-cell--weekend { background: var(--bg-surface-sunken); }
+.kal-cell--weekend:hover { background: var(--bg-surface-hover); }
+
+/* Days borrowed from the neighbouring months: present for the week's shape,
+   deliberately quiet so the month itself reads as a block. */
+.kal-cell--outside { background: var(--bg-app); }
+.kal-cell--outside .kal-cell__num { color: var(--text-tertiary); opacity: 0.7; }
+.kal-cell--outside .kal-chip { opacity: 0.65; }
+
+.kal-cell.is-selected {
+  background: var(--accent-subtle);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.kal-cell__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+}
+
+.kal-cell__num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.kal-cell--today .kal-cell__num {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
+/* The per-day "+" appears on hover (and always on the selected day), so an
+   empty month isn't a wall of plus signs. */
+.kal-cell__add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--t-fast), background var(--t-fast), color var(--t-fast);
+}
+
+.kal-cell:hover .kal-cell__add,
+.kal-cell.is-selected .kal-cell__add,
+.kal-cell__add:focus-visible { opacity: 1; }
+
+.kal-cell__add:hover {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
+.kal-cell__chips {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.kal-cell__more {
+  align-self: flex-start;
+  padding: 1px 4px;
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.kal-cell__more:hover { color: var(--accent); text-decoration: underline; }
+
+/* ------------------------------- Day panel -------------------------------- */
+
+.kal-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The day is the panel's subject, so it takes the height that "coming up"
+   doesn't need and scrolls its own list. */
+.kal-side__block--day {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.kal-side__block--next { flex: 0 0 auto; }
+
+.kal-side__block {
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-xl);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.kal-side__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface-sunken);
+}
+
+.kal-side__head h3 {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.kal-side__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-3);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.kal-side__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-6) var(--s-4);
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: var(--fs-md);
+}
+
+.kal-side__empty > svg { opacity: 0.5; }
+.kal-side__empty--sm { padding: var(--s-4); }
+
+/* ---------------------------- One meeting card ---------------------------- */
+
+.kal-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  /* The type's colour as a left rule: identifies the meeting at a glance
+     without tinting the whole card, which would fight the badges. */
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--chip, var(--accent));
+  border-radius: var(--r-lg);
+  background: var(--bg-surface);
+}
+
+.kal-card--past { opacity: 0.72; }
+
+.kal-card.is-highlight {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.kal-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.kal-card__time {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-md);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.kal-card__time > svg { color: var(--text-tertiary); }
+
+.kal-badge { font-size: var(--fs-xs); }
+.kal-badge--now {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+  color: var(--success);
+}
+.kal-badge--today {
+  background: var(--accent-subtle);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+.kal-badge--past {
+  background: var(--bg-surface-sunken);
+  border-color: var(--border-default);
+  color: var(--text-tertiary);
+}
+
+.kal-card__name {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 650;
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+
+.kal-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.kal-card__adres {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.kal-card__adres > svg { color: var(--text-tertiary); flex-shrink: 0; }
+
+.kal-card__desc {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+}
+
+.kal-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+
+.kal-card__author {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.kal-card__actions {
+  display: flex;
+  gap: var(--s-2);
+  margin-left: auto;
+}
+
+/* ------------------------------- Participants ----------------------------- */
+
+.kal-people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: var(--s-2);
+}
+
+.kal-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 4px 3px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-pill);
+  background: var(--bg-surface-sunken);
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+.kal-person > svg { color: var(--text-tertiary); flex-shrink: 0; }
+
+.kal-person__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kal-person__you { font-style: normal; color: var(--text-tertiary); }
+
+.kal-person--static { padding-right: 8px; }
+
+.kal-person button {
+  display: inline-flex;
+  padding: 2px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+
+.kal-person button:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+/* -------------------------------- Coming up ------------------------------- */
+
+.kal-next {
+  display: flex;
+  flex-direction: column;
+}
+
+.kal-next__item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  padding: var(--s-3) var(--s-4);
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--t-fast);
+}
+
+.kal-next__item:last-child { border-bottom: none; }
+.kal-next__item:hover { background: var(--bg-surface-hover); }
+.kal-next__item > svg { color: var(--text-tertiary); flex-shrink: 0; }
+
+.kal-next__bar {
+  flex: 0 0 auto;
+  width: 3px;
+  align-self: stretch;
+  min-height: 26px;
+  border-radius: var(--r-pill);
+  background: var(--chip, var(--accent));
+}
+
+.kal-next__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.kal-next__name {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kal-next__when {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ------------------------------- Hover card ------------------------------- */
+
+/* Positioned in the viewport (`fixed`) for two reasons: it appears on the first
+   frame with no measuring, and the grid's `overflow: hidden` — which is what
+   gives it rounded corners — cannot clip it at the edges of the month. */
+.kal-tip {
+  position: fixed;
+  z-index: 900; /* over the grid, under the modals (1000) */
+  width: 300px; /* TIP_WIDTH in views/Kalendarz.tsx */
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: var(--s-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+  animation: kalTipIn var(--t-fast) both;
+}
+
+/* Fades in over one frame-ish; there is deliberately no delay, because the
+   waiting is the whole reason this replaced the native tooltip. */
+@keyframes kalTipIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.kal-tip__time {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-sm);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.kal-tip__name {
+  font-size: var(--fs-base);
+  font-weight: 650;
+  line-height: 1.3;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.kal-tip__meta { display: flex; }
+
+.kal-tip__line {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.kal-tip__line > svg { color: var(--text-tertiary); flex-shrink: 0; margin-top: 2px; }
+
+.kal-tip__desc {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  /* The one place a clamp is right: notes can be a paragraph, and a hover card
+     taller than the screen would be worse than a hint to open the meeting. */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.kal-tip__hint {
+  margin-top: 2px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+/* ------------------------------- The forms -------------------------------- */
+
+/* Date + from + to on one line: they are one answer ("when"), and splitting
+   them across three rows makes the form feel longer than it is. */
+.kal-form-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  gap: var(--s-3);
+}
+
+.kal-form-row--two { grid-template-columns: 1fr 1fr; }
+.kal-form-row .form-group { margin-bottom: var(--s-3); }
+
+.kal-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.kal-swatch {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: var(--r-sm);
+  background: var(--swatch);
+  cursor: pointer;
+  transition: transform var(--t-fast), box-shadow var(--t-fast);
+}
+
+.kal-swatch:hover { transform: scale(1.08); }
+
+.kal-swatch.is-active {
+  border-color: var(--bg-surface);
+  box-shadow: 0 0 0 2px var(--text-primary);
+}
+
+.kal-swatch-custom {
+  width: 34px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: none;
+  cursor: pointer;
+}
+
+/* ------------------------------ Responsive -------------------------------- */
+
+/* Below this the day panel and a seven-column grid stop coexisting; the panel
+   moves under the month rather than squeezing both. */
+/* Below this the day panel and a seven-column grid stop coexisting side by
+   side, so the module goes back to being one scrolling page: nothing owns the
+   viewport height any more, and every list grows to its content. */
+@media (max-width: 1280px) {
+  .kal { min-height: 0; }
+  .kal-layout {
+    grid-template-columns: minmax(0, 1fr);
+    flex: 0 0 auto;
+  }
+  .kal-grid__scroll { overflow-y: visible; }
+  .kal-grid__body { grid-auto-rows: auto; }
+  /* Nothing competes for the height here, so empty days get their full size. */
+  .kal-cell { min-height: 104px; }
+  .kal-side { flex-direction: row; align-items: flex-start; }
+  .kal-side__block { flex: 1 1 0; min-width: 0; }
+  .kal-side__block--day,
+  .kal-side__block--next { flex: 1 1 0; }
+  .kal-side__list { overflow-y: visible; }
+}
+
+@media (max-width: 900px) {
+  .kal-side { flex-direction: column; }
+  .kal-cell { min-height: 88px; }
+  .kal-chip__time { display: none; }
+  .kal-form-row,
+  .kal-form-row--two { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* A label with an inline action on the same line — "rebuild the title",
+   "add everyone". The action belongs to the field, so it sits on its label
+   rather than below the input where it would read as a hint. */
+.kal-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+  /* Carries the gap the label used to own, so the input below sits where it
+     does in every other form group. */
+  margin-bottom: 6px;
+}
+
+.kal-label-row > label { margin-bottom: 0; }
+
+/* Smaller than the label: this is the field's secondary action, not its name. */
+.kal-label-row .link-button { font-size: var(--fs-sm); }
+
+.kal-bulk {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+}
+
+.kal-bulk .link-button:disabled,
+.kal-label-row .link-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+  text-decoration: none;
+}

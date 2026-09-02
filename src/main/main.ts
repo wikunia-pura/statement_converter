@@ -14,12 +14,14 @@ import {
   MailingPoleTyp,
   MailingSzablon,
   MailingSmtpConfig,
+  SpotkanieInput,
 } from '../shared/types';
 import { runAutoBackup, getBackupStatus, getBackupsDir, validateBackup } from './backupService';
 import { conversionCache } from './conversionCache';
 import * as authService from './authService';
 import { formatApartmentMappingLine, parseApartmentMappingLine } from '../shared/apartment-mapping';
 import { extractPdfText } from '../shared/pdf-utils';
+import { sanitizeForFilename } from '../shared/outputPaths';
 import { extractAccountNumbersFromFile } from '../shared/account-extractor-node';
 import {
   DEFAULT_ZALICZKI_MODEL,
@@ -133,19 +135,6 @@ function generateTimestamp(): string {
   const minutes = String(now.getMinutes()).padStart(2, '0');
   const seconds = String(now.getSeconds()).padStart(2, '0');
   return `${year}${month}${day}_${hours}${minutes}${seconds}`;
-}
-
-/**
- * Sanitize address name for use in filename
- * Removes or replaces characters that are invalid in filenames
- */
-function sanitizeForFilename(name: string): string {
-  return name
-    .replace(/[<>:"/\\|?*]/g, '') // Remove invalid filename characters
-    .replace(/\s+/g, '_')          // Replace spaces with underscores
-    .replace(/_+/g, '_')           // Collapse multiple underscores
-    .replace(/^_|_$/g, '')         // Remove leading/trailing underscores
-    .substring(0, 50);             // Limit length
 }
 
 /**
@@ -1725,6 +1714,7 @@ function setupIpcHandlers() {
           status: 'success',
           inputPath,
           outputPath: finalOutputPath,
+          adresId: adresId ?? null,
         });
 
         return {
@@ -1745,6 +1735,7 @@ function setupIpcHandlers() {
             errorMessage,
             inputPath,
             outputPath: '',
+            adresId: adresId ?? null,
           });
         }
 
@@ -1880,6 +1871,7 @@ function setupIpcHandlers() {
             status: 'success',
             inputPath,
             outputPath: finalOutputPath,
+            adresId: adresId ?? null,
           });
 
           return {
@@ -1934,6 +1926,7 @@ function setupIpcHandlers() {
               status: 'success',
               inputPath,
               outputPath: finalOutputPath,
+              adresId: adresId ?? null,
             });
 
             return {
@@ -1960,6 +1953,7 @@ function setupIpcHandlers() {
             errorMessage,
             inputPath,
             outputPath: '',
+            adresId: adresId ?? null,
           });
         }
 
@@ -1988,6 +1982,7 @@ function setupIpcHandlers() {
             status: 'success',
             inputPath: result.inputPath,
             outputPath: result.outputPath,
+            adresId: result.adresId ?? null,
           });
         }
         
@@ -2093,6 +2088,9 @@ function setupIpcHandlers() {
         const v = database.getSetting('sidebarCollapsed') as unknown;
         return !(v === false || v === 'false');
       })(),
+      // Opt-in, so an absent value reads as off — `boolSetting` already does
+      // exactly that.
+      calendarHoverCard: boolSetting('calendarHoverCard'),
       // Empty on installs that predate release notes, which is exactly right:
       // they get the "what's new" screen on their first launch after updating.
       lastSeenVersion: database.getSetting('lastSeenVersion') || '',
@@ -2141,6 +2139,11 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.SET_SIDEBAR_COLLAPSED, async (_, collapsed: boolean) => {
     database.setSetting('sidebarCollapsed', collapsed.toString());
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SET_CALENDAR_HOVER_CARD, async (_, enabled: boolean) => {
+    database.setSetting('calendarHoverCard', enabled.toString());
     return true;
   });
 
@@ -2243,6 +2246,10 @@ function setupIpcHandlers() {
           inputPath: String(h.inputPath || ''),
           outputPath: String(h.outputPath || ''),
           convertedAt: String(h.convertedAt),
+          adresNazwa: h.adresNazwa ? String(h.adresNazwa) : null,
+          bookedInDom: h.bookedInDom === true,
+          bookedInDomAt: h.bookedInDomAt ? String(h.bookedInDomAt) : null,
+          bookedInDomBy: h.bookedInDomBy ? String(h.bookedInDomBy) : null,
         }));
 
       const { added, skipped } = await database.importHistory(rows);
@@ -2251,6 +2258,33 @@ function setupIpcHandlers() {
       return { success: false, error: getErrorMessage(error) };
     }
   });
+
+  // Mark / unmark history rows as posted in the external "DOM" program. The app
+  // has no window into DOM, so this is purely the user's own tick — stored with
+  // who set it, because the history table is shared by the whole team.
+  ipcMain.handle(
+    IPC_CHANNELS.SET_HISTORY_BOOKED_IN_DOM,
+    async (_, ids: number[], booked: boolean) => {
+      try {
+        const clean = (Array.isArray(ids) ? ids : []).filter(
+          (id): id is number => typeof id === 'number' && Number.isFinite(id),
+        );
+        if (clean.length === 0) return { success: true, updated: 0 };
+        let by: string | null = null;
+        if (booked) {
+          try {
+            by = (await authService.getSession())?.email ?? null;
+          } catch {
+            by = null; // signature only — never block the tick over it
+          }
+        }
+        await database.setHistoryBookedInDom(clean, booked, by);
+        return { success: true, updated: clean.length };
+      } catch (error: unknown) {
+        return { success: false, error: getErrorMessage(error) };
+      }
+    },
+  );
 
   // Backup — full snapshot (Supabase tables + local settings) to a single JSON file
   ipcMain.handle(IPC_CHANNELS.BACKUP_EXPORT, async () => {
@@ -2615,6 +2649,69 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.MAILING_TEST_SMTP, async () => {
     return await verifySmtp(database.getMailingSmtp());
+  });
+
+  // Kalendarz (spotkania)
+  ipcMain.handle(IPC_CHANNELS.GET_APP_USERS, async () => {
+    try {
+      return await database.getAppUsers();
+    } catch (error: unknown) {
+      // An empty picker is a far better failure than a dead modal: the meeting
+      // can still be saved without participants.
+      log.error(
+        '[KALENDARZ] account list read failed:',
+        error instanceof Error ? error.message : String(error),
+      );
+      return [];
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.GET_SPOTKANIA_TYPY, async () => {
+    return await database.getSpotkaniaTypy();
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.ADD_SPOTKANIE_TYP,
+    async (_, nazwa: string, kolor: string, opis: string) => {
+      return await database.addSpotkanieTyp(nazwa, kolor, opis ?? '');
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.UPDATE_SPOTKANIE_TYP,
+    async (_, id: number, nazwa: string, kolor: string, opis: string) => {
+      await database.updateSpotkanieTyp(id, nazwa, kolor, opis ?? '');
+      return true;
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_SPOTKANIE_TYP, async (_, id: number) => {
+    await database.deleteSpotkanieTyp(id);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.GET_SPOTKANIA, async () => {
+    return await database.getSpotkania();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ADD_SPOTKANIE, async (_, input: SpotkanieInput) => {
+    // Who created it comes from the session, never from the renderer — it is a
+    // record of who did something, not a field anyone gets to fill in.
+    const session = await authService.getSession();
+    return await database.addSpotkanie(input, session?.email ?? '');
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.UPDATE_SPOTKANIE,
+    async (_, id: number, input: SpotkanieInput) => {
+      await database.updateSpotkanie(id, input);
+      return true;
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_SPOTKANIE, async (_, id: number) => {
+    await database.deleteSpotkanie(id);
+    return true;
   });
 
   // Auth (Supabase)

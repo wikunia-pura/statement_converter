@@ -54,6 +54,7 @@ const IPC_CHANNELS = {
   SET_ALWAYS_USE_AI: 'settings:set-always-use-ai',
   SET_CONTRACTOR_SORT_ORDER: 'settings:set-contractor-sort-order',
   SET_SIDEBAR_COLLAPSED: 'settings:set-sidebar-collapsed',
+  SET_CALENDAR_HOVER_CARD: 'settings:set-calendar-hover-card',
   SET_LAST_SEEN_VERSION: 'settings:set-last-seen-version',
   EXPORT_SETTINGS: 'settings:export',
   IMPORT_SETTINGS: 'settings:import',
@@ -61,6 +62,7 @@ const IPC_CHANNELS = {
   CLEAR_HISTORY: 'history:clear',
   IMPORT_HISTORY_FROM_FILE: 'history:import-from-file',
   EXPORT_HISTORY_TO_FILE: 'history:export-to-file',
+  SET_HISTORY_BOOKED_IN_DOM: 'history:set-booked-in-dom',
   BACKUP_EXPORT: 'backup:export',
   BACKUP_RESTORE: 'backup:restore',
   BACKUP_GET_STATUS: 'backup:get-status',
@@ -110,6 +112,15 @@ const IPC_CHANNELS = {
   MAILING_GET_SMTP: 'mailing:get-smtp',
   MAILING_SET_SMTP: 'mailing:set-smtp',
   MAILING_TEST_SMTP: 'mailing:test-smtp',
+  GET_APP_USERS: 'kalendarz:get-app-users',
+  GET_SPOTKANIA_TYPY: 'kalendarz:get-typy',
+  ADD_SPOTKANIE_TYP: 'kalendarz:add-typ',
+  UPDATE_SPOTKANIE_TYP: 'kalendarz:update-typ',
+  DELETE_SPOTKANIE_TYP: 'kalendarz:delete-typ',
+  GET_SPOTKANIA: 'kalendarz:get-spotkania',
+  ADD_SPOTKANIE: 'kalendarz:add-spotkanie',
+  UPDATE_SPOTKANIE: 'kalendarz:update-spotkanie',
+  DELETE_SPOTKANIE: 'kalendarz:delete-spotkanie',
   AUTH_SIGN_IN: 'auth:sign-in',
   AUTH_SIGN_OUT: 'auth:sign-out',
   AUTH_GET_SESSION: 'auth:get-session',
@@ -246,6 +257,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.SET_CONTRACTOR_SORT_ORDER, sortOrder),
   setSidebarCollapsed: (collapsed: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_SIDEBAR_COLLAPSED, collapsed),
+  setCalendarHoverCard: (enabled: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_CALENDAR_HOVER_CARD, enabled),
   setLastSeenVersion: (version: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_LAST_SEEN_VERSION, version),
   exportSettings: () => ipcRenderer.invoke(IPC_CHANNELS.EXPORT_SETTINGS),
@@ -256,6 +269,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearHistory: () => ipcRenderer.invoke(IPC_CHANNELS.CLEAR_HISTORY),
   importHistoryFromFile: () => ipcRenderer.invoke(IPC_CHANNELS.IMPORT_HISTORY_FROM_FILE),
   exportHistoryToFile: () => ipcRenderer.invoke(IPC_CHANNELS.EXPORT_HISTORY_TO_FILE),
+  setHistoryBookedInDom: (ids: number[], booked: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_HISTORY_BOOKED_IN_DOM, ids, booked),
 
   // Backup
   backupExport: () => ipcRenderer.invoke(IPC_CHANNELS.BACKUP_EXPORT),
@@ -360,6 +375,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('mailing:progress', listener);
     return () => ipcRenderer.off('mailing:progress', listener);
   },
+
+  // Kalendarz
+  getAppUsers: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_USERS),
+  getSpotkaniaTypy: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SPOTKANIA_TYPY),
+  addSpotkanieTyp: (nazwa: string, kolor: string, opis: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ADD_SPOTKANIE_TYP, nazwa, kolor, opis),
+  updateSpotkanieTyp: (id: number, nazwa: string, kolor: string, opis: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_SPOTKANIE_TYP, id, nazwa, kolor, opis),
+  deleteSpotkanieTyp: (id: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.DELETE_SPOTKANIE_TYP, id),
+  getSpotkania: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SPOTKANIA),
+  addSpotkanie: (input: import('../shared/types').SpotkanieInput) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ADD_SPOTKANIE, input),
+  updateSpotkanie: (id: number, input: import('../shared/types').SpotkanieInput) =>
+    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_SPOTKANIE, id, input),
+  deleteSpotkanie: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_SPOTKANIE, id),
 
   // App info
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION),

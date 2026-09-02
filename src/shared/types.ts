@@ -269,6 +269,24 @@ export interface ConversionHistory {
   inputPath: string;
   outputPath: string;
   convertedAt: string;
+  /**
+   * Community the statement was converted for. Recorded since the "Księgowania"
+   * view; rows written before it carry null and are attributed from the output
+   * filename instead (see shared/bookings.ts). A restore also nulls the id and
+   * keeps only the name, so never treat the id as the only link.
+   */
+  adresId?: number | null;
+  adresNazwa?: string | null;
+  /**
+   * Whether the accounting file this conversion produced has been posted in the
+   * external "DOM" program. The app cannot see into DOM, so this is the user's
+   * own tick — set from the Księgowania view, shared across installs.
+   */
+  bookedInDom?: boolean;
+  /** When the tick was set (ISO). Null whenever `bookedInDom` is false. */
+  bookedInDomAt?: string | null;
+  /** E-mail of the user who ticked it, so a shared team can tell who posted. */
+  bookedInDomBy?: string | null;
 }
 
 /* ---------------- Odczyty liczników — operation history ---------------- */
@@ -489,6 +507,74 @@ export interface MailingProgressEvent {
   adresNazwa: string;
 }
 
+/* --------------------------- Kalendarz (spotkania) --------------------------- */
+
+/**
+ * An application account, as offered by the participant picker.
+ *
+ * Mirrored out of Supabase's `auth` schema into `public.app_users` by a trigger:
+ * the publishable key cannot read `auth.users` (and must not be able to), so the
+ * mirror is what the app sees — id, mailbox, display name, nothing else.
+ */
+export interface AppUser {
+  id: string;
+  email: string;
+  /** From the account's metadata; most accounts are created without one. */
+  displayName?: string | null;
+  createdAt: string;
+}
+
+/**
+ * A kind of meeting, defined by the user inside the calendar module. The colour
+ * is part of the type rather than of the meeting: it is what makes a month of
+ * meetings scannable, so every type carries one.
+ */
+export interface SpotkanieTyp {
+  id: number;
+  nazwa: string;
+  /** `#rrggbb`. */
+  kolor: string;
+  opis: string;
+  createdAt: string;
+}
+
+/**
+ * One participant, snapshotted from `AppUser` when the meeting is saved — so the
+ * attendee list of a past meeting stays readable after an account is removed.
+ */
+export interface SpotkanieUczestnik {
+  userId: string;
+  email: string;
+  displayName?: string | null;
+}
+
+export interface Spotkanie {
+  id: number;
+  nazwa: string;
+  /** Null once the type has been deleted; the meeting itself survives. */
+  typId: number | null;
+  /** Null when no community is attached, or once it has been deleted. */
+  adresId: number | null;
+  /** Kept alongside the id: a restore renumbers `adresy`, the name does not. */
+  adresNazwa: string;
+  /** ISO instant. Date and time are one value — a meeting has both. */
+  startsAt: string;
+  /** ISO instant, or null for a meeting with no stated end. */
+  endsAt: string | null;
+  opis: string;
+  uczestnicy: SpotkanieUczestnik[];
+  /** E-mail of whoever created the meeting. */
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** What the add/edit form submits: a meeting minus everything the server owns. */
+export type SpotkanieInput = Omit<
+  Spotkanie,
+  'id' | 'createdBy' | 'createdAt' | 'updatedAt'
+>;
+
 /** Ordering of the contractor pick-lists in the transaction review screen. */
 export type ContractorSortOrder = 'name-asc' | 'name-desc' | 'account-asc' | 'account-desc';
 
@@ -512,6 +598,12 @@ export interface AppSettings {
   skipUserApproval: boolean; // Skip transaction review and generate files directly
   contractorSortOrder: ContractorSortOrder; // Ordering of contractor pick-lists in review (default: name-asc)
   sidebarCollapsed: boolean; // Collapse the navigation sidebar to an icon-only rail (default: true)
+  /**
+   * Kalendarz: show the instant hover card over a meeting in the month grid
+   * (default: false). Off by default because a card that follows the cursor is
+   * a matter of taste — with it off, the chip keeps a plain browser tooltip.
+   */
+  calendarHoverCard: boolean;
   /**
    * Release-notes version this machine has already been shown ('' = never).
    * The "Co nowego" modal opens once whenever the notes are newer than this.
@@ -558,7 +650,10 @@ export interface AppSettings {
  * `AppSettings` needs none of this — it is spread whole — but a secret added
  * there must be blanked in `settingsForExport`, like `smtpPass`.
  *
- * Out of scope on purpose: `app_config` (infrastructure, not user data), the
+ * Out of scope on purpose: `app_config` (infrastructure, not user data),
+ * `app_users` (a trigger-maintained mirror of the Supabase auth accounts, so it
+ * is rebuilt rather than restored — the participants on each meeting carry their
+ * own snapshot of the people), the
  * module files on disk (mailing PDFs, attachment copies) — history entries stay
  * readable without them — and `userData/zaliczki-cache` (the per-page OCR
  * results for "Podsumowanie zaliczek"). That cache is derived, not authored: its
@@ -585,6 +680,9 @@ export interface BackupData {
     mailingPola?: MailingPole[];
     mailingSzablony?: MailingSzablon[];
     mailingHistory?: MailingHistoryEntry[];
+    /** Absent in backups written before the Kalendarz module existed. */
+    spotkaniaTypy?: SpotkanieTyp[];
+    spotkania?: Spotkanie[];
     /** Never carries `smtpPass` — the SMTP password stays on the machine. */
     settings: AppSettings;
   };
@@ -602,6 +700,8 @@ export interface BackupCounts {
   mailingPola: number;
   mailingSzablony: number;
   mailingHistory: number;
+  spotkaniaTypy: number;
+  spotkania: number;
 }
 
 export function countBackup(data: BackupData): BackupCounts {
@@ -616,6 +716,8 @@ export function countBackup(data: BackupData): BackupCounts {
     mailingPola: data.data.mailingPola?.length ?? 0,
     mailingSzablony: data.data.mailingSzablony?.length ?? 0,
     mailingHistory: data.data.mailingHistory?.length ?? 0,
+    spotkaniaTypy: data.data.spotkaniaTypy?.length ?? 0,
+    spotkania: data.data.spotkania?.length ?? 0,
   };
 }
 
@@ -685,6 +787,7 @@ export const IPC_CHANNELS = {
   SET_ALWAYS_USE_AI: 'settings:set-always-use-ai',
   SET_CONTRACTOR_SORT_ORDER: 'settings:set-contractor-sort-order',
   SET_SIDEBAR_COLLAPSED: 'settings:set-sidebar-collapsed',
+  SET_CALENDAR_HOVER_CARD: 'settings:set-calendar-hover-card',
   SET_LAST_SEEN_VERSION: 'settings:set-last-seen-version',
   EXPORT_SETTINGS: 'settings:export',
   IMPORT_SETTINGS: 'settings:import',
@@ -694,6 +797,7 @@ export const IPC_CHANNELS = {
   CLEAR_HISTORY: 'history:clear',
   IMPORT_HISTORY_FROM_FILE: 'history:import-from-file',
   EXPORT_HISTORY_TO_FILE: 'history:export-to-file',
+  SET_HISTORY_BOOKED_IN_DOM: 'history:set-booked-in-dom',
 
   // Backup (full snapshot: Supabase tables + local settings)
   BACKUP_EXPORT: 'backup:export',
@@ -756,6 +860,18 @@ export const IPC_CHANNELS = {
   MAILING_GET_SMTP: 'mailing:get-smtp',
   MAILING_SET_SMTP: 'mailing:set-smtp',
   MAILING_TEST_SMTP: 'mailing:test-smtp',
+
+  // Kalendarz (meetings, their user-defined types, and the account list the
+  // participant picker reads)
+  GET_APP_USERS: 'kalendarz:get-app-users',
+  GET_SPOTKANIA_TYPY: 'kalendarz:get-typy',
+  ADD_SPOTKANIE_TYP: 'kalendarz:add-typ',
+  UPDATE_SPOTKANIE_TYP: 'kalendarz:update-typ',
+  DELETE_SPOTKANIE_TYP: 'kalendarz:delete-typ',
+  GET_SPOTKANIA: 'kalendarz:get-spotkania',
+  ADD_SPOTKANIE: 'kalendarz:add-spotkanie',
+  UPDATE_SPOTKANIE: 'kalendarz:update-spotkanie',
+  DELETE_SPOTKANIE: 'kalendarz:delete-spotkanie',
 
   // Auth (Supabase-backed)
   AUTH_SIGN_IN: 'auth:sign-in',

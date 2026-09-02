@@ -20,6 +20,8 @@ interface TypFormData {
   nazwa: string;
   kolor: string;
   opis: string;
+  /** Days before the meeting its documents are due; null = this kind has no rule. */
+  dniNaDokumenty: number | null;
 }
 
 /** Case- and whitespace-insensitive, so "Zebranie" and "zebranie " clash. */
@@ -57,6 +59,10 @@ const TypFormModal: React.FC<TypFormModalProps> = ({
     editing ? normalizeHexColor(editing.kolor) : DEFAULT_TYP_COLOR,
   );
   const [opis, setOpis] = useState(editing?.opis || '');
+  // Held as the raw text, so an empty box stays "no rule" instead of becoming 0.
+  const [dni, setDni] = useState(
+    editing?.dniNaDokumenty != null ? String(editing.dniNaDokumenty) : '',
+  );
   const [localError, setLocalError] = useState<string | null>(null);
 
   const handleSubmit = () => {
@@ -65,7 +71,23 @@ const TypFormModal: React.FC<TypFormModalProps> = ({
       setLocalError(t.kalTypNameRequired);
       return;
     }
-    onSubmit({ nazwa: n, kolor: normalizeHexColor(kolor), opis: opis.trim() });
+    // Empty means "no rule" — a real answer, so it is not defaulted to a number.
+    const trimmedDni = dni.trim();
+    let dniNaDokumenty: number | null = null;
+    if (trimmedDni) {
+      const parsed = Number(trimmedDni);
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 365) {
+        setLocalError(t.kalTypDaysInvalid);
+        return;
+      }
+      dniNaDokumenty = parsed;
+    }
+    onSubmit({
+      nazwa: n,
+      kolor: normalizeHexColor(kolor),
+      opis: opis.trim(),
+      dniNaDokumenty,
+    });
   };
 
   return (
@@ -124,6 +146,27 @@ const TypFormModal: React.FC<TypFormModalProps> = ({
                 aria-label={t.kalTypColorCustom}
                 title={t.kalTypColorCustom}
               />
+            </div>
+          </div>
+
+          {/* The notice period. Left empty for a kind of meeting that has none —
+              and then nothing about deadlines applies to its meetings. */}
+          <div className="form-group">
+            <label>{t.kalTypDays}</label>
+            <input
+              type="number"
+              min={1}
+              max={365}
+              value={dni}
+              placeholder={t.kalTypDaysPlaceholder}
+              onChange={(e) => {
+                setDni(e.target.value);
+                if (localError) setLocalError(null);
+              }}
+              style={{ maxWidth: '140px' }}
+            />
+            <div style={{ fontSize: '12px', opacity: 0.7, marginTop: '4px' }}>
+              {t.kalTypDaysHint}
             </div>
           </div>
 
@@ -234,9 +277,20 @@ const KalendarzTypy: React.FC<Props> = ({ language }) => {
     setError(null);
     try {
       if (editingId !== null) {
-        await window.electronAPI.updateSpotkanieTyp(editingId, data.nazwa, data.kolor, data.opis);
+        await window.electronAPI.updateSpotkanieTyp(
+          editingId,
+          data.nazwa,
+          data.kolor,
+          data.opis,
+          data.dniNaDokumenty,
+        );
       } else {
-        await window.electronAPI.addSpotkanieTyp(data.nazwa, data.kolor, data.opis);
+        await window.electronAPI.addSpotkanieTyp(
+          data.nazwa,
+          data.kolor,
+          data.opis,
+          data.dniNaDokumenty,
+        );
       }
       setFormState(null);
       await load();
@@ -314,6 +368,7 @@ const KalendarzTypy: React.FC<Props> = ({ language }) => {
               <tr>
                 <th>{t.kalTypName}</th>
                 <th>{t.kalTypDesc}</th>
+                <th>{t.kalTypDaysColumn}</th>
                 <th>{t.kalTypUsage}</th>
                 <th>{t.actions}</th>
               </tr>
@@ -331,6 +386,16 @@ const KalendarzTypy: React.FC<Props> = ({ language }) => {
                     </span>
                   </td>
                   <td>{typ.opis || '—'}</td>
+                  <td>
+                    {typ.dniNaDokumenty != null ? (
+                      <span className="kal-days">
+                        <Icon name="clock" size={12} />
+                        {t.kalTypDaysValue.replace('{days}', String(typ.dniNaDokumenty))}
+                      </span>
+                    ) : (
+                      <span style={{ opacity: 0.6 }}>{t.kalTypDaysNone}</span>
+                    )}
+                  </td>
                   <td>{usageByTyp.get(typ.id) ?? 0}</td>
                   <td>
                     <div style={{ display: 'flex', gap: '8px' }}>

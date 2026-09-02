@@ -401,6 +401,8 @@ export const translations = {
     kalTerminAckDone: 'Zmiana terminu potwierdzona jako przeczytana.',
     kalWarnChanged: 'Zmieniony termin: {count} — nikt tego jeszcze nie potwierdził',
     kalWarnTentative: 'Termin wstępny: {count}',
+    kalWarnNoDocs: 'Dokumenty niewysłane: {count}',
+    kalWarnOverdue: 'Wysyłka po terminie: {count} — minął termin na dokumenty',
     kalFilterOnHint: 'Filtr włączony — kliknij, aby go wyłączyć i pokazać wszystkie spotkania.',
     kalFilterOffHint: 'Kliknij, aby włączyć filtr i zostawić na widoku tylko te spotkania.',
 
@@ -417,6 +419,8 @@ export const translations = {
     kalDocsUndoneDone: 'Wycofano oznaczenie dokumentów.',
     kalDocsSendMailing: 'Wyślij mailingiem',
     kalDocsMailingOpen: 'Kliknij, aby zobaczyć szczegóły wysyłki',
+    kalDocsDueIn: 'Dokumenty do wysłania w ciągu {days} dni',
+    kalDocsOverdue: 'Termin wysyłki minął {days} dni temu',
     kalDocsMailingMissing: 'Nie znaleziono tej wysyłki w historii mailingu — mogła zostać wyczyszczona.',
     mailingFromMeeting: 'Ten mailing zostanie zapisany przy spotkaniu: {name}',
     mailingFromMeetingClear: 'Odłącz od spotkania',
@@ -426,6 +430,19 @@ export const translations = {
       'Sesja wygasła i aplikacja wylogowała Cię automatycznie. Bez zalogowania wspólne dane — banki, ' +
       'adresy, kontrahenci, historia — są niedostępne, dlatego operacje mogły kończyć się błędem ' +
       '(np. „Bank not found”). Zaloguj się ponownie, żeby wrócić do pracy.',
+
+    // Pulpit → sekcja Kalendarza
+    ksKalTitle: 'Spotkania — do zrobienia',
+    ksKalNote: 'Liczone od dziś w przód. Kliknij, aby otworzyć Kalendarz z tym filtrem.',
+    ksKalOpen: 'Otwórz Kalendarz: {what}',
+    ksKalOverdue: 'Wysyłka po terminie',
+    ksKalOverdueHint: 'minął termin na dokumenty z typu spotkania',
+    ksKalChanged: 'Zmieniony termin',
+    ksKalChangedHint: 'nikt nie potwierdził, że wie o zmianie',
+    ksKalNoDocs: 'Dokumenty niewysłane',
+    ksKalNoDocsHint: 'ani ręcznie, ani mailingiem',
+    ksKalTentative: 'Termin wstępny',
+    ksKalTentativeHint: 'data nieustalona z wszystkimi',
 
     // Powitanie (panel menu + baner pulpitu)
     greetingWord: 'Siemanko',
@@ -795,6 +812,16 @@ export const translations = {
     kalTypColor: 'Kolor',
     kalTypColorHint: 'Kolorem oznaczane są spotkania tego typu w kalendarzu.',
     kalTypColorCustom: 'Wybierz własny kolor',
+    kalTypDays: 'Dokumenty wysłać X dni przed spotkaniem',
+    kalTypDaysPlaceholder: 'np. 14',
+    kalTypDaysHint:
+      'Zostaw puste, jeśli ten rodzaj spotkania nie ma takiego wymogu — wtedy aplikacja nie ' +
+      'pilnuje dla niego terminu wysyłki. Podana liczba dni włącza ostrzeżenie i filtr ' +
+      '„Wysyłka po terminie” w Kalendarzu i na pulpicie.',
+    kalTypDaysInvalid: 'Podaj liczbę dni od 1 do 365 albo zostaw pole puste.',
+    kalTypDaysColumn: 'Wysyłka',
+    kalTypDaysValue: '{days} dni przed',
+    kalTypDaysNone: 'bez wymogu',
     kalTypDesc: 'Opis',
     kalTypDescPlaceholder: 'Do czego służy ten typ spotkania (opcjonalnie)',
     kalTypPreview: 'Tak będzie wyglądać w kalendarzu',
@@ -1536,6 +1563,8 @@ export const translations = {
     kalTerminAckDone: 'Date change acknowledged.',
     kalWarnChanged: 'Moved dates: {count} — nobody has acknowledged them yet',
     kalWarnTentative: 'Tentative dates: {count}',
+    kalWarnNoDocs: 'Documents not sent: {count}',
+    kalWarnOverdue: 'Sending overdue: {count} — the document deadline has passed',
     kalFilterOnHint: 'Filter is on — click to turn it off and show every meeting.',
     kalFilterOffHint: 'Click to turn the filter on and leave only these meetings in view.',
 
@@ -1552,6 +1581,8 @@ export const translations = {
     kalDocsUndoneDone: 'Removed the documents mark.',
     kalDocsSendMailing: 'Send by mailing',
     kalDocsMailingOpen: 'Click to see the details of this send',
+    kalDocsDueIn: 'Documents due within {days} days',
+    kalDocsOverdue: 'The sending deadline passed {days} days ago',
     kalDocsMailingMissing: 'This send is no longer in the mailing history — it may have been cleared.',
     mailingFromMeeting: 'This mailing will be recorded against the meeting: {name}',
     mailingFromMeetingClear: 'Detach from the meeting',
@@ -1561,6 +1592,19 @@ export const translations = {
       'Your session expired and the app signed you out automatically. Without a session the shared ' +
       'data — banks, addresses, contractors, history — cannot be read, which is why operations may ' +
       'have failed (e.g. "Bank not found"). Sign in again to carry on.',
+
+    // Dashboard → Calendar section
+    ksKalTitle: 'Meetings — to do',
+    ksKalNote: 'Counted from today on. Click to open the Calendar with that filter.',
+    ksKalOpen: 'Open the Calendar: {what}',
+    ksKalOverdue: 'Sending overdue',
+    ksKalOverdueHint: 'the type\u2019s document deadline has passed',
+    ksKalChanged: 'Moved date',
+    ksKalChangedHint: 'nobody has acknowledged the change',
+    ksKalNoDocs: 'Documents not sent',
+    ksKalNoDocsHint: 'neither by hand nor by mailing',
+    ksKalTentative: 'Tentative date',
+    ksKalTentativeHint: 'the date is not agreed with everyone',
 
     // Greeting (sidebar + dashboard banner)
     greetingWord: 'Hey',
@@ -1931,6 +1975,16 @@ export const translations = {
     kalTypColor: 'Colour',
     kalTypColorHint: 'Meetings of this type are tinted with this colour in the calendar.',
     kalTypColorCustom: 'Pick your own colour',
+    kalTypDays: 'Send documents X days before the meeting',
+    kalTypDaysPlaceholder: 'e.g. 14',
+    kalTypDaysHint:
+      'Leave empty when this kind of meeting has no such rule — the app then watches no ' +
+      'deadline for it. A number switches on the "Sending overdue" warning and filter in the ' +
+      'Calendar and on the dashboard.',
+    kalTypDaysInvalid: 'Give a number of days between 1 and 365, or leave the field empty.',
+    kalTypDaysColumn: 'Sending',
+    kalTypDaysValue: '{days} days before',
+    kalTypDaysNone: 'no rule',
     kalTypDesc: 'Description',
     kalTypDescPlaceholder: 'What this type is for (optional)',
     kalTypPreview: 'How it will look in the calendar',

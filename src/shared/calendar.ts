@@ -181,7 +181,84 @@ export function matchesTypFilter(spotkanie: Spotkanie, typId: number | null): bo
  * Both are answered the same way in the UI: a mark on the card, a filter, and a
  * count in the warning strip above the month.
  */
-export type SpotkanieStateFilter = 'all' | 'changed' | 'tentative';
+export type SpotkanieStateFilter = 'all' | 'changed' | 'tentative' | 'nodocs' | 'overdue';
+
+/**
+ * What the document questions need beyond the meeting itself.
+ *
+ * `sentByMailing` holds the ids of meetings with at least one SUCCESSFUL send
+ * from the Mailing module; a failed send is not a send. The types come along
+ * because the deadline belongs to the kind of meeting, not to the meeting.
+ */
+export interface SpotkaniaDocsContext {
+  sentByMailing: Set<number>;
+  typy: SpotkanieTyp[];
+  now?: Date;
+}
+
+/** Ids of the meetings a successful mailing went out for. */
+export function sentByMailingIds(
+  mailings: { spotkanieId: number; status: 'success' | 'error' }[],
+): Set<number> {
+  return new Set(mailings.filter((m) => m.status === 'success').map((m) => m.spotkanieId));
+}
+
+/**
+ * Did the paperwork go out at all?
+ *
+ * Either path counts, because both are real: somebody ticked it by hand with a
+ * note of what they sent, or the Mailing module sent it and recorded itself
+ * against the meeting. Asking only about the mailing would call a meeting
+ * unsent because the accountant used her own mailbox.
+ */
+export function hasDokumentyOut(spotkanie: Spotkanie, ctx: SpotkaniaDocsContext): boolean {
+  return !!spotkanie.dokumentyWyslaneAt || ctx.sentByMailing.has(spotkanie.id);
+}
+
+/**
+ * The moment this meeting's documents were due, or null when its kind has no
+ * notice period — which is what switches the whole deadline idea off for it.
+ */
+export function dokumentyDeadline(
+  spotkanie: Spotkanie,
+  typy: SpotkanieTyp[],
+): Date | null {
+  const typ = typOf(spotkanie, typy);
+  const days = typ?.dniNaDokumenty ?? null;
+  if (days === null || days <= 0) return null;
+  const start = new Date(spotkanie.startsAt).getTime();
+  if (Number.isNaN(start)) return null;
+  return new Date(start - days * 24 * 60 * 60 * 1000);
+}
+
+/**
+ * Documents not out, and the deadline for getting them out has arrived.
+ *
+ * Deliberately not "the meeting has passed": the point of a notice period is
+ * that it runs out BEFORE the meeting, so this turns true while there is still
+ * a meeting to send them for. A kind of meeting without a notice period never
+ * reports this, however long its documents go unsent.
+ */
+export function isDokumentyOverdue(
+  spotkanie: Spotkanie,
+  ctx: SpotkaniaDocsContext,
+): boolean {
+  if (hasDokumentyOut(spotkanie, ctx)) return false;
+  const deadline = dokumentyDeadline(spotkanie, ctx.typy);
+  if (!deadline) return false;
+  return (ctx.now ?? new Date()).getTime() >= deadline.getTime();
+}
+
+/** Whole days left until the documents are due; negative once it has passed. */
+export function daysToDokumentyDeadline(
+  spotkanie: Spotkanie,
+  ctx: SpotkaniaDocsContext,
+): number | null {
+  const deadline = dokumentyDeadline(spotkanie, ctx.typy);
+  if (!deadline) return null;
+  const ms = deadline.getTime() - (ctx.now ?? new Date()).getTime();
+  return Math.ceil(ms / (24 * 60 * 60 * 1000));
+}
 
 /**
  * True while a moved date is still waiting to be acknowledged.
@@ -204,9 +281,15 @@ export function hasDokumenty(spotkanie: Spotkanie): boolean {
   return !!spotkanie.dokumentyWyslaneAt;
 }
 
-export function matchesStateFilter(spotkanie: Spotkanie, filter: SpotkanieStateFilter): boolean {
+export function matchesStateFilter(
+  spotkanie: Spotkanie,
+  filter: SpotkanieStateFilter,
+  ctx: SpotkaniaDocsContext,
+): boolean {
   if (filter === 'changed') return hasUnreadTerminChange(spotkanie);
   if (filter === 'tentative') return isTerminWstepny(spotkanie);
+  if (filter === 'nodocs') return !hasDokumentyOut(spotkanie, ctx);
+  if (filter === 'overdue') return isDokumentyOverdue(spotkanie, ctx);
   return true;
 }
 
@@ -218,13 +301,39 @@ export function matchesStateFilter(spotkanie: Spotkanie, filter: SpotkanieStateF
 export interface SpotkaniaAlerts {
   changed: number;
   tentative: number;
+  noDocs: number;
+  overdue: number;
 }
 
-export function countAlerts(list: Spotkanie[]): SpotkaniaAlerts {
+export function countAlerts(list: Spotkanie[], ctx: SpotkaniaDocsContext): SpotkaniaAlerts {
   return {
     changed: list.filter(hasUnreadTerminChange).length,
     tentative: list.filter(isTerminWstepny).length,
+    noDocs: list.filter((s) => !hasDokumentyOut(s, ctx)).length,
+    overdue: list.filter((s) => isDokumentyOverdue(s, ctx)).length,
   };
+}
+
+/** True when at least one of the four states has something to report. */
+export function hasAnyAlert(alerts: SpotkaniaAlerts): boolean {
+  return alerts.changed > 0 || alerts.tentative > 0 || alerts.noDocs > 0 || alerts.overdue > 0;
+}
+
+/**
+ * The meetings a dashboard should be counting: today's and everything after.
+ *
+ * A dashboard is about what can still be done. A notice period that ran out on
+ * a meeting held in March is a fact, not a task, and letting those pile up
+ * would make the tile a number nobody can ever bring back to zero. The calendar
+ * still shows them when you browse to that month, which is where looking at
+ * what already happened belongs.
+ */
+export function spotkaniaFromToday(list: Spotkanie[], now: Date = new Date()): Spotkanie[] {
+  const today = toDayKey(now);
+  return list.filter((s) => {
+    const key = toDayKey(s.startsAt);
+    return !!key && key >= today;
+  });
 }
 
 /** The location of a meeting, or null — the lookup every renderer needs. */

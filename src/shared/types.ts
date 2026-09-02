@@ -558,6 +558,15 @@ export interface SpotkanieTyp {
   /** `#rrggbb`. */
   kolor: string;
   opis: string;
+  /**
+   * How many days before a meeting of this kind its documents have to be out.
+   *
+   * A property of the KIND, not of one meeting: a community's annual assembly
+   * has a notice period, an internal catch-up has none. Null means this kind
+   * has no such rule — the deadline warning, its counter and its filter then
+   * do not apply to these meetings at all.
+   */
+  dniNaDokumenty: number | null;
   createdAt: string;
 }
 

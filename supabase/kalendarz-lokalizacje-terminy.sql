@@ -39,6 +39,23 @@ create index if not exists spotkania_lokalizacja_id_idx
   on public.spotkania (lokalizacja_id);
 
 -- ============================================================
+-- How long before a meeting its documents have to be out
+-- ============================================================
+--
+-- A property of the KIND of meeting, not of one meeting: a community's annual
+-- assembly has a statutory notice period, an internal catch-up has none. NULL
+-- means "this kind has no such rule", and the whole deadline machinery — the
+-- warning, the counter, the filter — simply does not apply to its meetings.
+alter table public.spotkania_typy
+  add column if not exists dni_na_dokumenty integer;
+
+alter table public.spotkania_typy
+  drop constraint if exists spotkania_typy_dni_na_dokumenty_check;
+alter table public.spotkania_typy
+  add constraint spotkania_typy_dni_na_dokumenty_check
+  check (dni_na_dokumenty is null or dni_na_dokumenty between 1 and 365);
+
+-- ============================================================
 -- Is the date settled, or still tentative?
 -- ============================================================
 --

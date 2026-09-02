@@ -34,6 +34,7 @@ import { NotificationProvider } from './components/Notifications';
 import { translations, Language } from './translations';
 import { AppUser, FileEntry } from '../shared/types';
 import { BookingFilter, currentMonthKey } from '../shared/bookings';
+import { SpotkanieStateFilter } from '../shared/calendar';
 import { releaseForVersion, shouldShowWhatsNew } from '../shared/release-notes';
 import { greetingName } from '../shared/app-users';
 import { NavigationProvider, HeaderNav } from './navigation';
@@ -137,6 +138,12 @@ const App: React.FC = () => {
   // Kalendarz: the month lives here so a detour to "Typy spotkań" — or to any
   // other module — comes back to the month the user was looking at.
   const [kalMonth, setKalMonth] = useState<string>(() => currentMonthKey());
+  /**
+   * The calendar's "what needs doing" filter, lifted here so the dashboard's
+   * tiles can send the user into the calendar with one already applied — a tile
+   * that only navigated would leave them to find the twelve meetings it counted.
+   */
+  const [kalStateFilter, setKalStateFilter] = useState<SpotkanieStateFilter>('all');
   // The send form lives here so a detour to Adresy (to attach a missing city
   // unit) or to the templates tab doesn't throw away a half-filled mailing.
   const [mailingDraft, setMailingDraft] = useState<MailingDraft>(emptyMailingDraft);
@@ -663,6 +670,13 @@ const App: React.FC = () => {
               setHistorySearchSeed(query);
               navigate('converter', 'history');
             }}
+            onShowInCalendar={(filter) => {
+              setKalStateFilter(filter);
+              // The month too: the tiles count from today on, and the calendar
+              // would otherwise open on whatever month it was last left at.
+              setKalMonth(currentMonthKey());
+              navigate('kalendarz', 'calendar');
+            }}
           />
         )}
         {currentView === 'converter' && (
@@ -701,6 +715,11 @@ const App: React.FC = () => {
                 onShowInHistory={(query) => {
                   setHistorySearchSeed(query);
                   navigate('converter', 'history');
+                }}
+                onShowInCalendar={(filter) => {
+                  setKalStateFilter(filter);
+                  setKalMonth(currentMonthKey());
+                  navigate('kalendarz', 'calendar');
                 }}
               />
             )}
@@ -812,6 +831,8 @@ const App: React.FC = () => {
                 language={language}
                 monthKey={kalMonth}
                 setMonthKey={setKalMonth}
+                stateFilter={kalStateFilter}
+                setStateFilter={setKalStateFilter}
                 userEmail={session.email}
                 onManageTypes={() => navigate('kalendarz', 'types')}
                 onManagePlaces={() => navigate('kalendarz', 'places')}

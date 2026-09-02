@@ -2718,15 +2718,22 @@ function setupIpcHandlers() {
 
   ipcMain.handle(
     IPC_CHANNELS.ADD_SPOTKANIE_TYP,
-    async (_, nazwa: string, kolor: string, opis: string) => {
-      return await database.addSpotkanieTyp(nazwa, kolor, opis ?? '');
+    async (_, nazwa: string, kolor: string, opis: string, dniNaDokumenty?: number | null) => {
+      return await database.addSpotkanieTyp(nazwa, kolor, opis ?? '', dniNaDokumenty ?? null);
     },
   );
 
   ipcMain.handle(
     IPC_CHANNELS.UPDATE_SPOTKANIE_TYP,
-    async (_, id: number, nazwa: string, kolor: string, opis: string) => {
-      await database.updateSpotkanieTyp(id, nazwa, kolor, opis ?? '');
+    async (
+      _,
+      id: number,
+      nazwa: string,
+      kolor: string,
+      opis: string,
+      dniNaDokumenty?: number | null,
+    ) => {
+      await database.updateSpotkanieTyp(id, nazwa, kolor, opis ?? '', dniNaDokumenty ?? null);
       return true;
     },
   );

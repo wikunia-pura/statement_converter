@@ -88,12 +88,13 @@ export const RELEASES: Release[] = [
     date: '2026-09-02',
     title: 'Kalendarz pilnuje terminów, a aplikacja ma wreszcie „wstecz”',
     tagline:
-      'Największa tura zmian w Kalendarzu od jego powstania. Spotkanie ma teraz lokalizację wybieraną ze słownika, termin oznaczony jako potwierdzony albo wstępny, i ślad po każdej zmianie daty — z ostrzeżeniem u góry miesiąca, filtrem i przyciskiem „Zapoznałem się”. Do tego przy spotkaniu odnotujesz wysłane dokumenty (albo wyślesz je mailingiem, który sam się przy tym spotkaniu zapisze), panel dnia przewija się osobno od strony, a cała aplikacja zyskała nawigację wstecz i do przodu — przyciskami, skrótem Alt+strzałka i bocznymi guzikami myszy.',
+      'Największa tura zmian w Kalendarzu od jego powstania. Spotkanie ma teraz lokalizację wybieraną ze słownika, termin oznaczony jako potwierdzony albo wstępny, i ślad po każdej zmianie daty — z ostrzeżeniem u góry miesiąca, filtrem i przyciskiem „Zapoznałem się”. Do tego przy spotkaniu odnotujesz wysłane dokumenty (albo wyślesz je mailingiem, który sam się przy tym spotkaniu zapisze), panel dnia przewija się osobno od strony, a cała aplikacja zyskała nawigację wstecz i do przodu — przyciskami, skrótem Alt+strzałka i bocznymi guzikami myszy. Typ spotkania może wymagać wysłania dokumentów na X dni przed terminem, a pulpit zebrał cztery stany spotkań w jedną sekcję, z której jednym kliknięciem wchodzisz do Kalendarza z włączonym filtrem.',
     stats: [
       { value: 'wstecz', label: 'nawigacja w całej aplikacji' },
       { value: '2 stany', label: 'terminu: potwierdzony i wstępny' },
       { value: 'słownik', label: 'lokalizacji spotkań' },
       { value: 'mailing', label: 'powiązany ze spotkaniem' },
+      { value: '4 stany', label: 'spotkań na pulpicie' },
     ],
     highlights: [
       {
@@ -277,6 +278,77 @@ export const RELEASES: Release[] = [
           '„Wyślij mailingiem” nie pojawia się przy spotkaniu bez wspólnoty — mailing idzie do jednostki miasta przypisanej do wspólnoty, więc bez niej nie ma adresata.',
           'Pasek w Mailingu można odłączyć („Odłącz od spotkania”), jeśli akurat wysyłasz coś niezwiązanego.',
           'Uwaga do kopii zapasowej: po przywróceniu kopii wysyłki zachowują wszystkie swoje szczegóły w historii mailingu, ale tracą powiązanie ze spotkaniem — spotkania dostają przy przywracaniu nowe numery, a wiersz mailingu nie ma po czym ich odnaleźć.',
+        ],
+      },
+      {
+        id: 'kalendarz-termin-wysylki',
+        kind: 'new',
+        icon: 'alert-circle',
+        title: 'Termin na dokumenty — z typu spotkania',
+        summary:
+          'W typie spotkania podajesz, ile dni przed spotkaniem trzeba wysłać dokumenty. Gdy ten termin minie, a dokumenty nie wyszły, spotkanie dostaje czerwone ostrzeżenie, licznik u góry miesiąca i własny filtr. Typ bez podanej liczby dni nie uruchamia tego wcale.',
+        details: [
+          'Termin jest właściwością RODZAJU spotkania, nie jednego spotkania: zebranie roczne wspólnoty ma okres zawiadomienia, wewnętrzna narada nie ma żadnego. Puste pole w typie znaczy „ten rodzaj nie ma takiego wymogu” — i wtedy ani ostrzeżenie, ani licznik, ani filtr nie dotyczą jego spotkań.',
+          '„Wysłane” liczy się dwiema drogami: ręczny wpis na karcie albo mailing, który rzeczywiście poszedł. Nieudana wysyłka nie jest wysyłką. Pytanie o sam mailing nazwałoby spotkanie niewysłanym tylko dlatego, że księgowa użyła własnej skrzynki.',
+          'Ostrzeżenie zapala się, gdy termin minie — a nie gdy minie samo spotkanie. Sens okresu zawiadomienia jest w tym, że kończy się PRZED spotkaniem, więc alarm przychodzi, kiedy jest jeszcze co ratować.',
+          'Doszedł też filtr „Dokumenty niewysłane”, niezależny od terminów: pokazuje wszystkie spotkania, dla których papiery nie wyszły żadną drogą.',
+        ],
+        where: ['Kalendarz', 'Typy spotkań'],
+        steps: [
+          {
+            do: 'Wejdź w Kalendarz → „Typy spotkań”, edytuj typ i wypełnij pole „Dokumenty wysłać X dni przed spotkaniem” (np. 14).',
+            then: 'W tabeli typów, w kolumnie „Wysyłka”, pojawia się „14 dni przed”. Typy z pustym polem mają „bez wymogu”.',
+          },
+          {
+            do: 'Wróć na Kalendarz i znajdź spotkanie tego typu, dla którego dokumenty nie wyszły.',
+            then: 'W sekcji dokumentów na dole karty widać, ile dni zostało („Dokumenty do wysłania w ciągu 6 dni”).',
+          },
+          {
+            do: 'Gdy termin minie, spójrz na to spotkanie ponownie.',
+            then: 'Stopka karty robi się czerwona z napisem „Termin wysyłki minął 4 dni temu”, a u góry miesiąca pojawia się pasek „Wysyłka po terminie”.',
+          },
+          {
+            do: 'Kliknij ten pasek, żeby zostawić na widoku tylko te spotkania. Wyślij dokumenty (ręcznie albo mailingiem).',
+            then: 'Ostrzeżenie i licznik znikają dla tego spotkania.',
+          },
+        ],
+        expect: [
+          'Dozwolone jest od 1 do 365 dni; puste pole to świadoma odpowiedź „bez wymogu”, nie brak danych.',
+          'Termin liczy się od godziny rozpoczęcia spotkania, więc „14 dni przed” zebraniem o 18:00 kończy się o 18:00.',
+          'Liczba dni wchodzi do kopii zapasowej razem z typami spotkań.',
+        ],
+      },
+      {
+        id: 'pulpit-spotkania-do-zrobienia',
+        kind: 'new',
+        icon: 'calendar',
+        title: 'Pulpit: „Spotkania — do zrobienia”',
+        summary:
+          'Nowa sekcja na pulpicie, pod kafelkami księgowań: cztery liczby — wysyłka po terminie, zmieniony termin, dokumenty niewysłane, termin wstępny. Kliknięcie otwiera Kalendarz z tym filtrem już włączonym.',
+        details: [
+          'Dzień zaczyna się na pulpicie, a trzy z tych czterech stanów to rzeczy, które ktoś musi zrobić PRZED spotkaniem — więc ich miejsce jest obok księgowań miesiąca, nie o jeden moduł dalej.',
+          'Każdy kafelek jest zarazem drogą wejścia: otwiera Kalendarz z odpowiednim filtrem i na bieżącym miesiącu. Kafelek, który tylko by nawigował, zostawiłby użytkownika z szukaniem tych kilkunastu spotkań, które właśnie policzył.',
+          'Liczone od dziś w przód. Pulpit jest o tym, co jeszcze da się zrobić — okres zawiadomienia, który minął dla spotkania z marca, jest faktem, nie zadaniem, a zbieranie takich pozycji zamieniłoby kafelek w liczbę, której nikt nigdy nie sprowadzi do zera. Marcowe spotkania nadal widać w Kalendarzu po przejściu do tego miesiąca.',
+          'Gdy wszystkie cztery liczby są zerem, sekcji nie ma wcale — pusty rząd zer to mebel, który mówi „nie ma nic do zrobienia”, a pulpit ma już dość do czytania.',
+        ],
+        where: ['Pulpit'],
+        steps: [
+          {
+            do: 'Wejdź na „Pulpit” i zjedź pod kafelki kategorii.',
+            then: 'Zobaczysz sekcję „Spotkania — do zrobienia” z czterema kafelkami; pod każdą liczbą jest jednym zdaniem powiedziane, co ona znaczy.',
+          },
+          {
+            do: 'Kliknij kafelek z niezerową liczbą, np. „Wysyłka po terminie”.',
+            then: 'Otwiera się Kalendarz na bieżącym miesiącu, z włączonym tym filtrem — u góry widać zaznaczony przełącznik.',
+          },
+          {
+            do: 'Wyłącz przełącznik u góry Kalendarza, żeby wrócić do wszystkich spotkań.',
+            then: 'Filtr gaśnie; następne wejście z pulpitu włączy go od nowa.',
+          },
+        ],
+        expect: [
+          'Kafelek z zerem jest przygaszony i nieklikalny — rząd nie zmienia kształtu, kiedy liczby się zmieniają.',
+          'Kolory są te same co w Kalendarzu: czerwony dla wysyłki po terminie, pomarańczowy dla zmienionego terminu, niebieski dla niewysłanych dokumentów i terminu wstępnego.',
         ],
       },
       {

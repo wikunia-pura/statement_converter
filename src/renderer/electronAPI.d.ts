@@ -432,12 +432,19 @@ interface ElectronAPI {
   /** Name an account. Empty strings clear the name. */
   setAppUserName: (id: string, firstName: string, lastName: string) => Promise<boolean>;
   getSpotkaniaTypy: () => Promise<SpotkanieTyp[]>;
-  addSpotkanieTyp: (nazwa: string, kolor: string, opis: string) => Promise<SpotkanieTyp>;
+  addSpotkanieTyp: (
+    nazwa: string,
+    kolor: string,
+    opis: string,
+    /** Days before a meeting of this kind its documents are due; null = no rule. */
+    dniNaDokumenty?: number | null,
+  ) => Promise<SpotkanieTyp>;
   updateSpotkanieTyp: (
     id: number,
     nazwa: string,
     kolor: string,
     opis: string,
+    dniNaDokumenty?: number | null,
   ) => Promise<boolean>;
   deleteSpotkanieTyp: (id: number) => Promise<boolean>;
   getSpotkania: () => Promise<Spotkanie[]>;

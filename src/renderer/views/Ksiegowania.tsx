@@ -1,11 +1,25 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Adres, ConversionHistory } from '../../shared/types';
+import {
+  Adres,
+  ConversionHistory,
+  Spotkanie,
+  SpotkanieMailing,
+  SpotkanieTyp,
+} from '../../shared/types';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
 import Icon from '../components/Icon';
 import Select from '../components/Select';
 import MonthIllustration, { monthAccent } from '../components/MonthIllustration';
+import {
+  countAlerts,
+  hasAnyAlert,
+  sentByMailingIds,
+  spotkaniaFromToday,
+  SpotkaniaAlerts,
+  SpotkanieStateFilter,
+} from '../../shared/calendar';
 import { resolveOutputFilePath } from '../../shared/outputPaths';
 import {
   AddressBookingGroup,
@@ -35,6 +49,8 @@ interface Props {
   userEmail?: string;
   /** Jump to the Converter's Historia tab with this text already searched. */
   onShowInHistory?: (query: string) => void;
+  /** Jump to the Kalendarz with one of its "needs doing" filters already on. */
+  onShowInCalendar?: (filter: SpotkanieStateFilter) => void;
 }
 
 /** Polish plural: [one, few (2-4), many]. English: [singular, plural]. */
@@ -81,6 +97,104 @@ const STATE_ICON: Record<AddressBookingGroup['state'], React.ComponentProps<type
  * external DOM program is something the app cannot know, so every file carries a
  * tick the user sets here — per file, or for a whole community at once.
  */
+/* ========================= Kalendarz, from the dashboard ==================== */
+
+/**
+ * The calendar's four "needs doing" states, on the dashboard.
+ *
+ * The dashboard is where the day starts, and three of these four are things
+ * somebody has to act on before a meeting happens — so they belong next to the
+ * month's bookings rather than one module away. Each tile is also the way in:
+ * it opens the Kalendarz with that filter already applied, because a tile that
+ * only navigated would leave the user to find the meetings it just counted.
+ *
+ * Nothing is rendered when all four are zero. An empty row of zeros is a
+ * permanent piece of furniture saying "nothing to do", and the dashboard
+ * already has enough to read.
+ */
+const CalendarAlerts: React.FC<{
+  alerts: SpotkaniaAlerts;
+  language: Language;
+  onOpen?: (filter: SpotkanieStateFilter) => void;
+}> = ({ alerts, language, onOpen }) => {
+  const t = translations[language];
+  if (!hasAnyAlert(alerts)) return null;
+
+  const kinds: {
+    filter: SpotkanieStateFilter;
+    count: number;
+    tone: string;
+    icon: React.ComponentProps<typeof Icon>['name'];
+    label: string;
+    hint: string;
+  }[] = [
+    {
+      filter: 'overdue',
+      count: alerts.overdue,
+      tone: 'overdue',
+      icon: 'alert-circle',
+      label: t.ksKalOverdue,
+      hint: t.ksKalOverdueHint,
+    },
+    {
+      filter: 'changed',
+      count: alerts.changed,
+      tone: 'changed',
+      icon: 'alert-triangle',
+      label: t.ksKalChanged,
+      hint: t.ksKalChangedHint,
+    },
+    {
+      filter: 'nodocs',
+      count: alerts.noDocs,
+      tone: 'nodocs',
+      icon: 'mail',
+      label: t.ksKalNoDocs,
+      hint: t.ksKalNoDocsHint,
+    },
+    {
+      filter: 'tentative',
+      count: alerts.tentative,
+      tone: 'tentative',
+      icon: 'clock',
+      label: t.ksKalTentative,
+      hint: t.ksKalTentativeHint,
+    },
+  ];
+
+  return (
+    <section className="ks-kal">
+      <header className="ks-kal__head">
+        <h3>
+          <Icon name="calendar" size={15} /> {t.ksKalTitle}
+        </h3>
+        <span className="ks-kal__note">{t.ksKalNote}</span>
+      </header>
+      <div className="ks-kal__tiles">
+        {kinds.map((kind) => (
+          <button
+            key={kind.filter}
+            type="button"
+            className={`ks-kal-tile ks-kal-tile--${kind.tone}${
+              kind.count === 0 ? ' is-empty' : ''
+            }`}
+            onClick={() => onOpen?.(kind.filter)}
+            disabled={!onOpen || kind.count === 0}
+            title={kind.count === 0 ? kind.hint : t.ksKalOpen.replace('{what}', kind.label)}
+          >
+            <span className="ks-kal-tile__icon">
+              <Icon name={kind.icon} size={16} />
+            </span>
+            <span className="ks-kal-tile__count">{kind.count}</span>
+            <span className="ks-kal-tile__label">{kind.label}</span>
+            <span className="ks-kal-tile__hint">{kind.hint}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+};
+
 const Ksiegowania: React.FC<Props> = ({
   language,
   monthKey,
@@ -89,6 +203,7 @@ const Ksiegowania: React.FC<Props> = ({
   setFilter,
   userEmail,
   onShowInHistory,
+  onShowInCalendar,
 }) => {
   const t = translations[language];
   const notify = useNotify();
@@ -96,6 +211,11 @@ const Ksiegowania: React.FC<Props> = ({
 
   const [history, setHistory] = useState<ConversionHistory[]>([]);
   const [adresy, setAdresy] = useState<Adres[]>([]);
+  // The calendar's side of the dashboard: enough to count the four states the
+  // section reports, read from the same three sources the Kalendarz reads.
+  const [spotkania, setSpotkania] = useState<Spotkanie[]>([]);
+  const [spotkaniaTypy, setSpotkaniaTypy] = useState<SpotkanieTyp[]>([]);
+  const [spotkaniaMailingi, setSpotkaniaMailingi] = useState<SpotkanieMailing[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   // A refresh must not blank the dashboard — only the first load shows a loader.
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -116,12 +236,18 @@ const Ksiegowania: React.FC<Props> = ({
     if (silent) setIsRefreshing(true);
     else setIsLoading(true);
     try {
-      const [historyData, adresyData] = await Promise.all([
+      const [historyData, adresyData, spotkaniaData, typyData, mailingiData] = await Promise.all([
         window.electronAPI.getHistory(),
         window.electronAPI.getAdresy(),
+        window.electronAPI.getSpotkania(),
+        window.electronAPI.getSpotkaniaTypy(),
+        window.electronAPI.getSpotkaniaMailingi(),
       ]);
       setHistory(historyData);
       setAdresy(adresyData);
+      setSpotkania(spotkaniaData);
+      setSpotkaniaTypy(typyData);
+      setSpotkaniaMailingi(mailingiData);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -133,6 +259,24 @@ const Ksiegowania: React.FC<Props> = ({
     setSettleId((id) => id + 1);
     await load(true);
   };
+
+  /**
+   * The four calendar states, counted from today on.
+   *
+   * A dashboard is about what can still be done: a notice period that ran out
+   * on a meeting held in March is a fact, not a task, and letting those pile up
+   * would make the tile a number nobody can bring back to zero. Browsing to
+   * March in the calendar still shows them, which is where looking at what
+   * already happened belongs.
+   */
+  const kalAlerts: SpotkaniaAlerts = useMemo(
+    () =>
+      countAlerts(spotkaniaFromToday(spotkania), {
+        sentByMailing: sentByMailingIds(spotkaniaMailingi),
+        typy: spotkaniaTypy,
+      }),
+    [spotkania, spotkaniaTypy, spotkaniaMailingi],
+  );
 
   const rows = useMemo(() => toBookingRows(history, adresy), [history, adresy]);
   const months = useMemo(() => monthsWithData(rows), [rows]);
@@ -401,6 +545,13 @@ const Ksiegowania: React.FC<Props> = ({
 
         {/* ------------------------ Categories / filters -------------------- */}
         <BookingTiles totals={totals} language={language} filter={filter} onFilter={setFilter} />
+
+        {/* ---------------------------- Kalendarz --------------------------- */}
+        <CalendarAlerts
+          alerts={kalAlerts}
+          language={language}
+          onOpen={onShowInCalendar}
+        />
 
         {/* ----------------------------- Toolbar ---------------------------- */}
         <div className="ksieg-toolbar">

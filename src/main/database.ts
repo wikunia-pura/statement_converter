@@ -87,7 +87,8 @@ const HISTORY_COLS =
   'id, fileName:file_name, bankName:bank_name, converterName:converter_name, status, errorMessage:error_message, inputPath:input_path, outputPath:output_path, convertedAt:converted_at, adresId:adres_id, adresNazwa:adres_nazwa, bookedInDom:booked_in_dom, bookedInDomAt:booked_in_dom_at, bookedInDomBy:booked_in_dom_by';
 const APP_USER_COLS =
   'id, email, displayName:display_name, firstName:first_name, lastName:last_name, createdAt:created_at';
-const SPOTKANIE_TYP_COLS = 'id, nazwa, kolor, opis, createdAt:created_at';
+const SPOTKANIE_TYP_COLS =
+  'id, nazwa, kolor, opis, dniNaDokumenty:dni_na_dokumenty, createdAt:created_at';
 const SPOTKANIE_LOKALIZACJA_COLS = 'id, nazwa, adres, opis, createdAt:created_at';
 const SPOTKANIE_COLS =
   'id, nazwa, typId:typ_id, adresId:adres_id, adresNazwa:adres_nazwa, ' +
@@ -1133,16 +1134,43 @@ class DatabaseService {
       .select(SPOTKANIE_TYP_COLS)
       .order('nazwa', { ascending: true });
     if (error) throw new Error(`getSpotkaniaTypy: ${error.message}`);
-    return (data ?? []) as SpotkanieTyp[];
+    return (data ?? []).map((r: any) => ({
+      ...r,
+      // Null means "this kind has no notice period", which is a real answer —
+      // not a missing one, so it is never defaulted to a number.
+      dniNaDokumenty: r.dniNaDokumenty ?? null,
+    })) as SpotkanieTyp[];
   }
 
-  async addSpotkanieTyp(nazwa: string, kolor: string, opis: string): Promise<SpotkanieTyp> {
+  /**
+   * Days-before-the-meeting, as the column wants it: a whole number in range,
+   * or null. Zero, a negative or a stray decimal all mean "no rule" rather
+   * than a deadline nobody could satisfy.
+   */
+  private static noticeDays(value: number | null | undefined): number | null {
+    if (value === null || value === undefined) return null;
+    const days = Math.round(value);
+    if (!Number.isFinite(days) || days < 1 || days > 365) return null;
+    return days;
+  }
+
+  async addSpotkanieTyp(
+    nazwa: string,
+    kolor: string,
+    opis: string,
+    dniNaDokumenty: number | null = null,
+  ): Promise<SpotkanieTyp> {
     const { data, error } = await getSupabase()
       .from('spotkania_typy')
-      .insert({ nazwa: nazwa.trim(), kolor: kolor.trim(), opis })
+      .insert({
+        nazwa: nazwa.trim(),
+        kolor: kolor.trim(),
+        opis,
+        dni_na_dokumenty: DatabaseService.noticeDays(dniNaDokumenty),
+      })
       .select(SPOTKANIE_TYP_COLS)
       .single();
-    return unwrap(data, error, 'addSpotkanieTyp') as SpotkanieTyp;
+    return unwrap(data, error, 'addSpotkanieTyp') as unknown as SpotkanieTyp;
   }
 
   async updateSpotkanieTyp(
@@ -1150,10 +1178,16 @@ class DatabaseService {
     nazwa: string,
     kolor: string,
     opis: string,
+    dniNaDokumenty: number | null = null,
   ): Promise<void> {
     const { error } = await getSupabase()
       .from('spotkania_typy')
-      .update({ nazwa: nazwa.trim(), kolor: kolor.trim(), opis })
+      .update({
+        nazwa: nazwa.trim(),
+        kolor: kolor.trim(),
+        opis,
+        dni_na_dokumenty: DatabaseService.noticeDays(dniNaDokumenty),
+      })
       .eq('id', id);
     if (error) throw new Error(`updateSpotkanieTyp: ${error.message}`);
   }
@@ -1891,6 +1925,8 @@ class DatabaseService {
           nazwa: t.nazwa,
           kolor: t.kolor,
           opis: t.opis,
+          // Absent in backups written before types had a notice period.
+          dni_na_dokumenty: DatabaseService.noticeDays(t.dniNaDokumenty),
           created_at: t.createdAt,
         })),
       );

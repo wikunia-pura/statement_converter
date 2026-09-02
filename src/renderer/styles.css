@@ -1337,6 +1337,144 @@ tbody tr:hover {
   background: var(--bg-surface-hover);
 }
 
+/* The notice period in the type dictionary's table. */
+.kal-days {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-md);
+  color: var(--text-secondary);
+}
+
+.kal-days > svg { flex-shrink: 0; color: var(--text-tertiary); }
+
+/* ==========================================================================
+   Pulpit → Spotkania, do zrobienia
+   ========================================================================== */
+
+.ks-kal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4) var(--s-5);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-xl);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.ks-kal__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+
+.ks-kal__head h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 650;
+}
+
+.ks-kal__note {
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+}
+
+.ks-kal__tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--s-3);
+}
+
+/* Each tile is the way in, so it is a button all the way — and a tile at zero
+   is dimmed and inert rather than hidden, because a row that changes its own
+   shape as the numbers move is harder to read than one that does not. */
+.ks-kal-tile {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 2px var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-lg);
+  background: var(--bg-surface);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast);
+}
+
+.ks-kal-tile:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.ks-kal-tile.is-empty {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ks-kal-tile__icon {
+  grid-row: 1 / span 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-pill);
+  color: var(--text-tertiary);
+  background: var(--bg-surface-sunken);
+}
+
+.ks-kal-tile__count {
+  font-size: var(--fs-2xl);
+  font-weight: 750;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.ks-kal-tile__label {
+  grid-column: 2;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* The "why", one line, tertiary — the tile has to be readable by someone who
+   has not been told what these four states are. */
+.ks-kal-tile__hint {
+  grid-column: 2;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+/* One colour per state, matching the calendar's own strip exactly. */
+.ks-kal-tile--overdue:not(.is-empty) .ks-kal-tile__icon {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.ks-kal-tile--overdue:not(.is-empty) .ks-kal-tile__count { color: var(--danger); }
+
+.ks-kal-tile--changed:not(.is-empty) .ks-kal-tile__icon {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+
+.ks-kal-tile--changed:not(.is-empty) .ks-kal-tile__count { color: var(--warning); }
+
+.ks-kal-tile--nodocs:not(.is-empty) .ks-kal-tile__icon,
+.ks-kal-tile--tentative:not(.is-empty) .ks-kal-tile__icon {
+  color: var(--info);
+  background: var(--info-bg);
+}
+
 /* ==========================================================================
    Ustawienia → ADMIN drawer
    ========================================================================== */
@@ -2598,6 +2736,10 @@ body.dark-mode .bank-illustration-svg {
 /* Ring rather than a thicker border: growing the border on activation moves the
    button's own contents by two pixels, and a row of filters that jiggles as you
    click it reads as a bug. */
+/* Held on screen only because it is the switch that is on: nothing in this
+   month matches it, so it says zero and stays clickable to turn itself off. */
+.kal-warning.is-empty .kal-warning__text { opacity: 0.75; }
+
 .kal-warning.is-active {
   border-color: var(--warning);
   box-shadow:
@@ -2611,24 +2753,49 @@ body.dark-mode .bank-illustration-svg {
 }
 
 /* A tentative date is a plan, not a problem — it gets the calmer palette. */
-.kal-warning--tentative {
+.kal-warning--tentative,
+.kal-warning--nodocs {
   border-color: var(--info-border);
   background: var(--info-bg);
   color: var(--info);
 }
 
-.kal-warning--tentative.is-active {
+/* A deadline that has already run out is the one state here that cannot be
+   fixed by being early, so it is the only one in danger red. */
+.kal-warning--overdue {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.kal-warning--overdue:hover { border-color: var(--danger); }
+
+.kal-warning--overdue.is-active {
+  border-color: var(--danger);
+  box-shadow:
+    inset 0 0 0 1px var(--danger),
+    0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
+.kal-warning--overdue.is-active .kal-warning__box {
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
+.kal-warning--tentative.is-active,
+.kal-warning--nodocs.is-active {
   border-color: var(--info);
   box-shadow:
     inset 0 0 0 1px var(--info),
     0 0 0 3px color-mix(in srgb, var(--info) 22%, transparent);
 }
 
-.kal-warning--tentative.is-active .kal-warning__box {
+.kal-warning--tentative.is-active .kal-warning__box,
+.kal-warning--nodocs.is-active .kal-warning__box {
   background: color-mix(in srgb, var(--info) 22%, transparent);
 }
 
-.kal-warning--tentative:hover { border-color: var(--info); }
+.kal-warning--tentative:hover,
+.kal-warning--nodocs:hover { border-color: var(--info); }
 
 /* Confirmed / tentative, as two radios that look like what they do. */
 .kal-termin-choice {
@@ -2749,6 +2916,28 @@ body.dark-mode .bank-illustration-svg {
   background: var(--bg-surface-sunken);
   border-bottom-left-radius: inherit;
   border-bottom-right-radius: inherit;
+}
+
+/* The notice period, on the card. Red once it has run out — the same red the
+   strip and the dashboard tile use for it. */
+.kal-docs__deadline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  font-weight: 550;
+  color: var(--text-tertiary);
+}
+
+.kal-docs__deadline > svg { flex-shrink: 0; }
+
+.kal-docs__deadline.is-overdue { color: var(--danger); }
+
+/* An overdue footer is tinted, so a scan down the day panel finds it without
+   reading a word. */
+.kal-docs.is-overdue {
+  background: var(--danger-bg);
+  border-top-color: var(--danger-border);
 }
 
 .kal-docs__head {

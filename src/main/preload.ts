@@ -391,10 +391,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAppUserName: (id: string, firstName: string, lastName: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_APP_USER_NAME, id, firstName, lastName),
   getSpotkaniaTypy: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SPOTKANIA_TYPY),
-  addSpotkanieTyp: (nazwa: string, kolor: string, opis: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.ADD_SPOTKANIE_TYP, nazwa, kolor, opis),
-  updateSpotkanieTyp: (id: number, nazwa: string, kolor: string, opis: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_SPOTKANIE_TYP, id, nazwa, kolor, opis),
+  addSpotkanieTyp: (
+    nazwa: string,
+    kolor: string,
+    opis: string,
+    dniNaDokumenty?: number | null,
+  ) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ADD_SPOTKANIE_TYP, nazwa, kolor, opis, dniNaDokumenty ?? null),
+  updateSpotkanieTyp: (
+    id: number,
+    nazwa: string,
+    kolor: string,
+    opis: string,
+    dniNaDokumenty?: number | null,
+  ) =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.UPDATE_SPOTKANIE_TYP,
+      id,
+      nazwa,
+      kolor,
+      opis,
+      dniNaDokumenty ?? null,
+    ),
   deleteSpotkanieTyp: (id: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.DELETE_SPOTKANIE_TYP, id),
   getSpotkania: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SPOTKANIA),

@@ -356,10 +356,24 @@ on conflict (id) do update
 create table if not exists public.spotkania_typy (
   id         bigserial   primary key,
   nazwa      text        not null,
+  -- How many days before a meeting of this kind its documents have to be out.
+  -- NULL = this kind has no such rule, and the deadline machinery (warning,
+  -- counter, filter) does not apply to its meetings at all.
+  dni_na_dokumenty integer,
   kolor      text        not null default '#5b5ff6',
   opis       text        not null default '',
   created_at timestamptz not null default now()
 );
+
+-- For projects created before that column existed.
+alter table public.spotkania_typy
+  add column if not exists dni_na_dokumenty integer;
+
+alter table public.spotkania_typy
+  drop constraint if exists spotkania_typy_dni_na_dokumenty_check;
+alter table public.spotkania_typy
+  add constraint spotkania_typy_dni_na_dokumenty_check
+  check (dni_na_dokumenty is null or dni_na_dokumenty between 1 and 365);
 
 -- Where meetings happen — a dictionary the user owns, like the types above.
 create table if not exists public.spotkania_lokalizacje (

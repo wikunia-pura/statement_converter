@@ -30,12 +30,19 @@ import {
   formatTimeRange,
   groupByDay,
   countAlerts,
+  daysToDokumentyDeadline,
+  hasAnyAlert,
+  hasDokumentyOut,
   hasUnreadTerminChange,
+  isDokumentyOverdue,
   isTerminWstepny,
+  sentByMailingIds,
+  SpotkaniaDocsContext,
   lokalizacjaLabel,
   matchesSpotkanieSearch,
   matchesStateFilter,
   matchesTypFilter,
+  SpotkaniaAlerts,
   SpotkanieStateFilter,
   monthLabel,
   monthOfDayKey,
@@ -64,6 +71,12 @@ interface Props {
   setMonthKey: (key: string) => void;
   /** E-mail of the signed-in user — offered first in the participant picker. */
   userEmail?: string;
+  /**
+   * The state filter, lifted so the dashboard can send the user here with one
+   * already on — that is the whole point of its tiles.
+   */
+  stateFilter: SpotkanieStateFilter;
+  setStateFilter: (filter: SpotkanieStateFilter) => void;
   /** Jump to the module's "Typy spotkań" tab. */
   onManageTypes?: () => void;
   /** Jump to the module's "Lokalizacje" tab. */
@@ -79,6 +92,50 @@ interface Props {
     adresIds: number[];
   }) => void;
 }
+
+/**
+ * The four things that can be wrong with a meeting, in the order they matter.
+ *
+ * One table rather than four copies of the same button: they are the same
+ * control four times over, and the dashboard renders the same four from the
+ * same shared counts.
+ */
+const ALERT_KINDS: {
+  filter: SpotkanieStateFilter;
+  count: (alerts: SpotkaniaAlerts) => number;
+  tone: 'changed' | 'tentative' | 'nodocs' | 'overdue';
+  icon: React.ComponentProps<typeof Icon>['name'];
+  label: 'kalWarnOverdue' | 'kalWarnChanged' | 'kalWarnTentative' | 'kalWarnNoDocs';
+}[] = [
+  {
+    filter: 'overdue',
+    count: (a) => a.overdue,
+    tone: 'overdue',
+    icon: 'alert-circle',
+    label: 'kalWarnOverdue',
+  },
+  {
+    filter: 'changed',
+    count: (a) => a.changed,
+    tone: 'changed',
+    icon: 'alert-triangle',
+    label: 'kalWarnChanged',
+  },
+  {
+    filter: 'nodocs',
+    count: (a) => a.noDocs,
+    tone: 'nodocs',
+    icon: 'mail',
+    label: 'kalWarnNoDocs',
+  },
+  {
+    filter: 'tentative',
+    count: (a) => a.tentative,
+    tone: 'tentative',
+    icon: 'clock',
+    label: 'kalWarnTentative',
+  },
+];
 
 /** How many meetings a day cell shows before collapsing into "+N". */
 const CHIPS_PER_CELL = 3;
@@ -604,6 +661,8 @@ const MeetingCard: React.FC<{
   onSendMailing?: () => void;
   /** Open one recorded send in the mailing-details window. */
   onOpenMailing: (mailing: SpotkanieMailing) => void;
+  /** Which meetings a mailing went out for, plus the types that carry deadlines. */
+  docsCtx: SpotkaniaDocsContext;
 }> = ({
   spotkanie,
   typ,
@@ -620,13 +679,17 @@ const MeetingCard: React.FC<{
   onDokumenty,
   onSendMailing,
   onOpenMailing,
+  docsCtx,
 }) => {
   const t = translations[language];
   const when = spotkanieWhen(spotkanie);
   const color = normalizeHexColor(typ?.kolor ?? DEFAULT_TYP_COLOR);
   const changed = hasUnreadTerminChange(spotkanie);
   const tentative = isTerminWstepny(spotkanie);
-  const sent = !!spotkanie.dokumentyWyslaneAt;
+  // Either path counts as sent: the manual tick, or a mailing that went out.
+  const sent = hasDokumentyOut(spotkanie, docsCtx);
+  const overdue = isDokumentyOverdue(spotkanie, docsCtx);
+  const daysLeft = daysToDokumentyDeadline(spotkanie, docsCtx);
   // Open only while the user is writing the note; a card is a summary, and this
   // is the one thing on it that takes typing.
   const [editingDocs, setEditingDocs] = useState(false);
@@ -761,7 +824,7 @@ const MeetingCard: React.FC<{
           that is about what happened AFTER the meeting was arranged, and the one
           part with its own controls. Two ways in, one question answered — did it
           go out? */}
-      <div className="kal-docs">
+      <div className={`kal-docs${overdue ? ' is-overdue' : ''}`}>
         <div className="kal-docs__head">
           <span className={`kal-docs__state${sent ? ' is-sent' : ''}`}>
             <Icon name={sent ? 'file-check' : 'file-text'} size={14} />
@@ -794,6 +857,20 @@ const MeetingCard: React.FC<{
             )}
           </div>
         </div>
+
+        {/* The notice period, but only for a kind of meeting that has one — and
+            only while it still says something: once the papers are out, when
+            they were due stops being the question. */}
+        {!sent && daysLeft !== null && (
+          <div className={`kal-docs__deadline${overdue ? ' is-overdue' : ''}`}>
+            <Icon name={overdue ? 'alert-circle' : 'clock'} size={13} />
+            <span>
+              {overdue
+                ? t.kalDocsOverdue.replace('{days}', String(Math.abs(daysLeft)))
+                : t.kalDocsDueIn.replace('{days}', String(daysLeft))}
+            </span>
+          </div>
+        )}
 
         {sent && !editingDocs && (
           <div className="kal-docs__note">
@@ -902,6 +979,8 @@ const Kalendarz: React.FC<Props> = ({
   language,
   monthKey,
   setMonthKey,
+  stateFilter,
+  setStateFilter,
   userEmail,
   onManageTypes,
   onManagePlaces,
@@ -924,12 +1003,6 @@ const Kalendarz: React.FC<Props> = ({
   const [formError, setFormError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [typFilter, setTypFilter] = useState<number | null>(null);
-  /**
-   * The other axis of filtering: not "what kind of meeting" but "what still
-   * needs doing about it" — a moved date nobody has acknowledged, or a date
-   * that was never settled.
-   */
-  const [stateFilter, setStateFilter] = useState<SpotkanieStateFilter>('all');
   /** Meeting id being written to, so its own buttons disable and nothing else does. */
   const [busyId, setBusyId] = useState<number | null>(null);
   /**
@@ -1012,15 +1085,24 @@ const Kalendarz: React.FC<Props> = ({
 
   /* ------------------------------ Derived data ----------------------------- */
 
+  /**
+   * What the document questions need beyond the meeting: which meetings a
+   * mailing actually went out for, and the types that carry the notice periods.
+   */
+  const docsCtx: SpotkaniaDocsContext = useMemo(
+    () => ({ sentByMailing: sentByMailingIds(mailingi), typy }),
+    [mailingi, typy],
+  );
+
   const filtered = useMemo(
     () =>
       spotkania.filter(
         (s) =>
           matchesTypFilter(s, typFilter) &&
-          matchesStateFilter(s, stateFilter) &&
+          matchesStateFilter(s, stateFilter, docsCtx) &&
           matchesSpotkanieSearch(s, typy, search),
       ),
-    [spotkania, typy, typFilter, stateFilter, search],
+    [spotkania, typy, typFilter, stateFilter, search, docsCtx],
   );
 
   /**
@@ -1028,10 +1110,10 @@ const Kalendarz: React.FC<Props> = ({
    * rather than the whole database — the answer should be about the month you
    * are looking at.
    */
-  const alerts = useMemo(() => countAlerts(spotkaniaInMonth(spotkania, monthKey)), [
-    spotkania,
-    monthKey,
-  ]);
+  const alerts = useMemo(
+    () => countAlerts(spotkaniaInMonth(spotkania, monthKey), docsCtx),
+    [spotkania, monthKey, docsCtx],
+  );
 
   const mailingiBySpotkanie = useMemo(() => {
     const map = new Map<number, SpotkanieMailing[]>();
@@ -1323,51 +1405,41 @@ const Kalendarz: React.FC<Props> = ({
         </header>
 
         {/* ------------------------- What needs attention -------------------
-            Each strip is one switch: the tick box on the left shows whether the
+            Four states, one shape each: a tick box that shows whether the
             filter is on, and the same click turns it off again. This is also
-            the only place the two state filters live — a second pair of chips
-            among the type filters was two controls for one state, and the strip
-            is where the user is already looking, because it is the thing that
-            told them there was something to look at. */}
-        {(alerts.changed > 0 || alerts.tentative > 0) && (
+            the only place these filters live — a second set among the type
+            filters was two controls for one state, and the strip is where the
+            user is already looking, because it is the thing that told them
+            there was something to look at. */}
+        {/* The active filter's own switch always stays on screen, even at zero:
+            arriving here from the dashboard and then paging to a month with
+            none of them would otherwise leave the filter on with nothing to
+            turn it off with, and an empty calendar as the only clue. */}
+        {(hasAnyAlert(alerts) || stateFilter !== 'all') && (
           <div className="kal-warnings">
-            {alerts.changed > 0 && (
-              <button
-                type="button"
-                className={`kal-warning kal-warning--changed${
-                  stateFilter === 'changed' ? ' is-active' : ''
-                }`}
-                onClick={() => setStateFilter(stateFilter === 'changed' ? 'all' : 'changed')}
-                aria-pressed={stateFilter === 'changed'}
-                title={stateFilter === 'changed' ? t.kalFilterOnHint : t.kalFilterOffHint}
-              >
-                <span className="kal-warning__box" aria-hidden="true">
-                  {stateFilter === 'changed' && <Icon name="check" size={12} />}
-                </span>
-                <Icon name="alert-triangle" size={16} />
-                <span className="kal-warning__text">
-                  {t.kalWarnChanged.replace('{count}', String(alerts.changed))}
-                </span>
-              </button>
-            )}
-            {alerts.tentative > 0 && (
-              <button
-                type="button"
-                className={`kal-warning kal-warning--tentative${
-                  stateFilter === 'tentative' ? ' is-active' : ''
-                }`}
-                onClick={() => setStateFilter(stateFilter === 'tentative' ? 'all' : 'tentative')}
-                aria-pressed={stateFilter === 'tentative'}
-                title={stateFilter === 'tentative' ? t.kalFilterOnHint : t.kalFilterOffHint}
-              >
-                <span className="kal-warning__box" aria-hidden="true">
-                  {stateFilter === 'tentative' && <Icon name="check" size={12} />}
-                </span>
-                <Icon name="clock" size={16} />
-                <span className="kal-warning__text">
-                  {t.kalWarnTentative.replace('{count}', String(alerts.tentative))}
-                </span>
-              </button>
+            {ALERT_KINDS.map(({ filter, count, tone, icon, label }) =>
+              count(alerts) === 0 && stateFilter !== filter ? null : (
+                <button
+                  key={filter}
+                  type="button"
+                  className={
+                    `kal-warning kal-warning--${tone}` +
+                    (stateFilter === filter ? ' is-active' : '') +
+                    (count(alerts) === 0 ? ' is-empty' : '')
+                  }
+                  onClick={() => setStateFilter(stateFilter === filter ? 'all' : filter)}
+                  aria-pressed={stateFilter === filter}
+                  title={stateFilter === filter ? t.kalFilterOnHint : t.kalFilterOffHint}
+                >
+                  <span className="kal-warning__box" aria-hidden="true">
+                    {stateFilter === filter && <Icon name="check" size={12} />}
+                  </span>
+                  <Icon name={icon} size={16} />
+                  <span className="kal-warning__text">
+                    {t[label].replace('{count}', String(count(alerts)))}
+                  </span>
+                </button>
+              ),
             )}
           </div>
         )}
@@ -1612,6 +1684,7 @@ const Kalendarz: React.FC<Props> = ({
                           : undefined
                       }
                       onOpenMailing={(m) => void openMailingDetails(m)}
+                      docsCtx={docsCtx}
                     />
                   ))}
                 </div>

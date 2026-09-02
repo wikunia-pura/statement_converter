@@ -473,39 +473,76 @@ const Ksiegowania: React.FC<Props> = ({
   const monthName = monthLabel(monthKey, locale).replace(/\s*\d{4}$/, '');
   const year = monthKey.split('-')[0];
 
+  /**
+   * How much of the month is left, on exactly the measure the progress bar
+   * uses: every community in the book, minus the ones whose files are all
+   * ticked in DOM. So it counts a community with nothing generated yet the same
+   * as one whose files are waiting — both are still to do — and it hits zero at
+   * the same moment the bar hits 100%.
+   *
+   * Not `todo` (files of the conversions that happened to run), which is what
+   * this used to say: in a month where half the communities had no file at all,
+   * "zostało plików: 37" made the remaining work look like a fraction of what
+   * it was.
+   */
+  const remaining = Math.max(0, totals.addresses - totals.dom);
+
+  /**
+   * Bookings, counted by community rather than by file: how many communities
+   * produced at least one accounting file this month. `unbooked` is the ones
+   * that produced none, so this is its complement.
+   *
+   * A community's month is usually several files (one per account type), so the
+   * file count answered a question nobody asks — thirty-seven files across how
+   * many communities? — while every other number on this screen is a community.
+   */
+  const withBooking = Math.max(0, totals.addresses - totals.unbooked);
+
+  /**
+   * What this month holds. It used to open with `totals.rows` — the whole
+   * address book plus the "bez przypisanej wspólnoty" row — so a header reading
+   * "Wrzesień 2026" said "63 wspólnoty" whether September had work for sixty of
+   * them or for four, and counted a row that is not a community at all.
+   *
+   * The two figures can land on the same number (32 with a booking, 31 of them
+   * ticked, so 32 of 63 still to mark) — hence labels that say plainly which is
+   * which rather than leaving two identical numbers side by side.
+   */
   const facts = [
-    plural(totals.rows, language, ['wspólnota', 'wspólnoty', 'wspólnot'], ['community', 'communities']),
-    plural(
-      totals.generated,
+    `${plural(
+      withBooking,
       language,
-      ['plik księgowy', 'pliki księgowe', 'plików księgowych'],
-      ['accounting file', 'accounting files'],
-    ),
-    `${totals.todo} ${t.ksFactsWaiting}`,
+      ['wspólnota', 'wspólnoty', 'wspólnot'],
+      ['community', 'communities'],
+    )} ${t.ksFactsWithBooking}`,
+    `${remaining} ${t.ksFactsLeft}`,
   ];
   if (totals.errors > 0) facts.push(`${totals.errors} ${t.ksFactsErrors}`);
 
-  // One sentence naming the next move, in the same order the work happens.
-  // Errors outrank everything — a month with a failed conversion is not
-  // finished even when nothing is left to tick. And it only says "done" where
-  // the progress bar beside it can read 100%: every community posted, not
-  // merely every file that happens to exist.
+  /**
+   * One sentence naming the next move. Errors outrank everything — a month with
+   * a failed conversion is not finished even when nothing is left to tick.
+   *
+   * Everything else is one case now, because `remaining` already covers both
+   * ways a community can be unfinished: files waiting for the tick, and no
+   * files at all. That also makes the sentence and the bar beside it agree by
+   * construction — "domknięty" appears exactly when the bar reads 100%.
+   */
   const nudge = ((): { text: string; done: boolean } => {
     if (totals.errors > 0) {
       return { text: t.ksNudgeErrors.replace('{n}', String(totals.errors)), done: false };
     }
     if (totals.generated === 0) return { text: t.ksNudgeEmpty, done: false };
-    if (totals.todo > 0) {
-      return { text: t.ksNudgeTodo.replace('{n}', String(totals.todo)), done: false };
-    }
-    if (totals.unbooked > 0) {
-      return { text: t.ksNudgeMissing.replace('{n}', String(totals.unbooked)), done: false };
+    if (remaining > 0) {
+      return { text: t.ksNudgeTodo.replace('{n}', String(remaining)), done: false };
     }
     return { text: t.ksNudgeDone, done: true };
   })();
 
   return (
-    <div className="content-body">
+    // `--fill` so the lower band reaches the bottom of the window on a short
+    // month; the page still scrolls once the list outgrows it.
+    <div className="content-body content-body--fill">
       <div className="ksieg">
         {/* -------------------- Area one: the calendar ---------------------- */}
         <CalendarAlerts

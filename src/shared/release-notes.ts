@@ -84,54 +84,49 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    version: '6.8.0',
+    version: '7.0.0',
     date: '2026-09-02',
-    title: 'Kalendarz pilnuje terminów, a aplikacja ma wreszcie „wstecz”',
+    title: 'Kalendarz pilnuje terminów, ludzie mają imiona, aplikacja ma „wstecz”',
     tagline:
-      'Największa tura zmian w Kalendarzu od jego powstania. Spotkanie ma teraz lokalizację wybieraną ze słownika, termin oznaczony jako potwierdzony albo wstępny, i ślad po każdej zmianie daty — z ostrzeżeniem u góry miesiąca, filtrem i przyciskiem „Zapoznałem się”. Do tego przy spotkaniu odnotujesz wysłane dokumenty (albo wyślesz je mailingiem, który sam się przy tym spotkaniu zapisze), panel dnia przewija się osobno od strony, a cała aplikacja zyskała nawigację wstecz i do przodu — przyciskami, skrótem Alt+strzałka i bocznymi guzikami myszy. Typ spotkania może wymagać wysłania dokumentów na X dni przed terminem, a pulpit zebrał cztery stany spotkań w jedną sekcję, z której jednym kliknięciem wchodzisz do Kalendarza z włączonym filtrem.',
+      'Jedno wydanie zbierające wszystko, co zmieniło się od 6.5.0. Największa część to Kalendarz: spotkanie ma teraz lokalizację wybieraną ze słownika, termin oznaczony jako potwierdzony albo wstępny, ślad po każdej zmianie daty i pilnowanie terminu na dokumenty, który definiujesz w typie spotkania. Przy spotkaniu odnotujesz wysłane dokumenty albo wyślesz je mailingiem, który sam się przy nim zapisze. Pulpit dostał osobną sekcję z czterema stanami spotkań, konta mają imiona i nazwiska zamiast adresów e-mail, aplikacja wita Cię imieniem pod logo, a po całości chodzi się teraz przyciskami wstecz/do przodu, skrótem Alt+strzałka i bocznymi guzikami myszy. Do tego wygasła sesja mówi wprost, że wygasła, aktualizacje sprawdzają się co godzinę, a pasek postępu na pulpicie liczy wreszcie wspólnoty, nie pliki.',
     stats: [
+      { value: '14', label: 'zmian od wersji 6.5.0' },
+      { value: 'Kalendarz', label: 'lokalizacje, terminy, dokumenty' },
       { value: 'wstecz', label: 'nawigacja w całej aplikacji' },
-      { value: '2 stany', label: 'terminu: potwierdzony i wstępny' },
-      { value: 'słownik', label: 'lokalizacji spotkań' },
-      { value: 'mailing', label: 'powiązany ze spotkaniem' },
-      { value: '4 stany', label: 'spotkań na pulpicie' },
+      { value: 'imiona', label: 'zamiast adresów e-mail' },
     ],
     highlights: [
       {
-        id: 'nawigacja-wstecz',
+        id: 'kalendarz-lokalizacje',
         kind: 'new',
-        icon: 'arrow-right',
-        title: 'Wstecz i do przodu, jak w przeglądarce',
+        icon: 'map-pin',
+        title: 'Lokalizacje spotkań — słownik jak typy spotkań',
         summary:
-          'Nad menu, obok przycisku zwijania, są dwie strzałki: wracają do poprzedniego ekranu i idą z powrotem. Działa też Alt+← / Alt+→ oraz boczne przyciski myszy.',
+          'Nowa zakładka „Lokalizacje” w module Kalendarz: nazwa, adres i notatka. Przy spotkaniu wybierasz lokalizację z listy, a karta pokazuje ją z pinezką.',
         details: [
-          'Aplikacja nie ma paska adresu, więc do tej pory „wróć tam, gdzie byłam” trzeba było odtworzyć z pamięci — zwłaszcza po wejściu w historię z pulpitu albo w szablony z mailingu.',
-          'Historia pamięta nie tylko ekran, ale i zakładkę: cofnięcie z „Konwerter → Historia” wraca na „Konwerter → Konwersja”, a nie tylko do modułu. Zapamiętuje 50 ostatnich miejsc.',
-          'Dymek nad strzałką mówi, gdzie ona prowadzi („Wstecz: Kalendarz → Lokalizacje”), bo w aplikacji bez paska adresu to jedyny sposób, żeby wiedzieć to przed kliknięciem.',
-          'Skróty klawiszowe są wyłączone w trakcie pisania — Alt+← w polu tekstowym zostaje zwykłym skrótem pola.',
+          'Gdzie odbywają się spotkania, to krótka i stabilna lista: biuro ZGN, budynek wspólnoty, sala. Wpisywanie tego za każdym razem jest sposobem, w jaki jeden adres zyskuje trzy pisownie.',
+          'Adres i notatka („wejście od podwórza, II piętro”) są pokazywane pod nazwą przy wyborze, więc nikt nie musi pamiętać, o którą salę chodzi.',
+          'Zmiana nazwy w słowniku przechodzi na wszystkie spotkania, które z niej korzystają. Usunięcie lokalizacji nie usuwa spotkań — każde zapamiętało jej nazwę, więc dalej mówi, gdzie się odbyło.',
         ],
-        where: ['Menu boczne', 'u góry'],
+        where: ['Kalendarz', 'Lokalizacje'],
         steps: [
           {
-            do: 'Poklikaj po kilku ekranach, np. Pulpit → Kalendarz → Ustawienia.',
-            then: 'Strzałka „w lewo” nad menu przestaje być wyszarzona.',
+            do: 'Wejdź w Kalendarz i wybierz zakładkę „Lokalizacje”, potem „Dodaj lokalizację”.',
+            then: 'Podajesz nazwę (np. „Biuro ZGN Mokotów”), opcjonalnie adres i notatkę.',
           },
           {
-            do: 'Kliknij strzałkę w lewo (albo naciśnij Alt+←).',
-            then: 'Wracasz na Kalendarz — dokładnie na tę zakładkę, na której byłaś.',
+            do: 'Wróć na zakładkę „Kalendarz” i dodaj albo edytuj spotkanie.',
+            then: 'W formularzu jest pole „Lokalizacja” z wyszukiwaniem; pod każdą nazwą widać jej adres.',
           },
           {
-            do: 'Kliknij strzałkę w prawo (albo Alt+→).',
-            then: 'Idziesz z powrotem do Ustawień.',
-          },
-          {
-            do: 'Zwiń menu przyciskiem z trzema kreskami.',
-            then: 'Strzałki układają się w słupek pod przyciskiem i działają dalej.',
+            do: 'Zapisz spotkanie i spójrz na jego kartę w panelu dnia.',
+            then: 'Obok wspólnoty pojawia się lokalizacja z ikoną pinezki. Widać ją też w dymku nad kafelkiem w siatce.',
           },
         ],
         expect: [
-          'Kliknięcie pozycji menu, na której już jesteś, nie tworzy nowego wpisu w historii.',
-          'Historia żyje tak długo jak uruchomiona aplikacja — po restarcie startuje od pulpitu.',
+          'Kolumna „Spotkań” w słowniku mówi, ile spotkań korzysta z danej lokalizacji — zanim ją usuniesz.',
+          'Lokalizacje wchodzą do kopii zapasowej i są w niej liczone osobno („lokalizacje spotkań”).',
+          'Wyszukiwarka w Kalendarzu znajduje spotkania także po nazwie lokalizacji.',
         ],
       },
       {
@@ -205,36 +200,41 @@ export const RELEASES: Release[] = [
         ],
       },
       {
-        id: 'kalendarz-lokalizacje',
+        id: 'kalendarz-termin-wysylki',
         kind: 'new',
-        icon: 'map-pin',
-        title: 'Lokalizacje spotkań — słownik jak typy spotkań',
+        icon: 'alert-circle',
+        title: 'Termin na dokumenty — z typu spotkania',
         summary:
-          'Nowa zakładka „Lokalizacje” w module Kalendarz: nazwa, adres i notatka. Przy spotkaniu wybierasz lokalizację z listy, a karta pokazuje ją z pinezką.',
+          'W typie spotkania podajesz, ile dni przed spotkaniem trzeba wysłać dokumenty. Gdy ten termin minie, a dokumenty nie wyszły, spotkanie dostaje czerwone ostrzeżenie, licznik u góry miesiąca i własny filtr. Typ bez podanej liczby dni nie uruchamia tego wcale.',
         details: [
-          'Gdzie odbywają się spotkania, to krótka i stabilna lista: biuro ZGN, budynek wspólnoty, sala. Wpisywanie tego za każdym razem jest sposobem, w jaki jeden adres zyskuje trzy pisownie.',
-          'Adres i notatka („wejście od podwórza, II piętro”) są pokazywane pod nazwą przy wyborze, więc nikt nie musi pamiętać, o którą salę chodzi.',
-          'Zmiana nazwy w słowniku przechodzi na wszystkie spotkania, które z niej korzystają. Usunięcie lokalizacji nie usuwa spotkań — każde zapamiętało jej nazwę, więc dalej mówi, gdzie się odbyło.',
+          'Termin jest właściwością RODZAJU spotkania, nie jednego spotkania: zebranie roczne wspólnoty ma okres zawiadomienia, wewnętrzna narada nie ma żadnego. Puste pole w typie znaczy „ten rodzaj nie ma takiego wymogu” — i wtedy ani ostrzeżenie, ani licznik, ani filtr nie dotyczą jego spotkań.',
+          '„Wysłane” liczy się dwiema drogami: ręczny wpis na karcie albo mailing, który rzeczywiście poszedł. Nieudana wysyłka nie jest wysyłką. Pytanie o sam mailing nazwałoby spotkanie niewysłanym tylko dlatego, że księgowa użyła własnej skrzynki.',
+          'Ostrzeżenie zapala się, gdy termin minie — a nie gdy minie samo spotkanie. Sens okresu zawiadomienia jest w tym, że kończy się PRZED spotkaniem, więc alarm przychodzi, kiedy jest jeszcze co ratować.',
+          'Doszedł też filtr „Dokumenty niewysłane”, niezależny od terminów: pokazuje wszystkie spotkania, dla których papiery nie wyszły żadną drogą.',
         ],
-        where: ['Kalendarz', 'Lokalizacje'],
+        where: ['Kalendarz', 'Typy spotkań'],
         steps: [
           {
-            do: 'Wejdź w Kalendarz i wybierz zakładkę „Lokalizacje”, potem „Dodaj lokalizację”.',
-            then: 'Podajesz nazwę (np. „Biuro ZGN Mokotów”), opcjonalnie adres i notatkę.',
+            do: 'Wejdź w Kalendarz → „Typy spotkań”, edytuj typ i wypełnij pole „Dokumenty wysłać X dni przed spotkaniem” (np. 14).',
+            then: 'W tabeli typów, w kolumnie „Wysyłka”, pojawia się „14 dni przed”. Typy z pustym polem mają „bez wymogu”.',
           },
           {
-            do: 'Wróć na zakładkę „Kalendarz” i dodaj albo edytuj spotkanie.',
-            then: 'W formularzu jest pole „Lokalizacja” z wyszukiwaniem; pod każdą nazwą widać jej adres.',
+            do: 'Wróć na Kalendarz i znajdź spotkanie tego typu, dla którego dokumenty nie wyszły.',
+            then: 'W sekcji dokumentów na dole karty widać, ile dni zostało („Dokumenty do wysłania w ciągu 6 dni”).',
           },
           {
-            do: 'Zapisz spotkanie i spójrz na jego kartę w panelu dnia.',
-            then: 'Obok wspólnoty pojawia się lokalizacja z ikoną pinezki. Widać ją też w dymku nad kafelkiem w siatce.',
+            do: 'Gdy termin minie, spójrz na to spotkanie ponownie.',
+            then: 'Stopka karty robi się czerwona z napisem „Termin wysyłki minął 4 dni temu”, a u góry miesiąca pojawia się pasek „Wysyłka po terminie”.',
+          },
+          {
+            do: 'Kliknij ten pasek, żeby zostawić na widoku tylko te spotkania. Wyślij dokumenty (ręcznie albo mailingiem).',
+            then: 'Ostrzeżenie i licznik znikają dla tego spotkania.',
           },
         ],
         expect: [
-          'Kolumna „Spotkań” w słowniku mówi, ile spotkań korzysta z danej lokalizacji — zanim ją usuniesz.',
-          'Lokalizacje wchodzą do kopii zapasowej i są w niej liczone osobno („lokalizacje spotkań”).',
-          'Wyszukiwarka w Kalendarzu znajduje spotkania także po nazwie lokalizacji.',
+          'Dozwolone jest od 1 do 365 dni; puste pole to świadoma odpowiedź „bez wymogu”, nie brak danych.',
+          'Termin liczy się od godziny rozpoczęcia spotkania, więc „14 dni przed” zebraniem o 18:00 kończy się o 18:00.',
+          'Liczba dni wchodzi do kopii zapasowej razem z typami spotkań.',
         ],
       },
       {
@@ -281,44 +281,6 @@ export const RELEASES: Release[] = [
         ],
       },
       {
-        id: 'kalendarz-termin-wysylki',
-        kind: 'new',
-        icon: 'alert-circle',
-        title: 'Termin na dokumenty — z typu spotkania',
-        summary:
-          'W typie spotkania podajesz, ile dni przed spotkaniem trzeba wysłać dokumenty. Gdy ten termin minie, a dokumenty nie wyszły, spotkanie dostaje czerwone ostrzeżenie, licznik u góry miesiąca i własny filtr. Typ bez podanej liczby dni nie uruchamia tego wcale.',
-        details: [
-          'Termin jest właściwością RODZAJU spotkania, nie jednego spotkania: zebranie roczne wspólnoty ma okres zawiadomienia, wewnętrzna narada nie ma żadnego. Puste pole w typie znaczy „ten rodzaj nie ma takiego wymogu” — i wtedy ani ostrzeżenie, ani licznik, ani filtr nie dotyczą jego spotkań.',
-          '„Wysłane” liczy się dwiema drogami: ręczny wpis na karcie albo mailing, który rzeczywiście poszedł. Nieudana wysyłka nie jest wysyłką. Pytanie o sam mailing nazwałoby spotkanie niewysłanym tylko dlatego, że księgowa użyła własnej skrzynki.',
-          'Ostrzeżenie zapala się, gdy termin minie — a nie gdy minie samo spotkanie. Sens okresu zawiadomienia jest w tym, że kończy się PRZED spotkaniem, więc alarm przychodzi, kiedy jest jeszcze co ratować.',
-          'Doszedł też filtr „Dokumenty niewysłane”, niezależny od terminów: pokazuje wszystkie spotkania, dla których papiery nie wyszły żadną drogą.',
-        ],
-        where: ['Kalendarz', 'Typy spotkań'],
-        steps: [
-          {
-            do: 'Wejdź w Kalendarz → „Typy spotkań”, edytuj typ i wypełnij pole „Dokumenty wysłać X dni przed spotkaniem” (np. 14).',
-            then: 'W tabeli typów, w kolumnie „Wysyłka”, pojawia się „14 dni przed”. Typy z pustym polem mają „bez wymogu”.',
-          },
-          {
-            do: 'Wróć na Kalendarz i znajdź spotkanie tego typu, dla którego dokumenty nie wyszły.',
-            then: 'W sekcji dokumentów na dole karty widać, ile dni zostało („Dokumenty do wysłania w ciągu 6 dni”).',
-          },
-          {
-            do: 'Gdy termin minie, spójrz na to spotkanie ponownie.',
-            then: 'Stopka karty robi się czerwona z napisem „Termin wysyłki minął 4 dni temu”, a u góry miesiąca pojawia się pasek „Wysyłka po terminie”.',
-          },
-          {
-            do: 'Kliknij ten pasek, żeby zostawić na widoku tylko te spotkania. Wyślij dokumenty (ręcznie albo mailingiem).',
-            then: 'Ostrzeżenie i licznik znikają dla tego spotkania.',
-          },
-        ],
-        expect: [
-          'Dozwolone jest od 1 do 365 dni; puste pole to świadoma odpowiedź „bez wymogu”, nie brak danych.',
-          'Termin liczy się od godziny rozpoczęcia spotkania, więc „14 dni przed” zebraniem o 18:00 kończy się o 18:00.',
-          'Liczba dni wchodzi do kopii zapasowej razem z typami spotkań.',
-        ],
-      },
-      {
         id: 'pulpit-spotkania-do-zrobienia',
         kind: 'new',
         icon: 'calendar',
@@ -356,44 +318,6 @@ export const RELEASES: Release[] = [
           'Kolory są te same co w Kalendarzu i każdy stan ma swój: czerwony — wysyłka po terminie, pomarańczowy — zmieniony termin, indygo — dokumenty niewysłane, niebieski — termin wstępny.',
         ],
       },
-      {
-        id: 'kalendarz-scroll-dnia',
-        kind: 'fixed',
-        icon: 'calendar',
-        title: 'Panel dnia przewija się osobno od strony',
-        summary:
-          'Dzień z wieloma spotkaniami przewija się teraz we własnym panelu, zamiast przewijać cały ekran razem z siatką miesiąca.',
-        details: [
-          'Panel dnia miał własny suwak, ale nie miał wysokości, o którą mógłby się oprzeć: strona rosła razem z listą spotkań, więc przewijało się wszystko naraz i siatka miesiąca uciekała w górę.',
-          'Teraz widok Kalendarza wypełnia okno dokładnie, a przewijają się dwa panele w środku: siatka miesiąca i lista wybranego dnia. Nagłówek z miesiącem i pasek narzędzi zostają na miejscu.',
-          'Na bardzo niskim oknie panele nie ściskają się w nieskończoność — poniżej pewnej wysokości przewija się cała strona, tak jak dawniej.',
-        ],
-        where: ['Kalendarz'],
-        steps: [
-          {
-            do: 'Wybierz dzień z kilkoma spotkaniami.',
-            then: 'Lista po prawej przewija się sama, a nazwa miesiąca i przyciski nawigacji zostają widoczne.',
-          },
-        ],
-        expect: [
-          'Siatka miesiąca ma własny suwak, z przyklejonym paskiem dni tygodnia — bez zmian.',
-        ],
-      },
-    ],
-  },
-  {
-    version: '6.7.0',
-    date: '2026-09-02',
-    title: 'Ludzie z imienia i nazwiska — lista użytkowników i powitanie',
-    tagline:
-      'Aplikacja przestaje mówić do Ciebie adresem e-mail. W Ustawieniach jest nowa sekcja „Użytkownicy”: lista wszystkich kont, które mają dostęp, a przy każdym dwa pola — imię i nazwisko. Raz wpisane, pojawiają się wszędzie tam, gdzie do tej pory był e-mail: przy wyborze uczestników spotkania w Kalendarzu, na liście uczestników zapisanego spotkania, a także w powitaniu: pod logo FileFunky aplikacja wita Cię imieniem — „SIEMANKO”, pod tym Twoje imię dużą czcionką i krótka kreska. Do tego pasek postępu na pulpicie mierzy się wreszcie do wszystkich wspólnot, a nie do liczby wygenerowanych plików, i dopisuje jedno zdanie o tym, co zostało do zrobienia.',
-    stats: [
-      { value: '2 pola', label: 'imię i nazwisko na konto' },
-      { value: 'Kalendarz', label: 'wybór osoby po nazwisku' },
-      { value: 'Siemanko', label: 'powitanie pod logo w menu' },
-      { value: 'wspólnoty', label: 'nowa miara paska postępu' },
-    ],
-    highlights: [
       {
         id: 'uzytkownicy-imie-nazwisko',
         kind: 'new',
@@ -442,38 +366,6 @@ export const RELEASES: Release[] = [
         },
       },
       {
-        id: 'kalendarz-po-nazwisku',
-        kind: 'improved',
-        icon: 'calendar',
-        title: 'W Kalendarzu wybierasz osobę, nie skrzynkę',
-        summary:
-          'Lista uczestników spotkania pokazuje imiona i nazwiska. Adres e-mail zsuwa się do drugiego planu — zostaje jako podpowiedź pod nazwą i nadal działa w wyszukiwaniu.',
-        details: [
-          'Nazwisko jest tym, czym ludzie posługują się mówiąc o spotkaniu, a adres e-mail bywa nieoczywisty — dwa konta z podobnym adresem to dokładnie ta sytuacja, w której łatwo dodać nie tę osobę.',
-          'E-mail nie znika: pokazuje się pod nazwą i pozostaje w wyszukiwaniu, więc gdy dwie osoby mają to samo imię, nadal masz czym je rozróżnić.',
-          'Osoby zapisane na spotkaniu przechowują nazwę z chwili zapisu. Późniejsza zmiana imienia nie przepisuje tego, kto — jak mówi zapis — był na spotkaniu w zeszłym miesiącu.',
-        ],
-        where: ['Kalendarz', 'Nowe spotkanie', 'Uczestnicy'],
-        steps: [
-          {
-            do: 'Otwórz „Kalendarz” i kliknij dwukrotnie dowolny dzień.',
-            then: 'Otworzy się formularz nowego spotkania.',
-          },
-          {
-            do: 'Rozwiń „Dodaj uczestnika…” w sekcji „Uczestnicy”.',
-            then: 'Na liście widać imiona i nazwiska, a pod każdym — drobnym drukiem — adres e-mail.',
-          },
-          {
-            do: 'Nie widzisz czyjegoś nazwiska, tylko adres e-mail? Ta osoba nie została jeszcze nazwana.',
-            then: 'Wejdź w Ustawienia → Użytkownicy, wpisz jej imię i nazwisko, wróć do Kalendarza — będzie już na liście pod nazwą.',
-          },
-        ],
-        expect: [
-          'Wyszukiwanie w rozwijanej liście działa i po nazwisku, i po adresie e-mail.',
-          'Spotkania zapisane przed tą wersją pokazują to, co miały zapisane wcześniej — nic nie zostało nadpisane.',
-        ],
-      },
-      {
         id: 'powitanie-siemanko',
         kind: 'new',
         icon: 'sparkles',
@@ -509,89 +401,73 @@ export const RELEASES: Release[] = [
         ],
       },
       {
-        id: 'pulpit-postep-i-krok',
-        kind: 'fixed',
-        icon: 'bar-chart',
-        title: 'Pasek postępu liczy wspólnoty, a nie pliki',
+        id: 'nawigacja-wstecz',
+        kind: 'new',
+        icon: 'arrow-right',
+        title: 'Wstecz i do przodu, jak w przeglądarce',
         summary:
-          'Pasek „Zaksięgowane w DOM” mierzy się teraz do wszystkich wspólnot — pisze „9 z 12 wspólnot”. Do tego pod podsumowaniem doszło jedno zdanie z następnym krokiem.',
+          'Nad menu, obok przycisku zwijania, są dwie strzałki: wracają do poprzedniego ekranu i idą z powrotem. Działa też Alt+← / Alt+→ oraz boczne przyciski myszy.',
         details: [
-          'Do tej pory pasek pokazywał pliki: „12 z 37 plików”. To 37 nie brało się z niczego, co dałoby się sprawdzić — była to liczba plików księgowych, jakie akurat udało się wygenerować w tym miesiącu. Mianownik rósł więc w trakcie pracy, a pasek mógł stać na 100% w miesiącu, w którym połowa wspólnot nie miała jeszcze ani jednego pliku.',
-          'Teraz mianownikiem są wszystkie wspólnoty, tak samo jak w kafelkach nad listą i na samej liście. Pasek odpowiada na pytanie „ile miesiąca jest za nami” i dochodzi do 100% dopiero wtedy, gdy każda wspólnota jest odklikana w DOM.',
-          'Liczby plików nie znikają — są dalej w podsumowaniu nad paskiem („12 plików księgowych · 3 czeka na DOM”), tylko zawsze nazwane jako pliki.',
-          'Wspólnota usunięta z książki adresowej, która ma robotę w tym miesiącu, wchodzi do mianownika — jej praca jest prawdziwa i widnieje na liście. Wiersz „Bez przypisanej wspólnoty” nie wchodzi, bo nie jest wspólnotą.',
+          'Aplikacja nie ma paska adresu, więc do tej pory „wróć tam, gdzie byłam” trzeba było odtworzyć z pamięci — zwłaszcza po wejściu w historię z pulpitu albo w szablony z mailingu.',
+          'Historia pamięta nie tylko ekran, ale i zakładkę: cofnięcie z „Konwerter → Historia” wraca na „Konwerter → Konwersja”, a nie tylko do modułu. Zapamiętuje 50 ostatnich miejsc.',
+          'Dymek nad strzałką mówi, gdzie ona prowadzi („Wstecz: Kalendarz → Lokalizacje”), bo w aplikacji bez paska adresu to jedyny sposób, żeby wiedzieć to przed kliknięciem.',
+          'Skróty klawiszowe są wyłączone w trakcie pisania — Alt+← w polu tekstowym zostaje zwykłym skrótem pola.',
         ],
-        where: ['Pulpit'],
+        where: ['Menu boczne', 'u góry'],
         steps: [
           {
-            do: 'Wejdź na „Pulpit” i spójrz na pasek pod nazwą miesiąca.',
-            then: 'Po prawej stronie paska przeczytasz „9 z 12 wspólnot” i procent — gdzie 12 to tyle wspólnot, ile masz w „Adresach”.',
+            do: 'Poklikaj po kilku ekranach, np. Pulpit → Kalendarz → Ustawienia.',
+            then: 'Strzałka „w lewo” nad menu przestaje być wyszarzona.',
           },
           {
-            do: 'Pod podsumowaniem przeczytaj zdanie z następnym krokiem.',
-            then: 'Mówi, co zrobić dalej: że miesiąc jest jeszcze pusty, ile plików czeka na zaznaczenie w DOM, ile konwersji poprawić, albo — na zielono — że miesiąc jest domknięty.',
+            do: 'Kliknij strzałkę w lewo (albo naciśnij Alt+←).',
+            then: 'Wracasz na Kalendarz — dokładnie na tę zakładkę, na której byłaś.',
           },
           {
-            do: 'Zaznacz w DOM wszystkie pliki, jakie są w tym miesiącu.',
-            then: 'Jeśli któraś wspólnota nie ma jeszcze pliku, zdanie powie wprost: „Wszystko odklikane, ale bez pliku w tym miesiącu zostają wspólnoty: 2” — a pasek nie pokaże 100%, bo miesiąc nie jest skończony.',
+            do: 'Kliknij strzałkę w prawo (albo Alt+→).',
+            then: 'Idziesz z powrotem do Ustawień.',
+          },
+          {
+            do: 'Zwiń menu przyciskiem z trzema kreskami.',
+            then: 'Strzałki układają się w słupek pod przyciskiem i działają dalej.',
           },
         ],
         expect: [
-          'Zdanie i pasek zawsze mówią to samo: „miesiąc domknięty” pojawia się dokładnie wtedy, gdy pasek jest na 100%.',
-          'Błędy mają pierwszeństwo — miesiąc z nieudaną konwersją nie jest skończony, nawet jeśli nie ma już czego odklikać.',
-          'To samo jest na zakładce „Księgowania” w Konwerterze, bo to ten sam ekran. Liczby idą za wybranym miesiącem, nie za bieżącym.',
+          'Kliknięcie pozycji menu, na której już jesteś, nie tworzy nowego wpisu w historii.',
+          'Historia żyje tak długo jak uruchomiona aplikacja — po restarcie startuje od pulpitu.',
         ],
       },
-    ],
-  },
-  {
-    version: '6.6.0',
-    date: '2026-09-02',
-    title: 'Wygasła sesja mówi, że wygasła — i aktualizacje sprawdzane co godzinę',
-    tagline:
-      'Dwie rzeczy, które do tej pory trzeba było odgadywać. Pierwsza: gdy logowanie do chmury wygaśnie w trakcie pracy, aplikacja nie udaje już, że wszystko jest w porządku — wraca na ekran logowania i pisze wprost, co się stało. Wcześniej wyglądała na zalogowaną, a operacje kończyły się błędami w rodzaju „Bank not found”, które nie miały nic wspólnego z prawdziwą przyczyną, i pomagało dopiero przelogowanie. Druga: nowa wersja jest wyszukiwana nie tylko przy uruchomieniu, ale też raz na godzinę przy włączonej aplikacji, a „Później” wyjaśnia teraz, czym grozi zostanie na starej wersji.',
-    stats: [
-      { value: 'co godzinę', label: 'sprawdzanie nowej wersji' },
-      { value: 'komunikat', label: 'zamiast błędu „Bank not found”' },
-      { value: 'wspólnoty', label: 'nowa miara paska postępu' },
-    ],
-    highlights: [
       {
-        id: 'wygasla-sesja-komunikat',
-        kind: 'fixed',
-        icon: 'shield',
-        title: 'Wygasła sesja zamiast błędu „Bank not found”',
+        id: 'kalendarz-po-nazwisku',
+        kind: 'improved',
+        icon: 'calendar',
+        title: 'W Kalendarzu wybierasz osobę, nie skrzynkę',
         summary:
-          'Kiedy logowanie do chmury przestaje być ważne, aplikacja przerywa pracę, wraca na ekran logowania i wyjaśnia dlaczego — zamiast pokazywać błędy, które sugerują zepsute dane.',
+          'Lista uczestników spotkania pokazuje imiona i nazwiska. Adres e-mail zsuwa się do drugiego planu — zostaje jako podpowiedź pod nazwą i nadal działa w wyszukiwaniu.',
         details: [
-          'Wspólne dane — banki, adresy, kontrahenci, historia, kalendarz — leżą w chmurze i są widoczne tylko dla zalogowanego użytkownika. Po wygaśnięciu sesji baza nie zwracała błędu, tylko pustą odpowiedź, więc aplikacja czytała to jako „takiego banku nie ma” i pisała „Bank not found”. Nic nie było zepsute: brakowało wyłącznie ważnego logowania, dlatego przelogowanie natychmiast pomagało.',
-          'Teraz każde zapytanie bez ważnej sesji jest zatrzymywane z polskim komunikatem, a aplikacja przestaje udawać zalogowaną: znika menu boczne z „Wyloguj”, a na jego miejsce wraca ekran logowania z żółtą ramką i wyjaśnieniem.',
-          'Konwersja pliku sprawdza sesję jeszcze przed odczytem banku, więc o wygaśnięciu dowiadujesz się od razu po wrzuceniu pliku, a nie w połowie przetwarzania.',
+          'Nazwisko jest tym, czym ludzie posługują się mówiąc o spotkaniu, a adres e-mail bywa nieoczywisty — dwa konta z podobnym adresem to dokładnie ta sytuacja, w której łatwo dodać nie tę osobę.',
+          'E-mail nie znika: pokazuje się pod nazwą i pozostaje w wyszukiwaniu, więc gdy dwie osoby mają to samo imię, nadal masz czym je rozróżnić.',
+          'Osoby zapisane na spotkaniu przechowują nazwę z chwili zapisu. Późniejsza zmiana imienia nie przepisuje tego, kto — jak mówi zapis — był na spotkaniu w zeszłym miesiącu.',
         ],
-        where: ['Ekran logowania'],
+        where: ['Kalendarz', 'Nowe spotkanie', 'Uczestnicy'],
         steps: [
           {
-            do: 'Pracuj normalnie. Jeśli sesja wygaśnie, aplikacja sama wróci na ekran logowania.',
-            then: 'Nad polami e-mail i hasło pojawi się żółta ramka: „Sesja wygasła i aplikacja wylogowała Cię automatycznie…”.',
+            do: 'Otwórz „Kalendarz” i kliknij dwukrotnie dowolny dzień.',
+            then: 'Otworzy się formularz nowego spotkania.',
           },
           {
-            do: 'Wpisz e-mail i hasło, kliknij „Zaloguj”.',
-            then: 'Wracasz do aplikacji, dane z chmury znów się wczytują, a ramka znika.',
+            do: 'Rozwiń „Dodaj uczestnika…” w sekcji „Uczestnicy”.',
+            then: 'Na liście widać imiona i nazwiska, a pod każdym — drobnym drukiem — adres e-mail.',
           },
           {
-            do: 'Jeśli komunikat zastał Cię w trakcie konwersji, wrzuć plik ponownie po zalogowaniu.',
-            then: 'Konwersja przechodzi normalnie — przerwana próba nie zapisała pliku księgowego ani wpisu w historii.',
+            do: 'Nie widzisz czyjegoś nazwiska, tylko adres e-mail? Ta osoba nie została jeszcze nazwana.',
+            then: 'Wejdź w Ustawienia → Użytkownicy, wpisz jej imię i nazwisko, wróć do Kalendarza — będzie już na liście pod nazwą.',
           },
         ],
         expect: [
-          'Ten sam komunikat zobaczysz przy uruchomieniu aplikacji, jeśli sesja wygasła między jednym a drugim otwarciem.',
-          'Kliknięcie „Wyloguj” samodzielnie nie pokazuje żadnego ostrzeżenia — to Twoja decyzja, nie awaria.',
-          'Automatyczna kopia zapasowa nie zapisze się już jako pusta, gdy zabraknie sesji: zamiast pliku bez danych zostaje ostrzeżenie w logu (Ustawienia → „Otwórz folder logów”).',
+          'Wyszukiwanie w rozwijanej liście działa i po nazwisku, i po adresie e-mail.',
+          'Spotkania zapisane przed tą wersją pokazują to, co miały zapisane wcześniej — nic nie zostało nadpisane.',
         ],
-        note: {
-          type: 'tip',
-          text: 'Jeśli komunikat wraca zaraz po każdym zalogowaniu, sprawdź datę i godzinę na komputerze — przesunięty zegar potrafi unieważnić logowanie.',
-        },
       },
       {
         id: 'aktualizacje-co-godzine',
@@ -632,6 +508,99 @@ export const RELEASES: Release[] = [
           type: 'warning',
           text: 'Praca na starszej wersji może powodować niewłaściwe działanie aplikacji — błędy konwersji, brak nowych banków i poprawek. Widzisz ostrzeżenie? Zaktualizuj przy pierwszej okazji.',
         },
+      },
+      {
+        id: 'wygasla-sesja-komunikat',
+        kind: 'fixed',
+        icon: 'shield',
+        title: 'Wygasła sesja zamiast błędu „Bank not found”',
+        summary:
+          'Kiedy logowanie do chmury przestaje być ważne, aplikacja przerywa pracę, wraca na ekran logowania i wyjaśnia dlaczego — zamiast pokazywać błędy, które sugerują zepsute dane.',
+        details: [
+          'Wspólne dane — banki, adresy, kontrahenci, historia, kalendarz — leżą w chmurze i są widoczne tylko dla zalogowanego użytkownika. Po wygaśnięciu sesji baza nie zwracała błędu, tylko pustą odpowiedź, więc aplikacja czytała to jako „takiego banku nie ma” i pisała „Bank not found”. Nic nie było zepsute: brakowało wyłącznie ważnego logowania, dlatego przelogowanie natychmiast pomagało.',
+          'Teraz każde zapytanie bez ważnej sesji jest zatrzymywane z polskim komunikatem, a aplikacja przestaje udawać zalogowaną: znika menu boczne z „Wyloguj”, a na jego miejsce wraca ekran logowania z żółtą ramką i wyjaśnieniem.',
+          'Konwersja pliku sprawdza sesję jeszcze przed odczytem banku, więc o wygaśnięciu dowiadujesz się od razu po wrzuceniu pliku, a nie w połowie przetwarzania.',
+        ],
+        where: ['Ekran logowania'],
+        steps: [
+          {
+            do: 'Pracuj normalnie. Jeśli sesja wygaśnie, aplikacja sama wróci na ekran logowania.',
+            then: 'Nad polami e-mail i hasło pojawi się żółta ramka: „Sesja wygasła i aplikacja wylogowała Cię automatycznie…”.',
+          },
+          {
+            do: 'Wpisz e-mail i hasło, kliknij „Zaloguj”.',
+            then: 'Wracasz do aplikacji, dane z chmury znów się wczytują, a ramka znika.',
+          },
+          {
+            do: 'Jeśli komunikat zastał Cię w trakcie konwersji, wrzuć plik ponownie po zalogowaniu.',
+            then: 'Konwersja przechodzi normalnie — przerwana próba nie zapisała pliku księgowego ani wpisu w historii.',
+          },
+        ],
+        expect: [
+          'Ten sam komunikat zobaczysz przy uruchomieniu aplikacji, jeśli sesja wygasła między jednym a drugim otwarciem.',
+          'Kliknięcie „Wyloguj” samodzielnie nie pokazuje żadnego ostrzeżenia — to Twoja decyzja, nie awaria.',
+          'Automatyczna kopia zapasowa nie zapisze się już jako pusta, gdy zabraknie sesji: zamiast pliku bez danych zostaje ostrzeżenie w logu (Ustawienia → „Otwórz folder logów”).',
+        ],
+        note: {
+          type: 'tip',
+          text: 'Jeśli komunikat wraca zaraz po każdym zalogowaniu, sprawdź datę i godzinę na komputerze — przesunięty zegar potrafi unieważnić logowanie.',
+        },
+      },
+      {
+        id: 'pulpit-postep-i-krok',
+        kind: 'fixed',
+        icon: 'bar-chart',
+        title: 'Pulpit liczy wspólnoty, a nie pliki',
+        summary:
+          'Pasek „Zaksięgowane w DOM”, podsumowanie nad nim i zdanie z następnym krokiem mierzą teraz jedną rzecz: wspólnoty. Wcześniej każde z nich liczyło co innego, a jedna z tych liczb brała się z niczego, co dałoby się sprawdzić.',
+        details: [
+          'Pasek pokazywał pliki: „12 z 37 plików”. To 37 była liczbą plików księgowych, jakie akurat udało się wygenerować w tym miesiącu — mianownik rósł więc w trakcie pracy, a pasek mógł stać na 100% w miesiącu, w którym połowa wspólnot nie miała ani jednego pliku. Teraz mianownikiem są wszystkie wspólnoty, tak samo jak w kafelkach i na liście, a 100% pojawia się dopiero, gdy każda jest odklikana w DOM.',
+          'Podsumowanie otwierało się liczbą „63 wspólnoty”, którą była cała książka adresowa — plus wiersz „Bez przypisanej wspólnoty”, który wspólnotą nie jest. W nagłówku „Wrzesień 2026” mówiło to 63 niezależnie od tego, czy wrzesień miał robotę dla sześćdziesięciu, czy dla czterech. Teraz pisze, ile wspólnot ma w tym miesiącu księgowanie i ile zostaje bez oznaczenia w DOM.',
+          'Zdanie z następnym krokiem liczyło pliki tych konwersji, które się wykonały. W miesiącu, gdzie połowa wspólnot nie ma jeszcze żadnego pliku, „zostało plików: 37” pokazywało ułamek tego, co faktycznie zostało. Liczy teraz to samo co pasek: wszystkie wspólnoty minus zaksięgowane.',
+          'Dzięki temu zdanie i pasek nie mogą się rozejść: „miesiąc domknięty” pada dokładnie wtedy, gdy pasek pokazuje 100%, bo obie liczby są tą samą różnicą.',
+          'Wspólnota usunięta z książki adresowej, która ma robotę w tym miesiącu, wchodzi do mianownika — jej praca jest prawdziwa i widnieje na liście. Wiersz „Bez przypisanej wspólnoty” nie wchodzi, bo nie jest wspólnotą.',
+        ],
+        where: ['Pulpit'],
+        steps: [
+          {
+            do: 'Wejdź na „Pulpit” i przeczytaj pasek miesiąca od góry.',
+            then: 'Pod nazwą miesiąca: ile wspólnot ma księgowanie i ile zostaje bez oznaczenia w DOM. Pod tym jedno zdanie z następnym krokiem, a najniżej pasek „Zaksięgowane w DOM” z „31 z 63 wspólnot” i procentem.',
+          },
+          {
+            do: 'Zaznacz w DOM wszystko, co zostało w tym miesiącu.',
+            then: 'Licznik w zdaniu i wypełnienie paska schodzą razem do zera i do 100%, a zdanie zmienia kolor na zielony.',
+          },
+          {
+            do: 'Przełącz się na miesiąc z nieudaną konwersją.',
+            then: 'Zdanie ustępuje miejsca błędom: „Najpierw błędy — konwersji do poprawienia: 2”, bo miesiąc z błędem nie jest skończony, nawet jeśli nie ma już czego odklikać.',
+          },
+        ],
+        expect: [
+          'Liczba wspólnot bez oznaczenia pojawia się w dwóch miejscach — w podsumowaniu i w zdaniu pod nim. To ta sama liczba: podsumowanie ją pokazuje, zdanie mówi, co z nią zrobić.',
+          'To samo jest na zakładce „Księgowania” w Konwerterze, bo to ten sam ekran. Liczby idą za wybranym miesiącem, nie za bieżącym.',
+        ],
+      },      {
+        id: 'kalendarz-scroll-dnia',
+        kind: 'fixed',
+        icon: 'calendar',
+        title: 'Panel dnia przewija się osobno od strony',
+        summary:
+          'Dzień z wieloma spotkaniami przewija się teraz we własnym panelu, zamiast przewijać cały ekran razem z siatką miesiąca.',
+        details: [
+          'Panel dnia miał własny suwak, ale nie miał wysokości, o którą mógłby się oprzeć: strona rosła razem z listą spotkań, więc przewijało się wszystko naraz i siatka miesiąca uciekała w górę.',
+          'Teraz widok Kalendarza wypełnia okno dokładnie, a przewijają się dwa panele w środku: siatka miesiąca i lista wybranego dnia. Nagłówek z miesiącem i pasek narzędzi zostają na miejscu.',
+          'Na bardzo niskim oknie panele nie ściskają się w nieskończoność — poniżej pewnej wysokości przewija się cała strona, tak jak dawniej.',
+        ],
+        where: ['Kalendarz'],
+        steps: [
+          {
+            do: 'Wybierz dzień z kilkoma spotkaniami.',
+            then: 'Lista po prawej przewija się sama, a nazwa miesiąca i przyciski nawigacji zostają widoczne.',
+          },
+        ],
+        expect: [
+          'Siatka miesiąca ma własny suwak, z przyklejonym paskiem dni tygodnia — bez zmian.',
+        ],
       },
     ],
   },

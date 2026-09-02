@@ -1367,32 +1367,57 @@ tbody tr:hover {
 
 /* What separates the two is the GROUND, not a line.
  *
- * The meetings area is a panel in its own right: it bleeds past the page's
- * padding to the window's edges, sits on a faint wash of the calendar's own
- * indigo, and curves off at the bottom — so it reads as a sheet laid over the
- * top of the page, with the bookings continuing underneath on the plain app
- * ground. A rule across the middle would have said the same thing while adding
- * a line nobody needs; a change of ground says it with nothing at all.
+ * Each area is a band of its own: both bleed past the page's padding to the
+ * window's edges, each stands on its own ground, and they meet edge to edge.
+ * The boundary is a change of colour with nothing drawn on it — a rule across
+ * the middle would have said the same thing while adding a line nobody needs.
  *
- * The negative margins are exactly `.content-body`'s padding, and the padding
- * puts it back inside — so the wash reaches the window while the content stays
- * lined up with everything below it.
+ * The negative margins are exactly `.content-body`'s padding and the padding
+ * puts the content back inside, so the grounds reach the window while
+ * everything on them stays lined up. Because a band ends up exactly as wide as
+ * its container, none of this can produce a horizontal scrollbar.
  */
-.ks-area--kal {
-  margin: calc(-1 * var(--s-8)) calc(-1 * var(--s-8)) 0;
-  padding: var(--s-8) var(--s-8) var(--s-6);
-  background: color-mix(in srgb, var(--accent) 6%, var(--bg-app));
-  /* Twice the cards' own radius: big enough to read as a panel's edge rather
-     than as a rounded rectangle, still from the same scale. */
-  border-bottom-left-radius: calc(var(--r-xl) * 2);
-  border-bottom-right-radius: calc(var(--r-xl) * 2);
+.ks-area--kal,
+.ks-area--ksieg {
+  margin-left: calc(-1 * var(--s-8));
+  margin-right: calc(-1 * var(--s-8));
+  padding-left: var(--s-8);
+  padding-right: var(--s-8);
 }
 
-/* Dark mode needs a touch more of it: the same 6% over a near-black ground is
-   almost nothing, and the point of the wash is to be noticed without being
-   read as a colour. */
+/* The meetings stand on a wash of the calendar's own indigo, deep enough to be
+   the darker of the two grounds. The percentage is picked off the numbers, not
+   by eye: at 6% the wash lands at L=0.82 against the sunken ground's 0.85, so
+   the two bands differed by hue and barely by lightness and the seam
+   disappeared. At 12% it is 0.76 against 0.85 — a step of ~0.10, which is the
+   same size as the step from that ground up to a card. */
+.ks-area--kal {
+  margin-top: calc(-1 * var(--s-8));
+  padding-top: var(--s-8);
+  padding-bottom: var(--s-6);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-app));
+}
+
+/* The bookings get a ground of their own — the app's sunken surface, not the
+   page ground. Given the page ground the band was invisible: correct about the
+   seam, useless as a wrapper, because nothing on screen said the section was
+   one. Three steps up in light mode now (0.756 → 0.854 → 0.966 for the cards),
+   so the band reads as a surface and the cards lift off it.
+   Deliberately not the month's colour — that would leave the two bands nearly
+   identical in a month whose accent is close to indigo, making the separation
+   depend on which month you happened to be looking at. */
+.ks-area--ksieg {
+  margin-bottom: calc(-1 * var(--s-8));
+  padding-top: var(--s-6);
+  padding-bottom: var(--s-8);
+  background: var(--bg-surface-sunken);
+}
+
+/* Dark mode: the same mix over a near-black ground gives a much smaller step,
+   so it takes more of the accent to be noticed without being read as a colour
+   (L=0.0135 against the page's 0.0040). */
 body.dark-mode .ks-area--kal {
-  background: color-mix(in srgb, var(--accent) 11%, var(--bg-app));
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-app));
 }
 
 /* Built like the month bar: the same grid, the same tint-over-surface trick,
@@ -4772,10 +4797,10 @@ body.dark-mode .rte-content th {
 .ksieg {
   display: flex;
   flex-direction: column;
-  /* Bigger than any gap inside either area — with the panel's own bottom
-     padding on top of it, the two areas end up about twice as far apart as
-     anything inside either one. */
-  gap: var(--s-6);
+  /* No gap: the two bands touch, and the boundary between their grounds is the
+     separation. The air between their contents comes from their own padding —
+     24px from each side of the seam, which is more than any gap inside either. */
+  gap: 0;
 }
 
 /* ------------------------------ Month bar ------------------------------- */
@@ -5226,11 +5251,24 @@ body.dark-mode .month-art {
   border-left: 4px solid var(--border-strong);
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-sm);
-  transition: box-shadow var(--t-base), border-color var(--t-fast);
+  transition:
+    box-shadow var(--t-base),
+    border-color var(--t-fast),
+    background-color var(--t-fast);
 }
 
 .ksieg-row:hover,
 .ksieg-row.is-open { box-shadow: var(--shadow-md); }
+
+/* The highlight belongs to the ROW, not to its left column.
+ *
+ * It used to sit on `.ksieg-row__head`, which is column one of a two-column
+ * grid — so it stopped dead at the "Zaksięguj w DOM" column and the row looked
+ * half-lit. Painting the row covers both columns; the expanded body below
+ * carries its own surface, so the band lights and the file list under it does
+ * not. Separate from the shadow rule above on purpose: an open row keeps the
+ * shadow without being tinted. */
+.ksieg-row:hover { background: var(--bg-surface-hover); }
 
 .ksieg-row--todo    { border-left-color: var(--warning); }
 .ksieg-row--partial { border-left-color: var(--accent); }
@@ -5251,8 +5289,6 @@ body.dark-mode .month-art {
   cursor: pointer;
   border-radius: var(--r-xl) 0 0 var(--r-xl);
 }
-
-.ksieg-row__head:hover { background: var(--bg-surface-hover); }
 
 /* Once open, the head is a band with a body under it — square off that edge. */
 .ksieg-row.is-open .ksieg-row__head { border-radius: var(--r-xl) 0 0 0; }
@@ -5522,6 +5558,12 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
   grid-column: 1 / span 2;
   border-top: 1px solid var(--border-subtle);
   padding: var(--s-3) var(--s-5) var(--s-4);
+  /* Its own surface, so hovering the row lights the band and not the file list
+     underneath it — the hover is about the row's own action, and an open row's
+     contents tinting along with it just made the list restless. */
+  background: var(--bg-surface);
+  border-bottom-left-radius: var(--r-xl);
+  border-bottom-right-radius: var(--r-xl);
 }
 
 .ksieg-row__note {
@@ -5745,6 +5787,18 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 .content-body--fill > .kal {
   flex: 1;
   min-height: 0;
+}
+
+/* The dashboard's own use of `--fill`: grow so the lower band's ground reaches
+   the bottom of the window when the month is short, without `min-height: 0` —
+   the list must be allowed to outgrow the frame and let the page scroll, which
+   is the opposite of what the calendar's two panes want. */
+.content-body--fill > .ksieg {
+  flex: 1;
+}
+
+.content-body--fill > .ksieg > .ks-area--ksieg {
+  flex: 1;
 }
 
 .kal {

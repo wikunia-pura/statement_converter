@@ -399,10 +399,10 @@ export const translations = {
     kalTerminChangedBy: 'Zmienił(a): {who}.',
     kalTerminAck: 'Zapoznałem się',
     kalTerminAckDone: 'Zmiana terminu potwierdzona jako przeczytana.',
-    kalWarnChanged: 'Zmieniony termin: {count} — nikt tego jeszcze nie potwierdził',
+    kalWarnChanged: 'Zmieniony termin: {count}',
     kalWarnTentative: 'Termin wstępny: {count}',
     kalWarnNoDocs: 'Dokumenty niewysłane: {count}',
-    kalWarnOverdue: 'Wysyłka po terminie: {count} — minął termin na dokumenty',
+    kalWarnOverdue: 'Wysyłka po terminie: {count}',
     kalFilterOnHint: 'Filtr włączony — kliknij, aby go wyłączyć i pokazać wszystkie spotkania.',
     kalFilterOffHint: 'Kliknij, aby włączyć filtr i zostawić na widoku tylko te spotkania.',
 
@@ -432,8 +432,13 @@ export const translations = {
       '(np. „Bank not found”). Zaloguj się ponownie, żeby wrócić do pracy.',
 
     // Pulpit → sekcja Kalendarza
+    ksKalEyebrow: 'Kalendarz',
     ksKalTitle: 'Spotkania — do zrobienia',
-    ksKalNote: 'Liczone od dziś w przód. Kliknij, aby otworzyć Kalendarz z tym filtrem.',
+    ksKalNote:
+      'Liczone od dziś w przód, niezależnie od miesiąca poniżej. Kliknij kafelek, aby otworzyć ' +
+      'Kalendarz z tym filtrem.',
+    ksKalOpenAll: 'Otwórz Kalendarz',
+    ksKalAllClear: 'Nic nie czeka — żadnego przesuniętego terminu, wstępnej daty ani zaległych dokumentów.',
     ksKalOpen: 'Otwórz Kalendarz: {what}',
     ksKalOverdue: 'Wysyłka po terminie',
     ksKalOverdueHint: 'minął termin na dokumenty z typu spotkania',
@@ -1561,10 +1566,10 @@ export const translations = {
     kalTerminChangedBy: 'Changed by {who}.',
     kalTerminAck: 'Got it',
     kalTerminAckDone: 'Date change acknowledged.',
-    kalWarnChanged: 'Moved dates: {count} — nobody has acknowledged them yet',
+    kalWarnChanged: 'Moved dates: {count}',
     kalWarnTentative: 'Tentative dates: {count}',
     kalWarnNoDocs: 'Documents not sent: {count}',
-    kalWarnOverdue: 'Sending overdue: {count} — the document deadline has passed',
+    kalWarnOverdue: 'Sending overdue: {count}',
     kalFilterOnHint: 'Filter is on — click to turn it off and show every meeting.',
     kalFilterOffHint: 'Click to turn the filter on and leave only these meetings in view.',
 
@@ -1594,8 +1599,13 @@ export const translations = {
       'have failed (e.g. "Bank not found"). Sign in again to carry on.',
 
     // Dashboard → Calendar section
+    ksKalEyebrow: 'Calendar',
     ksKalTitle: 'Meetings — to do',
-    ksKalNote: 'Counted from today on. Click to open the Calendar with that filter.',
+    ksKalNote:
+      'Counted from today on, whatever month is shown below. Click a tile to open the Calendar ' +
+      'with that filter.',
+    ksKalOpenAll: 'Open the Calendar',
+    ksKalAllClear: 'Nothing outstanding — no moved dates, no tentative ones, no documents overdue.',
     ksKalOpen: 'Open the Calendar: {what}',
     ksKalOverdue: 'Sending overdue',
     ksKalOverdueHint: 'the type\u2019s document deadline has passed',

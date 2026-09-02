@@ -100,17 +100,17 @@ const STATE_ICON: Record<AddressBookingGroup['state'], React.ComponentProps<type
 /* ========================= Kalendarz, from the dashboard ==================== */
 
 /**
- * The calendar's four "needs doing" states, on the dashboard.
+ * The dashboard's first area: the calendar's four "needs doing" states.
  *
- * The dashboard is where the day starts, and three of these four are things
- * somebody has to act on before a meeting happens — so they belong next to the
- * month's bookings rather than one module away. Each tile is also the way in:
- * it opens the Kalendarz with that filter already applied, because a tile that
- * only navigated would leave the user to find the meetings it just counted.
+ * Its own banner and its own box, above the month's bookings and separate from
+ * them, because it answers a different question. Sitting between the booking
+ * tiles and the booking list it read as a third row of the same thing — and as
+ * though it were scoped to the month on screen, which it is not: these are
+ * counted from today forward, whatever month the bookings below are showing.
  *
- * Nothing is rendered when all four are zero. An empty row of zeros is a
- * permanent piece of furniture saying "nothing to do", and the dashboard
- * already has enough to read.
+ * Each tile is also the way in: it opens the Kalendarz with that filter already
+ * applied, because a tile that only navigated would leave the user to find the
+ * meetings it had just counted.
  */
 const CalendarAlerts: React.FC<{
   alerts: SpotkaniaAlerts;
@@ -118,7 +118,7 @@ const CalendarAlerts: React.FC<{
   onOpen?: (filter: SpotkanieStateFilter) => void;
 }> = ({ alerts, language, onOpen }) => {
   const t = translations[language];
-  if (!hasAnyAlert(alerts)) return null;
+  const anything = hasAnyAlert(alerts);
 
   const kinds: {
     filter: SpotkanieStateFilter;
@@ -163,34 +163,53 @@ const CalendarAlerts: React.FC<{
   ];
 
   return (
-    <section className="ks-kal">
-      <header className="ks-kal__head">
-        <h3>
-          <Icon name="calendar" size={15} /> {t.ksKalTitle}
-        </h3>
-        <span className="ks-kal__note">{t.ksKalNote}</span>
-      </header>
-      <div className="ks-kal__tiles">
-        {kinds.map((kind) => (
-          <button
-            key={kind.filter}
-            type="button"
-            className={`ks-kal-tile ks-kal-tile--${kind.tone}${
-              kind.count === 0 ? ' is-empty' : ''
-            }`}
-            onClick={() => onOpen?.(kind.filter)}
-            disabled={!onOpen || kind.count === 0}
-            title={kind.count === 0 ? kind.hint : t.ksKalOpen.replace('{what}', kind.label)}
-          >
-            <span className="ks-kal-tile__icon">
-              <Icon name={kind.icon} size={16} />
-            </span>
-            <span className="ks-kal-tile__count">{kind.count}</span>
-            <span className="ks-kal-tile__label">{kind.label}</span>
-            <span className="ks-kal-tile__hint">{kind.hint}</span>
+    <section className="ks-area ks-area--kal">
+      <header className="ks-area__banner">
+        <span className="ks-area__icon" aria-hidden="true">
+          <Icon name="calendar" size={22} />
+        </span>
+        <div className="ks-area__id">
+          <span className="ks-area__eyebrow">{t.ksKalEyebrow}</span>
+          <h2 className="ks-area__title">{t.ksKalTitle}</h2>
+          <p className="ks-area__sub">{t.ksKalNote}</p>
+        </div>
+        {onOpen && (
+          <button type="button" className="ks-area__action" onClick={() => onOpen('all')}>
+            {t.ksKalOpenAll} <Icon name="arrow-right" size={13} />
           </button>
-        ))}
-      </div>
+        )}
+      </header>
+
+      {/* Nothing outstanding is worth saying outright — four zeros would leave
+          the reader counting them to find that out. */}
+      {anything ? (
+        <div className="ks-kal__tiles">
+          {kinds.map((kind) => (
+            <button
+              key={kind.filter}
+              type="button"
+              className={`ks-kal-tile ks-kal-tile--${kind.tone}${
+                kind.count === 0 ? ' is-empty' : ''
+              }`}
+              onClick={() => onOpen?.(kind.filter)}
+              disabled={!onOpen || kind.count === 0}
+              title={kind.count === 0 ? kind.hint : t.ksKalOpen.replace('{what}', kind.label)}
+            >
+              <span className="ks-kal-tile__icon">
+                <Icon name={kind.icon} size={16} />
+              </span>
+              <span className="ks-kal-tile__count">{kind.count}</span>
+              <span className="ks-kal-tile__label">{kind.label}</span>
+              <span className="ks-kal-tile__hint">{kind.hint}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="ks-kal__clear">
+          <Icon name="check-circle" size={16} />
+          <span>{t.ksKalAllClear}</span>
+        </div>
+      )}
     </section>
   );
 };
@@ -455,6 +474,11 @@ const Ksiegowania: React.FC<Props> = ({
   return (
     <div className="content-body">
       <div className="ksieg">
+        {/* -------------------- Area one: the calendar ---------------------- */}
+        <CalendarAlerts alerts={kalAlerts} language={language} onOpen={onShowInCalendar} />
+
+        {/* -------------------- Area two: the month's bookings -------------- */}
+        <section className="ks-area ks-area--ksieg">
         {/* ---------------------------- Month bar --------------------------- */}
         <header
           className="ksieg-hero"
@@ -546,13 +570,6 @@ const Ksiegowania: React.FC<Props> = ({
         {/* ------------------------ Categories / filters -------------------- */}
         <BookingTiles totals={totals} language={language} filter={filter} onFilter={setFilter} />
 
-        {/* ---------------------------- Kalendarz --------------------------- */}
-        <CalendarAlerts
-          alerts={kalAlerts}
-          language={language}
-          onOpen={onShowInCalendar}
-        />
-
         {/* ----------------------------- Toolbar ---------------------------- */}
         <div className="ksieg-toolbar">
           <div className="ksieg-search">
@@ -621,6 +638,7 @@ const Ksiegowania: React.FC<Props> = ({
             ))}
           </div>
         )}
+        </section>
       </div>
     </div>
   );

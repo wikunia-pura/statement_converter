@@ -324,18 +324,23 @@ export const RELEASES: Release[] = [
         icon: 'calendar',
         title: 'Pulpit: „Spotkania — do zrobienia”',
         summary:
-          'Nowa sekcja na pulpicie, pod kafelkami księgowań: cztery liczby — wysyłka po terminie, zmieniony termin, dokumenty niewysłane, termin wstępny. Kliknięcie otwiera Kalendarz z tym filtrem już włączonym.',
+          'Pulpit dzieli się teraz na dwa obszary, każdy z własnym banerem: „Spotkania — do zrobienia” na górze i księgowania miesiąca pod nimi. W sekcji spotkań są cztery liczby — wysyłka po terminie, zmieniony termin, dokumenty niewysłane, termin wstępny — a kliknięcie otwiera Kalendarz z tym filtrem już włączonym.',
         details: [
-          'Dzień zaczyna się na pulpicie, a trzy z tych czterech stanów to rzeczy, które ktoś musi zrobić PRZED spotkaniem — więc ich miejsce jest obok księgowań miesiąca, nie o jeden moduł dalej.',
+          'Dzień zaczyna się na pulpicie, a trzy z tych czterech stanów to rzeczy, które ktoś musi zrobić PRZED spotkaniem — więc ich miejsce jest tutaj, nie o jeden moduł dalej.',
+          'Sekcja jest osobnym obszarem z własnym banerem, nad księgowaniami. Wstawiona między kafelki i listę wspólnot czytałaby się jak trzeci rząd tych samych liczb — i sugerowałaby, że dotyczy wyświetlanego miesiąca, a nie dotyczy: liczy od dziś w przód, niezależnie od miesiąca poniżej. Baner mówi to wprost.',
           'Każdy kafelek jest zarazem drogą wejścia: otwiera Kalendarz z odpowiednim filtrem i na bieżącym miesiącu. Kafelek, który tylko by nawigował, zostawiłby użytkownika z szukaniem tych kilkunastu spotkań, które właśnie policzył.',
           'Liczone od dziś w przód. Pulpit jest o tym, co jeszcze da się zrobić — okres zawiadomienia, który minął dla spotkania z marca, jest faktem, nie zadaniem, a zbieranie takich pozycji zamieniłoby kafelek w liczbę, której nikt nigdy nie sprowadzi do zera. Marcowe spotkania nadal widać w Kalendarzu po przejściu do tego miesiąca.',
-          'Gdy wszystkie cztery liczby są zerem, sekcji nie ma wcale — pusty rząd zer to mebel, który mówi „nie ma nic do zrobienia”, a pulpit ma już dość do czytania.',
+          'Gdy wszystkie cztery liczby są zerem, kafelki ustępują miejsca jednemu zielonemu zdaniu: „Nic nie czeka…”. Cztery zera kazałyby je przeliczyć, żeby się tego domyślić.',
         ],
         where: ['Pulpit'],
         steps: [
           {
-            do: 'Wejdź na „Pulpit” i zjedź pod kafelki kategorii.',
-            then: 'Zobaczysz sekcję „Spotkania — do zrobienia” z czterema kafelkami; pod każdą liczbą jest jednym zdaniem powiedziane, co ona znaczy.',
+            do: 'Wejdź na „Pulpit”.',
+            then: 'Na górze jest sekcja „Spotkania — do zrobienia” z czterema kafelkami; pod każdą liczbą jednym zdaniem, co ona znaczy. Pod nią, wyraźnie oddzielony, znajomy pasek miesiąca z księgowaniami.',
+          },
+          {
+            do: 'Kliknij „Otwórz Kalendarz” w banerze sekcji.',
+            then: 'Przechodzisz do Kalendarza bez żadnego filtra — po prostu do modułu.',
           },
           {
             do: 'Kliknij kafelek z niezerową liczbą, np. „Wysyłka po terminie”.',
@@ -348,7 +353,7 @@ export const RELEASES: Release[] = [
         ],
         expect: [
           'Kafelek z zerem jest przygaszony i nieklikalny — rząd nie zmienia kształtu, kiedy liczby się zmieniają.',
-          'Kolory są te same co w Kalendarzu: czerwony dla wysyłki po terminie, pomarańczowy dla zmienionego terminu, niebieski dla niewysłanych dokumentów i terminu wstępnego.',
+          'Kolory są te same co w Kalendarzu i każdy stan ma swój: czerwony — wysyłka po terminie, pomarańczowy — zmieniony termin, indygo — dokumenty niewysłane, niebieski — termin wstępny.',
         ],
       },
       {

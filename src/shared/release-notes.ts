@@ -327,7 +327,7 @@ export const RELEASES: Release[] = [
           'Pulpit dzieli się teraz na dwa obszary, każdy z własnym banerem: „Spotkania — do zrobienia” na górze i księgowania miesiąca pod nimi. W sekcji spotkań są cztery liczby — wysyłka po terminie, zmieniony termin, dokumenty niewysłane, termin wstępny — a kliknięcie otwiera Kalendarz z tym filtrem już włączonym.',
         details: [
           'Dzień zaczyna się na pulpicie, a trzy z tych czterech stanów to rzeczy, które ktoś musi zrobić PRZED spotkaniem — więc ich miejsce jest tutaj, nie o jeden moduł dalej.',
-          'Sekcja jest osobnym obszarem z własnym banerem — zbudowanym jak pasek miesiąca: ilustracja, podbarwienie, dwa fakty (ile czeka, co najbliżej) — nad księgowaniami. Wstawiona między kafelki i listę wspólnot czytałaby się jak trzeci rząd tych samych liczb — i sugerowałaby, że dotyczy wyświetlanego miesiąca, a nie dotyczy: liczy od dziś w przód, niezależnie od miesiąca poniżej. Baner mówi to wprost.',
+          'Sekcja jest osobnym panelem u góry strony: leży na własnym, delikatnie podbarwionym tle rozciągniętym do krawędzi okna i zaokrąglonym u dołu, a księgowania idą pod nim na zwykłym tle. Rozdziela je zmiana podłoża, nie kreska. Jej baner jest zbudowany jak pasek miesiąca — ilustracja, podbarwienie, dwa fakty (ile czeka, co najbliżej). Wstawiona między kafelki i listę wspólnot czytałaby się jak trzeci rząd tych samych liczb — i sugerowałaby, że dotyczy wyświetlanego miesiąca, a nie dotyczy: liczy od dziś w przód, niezależnie od miesiąca poniżej. Baner mówi to wprost.',
           'Każdy kafelek jest zarazem drogą wejścia: otwiera Kalendarz z odpowiednim filtrem i na bieżącym miesiącu. Kafelek, który tylko by nawigował, zostawiłby użytkownika z szukaniem tych kilkunastu spotkań, które właśnie policzył.',
           'Liczone od dziś w przód. Pulpit jest o tym, co jeszcze da się zrobić — okres zawiadomienia, który minął dla spotkania z marca, jest faktem, nie zadaniem, a zbieranie takich pozycji zamieniłoby kafelek w liczbę, której nikt nigdy nie sprowadzi do zera. Marcowe spotkania nadal widać w Kalendarzu po przejściu do tego miesiąca.',
           'Gdy wszystkie cztery liczby są zerem, kafelki ustępują miejsca jednemu zielonemu zdaniu: „Nic nie czeka…”. Cztery zera kazałyby je przeliczyć, żeby się tego domyślić.',
@@ -336,7 +336,7 @@ export const RELEASES: Release[] = [
         steps: [
           {
             do: 'Wejdź na „Pulpit”.',
-            then: 'Na górze jest baner „Spotkania — do zrobienia” z własną ilustracją: ile rzeczy czeka i jakie jest najbliższe spotkanie. Pod nim cztery kafelki, a niżej — wyraźnie oddzielony — znajomy pasek miesiąca z księgowaniami.',
+            then: 'Górę strony zajmuje panel „Spotkania — do zrobienia” na własnym tle: ilustracja, ile rzeczy czeka, jakie jest najbliższe spotkanie, pod tym cztery kafelki. Panel kończy się miękkim zaokrągleniem, a pod nim — już na zwykłym tle — znajomy pasek miesiąca z księgowaniami.',
           },
           {
             do: 'Kliknij „Otwórz Kalendarz” w banerze sekcji.',

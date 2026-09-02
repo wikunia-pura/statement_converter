@@ -1358,11 +1358,41 @@ tbody tr:hover {
    booking list, where they read as a third row of the bookings — and as though
    they were scoped to the month on screen. */
 /* Both areas are bare: each one's banner is already a card, and a box around
-   a card would be one card too many. What separates them is the gap. */
+   a card would be one card too many. */
 .ks-area {
   display: flex;
   flex-direction: column;
   gap: var(--s-4);
+}
+
+/* What separates the two is the GROUND, not a line.
+ *
+ * The meetings area is a panel in its own right: it bleeds past the page's
+ * padding to the window's edges, sits on a faint wash of the calendar's own
+ * indigo, and curves off at the bottom — so it reads as a sheet laid over the
+ * top of the page, with the bookings continuing underneath on the plain app
+ * ground. A rule across the middle would have said the same thing while adding
+ * a line nobody needs; a change of ground says it with nothing at all.
+ *
+ * The negative margins are exactly `.content-body`'s padding, and the padding
+ * puts it back inside — so the wash reaches the window while the content stays
+ * lined up with everything below it.
+ */
+.ks-area--kal {
+  margin: calc(-1 * var(--s-8)) calc(-1 * var(--s-8)) 0;
+  padding: var(--s-8) var(--s-8) var(--s-6);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-app));
+  /* Twice the cards' own radius: big enough to read as a panel's edge rather
+     than as a rounded rectangle, still from the same scale. */
+  border-bottom-left-radius: calc(var(--r-xl) * 2);
+  border-bottom-right-radius: calc(var(--r-xl) * 2);
+}
+
+/* Dark mode needs a touch more of it: the same 6% over a near-black ground is
+   almost nothing, and the point of the wash is to be noticed without being
+   read as a colour. */
+body.dark-mode .ks-area--kal {
+  background: color-mix(in srgb, var(--accent) 11%, var(--bg-app));
 }
 
 /* Built like the month bar: the same grid, the same tint-over-surface trick,
@@ -4742,8 +4772,9 @@ body.dark-mode .rte-content th {
 .ksieg {
   display: flex;
   flex-direction: column;
-  /* Bigger than any gap inside either area, which is what makes the split into
-     two read as a split rather than as a longer list. */
+  /* Bigger than any gap inside either area — with the panel's own bottom
+     padding on top of it, the two areas end up about twice as far apart as
+     anything inside either one. */
   gap: var(--s-6);
 }
 

@@ -3,9 +3,11 @@ import Icon from '../components/Icon';
 
 interface LoginProps {
   onSignedIn: () => void;
+  /** Why the user is looking at this screen — e.g. the session expired. */
+  notice?: string | null;
 }
 
-const Login: React.FC<LoginProps> = ({ onSignedIn }) => {
+const Login: React.FC<LoginProps> = ({ onSignedIn, notice }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +46,28 @@ const Login: React.FC<LoginProps> = ({ onSignedIn }) => {
         style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 16 }}
       >
         <h2 style={{ margin: 0 }}>Zaloguj się</h2>
+        {notice && (
+          <div
+            role="status"
+            style={{
+              display: 'flex',
+              gap: 10,
+              alignItems: 'flex-start',
+              padding: '12px 14px',
+              borderRadius: 8,
+              border: '1px solid var(--warning-border)',
+              background: 'var(--warning-bg)',
+              color: 'var(--warning)',
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
+            <span style={{ flexShrink: 0, lineHeight: 0, paddingTop: 2 }}>
+              <Icon name="alert-triangle" size={16} />
+            </span>
+            <span>{notice}</span>
+          </div>
+        )}
         <div className="form-group">
           <label htmlFor="login-email">E-mail</label>
           <input

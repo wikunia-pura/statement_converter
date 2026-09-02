@@ -115,6 +115,9 @@ const App: React.FC = () => {
   const [appVersion, setAppVersion] = useState<string>('1.0.0');
   const [session, setSession] = useState<{ email: string; userId: string } | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
+  // True when the session ended by expiring rather than by the user signing
+  // out — the login screen then says so instead of appearing out of nowhere.
+  const [sessionExpired, setSessionExpired] = useState(false);
   // Funky intro shown once when the app opens; self-dismisses after its animation.
   const [showSplash, setShowSplash] = useState(true);
   // Release notes: the version this machine has already been shown. Undefined
@@ -130,20 +133,40 @@ const App: React.FC = () => {
       try {
         const s = await window.electronAPI.authGetSession();
         setSession(s);
+        // Started with no session: was it an expiry or a sign-out? The user is
+        // owed that difference — an expiry is the app's fault, not theirs.
+        if (!s && (await window.electronAPI.authConsumeExpiryNotice())) {
+          setSessionExpired(true);
+        }
       } finally {
         setSessionChecked(true);
       }
     })();
   }, []);
 
+  // A session can also die mid-work: the refresh token expires or gets revoked,
+  // or the machine sleeps through its whole lifetime. Main announces it the
+  // moment it happens — before this, the app went on looking logged in while
+  // every read from the cloud came back empty and surfaced as a data error
+  // ("Bank not found"), and only a manual re-login fixed it.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.electronAPI) return;
+    return window.electronAPI.onSessionExpired(() => {
+      setSession(null);
+      setSessionExpired(true);
+    });
+  }, []);
+
   const handleSignOut = async () => {
     await window.electronAPI.authSignOut();
     setSession(null);
+    setSessionExpired(false);
   };
 
   const handleSignedIn = async () => {
     const s = await window.electronAPI.authGetSession();
     setSession(s);
+    setSessionExpired(false);
   };
 
   const loadAppVersion = async () => {
@@ -224,7 +247,10 @@ const App: React.FC = () => {
       <NotificationProvider errorTitle={t.error} okLabel="OK" cancelLabel={t.cancel} dismissLabel={t.close}>
         {splash}
         <div className="app">
-          <Login onSignedIn={handleSignedIn} />
+          <Login
+            onSignedIn={handleSignedIn}
+            notice={sessionExpired ? t.sessionExpiredNotice : null}
+          />
         </div>
       </NotificationProvider>
     );

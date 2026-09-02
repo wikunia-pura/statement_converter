@@ -449,6 +449,10 @@ interface ElectronAPI {
   ) => Promise<{ ok: true; session: { email: string; userId: string } } | { ok: false; error: string }>;
   authSignOut: () => Promise<void>;
   authGetSession: () => Promise<{ email: string; userId: string } | null>;
+  /** True when the last session ended by expiring rather than by signing out. */
+  authConsumeExpiryNotice: () => Promise<boolean>;
+  /** Fires when the session dies mid-work; the app returns to the login screen. */
+  onSessionExpired: (callback: (info: { message: string }) => void) => () => void;
 
   // App info
   getAppVersion: () => Promise<string>;

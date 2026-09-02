@@ -17,6 +17,10 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
   const [platform, setPlatform] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [macReleaseOpened, setMacReleaseOpened] = useState(false);
+  // Shown when the user waves the update away: they get told once, plainly,
+  // what running an old build risks. Main re-checks every hour, so the card
+  // comes back on its own until the update is actually installed.
+  const [showRequiredNotice, setShowRequiredNotice] = useState(false);
 
   useEffect(() => {
     // Listen for update events. Each subscription returns an unsubscribe fn;
@@ -29,6 +33,9 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
         console.log('Update available:', info);
         setUpdateAvailable(true);
         setUpdateInfo(info);
+        // An hourly re-announcement puts the offer back on screen rather than
+        // the warning the user has already read.
+        setShowRequiredNotice(false);
       }),
       window.electronAPI.onUpdateDownloaded((info: any) => {
         console.log('Update downloaded:', info);
@@ -96,7 +103,22 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
     setUpdateAvailable(false);
     setUpdateDownloaded(false);
     setMacReleaseOpened(false);
+    setShowRequiredNotice(false);
     setError('');
+  };
+
+  /**
+   * "Później" on a pending update. The update is not optional — an old build
+   * writes accounting files against yesterday's rules — so instead of silently
+   * closing, the card turns into the warning and offers the update again.
+   */
+  const handleLater = () => {
+    setShowRequiredNotice(true);
+  };
+
+  const handleUpdateNow = () => {
+    setShowRequiredNotice(false);
+    void handleDownload();
   };
 
   if (!updateAvailable && !updateDownloaded && !error && !macReleaseOpened) {
@@ -105,7 +127,32 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
 
   return (
     <div className="update-notification">
-      {macReleaseOpened ? (
+      {showRequiredNotice ? (
+        <div className="update-content update-required">
+          <div className="update-icon" style={{ color: 'var(--warning)' }}>
+            <Icon name="alert-triangle" size={24} />
+          </div>
+          <div className="update-text">
+            <strong>{t.updateRequiredTitle}</strong>
+            <p>{t.updateRequiredMessage}</p>
+          </div>
+          <div className="update-actions">
+            {updateDownloaded && platform !== 'win32' ? (
+              <button className="button button-primary" onClick={handleOpenDownloads}>
+                <Icon name="folder" size={14} />{' '}
+                {language === 'pl' ? 'Otwórz folder Pobrane' : 'Open Downloads'}
+              </button>
+            ) : (
+              <button className="button button-primary" onClick={handleUpdateNow}>
+                <Icon name="download" size={14} />{' '}{t.updateNow}
+              </button>
+            )}
+            <button className="button button-secondary" onClick={handleDismiss}>
+              <Icon name="x" size={14} />{' '}{t.updateLaterAnyway}
+            </button>
+          </div>
+        </div>
+      ) : macReleaseOpened ? (
         <div className="update-content">
           <div className="update-icon" style={{ color: 'var(--success)' }}><Icon name="sparkles" size={24} /></div>
           <div className="update-text">
@@ -143,7 +190,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
                 <Icon name="folder" size={14} />{' '}{language === 'pl' ? 'Otwórz folder Pobrane' : 'Open Downloads'}
               </button>
             )}
-            <button className="button button-secondary" onClick={handleDismiss}>
+            <button className="button button-secondary" onClick={handleLater}>
               <Icon name="x" size={14} />{' '}{t.later}
             </button>
           </div>
@@ -168,8 +215,8 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
                 <button className="button button-primary" onClick={handleDownload}>
                   <Icon name="download" size={14} />{' '}{isMac ? t.openDownloadPage : t.download}
                 </button>
-                <button className="button button-secondary" onClick={handleDismiss}>
-                  <Icon name="x" size={14} />{' '}{t.skip}
+                <button className="button button-secondary" onClick={handleLater}>
+                  <Icon name="x" size={14} />{' '}{t.later}
                 </button>
               </>
             )}

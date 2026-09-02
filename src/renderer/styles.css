@@ -2262,6 +2262,12 @@ body.dark-mode .bank-illustration-svg {
   color: var(--danger);
 }
 
+/* "Aktualizacja jest konieczna" — the card the user gets for choosing Później.
+   Warning-toned, so it reads as a consequence rather than another offer. */
+.update-required .update-text strong {
+  color: var(--warning);
+}
+
 /* ==========================================================================
    Zaliczki status banner + edit-table
    ========================================================================== */

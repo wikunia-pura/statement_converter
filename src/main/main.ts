@@ -19,6 +19,11 @@ import {
 import { runAutoBackup, getBackupStatus, getBackupsDir, validateBackup } from './backupService';
 import { conversionCache } from './conversionCache';
 import * as authService from './authService';
+import {
+  consumeSessionExpiryNotice,
+  onSessionLost,
+  SESSION_EXPIRED_MESSAGE,
+} from './supabaseClient';
 import { formatApartmentMappingLine, parseApartmentMappingLine } from '../shared/apartment-mapping';
 import { extractPdfText } from '../shared/pdf-utils';
 import { sanitizeForFilename } from '../shared/outputPaths';
@@ -60,6 +65,18 @@ const DEV_SERVER_PORT = 3000;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 
 let mainWindow: BrowserWindow | null = null;
+
+// How often the app re-checks for a new version while the user works. A single
+// check at startup was not enough: this app runs for days at a time, and a
+// user who never restarts never learned that a fix had shipped.
+const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+
+/**
+ * Set once a download is under way (or finished). Suspends the hourly check so
+ * it can't interrupt an install that is already happening; cleared on an
+ * updater error so a failed download doesn't silence the reminder for good.
+ */
+let updateDownloadStarted = false;
 let database: DatabaseService;
 let converterRegistry: ConverterRegistry;
 
@@ -1650,6 +1667,11 @@ function setupIpcHandlers() {
     IPC_CHANNELS.CONVERT_FILE,
     async (_, inputPath: string, bankId: number, fileName: string, adresId?: number | null, accountTypeId?: number | null) => {
       try {
+        // Nothing here works without a session: the bank, address and
+        // contractor lookups all live in Supabase, and an unauthorized read
+        // used to come back empty and surface as "Bank not found".
+        await authService.requireSession();
+
         // Validate input file exists
         if (!fs.existsSync(inputPath)) {
           throw new Error('Input file not found');
@@ -1773,6 +1795,11 @@ function setupIpcHandlers() {
     'files:analyze',
     async (_, inputPath: string, bankId: number, adresId?: number | null) => {
       try {
+        // Nothing here works without a session: the bank, address and
+        // contractor lookups all live in Supabase, and an unauthorized read
+        // used to come back empty and surface as "Bank not found".
+        await authService.requireSession();
+
         const bank = await database.getBankById(bankId);
         if (!bank) {
           throw new Error('Bank not found');
@@ -1809,6 +1836,11 @@ function setupIpcHandlers() {
         }
       };
       try {
+        // Nothing here works without a session: the bank, address and
+        // contractor lookups all live in Supabase, and an unauthorized read
+        // used to come back empty and surface as "Bank not found".
+        await authService.requireSession();
+
         if (!fs.existsSync(inputPath)) {
           throw new Error('Input file not found');
         }
@@ -2456,6 +2488,7 @@ function setupIpcHandlers() {
       return { success: true, openedRelease: true };
     }
     try {
+      updateDownloadStarted = true;
       const downloadPath = await autoUpdater.downloadUpdate();
       const downloadsFolder = app.getPath('downloads');
       return {
@@ -2464,6 +2497,7 @@ function setupIpcHandlers() {
         message: 'Update downloaded to Downloads folder'
       };
     } catch (error) {
+      updateDownloadStarted = false;
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   });
@@ -2731,6 +2765,12 @@ function setupIpcHandlers() {
   ipcMain.handle(IPC_CHANNELS.AUTH_GET_SESSION, async () => {
     return authService.getSession();
   });
+
+  // Asked by the login screen when it opens with no session: was the user
+  // logged out by an expiry (worth explaining) or by their own click?
+  ipcMain.handle(IPC_CHANNELS.AUTH_CONSUME_EXPIRY_NOTICE, () => {
+    return consumeSessionExpiryNotice();
+  });
 }
 
 function setupAutoUpdater() {
@@ -2760,6 +2800,19 @@ function setupAutoUpdater() {
   // Check for updates on app start (only in production)
   if (app.isPackaged) {
     log.info('App is packaged, will check for updates in 3 seconds');
+    // …and every hour after that, for as long as the app stays open. The
+    // renderer's own dialog reports the result, so this uses the plain check
+    // rather than checkForUpdatesAndNotify() and its hourly OS notification.
+    setInterval(() => {
+      if (updateDownloadStarted) {
+        log.info('[UPDATE] Hourly check skipped — download already under way');
+        return;
+      }
+      log.info('[UPDATE] Hourly check for a new version');
+      autoUpdater.checkForUpdates().catch((err) => {
+        log.error('[UPDATE] Hourly check failed:', err);
+      });
+    }, UPDATE_CHECK_INTERVAL_MS);
     setTimeout(() => {
       log.info('Starting auto-update check...');
       // macOS: niepodpisana aplikacja — używamy tylko checkForUpdates (bez Notify),
@@ -2808,6 +2861,7 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('update-downloaded', (info) => {
+    updateDownloadStarted = true;
     log.info('=== Update downloaded successfully ===');
     log.info('Version:', info.version);
     const downloadsFolder = app.getPath('downloads');
@@ -2836,6 +2890,8 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('error', (err) => {
+    // A failed download must not mute the hourly reminder for the rest of the day.
+    updateDownloadStarted = false;
     log.error('=== Update error ===');
     log.error('Error message:', err.message);
     log.error('Error stack:', err.stack);
@@ -2846,6 +2902,33 @@ function setupAutoUpdater() {
       mainWindow.webContents.send('update-error', err.message);
     }
   });
+}
+
+/**
+ * Tell the renderer the moment the Supabase session stops being usable.
+ *
+ * Until this existed, a dead session was invisible: the sidebar still showed
+ * "Wyloguj (email)", while every cloud read came back empty and surfaced as a
+ * nonsense data error ("Bank not found"). Re-logging in fixed it, which is
+ * exactly the instruction the app now gives instead of leaving it to guesswork.
+ */
+function setupSessionWatch() {
+  onSessionLost(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const notify = () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('auth:session-expired', { message: SESSION_EXPIRED_MESSAGE });
+      }
+    };
+    // A send into a page that is still loading goes nowhere, and there is only
+    // ever one report per lost session — so wait for the page instead.
+    if (mainWindow.webContents.isLoading()) {
+      mainWindow.webContents.once('did-finish-load', notify);
+    } else {
+      notify();
+    }
+  });
+  authService.watchSessionLoss();
 }
 
 app.whenReady().then(() => {
@@ -2868,6 +2951,7 @@ app.whenReady().then(() => {
   
   setupIpcHandlers();
   setupAutoUpdater();
+  setupSessionWatch();
   createWindow();
 
   // Anthropic key lives in Supabase (app_config), not in the public binaries.

@@ -84,6 +84,97 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '6.6.0',
+    date: '2026-09-02',
+    title: 'Wygasła sesja mówi, że wygasła — i aktualizacje sprawdzane co godzinę',
+    tagline:
+      'Dwie rzeczy, które do tej pory trzeba było odgadywać. Pierwsza: gdy logowanie do chmury wygaśnie w trakcie pracy, aplikacja nie udaje już, że wszystko jest w porządku — wraca na ekran logowania i pisze wprost, co się stało. Wcześniej wyglądała na zalogowaną, a operacje kończyły się błędami w rodzaju „Bank not found”, które nie miały nic wspólnego z prawdziwą przyczyną, i pomagało dopiero przelogowanie. Druga: nowa wersja jest wyszukiwana nie tylko przy uruchomieniu, ale też raz na godzinę przy włączonej aplikacji, a „Później” wyjaśnia teraz, czym grozi zostanie na starej wersji.',
+    stats: [
+      { value: 'co godzinę', label: 'sprawdzanie nowej wersji' },
+      { value: 'komunikat', label: 'zamiast błędu „Bank not found”' },
+      { value: '0', label: 'pustych kopii zapasowych' },
+    ],
+    highlights: [
+      {
+        id: 'wygasla-sesja-komunikat',
+        kind: 'fixed',
+        icon: 'shield',
+        title: 'Wygasła sesja zamiast błędu „Bank not found”',
+        summary:
+          'Kiedy logowanie do chmury przestaje być ważne, aplikacja przerywa pracę, wraca na ekran logowania i wyjaśnia dlaczego — zamiast pokazywać błędy, które sugerują zepsute dane.',
+        details: [
+          'Wspólne dane — banki, adresy, kontrahenci, historia, kalendarz — leżą w chmurze i są widoczne tylko dla zalogowanego użytkownika. Po wygaśnięciu sesji baza nie zwracała błędu, tylko pustą odpowiedź, więc aplikacja czytała to jako „takiego banku nie ma” i pisała „Bank not found”. Nic nie było zepsute: brakowało wyłącznie ważnego logowania, dlatego przelogowanie natychmiast pomagało.',
+          'Teraz każde zapytanie bez ważnej sesji jest zatrzymywane z polskim komunikatem, a aplikacja przestaje udawać zalogowaną: znika menu boczne z „Wyloguj”, a na jego miejsce wraca ekran logowania z żółtą ramką i wyjaśnieniem.',
+          'Konwersja pliku sprawdza sesję jeszcze przed odczytem banku, więc o wygaśnięciu dowiadujesz się od razu po wrzuceniu pliku, a nie w połowie przetwarzania.',
+        ],
+        where: ['Ekran logowania'],
+        steps: [
+          {
+            do: 'Pracuj normalnie. Jeśli sesja wygaśnie, aplikacja sama wróci na ekran logowania.',
+            then: 'Nad polami e-mail i hasło pojawi się żółta ramka: „Sesja wygasła i aplikacja wylogowała Cię automatycznie…”.',
+          },
+          {
+            do: 'Wpisz e-mail i hasło, kliknij „Zaloguj”.',
+            then: 'Wracasz do aplikacji, dane z chmury znów się wczytują, a ramka znika.',
+          },
+          {
+            do: 'Jeśli komunikat zastał Cię w trakcie konwersji, wrzuć plik ponownie po zalogowaniu.',
+            then: 'Konwersja przechodzi normalnie — przerwana próba nie zapisała pliku księgowego ani wpisu w historii.',
+          },
+        ],
+        expect: [
+          'Ten sam komunikat zobaczysz przy uruchomieniu aplikacji, jeśli sesja wygasła między jednym a drugim otwarciem.',
+          'Kliknięcie „Wyloguj” samodzielnie nie pokazuje żadnego ostrzeżenia — to Twoja decyzja, nie awaria.',
+          'Automatyczna kopia zapasowa nie zapisze się już jako pusta, gdy zabraknie sesji: zamiast pliku bez danych zostaje ostrzeżenie w logu (Ustawienia → „Otwórz folder logów”).',
+        ],
+        note: {
+          type: 'tip',
+          text: 'Jeśli komunikat wraca zaraz po każdym zalogowaniu, sprawdź datę i godzinę na komputerze — przesunięty zegar potrafi unieważnić logowanie.',
+        },
+      },
+      {
+        id: 'aktualizacje-co-godzine',
+        kind: 'improved',
+        icon: 'refresh',
+        title: 'Sprawdzanie aktualizacji co godzinę, także w trakcie pracy',
+        summary:
+          'Nowa wersja jest wyszukiwana nie tylko przy uruchomieniu, ale też raz na godzinę, dopóki aplikacja jest włączona. A „Później” mówi wprost, czym grozi praca na starszej wersji.',
+        details: [
+          'Aplikację często zostawia się otwartą przez wiele dni. Do tej pory jedno sprawdzenie przy starcie oznaczało, że o poprawce wydanej w środę dowiadywałaś się w poniedziałek — albo dopiero przy zgłaszaniu błędu, który był już naprawiony.',
+          'Aktualizacja nie jest tu opcją estetyczną: pliki księgowe muszą pasować do bieżących zasad w DOM, a poprawki dotyczą też rozpoznawania wpłat i przypisywania mieszkań. Dlatego „Później” nie zamyka już okienka po cichu.',
+        ],
+        where: ['Okienko w prawym górnym rogu'],
+        steps: [
+          {
+            do: 'Pracuj normalnie. Gdy ukaże się nowa wersja, w prawym górnym rogu pojawi się okienko „Dostępna nowa wersja”.',
+            then: 'Zobaczysz numer nowej wersji oraz przyciski „Pobierz” i „Później”.',
+          },
+          {
+            do: 'Kliknij „Pobierz”, żeby zaktualizować od razu.',
+            then: 'Windows: aplikacja pobierze aktualizację, zainstaluje ją i uruchomi się ponownie. macOS: otworzy się strona z plikiem DMG i instrukcją.',
+          },
+          {
+            do: 'Kliknij „Później”, jeśli nie możesz teraz przerwać pracy.',
+            then: 'Okienko zmieni się w ostrzeżenie „Aktualizacja jest konieczna” z opisem, czym grozi zostanie na starszej wersji.',
+          },
+          {
+            do: 'W ostrzeżeniu wybierz „Aktualizuj teraz” albo „Rozumiem, pracuję dalej”.',
+            then: '„Rozumiem, pracuję dalej” zamyka okienko, ale przypomnienie wróci przy następnym sprawdzeniu — najpóźniej po godzinie.',
+          },
+        ],
+        expect: [
+          'Sprawdzanie działa w wersji zainstalowanej (nie w trybie deweloperskim) i nie wchodzi w drogę trwającemu pobieraniu — w jego czasie godzinowe przypomnienie milczy.',
+          'Nie musisz nic włączać: działa od tej wersji samo.',
+          'Przycisk „Sprawdź aktualizacje” w Ustawieniach nadal działa jak dotąd, gdy chcesz sprawdzić natychmiast.',
+        ],
+        note: {
+          type: 'warning',
+          text: 'Praca na starszej wersji może powodować niewłaściwe działanie aplikacji — błędy konwersji, brak nowych banków i poprawek. Widzisz ostrzeżenie? Zaktualizuj przy pierwszej okazji.',
+        },
+      },
+    ],
+  },
+  {
     version: '6.5.0',
     date: '2026-09-02',
     title: 'Dwa nowe ekrany: pulpit „Księgowania” i „Kalendarz”',

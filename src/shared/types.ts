@@ -877,4 +877,5 @@ export const IPC_CHANNELS = {
   AUTH_SIGN_IN: 'auth:sign-in',
   AUTH_SIGN_OUT: 'auth:sign-out',
   AUTH_GET_SESSION: 'auth:get-session',
+  AUTH_CONSUME_EXPIRY_NOTICE: 'auth:consume-expiry-notice',
 } as const;

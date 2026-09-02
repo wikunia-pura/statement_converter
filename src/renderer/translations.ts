@@ -334,6 +334,19 @@ export const translations = {
     openDownloadPage: 'Otwórz stronę pobrań',
     macUpdateInstructions: 'Pobierz nowy plik DMG, przeciągnij FileFunky do folderu Aplikacje, a następnie uruchom dołączony skrypt Zainstaluj.command (lub w Terminalu: xattr -cr /Applications/FileFunky.app).',
     macReleasePageOpened: 'Otworzyłem stronę z najnowszą wersją w przeglądarce.',
+    updateRequiredTitle: 'Aktualizacja jest konieczna',
+    updateRequiredMessage:
+      'Praca na starszej wersji może powodować niewłaściwe działanie aplikacji: błędy przy konwersji, ' +
+      'brak nowych banków i poprawek, pliki księgowe niezgodne z DOM. Zaktualizuj przy najbliższej ' +
+      'okazji — przypomnę się za godzinę.',
+    updateNow: 'Aktualizuj teraz',
+    updateLaterAnyway: 'Rozumiem, pracuję dalej',
+
+    // Sesja (logowanie do chmury)
+    sessionExpiredNotice:
+      'Sesja wygasła i aplikacja wylogowała Cię automatycznie. Bez zalogowania wspólne dane — banki, ' +
+      'adresy, kontrahenci, historia — są niedostępne, dlatego operacje mogły kończyć się błędem ' +
+      '(np. „Bank not found”). Zaloguj się ponownie, żeby wrócić do pracy.',
     
     // Transaction Review
     finalizeAndNext: 'Wygeneruj i przejdź dalej',
@@ -1350,6 +1363,19 @@ export const translations = {
     openDownloadPage: 'Open download page',
     macUpdateInstructions: 'Download the new DMG, drag FileFunky to the Applications folder, then run the bundled Zainstaluj.command script (or in Terminal: xattr -cr /Applications/FileFunky.app).',
     macReleasePageOpened: 'Opened the latest release page in your browser.',
+    updateRequiredTitle: 'This update is required',
+    updateRequiredMessage:
+      'Staying on an older version can make the app behave incorrectly: conversion errors, missing ' +
+      'banks and fixes, accounting files DOM will not accept. Update at your earliest convenience — ' +
+      'this reminder comes back in an hour.',
+    updateNow: 'Update now',
+    updateLaterAnyway: 'Understood, keep working',
+
+    // Session (cloud sign-in)
+    sessionExpiredNotice:
+      'Your session expired and the app signed you out automatically. Without a session the shared ' +
+      'data — banks, addresses, contractors, history — cannot be read, which is why operations may ' +
+      'have failed (e.g. "Bank not found"). Sign in again to carry on.',
     
     // Transaction Review
     finalizeAndNext: 'Generate & next',

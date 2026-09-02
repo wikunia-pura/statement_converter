@@ -70,6 +70,14 @@ export interface MailingDraft {
   loadedFromTemplateId: number | null;
   /** True once the text differs from the template — drives the "edited" hint. */
   edited: boolean;
+  /**
+   * The meeting this send belongs to, when the user came here from a meeting's
+   * "wyślij dokumenty". Travels through to every history row the send writes,
+   * which is what lets the meeting list what actually went out for it.
+   */
+  spotkanieId?: number | null;
+  /** The meeting's name, for the banner that says where this draft came from. */
+  spotkanieNazwa?: string | null;
 }
 
 export const emptyMailingDraft: MailingDraft = {
@@ -84,6 +92,8 @@ export const emptyMailingDraft: MailingDraft = {
   tresc: '',
   loadedFromTemplateId: null,
   edited: false,
+  spotkanieId: null,
+  spotkanieNazwa: null,
 };
 
 interface Props {
@@ -528,6 +538,9 @@ const Mailing: React.FC<Props> = ({
         tableFields: tableFieldNames,
         attachPdf,
         attachments: draft.attachments,
+        // Set when the draft came from a meeting's "wyślij dokumenty": every
+        // history row this send writes points back at the meeting.
+        spotkanieId: draft.spotkanieId ?? null,
       });
       if (response.error) {
         notify.error(`${t.mailingSendError}: ${response.error}`);
@@ -583,6 +596,27 @@ const Mailing: React.FC<Props> = ({
             <Icon name="alert-triangle" size={16} />
             {t.mailingSmtpNotConfigured}
           </div>
+        </div>
+      )}
+
+      {/* Where this draft came from, when it came from a meeting. Says it once,
+          at the top, because the send itself will be recorded against that
+          meeting and the user should know before pressing the button. */}
+      {draft.spotkanieId != null && (
+        <div className="mailing-from-meeting">
+          <Icon name="calendar" size={16} />
+          <span>
+            {t.mailingFromMeeting.replace('{name}', draft.spotkanieNazwa || '—')}
+          </span>
+          <button
+            type="button"
+            className="link-button"
+            onClick={() =>
+              setDraft((prev) => ({ ...prev, spotkanieId: null, spotkanieNazwa: null }))
+            }
+          >
+            {t.mailingFromMeetingClear}
+          </button>
         </div>
       )}
 

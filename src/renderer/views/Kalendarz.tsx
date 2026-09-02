@@ -1,5 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Adres, AppUser, Spotkanie, SpotkanieInput, SpotkanieTyp, SpotkanieUczestnik } from '../../shared/types';
+import {
+  Adres,
+  AppUser,
+  Spotkanie,
+  SpotkanieInput,
+  SpotkanieLokalizacja,
+  SpotkanieMailing,
+  SpotkanieTerminStatus,
+  SpotkanieTyp,
+  SpotkanieUczestnik,
+} from '../../shared/types';
 import { comparePeople, personLabel, personName } from '../../shared/app-users';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
@@ -17,8 +27,14 @@ import {
   formatTime,
   formatTimeRange,
   groupByDay,
+  countAlerts,
+  hasUnreadTerminChange,
+  isTerminWstepny,
+  lokalizacjaLabel,
   matchesSpotkanieSearch,
+  matchesStateFilter,
   matchesTypFilter,
+  SpotkanieStateFilter,
   monthLabel,
   monthOfDayKey,
   monthsWithSpotkania,
@@ -48,6 +64,18 @@ interface Props {
   userEmail?: string;
   /** Jump to the module's "Typy spotkań" tab. */
   onManageTypes?: () => void;
+  /** Jump to the module's "Lokalizacje" tab. */
+  onManagePlaces?: () => void;
+  /**
+   * Hand a meeting over to the Mailing module. Deliberately not the mailing
+   * draft itself: the calendar knows which meeting and which community, and
+   * nothing about how a mailing is composed.
+   */
+  onSendDocuments?: (context: {
+    spotkanieId: number;
+    spotkanieNazwa: string;
+    adresIds: number[];
+  }) => void;
 }
 
 /** How many meetings a day cell shows before collapsing into "+N". */
@@ -77,6 +105,7 @@ interface FormProps {
   /** Day the form opens on (`YYYY-MM-DD`) — the cell the user clicked. */
   defaultDay: string;
   typy: SpotkanieTyp[];
+  lokalizacje: SpotkanieLokalizacja[];
   adresy: Adres[];
   users: AppUser[];
   userEmail?: string;
@@ -85,6 +114,7 @@ interface FormProps {
   onSubmit: (input: SpotkanieInput) => void;
   onCancel: () => void;
   onManageTypes?: () => void;
+  onManagePlaces?: () => void;
 }
 
 const SpotkanieFormModal: React.FC<FormProps> = ({
@@ -92,6 +122,7 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
   editing,
   defaultDay,
   typy,
+  lokalizacje,
   adresy,
   users,
   userEmail,
@@ -100,6 +131,7 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
   onSubmit,
   onCancel,
   onManageTypes,
+  onManagePlaces,
 }) => {
   const t = translations[language];
   const startParts = toParts(editing?.startsAt ?? null);
@@ -132,6 +164,17 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
     editing ? endParts.time : shiftTime(DEFAULT_START, 60),
   );
   const [opis, setOpis] = useState(editing?.opis ?? '');
+  const [lokalizacjaId, setLokalizacjaId] = useState(
+    editing?.lokalizacjaId != null ? String(editing.lokalizacjaId) : '',
+  );
+  /**
+   * Confirmed or still being agreed. A new meeting starts confirmed — that is
+   * what most of them are, and calling every fresh entry tentative would make
+   * the mark meaningless by the end of the first week.
+   */
+  const [terminStatus, setTerminStatus] = useState<SpotkanieTerminStatus>(
+    editing?.terminStatus ?? 'potwierdzony',
+  );
   const [uczestnicy, setUczestnicy] = useState<SpotkanieUczestnik[]>(editing?.uczestnicy ?? []);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -214,6 +257,7 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
       return;
     }
     const adres = adresy.find((a) => String(a.id) === adresId) ?? null;
+    const lokalizacja = lokalizacje.find((l) => String(l.id) === lokalizacjaId) ?? null;
     onSubmit({
       nazwa: name,
       typId: typId ? Number(typId) : null,
@@ -221,10 +265,13 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
       // The name travels with the meeting: a restore renumbers the addresses,
       // and this is what the link is re-pointed through afterwards.
       adresNazwa: adres ? adres.nazwa : '',
+      lokalizacjaId: lokalizacja ? lokalizacja.id : null,
+      lokalizacjaNazwa: lokalizacja ? lokalizacja.nazwa : '',
       startsAt,
       endsAt,
       opis: opis.trim(),
       uczestnicy,
+      terminStatus,
     });
   };
 
@@ -344,6 +391,67 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
                 {t.kalFieldTimeToHint}
               </div>
             </div>
+          </div>
+
+          {/* Is that date settled? Two radios rather than a checkbox: "wstępny"
+              is a real state somebody chose, not the absence of a tick. */}
+          <div className="form-group">
+            <label>{t.kalFieldTermin}</label>
+            <div className="kal-termin-choice">
+              {(['potwierdzony', 'wstepny'] as SpotkanieTerminStatus[]).map((value) => (
+                <label
+                  key={value}
+                  className={`kal-termin-option${terminStatus === value ? ' is-active' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="kal-termin-status"
+                    value={value}
+                    checked={terminStatus === value}
+                    onChange={() => setTerminStatus(value)}
+                  />
+                  <Icon name={value === 'potwierdzony' ? 'check-circle' : 'clock'} size={14} />
+                  <span>{value === 'potwierdzony' ? t.kalTerminConfirmed : t.kalTerminTentative}</span>
+                </label>
+              ))}
+            </div>
+            <div style={{ fontSize: '11px', opacity: 0.65, marginTop: '4px' }}>
+              {t.kalFieldTerminHint}
+            </div>
+          </div>
+
+          {/* Where. Picked from the dictionary, never typed — three spellings of
+              one address is exactly what the dictionary exists to prevent. */}
+          <div className="form-group">
+            <div className="kal-label-row">
+              <label>{t.kalFieldPlace}</label>
+              {onManagePlaces && (
+                <button type="button" className="link-button" onClick={onManagePlaces}>
+                  {t.kalManagePlaces}
+                </button>
+              )}
+            </div>
+            {lokalizacje.length === 0 ? (
+              <div style={{ fontSize: '12px', opacity: 0.7 }}>{t.kalNoPlaces}</div>
+            ) : (
+              <SearchableSelect
+                value={lokalizacjaId}
+                options={[
+                  { value: '', label: t.kalNoPlaceOption },
+                  ...lokalizacje.map((lok) => ({
+                    value: String(lok.id),
+                    label: lok.nazwa,
+                    hint: lok.adres || undefined,
+                    keywords: `${lok.nazwa} ${lok.adres} ${lok.opis}`,
+                  })),
+                ]}
+                onChange={setLokalizacjaId}
+                placeholder={t.kalPlacePlaceholder}
+                searchPlaceholder={t.kalPlaceSearch}
+                emptyText={t.kalPlaceNoMatch}
+                ariaLabel={t.kalFieldPlace}
+              />
+            )}
           </div>
 
           <div className="form-group">
@@ -474,25 +582,70 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
 const MeetingCard: React.FC<{
   spotkanie: Spotkanie;
   typ: SpotkanieTyp | null;
+  /** Resolved place name — the live dictionary entry, or the snapshot. */
+  place: string;
+  /** Mailings recorded against this meeting, newest first. */
+  mailings: SpotkanieMailing[];
   language: Language;
   locale: string;
   highlighted: boolean;
+  busy: boolean;
   onEdit: () => void;
   onDelete: () => void;
-}> = ({ spotkanie, typ, language, locale, highlighted, onEdit, onDelete }) => {
+  /** "I have seen that the date moved." */
+  onAckTermin: () => void;
+  /** Settle a tentative date, or put a settled one back to tentative. */
+  onTerminStatus: (status: SpotkanieTerminStatus) => void;
+  /** Tick or untick "documents sent", with a note of what went out. */
+  onDokumenty: (sent: boolean, opis: string) => void;
+  /** Hand this meeting to the Mailing module. Absent when it has no community. */
+  onSendMailing?: () => void;
+}> = ({
+  spotkanie,
+  typ,
+  place,
+  mailings,
+  language,
+  locale,
+  highlighted,
+  busy,
+  onEdit,
+  onDelete,
+  onAckTermin,
+  onTerminStatus,
+  onDokumenty,
+  onSendMailing,
+}) => {
   const t = translations[language];
   const when = spotkanieWhen(spotkanie);
   const color = normalizeHexColor(typ?.kolor ?? DEFAULT_TYP_COLOR);
+  const changed = hasUnreadTerminChange(spotkanie);
+  const tentative = isTerminWstepny(spotkanie);
+  const sent = !!spotkanie.dokumentyWyslaneAt;
+  // Open only while the user is writing the note; a card is a summary, and this
+  // is the one thing on it that takes typing.
+  const [editingDocs, setEditingDocs] = useState(false);
+  const [docsOpis, setDocsOpis] = useState(spotkanie.dokumentyOpis);
 
   return (
     <article
-      className={`kal-card kal-card--${when} ${highlighted ? 'is-highlight' : ''}`}
+      className={
+        `kal-card kal-card--${when}` +
+        (highlighted ? ' is-highlight' : '') +
+        (changed ? ' is-changed' : '') +
+        (tentative ? ' is-tentative' : '')
+      }
       style={{ ['--chip' as string]: color }}
     >
       <div className="kal-card__head">
         <span className="kal-card__time">
           <Icon name="clock" size={13} /> {formatTimeRange(spotkanie, locale)}
         </span>
+        {tentative && (
+          <span className="status-badge kal-badge kal-badge--tentative">
+            <Icon name="clock" size={11} /> {t.kalTerminTentative}
+          </span>
+        )}
         {when === 'now' && <span className="status-badge kal-badge kal-badge--now">{t.kalNow}</span>}
         {when === 'today' && (
           <span className="status-badge kal-badge kal-badge--today">{t.kalTodayBadge}</span>
@@ -501,6 +654,36 @@ const MeetingCard: React.FC<{
           <span className="status-badge kal-badge kal-badge--past">{t.kalPast}</span>
         )}
       </div>
+
+      {/* The moved date, said out loud. Everyone wrote the old one down, so this
+          outranks everything else on the card until somebody acknowledges it. */}
+      {changed && (
+        <div className="kal-alert kal-alert--changed">
+          <Icon name="alert-triangle" size={15} />
+          <div className="kal-alert__body">
+            <strong>{t.kalTerminChangedTitle}</strong>
+            <span>
+              {spotkanie.terminZmienionyZ
+                ? t.kalTerminChangedFrom.replace(
+                    '{from}',
+                    formatStamp(spotkanie.terminZmienionyZ, locale),
+                  )
+                : t.kalTerminChangedNoPrevious}
+              {spotkanie.terminZmienionyBy
+                ? ` ${t.kalTerminChangedBy.replace('{who}', spotkanie.terminZmienionyBy)}`
+                : ''}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="button button-small button-warning"
+            onClick={onAckTermin}
+            disabled={busy}
+          >
+            <Icon name="check" size={13} /> {t.kalTerminAck}
+          </button>
+        </div>
+      )}
 
       <h4 className="kal-card__name">{spotkanie.nazwa}</h4>
 
@@ -511,7 +694,12 @@ const MeetingCard: React.FC<{
         </span>
         {spotkanie.adresNazwa && (
           <span className="kal-card__adres">
-            <Icon name="map-pin" size={13} /> {spotkanie.adresNazwa}
+            <Icon name="building" size={13} /> {spotkanie.adresNazwa}
+          </span>
+        )}
+        {place && (
+          <span className="kal-place">
+            <Icon name="map-pin" size={13} /> {place}
           </span>
         )}
       </div>
@@ -529,6 +717,120 @@ const MeetingCard: React.FC<{
         </div>
       )}
 
+      {/* Paperwork. Two ways in, one question answered: did it go out? */}
+      <div className="kal-docs">
+        <div className="kal-docs__head">
+          <span className={`kal-docs__state${sent ? ' is-sent' : ''}`}>
+            <Icon name={sent ? 'file-check' : 'file-text'} size={14} />
+            {sent ? t.kalDocsSent : t.kalDocsNotSent}
+          </span>
+          <div className="kal-docs__actions">
+            {!editingDocs && (
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => {
+                  setDocsOpis(spotkanie.dokumentyOpis);
+                  setEditingDocs(true);
+                }}
+                disabled={busy}
+              >
+                {sent ? t.kalDocsEdit : t.kalDocsMark}
+              </button>
+            )}
+            {onSendMailing && (
+              <button
+                type="button"
+                className="link-button"
+                onClick={onSendMailing}
+                disabled={busy}
+              >
+                {t.kalDocsSendMailing}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {sent && !editingDocs && (
+          <div className="kal-docs__note">
+            {spotkanie.dokumentyOpis && <p>{spotkanie.dokumentyOpis}</p>}
+            <span className="kal-docs__stamp">
+              {t.kalDocsStamp
+                .replace('{when}', formatStamp(spotkanie.dokumentyWyslaneAt ?? '', locale))
+                .replace('{who}', spotkanie.dokumentyWyslaneBy || '—')}
+            </span>
+          </div>
+        )}
+
+        {editingDocs && (
+          <div className="kal-docs__form">
+            <textarea
+              rows={2}
+              value={docsOpis}
+              placeholder={t.kalDocsPlaceholder}
+              onChange={(e) => setDocsOpis(e.target.value)}
+              autoFocus
+            />
+            <div className="kal-docs__form-actions">
+              <button
+                type="button"
+                className="button button-small button-primary"
+                onClick={() => {
+                  onDokumenty(true, docsOpis);
+                  setEditingDocs(false);
+                }}
+                disabled={busy}
+              >
+                <Icon name="check" size={13} /> {t.kalDocsSave}
+              </button>
+              <button
+                type="button"
+                className="button button-small button-secondary"
+                onClick={() => setEditingDocs(false)}
+                disabled={busy}
+              >
+                {t.cancel}
+              </button>
+              {sent && (
+                <button
+                  type="button"
+                  className="button button-small button-danger"
+                  onClick={() => {
+                    onDokumenty(false, '');
+                    setEditingDocs(false);
+                  }}
+                  disabled={busy}
+                >
+                  <Icon name="x" size={13} /> {t.kalDocsUndo}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* What the Mailing module actually sent for this meeting. The mailing
+            history stays the authority; this is its slim read-back. */}
+        {mailings.length > 0 && (
+          <ul className="kal-docs__mailings">
+            {mailings.map((m) => (
+              <li key={m.id} className={m.status === 'error' ? 'is-error' : undefined}>
+                <Icon name={m.status === 'error' ? 'alert-circle' : 'mail'} size={12} />
+                <span className="kal-docs__mailing-main">
+                  {m.templateName || m.subject || '—'}
+                  {m.jednostkaNazwa ? ` → ${m.jednostkaNazwa}` : ''}
+                </span>
+                <span className="kal-docs__mailing-when">{formatStamp(m.sentAt, locale)}</span>
+                {m.attachmentNames.length > 0 && (
+                  <span className="kal-docs__mailing-files" title={m.attachmentNames.join(', ')}>
+                    <Icon name="paperclip" size={11} /> {m.attachmentNames.length}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       <div className="kal-card__foot">
         {spotkanie.createdBy && (
           <span className="kal-card__author">
@@ -536,10 +838,29 @@ const MeetingCard: React.FC<{
           </span>
         )}
         <div className="kal-card__actions">
-          <button className="button button-small button-primary" onClick={onEdit}>
+          {tentative ? (
+            <button
+              className="button button-small button-warning"
+              onClick={() => onTerminStatus('potwierdzony')}
+              disabled={busy}
+              title={t.kalTerminConfirmHint}
+            >
+              <Icon name="check-circle" size={13} /> {t.kalTerminConfirm}
+            </button>
+          ) : (
+            <button
+              className="button button-small button-secondary"
+              onClick={() => onTerminStatus('wstepny')}
+              disabled={busy}
+              title={t.kalTerminUnconfirmHint}
+            >
+              <Icon name="clock" size={13} /> {t.kalTerminUnconfirm}
+            </button>
+          )}
+          <button className="button button-small button-primary" onClick={onEdit} disabled={busy}>
             <Icon name="edit" size={13} /> {t.edit}
           </button>
-          <button className="button button-small button-danger" onClick={onDelete}>
+          <button className="button button-small button-danger" onClick={onDelete} disabled={busy}>
             <Icon name="trash" size={13} /> {t.delete}
           </button>
         </div>
@@ -565,6 +886,8 @@ const Kalendarz: React.FC<Props> = ({
   setMonthKey,
   userEmail,
   onManageTypes,
+  onManagePlaces,
+  onSendDocuments,
 }) => {
   const t = translations[language];
   const notify = useNotify();
@@ -572,6 +895,8 @@ const Kalendarz: React.FC<Props> = ({
 
   const [spotkania, setSpotkania] = useState<Spotkanie[]>([]);
   const [typy, setTypy] = useState<SpotkanieTyp[]>([]);
+  const [lokalizacje, setLokalizacje] = useState<SpotkanieLokalizacja[]>([]);
+  const [mailingi, setMailingi] = useState<SpotkanieMailing[]>([]);
   const [adresy, setAdresy] = useState<Adres[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -581,6 +906,14 @@ const Kalendarz: React.FC<Props> = ({
   const [formError, setFormError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [typFilter, setTypFilter] = useState<number | null>(null);
+  /**
+   * The other axis of filtering: not "what kind of meeting" but "what still
+   * needs doing about it" — a moved date nobody has acknowledged, or a date
+   * that was never settled.
+   */
+  const [stateFilter, setStateFilter] = useState<SpotkanieStateFilter>('all');
+  /** Meeting id being written to, so its own buttons disable and nothing else does. */
+  const [busyId, setBusyId] = useState<number | null>(null);
   const [selectedDay, setSelectedDay] = useState<string>(todayKey());
   // Set when a chip in the grid is clicked, so the panel says which of the day's
   // meetings the user actually pointed at.
@@ -617,17 +950,29 @@ const Kalendarz: React.FC<Props> = ({
     if (silent) setIsRefreshing(true);
     else setIsLoading(true);
     try {
-      const [spotkaniaData, typyData, adresyData, usersData, settings] = await Promise.all([
+      const [
+        spotkaniaData,
+        typyData,
+        lokalizacjeData,
+        adresyData,
+        usersData,
+        mailingiData,
+        settings,
+      ] = await Promise.all([
         window.electronAPI.getSpotkania(),
         window.electronAPI.getSpotkaniaTypy(),
+        window.electronAPI.getSpotkaniaLokalizacje(),
         window.electronAPI.getAdresy(),
         window.electronAPI.getAppUsers(),
+        window.electronAPI.getSpotkaniaMailingi(),
         window.electronAPI.getSettings(),
       ]);
       setSpotkania(spotkaniaData);
       setTypy(typyData);
+      setLokalizacje(lokalizacjeData);
       setAdresy(adresyData);
       setUsers(usersData);
+      setMailingi(mailingiData);
       setHoverCard(settings.calendarHoverCard ?? false);
     } catch (err) {
       notify.error(t.kalLoadError);
@@ -642,10 +987,33 @@ const Kalendarz: React.FC<Props> = ({
   const filtered = useMemo(
     () =>
       spotkania.filter(
-        (s) => matchesTypFilter(s, typFilter) && matchesSpotkanieSearch(s, typy, search),
+        (s) =>
+          matchesTypFilter(s, typFilter) &&
+          matchesStateFilter(s, stateFilter) &&
+          matchesSpotkanieSearch(s, typy, search),
       ),
-    [spotkania, typy, typFilter, search],
+    [spotkania, typy, typFilter, stateFilter, search],
   );
+
+  /**
+   * What the strip above the month announces, counted over the month on screen
+   * rather than the whole database — the answer should be about the month you
+   * are looking at.
+   */
+  const alerts = useMemo(() => countAlerts(spotkaniaInMonth(spotkania, monthKey)), [
+    spotkania,
+    monthKey,
+  ]);
+
+  const mailingiBySpotkanie = useMemo(() => {
+    const map = new Map<number, SpotkanieMailing[]>();
+    for (const m of mailingi) {
+      const bucket = map.get(m.spotkanieId);
+      if (bucket) bucket.push(m);
+      else map.set(m.spotkanieId, [m]);
+    }
+    return map;
+  }, [mailingi]);
 
   // The month bar and "coming up" describe what is actually scheduled, so they
   // ignore the search and the type filter — a filter that hid everything would
@@ -755,6 +1123,60 @@ const Kalendarz: React.FC<Props> = ({
     }
   };
 
+  /**
+   * One wrapper for the small per-meeting writes: they all set the same busy
+   * flag, reload the same way, and report the same failure. Reloads rather than
+   * patching state in place — the meetings are shared, and the row may have
+   * moved under us while the card was on screen.
+   */
+  const runOnMeeting = async (id: number, action: () => Promise<unknown>, done: string) => {
+    setBusyId(id);
+    try {
+      await action();
+      await load(true);
+      notify.success(done);
+    } catch (err: unknown) {
+      notify.error(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleAckTermin = (spotkanie: Spotkanie) =>
+    runOnMeeting(
+      spotkanie.id,
+      () => window.electronAPI.ackSpotkanieTermin(spotkanie.id),
+      t.kalTerminAckDone,
+    );
+
+  const handleTerminStatus = (spotkanie: Spotkanie, status: SpotkanieTerminStatus) =>
+    runOnMeeting(
+      spotkanie.id,
+      () => window.electronAPI.setSpotkanieTerminStatus(spotkanie.id, status),
+      status === 'potwierdzony' ? t.kalTerminConfirmedDone : t.kalTerminTentativeDone,
+    );
+
+  const handleDokumenty = (spotkanie: Spotkanie, sent: boolean, opis: string) =>
+    runOnMeeting(
+      spotkanie.id,
+      () => window.electronAPI.setSpotkanieDokumenty(spotkanie.id, sent, opis),
+      sent ? t.kalDocsSavedDone : t.kalDocsUndoneDone,
+    );
+
+  /**
+   * Hand a meeting to the Mailing module. Only offered for a meeting with a
+   * community: a mailing goes to that community's city unit, so without one
+   * there is nobody to send to.
+   */
+  const handleSendMailing = (spotkanie: Spotkanie) => {
+    if (!onSendDocuments || spotkanie.adresId === null) return;
+    onSendDocuments({
+      spotkanieId: spotkanie.id,
+      spotkanieNazwa: spotkanie.nazwa,
+      adresIds: [spotkanie.adresId],
+    });
+  };
+
   /** Follow a meeting from the "coming up" list to its own day. */
   const goToSpotkanie = (spotkanie: Spotkanie) => {
     selectDay(toDayKey(spotkanie.startsAt), spotkanie.id);
@@ -782,7 +1204,7 @@ const Kalendarz: React.FC<Props> = ({
   if (typy.length > 0) facts.push(`${t.kalFactsTypes}: ${typy.length}`);
 
   return (
-    <div className="content-body">
+    <div className="content-body content-body--fill">
       <div className="kal">
         {/* ---------------------------- Month bar --------------------------- */}
         <header
@@ -851,6 +1273,44 @@ const Kalendarz: React.FC<Props> = ({
           </div>
         </header>
 
+        {/* ------------------------- What needs attention ------------------- */}
+        {(alerts.changed > 0 || alerts.tentative > 0) && (
+          <div className="kal-warnings">
+            {alerts.changed > 0 && (
+              <button
+                type="button"
+                className={`kal-warning kal-warning--changed${
+                  stateFilter === 'changed' ? ' is-active' : ''
+                }`}
+                onClick={() => setStateFilter(stateFilter === 'changed' ? 'all' : 'changed')}
+                aria-pressed={stateFilter === 'changed'}
+              >
+                <Icon name="alert-triangle" size={16} />
+                <span>
+                  {t.kalWarnChanged.replace('{count}', String(alerts.changed))}
+                </span>
+                <em>{stateFilter === 'changed' ? t.kalWarnShowAll : t.kalWarnShowThese}</em>
+              </button>
+            )}
+            {alerts.tentative > 0 && (
+              <button
+                type="button"
+                className={`kal-warning kal-warning--tentative${
+                  stateFilter === 'tentative' ? ' is-active' : ''
+                }`}
+                onClick={() => setStateFilter(stateFilter === 'tentative' ? 'all' : 'tentative')}
+                aria-pressed={stateFilter === 'tentative'}
+              >
+                <Icon name="clock" size={16} />
+                <span>
+                  {t.kalWarnTentative.replace('{count}', String(alerts.tentative))}
+                </span>
+                <em>{stateFilter === 'tentative' ? t.kalWarnShowAll : t.kalWarnShowThese}</em>
+              </button>
+            )}
+          </div>
+        )}
+
         {/* ----------------------------- Toolbar ---------------------------- */}
         <div className="ksieg-toolbar">
           <div className="ksieg-search">
@@ -895,6 +1355,34 @@ const Kalendarz: React.FC<Props> = ({
                 {typ.nazwa}
               </button>
             ))}
+
+            {/* The state filters sit with the type filters and narrow the same
+                thing they do: the month on screen and the day panel beside it.
+                The counters above are the month's too, so the strip and the
+                filter can never disagree about how many there are. */}
+            <span className="kal-filters__sep" aria-hidden="true" />
+            <button
+              type="button"
+              className={`kal-filter kal-filter--changed${
+                stateFilter === 'changed' ? ' is-active' : ''
+              }`}
+              onClick={() => setStateFilter(stateFilter === 'changed' ? 'all' : 'changed')}
+              aria-pressed={stateFilter === 'changed'}
+              title={t.kalFilterChangedHint}
+            >
+              <Icon name="alert-triangle" size={12} /> {t.kalFilterChanged}
+            </button>
+            <button
+              type="button"
+              className={`kal-filter kal-filter--tentative${
+                stateFilter === 'tentative' ? ' is-active' : ''
+              }`}
+              onClick={() => setStateFilter(stateFilter === 'tentative' ? 'all' : 'tentative')}
+              aria-pressed={stateFilter === 'tentative'}
+              title={t.kalFilterTentativeHint}
+            >
+              <Icon name="clock" size={12} /> {t.kalFilterTentative}
+            </button>
           </div>
 
           <button
@@ -976,7 +1464,11 @@ const Kalendarz: React.FC<Props> = ({
                             <button
                               key={s.id}
                               type="button"
-                              className="kal-chip kal-chip--button"
+                              className={
+                                'kal-chip kal-chip--button' +
+                                (hasUnreadTerminChange(s) ? ' is-changed' : '') +
+                                (isTerminWstepny(s) ? ' is-tentative' : '')
+                              }
                               style={{
                                 ['--chip' as string]: normalizeHexColor(
                                   typ?.kolor ?? DEFAULT_TYP_COLOR,
@@ -1009,6 +1501,10 @@ const Kalendarz: React.FC<Props> = ({
                               }}
                             >
                               <span className="kal-chip__dot" />
+                              {hasUnreadTerminChange(s) && (
+                                <Icon name="alert-triangle" size={11} />
+                              )}
+                              {isTerminWstepny(s) && <Icon name="clock" size={11} />}
                               <span className="kal-chip__time">
                                 {formatTime(s.startsAt, locale)}
                               </span>
@@ -1052,7 +1548,11 @@ const Kalendarz: React.FC<Props> = ({
               {dayMeetings.length === 0 ? (
                 <div className="kal-side__empty">
                   <Icon name="calendar" size={26} />
-                  <span>{searchActive || typFilter !== null ? t.kalNoResults : t.kalDayEmpty}</span>
+                  <span>
+                    {searchActive || typFilter !== null || stateFilter !== 'all'
+                      ? t.kalNoResults
+                      : t.kalDayEmpty}
+                  </span>
                 </div>
               ) : (
                 <div className="kal-side__list">
@@ -1061,11 +1561,22 @@ const Kalendarz: React.FC<Props> = ({
                       key={s.id}
                       spotkanie={s}
                       typ={typOf(s, typy)}
+                      place={lokalizacjaLabel(s, lokalizacje)}
+                      mailings={mailingiBySpotkanie.get(s.id) ?? []}
                       language={language}
                       locale={locale}
                       highlighted={highlightId === s.id}
+                      busy={busyId === s.id}
                       onEdit={() => openForm(toDayKey(s.startsAt), s)}
                       onDelete={() => void handleDelete(s)}
+                      onAckTermin={() => void handleAckTermin(s)}
+                      onTerminStatus={(status) => void handleTerminStatus(s, status)}
+                      onDokumenty={(sent, opis) => void handleDokumenty(s, sent, opis)}
+                      onSendMailing={
+                        onSendDocuments && s.adresId !== null
+                          ? () => handleSendMailing(s)
+                          : undefined
+                      }
                     />
                   ))}
                 </div>
@@ -1153,6 +1664,28 @@ const Kalendarz: React.FC<Props> = ({
               {tip.spotkanie.uczestnicy.map((person) => personLabel(person)).join(', ')}
             </div>
           )}
+          {lokalizacjaLabel(tip.spotkanie, lokalizacje) && (
+            <div className="kal-tip__line">
+              <Icon name="map-pin" size={12} />
+              {lokalizacjaLabel(tip.spotkanie, lokalizacje)}
+            </div>
+          )}
+          {isTerminWstepny(tip.spotkanie) && (
+            <div className="kal-tip__line kal-tip__line--warn">
+              <Icon name="clock" size={12} /> {t.kalTerminTentative}
+            </div>
+          )}
+          {hasUnreadTerminChange(tip.spotkanie) && (
+            <div className="kal-tip__line kal-tip__line--warn">
+              <Icon name="alert-triangle" size={12} />
+              {tip.spotkanie.terminZmienionyZ
+                ? t.kalTerminChangedFrom.replace(
+                    '{from}',
+                    formatStamp(tip.spotkanie.terminZmienionyZ, locale),
+                  )
+                : t.kalTerminChangedTitle}
+            </div>
+          )}
           {tip.spotkanie.opis && <p className="kal-tip__desc">{tip.spotkanie.opis}</p>}
           <div className="kal-tip__hint">{t.kalChipDoubleClick}</div>
         </div>
@@ -1167,6 +1700,7 @@ const Kalendarz: React.FC<Props> = ({
           editing={form.editing}
           defaultDay={form.day}
           typy={typy}
+          lokalizacje={lokalizacje}
           adresy={adresy}
           users={users}
           userEmail={userEmail}
@@ -1178,6 +1712,7 @@ const Kalendarz: React.FC<Props> = ({
             setFormError(null);
           }}
           onManageTypes={onManageTypes}
+          onManagePlaces={onManagePlaces}
         />
       )}
     </div>

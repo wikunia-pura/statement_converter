@@ -1,6 +1,6 @@
 // Type definitions for Electron API exposed via preload
 
-import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent, AppUser, SpotkanieTyp, Spotkanie, SpotkanieInput } from '../shared/types';
+import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent, AppUser, SpotkanieTyp, SpotkanieLokalizacja, Spotkanie, SpotkanieInput, SpotkanieMailing, SpotkanieTerminStatus } from '../shared/types';
 
 // Zaliczki shared types (referenced by the main-process helpers)
 export type ZaliczkiCategory =
@@ -408,6 +408,8 @@ interface ElectronAPI {
     tableFields: string[];
     attachPdf: boolean;
     attachments: { fileName: string; filePath: string }[];
+    /** The meeting this send was triggered from, recorded on every history row. */
+    spotkanieId?: number | null;
   }) => Promise<{ success?: boolean; results?: MailingSendResult[]; error?: string }>;
   mailingGetHistory: () => Promise<MailingHistoryEntry[]>;
   mailingClearHistory: () => Promise<boolean>;
@@ -443,6 +445,26 @@ interface ElectronAPI {
   addSpotkanie: (input: SpotkanieInput) => Promise<Spotkanie>;
   updateSpotkanie: (id: number, input: SpotkanieInput) => Promise<boolean>;
   deleteSpotkanie: (id: number) => Promise<boolean>;
+  /** "I have seen that this moved" — stops the meeting being marked as changed. */
+  ackSpotkanieTermin: (id: number) => Promise<boolean>;
+  setSpotkanieTerminStatus: (id: number, status: SpotkanieTerminStatus) => Promise<boolean>;
+  /** Tick or untick "documents sent", with a note of what went out. */
+  setSpotkanieDokumenty: (id: number, sent: boolean, opis: string) => Promise<boolean>;
+  /** Every Mailing send triggered from a meeting, newest first. */
+  getSpotkaniaMailingi: () => Promise<SpotkanieMailing[]>;
+  getSpotkaniaLokalizacje: () => Promise<SpotkanieLokalizacja[]>;
+  addSpotkanieLokalizacja: (
+    nazwa: string,
+    adres: string,
+    opis: string,
+  ) => Promise<SpotkanieLokalizacja>;
+  updateSpotkanieLokalizacja: (
+    id: number,
+    nazwa: string,
+    adres: string,
+    opis: string,
+  ) => Promise<boolean>;
+  deleteSpotkanieLokalizacja: (id: number) => Promise<boolean>;
 
   // Auth (Supabase)
   authSignIn: (

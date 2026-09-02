@@ -118,10 +118,18 @@ const IPC_CHANNELS = {
   ADD_SPOTKANIE_TYP: 'kalendarz:add-typ',
   UPDATE_SPOTKANIE_TYP: 'kalendarz:update-typ',
   DELETE_SPOTKANIE_TYP: 'kalendarz:delete-typ',
+  GET_SPOTKANIA_LOKALIZACJE: 'kalendarz:get-lokalizacje',
+  ADD_SPOTKANIE_LOKALIZACJA: 'kalendarz:add-lokalizacja',
+  UPDATE_SPOTKANIE_LOKALIZACJA: 'kalendarz:update-lokalizacja',
+  DELETE_SPOTKANIE_LOKALIZACJA: 'kalendarz:delete-lokalizacja',
   GET_SPOTKANIA: 'kalendarz:get-spotkania',
   ADD_SPOTKANIE: 'kalendarz:add-spotkanie',
   UPDATE_SPOTKANIE: 'kalendarz:update-spotkanie',
   DELETE_SPOTKANIE: 'kalendarz:delete-spotkanie',
+  ACK_SPOTKANIE_TERMIN: 'kalendarz:ack-termin',
+  SET_SPOTKANIE_TERMIN_STATUS: 'kalendarz:set-termin-status',
+  SET_SPOTKANIE_DOKUMENTY: 'kalendarz:set-dokumenty',
+  GET_SPOTKANIA_MAILINGI: 'kalendarz:get-mailingi',
   AUTH_SIGN_IN: 'auth:sign-in',
   AUTH_SIGN_OUT: 'auth:sign-out',
   AUTH_GET_SESSION: 'auth:get-session',
@@ -395,6 +403,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateSpotkanie: (id: number, input: import('../shared/types').SpotkanieInput) =>
     ipcRenderer.invoke(IPC_CHANNELS.UPDATE_SPOTKANIE, id, input),
   deleteSpotkanie: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_SPOTKANIE, id),
+  ackSpotkanieTermin: (id: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ACK_SPOTKANIE_TERMIN, id),
+  setSpotkanieTerminStatus: (id: number, status: 'potwierdzony' | 'wstepny') =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_SPOTKANIE_TERMIN_STATUS, id, status),
+  setSpotkanieDokumenty: (id: number, sent: boolean, opis: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_SPOTKANIE_DOKUMENTY, id, sent, opis),
+  getSpotkaniaMailingi: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SPOTKANIA_MAILINGI),
+  getSpotkaniaLokalizacje: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SPOTKANIA_LOKALIZACJE),
+  addSpotkanieLokalizacja: (nazwa: string, adres: string, opis: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ADD_SPOTKANIE_LOKALIZACJA, nazwa, adres, opis),
+  updateSpotkanieLokalizacja: (id: number, nazwa: string, adres: string, opis: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_SPOTKANIE_LOKALIZACJA, id, nazwa, adres, opis),
+  deleteSpotkanieLokalizacja: (id: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.DELETE_SPOTKANIE_LOKALIZACJA, id),
 
   // App info
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION),

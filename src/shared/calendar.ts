@@ -9,7 +9,7 @@
  * month-key helpers are re-exported here so both modules count months alike.
  */
 
-import { Spotkanie, SpotkanieTyp } from './types';
+import { Spotkanie, SpotkanieLokalizacja, SpotkanieTyp } from './types';
 
 export { monthKeyOf, currentMonthKey, shiftMonthKey, monthLabel } from './bookings';
 
@@ -155,6 +155,8 @@ export function matchesSpotkanieSearch(
     spotkanie.opis,
     spotkanie.createdBy,
     typ?.nazwa ?? '',
+    spotkanie.lokalizacjaNazwa,
+    spotkanie.dokumentyOpis,
     ...spotkanie.uczestnicy.flatMap((u) => [u.email, u.displayName ?? '']),
   ]
     .join(' ')
@@ -165,6 +167,85 @@ export function matchesSpotkanieSearch(
 /** `null` means "every type", including meetings whose type was deleted. */
 export function matchesTypFilter(spotkanie: Spotkanie, typId: number | null): boolean {
   return typId === null || spotkanie.typId === typId;
+}
+
+/* --------------------- Moved dates and tentative dates --------------------- */
+
+/**
+ * The two states a meeting's date can be in beyond "just a date", both of which
+ * mean somebody still has something to do about it:
+ *
+ *   `changed`   — the date moved and nobody has said they saw it,
+ *   `tentative` — the date was never settled in the first place.
+ *
+ * Both are answered the same way in the UI: a mark on the card, a filter, and a
+ * count in the warning strip above the month.
+ */
+export type SpotkanieStateFilter = 'all' | 'changed' | 'tentative';
+
+/**
+ * True while a moved date is still waiting to be acknowledged.
+ *
+ * The acknowledgement — not the move — is what clears this: the point of the
+ * mark is that a person has seen it, so an unread move stays loud however old
+ * it is, and a read one goes quiet however recent.
+ */
+export function hasUnreadTerminChange(spotkanie: Spotkanie): boolean {
+  return !!spotkanie.terminZmienionyAt && !spotkanie.terminZmianaOdczytanaAt;
+}
+
+/** True for a date that was never settled. */
+export function isTerminWstepny(spotkanie: Spotkanie): boolean {
+  return spotkanie.terminStatus === 'wstepny';
+}
+
+/** True when the paperwork has been ticked off by hand. */
+export function hasDokumenty(spotkanie: Spotkanie): boolean {
+  return !!spotkanie.dokumentyWyslaneAt;
+}
+
+export function matchesStateFilter(spotkanie: Spotkanie, filter: SpotkanieStateFilter): boolean {
+  if (filter === 'changed') return hasUnreadTerminChange(spotkanie);
+  if (filter === 'tentative') return isTerminWstepny(spotkanie);
+  return true;
+}
+
+/**
+ * What the strip above the month has to announce. Counted over whatever list the
+ * caller considers "in view" — the month, so switching months answers for the
+ * month you are looking at rather than for the whole database.
+ */
+export interface SpotkaniaAlerts {
+  changed: number;
+  tentative: number;
+}
+
+export function countAlerts(list: Spotkanie[]): SpotkaniaAlerts {
+  return {
+    changed: list.filter(hasUnreadTerminChange).length,
+    tentative: list.filter(isTerminWstepny).length,
+  };
+}
+
+/** The location of a meeting, or null — the lookup every renderer needs. */
+export function lokalizacjaOf(
+  spotkanie: Spotkanie,
+  lokalizacje: SpotkanieLokalizacja[],
+): SpotkanieLokalizacja | null {
+  if (spotkanie.lokalizacjaId === null) return null;
+  return lokalizacje.find((l) => l.id === spotkanie.lokalizacjaId) ?? null;
+}
+
+/**
+ * What to show as the meeting's place: the live dictionary entry when the link
+ * still resolves, otherwise the name snapshotted on the meeting. A location
+ * deleted from the dictionary leaves the meeting saying where it was held.
+ */
+export function lokalizacjaLabel(
+  spotkanie: Spotkanie,
+  lokalizacje: SpotkanieLokalizacja[],
+): string {
+  return lokalizacjaOf(spotkanie, lokalizacje)?.nazwa || spotkanie.lokalizacjaNazwa || '';
 }
 
 /* -------------------------------- Presentation ------------------------------ */

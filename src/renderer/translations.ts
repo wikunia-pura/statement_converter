@@ -300,7 +300,7 @@ export const translations = {
     backupError: 'Błąd kopii zapasowej',
     backupRestoreConfirm1: 'Przywrócenie kopii ZASTĄPI wszystkie obecne dane (banki, kontrahentów, adresy, typy kont, historię) danymi z pliku. Dane są wspólne dla wszystkich użytkowników aplikacji. Kontynuować?',
     backupRestoreConfirm2: 'Czy na pewno? Przed przywróceniem zostanie automatycznie zapisana kopia obecnego stanu w folderze kopii zapasowych.',
-    backupCounts: 'banki: {banks}, kontrahenci: {kontrahenci}, adresy: {adresy}, typy kont: {kontoTypy}, historia: {history}, historia odczytów: {odczytyHistory}, jednostki ZGN: {zgnJednostki}, pola dynamiczne: {mailingPola}, szablony maili: {mailingSzablony}, historia maili: {mailingHistory}, typy spotkań: {spotkaniaTypy}, spotkania: {spotkania}, nazwy użytkowników: {appUserNames}',
+    backupCounts: 'banki: {banks}, kontrahenci: {kontrahenci}, adresy: {adresy}, typy kont: {kontoTypy}, historia: {history}, historia odczytów: {odczytyHistory}, jednostki ZGN: {zgnJednostki}, pola dynamiczne: {mailingPola}, szablony maili: {mailingSzablony}, historia maili: {mailingHistory}, typy spotkań: {spotkaniaTypy}, spotkania: {spotkania}, lokalizacje spotkań: {spotkaniaLokalizacje}, nazwy użytkowników: {appUserNames}',
     backupAutoCreated: 'Utworzono automatyczną kopię zapasową danych ({date}){offsite}',
     backupExitCreated: 'Utworzono kopię zapasową danych ({date}){offsite} — zamykanie aplikacji…',
     backupOffsiteOk: ' i wysłano ją off-site',
@@ -342,6 +342,87 @@ export const translations = {
       'okazji — przypomnę się za godzinę.',
     updateNow: 'Aktualizuj teraz',
     updateLaterAnyway: 'Rozumiem, pracuję dalej',
+
+    // Nawigacja wstecz/do przodu
+    navBack: 'Wstecz',
+    navForward: 'Do przodu',
+    navHistory: 'Historia nawigacji',
+
+    // Kalendarz — lokalizacje spotkań
+    kalTabPlaces: 'Lokalizacje',
+    kalFieldPlace: 'Lokalizacja',
+    kalManagePlaces: 'Zarządzaj lokalizacjami',
+    kalNoPlaces: 'Brak lokalizacji. Dodaj je w zakładce „Lokalizacje”.',
+    kalNoPlaceOption: '— bez lokalizacji —',
+    kalPlacePlaceholder: 'Wybierz lokalizację…',
+    kalPlaceSearch: 'Szukaj lokalizacji…',
+    kalPlaceNoMatch: 'Żadna lokalizacja nie pasuje.',
+    kalLokTitle: 'Lokalizacje spotkań',
+    kalLokHint:
+      'Miejsca, w których odbywają się spotkania — biuro ZGN, budynek wspólnoty, sala. ' +
+      'Wybiera się je z listy przy spotkaniu, więc jeden adres ma jedną pisownię. ' +
+      'Zmiana nazwy tutaj przechodzi na wszystkie spotkania, które z niej korzystają.',
+    kalLokAdd: 'Dodaj lokalizację',
+    kalLokEdit: 'Edytuj lokalizację',
+    kalLokName: 'Nazwa',
+    kalLokNamePlaceholder: 'np. Biuro ZGN Mokotów',
+    kalLokNameRequired: 'Podaj nazwę lokalizacji.',
+    kalLokNameTaken: 'Lokalizacja o tej nazwie już istnieje.',
+    kalLokAddress: 'Adres',
+    kalLokAddressPlaceholder: 'np. ul. Irysowa 19, Warszawa',
+    kalLokAddressHint: 'Pokazywany pod nazwą przy wyborze i w karcie spotkania.',
+    kalLokDesc: 'Opis',
+    kalLokDescPlaceholder: 'np. wejście od podwórza, II piętro, pokój 12',
+    kalLokUsage: 'Spotkań',
+    kalLokEmpty: 'Nie ma jeszcze żadnej lokalizacji.',
+    kalLokConfirmDelete: 'Usunąć lokalizację „{name}”?',
+    kalLokConfirmDeleteUsed:
+      'Lokalizacja „{name}” jest przypisana do {count} spotkań. Po usunięciu spotkania zostaną, ' +
+      'a nazwa lokalizacji nadal będzie na nich widoczna. Usunąć?',
+
+    // Kalendarz — status terminu i zmiana terminu
+    kalFieldTermin: 'Termin',
+    kalFieldTerminHint:
+      'Wstępny termin jest oznaczany w kalendarzu i można go odfiltrować — użyj go, ' +
+      'dopóki data nie jest ustalona z wszystkimi.',
+    kalTerminConfirmed: 'Potwierdzony',
+    kalTerminTentative: 'Wstępny',
+    kalTerminConfirm: 'Potwierdź termin',
+    kalTerminConfirmHint: 'Oznacz termin jako ustalony — spotkanie przestanie być wyróżnione.',
+    kalTerminUnconfirm: 'Oznacz jako wstępny',
+    kalTerminUnconfirmHint: 'Termin nie jest jeszcze ustalony ze wszystkimi.',
+    kalTerminConfirmedDone: 'Termin potwierdzony.',
+    kalTerminTentativeDone: 'Termin oznaczony jako wstępny.',
+    kalTerminChangedTitle: 'Zmieniony termin spotkania',
+    kalTerminChangedFrom: 'Poprzednio: {from}.',
+    kalTerminChangedNoPrevious: 'Termin tego spotkania został zmieniony.',
+    kalTerminChangedBy: 'Zmienił(a): {who}.',
+    kalTerminAck: 'Zapoznałem się',
+    kalTerminAckDone: 'Zmiana terminu potwierdzona jako przeczytana.',
+    kalFilterChanged: 'Zmieniony termin',
+    kalFilterChangedHint:
+      'W tym miesiącu pokaż tylko spotkania ze zmienionym terminem, których nikt nie potwierdził.',
+    kalFilterTentative: 'Wstępne',
+    kalFilterTentativeHint: 'W tym miesiącu pokaż tylko spotkania z niepotwierdzonym terminem.',
+    kalWarnChanged: 'Zmieniony termin: {count} — nikt tego jeszcze nie potwierdził',
+    kalWarnTentative: 'Termin wstępny: {count}',
+    kalWarnShowThese: 'Pokaż',
+    kalWarnShowAll: 'Pokaż wszystkie',
+
+    // Kalendarz — dokumenty na spotkanie
+    kalDocsSent: 'Dokumenty wysłane',
+    kalDocsNotSent: 'Dokumenty niewysłane',
+    kalDocsMark: 'Oznacz jako wysłane',
+    kalDocsEdit: 'Edytuj wpis',
+    kalDocsPlaceholder: 'Co zostało wysłane? np. sprawozdanie 2025, uchwała nr 3/2026',
+    kalDocsSave: 'Zapisz',
+    kalDocsUndo: 'Wycofaj',
+    kalDocsStamp: 'Oznaczone {when} przez {who}',
+    kalDocsSavedDone: 'Zapisano informację o wysłanych dokumentach.',
+    kalDocsUndoneDone: 'Wycofano oznaczenie dokumentów.',
+    kalDocsSendMailing: 'Wyślij mailingiem',
+    mailingFromMeeting: 'Ten mailing zostanie zapisany przy spotkaniu: {name}',
+    mailingFromMeetingClear: 'Odłącz od spotkania',
 
     // Sesja (logowanie do chmury)
     sessionExpiredNotice:
@@ -1357,7 +1438,7 @@ export const translations = {
     backupError: 'Backup error',
     backupRestoreConfirm1: 'Restoring will REPLACE all current data (banks, contractors, addresses, account types, history) with the file contents. This data is shared by all users of the app. Continue?',
     backupRestoreConfirm2: 'Are you sure? A copy of the current state will be saved automatically to the backups folder before restoring.',
-    backupCounts: 'banks: {banks}, contractors: {kontrahenci}, addresses: {adresy}, account types: {kontoTypy}, history: {history}, meter-reading history: {odczytyHistory}, city units: {zgnJednostki}, dynamic fields: {mailingPola}, mail templates: {mailingSzablony}, mail history: {mailingHistory}, meeting types: {spotkaniaTypy}, meetings: {spotkania}, user names: {appUserNames}',
+    backupCounts: 'banks: {banks}, contractors: {kontrahenci}, addresses: {adresy}, account types: {kontoTypy}, history: {history}, meter-reading history: {odczytyHistory}, city units: {zgnJednostki}, dynamic fields: {mailingPola}, mail templates: {mailingSzablony}, mail history: {mailingHistory}, meeting types: {spotkaniaTypy}, meetings: {spotkania}, meeting locations: {spotkaniaLokalizacje}, user names: {appUserNames}',
     backupAutoCreated: 'Automatic data backup created ({date}){offsite}',
     backupExitCreated: 'Data backup created ({date}){offsite} — closing the app…',
     backupOffsiteOk: ' and copied off-site',
@@ -1399,6 +1480,87 @@ export const translations = {
       'this reminder comes back in an hour.',
     updateNow: 'Update now',
     updateLaterAnyway: 'Understood, keep working',
+
+    // Back/forward navigation
+    navBack: 'Back',
+    navForward: 'Forward',
+    navHistory: 'Navigation history',
+
+    // Calendar — meeting locations
+    kalTabPlaces: 'Locations',
+    kalFieldPlace: 'Location',
+    kalManagePlaces: 'Manage locations',
+    kalNoPlaces: 'No locations yet. Add them on the "Locations" tab.',
+    kalNoPlaceOption: '— no location —',
+    kalPlacePlaceholder: 'Pick a location…',
+    kalPlaceSearch: 'Search locations…',
+    kalPlaceNoMatch: 'No location matches.',
+    kalLokTitle: 'Meeting locations',
+    kalLokHint:
+      'Where meetings are held — the city office, a community building, a room. They are picked ' +
+      'from this list on a meeting, so one address has one spelling. Renaming one here follows ' +
+      'through to every meeting using it.',
+    kalLokAdd: 'Add a location',
+    kalLokEdit: 'Edit location',
+    kalLokName: 'Name',
+    kalLokNamePlaceholder: 'e.g. ZGN Mokotów office',
+    kalLokNameRequired: 'Give the location a name.',
+    kalLokNameTaken: 'A location with this name already exists.',
+    kalLokAddress: 'Address',
+    kalLokAddressPlaceholder: 'e.g. 19 Irysowa St, Warsaw',
+    kalLokAddressHint: 'Shown under the name in the picker and on the meeting card.',
+    kalLokDesc: 'Note',
+    kalLokDescPlaceholder: 'e.g. entrance from the courtyard, 2nd floor, room 12',
+    kalLokUsage: 'Meetings',
+    kalLokEmpty: 'No locations yet.',
+    kalLokConfirmDelete: 'Delete the location "{name}"?',
+    kalLokConfirmDeleteUsed:
+      'The location "{name}" is used by {count} meetings. Deleting it keeps the meetings, and ' +
+      'they will still show the location name. Delete?',
+
+    // Calendar — date status and moved dates
+    kalFieldTermin: 'Date',
+    kalFieldTerminHint:
+      'A tentative date is marked in the calendar and can be filtered for — use it until the ' +
+      'date is agreed with everyone.',
+    kalTerminConfirmed: 'Confirmed',
+    kalTerminTentative: 'Tentative',
+    kalTerminConfirm: 'Confirm the date',
+    kalTerminConfirmHint: 'Mark the date as agreed — the meeting stops being highlighted.',
+    kalTerminUnconfirm: 'Mark as tentative',
+    kalTerminUnconfirmHint: 'The date is not agreed with everyone yet.',
+    kalTerminConfirmedDone: 'Date confirmed.',
+    kalTerminTentativeDone: 'Date marked as tentative.',
+    kalTerminChangedTitle: 'The meeting date changed',
+    kalTerminChangedFrom: 'Previously: {from}.',
+    kalTerminChangedNoPrevious: 'This meeting has been moved.',
+    kalTerminChangedBy: 'Changed by {who}.',
+    kalTerminAck: 'Got it',
+    kalTerminAckDone: 'Date change acknowledged.',
+    kalFilterChanged: 'Moved date',
+    kalFilterChangedHint:
+      'In this month, show only meetings whose date moved and nobody has acknowledged.',
+    kalFilterTentative: 'Tentative',
+    kalFilterTentativeHint: 'In this month, show only meetings whose date is not confirmed.',
+    kalWarnChanged: 'Moved dates: {count} — nobody has acknowledged them yet',
+    kalWarnTentative: 'Tentative dates: {count}',
+    kalWarnShowThese: 'Show',
+    kalWarnShowAll: 'Show all',
+
+    // Calendar — documents for a meeting
+    kalDocsSent: 'Documents sent',
+    kalDocsNotSent: 'Documents not sent',
+    kalDocsMark: 'Mark as sent',
+    kalDocsEdit: 'Edit entry',
+    kalDocsPlaceholder: 'What was sent? e.g. 2025 report, resolution 3/2026',
+    kalDocsSave: 'Save',
+    kalDocsUndo: 'Undo',
+    kalDocsStamp: 'Marked {when} by {who}',
+    kalDocsSavedDone: 'Saved what was sent.',
+    kalDocsUndoneDone: 'Removed the documents mark.',
+    kalDocsSendMailing: 'Send by mailing',
+    mailingFromMeeting: 'This mailing will be recorded against the meeting: {name}',
+    mailingFromMeetingClear: 'Detach from the meeting',
 
     // Session (cloud sign-in)
     sessionExpiredNotice:

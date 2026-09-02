@@ -21,8 +21,11 @@ import {
   AppUser,
   AppUserName,
   SpotkanieTyp,
+  SpotkanieLokalizacja,
   Spotkanie,
   SpotkanieInput,
+  SpotkanieMailing,
+  SpotkanieTerminStatus,
   SpotkanieUczestnik,
 } from '../shared/types';
 import { getSupabase } from './supabaseClient';
@@ -77,7 +80,7 @@ const MAILING_POLE_COLS =
 const MAILING_SZABLON_COLS =
   'id, nazwa, typ, temat, tresc, attachPdf:attach_pdf, tableFields:table_fields, createdAt:created_at';
 const MAILING_HISTORY_COLS =
-  'id, typ, templateName:template_name, status, errorMessage:error_message, adresId:adres_id, adresNazwa:adres_nazwa, jednostkaNazwa:jednostka_nazwa, jednostkaEmail:jednostka_email, subject, bodyHtml:body_html, bodyText:body_text, fieldValues:field_values, attachments, sentFrom:sent_from, sentAt:sent_at';
+  'id, typ, templateName:template_name, status, errorMessage:error_message, adresId:adres_id, adresNazwa:adres_nazwa, jednostkaNazwa:jednostka_nazwa, jednostkaEmail:jednostka_email, subject, bodyHtml:body_html, bodyText:body_text, fieldValues:field_values, attachments, sentFrom:sent_from, sentAt:sent_at, spotkanieId:spotkanie_id';
 const KONTO_TYP_COLS =
   'id, name, bankAccountSymbol:bank_account_symbol, apartmentPrefix:apartment_prefix, isDefault:is_default, createdAt:created_at';
 const HISTORY_COLS =
@@ -85,8 +88,23 @@ const HISTORY_COLS =
 const APP_USER_COLS =
   'id, email, displayName:display_name, firstName:first_name, lastName:last_name, createdAt:created_at';
 const SPOTKANIE_TYP_COLS = 'id, nazwa, kolor, opis, createdAt:created_at';
+const SPOTKANIE_LOKALIZACJA_COLS = 'id, nazwa, adres, opis, createdAt:created_at';
 const SPOTKANIE_COLS =
-  'id, nazwa, typId:typ_id, adresId:adres_id, adresNazwa:adres_nazwa, startsAt:starts_at, endsAt:ends_at, opis, uczestnicy, createdBy:created_by, createdAt:created_at, updatedAt:updated_at';
+  'id, nazwa, typId:typ_id, adresId:adres_id, adresNazwa:adres_nazwa, ' +
+  'lokalizacjaId:lokalizacja_id, lokalizacjaNazwa:lokalizacja_nazwa, ' +
+  'startsAt:starts_at, endsAt:ends_at, opis, uczestnicy, terminStatus:termin_status, ' +
+  'terminZmienionyAt:termin_zmieniony_at, terminZmienionyZ:termin_zmieniony_z, ' +
+  'terminZmienionyBy:termin_zmieniony_by, ' +
+  'terminZmianaOdczytanaAt:termin_zmiana_odczytana_at, ' +
+  'terminZmianaOdczytanaBy:termin_zmiana_odczytana_by, ' +
+  'dokumentyWyslaneAt:dokumenty_wyslane_at, dokumentyWyslaneBy:dokumenty_wyslane_by, ' +
+  'dokumentyOpis:dokumenty_opis, ' +
+  'createdBy:created_by, createdAt:created_at, updatedAt:updated_at';
+/** Slim projection of a mailing send, as a meeting shows it. */
+const SPOTKANIE_MAILING_COLS =
+  'id, spotkanieId:spotkanie_id, templateName:template_name, status, ' +
+  'errorMessage:error_message, adresNazwa:adres_nazwa, jednostkaNazwa:jednostka_nazwa, ' +
+  'jednostkaEmail:jednostka_email, subject, attachments, sentFrom:sent_from, sentAt:sent_at';
 const ODCZYTY_HISTORY_COLS =
   'id, supplier, status, errorMessage:error_message, outputDir:output_dir, sources:source_files, outputs:output_files, readingCount:reading_count, skippedCount:skipped_count, convertedAt:converted_at';
 
@@ -1002,6 +1020,7 @@ class DatabaseService {
       field_values: entry.fieldValues,
       attachments: entry.attachments,
       sent_from: entry.sentFrom,
+      spotkanie_id: entry.spotkanieId ?? null,
     });
     if (error) throw new Error(`addMailingHistory: ${error.message}`);
   }
@@ -1149,6 +1168,74 @@ class DatabaseService {
     if (error) throw new Error(`deleteSpotkanieTyp: ${error.message}`);
   }
 
+  /* --------------------------- Locations --------------------------- */
+
+  async getSpotkaniaLokalizacje(): Promise<SpotkanieLokalizacja[]> {
+    const { data, error } = await getSupabase()
+      .from('spotkania_lokalizacje')
+      .select(SPOTKANIE_LOKALIZACJA_COLS)
+      .order('nazwa', { ascending: true });
+    if (error) throw new Error(`getSpotkaniaLokalizacje: ${error.message}`);
+    return (data ?? []).map((r: any) => ({
+      ...r,
+      adres: r.adres ?? '',
+      opis: r.opis ?? '',
+    })) as SpotkanieLokalizacja[];
+  }
+
+  async addSpotkanieLokalizacja(
+    nazwa: string,
+    adres: string,
+    opis: string,
+  ): Promise<SpotkanieLokalizacja> {
+    const { data, error } = await getSupabase()
+      .from('spotkania_lokalizacje')
+      .insert({ nazwa: nazwa.trim(), adres: adres.trim(), opis })
+      .select(SPOTKANIE_LOKALIZACJA_COLS)
+      .single();
+    return unwrap(data, error, 'addSpotkanieLokalizacja') as SpotkanieLokalizacja;
+  }
+
+  /**
+   * Rename or re-address a location. The name is copied onto every meeting that
+   * points at it, so a rename here follows through to the meetings rather than
+   * leaving them displaying the old one — the snapshot exists to survive a
+   * restore, not to freeze a typo.
+   */
+  async updateSpotkanieLokalizacja(
+    id: number,
+    nazwa: string,
+    adres: string,
+    opis: string,
+  ): Promise<void> {
+    const trimmed = nazwa.trim();
+    const { error } = await getSupabase()
+      .from('spotkania_lokalizacje')
+      .update({ nazwa: trimmed, adres: adres.trim(), opis })
+      .eq('id', id);
+    if (error) throw new Error(`updateSpotkanieLokalizacja: ${error.message}`);
+
+    const { error: syncError } = await getSupabase()
+      .from('spotkania')
+      .update({ lokalizacja_nazwa: trimmed })
+      .eq('lokalizacja_id', id);
+    if (syncError) {
+      throw new Error(`updateSpotkanieLokalizacja (nazwa w spotkaniach): ${syncError.message}`);
+    }
+  }
+
+  /**
+   * Delete a location. `spotkania.lokalizacja_id` is ON DELETE SET NULL, so the
+   * meetings survive — and because each one kept the name, they go on saying
+   * where they were held. The caller warns how many that affects.
+   */
+  async deleteSpotkanieLokalizacja(id: number): Promise<void> {
+    const { error } = await getSupabase().from('spotkania_lokalizacje').delete().eq('id', id);
+    if (error) throw new Error(`deleteSpotkanieLokalizacja: ${error.message}`);
+  }
+
+  /* ---------------------------- Meetings ---------------------------- */
+
   async getSpotkania(): Promise<Spotkanie[]> {
     const rows = await fetchAllPaged<any>('getSpotkania', (from, to) =>
       getSupabase()
@@ -1162,9 +1249,22 @@ class DatabaseService {
       typId: r.typId ?? null,
       adresId: r.adresId ?? null,
       adresNazwa: r.adresNazwa ?? '',
+      lokalizacjaId: r.lokalizacjaId ?? null,
+      lokalizacjaNazwa: r.lokalizacjaNazwa ?? '',
       endsAt: r.endsAt ?? null,
       opis: r.opis ?? '',
       uczestnicy: Array.isArray(r.uczestnicy) ? (r.uczestnicy as SpotkanieUczestnik[]) : [],
+      // Rows written before the column existed carry no status; they meant a
+      // real date, so that is what they keep meaning.
+      terminStatus: (r.terminStatus ?? 'potwierdzony') as SpotkanieTerminStatus,
+      terminZmienionyAt: r.terminZmienionyAt ?? null,
+      terminZmienionyZ: r.terminZmienionyZ ?? null,
+      terminZmienionyBy: r.terminZmienionyBy ?? null,
+      terminZmianaOdczytanaAt: r.terminZmianaOdczytanaAt ?? null,
+      terminZmianaOdczytanaBy: r.terminZmianaOdczytanaBy ?? null,
+      dokumentyWyslaneAt: r.dokumentyWyslaneAt ?? null,
+      dokumentyWyslaneBy: r.dokumentyWyslaneBy ?? null,
+      dokumentyOpis: r.dokumentyOpis ?? '',
       createdBy: r.createdBy ?? '',
     })) as Spotkanie[];
   }
@@ -1190,10 +1290,13 @@ class DatabaseService {
       typ_id: input.typId,
       adres_id: input.adresId,
       adres_nazwa: input.adresNazwa.trim(),
+      lokalizacja_id: input.lokalizacjaId,
+      lokalizacja_nazwa: input.lokalizacjaNazwa.trim(),
       starts_at: input.startsAt,
       ends_at: input.endsAt,
       opis: input.opis,
       uczestnicy: input.uczestnicy,
+      termin_status: input.terminStatus === 'wstepny' ? 'wstepny' : 'potwierdzony',
     };
   }
 
@@ -1203,18 +1306,147 @@ class DatabaseService {
       .insert({ ...DatabaseService.spotkaniePayload(input), created_by: createdBy })
       .select(SPOTKANIE_COLS)
       .single();
-    return unwrap(data, error, 'addSpotkanie') as Spotkanie;
+    // Cast through unknown: SPOTKANIE_COLS is assembled from parts, so
+    // postgrest-js cannot infer the row shape from a literal any more.
+    return unwrap(data, error, 'addSpotkanie') as unknown as Spotkanie;
   }
 
-  async updateSpotkanie(id: number, input: SpotkanieInput): Promise<void> {
+  /**
+   * Save an edit, and notice when the edit moved the date.
+   *
+   * Read-then-write rather than a trigger: the comparison is on instants, and
+   * the app is the only writer here. Instants are compared numerically, never
+   * as strings — Supabase renders `timestamptz` with a `+00:00` offset while
+   * the values the app builds end in `Z`, and the two only agree as numbers.
+   *
+   * A move resets the acknowledgement: whoever had seen the previous date has
+   * not seen this one. `terminZmienionyZ` keeps the start the meeting had
+   * before THIS move, which is the one thing a reader needs ("było 14:00").
+   */
+  async updateSpotkanie(id: number, input: SpotkanieInput, changedBy: string): Promise<void> {
+    const { data: before, error: readError } = await getSupabase()
+      .from('spotkania')
+      .select('starts_at, ends_at')
+      .eq('id', id)
+      .maybeSingle();
+    if (readError) throw new Error(`updateSpotkanie (odczyt): ${readError.message}`);
+
+    const payload: Record<string, unknown> = {
+      ...DatabaseService.spotkaniePayload(input),
+      updated_at: new Date().toISOString(),
+    };
+
+    if (before) {
+      const previous = before as { starts_at: string; ends_at: string | null };
+      const instant = (value: string | null | undefined): number | null =>
+        value ? new Date(value).getTime() : null;
+      const moved =
+        instant(previous.starts_at) !== instant(input.startsAt) ||
+        instant(previous.ends_at) !== instant(input.endsAt);
+      if (moved) {
+        payload.termin_zmieniony_at = new Date().toISOString();
+        payload.termin_zmieniony_z = previous.starts_at;
+        payload.termin_zmieniony_by = changedBy;
+        payload.termin_zmiana_odczytana_at = null;
+        payload.termin_zmiana_odczytana_by = null;
+      }
+    }
+
+    const { error } = await getSupabase().from('spotkania').update(payload).eq('id', id);
+    if (error) throw new Error(`updateSpotkanie: ${error.message}`);
+  }
+
+  /**
+   * "I have seen that this moved." Records who said so and stops the meeting
+   * being marked — the record of the move itself stays, so its details still
+   * read "termin zmieniony z 14:00".
+   */
+  async ackSpotkanieTermin(id: number, who: string): Promise<void> {
     const { error } = await getSupabase()
       .from('spotkania')
       .update({
-        ...DatabaseService.spotkaniePayload(input),
+        termin_zmiana_odczytana_at: new Date().toISOString(),
+        termin_zmiana_odczytana_by: who,
+      })
+      .eq('id', id);
+    if (error) throw new Error(`ackSpotkanieTermin: ${error.message}`);
+  }
+
+  /** Settle a tentative date, or put a settled one back to tentative. */
+  async setSpotkanieTerminStatus(id: number, status: SpotkanieTerminStatus): Promise<void> {
+    const { error } = await getSupabase()
+      .from('spotkania')
+      .update({
+        termin_status: status === 'wstepny' ? 'wstepny' : 'potwierdzony',
         updated_at: new Date().toISOString(),
       })
       .eq('id', id);
-    if (error) throw new Error(`updateSpotkanie: ${error.message}`);
+    if (error) throw new Error(`setSpotkanieTerminStatus: ${error.message}`);
+  }
+
+  /**
+   * Tick (or untick) "documents sent", with a note of what went out.
+   *
+   * Unticking clears the note as well: keeping the description of a send that
+   * has been withdrawn would leave the meeting claiming something happened.
+   */
+  async setSpotkanieDokumenty(
+    id: number,
+    sent: boolean,
+    opis: string,
+    who: string,
+  ): Promise<void> {
+    const { error } = await getSupabase()
+      .from('spotkania')
+      .update(
+        sent
+          ? {
+              dokumenty_wyslane_at: new Date().toISOString(),
+              dokumenty_wyslane_by: who,
+              dokumenty_opis: opis.trim(),
+            }
+          : {
+              dokumenty_wyslane_at: null,
+              dokumenty_wyslane_by: null,
+              dokumenty_opis: '',
+            },
+      )
+      .eq('id', id);
+    if (error) throw new Error(`setSpotkanieDokumenty: ${error.message}`);
+  }
+
+  /**
+   * Every Mailing send that was triggered from a meeting, newest first.
+   *
+   * One query for all of them rather than one per meeting: the calendar shows a
+   * month of meetings at a time, and the rows carrying a `spotkanie_id` are a
+   * small slice of the mailing history.
+   */
+  async getSpotkaniaMailingi(): Promise<SpotkanieMailing[]> {
+    const rows = await fetchAllPaged<any>('getSpotkaniaMailingi', (from, to) =>
+      getSupabase()
+        .from('mailing_history')
+        .select(SPOTKANIE_MAILING_COLS)
+        .not('spotkanie_id', 'is', null)
+        .order('sent_at', { ascending: false })
+        .range(from, to),
+    );
+    return rows.map(r => ({
+      id: r.id,
+      spotkanieId: r.spotkanieId,
+      templateName: r.templateName ?? '',
+      status: r.status,
+      errorMessage: r.errorMessage ?? undefined,
+      adresNazwa: r.adresNazwa ?? '',
+      jednostkaNazwa: r.jednostkaNazwa ?? '',
+      jednostkaEmail: r.jednostkaEmail ?? '',
+      subject: r.subject ?? '',
+      attachmentNames: Array.isArray(r.attachments)
+        ? (r.attachments as { fileName?: string }[]).map(a => a.fileName ?? '').filter(Boolean)
+        : [],
+      sentFrom: r.sentFrom ?? '',
+      sentAt: r.sentAt,
+    }));
   }
 
   async deleteSpotkanie(id: number): Promise<void> {
@@ -1304,6 +1536,7 @@ class DatabaseService {
       mailingHistory,
       spotkaniaTypy,
       spotkania,
+      spotkaniaLokalizacje,
       appUsers,
     ] = await Promise.all([
       this.getAllBanks(),
@@ -1318,6 +1551,7 @@ class DatabaseService {
       this.getMailingHistory(),
       this.getSpotkaniaTypy(),
       this.getSpotkania(),
+      this.getSpotkaniaLokalizacje(),
       this.getAppUsers(),
     ]);
     return {
@@ -1338,6 +1572,7 @@ class DatabaseService {
         mailingHistory,
         spotkaniaTypy,
         spotkania,
+        spotkaniaLokalizacje,
         // The `app_users` ROWS are deliberately absent: they mirror the Supabase
         // auth accounts, rebuilt by a trigger, not data this app authors — and
         // the participants stored on each meeting carry their own snapshot. The
@@ -1419,6 +1654,7 @@ class DatabaseService {
       mailingHistory,
       spotkaniaTypy,
       spotkania,
+      spotkaniaLokalizacje,
       appUserNames,
       settings,
     } = backup.data;
@@ -1618,6 +1854,11 @@ class DatabaseService {
           // history rows still carry the old ones; the name is what the history
           // actually displays, so drop the stale link rather than mis-point it.
           adres_id: null,
+          // Same for the meeting link, and with no name to re-point it through:
+          // the meetings are re-inserted further down with fresh ids, and a
+          // mailing row has no natural key back to one. The row keeps every
+          // detail of what was sent; only the meeting stops listing it.
+          spotkanie_id: null,
           adres_nazwa: h.adresNazwa,
           jednostka_nazwa: h.jednostkaNazwa,
           jednostka_email: h.jednostkaEmail,
@@ -1638,6 +1879,7 @@ class DatabaseService {
     // under live meetings, nulling their type.
     if (spotkania) {
       const preexistingSpotkanieTypIds = (await this.getSpotkaniaTypy()).map(t => t.id);
+      const preexistingLokalizacjaIds = (await this.getSpotkaniaLokalizacje()).map(l => l.id);
       // Same alongside-then-swap dance as banks: the new types must exist before
       // the meetings that reference them, and the old ones can only go once
       // nothing points at them any more.
@@ -1650,6 +1892,19 @@ class DatabaseService {
           kolor: t.kolor,
           opis: t.opis,
           created_at: t.createdAt,
+        })),
+      );
+
+      // Locations ride the same dance, for the same reason.
+      const lokalizacjaIdMap = await this.insertRemapped(
+        'spotkania_lokalizacje',
+        'id',
+        (spotkaniaLokalizacje ?? []).map(l => l.id),
+        (spotkaniaLokalizacje ?? []).map(l => ({
+          nazwa: l.nazwa,
+          adres: l.adres ?? '',
+          opis: l.opis ?? '',
+          created_at: l.createdAt,
         })),
       );
 
@@ -1667,12 +1922,28 @@ class DatabaseService {
             ? adresIdByNazwa.get(m.adresNazwa.trim().toLowerCase()) ?? null
             : null,
           adres_nazwa: m.adresNazwa ?? '',
+          // Re-pointed through the fresh dictionary ids; the name travels
+          // regardless, which is what a meeting actually displays.
+          lokalizacja_id:
+            m.lokalizacjaId != null ? lokalizacjaIdMap.get(m.lokalizacjaId) ?? null : null,
+          lokalizacja_nazwa: m.lokalizacjaNazwa ?? '',
           starts_at: m.startsAt,
           ends_at: m.endsAt ?? null,
           opis: m.opis ?? '',
           // The participants are a snapshot of accounts, whose ids are auth
           // uuids — stable across a restore, so they travel verbatim.
           uczestnicy: m.uczestnicy ?? [],
+          // Absent in backups written before these columns existed: a meeting
+          // from back then meant a real date and no paperwork trail.
+          termin_status: m.terminStatus === 'wstepny' ? 'wstepny' : 'potwierdzony',
+          termin_zmieniony_at: m.terminZmienionyAt ?? null,
+          termin_zmieniony_z: m.terminZmienionyZ ?? null,
+          termin_zmieniony_by: m.terminZmienionyBy ?? null,
+          termin_zmiana_odczytana_at: m.terminZmianaOdczytanaAt ?? null,
+          termin_zmiana_odczytana_by: m.terminZmianaOdczytanaBy ?? null,
+          dokumenty_wyslane_at: m.dokumentyWyslaneAt ?? null,
+          dokumenty_wyslane_by: m.dokumentyWyslaneBy ?? null,
+          dokumenty_opis: m.dokumentyOpis ?? '',
           created_by: m.createdBy ?? '',
           created_at: m.createdAt,
           updated_at: m.updatedAt,
@@ -1680,6 +1951,7 @@ class DatabaseService {
       );
 
       await this.deleteByIds('spotkania_typy', preexistingSpotkanieTypIds);
+      await this.deleteByIds('spotkania_lokalizacje', preexistingLokalizacjaIds);
     }
 
     // Names of the accounts. Applied one by one rather than wiped-and-inserted:

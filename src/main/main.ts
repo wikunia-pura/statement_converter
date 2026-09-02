@@ -15,6 +15,7 @@ import {
   MailingSzablon,
   MailingSmtpConfig,
   SpotkanieInput,
+  SpotkanieTerminStatus,
 } from '../shared/types';
 import { runAutoBackup, getBackupStatus, getBackupsDir, validateBackup } from './backupService';
 import { conversionCache } from './conversionCache';
@@ -2749,13 +2750,80 @@ function setupIpcHandlers() {
   ipcMain.handle(
     IPC_CHANNELS.UPDATE_SPOTKANIE,
     async (_, id: number, input: SpotkanieInput) => {
-      await database.updateSpotkanie(id, input);
+      // Who moved the date comes from the session, never from the renderer —
+      // it is a record of who did something, not a field anyone gets to fill in.
+      const session = await authService.getSession();
+      await database.updateSpotkanie(id, input, session?.email ?? '');
       return true;
     },
   );
 
   ipcMain.handle(IPC_CHANNELS.DELETE_SPOTKANIE, async (_, id: number) => {
     await database.deleteSpotkanie(id);
+    return true;
+  });
+
+  // "I have seen that this moved." Same rule: the acknowledger is the session.
+  ipcMain.handle(IPC_CHANNELS.ACK_SPOTKANIE_TERMIN, async (_, id: number) => {
+    const session = await authService.getSession();
+    await database.ackSpotkanieTermin(id, session?.email ?? '');
+    return true;
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.SET_SPOTKANIE_TERMIN_STATUS,
+    async (_, id: number, status: SpotkanieTerminStatus) => {
+      await database.setSpotkanieTerminStatus(id, status);
+      return true;
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.SET_SPOTKANIE_DOKUMENTY,
+    async (_, id: number, sent: boolean, opis: string) => {
+      const session = await authService.getSession();
+      await database.setSpotkanieDokumenty(id, sent, opis, session?.email ?? '');
+      return true;
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.GET_SPOTKANIA_MAILINGI, async () => {
+    try {
+      return await database.getSpotkaniaMailingi();
+    } catch (error: unknown) {
+      // A meeting without its send list is still a usable meeting; a dead view
+      // is not. Same call as the account list above.
+      log.error(
+        '[KALENDARZ] mailing list read failed:',
+        error instanceof Error ? error.message : String(error),
+      );
+      return [];
+    }
+  });
+
+  /* ------------------------- Meeting locations ------------------------- */
+
+  ipcMain.handle(IPC_CHANNELS.GET_SPOTKANIA_LOKALIZACJE, async () => {
+    return await database.getSpotkaniaLokalizacje();
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.ADD_SPOTKANIE_LOKALIZACJA,
+    async (_, nazwa: string, adres: string, opis: string) => {
+      return await database.addSpotkanieLokalizacja(nazwa, adres, opis);
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.UPDATE_SPOTKANIE_LOKALIZACJA,
+    async (_, id: number, nazwa: string, adres: string, opis: string) => {
+      await database.updateSpotkanieLokalizacja(id, nazwa, adres, opis);
+      return true;
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_SPOTKANIE_LOKALIZACJA, async (_, id: number) => {
+    await database.deleteSpotkanieLokalizacja(id);
     return true;
   });
 

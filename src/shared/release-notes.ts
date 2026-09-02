@@ -84,6 +84,219 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '6.8.0',
+    date: '2026-09-02',
+    title: 'Kalendarz pilnuje terminów, a aplikacja ma wreszcie „wstecz”',
+    tagline:
+      'Największa tura zmian w Kalendarzu od jego powstania. Spotkanie ma teraz lokalizację wybieraną ze słownika, termin oznaczony jako potwierdzony albo wstępny, i ślad po każdej zmianie daty — z ostrzeżeniem u góry miesiąca, filtrem i przyciskiem „Zapoznałem się”. Do tego przy spotkaniu odnotujesz wysłane dokumenty (albo wyślesz je mailingiem, który sam się przy tym spotkaniu zapisze), panel dnia przewija się osobno od strony, a cała aplikacja zyskała nawigację wstecz i do przodu — przyciskami, skrótem Alt+strzałka i bocznymi guzikami myszy.',
+    stats: [
+      { value: 'wstecz', label: 'nawigacja w całej aplikacji' },
+      { value: '2 stany', label: 'terminu: potwierdzony i wstępny' },
+      { value: 'słownik', label: 'lokalizacji spotkań' },
+      { value: 'mailing', label: 'powiązany ze spotkaniem' },
+    ],
+    highlights: [
+      {
+        id: 'nawigacja-wstecz',
+        kind: 'new',
+        icon: 'arrow-right',
+        title: 'Wstecz i do przodu, jak w przeglądarce',
+        summary:
+          'Nad menu, obok przycisku zwijania, są dwie strzałki: wracają do poprzedniego ekranu i idą z powrotem. Działa też Alt+← / Alt+→ oraz boczne przyciski myszy.',
+        details: [
+          'Aplikacja nie ma paska adresu, więc do tej pory „wróć tam, gdzie byłam” trzeba było odtworzyć z pamięci — zwłaszcza po wejściu w historię z pulpitu albo w szablony z mailingu.',
+          'Historia pamięta nie tylko ekran, ale i zakładkę: cofnięcie z „Konwerter → Historia” wraca na „Konwerter → Konwersja”, a nie tylko do modułu. Zapamiętuje 50 ostatnich miejsc.',
+          'Dymek nad strzałką mówi, gdzie ona prowadzi („Wstecz: Kalendarz → Lokalizacje”), bo w aplikacji bez paska adresu to jedyny sposób, żeby wiedzieć to przed kliknięciem.',
+          'Skróty klawiszowe są wyłączone w trakcie pisania — Alt+← w polu tekstowym zostaje zwykłym skrótem pola.',
+        ],
+        where: ['Menu boczne', 'u góry'],
+        steps: [
+          {
+            do: 'Poklikaj po kilku ekranach, np. Pulpit → Kalendarz → Ustawienia.',
+            then: 'Strzałka „w lewo” nad menu przestaje być wyszarzona.',
+          },
+          {
+            do: 'Kliknij strzałkę w lewo (albo naciśnij Alt+←).',
+            then: 'Wracasz na Kalendarz — dokładnie na tę zakładkę, na której byłaś.',
+          },
+          {
+            do: 'Kliknij strzałkę w prawo (albo Alt+→).',
+            then: 'Idziesz z powrotem do Ustawień.',
+          },
+          {
+            do: 'Zwiń menu przyciskiem z trzema kreskami.',
+            then: 'Strzałki układają się w słupek pod przyciskiem i działają dalej.',
+          },
+        ],
+        expect: [
+          'Kliknięcie pozycji menu, na której już jesteś, nie tworzy nowego wpisu w historii.',
+          'Historia żyje tak długo jak uruchomiona aplikacja — po restarcie startuje od pulpitu.',
+        ],
+      },
+      {
+        id: 'kalendarz-zmieniony-termin',
+        kind: 'new',
+        icon: 'alert-triangle',
+        title: 'Zmieniony termin jest widoczny, dopóki ktoś go nie potwierdzi',
+        summary:
+          'Gdy ktoś edytuje datę lub godzinę spotkania, aplikacja to zapamiętuje: spotkanie dostaje ostrzeżenie z poprzednim terminem, u góry miesiąca pojawia się pasek, a przycisk „Zapoznałem się” przywraca zwykły wygląd.',
+        details: [
+          'Przesunięty termin to jedyna rzecz w tym module, o której ktoś musi zostać POINFORMOWANY — wszyscy zapisali sobie starą datę. Dlatego zmiana nie jest cicho stosowana, tylko odnotowana: kiedy nastąpiła, jaki był termin wcześniej i kto go zmienił.',
+          'Znika dopiero po potwierdzeniu, nie po czasie: nieprzeczytana zmiana z zeszłego tygodnia jest nadal głośna, a przeczytana sprzed minuty — już cicha.',
+          'Potwierdzenie jest wspólne dla wszystkich (jedna baza), więc pierwsza osoba, która kliknie „Zapoznałem się”, wycisza je też pozostałym. Zapis o zmianie zostaje — w szczegółach spotkania nadal widać, że termin był przesunięty.',
+          'Aplikacja porównuje momenty w czasie, nie napisy: Supabase zapisuje strefę jako „+00:00”, a aplikacja jako „Z”, i te dwa zapisy zgadzają się tylko liczbowo.',
+        ],
+        where: ['Kalendarz'],
+        steps: [
+          {
+            do: 'Otwórz Kalendarz, kliknij dwukrotnie istniejące spotkanie i zmień godzinę. Zapisz.',
+            then: 'Karta spotkania dostaje pomarańczową ramkę i napis „Zmieniony termin spotkania — Poprzednio: …”, a u góry miesiąca pojawia się pasek „Zmieniony termin: 1”.',
+          },
+          {
+            do: 'Kliknij ten pasek u góry.',
+            then: 'Kalendarz pokazuje tylko spotkania ze zmienionym terminem. Drugie kliknięcie wraca do wszystkich.',
+          },
+          {
+            do: 'Na karcie spotkania kliknij „Zapoznałem się”.',
+            then: 'Ostrzeżenie znika, pasek u góry przestaje liczyć to spotkanie, a karta wygląda jak każda inna.',
+          },
+        ],
+        expect: [
+          'W siatce miesiąca takie spotkanie ma pomarańczowy kafelek z trójkątem — widać je bez wchodzenia w dzień.',
+          'Zmiana samej nazwy, opisu, lokalizacji czy uczestników nie oznacza spotkania — liczy się wyłącznie data i godzina.',
+          'Filtr „Zmieniony termin” w pasku narzędzi zawęża wyświetlany miesiąc i panel dnia — tak samo jak licznik u góry, więc oba mówią o tym samym.',
+        ],
+      },
+      {
+        id: 'kalendarz-termin-wstepny',
+        kind: 'new',
+        icon: 'clock',
+        title: 'Termin potwierdzony albo wstępny',
+        summary:
+          'W formularzu spotkania wybierasz, czy data jest ustalona. Wstępny termin jest oznaczony przerywaną ramką, ma swój filtr i swój pasek u góry — a jedno kliknięcie na karcie zmienia go w potwierdzony.',
+        details: [
+          'Nowe spotkanie startuje jako potwierdzone — takich jest większość, a nazywanie każdego wpisu wstępnym odebrałoby oznaczeniu sens do końca pierwszego tygodnia.',
+          'Rozwiązane tak samo jak zmieniony termin: oznaczenie na karcie i w siatce, filtr w pasku narzędzi, licznik u góry miesiąca. Różnica jest w tonie — wstępny termin to plan, nie problem, więc jest niebieski, a nie pomarańczowy.',
+          'Spotkania zapisane przed tą wersją są potwierdzone: wtedy oznaczało to prawdziwą datę i tak zostaje.',
+        ],
+        where: ['Kalendarz', 'Nowe spotkanie', 'Termin'],
+        steps: [
+          {
+            do: 'Dodaj spotkanie i w sekcji „Termin” wybierz „Wstępny”.',
+            then: 'Po zapisaniu karta ma przerywaną niebieską ramkę i plakietkę „Wstępny”, a u góry miesiąca pojawia się „Termin wstępny: 1”.',
+          },
+          {
+            do: 'Gdy data się potwierdzi, kliknij na karcie „Potwierdź termin”.',
+            then: 'Oznaczenie znika bez wchodzenia w formularz.',
+          },
+          {
+            do: 'Chcesz odwrotnie? Na potwierdzonym spotkaniu kliknij „Oznacz jako wstępny”.',
+            then: 'Wraca przerywana ramka i licznik u góry.',
+          },
+        ],
+        expect: [
+          'Filtr „Wstępne” zawęża wyświetlany miesiąc, dokładnie jak filtry typów obok niego.',
+          'Spotkanie może być jednocześnie wstępne i ze zmienionym terminem — wtedy pierwszeństwo w oznaczeniu ma zmieniony termin.',
+        ],
+      },
+      {
+        id: 'kalendarz-lokalizacje',
+        kind: 'new',
+        icon: 'map-pin',
+        title: 'Lokalizacje spotkań — słownik jak typy spotkań',
+        summary:
+          'Nowa zakładka „Lokalizacje” w module Kalendarz: nazwa, adres i notatka. Przy spotkaniu wybierasz lokalizację z listy, a karta pokazuje ją z pinezką.',
+        details: [
+          'Gdzie odbywają się spotkania, to krótka i stabilna lista: biuro ZGN, budynek wspólnoty, sala. Wpisywanie tego za każdym razem jest sposobem, w jaki jeden adres zyskuje trzy pisownie.',
+          'Adres i notatka („wejście od podwórza, II piętro”) są pokazywane pod nazwą przy wyborze, więc nikt nie musi pamiętać, o którą salę chodzi.',
+          'Zmiana nazwy w słowniku przechodzi na wszystkie spotkania, które z niej korzystają. Usunięcie lokalizacji nie usuwa spotkań — każde zapamiętało jej nazwę, więc dalej mówi, gdzie się odbyło.',
+        ],
+        where: ['Kalendarz', 'Lokalizacje'],
+        steps: [
+          {
+            do: 'Wejdź w Kalendarz i wybierz zakładkę „Lokalizacje”, potem „Dodaj lokalizację”.',
+            then: 'Podajesz nazwę (np. „Biuro ZGN Mokotów”), opcjonalnie adres i notatkę.',
+          },
+          {
+            do: 'Wróć na zakładkę „Kalendarz” i dodaj albo edytuj spotkanie.',
+            then: 'W formularzu jest pole „Lokalizacja” z wyszukiwaniem; pod każdą nazwą widać jej adres.',
+          },
+          {
+            do: 'Zapisz spotkanie i spójrz na jego kartę w panelu dnia.',
+            then: 'Obok wspólnoty pojawia się lokalizacja z ikoną pinezki. Widać ją też w dymku nad kafelkiem w siatce.',
+          },
+        ],
+        expect: [
+          'Kolumna „Spotkań” w słowniku mówi, ile spotkań korzysta z danej lokalizacji — zanim ją usuniesz.',
+          'Lokalizacje wchodzą do kopii zapasowej i są w niej liczone osobno („lokalizacje spotkań”).',
+          'Wyszukiwarka w Kalendarzu znajduje spotkania także po nazwie lokalizacji.',
+        ],
+      },
+      {
+        id: 'kalendarz-dokumenty',
+        kind: 'new',
+        icon: 'file-check',
+        title: 'Dokumenty na spotkanie — ręcznie albo mailingiem',
+        summary:
+          'Na karcie spotkania jest sekcja dokumentów: możesz wpisać, co zostało wysłane, albo jednym kliknięciem przejść do mailingu — a wysyłka sama zapisze się przy tym spotkaniu, ze szczegółami.',
+        details: [
+          'Dwie drogi do tego samego pytania („czy papiery poszły?”), bo obie zdarzają się w praktyce: ktoś wysyła ręcznie ze swojej skrzynki i odnotowuje to tutaj, albo wysyłka idzie przez moduł Mailing.',
+          'Ręczny wpis jest opisowy, nie „ptaszkiem”: liczy się to, CO zostało wysłane („sprawozdanie 2025, uchwała nr 3/2026”), razem z datą i osobą, która to odnotowała.',
+          'Mailing wywołany ze spotkania startuje z wybraną wspólnotą tego spotkania i pokazuje u góry, przy którym spotkaniu zostanie zapisany. Każdy wysłany mail z tej wysyłki wskazuje na to spotkanie.',
+          'Historia mailingu pozostaje źródłem prawdy o wysyłce — karta spotkania pokazuje jej skrót: szablon, do kogo poszło, kiedy i ile załączników.',
+        ],
+        where: ['Kalendarz', 'karta spotkania', 'Dokumenty'],
+        steps: [
+          {
+            do: 'Na karcie spotkania kliknij „Oznacz jako wysłane”.',
+            then: 'Rozwija się pole na opis. Wpisz, co poszło, i kliknij „Zapisz”.',
+          },
+          {
+            do: 'Spójrz na sekcję dokumentów.',
+            then: 'Napis zmienia się na zielone „Dokumenty wysłane”, pod nim Twój opis oraz „Oznaczone <data> przez <osoba>”.',
+          },
+          {
+            do: 'Chcesz wysłać mailingiem? Kliknij „Wyślij mailingiem” na karcie spotkania (dostępne, gdy spotkanie ma przypisaną wspólnotę).',
+            then: 'Aplikacja przechodzi do Mailingu z wybraną wspólnotą i niebieskim paskiem „Ten mailing zostanie zapisany przy spotkaniu: …”.',
+          },
+          {
+            do: 'Wyślij mailing normalnie, potem wróć do Kalendarza (np. strzałką wstecz).',
+            then: 'Na karcie spotkania, pod sekcją dokumentów, pojawia się lista wysyłek: szablon, odbiorca, data i liczba załączników.',
+          },
+        ],
+        expect: [
+          'Pomyłka? „Edytuj wpis” → „Wycofaj” zdejmuje oznaczenie razem z opisem, żeby spotkanie nie twierdziło, że coś się stało.',
+          '„Wyślij mailingiem” nie pojawia się przy spotkaniu bez wspólnoty — mailing idzie do jednostki miasta przypisanej do wspólnoty, więc bez niej nie ma adresata.',
+          'Pasek w Mailingu można odłączyć („Odłącz od spotkania”), jeśli akurat wysyłasz coś niezwiązanego.',
+          'Uwaga do kopii zapasowej: po przywróceniu kopii wysyłki zachowują wszystkie swoje szczegóły w historii mailingu, ale tracą powiązanie ze spotkaniem — spotkania dostają przy przywracaniu nowe numery, a wiersz mailingu nie ma po czym ich odnaleźć.',
+        ],
+      },
+      {
+        id: 'kalendarz-scroll-dnia',
+        kind: 'fixed',
+        icon: 'calendar',
+        title: 'Panel dnia przewija się osobno od strony',
+        summary:
+          'Dzień z wieloma spotkaniami przewija się teraz we własnym panelu, zamiast przewijać cały ekran razem z siatką miesiąca.',
+        details: [
+          'Panel dnia miał własny suwak, ale nie miał wysokości, o którą mógłby się oprzeć: strona rosła razem z listą spotkań, więc przewijało się wszystko naraz i siatka miesiąca uciekała w górę.',
+          'Teraz widok Kalendarza wypełnia okno dokładnie, a przewijają się dwa panele w środku: siatka miesiąca i lista wybranego dnia. Nagłówek z miesiącem i pasek narzędzi zostają na miejscu.',
+          'Na bardzo niskim oknie panele nie ściskają się w nieskończoność — poniżej pewnej wysokości przewija się cała strona, tak jak dawniej.',
+        ],
+        where: ['Kalendarz'],
+        steps: [
+          {
+            do: 'Wybierz dzień z kilkoma spotkaniami.',
+            then: 'Lista po prawej przewija się sama, a nazwa miesiąca i przyciski nawigacji zostają widoczne.',
+          },
+        ],
+        expect: [
+          'Siatka miesiąca ma własny suwak, z przyklejonym paskiem dni tygodnia — bez zmian.',
+        ],
+      },
+    ],
+  },
+  {
     version: '6.7.0',
     date: '2026-09-02',
     title: 'Ludzie z imienia i nazwiska — lista użytkowników i powitanie',

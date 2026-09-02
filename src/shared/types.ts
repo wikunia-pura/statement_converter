@@ -464,6 +464,8 @@ export interface MailingHistoryEntry {
   /** The mailbox the message was sent from. */
   sentFrom: string;
   sentAt: string;
+  /** The meeting this send was triggered from, when it was. */
+  spotkanieId?: number | null;
 }
 
 /**
@@ -575,6 +577,29 @@ export interface SpotkanieUczestnik {
   displayName?: string | null;
 }
 
+/**
+ * Where meetings happen — a dictionary the office owns, the same shape as
+ * `SpotkanieTyp`. Somewhere a meeting is held is a property of this world (a
+ * community's own building, the ZGN office, the accountant's room), not
+ * something to retype on every meeting.
+ */
+export interface SpotkanieLokalizacja {
+  id: number;
+  nazwa: string;
+  /** Street address or "how to get there". Optional; shown under the name. */
+  adres: string;
+  opis: string;
+  createdAt: string;
+}
+
+/**
+ * Whether the meeting's date is settled or still being agreed.
+ *
+ * Confirmed is the default: every meeting written before this existed meant a
+ * real date, and a tentative one is the deliberate exception.
+ */
+export type SpotkanieTerminStatus = 'potwierdzony' | 'wstepny';
+
 export interface Spotkanie {
   id: number;
   nazwa: string;
@@ -584,23 +609,88 @@ export interface Spotkanie {
   adresId: number | null;
   /** Kept alongside the id: a restore renumbers `adresy`, the name does not. */
   adresNazwa: string;
+  /** Null when no location is attached, or once it has been deleted. */
+  lokalizacjaId: number | null;
+  /** Same reason as `adresNazwa`: the name is what survives a restore. */
+  lokalizacjaNazwa: string;
   /** ISO instant. Date and time are one value — a meeting has both. */
   startsAt: string;
   /** ISO instant, or null for a meeting with no stated end. */
   endsAt: string | null;
   opis: string;
   uczestnicy: SpotkanieUczestnik[];
+  terminStatus: SpotkanieTerminStatus;
+  /**
+   * The trail a moved date leaves. Set by the server when an edit actually
+   * changes the start or the end — a meeting whose date moves is the one thing
+   * in this module somebody has to be TOLD about, because everyone has already
+   * written the old date down.
+   *
+   * `terminZmianaOdczytanaAt` is the acknowledgement: once a person says they
+   * have seen it, the meeting goes back to looking ordinary and the record
+   * stays readable in its details. Null everywhere ⇒ the date has not moved
+   * since the meeting was created.
+   */
+  terminZmienionyAt: string | null;
+  /** The start the meeting had before the last move. */
+  terminZmienionyZ: string | null;
+  terminZmienionyBy: string | null;
+  terminZmianaOdczytanaAt: string | null;
+  terminZmianaOdczytanaBy: string | null;
+  /** Set when someone ticks "documents sent" by hand. */
+  dokumentyWyslaneAt: string | null;
+  dokumentyWyslaneBy: string | null;
+  /** What was sent, in the sender's own words. */
+  dokumentyOpis: string;
   /** E-mail of whoever created the meeting. */
   createdBy: string;
   createdAt: string;
   updatedAt: string;
 }
 
-/** What the add/edit form submits: a meeting minus everything the server owns. */
+/**
+ * What the add/edit form submits: a meeting minus everything the server owns.
+ *
+ * The date-change trail and the documents fields are excluded on purpose — they
+ * are recorded by the actions that cause them (an edit that moves the date, a
+ * tick on the meeting), never typed into the form.
+ */
 export type SpotkanieInput = Omit<
   Spotkanie,
-  'id' | 'createdBy' | 'createdAt' | 'updatedAt'
+  | 'id'
+  | 'createdBy'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'terminZmienionyAt'
+  | 'terminZmienionyZ'
+  | 'terminZmienionyBy'
+  | 'terminZmianaOdczytanaAt'
+  | 'terminZmianaOdczytanaBy'
+  | 'dokumentyWyslaneAt'
+  | 'dokumentyWyslaneBy'
+  | 'dokumentyOpis'
 >;
+
+/**
+ * One Mailing send recorded against a meeting — the slim projection the
+ * calendar shows. The full row lives in `mailing_history`, which stays the
+ * authority on what actually went out.
+ */
+export interface SpotkanieMailing {
+  id: number;
+  spotkanieId: number;
+  templateName: string;
+  status: 'success' | 'error';
+  errorMessage?: string;
+  adresNazwa: string;
+  jednostkaNazwa: string;
+  jednostkaEmail: string;
+  subject: string;
+  /** File names only — the paths are in the mailing history itself. */
+  attachmentNames: string[];
+  sentFrom: string;
+  sentAt: string;
+}
 
 /** Ordering of the contractor pick-lists in the transaction review screen. */
 export type ContractorSortOrder = 'name-asc' | 'name-desc' | 'account-asc' | 'account-desc';
@@ -712,6 +802,8 @@ export interface BackupData {
     /** Absent in backups written before the Kalendarz module existed. */
     spotkaniaTypy?: SpotkanieTyp[];
     spotkania?: Spotkanie[];
+    /** Absent in backups written before meetings had locations. */
+    spotkaniaLokalizacje?: SpotkanieLokalizacja[];
     /**
      * Names given to the accounts, keyed by mailbox. Only the names travel —
      * the accounts themselves belong to Supabase auth. Absent in backups
@@ -737,6 +829,7 @@ export interface BackupCounts {
   mailingHistory: number;
   spotkaniaTypy: number;
   spotkania: number;
+  spotkaniaLokalizacje: number;
   appUserNames: number;
 }
 
@@ -754,6 +847,7 @@ export function countBackup(data: BackupData): BackupCounts {
     mailingHistory: data.data.mailingHistory?.length ?? 0,
     spotkaniaTypy: data.data.spotkaniaTypy?.length ?? 0,
     spotkania: data.data.spotkania?.length ?? 0,
+    spotkaniaLokalizacje: data.data.spotkaniaLokalizacje?.length ?? 0,
     appUserNames: data.data.appUserNames?.length ?? 0,
   };
 }
@@ -906,10 +1000,18 @@ export const IPC_CHANNELS = {
   ADD_SPOTKANIE_TYP: 'kalendarz:add-typ',
   UPDATE_SPOTKANIE_TYP: 'kalendarz:update-typ',
   DELETE_SPOTKANIE_TYP: 'kalendarz:delete-typ',
+  GET_SPOTKANIA_LOKALIZACJE: 'kalendarz:get-lokalizacje',
+  ADD_SPOTKANIE_LOKALIZACJA: 'kalendarz:add-lokalizacja',
+  UPDATE_SPOTKANIE_LOKALIZACJA: 'kalendarz:update-lokalizacja',
+  DELETE_SPOTKANIE_LOKALIZACJA: 'kalendarz:delete-lokalizacja',
   GET_SPOTKANIA: 'kalendarz:get-spotkania',
   ADD_SPOTKANIE: 'kalendarz:add-spotkanie',
   UPDATE_SPOTKANIE: 'kalendarz:update-spotkanie',
   DELETE_SPOTKANIE: 'kalendarz:delete-spotkanie',
+  ACK_SPOTKANIE_TERMIN: 'kalendarz:ack-termin',
+  SET_SPOTKANIE_TERMIN_STATUS: 'kalendarz:set-termin-status',
+  SET_SPOTKANIE_DOKUMENTY: 'kalendarz:set-dokumenty',
+  GET_SPOTKANIA_MAILINGI: 'kalendarz:get-mailingi',
 
   // Auth (Supabase-backed)
   AUTH_SIGN_IN: 'auth:sign-in',

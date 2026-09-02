@@ -361,6 +361,16 @@ create table if not exists public.spotkania_typy (
   created_at timestamptz not null default now()
 );
 
+-- Where meetings happen — a dictionary the user owns, like the types above.
+create table if not exists public.spotkania_lokalizacje (
+  id         bigserial   primary key,
+  nazwa      text        not null,
+  -- Street address or "how to get there", shown under the name.
+  adres      text        not null default '',
+  opis       text        not null default '',
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.spotkania (
   id          bigserial   primary key,
   nazwa       text        not null,
@@ -379,14 +389,73 @@ create table if not exists public.spotkania (
   -- [{ userId, email, displayName }] — snapshotted from `app_users` on save, so
   -- a participant stays readable after their account is removed.
   uczestnicy  jsonb       not null default '[]'::jsonb,
+  -- Where it happens. ON DELETE SET NULL like every other link here; the NAME
+  -- travels beside the id because a restore renumbers the dictionary.
+  lokalizacja_id    bigint  references public.spotkania_lokalizacje(id) on delete set null,
+  lokalizacja_nazwa text    not null default '',
+  -- Is the date settled, or still tentative? 'potwierdzony' | 'wstepny'.
+  -- Defaults to confirmed so meetings written before this column keep meaning
+  -- what they meant.
+  termin_status text not null default 'potwierdzony',
+  -- The trail a moved date leaves. A meeting whose date moves is the one thing
+  -- here somebody has to be TOLD about — everyone wrote the old date down — so
+  -- the move is recorded, and `..._odczytana_*` is the acknowledgement that
+  -- puts the meeting back to looking ordinary.
+  termin_zmieniony_at timestamptz,
+  termin_zmieniony_z  timestamptz,
+  termin_zmieniony_by text,
+  termin_zmiana_odczytana_at timestamptz,
+  termin_zmiana_odczytana_by text,
+  -- Paperwork sent by hand, with a note of what went out. The Mailing module's
+  -- own sends link themselves through mailing_history.spotkanie_id instead.
+  dokumenty_wyslane_at timestamptz,
+  dokumenty_wyslane_by text,
+  dokumenty_opis text not null default '',
   created_by  text        not null default '',
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
 
+-- For projects created before these columns existed.
+alter table public.spotkania
+  add column if not exists lokalizacja_id bigint
+    references public.spotkania_lokalizacje(id) on delete set null,
+  add column if not exists lokalizacja_nazwa text not null default '',
+  add column if not exists termin_status text not null default 'potwierdzony',
+  add column if not exists termin_zmieniony_at timestamptz,
+  add column if not exists termin_zmieniony_z  timestamptz,
+  add column if not exists termin_zmieniony_by text,
+  add column if not exists termin_zmiana_odczytana_at timestamptz,
+  add column if not exists termin_zmiana_odczytana_by text,
+  add column if not exists dokumenty_wyslane_at timestamptz,
+  add column if not exists dokumenty_wyslane_by text,
+  add column if not exists dokumenty_opis text not null default '';
+
+alter table public.spotkania
+  drop constraint if exists spotkania_termin_status_check;
+alter table public.spotkania
+  add constraint spotkania_termin_status_check
+  check (termin_status in ('potwierdzony', 'wstepny'));
+
 -- The calendar reads one month at a time; the community filter reads by address.
 create index if not exists spotkania_starts_at_idx on public.spotkania (starts_at);
+create index if not exists spotkania_lokalizacja_id_idx on public.spotkania (lokalizacja_id);
+-- The calendar's warning strip counts exactly these.
+create index if not exists spotkania_termin_zmiana_idx
+  on public.spotkania (termin_zmieniony_at)
+  where termin_zmieniony_at is not null and termin_zmiana_odczytana_at is null;
 create index if not exists spotkania_adres_id_idx  on public.spotkania (adres_id);
+
+-- Mailing ↔ meeting. Added here rather than on the table above, because
+-- `mailing_history` is created before `spotkania` exists to be referenced. The
+-- mailing row stays the authority on what was actually sent; this is only the
+-- link back to the meeting the send was triggered from.
+alter table public.mailing_history
+  add column if not exists spotkanie_id bigint
+    references public.spotkania(id) on delete set null;
+
+create index if not exists mailing_history_spotkanie_id_idx
+  on public.mailing_history (spotkanie_id);
 
 -- ============================================================
 -- Row-Level Security
@@ -407,6 +476,7 @@ alter table public.mailing_szablony enable row level security;
 alter table public.mailing_history  enable row level security;
 alter table public.app_users        enable row level security;
 alter table public.spotkania_typy   enable row level security;
+alter table public.spotkania_lokalizacje enable row level security;
 alter table public.spotkania        enable row level security;
 
 -- app_config: read-only for signed-in users; no insert/update/delete policy,
@@ -444,6 +514,10 @@ drop policy if exists "authenticated_all" on public.zgn_jednostki;
 drop policy if exists "authenticated_all" on public.mailing_pola;
 drop policy if exists "authenticated_all" on public.mailing_szablony;
 drop policy if exists "authenticated_all" on public.mailing_history;
+drop policy if exists "authenticated_all" on public.spotkania_lokalizacje;
+create policy "authenticated_all" on public.spotkania_lokalizacje
+  for all to authenticated using (true) with check (true);
+
 drop policy if exists "authenticated_all" on public.spotkania_typy;
 drop policy if exists "authenticated_all" on public.spotkania;
 

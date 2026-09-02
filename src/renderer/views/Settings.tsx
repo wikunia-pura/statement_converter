@@ -285,6 +285,7 @@ const Settings: React.FC<SettingsProps> = ({
       .replace('{mailingHistory}', String(counts.mailingHistory))
       .replace('{spotkaniaTypy}', String(counts.spotkaniaTypy))
       .replace('{spotkania}', String(counts.spotkania))
+      .replace('{spotkaniaLokalizacje}', String(counts.spotkaniaLokalizacje))
       .replace('{appUserNames}', String(counts.appUserNames));
   };
 

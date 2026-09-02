@@ -18,6 +18,7 @@ import MailingPola from './views/MailingPola';
 import MailingHistoria from './views/MailingHistoria';
 import Kalendarz from './views/Kalendarz';
 import KalendarzTypy from './views/KalendarzTypy';
+import KalendarzLokalizacje from './views/KalendarzLokalizacje';
 import ModuleTabs from './components/ModuleTabs';
 import CoNowego from './views/CoNowego';
 import Login from './views/Login';
@@ -35,6 +36,7 @@ import { AppUser, FileEntry } from '../shared/types';
 import { BookingFilter, currentMonthKey } from '../shared/bookings';
 import { releaseForVersion, shouldShowWhatsNew } from '../shared/release-notes';
 import { greetingName } from '../shared/app-users';
+import { NavigationProvider, HeaderNav } from './navigation';
 
 interface NavItemProps {
   icon: React.ComponentProps<typeof Icon>['name'];
@@ -77,10 +79,37 @@ type View =
   | 'kalendarz'
   | 'conowego';
 
+/**
+ * One place the app can be: a view, plus which of its tabs was open.
+ *
+ * The tab belongs in here because it is navigation — "Pokaż w historii" moves
+ * the user as much as clicking Konwerter does, and Back that skipped it would
+ * feel like it had missed a step.
+ */
+interface AppLocation {
+  view: View;
+  tab?: string;
+}
+
+/** Deep enough for a day's work; old entries fall off the bottom. */
+const NAV_STACK_LIMIT = 50;
+
+interface NavState {
+  stack: AppLocation[];
+  index: number;
+}
+
 const App: React.FC = () => {
+  /**
+   * Where the user is, and how they got here. An app with no address bar still
+   * owes them Back — this is the whole browser history, in one piece of state.
+   */
+  const [nav, setNav] = useState<NavState>({ stack: [{ view: 'pulpit' }], index: 0 });
   // The dashboard is where the app opens: the month's bookings are the question
   // the user comes here with, and converting files is the answer to it.
-  const [currentView, setCurrentView] = useState<View>('pulpit');
+  const currentView = nav.stack[nav.index].view;
+  const canGoBack = nav.index > 0;
+  const canGoForward = nav.index < nav.stack.length - 1;
   const [darkMode, setDarkMode] = useState(false);
   const [language, setLanguage] = useState<Language>('pl');
   // Sidebar starts collapsed (icon-only rail); the user can pin it expanded and
@@ -104,7 +133,7 @@ const App: React.FC = () => {
   const [historySearchSeed, setHistorySearchSeed] = useState<string>('');
   const [odczytyTab, setOdczytyTab] = useState<'convert' | 'history'>('convert');
   const [mailingTab, setMailingTab] = useState<'send' | 'templates' | 'fields' | 'history'>('send');
-  const [kalendarzTab, setKalendarzTab] = useState<'calendar' | 'types'>('calendar');
+  const [kalendarzTab, setKalendarzTab] = useState<'calendar' | 'types' | 'places'>('calendar');
   // Kalendarz: the month lives here so a detour to "Typy spotkań" — or to any
   // other module — comes back to the month the user was looking at.
   const [kalMonth, setKalMonth] = useState<string>(() => currentMonthKey());
@@ -166,6 +195,127 @@ const App: React.FC = () => {
       setSession(null);
       setSessionExpired(true);
     });
+  }, []);
+
+  /* ------------------------------ Navigation ------------------------------ */
+
+  /** The tab a module is currently on, so a history entry can record it. */
+  const tabOf = (view: View): string | undefined => {
+    if (view === 'converter') return converterTab;
+    if (view === 'odczyty') return odczytyTab;
+    if (view === 'mailing') return mailingTab;
+    if (view === 'kalendarz') return kalendarzTab;
+    return undefined;
+  };
+
+  /** Put a module on a tab. Tabs that don't belong to the view are ignored. */
+  const applyTab = (view: View, tab?: string) => {
+    if (!tab) return;
+    if (view === 'converter') setConverterTab(tab as typeof converterTab);
+    else if (view === 'odczyty') setOdczytyTab(tab as typeof odczytyTab);
+    else if (view === 'mailing') setMailingTab(tab as typeof mailingTab);
+    else if (view === 'kalendarz') setKalendarzTab(tab as typeof kalendarzTab);
+  };
+
+  /**
+   * Go somewhere, and remember it.
+   *
+   * Two behaviours worth naming. Navigating to where you already are does
+   * nothing, so a second click on the active nav item is not a history entry.
+   * And navigating to the entry directly behind the current one is treated as
+   * Back rather than as a new entry — that is what lets a view's own "back to
+   * the list" button keep the forward history instead of stacking duplicates.
+   */
+  const navigate = (view: View, tab?: string) => {
+    applyTab(view, tab);
+    setNav((prev) => {
+      const here = prev.stack[prev.index];
+      // Without an explicit tab, staying in the same view keeps the tab the
+      // entry already had; arriving from elsewhere picks up the module's own
+      // remembered tab, which is what the sidebar has always done.
+      const next: AppLocation = {
+        view,
+        tab: tab ?? (view === here.view ? here.tab : tabOf(view)),
+      };
+      if (here.view === next.view && here.tab === next.tab) return prev;
+      const behind = prev.index > 0 ? prev.stack[prev.index - 1] : null;
+      if (behind && behind.view === next.view && behind.tab === next.tab) {
+        return { ...prev, index: prev.index - 1 };
+      }
+      const stack = [...prev.stack.slice(0, prev.index + 1), next];
+      if (stack.length > NAV_STACK_LIMIT) {
+        const trimmed = stack.slice(stack.length - NAV_STACK_LIMIT);
+        return { stack: trimmed, index: trimmed.length - 1 };
+      }
+      return { stack, index: stack.length - 1 };
+    });
+  };
+
+  /** Kept as the old name so every existing call site reads unchanged. */
+  const setCurrentView = (view: View) => navigate(view);
+
+  /**
+   * Move along the history. Pure updater on purpose — the tab is restored by
+   * the effect below rather than from in here, because StrictMode invokes an
+   * updater twice and a state write hidden inside one is exactly the kind of
+   * side effect that makes the second invocation matter.
+   */
+  const step = (delta: number) =>
+    setNav((prev) => {
+      const index = prev.index + delta;
+      if (index < 0 || index > prev.stack.length - 1) return prev;
+      return { ...prev, index };
+    });
+
+  const goBack = () => step(-1);
+  const goForward = () => step(1);
+
+  // Whatever moved the history — a button, Alt+←, the mouse — the module ends
+  // up on the tab that entry recorded, not on its most recently used one.
+  useEffect(() => {
+    const loc = nav.stack[nav.index];
+    applyTab(loc.view, loc.tab);
+  }, [nav]);
+
+  /**
+   * Alt+← / Alt+→ and the mouse's own back/forward buttons, the two gestures
+   * people already have in their hands. Ignored while typing, so Alt+← in a
+   * text field stays a text-field key.
+   */
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) {
+        return;
+      }
+      if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        goBack();
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        goForward();
+      }
+    };
+    const onMouseDown = (event: MouseEvent) => {
+      if (event.button === 3) {
+        event.preventDefault();
+        goBack();
+      } else if (event.button === 4) {
+        event.preventDefault();
+        goForward();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onMouseDown);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onMouseDown);
+    };
+    // Registered once: both handlers reach the history through `setNav(prev =>
+    // …)` and the tab setters, so they hold no state to go stale — and
+    // re-subscribing on every render would be two listener swaps per keystroke.
   }, []);
 
   /**
@@ -257,6 +407,45 @@ const App: React.FC = () => {
   const me = profile ?? { email: session?.email ?? '' };
   const myName = greetingName(me);
 
+  /**
+   * What a history entry is called, for the Back/Forward tooltips. In an app
+   * whose history is invisible, "Wstecz: Kalendarz → Lokalizacje" is the
+   * difference between a button you trust and one you poke at.
+   */
+  const locationLabel = (loc: AppLocation | undefined): string | null => {
+    if (!loc) return null;
+    const view: Record<View, string> = {
+      pulpit: t.pulpit,
+      converter: t.converter,
+      settings: t.settings,
+      kontrahenci: t.kontrahenci,
+      adresy: t.adresy,
+      banki: t.banki,
+      podsumowanie: t.podsumowanieZaliczek,
+      noty: t.notySwiadczenia,
+      scalanie: t.scalanieWplat,
+      homebanking: t.homebanking,
+      odczyty: t.odczyty,
+      mailing: t.mailing,
+      kalendarz: t.kalendarz,
+      conowego: t.whatsNew,
+    };
+    const tabs: Record<string, string> = {
+      convert: t.tabConversion,
+      bookings: t.tabBookings,
+      history: t.tabHistory,
+      send: t.mailingTabSend,
+      templates: t.mailingTabTemplates,
+      fields: t.mailingTabFields,
+      calendar: t.kalTabCalendar,
+      types: t.kalTabTypes,
+      places: t.kalTabPlaces,
+    };
+    const base = view[loc.view];
+    const tab = loc.tab ? tabs[loc.tab] : undefined;
+    return tab ? `${base} → ${tab}` : base;
+  };
+
   // Release notes for the running build. `unreadRelease` drives both the nav dot
   // and the one-time modal; it stays false while settings are still loading.
   const currentRelease = releaseForVersion(appVersion);
@@ -299,6 +488,15 @@ const App: React.FC = () => {
 
   return (
     <NotificationProvider errorTitle={t.error} okLabel="OK" cancelLabel={t.cancel} dismissLabel={t.close}>
+    <NavigationProvider
+      canGoBack={canGoBack}
+      canGoForward={canGoForward}
+      goBack={goBack}
+      goForward={goForward}
+      backLabel={locationLabel(nav.stack[nav.index - 1])}
+      forwardLabel={locationLabel(nav.stack[nav.index + 1])}
+      labels={{ back: t.navBack, forward: t.navForward, group: t.navHistory }}
+    >
     {splash}
     <div className="app">
       <UpdateNotification language={language} />
@@ -319,16 +517,23 @@ const App: React.FC = () => {
       <div className="app-body">
       <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-header">
-          <button
-            type="button"
-            className="sidebar-toggle"
-            onClick={toggleSidebar}
-            title={sidebarCollapsed ? t.expandSidebar : t.collapseSidebar}
-            aria-label={sidebarCollapsed ? t.expandSidebar : t.collapseSidebar}
-            aria-expanded={!sidebarCollapsed}
-          >
-            <Icon name="menu" size={20} />
-          </button>
+          {/* The window's chrome: collapse the rail, and go back or forward.
+              One place for the whole app rather than a pair of buttons in
+              fourteen view headers — and it is the one row that is on screen
+              whatever the user is looking at. */}
+          <div className="sidebar-chrome">
+            <button
+              type="button"
+              className="sidebar-toggle"
+              onClick={toggleSidebar}
+              title={sidebarCollapsed ? t.expandSidebar : t.collapseSidebar}
+              aria-label={sidebarCollapsed ? t.expandSidebar : t.collapseSidebar}
+              aria-expanded={!sidebarCollapsed}
+            >
+              <Icon name="menu" size={20} />
+            </button>
+            <HeaderNav />
+          </div>
           <Logo />
           {/* The welcome, right under the logo: the first thing read on opening
               the app, and the one place that addresses the person rather than
@@ -456,8 +661,7 @@ const App: React.FC = () => {
             userEmail={session.email}
             onShowInHistory={(query) => {
               setHistorySearchSeed(query);
-              setConverterTab('history');
-              setCurrentView('converter');
+              navigate('converter', 'history');
             }}
           />
         )}
@@ -470,7 +674,7 @@ const App: React.FC = () => {
                 { id: 'history', label: t.tabHistory, icon: 'history' },
               ]}
               active={converterTab}
-              onChange={(id) => setConverterTab(id as 'convert' | 'bookings' | 'history')}
+              onChange={(id) => navigate('converter', id)}
             />
             {converterTab === 'convert' && (
               <Converter
@@ -481,9 +685,9 @@ const App: React.FC = () => {
                 setSelectedBank={setSelectedBank}
                 onAddAdresWithAccount={(acc) => {
                   setAdresyPrefillAccount(acc);
-                  setCurrentView('adresy');
+                  navigate('adresy');
                 }}
-                onNavigateToHistory={() => setConverterTab('history')}
+                onNavigateToHistory={() => navigate('converter', 'history')}
               />
             )}
             {converterTab === 'bookings' && (
@@ -496,7 +700,7 @@ const App: React.FC = () => {
                 userEmail={session.email}
                 onShowInHistory={(query) => {
                   setHistorySearchSeed(query);
-                  setConverterTab('history');
+                  navigate('converter', 'history');
                 }}
               />
             )}
@@ -552,14 +756,14 @@ const App: React.FC = () => {
                 { id: 'history', label: t.tabHistory, icon: 'history' },
               ]}
               active={odczytyTab}
-              onChange={(id) => setOdczytyTab(id as 'convert' | 'history')}
+              onChange={(id) => navigate('odczyty', id)}
             />
             {odczytyTab === 'convert' ? (
               <OdczytyLicznikow
                 language={language}
                 files={odczytyFiles}
                 setFiles={setOdczytyFiles}
-                onNavigateToHistory={() => setOdczytyTab('history')}
+                onNavigateToHistory={() => navigate('odczyty', 'history')}
               />
             ) : (
               <OdczytyHistoria language={language} />
@@ -576,15 +780,15 @@ const App: React.FC = () => {
                 { id: 'history', label: t.tabHistory, icon: 'history' },
               ]}
               active={mailingTab}
-              onChange={(id) => setMailingTab(id as 'send' | 'templates' | 'fields' | 'history')}
+              onChange={(id) => navigate('mailing', id)}
             />
             {mailingTab === 'send' && (
               <Mailing
                 language={language}
                 draft={mailingDraft}
                 setDraft={setMailingDraft}
-                onNavigateToHistory={() => setMailingTab('history')}
-                onNavigateToTemplates={() => setMailingTab('templates')}
+                onNavigateToHistory={() => navigate('mailing', 'history')}
+                onNavigateToTemplates={() => navigate('mailing', 'templates')}
               />
             )}
             {mailingTab === 'templates' && <MailingSzablony language={language} />}
@@ -598,21 +802,34 @@ const App: React.FC = () => {
               tabs={[
                 { id: 'calendar', label: t.kalTabCalendar, icon: 'calendar' },
                 { id: 'types', label: t.kalTabTypes, icon: 'clipboard' },
+                { id: 'places', label: t.kalTabPlaces, icon: 'map-pin' },
               ]}
               active={kalendarzTab}
-              onChange={(id) => setKalendarzTab(id as 'calendar' | 'types')}
+              onChange={(id) => navigate('kalendarz', id)}
             />
-            {kalendarzTab === 'calendar' ? (
+            {kalendarzTab === 'calendar' && (
               <Kalendarz
                 language={language}
                 monthKey={kalMonth}
                 setMonthKey={setKalMonth}
                 userEmail={session.email}
-                onManageTypes={() => setKalendarzTab('types')}
+                onManageTypes={() => navigate('kalendarz', 'types')}
+                onManagePlaces={() => navigate('kalendarz', 'places')}
+                onSendDocuments={(ctx) => {
+                  // A fresh draft, pre-addressed to the meeting's community and
+                  // carrying the meeting so the send records itself against it.
+                  setMailingDraft({
+                    ...emptyMailingDraft,
+                    adresIds: ctx.adresIds,
+                    spotkanieId: ctx.spotkanieId,
+                    spotkanieNazwa: ctx.spotkanieNazwa,
+                  });
+                  navigate('mailing', 'send');
+                }}
               />
-            ) : (
-              <KalendarzTypy language={language} />
             )}
+            {kalendarzTab === 'types' && <KalendarzTypy language={language} />}
+            {kalendarzTab === 'places' && <KalendarzLokalizacje language={language} />}
           </>
         )}
         {currentView === 'conowego' && (
@@ -632,6 +849,7 @@ const App: React.FC = () => {
       </div>
       <Footer language={language} appVersion={appVersion} />
     </div>
+    </NavigationProvider>
     </NotificationProvider>
   );
 };

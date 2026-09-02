@@ -70,6 +70,12 @@ export interface MailingSendRequest {
   attachPdf: boolean;
   /** Extra files picked by the user; the same set goes to every community. */
   attachments: { fileName: string; filePath: string }[];
+  /**
+   * The meeting this send was triggered from, when the user came here from the
+   * Kalendarz. Recorded on every history row the send produces, which is what
+   * lets the meeting list what actually went out for it.
+   */
+  spotkanieId?: number | null;
 }
 
 /** Where generated PDFs and archived attachments live, per send day. */
@@ -209,6 +215,7 @@ export async function sendMailing(
             fieldValues,
             attachments: result.attachments,
             sentFrom: sender.from,
+            spotkanieId: request.spotkanieId ?? null,
           });
         } catch (error: unknown) {
           log.error(

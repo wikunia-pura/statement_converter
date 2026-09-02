@@ -230,10 +230,57 @@ a:hover { color: var(--accent-hover); }
   flex-direction: column;
 }
 
+/* The window's own chrome: collapse the rail, plus Back and Forward. One row
+   for the whole app, and the only one that is on screen whatever view is. */
+.sidebar-chrome {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: var(--s-2) var(--s-2) 0;
+}
+
+.header-nav {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.header-nav__btn {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color var(--t-fast), color var(--t-fast), opacity var(--t-fast);
+}
+
+.header-nav__btn:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+/* Dimmed rather than hidden: a Back button that vanishes at the start of the
+   history takes the row's shape with it. */
+.header-nav__btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* Collapsed rail: the three buttons stack instead of overflowing 64px. */
+.sidebar.collapsed .sidebar-chrome {
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
 .sidebar-toggle {
   width: 40px;
   height: 40px;
-  margin: var(--s-2) var(--s-2) 0;
   padding: 0;
   display: flex;
   align-items: center;
@@ -252,11 +299,6 @@ a:hover { color: var(--accent-hover); }
   color: var(--text-primary);
 }
 
-.sidebar.collapsed .sidebar-toggle {
-  align-self: center;
-  margin-right: var(--s-2);
-  margin-left: var(--s-2);
-}
 
 .sidebar.collapsed .logo-container {
   padding: var(--s-3) var(--s-2);
@@ -2497,6 +2539,288 @@ body.dark-mode .bank-illustration-svg {
 .update-required .update-text strong {
   color: var(--warning);
 }
+
+/* ==========================================================================
+   Kalendarz — what needs attention, places, dates, documents
+   ========================================================================== */
+
+/* The strip above the month. Buttons, not a banner: the useful thing to do
+   about "two dates moved" is to see which two. */
+.kal-warnings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.kal-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 8px var(--s-4);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+
+.kal-warning em {
+  font-style: normal;
+  font-weight: 500;
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+.kal-warning:hover {
+  border-color: var(--warning);
+}
+
+.kal-warning.is-active {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--warning) 28%, transparent);
+}
+
+/* A tentative date is a plan, not a problem — it gets the calmer palette. */
+.kal-warning--tentative {
+  border-color: var(--info-border);
+  background: var(--info-bg);
+  color: var(--info);
+}
+
+.kal-warning--tentative:hover { border-color: var(--info); }
+
+.kal-warning--tentative.is-active {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--info) 28%, transparent);
+}
+
+.kal-filters__sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px var(--s-1);
+  background: var(--border-default);
+}
+
+.kal-filter--changed.is-active {
+  border-color: var(--warning);
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.kal-filter--tentative.is-active {
+  border-color: var(--info);
+  background: var(--info-bg);
+  color: var(--info);
+}
+
+/* Confirmed / tentative, as two radios that look like what they do. */
+.kal-termin-choice {
+  display: flex;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+
+.kal-termin-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px var(--s-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: var(--fs-md);
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+
+.kal-termin-option input { display: none; }
+
+.kal-termin-option:hover { background: var(--bg-surface-hover); }
+
+.kal-termin-option.is-active {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* The place a meeting is held, wherever it appears. */
+.kal-place {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-md);
+  color: var(--text-secondary);
+  min-width: 0;
+}
+
+.kal-place > svg { flex-shrink: 0; color: var(--text-tertiary); }
+
+/* A moved date, said out loud on the card. Outranks the rest of the card until
+   somebody acknowledges it, so it sits above the name. */
+.kal-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  border-radius: var(--r-md);
+  border: 1px solid var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: var(--fs-md);
+}
+
+.kal-alert > svg { flex-shrink: 0; margin-top: 1px; }
+
+.kal-alert__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.kal-alert__body span { font-weight: 500; opacity: 0.9; }
+
+/* The two marks on the card itself: a left edge, so a scan down the day panel
+   picks them out without reading a word. */
+.kal-card.is-changed { border-left: 3px solid var(--warning); }
+.kal-card.is-tentative { border-left: 3px dashed var(--info); }
+.kal-card.is-changed.is-tentative { border-left: 3px solid var(--warning); }
+
+.kal-badge--tentative {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--info-bg);
+  color: var(--info);
+  border: 1px solid var(--info-border);
+}
+
+/* …and in the month grid, on the chip. Dashed for tentative, warning-tinted
+   for moved, so the month answers "is anything off?" before the panel does. */
+.kal-chip.is-tentative { border-style: dashed; }
+
+.kal-chip.is-changed {
+  background: var(--warning-bg);
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.kal-tip__line--warn { color: var(--warning); font-weight: 550; }
+
+/* --------------------------- Documents ---------------------------------- */
+
+.kal-docs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.kal-docs__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+
+.kal-docs__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.kal-docs__state.is-sent { color: var(--success); }
+
+.kal-docs__actions { display: inline-flex; gap: var(--s-3); }
+
+.kal-docs__note {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-md);
+  color: var(--text-secondary);
+}
+
+.kal-docs__note p { margin: 0; }
+
+.kal-docs__stamp { font-size: var(--fs-xs); color: var(--text-tertiary); }
+
+.kal-docs__form { display: flex; flex-direction: column; gap: var(--s-2); }
+
+.kal-docs__form textarea { resize: vertical; }
+
+.kal-docs__form-actions { display: flex; gap: var(--s-2); flex-wrap: wrap; }
+
+/* What the Mailing module actually sent for this meeting. */
+.kal-docs__mailings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kal-docs__mailings li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px var(--s-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-surface-sunken);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  min-width: 0;
+}
+
+.kal-docs__mailings li.is-error { color: var(--danger); }
+
+.kal-docs__mailings li > svg { flex-shrink: 0; }
+
+.kal-docs__mailing-main {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kal-docs__mailing-when,
+.kal-docs__mailing-files {
+  flex-shrink: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.kal-docs__mailing-files { display: inline-flex; align-items: center; gap: 3px; }
+
+/* The Mailing view's own note about where the draft came from. */
+.mailing-from-meeting {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-bottom: var(--s-4);
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--accent-border);
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-size: var(--fs-md);
+  font-weight: 550;
+}
+
+.mailing-from-meeting > svg { flex-shrink: 0; }
+.mailing-from-meeting span { flex: 1; min-width: 0; }
 
 /* ==========================================================================
    Zaliczki status banner + edit-table
@@ -4986,12 +5310,28 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 
 /* Fills the scroll viewport rather than ending wherever the month happens to:
    a calendar with dead space under it reads as a widget, not as the view. */
+/* Fills the frame instead of growing past it: with a definite height here the
+   grid and the day panel scroll inside themselves, which is the whole point of
+   a two-pane calendar. `min-height: 100%` used to let the content push the page
+   taller, so the day's list scrolled the entire view instead. */
+.content-body--fill {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.content-body--fill > .kal {
+  flex: 1;
+  min-height: 0;
+}
+
 .kal {
   display: flex;
   flex-direction: column;
   gap: var(--s-4);
-  min-height: 100%;
 }
+
+
 
 /* The month bar is shared with Księgowania (.ksieg-hero); only the toolbar
    differs, because the type filters need room to wrap. */
@@ -5102,9 +5442,13 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
   grid-template-columns: minmax(0, 1fr) 384px;
   gap: var(--s-4);
   /* Takes whatever the hero and the toolbar leave, and stretches both columns
-     to it; `min-height: 0` is what lets the children scroll instead of pushing. */
+     to it. The floor is deliberate rather than `min-height: 0`: the columns
+     have their own `min-height: 0` and their own scrollers, so shrinking THEM
+     is what makes the panes scroll — while shrinking this any further would
+     squeeze the month into nothing on a short window. Below the floor the page
+     itself scrolls (see `.content-body--fill`). */
   flex: 1;
-  min-height: 0;
+  min-height: 420px;
   align-items: stretch;
 }
 

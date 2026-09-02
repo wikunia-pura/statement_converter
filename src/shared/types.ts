@@ -521,7 +521,28 @@ export interface AppUser {
   email: string;
   /** From the account's metadata; most accounts are created without one. */
   displayName?: string | null;
+  /**
+   * The app's own name for the person, typed in Ustawienia → Użytkownicy.
+   * Separate from `displayName` because the auth trigger owns that one and
+   * overwrites it from the account metadata — see supabase/schema.sql.
+   */
+  firstName?: string | null;
+  lastName?: string | null;
   createdAt: string;
+}
+
+/**
+ * A person's name as it travels in a backup: keyed by mailbox, never by id.
+ *
+ * The rows of `app_users` themselves are not restorable — a trigger owns them,
+ * mirroring the Supabase accounts — but the names ARE authored in this app and
+ * cannot be rebuilt from anything. So a restore carries them across and applies
+ * them to whichever live account has that mailbox.
+ */
+export interface AppUserName {
+  email: string;
+  firstName?: string | null;
+  lastName?: string | null;
 }
 
 /**
@@ -545,6 +566,12 @@ export interface SpotkanieTyp {
 export interface SpotkanieUczestnik {
   userId: string;
   email: string;
+  /**
+   * The name the person went by when the meeting was saved — their first and
+   * last name once someone has been named, the account's own display name
+   * before that. A snapshot on purpose: renaming a person later must not
+   * rewrite who a past meeting says was in the room.
+   */
   displayName?: string | null;
 }
 
@@ -650,10 +677,12 @@ export interface AppSettings {
  * `AppSettings` needs none of this — it is spread whole — but a secret added
  * there must be blanked in `settingsForExport`, like `smtpPass`.
  *
- * Out of scope on purpose: `app_config` (infrastructure, not user data),
- * `app_users` (a trigger-maintained mirror of the Supabase auth accounts, so it
- * is rebuilt rather than restored — the participants on each meeting carry their
- * own snapshot of the people), the
+ * Out of scope on purpose: `app_config` (infrastructure, not user data), the
+ * ROWS of `app_users` (a trigger-maintained mirror of the Supabase auth
+ * accounts, so they are rebuilt rather than restored — and the participants on
+ * each meeting carry their own snapshot of the people; their NAMES are a
+ * different matter and travel as `appUserNames`, because this app authors them
+ * and nothing can rebuild them), the
  * module files on disk (mailing PDFs, attachment copies) — history entries stay
  * readable without them — and `userData/zaliczki-cache` (the per-page OCR
  * results for "Podsumowanie zaliczek"). That cache is derived, not authored: its
@@ -683,6 +712,12 @@ export interface BackupData {
     /** Absent in backups written before the Kalendarz module existed. */
     spotkaniaTypy?: SpotkanieTyp[];
     spotkania?: Spotkanie[];
+    /**
+     * Names given to the accounts, keyed by mailbox. Only the names travel —
+     * the accounts themselves belong to Supabase auth. Absent in backups
+     * written before users could be named.
+     */
+    appUserNames?: AppUserName[];
     /** Never carries `smtpPass` — the SMTP password stays on the machine. */
     settings: AppSettings;
   };
@@ -702,6 +737,7 @@ export interface BackupCounts {
   mailingHistory: number;
   spotkaniaTypy: number;
   spotkania: number;
+  appUserNames: number;
 }
 
 export function countBackup(data: BackupData): BackupCounts {
@@ -718,6 +754,7 @@ export function countBackup(data: BackupData): BackupCounts {
     mailingHistory: data.data.mailingHistory?.length ?? 0,
     spotkaniaTypy: data.data.spotkaniaTypy?.length ?? 0,
     spotkania: data.data.spotkania?.length ?? 0,
+    appUserNames: data.data.appUserNames?.length ?? 0,
   };
 }
 
@@ -864,6 +901,7 @@ export const IPC_CHANNELS = {
   // Kalendarz (meetings, their user-defined types, and the account list the
   // participant picker reads)
   GET_APP_USERS: 'kalendarz:get-app-users',
+  SET_APP_USER_NAME: 'users:set-name',
   GET_SPOTKANIA_TYPY: 'kalendarz:get-typy',
   ADD_SPOTKANIE_TYP: 'kalendarz:add-typ',
   UPDATE_SPOTKANIE_TYP: 'kalendarz:update-typ',

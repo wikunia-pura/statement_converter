@@ -2700,6 +2700,17 @@ function setupIpcHandlers() {
     }
   });
 
+  // Naming an account is an admin action available to any signed-in user: this
+  // is a single small office sharing one database, and the alternative — a role
+  // system — would be scaffolding around a list of five people.
+  ipcMain.handle(
+    IPC_CHANNELS.SET_APP_USER_NAME,
+    async (_, id: string, firstName: string, lastName: string) => {
+      await database.setAppUserName(id, firstName, lastName);
+      return true;
+    },
+  );
+
   ipcMain.handle(IPC_CHANNELS.GET_SPOTKANIA_TYPY, async () => {
     return await database.getSpotkaniaTypy();
   });

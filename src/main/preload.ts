@@ -113,6 +113,7 @@ const IPC_CHANNELS = {
   MAILING_SET_SMTP: 'mailing:set-smtp',
   MAILING_TEST_SMTP: 'mailing:test-smtp',
   GET_APP_USERS: 'kalendarz:get-app-users',
+  SET_APP_USER_NAME: 'users:set-name',
   GET_SPOTKANIA_TYPY: 'kalendarz:get-typy',
   ADD_SPOTKANIE_TYP: 'kalendarz:add-typ',
   UPDATE_SPOTKANIE_TYP: 'kalendarz:update-typ',
@@ -379,6 +380,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Kalendarz
   getAppUsers: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_USERS),
+  setAppUserName: (id: string, firstName: string, lastName: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_APP_USER_NAME, id, firstName, lastName),
   getSpotkaniaTypy: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SPOTKANIA_TYPY),
   addSpotkanieTyp: (nazwa: string, kolor: string, opis: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.ADD_SPOTKANIE_TYP, nazwa, kolor, opis),

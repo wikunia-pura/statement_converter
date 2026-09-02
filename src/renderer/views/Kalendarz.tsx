@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Adres, AppUser, Spotkanie, SpotkanieInput, SpotkanieTyp, SpotkanieUczestnik } from '../../shared/types';
+import { comparePeople, personLabel, personName } from '../../shared/app-users';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
@@ -65,11 +66,6 @@ interface TipState {
   left: number;
   top?: number;
   bottom?: number;
-}
-
-/** The label a participant is known by: their name if they have one. */
-function personLabel(person: { email: string; displayName?: string | null }): string {
-  return person.displayName?.trim() || person.email;
 }
 
 /* ============================ The add/edit form ============================ */
@@ -140,7 +136,9 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
   const [localError, setLocalError] = useState<string | null>(null);
 
   const chosen = new Set(uczestnicy.map((u) => u.userId));
-  const available = users.filter((u) => !chosen.has(u.id));
+  // Offered by name, in name order — the dropdown is read down, and mailbox
+  // order stops making sense the moment the labels are people's names.
+  const available = users.filter((u) => !chosen.has(u.id)).sort(comparePeople);
 
   const typNazwa = (id: string): string | null =>
     typy.find((typ) => String(typ.id) === id)?.nazwa ?? null;
@@ -179,7 +177,7 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
       ...prev,
       ...users
         .filter((u) => !prev.some((p) => p.userId === u.id))
-        .map((u) => ({ userId: u.id, email: u.email, displayName: u.displayName ?? null })),
+        .map((u) => ({ userId: u.id, email: u.email, displayName: personName(u) })),
     ]);
   };
 
@@ -195,7 +193,7 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
     if (!user || chosen.has(user.id)) return;
     setUczestnicy((prev) => [
       ...prev,
-      { userId: user.id, email: user.email, displayName: user.displayName ?? null },
+      { userId: user.id, email: user.email, displayName: personName(user) },
     ]);
   };
 
@@ -389,9 +387,15 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
                 value=""
                 options={available.map((u) => ({
                   value: u.id,
+                  // Pick people by name; the mailbox drops to the hint line and
+                  // stays searchable, so it is still there when two people
+                  // share a first name — or when nobody has named them yet.
                   label: personLabel(u),
-                  hint: u.displayName ? u.email : undefined,
-                  keywords: `${u.email} ${u.displayName ?? ''}${
+                  hint: personName(u) ? u.email : undefined,
+                  // Searchable by name, by mailbox, and by whatever name the
+                  // account itself carries — someone may still look for the
+                  // label they saw before anyone was named here.
+                  keywords: `${u.email} ${personName(u) ?? ''} ${u.displayName ?? ''}${
                     u.email === userEmail ? ' ja me' : ''
                   }`,
                 }))}

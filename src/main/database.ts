@@ -19,6 +19,7 @@ import {
   MailingHistoryEntry,
   MailingSmtpConfig,
   AppUser,
+  AppUserName,
   SpotkanieTyp,
   Spotkanie,
   SpotkanieInput,
@@ -81,7 +82,8 @@ const KONTO_TYP_COLS =
   'id, name, bankAccountSymbol:bank_account_symbol, apartmentPrefix:apartment_prefix, isDefault:is_default, createdAt:created_at';
 const HISTORY_COLS =
   'id, fileName:file_name, bankName:bank_name, converterName:converter_name, status, errorMessage:error_message, inputPath:input_path, outputPath:output_path, convertedAt:converted_at, adresId:adres_id, adresNazwa:adres_nazwa, bookedInDom:booked_in_dom, bookedInDomAt:booked_in_dom_at, bookedInDomBy:booked_in_dom_by';
-const APP_USER_COLS = 'id, email, displayName:display_name, createdAt:created_at';
+const APP_USER_COLS =
+  'id, email, displayName:display_name, firstName:first_name, lastName:last_name, createdAt:created_at';
 const SPOTKANIE_TYP_COLS = 'id, nazwa, kolor, opis, createdAt:created_at';
 const SPOTKANIE_COLS =
   'id, nazwa, typId:typ_id, adresId:adres_id, adresNazwa:adres_nazwa, startsAt:starts_at, endsAt:ends_at, opis, uczestnicy, createdBy:created_by, createdAt:created_at, updatedAt:updated_at';
@@ -1083,6 +1085,29 @@ class DatabaseService {
     return (data ?? []) as AppUser[];
   }
 
+  /**
+   * Name an account, or clear its name (empty strings are stored as NULL, so
+   * "no name" is one value rather than two).
+   *
+   * Only these two columns are writable by a signed-in client — the mailbox and
+   * the id belong to the auth trigger, enforced by a column grant in Supabase
+   * rather than by this method being polite about it.
+   */
+  async setAppUserName(
+    id: string,
+    firstName: string | null,
+    lastName: string | null,
+  ): Promise<void> {
+    const { error } = await getSupabase()
+      .from('app_users')
+      .update({
+        first_name: firstName?.trim() || null,
+        last_name: lastName?.trim() || null,
+      })
+      .eq('id', id);
+    if (error) throw new Error(`setAppUserName: ${error.message}`);
+  }
+
   async getSpotkaniaTypy(): Promise<SpotkanieTyp[]> {
     const { data, error } = await getSupabase()
       .from('spotkania_typy')
@@ -1279,6 +1304,7 @@ class DatabaseService {
       mailingHistory,
       spotkaniaTypy,
       spotkania,
+      appUsers,
     ] = await Promise.all([
       this.getAllBanks(),
       this.getAllKontrahenci(),
@@ -1292,6 +1318,7 @@ class DatabaseService {
       this.getMailingHistory(),
       this.getSpotkaniaTypy(),
       this.getSpotkania(),
+      this.getAppUsers(),
     ]);
     return {
       format: 'filefunky-backup',
@@ -1311,9 +1338,19 @@ class DatabaseService {
         mailingHistory,
         spotkaniaTypy,
         spotkania,
-        // `app_users` is deliberately absent: it is a mirror of the Supabase
-        // auth accounts, rebuilt by a trigger, not data this app authors. The
-        // participants stored on each meeting carry their own snapshot.
+        // The `app_users` ROWS are deliberately absent: they mirror the Supabase
+        // auth accounts, rebuilt by a trigger, not data this app authors — and
+        // the participants stored on each meeting carry their own snapshot. The
+        // NAMES are the exception: someone typed them here, nothing can rebuild
+        // them, so they travel keyed by mailbox. Accounts nobody has named carry
+        // nothing worth restoring, hence the filter.
+        appUserNames: appUsers
+          .filter(u => (u.firstName ?? '') !== '' || (u.lastName ?? '') !== '')
+          .map((u): AppUserName => ({
+            email: u.email,
+            firstName: u.firstName,
+            lastName: u.lastName,
+          })),
         settings: this.settingsForExport(),
       },
     };
@@ -1382,6 +1419,7 @@ class DatabaseService {
       mailingHistory,
       spotkaniaTypy,
       spotkania,
+      appUserNames,
       settings,
     } = backup.data;
 
@@ -1642,6 +1680,22 @@ class DatabaseService {
       );
 
       await this.deleteByIds('spotkania_typy', preexistingSpotkanieTypIds);
+    }
+
+    // Names of the accounts. Applied one by one rather than wiped-and-inserted:
+    // the rows belong to the auth trigger, so a restore can only ever say "this
+    // mailbox is called X". A name for an account that no longer exists here
+    // simply matches nothing — deliberately not an error, since a backup may
+    // predate a person leaving.
+    if (appUserNames && appUserNames.length > 0) {
+      const idByEmail = new Map(
+        (await this.getAppUsers()).map(u => [u.email.trim().toLowerCase(), u.id]),
+      );
+      for (const person of appUserNames) {
+        const id = idByEmail.get(person.email.trim().toLowerCase());
+        if (!id) continue;
+        await this.setAppUserName(id, person.firstName ?? null, person.lastName ?? null);
+      }
     }
 
     this.importSettings({ settings });

@@ -5,15 +5,27 @@ import { useNotify } from '../components/Notifications';
 import Icon from '../components/Icon';
 import Select from '../components/Select';
 import Loader from '../components/Loader';
+import UsersCard from '../components/UsersCard';
 
 interface SettingsProps {
   darkMode: boolean;
   language: Language;
   onDarkModeChange: (enabled: boolean) => void;
   onLanguageChange: (language: Language) => void;
+  /** Mailbox of the signed-in user, so the user list can mark their own row. */
+  userEmail?: string;
+  /** Fired when someone's name changes, so the greeting updates immediately. */
+  onUserNamesChanged?: () => void;
 }
 
-const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChange, onLanguageChange }) => {
+const Settings: React.FC<SettingsProps> = ({
+  darkMode,
+  language,
+  onDarkModeChange,
+  onLanguageChange,
+  userEmail,
+  onUserNamesChanged,
+}) => {
   const t = translations[language];
   const notify = useNotify();
   const [converters, setConverters] = useState<Converter[]>([]);
@@ -44,6 +56,10 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
     passwordSet: false,
   });
   const [smtpPassword, setSmtpPassword] = useState('');
+  // The ADMIN drawer at the bottom: shut on arrival. What is inside is either
+  // rarely touched (naming the accounts) or must not be touched at all (the
+  // skip-approval switch), so neither belongs in the flow of ordinary settings.
+  const [adminOpen, setAdminOpen] = useState(false);
   const [smtpBusy, setSmtpBusy] = useState(false);
 
   useEffect(() => {
@@ -268,7 +284,8 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
       .replace('{mailingSzablony}', String(counts.mailingSzablony))
       .replace('{mailingHistory}', String(counts.mailingHistory))
       .replace('{spotkaniaTypy}', String(counts.spotkaniaTypy))
-      .replace('{spotkania}', String(counts.spotkania));
+      .replace('{spotkania}', String(counts.spotkania))
+      .replace('{appUserNames}', String(counts.appUserNames));
   };
 
   const handleCreateBackup = async () => {
@@ -740,32 +757,85 @@ const Settings: React.FC<SettingsProps> = ({ darkMode, language, onDarkModeChang
           </div>
         </div>
 
-        {/* Developer-only section - Skip Approval */}
-        <div className="card" style={{ borderColor: 'var(--danger)', backgroundColor: 'rgba(220, 53, 69, 0.05)' }}>
-          <h2 style={{ marginBottom: '20px', color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Icon name="alert-triangle" size={20} /> {t.doNotUseSkipApproval}
-          </h2>
-          <p style={{ color: 'var(--danger)', fontSize: '14px', marginBottom: '15px', fontWeight: 'bold' }}>
-            {t.skipApprovalWarningMessage}
-          </p>
-          <div className="settings-row">
-            <div className="settings-label">
-              <span className="settings-label-main" style={{ color: 'var(--danger)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                <Icon name="alert-circle" size={14} /> {t.skipUserApproval}
-              </span>
-              <span className="settings-label-sub" style={{ color: 'var(--text-tertiary)' }}>
-                {t.skipUserApprovalDesc}
-              </span>
-            </div>
-            <label className="toggle-switch">
-              <input
-                type="checkbox"
-                checked={skipUserApproval}
-                onChange={handleSkipUserApprovalToggle}
+        {/* ------------------------------ ADMIN -----------------------------
+            Last on the page and shut by default. The user list is edited once
+            per person, and the switch below it is one nobody should be looking
+            for — putting either among the everyday settings invites a stray
+            click on the second one. */}
+        <div className="admin-section">
+          <button
+            type="button"
+            className="admin-section__head"
+            onClick={() => setAdminOpen(!adminOpen)}
+            aria-expanded={adminOpen}
+          >
+            <Icon name={adminOpen ? 'chevron-down' : 'chevron-right'} size={16} />
+            <span className="admin-section__title">ADMIN</span>
+            <span className="admin-section__hint">{t.adminSectionHint}</span>
+          </button>
+
+          {adminOpen && (
+            <div className="admin-section__body">
+              <UsersCard
+                language={language}
+                currentEmail={userEmail}
+                onNamesChanged={onUserNamesChanged}
               />
-              <span className="toggle-slider"></span>
-            </label>
-          </div>
+
+              <div
+                className="card"
+                style={{ borderColor: 'var(--danger)', backgroundColor: 'rgba(220, 53, 69, 0.05)' }}
+              >
+                <h2
+                  style={{
+                    marginBottom: '20px',
+                    color: 'var(--danger)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <Icon name="alert-triangle" size={20} /> {t.doNotUseSkipApproval}
+                </h2>
+                <p
+                  style={{
+                    color: 'var(--danger)',
+                    fontSize: '14px',
+                    marginBottom: '15px',
+                    fontWeight: 'bold',
+                  }}
+                >
+                  {t.skipApprovalWarningMessage}
+                </p>
+                <div className="settings-row">
+                  <div className="settings-label">
+                    <span
+                      className="settings-label-main"
+                      style={{
+                        color: 'var(--danger)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <Icon name="alert-circle" size={14} /> {t.skipUserApproval}
+                    </span>
+                    <span className="settings-label-sub" style={{ color: 'var(--text-tertiary)' }}>
+                      {t.skipUserApprovalDesc}
+                    </span>
+                  </div>
+                  <label className="toggle-switch">
+                    <input
+                      type="checkbox"
+                      checked={skipUserApproval}
+                      onChange={handleSkipUserApprovalToggle}
+                    />
+                    <span className="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
     </div>
   );

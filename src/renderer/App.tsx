@@ -23,6 +23,7 @@ import CoNowego from './views/CoNowego';
 import Login from './views/Login';
 import Logo from './components/Logo';
 import SplashScreen from './components/SplashScreen';
+import SidebarWelcome from './components/SidebarWelcome';
 import Footer from './components/Footer';
 import Icon from './components/Icon';
 import UpdateNotification from './components/UpdateNotification';
@@ -30,9 +31,10 @@ import BackupNotifier from './components/BackupNotifier';
 import WhatsNewModal from './components/WhatsNewModal';
 import { NotificationProvider } from './components/Notifications';
 import { translations, Language } from './translations';
-import { FileEntry } from '../shared/types';
+import { AppUser, FileEntry } from '../shared/types';
 import { BookingFilter, currentMonthKey } from '../shared/bookings';
 import { releaseForVersion, shouldShowWhatsNew } from '../shared/release-notes';
+import { greetingName } from '../shared/app-users';
 
 interface NavItemProps {
   icon: React.ComponentProps<typeof Icon>['name'];
@@ -118,6 +120,14 @@ const App: React.FC = () => {
   // True when the session ended by expiring rather than by the user signing
   // out — the login screen then says so instead of appearing out of nowhere.
   const [sessionExpired, setSessionExpired] = useState(false);
+  // The signed-in person's own name, as given in Ustawienia → Użytkownicy. The
+  // session only knows a mailbox; the greeting wants a first name.
+  const [profile, setProfile] = useState<AppUser | null>(null);
+  // Whether the user list has answered yet. The welcome panel waits for it:
+  // rendering early would greet the mailbox for a moment and then swap in the
+  // real name, and a greeting that changes as you read it is worse than one
+  // that arrives a beat later.
+  const [profileChecked, setProfileChecked] = useState(false);
   // Funky intro shown once when the app opens; self-dismisses after its animation.
   const [showSplash, setShowSplash] = useState(true);
   // Release notes: the version this machine has already been shown. Undefined
@@ -138,6 +148,7 @@ const App: React.FC = () => {
         if (!s && (await window.electronAPI.authConsumeExpiryNotice())) {
           setSessionExpired(true);
         }
+        if (s) void loadProfile();
       } finally {
         setSessionChecked(true);
       }
@@ -157,16 +168,40 @@ const App: React.FC = () => {
     });
   }, []);
 
+  /**
+   * Find the signed-in person in the shared user list. Matched by mailbox,
+   * because that is all the session carries — and it is the same key the list
+   * itself is keyed by. A failure here costs a first name, never a screen, so
+   * it stays quiet and the app falls back to the mailbox.
+   */
+  const loadProfile = async () => {
+    try {
+      const email = (await window.electronAPI.authGetSession())?.email;
+      if (!email) return;
+      const users = await window.electronAPI.getAppUsers();
+      setProfile(users.find((u) => u.email === email) ?? null);
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+    } finally {
+      // Also on failure: the panel then greets by mailbox, which is the honest
+      // answer when the name cannot be read.
+      setProfileChecked(true);
+    }
+  };
+
   const handleSignOut = async () => {
     await window.electronAPI.authSignOut();
     setSession(null);
     setSessionExpired(false);
+    setProfile(null);
+    setProfileChecked(false);
   };
 
   const handleSignedIn = async () => {
     const s = await window.electronAPI.authGetSession();
     setSession(s);
     setSessionExpired(false);
+    void loadProfile();
   };
 
   const loadAppVersion = async () => {
@@ -215,6 +250,12 @@ const App: React.FC = () => {
   };
 
   const t = translations[language];
+
+  // Who the app is talking to. The user list is the authority on names; before
+  // anyone is named — or while the list is still loading — the mailbox stands
+  // in, so the greeting is never blank and never a placeholder.
+  const me = profile ?? { email: session?.email ?? '' };
+  const myName = greetingName(me);
 
   // Release notes for the running build. `unreadRelease` drives both the nav dot
   // and the one-time modal; it stays false while settings are still loading.
@@ -289,6 +330,13 @@ const App: React.FC = () => {
             <Icon name="menu" size={20} />
           </button>
           <Logo />
+          {/* The welcome, right under the logo: the first thing read on opening
+              the app, and the one place that addresses the person rather than
+              the data. Held back until the name is known, so it cannot greet a
+              mailbox for a beat and then correct itself. */}
+          {profileChecked && (
+            <SidebarWelcome language={language} name={myName} email={session.email} />
+          )}
         </div>
         <div className="sidebar-nav">
           <NavItem
@@ -384,9 +432,12 @@ const App: React.FC = () => {
             onClick={() => setCurrentView('settings')}
           />
           <div className="nav-divider" />
+          {/* Who is signed in belongs to the welcome panel at the top; what is
+              left down here is the one action — and its own target, so reading
+              your name and ending your session are no longer one click. */}
           <NavItem
-            icon="users"
-            label={`Wyloguj (${session.email})`}
+            icon="arrow-right"
+            label={t.signOut}
             title={session.email}
             onClick={handleSignOut}
             style={{ fontSize: 12, opacity: 0.7 }}
@@ -573,6 +624,8 @@ const App: React.FC = () => {
             language={language}
             onDarkModeChange={handleDarkModeChange}
             onLanguageChange={handleLanguageChange}
+            userEmail={session.email}
+            onUserNamesChanged={loadProfile}
           />
         )}
       </div>

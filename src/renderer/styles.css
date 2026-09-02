@@ -287,15 +287,18 @@ a:hover { color: var(--accent-hover); }
 }
 
 .logo-container {
-  padding: var(--s-6) var(--s-4) var(--s-5);
+  padding: var(--s-4) var(--s-4) var(--s-3);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
+/* The asset is square (1024×1024), so this width is also its height — at 200px
+   the mark alone took a quarter of the sidebar before a single nav item, and
+   the header pushed the list towards its scrollbar. */
 .logo-image {
-  width: 200px;
+  width: 156px;
   height: auto;
   max-width: 100%;
   object-fit: contain;
@@ -360,6 +363,111 @@ body.dark-mode .nav-item.active {
   height: 1px;
   margin: var(--s-3) var(--s-2);
   background: var(--border-subtle);
+}
+
+/* ==========================================================================
+   The welcome under the logo, and the avatar used by the user list
+   ========================================================================== */
+
+/* No card, no border, no fill: in a column of nav items any of those would read
+   as one more button. Three elements and a lot of air — a label, a name, a
+   rule — carry it instead. */
+.welcome {
+  display: flex;
+  flex-direction: column;
+  padding: var(--s-4);
+  border-bottom: 1px solid var(--border-subtle);
+  animation: welcomeIn 460ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+/* Arrives just after the app does — a greeting that appears is read; one that
+   was simply already there is furniture. */
+@keyframes welcomeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Small, heavily letterspaced, in the month's colour: it is the same word every
+   day, so it earns the least ink — and the tracking is what makes it read as a
+   label above a headline rather than as a line of text. */
+.welcome__word {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--month-ink, var(--accent));
+}
+
+/* Display sizing, because the name is the only thing on this block that changes
+   from person to person — and the only reason the block exists. */
+.welcome__name {
+  margin-top: 9px;
+  font-size: 27px;
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: -0.022em;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The only ornament: one hairline, hung on the right so it closes the block
+   against the name's left edge instead of stacking under it. Drawn by growing
+   to width — which, anchored right, reads as a stroke pulled leftwards. */
+.welcome__rule {
+  align-self: flex-end;
+  width: 52px;
+  height: 1px;
+  margin-top: var(--s-4);
+  background: var(--month-ink, var(--accent));
+  opacity: 0.6;
+  animation: ruleIn 560ms cubic-bezier(0.2, 0, 0, 1) 140ms both;
+}
+
+@keyframes ruleIn {
+  from { width: 0; opacity: 0; }
+  to   { width: 52px; opacity: 0.6; }
+}
+
+/* On the near-black surface the bright month tint is what carries — the same
+   colour that tints the dashboard's month bar, at full strength. */
+body.dark-mode .welcome__word {
+  color: var(--month-accent, var(--accent-hover));
+}
+
+body.dark-mode .welcome__rule {
+  background: var(--month-accent, var(--accent-hover));
+}
+
+/* Collapsed rail: gone. With nothing but type on the block there is no honest
+   64px version of it — and the rail is icon-only by design. The signed-in
+   mailbox stays reachable from the "Wyloguj" item's tooltip. */
+.sidebar.collapsed .welcome {
+  display: none;
+}
+
+/* Initials, not a photo: there is nowhere to upload one, and two letters in the
+   brand tint identify a person in a five-person office perfectly well. */
+.user-avatar {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--text-on-accent);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+
+.user-avatar--sm {
+  width: 24px;
+  height: 24px;
 }
 
 /* ==========================================================================
@@ -1185,6 +1293,128 @@ tbody tr {
 
 tbody tr:hover {
   background: var(--bg-surface-hover);
+}
+
+/* ==========================================================================
+   Ustawienia → ADMIN drawer
+   ========================================================================== */
+
+/* Sits at the end of the settings page, and deliberately does not look like a
+   card: a closed drawer that reads as another panel invites the click it is
+   there to discourage. */
+.admin-section {
+  margin-top: var(--s-8);
+  border-top: 1px solid var(--border-default);
+}
+
+.admin-section__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  width: 100%;
+  padding: var(--s-4) 0;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  text-align: left;
+  transition: color var(--t-fast);
+}
+
+.admin-section__head:hover {
+  color: var(--text-secondary);
+}
+
+.admin-section__head > svg {
+  flex-shrink: 0;
+}
+
+.admin-section__title {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+/* Says what is behind the door, so opening it is a decision rather than a poke.
+   First to go when the page gets narrow. */
+.admin-section__hint {
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .admin-section__hint { display: none; }
+}
+
+.admin-section__body {
+  padding-top: var(--s-2);
+}
+
+/* ==========================================================================
+   Ustawienia → Użytkownicy
+   ========================================================================== */
+
+/* The table keeps its own scroller: two text inputs per row stop fitting long
+   before the window does, and the settings page must not scroll sideways. */
+.users-table {
+  overflow-x: auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-lg);
+}
+
+.users-table table {
+  min-width: 520px;
+}
+
+.users-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.users-table input {
+  width: 100%;
+  min-width: 120px;
+}
+
+.users-table td .button {
+  white-space: nowrap;
+}
+
+.users-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.users-person__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.users-person__name {
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.users-person__you {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.users-person__email {
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ==========================================================================
@@ -3880,6 +4110,25 @@ body.dark-mode .month-art {
 .ksieg-hero__id {
   min-width: 0;
   align-self: center;
+}
+
+/* The next move, in the accent — or in green once there is no next move. */
+.ksieg-hero__nudge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: var(--fs-md);
+  font-weight: 550;
+  color: var(--accent);
+}
+
+.ksieg-hero__nudge.is-done {
+  color: var(--success);
+}
+
+.ksieg-hero__nudge > svg {
+  flex-shrink: 0;
 }
 
 .ksieg-hero__eyebrow {

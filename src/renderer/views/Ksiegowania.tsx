@@ -289,6 +289,25 @@ const Ksiegowania: React.FC<Props> = ({
   ];
   if (totals.errors > 0) facts.push(`${totals.errors} ${t.ksFactsErrors}`);
 
+  // One sentence naming the next move, in the same order the work happens.
+  // Errors outrank everything — a month with a failed conversion is not
+  // finished even when nothing is left to tick. And it only says "done" where
+  // the progress bar beside it can read 100%: every community posted, not
+  // merely every file that happens to exist.
+  const nudge = ((): { text: string; done: boolean } => {
+    if (totals.errors > 0) {
+      return { text: t.ksNudgeErrors.replace('{n}', String(totals.errors)), done: false };
+    }
+    if (totals.generated === 0) return { text: t.ksNudgeEmpty, done: false };
+    if (totals.todo > 0) {
+      return { text: t.ksNudgeTodo.replace('{n}', String(totals.todo)), done: false };
+    }
+    if (totals.unbooked > 0) {
+      return { text: t.ksNudgeMissing.replace('{n}', String(totals.unbooked)), done: false };
+    }
+    return { text: t.ksNudgeDone, done: true };
+  })();
+
   return (
     <div className="content-body">
       <div className="ksieg">
@@ -310,6 +329,12 @@ const Ksiegowania: React.FC<Props> = ({
               <span>{year}</span>
             </h1>
             <p className="ksieg-hero__facts">{facts.join(' · ')}</p>
+            {/* What to do next, read off the month's actual state. The tiles
+                and the bar give the numbers; this says what to do with them. */}
+            <p className={`ksieg-hero__nudge${nudge.done ? ' is-done' : ''}`}>
+              <Icon name={nudge.done ? 'check-circle' : 'arrow-right'} size={14} />
+              {nudge.text}
+            </p>
           </div>
 
           <div className="ksieg-hero__nav">
@@ -363,8 +388,8 @@ const Ksiegowania: React.FC<Props> = ({
               <span className="ksieg-progress__label">{t.ksProgressLabel}</span>
               <span className="ksieg-progress__value">
                 {t.ksProgressDone
-                  .replace('{booked}', String(totals.booked))
-                  .replace('{generated}', String(totals.generated))}
+                  .replace('{done}', String(totals.dom))
+                  .replace('{total}', String(totals.addresses))}
                 <strong>{totals.domPercent}%</strong>
               </span>
             </div>

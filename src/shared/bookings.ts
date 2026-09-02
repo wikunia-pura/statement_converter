@@ -174,7 +174,12 @@ export interface AddressBookingGroup {
 export interface BookingTotals {
   /** Rows on the list: every community, plus the catch-all bucket when present. */
   rows: number;
-  /** Communities in the address book (the denominator of the month). */
+  /**
+   * The month's denominator: every community on the list. That is the address
+   * book, plus any community that has work this month but has since been
+   * removed from the book — its work is real and still shown, so counting it
+   * keeps `dom` a subset of this and the progress bar inside 100%.
+   */
   addresses: number;
   /** Communities with no accounting file at all this month. */
   unbooked: number;
@@ -192,7 +197,17 @@ export interface BookingTotals {
   todo: number;
   /** Failed conversions this month. */
   errors: number;
-  /** Share of this month's accounting files already posted in DOM (0–100). */
+  /**
+   * Share of the communities that are fully posted in DOM (0–100).
+   *
+   * Communities, not files — the same unit as the tiles and the list beside it.
+   * Measured against files it read "37 files, 12 posted", which answered a
+   * question nobody asked: the 37 was however many statements happened to be
+   * converted, so the denominator moved every time work was done and the bar
+   * could sit at 100% while half the communities had nothing at all. Against
+   * the address book the bar means "how much of the month is behind us", and it
+   * only reaches 100% when every community is actually done.
+   */
   domPercent: number;
 }
 
@@ -285,18 +300,20 @@ export function groupByAddress(
     groups.push(build('unassigned', null, '', unassignedRows, true));
   }
 
-  // Two different units, and mixing them is what made the old tiles unreadable:
-  // the tiles count COMMUNITIES (that is what the list shows and what a filter
-  // selects), the progress bar and the header count FILES. The catch-all bucket
-  // is a row, not a community, so it never inflates the community counters —
-  // but its files are real accounting files and do count as such.
+  // Communities are the unit of this screen: that is what the list shows, what a
+  // filter selects, what the tiles count and what the progress bar measures. The
+  // file counters (`generated`, `booked`, `todo`, `errors`) stay as they are —
+  // they are the volume of work behind those communities, named as files
+  // wherever they are shown. The catch-all bucket is a row, not a community, so
+  // it never inflates the community counters, but its files are real accounting
+  // files and do count as such.
   const communities = groups.filter((g) => !g.unassigned);
   const generated = groups.reduce((sum, g) => sum + g.generated, 0);
   const booked = groups.reduce((sum, g) => sum + g.booked, 0);
 
   const totals: BookingTotals = {
     rows: groups.length,
-    addresses: adresy.length,
+    addresses: communities.length,
     unbooked: communities.filter((g) => g.state === 'missing').length,
     waiting: communities.filter((g) => g.todo > 0).length,
     dom: communities.filter((g) => g.state === 'done').length,
@@ -305,7 +322,10 @@ export function groupByAddress(
     booked,
     todo: generated - booked,
     errors: groups.reduce((sum, g) => sum + g.errors, 0),
-    domPercent: generated === 0 ? 0 : Math.round((booked / generated) * 100),
+    domPercent:
+      communities.length === 0
+        ? 0
+        : Math.round((communities.filter((g) => g.state === 'done').length / communities.length) * 100),
   };
 
   return { groups, totals };

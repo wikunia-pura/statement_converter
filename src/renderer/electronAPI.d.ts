@@ -427,6 +427,8 @@ interface ElectronAPI {
   // Kalendarz — spotkania, ich typy i konta do listy uczestników
   /** The application's accounts, offered by the participant picker. */
   getAppUsers: () => Promise<AppUser[]>;
+  /** Name an account. Empty strings clear the name. */
+  setAppUserName: (id: string, firstName: string, lastName: string) => Promise<boolean>;
   getSpotkaniaTypy: () => Promise<SpotkanieTyp[]>;
   addSpotkanieTyp: (nazwa: string, kolor: string, opis: string) => Promise<SpotkanieTyp>;
   updateSpotkanieTyp: (

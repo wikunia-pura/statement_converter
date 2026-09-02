@@ -300,7 +300,7 @@ export const translations = {
     backupError: 'Błąd kopii zapasowej',
     backupRestoreConfirm1: 'Przywrócenie kopii ZASTĄPI wszystkie obecne dane (banki, kontrahentów, adresy, typy kont, historię) danymi z pliku. Dane są wspólne dla wszystkich użytkowników aplikacji. Kontynuować?',
     backupRestoreConfirm2: 'Czy na pewno? Przed przywróceniem zostanie automatycznie zapisana kopia obecnego stanu w folderze kopii zapasowych.',
-    backupCounts: 'banki: {banks}, kontrahenci: {kontrahenci}, adresy: {adresy}, typy kont: {kontoTypy}, historia: {history}, historia odczytów: {odczytyHistory}, jednostki ZGN: {zgnJednostki}, pola dynamiczne: {mailingPola}, szablony maili: {mailingSzablony}, historia maili: {mailingHistory}, typy spotkań: {spotkaniaTypy}, spotkania: {spotkania}',
+    backupCounts: 'banki: {banks}, kontrahenci: {kontrahenci}, adresy: {adresy}, typy kont: {kontoTypy}, historia: {history}, historia odczytów: {odczytyHistory}, jednostki ZGN: {zgnJednostki}, pola dynamiczne: {mailingPola}, szablony maili: {mailingSzablony}, historia maili: {mailingHistory}, typy spotkań: {spotkaniaTypy}, spotkania: {spotkania}, nazwy użytkowników: {appUserNames}',
     backupAutoCreated: 'Utworzono automatyczną kopię zapasową danych ({date}){offsite}',
     backupExitCreated: 'Utworzono kopię zapasową danych ({date}){offsite} — zamykanie aplikacji…',
     backupOffsiteOk: ' i wysłano ją off-site',
@@ -316,6 +316,7 @@ export const translations = {
     skipApprovalConfirmMessage: 'Ta funkcja jest przeznaczona TYLKO dla developera. Włączenie może spowodować błędy w danych. Czy NA PEWNO chcesz kontynuować?',
     enableAnyway: 'Włącz mimo wszystko',
     doNotUseSkipApproval: 'NIE UŻYWAĆ - POMIŃ AKCEPTACJĘ',
+    adminSectionHint: 'Lista użytkowników i przełączniki, których nie należy ruszać',
     
     // Updates
     updateAvailableTitle: 'Dostępna nowa wersja',
@@ -347,6 +348,32 @@ export const translations = {
       'Sesja wygasła i aplikacja wylogowała Cię automatycznie. Bez zalogowania wspólne dane — banki, ' +
       'adresy, kontrahenci, historia — są niedostępne, dlatego operacje mogły kończyć się błędem ' +
       '(np. „Bank not found”). Zaloguj się ponownie, żeby wrócić do pracy.',
+
+    // Powitanie (panel menu + baner pulpitu)
+    greetingWord: 'Siemanko',
+    signOut: 'Wyloguj',
+    ksNudgeEmpty: 'Miesiąc jeszcze pusty — wrzuć pierwsze wyciągi i ruszamy.',
+    ksNudgeTodo: 'Do zaznaczenia w DOM zostało plików: {n}. Jeszcze chwila i miesiąc domknięty.',
+    ksNudgeMissing: 'Wszystko odklikane, ale bez pliku w tym miesiącu zostają wspólnoty: {n}.',
+    ksNudgeDone: 'Wszystko zaksięgowane w DOM. Miesiąc domknięty — świetna robota!',
+    ksNudgeErrors: 'Najpierw błędy — konwersji do poprawienia: {n}.',
+
+    // Ustawienia → Użytkownicy
+    usersTitle: 'Użytkownicy',
+    usersHint:
+      'Konta z dostępem do aplikacji. Nadaj imię i nazwisko — to one pojawią się przy wyborze ' +
+      'uczestników w Kalendarzu (zamiast adresu e-mail) i w powitaniu na pulpicie. Kont nie ' +
+      'dodaje się tutaj: pojawiają się same, gdy dostaną dostęp do aplikacji.',
+    usersEmpty: 'Brak kont do wyświetlenia.',
+    usersColumnPerson: 'Osoba',
+    usersColumnFirstName: 'Imię',
+    usersColumnLastName: 'Nazwisko',
+    usersYou: 'to Ty',
+    usersSaved: 'Zapisano: {name}',
+    usersSaveFailed: 'Nie udało się zapisać imienia i nazwiska.',
+    usersLoadFailed: 'Nie udało się wczytać listy użytkowników.',
+    usersNothingToSave: 'Nic się nie zmieniło',
+    usersNamedCount: 'Nazwanych osób: {named} z {total}.',
     
     // Transaction Review
     finalizeAndNext: 'Wygeneruj i przejdź dalej',
@@ -540,7 +567,7 @@ export const translations = {
     ksFactsWaiting: 'czeka na DOM',
     ksFactsErrors: 'błędy',
     ksProgressLabel: 'Zaksięgowane w DOM',
-    ksProgressDone: '{booked} z {generated} plików',
+    ksProgressDone: '{done} z {total} wspólnot',
 
     // Kategorie (kafelki = filtry). Każdy kafelek liczy WSPÓLNOTY.
     ksTileAll: 'Wszystkie',
@@ -657,7 +684,8 @@ export const translations = {
     kalNoAdres: 'Bez wspólnoty',
     kalFieldParticipants: 'Uczestnicy',
     kalFieldParticipantsHint:
-      'Wybierz osoby z kont, które mają dostęp do aplikacji. Możesz dodać dowolną liczbę uczestników.',
+      'Wybierz osoby z kont, które mają dostęp do aplikacji. Możesz dodać dowolną liczbę uczestników. ' +
+      'Osoby bez imienia i nazwiska widnieją jako adres e-mail — nazwiesz je w Ustawieniach → Użytkownicy.',
     kalNoAccounts: 'Brak kont do wyboru. Konta zakłada administrator w panelu Supabase.',
     kalParticipantsAdd: 'Dodaj uczestnika…',
     kalParticipantsSearch: 'Wyszukaj osobę…',
@@ -1329,7 +1357,7 @@ export const translations = {
     backupError: 'Backup error',
     backupRestoreConfirm1: 'Restoring will REPLACE all current data (banks, contractors, addresses, account types, history) with the file contents. This data is shared by all users of the app. Continue?',
     backupRestoreConfirm2: 'Are you sure? A copy of the current state will be saved automatically to the backups folder before restoring.',
-    backupCounts: 'banks: {banks}, contractors: {kontrahenci}, addresses: {adresy}, account types: {kontoTypy}, history: {history}, meter-reading history: {odczytyHistory}, city units: {zgnJednostki}, dynamic fields: {mailingPola}, mail templates: {mailingSzablony}, mail history: {mailingHistory}, meeting types: {spotkaniaTypy}, meetings: {spotkania}',
+    backupCounts: 'banks: {banks}, contractors: {kontrahenci}, addresses: {adresy}, account types: {kontoTypy}, history: {history}, meter-reading history: {odczytyHistory}, city units: {zgnJednostki}, dynamic fields: {mailingPola}, mail templates: {mailingSzablony}, mail history: {mailingHistory}, meeting types: {spotkaniaTypy}, meetings: {spotkania}, user names: {appUserNames}',
     backupAutoCreated: 'Automatic data backup created ({date}){offsite}',
     backupExitCreated: 'Data backup created ({date}){offsite} — closing the app…',
     backupOffsiteOk: ' and copied off-site',
@@ -1345,6 +1373,7 @@ export const translations = {
     skipApprovalConfirmMessage: 'This feature is ONLY for the developer. Enabling it may cause data errors. Are you SURE you want to continue?',
     enableAnyway: 'Enable anyway',
     doNotUseSkipApproval: 'DO NOT USE - SKIP APPROVAL',
+    adminSectionHint: 'The user list, and switches nobody should be touching',
     
     // Updates
     updateAvailableTitle: 'New version available',
@@ -1376,6 +1405,33 @@ export const translations = {
       'Your session expired and the app signed you out automatically. Without a session the shared ' +
       'data — banks, addresses, contractors, history — cannot be read, which is why operations may ' +
       'have failed (e.g. "Bank not found"). Sign in again to carry on.',
+
+    // Greeting (sidebar + dashboard banner)
+    greetingWord: 'Hey',
+    signOut: 'Sign out',
+    ksNudgeEmpty: 'Nothing here yet — drop in the first statements and off we go.',
+    ksNudgeTodo: 'Files left to tick in DOM: {n}. Nearly a closed month.',
+    ksNudgeMissing: 'All ticked, but these communities still have no file this month: {n}.',
+    ksNudgeDone: 'Everything posted in DOM. Month closed — nice work!',
+    ksNudgeErrors: 'Errors first — conversions to fix: {n}.',
+
+    // Settings → Users
+    usersTitle: 'Users',
+    usersHint:
+      'The accounts with access to the app. Give each one a first and last name — that is what ' +
+      'the Calendar offers when picking participants (instead of the mailbox) and what the ' +
+      'dashboard greets you by. Accounts are not added here: they appear on their own once ' +
+      'someone is granted access.',
+    usersEmpty: 'No accounts to show.',
+    usersColumnPerson: 'Person',
+    usersColumnFirstName: 'First name',
+    usersColumnLastName: 'Last name',
+    usersYou: 'you',
+    usersSaved: 'Saved: {name}',
+    usersSaveFailed: 'Could not save the name.',
+    usersLoadFailed: 'Could not load the user list.',
+    usersNothingToSave: 'Nothing changed',
+    usersNamedCount: 'Named: {named} of {total}.',
     
     // Transaction Review
     finalizeAndNext: 'Generate & next',
@@ -1569,7 +1625,7 @@ export const translations = {
     ksFactsWaiting: 'waiting for DOM',
     ksFactsErrors: 'errors',
     ksProgressLabel: 'Posted in DOM',
-    ksProgressDone: '{booked} of {generated} files',
+    ksProgressDone: '{done} of {total} communities',
 
     // Categories (tiles = filters). Every tile counts COMMUNITIES.
     ksTileAll: 'All',
@@ -1686,7 +1742,8 @@ export const translations = {
     kalNoAdres: 'No community',
     kalFieldParticipants: 'Participants',
     kalFieldParticipantsHint:
-      'Pick people from the accounts that have access to the app. Add as many as you need.',
+      'Pick people from the accounts that have access to the app. Add as many as you need. ' +
+      'Anyone without a name shows as their mailbox — name them in Settings → Users.',
     kalNoAccounts: 'No accounts to pick from. Accounts are created by the administrator in Supabase.',
     kalParticipantsAdd: 'Add a participant…',
     kalParticipantsSearch: 'Search for a person…',

@@ -84,6 +84,169 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '6.7.0',
+    date: '2026-09-02',
+    title: 'Ludzie z imienia i nazwiska — lista użytkowników i powitanie',
+    tagline:
+      'Aplikacja przestaje mówić do Ciebie adresem e-mail. W Ustawieniach jest nowa sekcja „Użytkownicy”: lista wszystkich kont, które mają dostęp, a przy każdym dwa pola — imię i nazwisko. Raz wpisane, pojawiają się wszędzie tam, gdzie do tej pory był e-mail: przy wyborze uczestników spotkania w Kalendarzu, na liście uczestników zapisanego spotkania, a także w powitaniu: pod logo FileFunky aplikacja wita Cię imieniem — „SIEMANKO”, pod tym Twoje imię dużą czcionką i krótka kreska. Do tego pasek postępu na pulpicie mierzy się wreszcie do wszystkich wspólnot, a nie do liczby wygenerowanych plików, i dopisuje jedno zdanie o tym, co zostało do zrobienia.',
+    stats: [
+      { value: '2 pola', label: 'imię i nazwisko na konto' },
+      { value: 'Kalendarz', label: 'wybór osoby po nazwisku' },
+      { value: 'Siemanko', label: 'powitanie pod logo w menu' },
+      { value: 'wspólnoty', label: 'nowa miara paska postępu' },
+    ],
+    highlights: [
+      {
+        id: 'uzytkownicy-imie-nazwisko',
+        kind: 'new',
+        icon: 'users',
+        title: 'Ustawienia → Użytkownicy: imię i nazwisko dla każdego konta',
+        summary:
+          'Nowa sekcja w Ustawieniach z listą wszystkich kont mających dostęp do aplikacji. Przy każdym wpisujesz imię i nazwisko — i od tej chwili aplikacja posługuje się nimi zamiast adresem e-mail.',
+        details: [
+          'Konta zakłada się w panelu Supabase i aplikacja tylko je odczytuje — dlatego tej listy nie da się tu poszerzyć ani skrócić, a nowa osoba pojawia się na niej sama, gdy dostanie dostęp. Aplikacja dokłada jedyną rzecz, której konto o sobie nie wie: jak ta osoba się nazywa.',
+          'Imię i nazwisko są osobnymi polami aplikacji, niezależnymi od nazwy zapisanej w samym koncie Supabase. Dzięki temu zmiana hasła ani żadna operacja na koncie nie wyczyści tego, co tu wpiszesz.',
+          'Nadawać imiona może każda zalogowana osoba — to jedno biuro pracujące na jednej bazie, więc osobne role administratorów byłyby rusztowaniem wokół listy kilku osób.',
+          'Lista siedzi na samym dole Ustawień, w zwiniętej sekcji „ADMIN”, razem z przełącznikiem „NIE UŻYWAĆ — POMIŃ AKCEPTACJĘ”. Imiona nadaje się raz na osobę, a tego przełącznika nie należy ruszać wcale — żadne z dwojga nie ma czego szukać w toku codziennych ustawień.',
+        ],
+        where: ['Ustawienia', 'ADMIN', 'Użytkownicy'],
+        steps: [
+          {
+            do: 'Wejdź w „Ustawienia” w menu po lewej i przewiń na sam dół, do zwiniętej sekcji „ADMIN”.',
+            then: 'Sekcja jest domyślnie zamknięta — obok napisu „ADMIN” widnieje podpowiedź, co jest w środku.',
+          },
+          {
+            do: 'Kliknij „ADMIN”, żeby ją rozwinąć.',
+            then: 'Pierwszą kartą w środku są „Użytkownicy”: lista kont — kółko z inicjałami, nazwa osoby, pod nią adres e-mail, a Twoje własne konto jest podpisane „to Ty”.',
+          },
+          {
+            do: 'W kolumnie „Imię” wpisz imię, w „Nazwisko” — nazwisko.',
+            then: 'Przycisk „Zapisz” w tym wierszu przestaje być wyszarzony. Dopóki nic nie zmieniłaś, jest nieaktywny.',
+          },
+          {
+            do: 'Kliknij „Zapisz” w tym wierszu (albo po prostu naciśnij Enter w jednym z dwóch pól).',
+            then: 'Na górze pojawi się zielony komunikat „Zapisano: Imię Nazwisko”, a wiersz od razu pokazuje nową nazwę. Pod listą widać licznik „Nazwanych osób: 3 z 5”.',
+          },
+          {
+            do: 'Chcesz usunąć nazwę? Wyczyść oba pola i zapisz.',
+            then: 'Osoba wraca do wyświetlania jako adres e-mail.',
+          },
+        ],
+        expect: [
+          'Sekcja „ADMIN” wraca do stanu zamkniętego przy każdym wejściu w Ustawienia.',
+          'Lista jest wspólna dla wszystkich instalacji — nazwa wpisana u Ciebie jest widoczna dla wszystkich, tak samo jak banki czy adresy.',
+          'Kolejność listy idzie po nazwie, nie po adresie e-mail, i uwzględnia polskie znaki.',
+          'Imiona i nazwiska wchodzą do kopii zapasowej — po przywróceniu kopii wracają, dopasowane po adresie e-mail. W podsumowaniu kopii pojawia się nowa pozycja „nazwy użytkowników”.',
+        ],
+        note: {
+          type: 'warning',
+          text: 'Ta wersja wymaga jednorazowej aktualizacji bazy (supabase/app-users-imie-nazwisko.sql). Bez niej sekcja „Użytkownicy” zgłosi błąd zapisu.',
+        },
+      },
+      {
+        id: 'kalendarz-po-nazwisku',
+        kind: 'improved',
+        icon: 'calendar',
+        title: 'W Kalendarzu wybierasz osobę, nie skrzynkę',
+        summary:
+          'Lista uczestników spotkania pokazuje imiona i nazwiska. Adres e-mail zsuwa się do drugiego planu — zostaje jako podpowiedź pod nazwą i nadal działa w wyszukiwaniu.',
+        details: [
+          'Nazwisko jest tym, czym ludzie posługują się mówiąc o spotkaniu, a adres e-mail bywa nieoczywisty — dwa konta z podobnym adresem to dokładnie ta sytuacja, w której łatwo dodać nie tę osobę.',
+          'E-mail nie znika: pokazuje się pod nazwą i pozostaje w wyszukiwaniu, więc gdy dwie osoby mają to samo imię, nadal masz czym je rozróżnić.',
+          'Osoby zapisane na spotkaniu przechowują nazwę z chwili zapisu. Późniejsza zmiana imienia nie przepisuje tego, kto — jak mówi zapis — był na spotkaniu w zeszłym miesiącu.',
+        ],
+        where: ['Kalendarz', 'Nowe spotkanie', 'Uczestnicy'],
+        steps: [
+          {
+            do: 'Otwórz „Kalendarz” i kliknij dwukrotnie dowolny dzień.',
+            then: 'Otworzy się formularz nowego spotkania.',
+          },
+          {
+            do: 'Rozwiń „Dodaj uczestnika…” w sekcji „Uczestnicy”.',
+            then: 'Na liście widać imiona i nazwiska, a pod każdym — drobnym drukiem — adres e-mail.',
+          },
+          {
+            do: 'Nie widzisz czyjegoś nazwiska, tylko adres e-mail? Ta osoba nie została jeszcze nazwana.',
+            then: 'Wejdź w Ustawienia → Użytkownicy, wpisz jej imię i nazwisko, wróć do Kalendarza — będzie już na liście pod nazwą.',
+          },
+        ],
+        expect: [
+          'Wyszukiwanie w rozwijanej liście działa i po nazwisku, i po adresie e-mail.',
+          'Spotkania zapisane przed tą wersją pokazują to, co miały zapisane wcześniej — nic nie zostało nadpisane.',
+        ],
+      },
+      {
+        id: 'powitanie-siemanko',
+        kind: 'new',
+        icon: 'sparkles',
+        title: 'Powitanie pod logo FileFunky',
+        summary:
+          'Tuż pod logo, nad wszystkimi modułami, aplikacja wita Cię imieniem: „SIEMANKO” drobnym rozstrzelonym drukiem, pod tym Twoje imię dużą czcionką, a pod nim — od prawej — krótka kreska. Podpis i kreska mają kolor bieżącego miesiąca, ten sam, którym podbarwiony jest pasek miesiąca na pulpicie.',
+        details: [
+          'To pierwsza rzecz w menu — aplikacja otwiera się i zwraca do człowieka, zamiast od razu do danych. Imię bierze z Ustawień → Użytkownicy; dopóki nikt Cię nie nazwał, używa początku Twojego adresu e-mail.',
+          'Powitanie nie ma ramki ani tła: w kolumnie pozycji menu każde pudełko czytałoby się jako kolejny przycisk do klikania. Trzymają je trzy elementy i dużo powietrza — podpis, imię, kreska.',
+          'Kolor idzie za porą roku: wrzesień i październik są ciepłe, rdzawe, zima chłodna i błękitna, listopad szary, grudzień świerkowy. To te same dwanaście kolorów, które podbarwiają pasek miesiąca na pulpicie, więc menu i pulpit mówią o tej samej porze roku.',
+          'Na dole menu został sam „Wyloguj”. Wcześniej był tam jeden wiersz „Wyloguj (adres@e-mail)” — odczytanie, kim jesteś, i zakończenie sesji dzieliły jeden przycisk.',
+        ],
+        where: ['Menu boczne'],
+        steps: [
+          {
+            do: 'Spójrz pod logo FileFunky w menu po lewej.',
+            then: 'Zobaczysz „SIEMANKO” w kolorze bieżącego miesiąca, pod tym swoje imię, a pod nim — dosuniętą do prawej — krótką kreskę, która przy uruchomieniu rozciąga się do swojej długości.',
+          },
+          {
+            do: 'Nie widzisz swojego imienia, tylko fragment adresu e-mail? Nikt Cię jeszcze nie nazwał.',
+            then: 'Wejdź w Ustawienia → Użytkownicy, wpisz swoje imię i nazwisko, zapisz — powitanie zmieni się od razu, bez restartu aplikacji.',
+          },
+          {
+            do: 'Zwiń menu przyciskiem z trzema kreskami u góry.',
+            then: 'Powitanie znika: wąski pasek jest z założenia tylko na ikony. Adres e-mail, na który jesteś zalogowana, pokazuje dymek nad „Wyloguj”.',
+          },
+        ],
+        expect: [
+          'Logo FileFunky nad powitaniem jest teraz mniejsze, a odstępy w nagłówku ciaśniejsze — menu zaczyna się o ~50 px wyżej, więc mniej pozycji ucieka pod przewijanie.',
+          'Powitanie pojawia się dopiero, gdy aplikacja odczyta Twoje imię — dzięki temu nie mruga najpierw adresem e-mail, a potem imieniem.',
+          'Bardzo długie imię zostanie przycięte wielokropkiem, żeby nie rozpychało menu.',
+          'Kolor zmienia się sam pierwszego dnia nowego miesiąca — także wtedy, gdy aplikacja została włączona przez noc.',
+        ],
+      },
+      {
+        id: 'pulpit-postep-i-krok',
+        kind: 'fixed',
+        icon: 'bar-chart',
+        title: 'Pasek postępu liczy wspólnoty, a nie pliki',
+        summary:
+          'Pasek „Zaksięgowane w DOM” mierzy się teraz do wszystkich wspólnot — pisze „9 z 12 wspólnot”. Do tego pod podsumowaniem doszło jedno zdanie z następnym krokiem.',
+        details: [
+          'Do tej pory pasek pokazywał pliki: „12 z 37 plików”. To 37 nie brało się z niczego, co dałoby się sprawdzić — była to liczba plików księgowych, jakie akurat udało się wygenerować w tym miesiącu. Mianownik rósł więc w trakcie pracy, a pasek mógł stać na 100% w miesiącu, w którym połowa wspólnot nie miała jeszcze ani jednego pliku.',
+          'Teraz mianownikiem są wszystkie wspólnoty, tak samo jak w kafelkach nad listą i na samej liście. Pasek odpowiada na pytanie „ile miesiąca jest za nami” i dochodzi do 100% dopiero wtedy, gdy każda wspólnota jest odklikana w DOM.',
+          'Liczby plików nie znikają — są dalej w podsumowaniu nad paskiem („12 plików księgowych · 3 czeka na DOM”), tylko zawsze nazwane jako pliki.',
+          'Wspólnota usunięta z książki adresowej, która ma robotę w tym miesiącu, wchodzi do mianownika — jej praca jest prawdziwa i widnieje na liście. Wiersz „Bez przypisanej wspólnoty” nie wchodzi, bo nie jest wspólnotą.',
+        ],
+        where: ['Pulpit'],
+        steps: [
+          {
+            do: 'Wejdź na „Pulpit” i spójrz na pasek pod nazwą miesiąca.',
+            then: 'Po prawej stronie paska przeczytasz „9 z 12 wspólnot” i procent — gdzie 12 to tyle wspólnot, ile masz w „Adresach”.',
+          },
+          {
+            do: 'Pod podsumowaniem przeczytaj zdanie z następnym krokiem.',
+            then: 'Mówi, co zrobić dalej: że miesiąc jest jeszcze pusty, ile plików czeka na zaznaczenie w DOM, ile konwersji poprawić, albo — na zielono — że miesiąc jest domknięty.',
+          },
+          {
+            do: 'Zaznacz w DOM wszystkie pliki, jakie są w tym miesiącu.',
+            then: 'Jeśli któraś wspólnota nie ma jeszcze pliku, zdanie powie wprost: „Wszystko odklikane, ale bez pliku w tym miesiącu zostają wspólnoty: 2” — a pasek nie pokaże 100%, bo miesiąc nie jest skończony.',
+          },
+        ],
+        expect: [
+          'Zdanie i pasek zawsze mówią to samo: „miesiąc domknięty” pojawia się dokładnie wtedy, gdy pasek jest na 100%.',
+          'Błędy mają pierwszeństwo — miesiąc z nieudaną konwersją nie jest skończony, nawet jeśli nie ma już czego odklikać.',
+          'To samo jest na zakładce „Księgowania” w Konwerterze, bo to ten sam ekran. Liczby idą za wybranym miesiącem, nie za bieżącym.',
+        ],
+      },
+    ],
+  },
+  {
     version: '6.6.0',
     date: '2026-09-02',
     title: 'Wygasła sesja mówi, że wygasła — i aktualizacje sprawdzane co godzinę',
@@ -92,7 +255,7 @@ export const RELEASES: Release[] = [
     stats: [
       { value: 'co godzinę', label: 'sprawdzanie nowej wersji' },
       { value: 'komunikat', label: 'zamiast błędu „Bank not found”' },
-      { value: '0', label: 'pustych kopii zapasowych' },
+      { value: 'wspólnoty', label: 'nowa miara paska postępu' },
     ],
     highlights: [
       {

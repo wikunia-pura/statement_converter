@@ -14,6 +14,17 @@ import React from 'react';
 interface MonthArt {
   /** Tint for the bar behind the scene (both themes handle it via opacity). */
   accent: string;
+  /**
+   * The same hue, dark enough to be TEXT on a light surface.
+   *
+   * `accent` is only ever painted at 9–16% opacity behind the month bar, so it
+   * is chosen for warmth, not for legibility: as ink on the off-white surface
+   * the twelve land between 1.8:1 and 3.1:1, which is unreadable at label
+   * sizes. These are hand-tuned rather than computed — one darkening ratio that
+   * rescues June's amber turns December's spruce into mud, because the twelve
+   * do not start at the same lightness.
+   */
+  ink: string;
   scene: React.ReactNode;
 }
 
@@ -81,6 +92,7 @@ const MONTHS: MonthArt[] = [
   // 1 — styczeń: bałwan
   {
     accent: '#6ea8d8',
+    ink: '#2e6f9c',
     scene: (
       <>
         {snowflake(18, 16, 0.8)}
@@ -100,6 +112,7 @@ const MONTHS: MonthArt[] = [
   // 2 — luty: płatek i serce
   {
     accent: '#8aa9e0',
+    ink: '#3f6aa8',
     scene: (
       <>
         {snowflake(34, 30, 1.5, '#7fb3e0')}
@@ -115,7 +128,12 @@ const MONTHS: MonthArt[] = [
   },
   // 3 — marzec: krokusy przebijające się przez śnieg
   {
-    accent: '#8a6fd0',
+    // Nudged a shade lighter than the crocuses' own violet: at 4.50:1 the old
+    // value sat exactly on the legibility line once the sidebar started setting
+    // 11px type in it. In the month bar the change is invisible — the accent is
+    // only ever painted there at 9% (#f1eef9 before, #f1eff9 now).
+    accent: '#9179d6',
+    ink: '#5b45a8',
     scene: (
       <>
         {sun(76, 18, 8)}
@@ -134,6 +152,7 @@ const MONTHS: MonthArt[] = [
   // 4 — kwiecień plecień: chmura z deszczem i słońce
   {
     accent: '#6fb3d8',
+    ink: '#2c7398',
     scene: (
       <>
         {sun(74, 20, 9)}
@@ -148,6 +167,7 @@ const MONTHS: MonthArt[] = [
   // 5 — maj: tulipany
   {
     accent: '#7fc46e',
+    ink: '#3d7f33',
     scene: (
       <>
         {sun(78, 16, 8)}
@@ -163,6 +183,7 @@ const MONTHS: MonthArt[] = [
   // 6 — czerwiec: pełne słońce nad łąką
   {
     accent: '#f0b429',
+    ink: '#8f6410',
     scene: (
       <>
         {sun(48, 26, 14)}
@@ -177,6 +198,7 @@ const MONTHS: MonthArt[] = [
   // 7 — lipiec: parasol plażowy
   {
     accent: '#f08a3c',
+    ink: '#9a4f12',
     scene: (
       <>
         {sun(22, 18, 8)}
@@ -194,6 +216,7 @@ const MONTHS: MonthArt[] = [
   // 8 — sierpień: kłosy zboża
   {
     accent: '#e0a83c',
+    ink: '#8a6111',
     scene: (
       <>
         {sun(76, 18, 8)}
@@ -217,6 +240,7 @@ const MONTHS: MonthArt[] = [
   // 9 — wrzesień: liście i jabłko
   {
     accent: '#d97b3c',
+    ink: '#9c4d1b',
     scene: (
       <>
         {leaf(14, 24, -20, '#e08a3c')}
@@ -232,6 +256,7 @@ const MONTHS: MonthArt[] = [
   // 10 — październik: dynia
   {
     accent: '#c96a2a',
+    ink: '#8e4415',
     scene: (
       <>
         {leaf(12, 20, -15, '#c05f2a')}
@@ -250,6 +275,7 @@ const MONTHS: MonthArt[] = [
   // 11 — listopad: bezlistne drzewo we mgle
   {
     accent: '#8c8f9a',
+    ink: '#575b66',
     scene: (
       <>
         {cloud(60, 20, '#c2c7d0')}
@@ -265,6 +291,7 @@ const MONTHS: MonthArt[] = [
   // 12 — grudzień: choinka
   {
     accent: '#3f9d6b',
+    ink: '#24714a',
     scene: (
       <>
         {snowflake(18, 20, 0.7)}
@@ -286,6 +313,11 @@ const MONTHS: MonthArt[] = [
 /** Tint of the month bar — the season's own colour, used at low opacity. */
 export function monthAccent(month: number): string {
   return MONTHS[clampMonth(month)].accent;
+}
+
+/** The month's colour, dark enough to set text in on a light surface. */
+export function monthInk(month: number): string {
+  return MONTHS[clampMonth(month)].ink;
 }
 
 function clampMonth(month: number): number {

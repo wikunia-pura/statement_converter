@@ -270,8 +270,20 @@ create table if not exists public.app_users (
   id           uuid        primary key,
   email        text        not null,
   display_name text,
+  -- The app's OWN name for the person, typed in Ustawienia → Użytkownicy. Kept
+  -- apart from `display_name` on purpose: that one mirrors the account's auth
+  -- metadata and the trigger below overwrites it whenever the metadata carries
+  -- a name, so a name typed in the app would lose to whatever Supabase holds.
+  -- The trigger never touches these two.
+  first_name   text,
+  last_name    text,
   created_at   timestamptz not null default now()
 );
+
+-- For projects created before these columns existed.
+alter table public.app_users
+  add column if not exists first_name text,
+  add column if not exists last_name  text;
 
 -- One function for insert/update/delete: the participant picker must not offer
 -- an account that was revoked, and must show a mailbox the moment it changes.
@@ -403,12 +415,24 @@ drop policy if exists "authenticated_read" on public.app_config;
 create policy "authenticated_read" on public.app_config
   for select to authenticated using (true);
 
--- app_users: read-only for signed-in users. Only the auth trigger writes it, so
--- there is no insert/update/delete policy — the mirror can never drift because
--- a client edited it.
+-- app_users: readable by signed-in users, and writable in exactly two columns.
+-- `id`, `email` and `created_at` remain the auth trigger's business — a client
+-- able to rewrite them could point an account at the wrong mailbox — while
+-- `first_name`/`last_name` are the app's own fields. RLS cannot say "these
+-- columns only", so the policy opens UPDATE and the column grant narrows it;
+-- Supabase grants ALL on public tables to `authenticated` by default, hence the
+-- revoke first. Still no insert/delete policy: only the trigger adds or removes
+-- accounts.
 drop policy if exists "authenticated_read" on public.app_users;
 create policy "authenticated_read" on public.app_users
   for select to authenticated using (true);
+
+drop policy if exists "authenticated_update_names" on public.app_users;
+create policy "authenticated_update_names" on public.app_users
+  for update to authenticated using (true) with check (true);
+
+revoke update on public.app_users from authenticated;
+grant update (first_name, last_name) on public.app_users to authenticated;
 
 drop policy if exists "authenticated_all" on public.banks;
 drop policy if exists "authenticated_all" on public.kontrahenci;

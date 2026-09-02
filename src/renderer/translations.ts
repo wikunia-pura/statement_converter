@@ -399,15 +399,8 @@ export const translations = {
     kalTerminChangedBy: 'Zmienił(a): {who}.',
     kalTerminAck: 'Zapoznałem się',
     kalTerminAckDone: 'Zmiana terminu potwierdzona jako przeczytana.',
-    kalFilterChanged: 'Zmieniony termin',
-    kalFilterChangedHint:
-      'W tym miesiącu pokaż tylko spotkania ze zmienionym terminem, których nikt nie potwierdził.',
-    kalFilterTentative: 'Wstępne',
-    kalFilterTentativeHint: 'W tym miesiącu pokaż tylko spotkania z niepotwierdzonym terminem.',
     kalWarnChanged: 'Zmieniony termin: {count} — nikt tego jeszcze nie potwierdził',
     kalWarnTentative: 'Termin wstępny: {count}',
-    kalFilterOn: 'FILTR WŁĄCZONY',
-    kalFilterOff: 'Filtr wyłączony',
     kalFilterOnHint: 'Filtr włączony — kliknij, aby go wyłączyć i pokazać wszystkie spotkania.',
     kalFilterOffHint: 'Kliknij, aby włączyć filtr i zostawić na widoku tylko te spotkania.',
 
@@ -423,6 +416,8 @@ export const translations = {
     kalDocsSavedDone: 'Zapisano informację o wysłanych dokumentach.',
     kalDocsUndoneDone: 'Wycofano oznaczenie dokumentów.',
     kalDocsSendMailing: 'Wyślij mailingiem',
+    kalDocsMailingOpen: 'Kliknij, aby zobaczyć szczegóły wysyłki',
+    kalDocsMailingMissing: 'Nie znaleziono tej wysyłki w historii mailingu — mogła zostać wyczyszczona.',
     mailingFromMeeting: 'Ten mailing zostanie zapisany przy spotkaniu: {name}',
     mailingFromMeetingClear: 'Odłącz od spotkania',
 
@@ -1539,15 +1534,8 @@ export const translations = {
     kalTerminChangedBy: 'Changed by {who}.',
     kalTerminAck: 'Got it',
     kalTerminAckDone: 'Date change acknowledged.',
-    kalFilterChanged: 'Moved date',
-    kalFilterChangedHint:
-      'In this month, show only meetings whose date moved and nobody has acknowledged.',
-    kalFilterTentative: 'Tentative',
-    kalFilterTentativeHint: 'In this month, show only meetings whose date is not confirmed.',
     kalWarnChanged: 'Moved dates: {count} — nobody has acknowledged them yet',
     kalWarnTentative: 'Tentative dates: {count}',
-    kalFilterOn: 'FILTER ON',
-    kalFilterOff: 'Filter off',
     kalFilterOnHint: 'Filter is on — click to turn it off and show every meeting.',
     kalFilterOffHint: 'Click to turn the filter on and leave only these meetings in view.',
 
@@ -1563,6 +1551,8 @@ export const translations = {
     kalDocsSavedDone: 'Saved what was sent.',
     kalDocsUndoneDone: 'Removed the documents mark.',
     kalDocsSendMailing: 'Send by mailing',
+    kalDocsMailingOpen: 'Click to see the details of this send',
+    kalDocsMailingMissing: 'This send is no longer in the mailing history — it may have been cleared.',
     mailingFromMeeting: 'This mailing will be recorded against the meeting: {name}',
     mailingFromMeetingClear: 'Detach from the meeting',
 

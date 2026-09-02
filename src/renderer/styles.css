@@ -2586,16 +2586,6 @@ body.dark-mode .bank-illustration-svg {
   transition: opacity var(--t-fast), background var(--t-fast);
 }
 
-/* The state, spelled out. Small, and only loud once the filter is on. */
-.kal-warning__state {
-  flex-shrink: 0;
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  opacity: 0.6;
-}
-
 .kal-warning:hover {
   border-color: var(--warning);
 }
@@ -2620,8 +2610,6 @@ body.dark-mode .bank-illustration-svg {
   background: color-mix(in srgb, var(--warning) 22%, transparent);
 }
 
-.kal-warning.is-active .kal-warning__state { opacity: 1; }
-
 /* A tentative date is a plan, not a problem — it gets the calmer palette. */
 .kal-warning--tentative {
   border-color: var(--info-border);
@@ -2642,59 +2630,6 @@ body.dark-mode .bank-illustration-svg {
 
 .kal-warning--tentative:hover { border-color: var(--info); }
 
-.kal-filters__sep {
-  width: 1px;
-  align-self: stretch;
-  margin: 2px var(--s-1);
-  background: var(--border-default);
-}
-
-/* Same switch, chip-sized: the toolbar and the strip above it are two ways to
-   flip one filter, so they have to look like it. */
-.kal-filter__box {
-  flex-shrink: 0;
-  width: 14px;
-  height: 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1.5px solid currentColor;
-  border-radius: 4px;
-  opacity: 0.5;
-  transition: opacity var(--t-fast), background var(--t-fast);
-}
-
-.kal-filter--state:hover .kal-filter__box { opacity: 0.8; }
-
-.kal-filter--state.is-active .kal-filter__box { opacity: 1; }
-
-.kal-filter--state.is-active { font-weight: 650; }
-
-/* The tick's fill and the ring name their colour outright rather than going
-   through currentColor — one less thing depending on how a browser resolves
-   color-mix against an inherited value. */
-.kal-filter--changed.is-active {
-  border-color: var(--warning);
-  background: var(--warning-bg);
-  color: var(--warning);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--warning) 20%, transparent);
-}
-
-.kal-filter--changed.is-active .kal-filter__box {
-  background: color-mix(in srgb, var(--warning) 24%, transparent);
-}
-
-.kal-filter--tentative.is-active {
-  border-color: var(--info);
-  background: var(--info-bg);
-  color: var(--info);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--info) 20%, transparent);
-}
-
-.kal-filter--tentative.is-active .kal-filter__box {
-  background: color-mix(in srgb, var(--info) 24%, transparent);
-}
-
 /* Confirmed / tentative, as two radios that look like what they do. */
 .kal-termin-choice {
   display: flex;
@@ -2702,10 +2637,14 @@ body.dark-mode .bank-illustration-svg {
   flex-wrap: wrap;
 }
 
-.kal-termin-option {
+/* Written as a descendant so it outranks `.form-group label`, which is (0,1,1)
+   and sets `display: block` — that is what flattened these into inline text
+   with the icon sitting on the baseline against the word. */
+.kal-termin-choice .kal-termin-option {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
+  margin-bottom: 0;
   padding: 7px var(--s-3);
   border: 1px solid var(--border-default);
   border-radius: var(--r-md);
@@ -2716,11 +2655,13 @@ body.dark-mode .bank-illustration-svg {
   transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
 }
 
-.kal-termin-option input { display: none; }
+.kal-termin-choice .kal-termin-option input { display: none; }
 
-.kal-termin-option:hover { background: var(--bg-surface-hover); }
+.kal-termin-choice .kal-termin-option:hover { background: var(--bg-surface-hover); }
 
-.kal-termin-option.is-active {
+.kal-termin-choice .kal-termin-option > svg { flex-shrink: 0; }
+
+.kal-termin-choice .kal-termin-option.is-active {
   border-color: var(--accent);
   background: var(--accent-subtle);
   color: var(--accent);
@@ -2794,12 +2735,20 @@ body.dark-mode .bank-illustration-svg {
 
 /* --------------------------- Documents ---------------------------------- */
 
+/* Last on the card and visibly a different room: it is the only part about
+   what happened AFTER the meeting was arranged, and the only part with controls
+   of its own. Negative margins pull it to the card's edges so the tint reads as
+   a footer rather than as a box floating inside one. */
 .kal-docs {
   display: flex;
   flex-direction: column;
   gap: var(--s-2);
-  padding-top: var(--s-3);
-  border-top: 1px solid var(--border-subtle);
+  margin: 0 calc(-1 * var(--s-3)) calc(-1 * var(--s-3));
+  padding: var(--s-3);
+  border-top: 1px solid var(--border-default);
+  background: var(--bg-surface-sunken);
+  border-bottom-left-radius: inherit;
+  border-bottom-right-radius: inherit;
 }
 
 .kal-docs__head {
@@ -2851,21 +2800,33 @@ body.dark-mode .bank-illustration-svg {
   gap: 4px;
 }
 
-.kal-docs__mailings li {
+.kal-docs__mailing {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px var(--s-2);
+  width: 100%;
+  padding: 6px var(--s-2);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--r-sm);
-  background: var(--bg-surface-sunken);
+  background: var(--bg-surface);
   font-size: var(--fs-sm);
+  font-family: inherit;
   color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
   min-width: 0;
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
 }
 
-.kal-docs__mailings li.is-error { color: var(--danger); }
+.kal-docs__mailing:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
 
-.kal-docs__mailings li > svg { flex-shrink: 0; }
+.kal-docs__mailing.is-error { color: var(--danger); }
+
+.kal-docs__mailing > svg { flex-shrink: 0; }
 
 .kal-docs__mailing-main {
   flex: 1;

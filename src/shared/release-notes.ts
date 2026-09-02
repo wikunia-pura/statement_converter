@@ -154,11 +154,11 @@ export const RELEASES: Release[] = [
           },
           {
             do: 'Kliknij ten pasek u góry.',
-            then: 'Kwadracik po lewej zaznacza się, napis zmienia się na „FILTR WŁĄCZONY”, pasek dostaje obwódkę — a kalendarz pokazuje tylko spotkania ze zmienionym terminem.',
+            then: 'Kwadracik po lewej zaznacza się, pasek dostaje obwódkę — a kalendarz pokazuje tylko spotkania ze zmienionym terminem.',
           },
           {
             do: 'Kliknij ten sam pasek jeszcze raz.',
-            then: 'Filtr się wyłącza i wracają wszystkie spotkania. Ten sam przełącznik jest w pasku narzędzi, jako „Zmieniony termin”.',
+            then: 'Filtr się wyłącza i wracają wszystkie spotkania.',
           },
           {
             do: 'Na karcie spotkania kliknij „Zapoznałem się”.',
@@ -168,7 +168,7 @@ export const RELEASES: Release[] = [
         expect: [
           'W siatce miesiąca takie spotkanie ma pomarańczowy kafelek z trójkątem — widać je bez wchodzenia w dzień.',
           'Zmiana samej nazwy, opisu, lokalizacji czy uczestników nie oznacza spotkania — liczy się wyłącznie data i godzina.',
-          'Filtr „Zmieniony termin” w pasku narzędzi i pasek u góry to jeden i ten sam przełącznik — włączony w jednym miejscu jest zaznaczony w obu.',
+          'Filtr jest tylko w tym pasku — jeden przełącznik na jeden stan, obok liczby, która o nim powiedziała.',
         ],
       },
       {
@@ -199,7 +199,7 @@ export const RELEASES: Release[] = [
           },
         ],
         expect: [
-          'Filtr „Wstępne” zawęża wyświetlany miesiąc, dokładnie jak filtry typów obok niego.',
+          'Pasek „Termin wstępny” u góry miesiąca działa jak ten przy zmienionym terminie: kwadracik włącza i wyłącza filtr.',
           'Spotkanie może być jednocześnie wstępne i ze zmienionym terminem — wtedy pierwszeństwo w oznaczeniu ma zmieniony termin.',
         ],
       },
@@ -252,7 +252,7 @@ export const RELEASES: Release[] = [
         where: ['Kalendarz', 'karta spotkania', 'Dokumenty'],
         steps: [
           {
-            do: 'Na karcie spotkania kliknij „Oznacz jako wysłane”.',
+            do: 'Zjedź na dół karty spotkania — sekcja dokumentów jest wydzielona pod przyciskami — i kliknij „Oznacz jako wysłane”.',
             then: 'Rozwija się pole na opis. Wpisz, co poszło, i kliknij „Zapisz”.',
           },
           {
@@ -265,7 +265,11 @@ export const RELEASES: Release[] = [
           },
           {
             do: 'Wyślij mailing normalnie, potem wróć do Kalendarza (np. strzałką wstecz).',
-            then: 'Na karcie spotkania, pod sekcją dokumentów, pojawia się lista wysyłek: szablon, odbiorca, data i liczba załączników.',
+            then: 'W sekcji dokumentów pojawia się wiersz wysyłki: szablon, odbiorca, data i liczba załączników.',
+          },
+          {
+            do: 'Kliknij ten wiersz.',
+            then: 'Otwiera się to samo okno szczegółów co w historii mailingu: treść dokładnie taka, jaka poszła, wartości pól i załączniki do otwarcia.',
           },
         ],
         expect: [

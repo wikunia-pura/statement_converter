@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Adres,
   AppUser,
+  MailingHistoryEntry,
   Spotkanie,
   SpotkanieInput,
   SpotkanieLokalizacja,
@@ -18,6 +19,7 @@ import Icon from '../components/Icon';
 import Select from '../components/Select';
 import SearchableSelect from '../components/SearchableSelect';
 import ModalDismiss from '../components/Modal';
+import MailingDetailsModal from '../components/MailingDetailsModal';
 import MonthIllustration, { monthAccent } from '../components/MonthIllustration';
 import {
   buildMonthGrid,
@@ -600,6 +602,8 @@ const MeetingCard: React.FC<{
   onDokumenty: (sent: boolean, opis: string) => void;
   /** Hand this meeting to the Mailing module. Absent when it has no community. */
   onSendMailing?: () => void;
+  /** Open one recorded send in the mailing-details window. */
+  onOpenMailing: (mailing: SpotkanieMailing) => void;
 }> = ({
   spotkanie,
   typ,
@@ -615,6 +619,7 @@ const MeetingCard: React.FC<{
   onTerminStatus,
   onDokumenty,
   onSendMailing,
+  onOpenMailing,
 }) => {
   const t = translations[language];
   const when = spotkanieWhen(spotkanie);
@@ -717,7 +722,45 @@ const MeetingCard: React.FC<{
         </div>
       )}
 
-      {/* Paperwork. Two ways in, one question answered: did it go out? */}
+      <div className="kal-card__foot">
+        {spotkanie.createdBy && (
+          <span className="kal-card__author">
+            {t.kalCreatedBy.replace('{who}', spotkanie.createdBy)}
+          </span>
+        )}
+        <div className="kal-card__actions">
+          {tentative ? (
+            <button
+              className="button button-small button-warning"
+              onClick={() => onTerminStatus('potwierdzony')}
+              disabled={busy}
+              title={t.kalTerminConfirmHint}
+            >
+              <Icon name="check-circle" size={13} /> {t.kalTerminConfirm}
+            </button>
+          ) : (
+            <button
+              className="button button-small button-info"
+              onClick={() => onTerminStatus('wstepny')}
+              disabled={busy}
+              title={t.kalTerminUnconfirmHint}
+            >
+              <Icon name="clock" size={13} /> {t.kalTerminUnconfirm}
+            </button>
+          )}
+          <button className="button button-small button-primary" onClick={onEdit} disabled={busy}>
+            <Icon name="edit" size={13} /> {t.edit}
+          </button>
+          <button className="button button-small button-danger" onClick={onDelete} disabled={busy}>
+            <Icon name="trash" size={13} /> {t.delete}
+          </button>
+        </div>
+      </div>
+
+      {/* Paperwork, last on the card and walled off from it: it is the one part
+          that is about what happened AFTER the meeting was arranged, and the one
+          part with its own controls. Two ways in, one question answered — did it
+          go out? */}
       <div className="kal-docs">
         <div className="kal-docs__head">
           <span className={`kal-docs__state${sent ? ' is-sent' : ''}`}>
@@ -728,24 +771,25 @@ const MeetingCard: React.FC<{
             {!editingDocs && (
               <button
                 type="button"
-                className="link-button"
+                className="button button-small button-secondary"
                 onClick={() => {
                   setDocsOpis(spotkanie.dokumentyOpis);
                   setEditingDocs(true);
                 }}
                 disabled={busy}
               >
+                <Icon name={sent ? 'edit' : 'check'} size={13} />{' '}
                 {sent ? t.kalDocsEdit : t.kalDocsMark}
               </button>
             )}
             {onSendMailing && (
               <button
                 type="button"
-                className="link-button"
+                className="button button-small button-info"
                 onClick={onSendMailing}
                 disabled={busy}
               >
-                {t.kalDocsSendMailing}
+                <Icon name="mail" size={13} /> {t.kalDocsSendMailing}
               </button>
             )}
           </div>
@@ -808,62 +852,36 @@ const MeetingCard: React.FC<{
           </div>
         )}
 
-        {/* What the Mailing module actually sent for this meeting. The mailing
-            history stays the authority; this is its slim read-back. */}
+        {/* What the Mailing module actually sent for this meeting. Each row
+            opens the same details window the mailing history opens, because a
+            send recorded here and the same send in the history are one thing. */}
         {mailings.length > 0 && (
           <ul className="kal-docs__mailings">
             {mailings.map((m) => (
-              <li key={m.id} className={m.status === 'error' ? 'is-error' : undefined}>
-                <Icon name={m.status === 'error' ? 'alert-circle' : 'mail'} size={12} />
-                <span className="kal-docs__mailing-main">
-                  {m.templateName || m.subject || '—'}
-                  {m.jednostkaNazwa ? ` → ${m.jednostkaNazwa}` : ''}
-                </span>
-                <span className="kal-docs__mailing-when">{formatStamp(m.sentAt, locale)}</span>
-                {m.attachmentNames.length > 0 && (
-                  <span className="kal-docs__mailing-files" title={m.attachmentNames.join(', ')}>
-                    <Icon name="paperclip" size={11} /> {m.attachmentNames.length}
+              <li key={m.id}>
+                <button
+                  type="button"
+                  className={`kal-docs__mailing${m.status === 'error' ? ' is-error' : ''}`}
+                  onClick={() => onOpenMailing(m)}
+                  title={t.kalDocsMailingOpen}
+                >
+                  <Icon name={m.status === 'error' ? 'alert-circle' : 'mail'} size={12} />
+                  <span className="kal-docs__mailing-main">
+                    {m.templateName || m.subject || '—'}
+                    {m.jednostkaNazwa ? ` → ${m.jednostkaNazwa}` : ''}
                   </span>
-                )}
+                  {m.attachmentNames.length > 0 && (
+                    <span className="kal-docs__mailing-files" title={m.attachmentNames.join(', ')}>
+                      <Icon name="paperclip" size={11} /> {m.attachmentNames.length}
+                    </span>
+                  )}
+                  <span className="kal-docs__mailing-when">{formatStamp(m.sentAt, locale)}</span>
+                  <Icon name="chevron-right" size={12} />
+                </button>
               </li>
             ))}
           </ul>
         )}
-      </div>
-
-      <div className="kal-card__foot">
-        {spotkanie.createdBy && (
-          <span className="kal-card__author">
-            {t.kalCreatedBy.replace('{who}', spotkanie.createdBy)}
-          </span>
-        )}
-        <div className="kal-card__actions">
-          {tentative ? (
-            <button
-              className="button button-small button-warning"
-              onClick={() => onTerminStatus('potwierdzony')}
-              disabled={busy}
-              title={t.kalTerminConfirmHint}
-            >
-              <Icon name="check-circle" size={13} /> {t.kalTerminConfirm}
-            </button>
-          ) : (
-            <button
-              className="button button-small button-secondary"
-              onClick={() => onTerminStatus('wstepny')}
-              disabled={busy}
-              title={t.kalTerminUnconfirmHint}
-            >
-              <Icon name="clock" size={13} /> {t.kalTerminUnconfirm}
-            </button>
-          )}
-          <button className="button button-small button-primary" onClick={onEdit} disabled={busy}>
-            <Icon name="edit" size={13} /> {t.edit}
-          </button>
-          <button className="button button-small button-danger" onClick={onDelete} disabled={busy}>
-            <Icon name="trash" size={13} /> {t.delete}
-          </button>
-        </div>
       </div>
     </article>
   );
@@ -914,6 +932,16 @@ const Kalendarz: React.FC<Props> = ({
   const [stateFilter, setStateFilter] = useState<SpotkanieStateFilter>('all');
   /** Meeting id being written to, so its own buttons disable and nothing else does. */
   const [busyId, setBusyId] = useState<number | null>(null);
+  /**
+   * The send being read in full, and the history it came from.
+   *
+   * The calendar itself only carries a slim projection of each send — enough for
+   * a one-line summary — so the full row is fetched the first time somebody
+   * asks for details, and then kept: the same window opens instantly for every
+   * other send on the screen.
+   */
+  const [mailingDetails, setMailingDetails] = useState<MailingHistoryEntry | null>(null);
+  const [mailingHistory, setMailingHistory] = useState<MailingHistoryEntry[] | null>(null);
   const [selectedDay, setSelectedDay] = useState<string>(todayKey());
   // Set when a chip in the grid is clicked, so the panel says which of the day's
   // meetings the user actually pointed at.
@@ -1177,6 +1205,27 @@ const Kalendarz: React.FC<Props> = ({
     });
   };
 
+  /**
+   * Open one recorded send in the same window the mailing history uses. Falls
+   * back to a plain error rather than a half-filled modal: the row exists in
+   * the calendar because the send happened, so a miss here means the history
+   * row was cleared, and saying so is better than showing an empty record.
+   */
+  const openMailingDetails = async (mailing: SpotkanieMailing) => {
+    try {
+      const history = mailingHistory ?? (await window.electronAPI.mailingGetHistory());
+      if (!mailingHistory) setMailingHistory(history);
+      const entry = history.find((h) => h.id === mailing.id);
+      if (!entry) {
+        notify.error(t.kalDocsMailingMissing);
+        return;
+      }
+      setMailingDetails(entry);
+    } catch (err: unknown) {
+      notify.error(err instanceof Error ? err.message : 'Unknown error');
+    }
+  };
+
   /** Follow a meeting from the "coming up" list to its own day. */
   const goToSpotkanie = (spotkanie: Spotkanie) => {
     selectDay(toDayKey(spotkanie.startsAt), spotkanie.id);
@@ -1274,10 +1323,12 @@ const Kalendarz: React.FC<Props> = ({
         </header>
 
         {/* ------------------------- What needs attention -------------------
-            Each strip is one switch, not two actions: the box on the left shows
-            whether the filter is on, and the same click that turns it on turns
-            it off again. "Pokaż / Pokaż wszystkie" used to sit here and read as
-            two different buttons wearing one. */}
+            Each strip is one switch: the tick box on the left shows whether the
+            filter is on, and the same click turns it off again. This is also
+            the only place the two state filters live — a second pair of chips
+            among the type filters was two controls for one state, and the strip
+            is where the user is already looking, because it is the thing that
+            told them there was something to look at. */}
         {(alerts.changed > 0 || alerts.tentative > 0) && (
           <div className="kal-warnings">
             {alerts.changed > 0 && (
@@ -1297,9 +1348,6 @@ const Kalendarz: React.FC<Props> = ({
                 <span className="kal-warning__text">
                   {t.kalWarnChanged.replace('{count}', String(alerts.changed))}
                 </span>
-                <span className="kal-warning__state">
-                  {stateFilter === 'changed' ? t.kalFilterOn : t.kalFilterOff}
-                </span>
               </button>
             )}
             {alerts.tentative > 0 && (
@@ -1318,9 +1366,6 @@ const Kalendarz: React.FC<Props> = ({
                 <Icon name="clock" size={16} />
                 <span className="kal-warning__text">
                   {t.kalWarnTentative.replace('{count}', String(alerts.tentative))}
-                </span>
-                <span className="kal-warning__state">
-                  {stateFilter === 'tentative' ? t.kalFilterOn : t.kalFilterOff}
                 </span>
               </button>
             )}
@@ -1372,43 +1417,6 @@ const Kalendarz: React.FC<Props> = ({
               </button>
             ))}
 
-            {/* The state filters sit with the type filters and narrow the same
-                thing they do: the month on screen and the day panel beside it.
-                The counters above are the month's too, so the strip and the
-                filter can never disagree about how many there are. */}
-            <span className="kal-filters__sep" aria-hidden="true" />
-            <button
-              type="button"
-              className={`kal-filter kal-filter--state kal-filter--changed${
-                stateFilter === 'changed' ? ' is-active' : ''
-              }`}
-              onClick={() => setStateFilter(stateFilter === 'changed' ? 'all' : 'changed')}
-              aria-pressed={stateFilter === 'changed'}
-              title={
-                stateFilter === 'changed' ? t.kalFilterOnHint : t.kalFilterChangedHint
-              }
-            >
-              <span className="kal-filter__box" aria-hidden="true">
-                {stateFilter === 'changed' && <Icon name="check" size={10} />}
-              </span>
-              <Icon name="alert-triangle" size={12} /> {t.kalFilterChanged}
-            </button>
-            <button
-              type="button"
-              className={`kal-filter kal-filter--state kal-filter--tentative${
-                stateFilter === 'tentative' ? ' is-active' : ''
-              }`}
-              onClick={() => setStateFilter(stateFilter === 'tentative' ? 'all' : 'tentative')}
-              aria-pressed={stateFilter === 'tentative'}
-              title={
-                stateFilter === 'tentative' ? t.kalFilterOnHint : t.kalFilterTentativeHint
-              }
-            >
-              <span className="kal-filter__box" aria-hidden="true">
-                {stateFilter === 'tentative' && <Icon name="check" size={10} />}
-              </span>
-              <Icon name="clock" size={12} /> {t.kalFilterTentative}
-            </button>
           </div>
 
           <button
@@ -1603,6 +1611,7 @@ const Kalendarz: React.FC<Props> = ({
                           ? () => handleSendMailing(s)
                           : undefined
                       }
+                      onOpenMailing={(m) => void openMailingDetails(m)}
                     />
                   ))}
                 </div>
@@ -1715,6 +1724,14 @@ const Kalendarz: React.FC<Props> = ({
           {tip.spotkanie.opis && <p className="kal-tip__desc">{tip.spotkanie.opis}</p>}
           <div className="kal-tip__hint">{t.kalChipDoubleClick}</div>
         </div>
+      )}
+
+      {mailingDetails && (
+        <MailingDetailsModal
+          entry={mailingDetails}
+          language={language}
+          onClose={() => setMailingDetails(null)}
+        />
       )}
 
       {form && (

@@ -571,9 +571,22 @@ function setupIpcHandlers() {
         : fs.readFileSync(filePath, 'utf-8');
 
       // Snapshot existing kontrahenci once — avoid an O(n²) round-trip per line on large Plan kont files.
-      const byNameLower = new Map<string, any>();
+      // Two indices, either of which identifies "this is the same contractor as before":
+      //   - byNameExact: an unchanged name tracks vDOM renumbering the same contractor's symbol
+      //     across exports.
+      //   - bySymbol: an unchanged symbol recognizes a contractor that was previously disambiguated
+      //     with a " (n)" suffix (see below), so re-importing the same file is idempotent instead of
+      //     minting a fresh "(n)" every time — the file always carries the plain, un-suffixed name.
+      // Only when NEITHER matches is the name a genuine collision: a different contractor that
+      // happens to share a label case-insensitively (e.g. "Kredyt Bankowy" vs "Kredyt bankowy").
+      // That one must not silently overwrite the other, so it gets a Windows-style " (n)" suffix.
+      const byNameExact = new Map<string, any>();
+      const bySymbol = new Map<string, any>();
+      const usedNamesLower = new Set<string>();
       for (const k of await database.getAllKontrahenci()) {
-        byNameLower.set(k.nazwa.toLowerCase(), k);
+        byNameExact.set(k.nazwa, k);
+        bySymbol.set(k.kontoKontrahenta, k);
+        usedNamesLower.add(k.nazwa.toLowerCase());
       }
 
       // Parse the file
@@ -587,24 +600,32 @@ function setupIpcHandlers() {
 
       const finalizeLastKontrahent = async () => {
         if (lastNazwa && lastSymbol) {
-          // Match by nazwa (main name), not by symbol — local snapshot lookup.
-          const existing = byNameLower.get(lastNazwa.toLowerCase());
+          const existing = byNameExact.get(lastNazwa) ?? bySymbol.get(lastSymbol);
 
           if (existing) {
-            // Update existing: nazwa, kontoKontrahenta, nip can change
-            // BUT keep existing alternativeNames
+            // Same contractor (matched by name or by symbol) — keep whatever nazwa it already
+            // has (may carry a disambiguating suffix); kontoKontrahenta and nip can change.
             await database.updateKontrahent(
               existing.id,
-              lastNazwa,
+              existing.nazwa,
               lastSymbol,
               accumulatedNip,
               existing.alternativeNames || []
             );
+            existing.kontoKontrahenta = lastSymbol;
             updated++;
           } else {
-            // Add new
-            const created = await database.addKontrahent(lastNazwa, lastSymbol, accumulatedNip, []);
-            byNameLower.set(lastNazwa.toLowerCase(), created);
+            let nazwaToUse = lastNazwa;
+            const lowerKey = lastNazwa.toLowerCase();
+            if (usedNamesLower.has(lowerKey)) {
+              let n = 1;
+              while (usedNamesLower.has(`${lowerKey} (${n})`)) n++;
+              nazwaToUse = `${lastNazwa} (${n})`;
+            }
+            const created = await database.addKontrahent(nazwaToUse, lastSymbol, accumulatedNip, []);
+            byNameExact.set(nazwaToUse, created);
+            bySymbol.set(lastSymbol, created);
+            usedNamesLower.add(nazwaToUse.toLowerCase());
             added++;
           }
         }

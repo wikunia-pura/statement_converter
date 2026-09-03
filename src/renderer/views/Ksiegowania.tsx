@@ -54,6 +54,8 @@ interface Props {
   onShowInHistory?: (query: string) => void;
   /** Jump to the Kalendarz with one of its "needs doing" filters already on. */
   onShowInCalendar?: (filter: SpotkanieStateFilter) => void;
+  /** Show the meetings/calendar area. Off in the Converter's tab — the calendar lives on the dashboard only. */
+  showCalendar?: boolean;
 }
 
 /** Polish plural: [one, few (2-4), many]. English: [singular, plural]. */
@@ -252,6 +254,7 @@ const Ksiegowania: React.FC<Props> = ({
   userEmail,
   onShowInHistory,
   onShowInCalendar,
+  showCalendar = true,
 }) => {
   const t = translations[language];
   const notify = useNotify();
@@ -545,17 +548,19 @@ const Ksiegowania: React.FC<Props> = ({
     <div className="content-body content-body--fill">
       <div className="ksieg">
         {/* -------------------- Area one: the calendar ---------------------- */}
-        <CalendarAlerts
-          alerts={kalAlerts}
-          language={language}
-          locale={locale}
-          next={kalNext}
-          upcomingCount={kalUpcoming.length}
-          onOpen={onShowInCalendar}
-        />
+        {showCalendar && (
+          <CalendarAlerts
+            alerts={kalAlerts}
+            language={language}
+            locale={locale}
+            next={kalNext}
+            upcomingCount={kalUpcoming.length}
+            onOpen={onShowInCalendar}
+          />
+        )}
 
         {/* -------------------- Area two: the month's bookings -------------- */}
-        <section className="ks-area ks-area--ksieg">
+        <section className={`ks-area ks-area--ksieg${showCalendar ? '' : ' ks-area--ksieg-solo'}`}>
         {/* ---------------------------- Month bar --------------------------- */}
         <header
           className="ksieg-hero"

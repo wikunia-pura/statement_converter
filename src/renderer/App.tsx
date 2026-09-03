@@ -712,6 +712,7 @@ const App: React.FC = () => {
                 filter={ksiegFilter}
                 setFilter={setKsiegFilter}
                 userEmail={session.email}
+                showCalendar={false}
                 onShowInHistory={(query) => {
                   setHistorySearchSeed(query);
                   navigate('converter', 'history');

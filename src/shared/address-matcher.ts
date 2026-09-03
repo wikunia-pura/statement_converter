@@ -117,6 +117,30 @@ const APT_PATTERNS = {
   leadingNumber: new RegExp(String.raw`^(\d{1,4}${APT_LETTER})(?!\s*pln)\s`, 'i'),
 } as const;
 
+/**
+ * Matches a street-address clause ("ul. Lutomierska 109A ", "al. Lotników 20 ")
+ * sitting immediately before the current position (used with a "before the
+ * match" substring, anchored with `$`).
+ *
+ * Guards the `lokal`/`lokalu`/`prefix` apartment patterns: those keywords are
+ * normally standalone lokal references ("CZYNSZ ZA LOKAL 15") and are trusted
+ * as identifiers without address validation. But the same "m.NN"/"lokal NN"
+ * shape also occurs glued to the end of an unrelated street address — most
+ * commonly the payer's own home address in the counterparty field ("PIOTR
+ * KOWALSKI UL. LUTOMIERSKA 109A M.89"). There the number is the payer's own
+ * apartment on that street, not a reference to any managed property, and must
+ * not be trusted as a bare identifier — see extractApartmentNumber.
+ *
+ * Requires the "ul."/"al." marker (rather than any word+number pair) to keep
+ * false positives rare: Polish bank statements consistently prefix a real
+ * street name this way, so requiring it only misses the guard for addresses
+ * written without it, never adds a false trigger.
+ */
+const FOREIGN_STREET_BEFORE_APARTMENT = new RegExp(
+  String.raw`(?:ulica|aleja|ul\.?|al\.?)\s*[a-z]{3,}(?:[-\s][a-z]{3,})?\s+\d{1,4}[a-z]?\s*$`,
+  'i',
+);
+
 // Generic fallback patterns — hoisted to module scope so they're compiled once,
 // not rebuilt on every extractAddress() call.
 const GENERIC_PATTERN_1 = new RegExp(
@@ -682,24 +706,29 @@ export class AddressMatcher {
     }
 
     const lokalMatch = normalized.match(APT_PATTERNS.lokal);
-    if (lokalMatch) {
+    if (lokalMatch && !this.gluedToForeignStreet(normalized, lokalMatch.index!)) {
       return found(null, lokalMatch[1], 'identifier');
     }
 
     const lokaluMatch = normalized.match(APT_PATTERNS.lokalu);
-    if (lokaluMatch) {
+    if (lokaluMatch && !this.gluedToForeignStreet(normalized, lokaluMatch.index!)) {
       return found(null, lokaluMatch[1], 'identifier');
     }
 
     // === PREFIX PATTERNS (higher priority than address patterns) ===
     // "mieszkanie X", "lok. X", "m. X" etc. - explicit apartment references
     // These are treated as identifiers (trusted without address validation)
+    // UNLESS they sit glued to a street clause — see FOREIGN_STREET_BEFORE_APARTMENT.
     const prefixMatch = normalized.match(APT_PATTERNS.prefix);
     if (prefixMatch) {
       const apt = prefixMatch[1] || prefixMatch[2];
       // Length is measured on the digits alone, so "128A" is not rejected as
       // 4-digits-plus for carrying a letter.
-      if (apt && this.apartmentDigits(apt).length <= 4) {
+      if (
+        apt &&
+        this.apartmentDigits(apt).length <= 4 &&
+        !this.gluedToForeignStreet(normalized, prefixMatch.index!)
+      ) {
         return found(null, apt, 'identifier');
       }
     }
@@ -732,6 +761,15 @@ export class AddressMatcher {
     }
 
     return null;
+  }
+
+  /**
+   * True when the text immediately before `matchIndex` ends with a street
+   * clause ("ul. Lutomierska 109A "). See FOREIGN_STREET_BEFORE_APARTMENT.
+   */
+  private gluedToForeignStreet(text: string, matchIndex: number): boolean {
+    const before = this.normalizePolishChars(text.slice(0, matchIndex));
+    return FOREIGN_STREET_BEFORE_APARTMENT.test(before);
   }
 
   // ============================================================

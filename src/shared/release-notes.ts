@@ -84,6 +84,56 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '7.0.1',
+    date: '2026-09-03',
+    title: 'Zaimportowany kontrahent przestał znikać, cudzy adres przestał być mieszkaniem',
+    tagline:
+      'Wydanie z trzema poprawkami: import planu kont z DOM przestał zamieniać dwóch różnych kontrahentów o tej samej nazwie w jednego, dopasowywanie mieszkania przestało brać numer domu z adresu klienta za numer lokalu, a pasek Kalendarza zniknął z zakładki Księgowania w Konwerterze — bo tam go nigdy nie było czym wypełnić.',
+    highlights: [
+      {
+        id: 'kontrahenci-import-dom-kolizja-nazw',
+        kind: 'fixed',
+        icon: 'users',
+        title: 'Import z DOM: ten sam numer konta, dwie różne nazwy, zero utraconych kontrahentów',
+        summary:
+          'Gdy plan kont miał dwóch różnych kontrahentów o identycznej nazwie różniącej się tylko wielkością liter (np. „Kredyt Bankowy” i „Kredyt bankowy”), import po cichu podmieniał numer konta jednego z nich na numer drugiego — pierwszy znikał z listy. Teraz taki kontrahent dostaje w nazwie dopisek „(1)”, „(2)” i zostaje osobnym wpisem.',
+        details: [
+          'Import „z DOM” dopasowuje istniejące wpisy po nazwie, nie po numerze konta — dzięki temu przetrwa zmianę numeru tego samego kontrahenta między eksportami z systemu księgowego. Problem pojawiał się, gdy plan kont zawierał dwa NAPRAWDĘ różne konta z tą samą nazwą pisaną inną wielkością liter: drugie z nich było traktowane jako „to samo”, więc podmieniało numer konta pierwszemu, zamiast dodać się jako osobna pozycja.',
+          'Ponowny import tego samego pliku jest teraz bezpieczny — nie mnoży dopisków „(1)”, „(2)”, „(3)” przy każdym uruchomieniu, tylko rozpoznaje już zaimportowanego kontrahenta po numerze konta i po prostu go odświeża.',
+        ],
+        where: ['Kontrahenci', '„Import z DOM”'],
+        expect: [
+          'Kontrahent, który wcześniej zniknął po imporcie (bo jego numer konta został po cichu nadpisany), wraca jako osobna pozycja z dopiskiem „(1)” w nazwie.',
+          'Import „z FileFunky” (dopasowanie po numerze konta) nie miał tego problemu i się nie zmienił.',
+        ],
+        note: {
+          type: 'tip',
+          text: 'Jeśli wcześniejsze, wadliwe uruchomienia importu zdążyły już utworzyć zbędne duplikaty z dopiskiem w nazwie, trzeba je usunąć ręcznie z listy Kontrahenci — poprawka nie cofa tego, co już się zapisało.',
+        },
+      },
+      {
+        id: 'dopasowanie-cudzy-adres-jako-lokal',
+        kind: 'fixed',
+        icon: 'home',
+        title: 'Numer domu klienta na wyciągu przestał udawać numer lokalu',
+        summary:
+          'Gdy w polu kontrahenta na wyciągu bankowym był własny adres płatnika w formacie „ul. Lutomierska 109A M.89”, dopasowywanie transakcji brało „89” za numer lokalu wspólnoty. Teraz taki numer, gdy stoi bezpośrednio po adresie ulicy, nie jest już traktowany jako pewny identyfikator lokalu.',
+        expect: [
+          'Dotyczy tylko przypadków, w których numer lokalu/mieszkania jest zapisany bezpośrednio po nazwie ulicy z numerem domu — samodzielne „lokal 15” czy „m. 12” w opisie transakcji działa jak dotychczas.',
+        ],
+      },
+      {
+        id: 'ksiegowania-konwerter-bez-paska-kalendarza',
+        kind: 'improved',
+        icon: 'calendar',
+        title: 'Zakładka Księgowania w Konwerterze bez pustego miejsca po pasku Kalendarza',
+        summary:
+          'Pasek ze zbliżającymi się terminami z Kalendarza pokazywał się też w zakładce Księgowania wewnątrz Konwertera, choć bez sensu — te same informacje są już na Pulpicie. Teraz w Konwerterze widać od razu miesiąc księgowań, bez paska nad nim.',
+        where: ['Konwerter', 'Księgowania'],
+      },
+    ],
+  },
+  {
     version: '7.0.0',
     date: '2026-09-02',
     title: 'Kalendarz pilnuje terminów, ludzie mają imiona, aplikacja ma „wstecz”',

@@ -16,7 +16,11 @@ test-output/
 config/ai-config.yml
 config/backup-config.yml
 
-# Wyciągi bankowe użyte do testów — repo jest publiczne, a te pliki niosą
-# prawdziwe nazwiska i numery kont. Trzymamy je tylko lokalnie.
+# Wyciągi bankowe i plany kont użyte do testów — repo jest publiczne, a te pliki
+# niosą prawdziwe nazwiska i numery kont. Trzymamy je tylko lokalnie.
 test-data/BOS_wyciag (49).pdf
 test-data/operacje_260801_260831 (3).xml
+test-data/07M_2026.mt940
+test-data/07M_2026 (1).mt940
+test-data/Statement_9258682567_31-08-2026_No8.sta
+test-data/PlanKont_20260903_104140.pdf

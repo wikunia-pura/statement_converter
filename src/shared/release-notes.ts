@@ -84,6 +84,57 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '7.1.0',
+    date: '2026-09-07',
+    title: 'Bank Pocztowy — kolejny bank, którego wyciąg konwertujesz bez przepisywania',
+    tagline:
+      'Wyciągi z Banku Pocztowego (pliki .mt940) mają swój konwerter. Rozpoznaje lokale z tytułów wpłat, dopasowuje kontrahentów po stronie wydatków i pomija własne prowizje banku — tak samo jak konwertery pozostałych ośmiu banków. Zanim wrzucisz pierwszy plik, dodaj bank na liście Banki i wskaż mu konwerter „Bank Pocztowy (MT940)”.',
+    highlights: [
+      {
+        id: 'konwerter-bank-pocztowy',
+        kind: 'new',
+        icon: 'building',
+        title: 'Konwerter „Bank Pocztowy (MT940)”',
+        summary:
+          'Nowy konwerter czyta wyciągi Banku Pocztowego w formacie MT940 (pliki z rozszerzeniem .mt940) i robi z nich te same dwa pliki co pozostałe banki: podgląd do sprawdzenia i plik księgowy do importu.',
+        details: [
+          'Pocztowy zapisuje wyciąg inaczej niż PKO, ING czy Alior: tytuł przelewu, nazwa kontrahenta i jego adres są pocięte na kawałki po 27 znaków, a przy każdym kawałku bank obcina spacje z końca. Konwerter składa te kawałki z powrotem i przywraca brakujące odstępy, więc „Koszty Zarządu zg. z UCHW.” i „8/07 i 03/2026” nie sklejają się w jedno słowo.',
+          'Numer lokalu rozpoznawany jest z tytułu wpłaty i z nazwy płacącego — dokładnie tym samym mechanizmem, co w pozostałych bankach, razem z regułami przypisania lokali z zakładki Adresy. Wpłaty z „ZAKŁ. GOSP. NIERUCHOM.” trafiają na konto ZGN.',
+          'Po stronie wydatków transakcje są dopasowywane do listy Kontrahentów; nierozpoznane wychodzą w pliku księgowym jako „NIEROZPOZNANY KONTRAHENT #n” i czekają na przypisanie w akceptacji.',
+          'Własne opłaty banku („opł. za rachunek”, „prowizja wplaty otwarte”) są pomijane — nie ma ich ani w podglądzie, ani w pliku księgowym.',
+          'Numer rachunku wspólnoty jest odczytywany z nagłówka pliku, więc jeśli masz go dopisany w Adresach, aplikacja sama podpowie wspólnotę po wrzuceniu wyciągu.',
+        ],
+        where: ['Banki', '„Dodaj Bank”'],
+        steps: [
+          {
+            do: 'Wejdź w Banki i kliknij „Dodaj Bank”.',
+            then: 'Otwiera się formularz z polami „Nazwa Banku” i „Konwerter”.',
+          },
+          {
+            do: 'Wpisz nazwę (np. „Bank Pocztowy”), a w polu „Konwerter” wybierz z listy „Bank Pocztowy (MT940)”. Zapisz.',
+            then: 'Bank pojawia się na liście, a w kolumnie „Konwerter” widać przy nim „Bank Pocztowy (MT940)”.',
+          },
+          {
+            do: 'Przejdź do Konwertera, w „Wybierz Bank” wskaż nowo dodany bank i wrzuć plik .mt940 przez „Dodaj Pliki”.',
+            then: 'Plik dostaje status „oczekuje”, a jeśli rachunek z wyciągu jest dopisany w Adresach — wspólnota podpowiada się sama.',
+          },
+          {
+            do: 'Kliknij konwersję.',
+            then: 'Transakcje, których nie udało się rozpoznać, trafiają na ekran akceptacji; po jego zatwierdzeniu powstają pliki w podfolderach „podglad” i „accounting”.',
+          },
+        ],
+        expect: [
+          'Plik księgowy ma dokładnie ten sam układ kolumn co dla pozostałych banków, więc import do systemu księgowego niczym się nie różni.',
+          'Wpłaty i wydatki z wyciągu zgadzają się co do grosza z saldem otwarcia i zamknięcia — sprawdzone na wyciągach lipcowych z dwóch rachunków tej samej wspólnoty.',
+        ],
+        note: {
+          type: 'warning',
+          text: 'Bank Pocztowy sam wstawia spacje w środku tytułu przelewu — „Kw iatowa 24a/3” albo „Kwiat owa24a/4” to zapis samego banku, nie błąd odczytu. Takich wpłat automat nie rozpozna i zobaczysz je na ekranie akceptacji (z podpowiedzią AI, jeśli jest włączona).',
+        },
+      },
+    ],
+  },
+  {
     version: '7.0.1',
     date: '2026-09-03',
     title: 'Zaimportowany kontrahent przestał znikać, cudzy adres przestał być mieszkaniem',

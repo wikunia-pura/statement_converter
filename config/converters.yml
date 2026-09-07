@@ -33,3 +33,7 @@ converters:
   - id: bos_xml
     name: BOŚ Bank XML (CAMT.052)
     description: Bank Ochrony Środowiska XML account reports (ISO 20022 camt.052) with AI-powered tenant extraction
+
+  - id: pocztowy
+    name: Bank Pocztowy (MT940)
+    description: Bank Pocztowy MT940 format statements with AI-powered tenant extraction

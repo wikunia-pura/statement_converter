@@ -103,6 +103,7 @@ function extractFromText(text: string, converterId?: string | null): string[] {
     case 'pko_mt940':
     case 'ing':
     case 'alior':
+    case 'pocztowy':
       // MT940 :25: tag carries the owner account. May or may not have leading slash + "PL".
       // Example: ":25:/PL49102010260000120201852748"
       for (const m of text.matchAll(/:25:\s*\/?(?:PL)?\s*([\d\s]{26,40})/gi)) {

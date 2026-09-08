@@ -4,7 +4,7 @@ import yaml from 'js-yaml';
 import { app } from 'electron';
 import { Converter, TransactionForReview, ConversionReviewData, CLARIFICATION_ACCOUNT, DEFAULT_ACCOUNT_CONFIG } from '../shared/types';
 import { readFileWithEncoding, writeFileWin1250 } from '../shared/encoding';
-import { apartmentGapInText, isAccountSymbol, isLetteredApartment, needsExplicitAccount } from '../shared/apartment-account';
+import { isAccountSymbol, isLetteredApartment, needsExplicitAccount } from '../shared/apartment-account';
 import type { ConversionProgressCallback } from '../shared/base-converter';
 import { SantanderXmlConverter } from '../converters/santander-xml';
 import { PKOBPMT940Converter } from '../converters/pko-mt940';
@@ -760,16 +760,10 @@ class ConverterRegistry {
       //    symbol to book it to (17A). Checked independently of confidence because
       //    the AI can return such a number with a high score of its own, and the
       //    alternative to asking the user is booking onto the wrong apartment.
-      // 5. Income transaction whose text shows a lokal number the sender's bank
-      //    may have cut in two ("lok1 0"). Checked independently of confidence for
-      //    the same reason as (4): whoever produced the number — regex, AI, or a
-      //    cached answer with none of this logic behind it — may have guessed the
-      //    cut correctly, and a correct guess is not a verified reading.
       const needsReview = confidence < 70
         || (trn.transactionType === 'income' && !trn.extracted.apartmentNumber)
         || trn.extracted.matchedByManualMapping === true
-        || (trn.transactionType === 'income' && this.needsAccountDecision(trn))
-        || (trn.transactionType === 'income' && this.hasApartmentGap(trn));
+        || (trn.transactionType === 'income' && this.needsAccountDecision(trn));
       
       if (needsReview) {
         reviewTransactions.push(this.toReviewTransaction(trn, index, converterId));
@@ -787,18 +781,6 @@ class ConverterRegistry {
     accountConfig?: { bankAccountSymbol: string; apartmentPrefix: string }
   ): string {
     return accountConfig?.apartmentPrefix || DEFAULT_ACCOUNT_CONFIG.apartmentPrefix;
-  }
-
-  /**
-   * True when the transaction text shows a lokal number the sender's bank may
-   * have cut in two ("lok1 0" for lok10) — re-read from the text for the same
-   * reason needsAccountDecision is: whatever number regex, AI, or a cached
-   * answer landed on, a correct-looking reading of a wrap-cut title is a guess,
-   * not a verified fact, until the user confirms it.
-   */
-  private hasApartmentGap(trn: any): boolean {
-    const text = `${trn.normalized?.descBase ?? ''} ${trn.normalized?.descOpt ?? ''}`;
-    return apartmentGapInText(text) !== null;
   }
 
   /**

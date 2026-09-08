@@ -84,6 +84,42 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '7.2.2',
+    date: '2026-09-08',
+    title: 'Powrót do księgowania z 7.2.0 dla rozciętego numeru lokalu, plus poprawka kodowania CP852',
+    tagline:
+      'Dodatkowe wstrzymywanie wpłat z wersji 7.2.1 zostało wycofane — wpłata z poprawnie rozpoznanym numerem lokalu znów księguje się automatycznie, tak jak w 7.2.0. Do tego poprawiona detekcja kodowania CP852 (DOS Latin-2), które wcześniej bywało mylone z Windows-1250 i psuło polskie znaki.',
+    highlights: [
+      {
+        id: 'powrot-do-ksiegowania-z-720',
+        kind: 'improved',
+        icon: 'shield',
+        title: 'Wpłata z poprawnie rozpoznanym numerem lokalu znów księguje się automatycznie',
+        summary:
+          'Wersja 7.2.1 wstrzymywała do akceptacji każdą wpłatę, w której tytuł przelewu pokazywał rozcięty numer lokalu — nawet gdy AI albo adres płacącego trafnie odgadły pełny numer. Po testach na produkcji wracamy do zachowania z 7.2.0: wpłata z poprawnie rozpoznanym numerem księguje się sama, a do akceptacji trafia tylko ta, w której rozpoznany numer sam w sobie wciąż wygląda na urwany (np. „lok1”, gdy dalej w tytule stoi jeszcze cyfra).',
+        where: ['Konwerter', 'Akceptacja'],
+        expect: [
+          'Zachowanie identyczne jak w 7.2.0: mniej wpłat trafia do ręcznej weryfikacji niż w 7.2.1, kosztem tego, że poprawnie odgadnięty, ale technicznie niezweryfikowany numer może zaksięgować się bez potwierdzenia.',
+        ],
+      },
+      {
+        id: 'poprawka-kodowania-cp852',
+        kind: 'fixed',
+        icon: 'file-check',
+        title: 'Poprawiona detekcja kodowania CP852 (DOS Latin-2)',
+        summary:
+          'Plik zapisany w kodowaniu CP852 bywał odczytywany jako Windows-1250, bo oba kodowania zapisują polskie litery w tym samym zakresie bajtów — efektem były zniekształcone znaki („ń” jako „ä”, „ł” jako znak zapytania) w opisach i nazwach kontrahentów.',
+        details: [
+          'CP852 jest teraz rozpoznawane osobno, przed dotychczasowym rozróżnieniem ISO-8859-2 / Windows-1250 — appka liczy, w którym z trzech kodowań plik daje więcej sensownych polskich liter, i wybiera to z najlepszym wynikiem.',
+        ],
+        where: ['Konwerter'],
+        expect: [
+          'Dotyczy tylko plików faktycznie zapisanych w CP852 — pozostałe wyciągi wczytują się bez zmian.',
+        ],
+      },
+    ],
+  },
+  {
     version: '7.2.1',
     date: '2026-09-08',
     title: 'Rozcięty numer lokalu trafia do akceptacji, nawet gdy odgadnięty poprawnie',

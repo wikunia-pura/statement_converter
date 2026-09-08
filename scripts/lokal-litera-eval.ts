@@ -5,11 +5,7 @@
  * number cut in two by the payer's bank wrapping the title (lok1 0 vs lok10).
  *
  * All three land in the same place — a plausible-looking number, high confidence,
- * no warning — so all three belong to the same gate. All three are also checked
- * against the *text*, independent of whatever number regex, AI, or the cache
- * actually produced: a correct-looking answer for an ambiguous reading (an AI
- * guessing "lok1 0" is apartment 10, and being right) is not a verified one, so
- * it must hold the row exactly like a wrong guess would.
+ * no warning — so all three belong to the same gate.
  *
  * The bug this guards against moved real money: a payment for apartment 17A was
  * recognized as apartment 17 with 95% confidence, so it never surfaced for review
@@ -39,7 +35,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { AddressMatcher } from '../src/shared/address-matcher';
 import {
-  apartmentGapInText,
+  apartmentSplitInText,
   composeApartmentAccount,
   isAccountSymbol,
   isLetteredApartment,
@@ -373,22 +369,6 @@ const CASES: Case[] = [
     heldBack: true,
   },
   {
-    // The exact case that slipped through the first version of this guard: the
-    // payer's own clean address ("24A/12") resolves the apartment correctly
-    // through a path that has nothing to do with the broken description — so the
-    // *final* number is right — but the description still shows the cut-in-two
-    // shape, and that is what must hold the row, not whether the number it
-    // produced was lucky. (This is also what an AI reading "lok1 0" as apartment
-    // 10 looks like: a correct-looking answer from an ambiguous title.)
-    name: 'numer poprawnie rozpoznany (12) z INNEGO źródła nadal wstrzymany, bo opis pokazuje rozcięcie',
-    addresses: kwiatowa,
-    description: 'Fundusz remontowy, id. lokalu 114/1 2, sierpień 2026',
-    counterparty: 'KUSTRA JÓZEF ul. KWIATOWA 24A/12 02-539',
-    apartment: '12',
-    account: '204-000012',
-    heldBack: true,
-  },
-  {
     // The digits that legitimately follow an apartment number in a title are a
     // date, an amount or a year — none of them may hold every such payment.
     name: 'data po numerze lokalu nie jest ogonem (m. 5 08.2026)',
@@ -575,25 +555,19 @@ check(
   false,
 );
 
-// The gap guard is the same kind of cross-check as the letter one, but it does
-// not take the recognized apartment number at all: whatever number regex, AI
-// or a known address elsewhere in the text landed on, the description alone
-// still shows the cut — including when that number happens to be right.
-check('luka po "lok1 0"', apartmentGapInText('Kwiatowa 24A lok1 0 lipiec'), { head: '1', tail: '0' });
-check('luka po "114/1 2"', apartmentGapInText('id. lokalu 114/1 2, sierpień'), { head: '1', tail: '2' });
-check('kilka spacji między połówkami', apartmentGapInText('lok1  0 lipiec'), { head: '1', tail: '0' });
-check('numer bez luki jest czysty', apartmentGapInText('Kwiatowa 24A lok10 lipiec'), null);
-check('data to nie luka', apartmentGapInText('m. 5 08.2026'), null);
-check('kwota to nie luka', apartmentGapInText('lokal 3 150,00 PLN'), null);
-check('rok to nie luka', apartmentGapInText('lok 5 2026'), null);
-check('kod pocztowy za budynkiem to nie luka', apartmentGapInText('Piaskowa lok 10 00-950'), null);
-check('za szeroki w całości to nie luka', apartmentGapInText('m. 12 260826109199'), null);
-check('litera kończy numer', apartmentGapInText('lok 5A 3'), null);
-check(
-  'luka wykrywana niezależnie od tego, że finalny numer (12) rozpoznano gdzie indziej w tekście',
-  apartmentGapInText('id. lokalu 114/1 2, sierpień 2026 KUSTRA JÓZEF ul. KWIATOWA 24A/12 02-539'),
-  { head: '1', tail: '2' },
-);
+// The split guard is the same kind of cross-check: whoever answered "1" for
+// "lok1 0" — regex, AI or the cache — the text still shows the cut.
+check('ogon po "lok1 0"', apartmentSplitInText('Kwiatowa 24A lok1 0 lipiec', '1'), '0');
+check('ogon po "114/1 2"', apartmentSplitInText('id. lokalu 114/1 2, sierpień', '1'), '2');
+check('kilka spacji między połówkami', apartmentSplitInText('lok1  0 lipiec', '1'), '0');
+check('numer bez ogona jest czysty', apartmentSplitInText('Kwiatowa 24A lok10 lipiec', '10'), null);
+check('data to nie ogon', apartmentSplitInText('m. 5 08.2026', '5'), null);
+check('kwota to nie ogon', apartmentSplitInText('lokal 3 150,00 PLN', '3'), null);
+check('rok to nie ogon', apartmentSplitInText('lok 5 2026', '5'), null);
+check('kod pocztowy za budynkiem to nie ogon', apartmentSplitInText('Piaskowa lok 10 00-950', '10'), null);
+check('za szeroki w całości to nie ogon', apartmentSplitInText('m. 12 260826109199', '12'), null);
+check('litera kończy numer', apartmentSplitInText('lok 5A 3', '5A'), null);
+check('szukany numer musi być całym ciągiem cyfr', apartmentSplitInText('lok. 25 3', '2'), null);
 
 // ── 3. Whole pipeline over the real statement files ────────────────────────
 
@@ -716,28 +690,10 @@ if (FILES.length === 0) {
 // The fundusz-remontowy statements are where the cut lands inside the lokal
 // number. The extractor returns null for a held-back row — that is what sends it
 // to the user instead of the books — so "null" here is the pass condition.
-//
-// Kustra's transactions are the case the first version of this guard missed:
-// the counterparty's own address ("24A/12") resolves the apartment correctly
-// through a path that has nothing to do with the broken description, so the
-// regex extractor used to return a confident, right-looking "12" for them.
-// They must be held back anyway, because the description still shows the cut
-// — the guard runs on the text, not on whether the number it produced was right.
 
 const POCZTOWY_FILES = ['08M_2026 (1).mt940', '07M_2026 (1).mt940']
   .map(f => path.join(__dirname, '..', 'test-data', f))
   .filter(f => fs.existsSync(f));
-
-// Exact count of transactions whose text shows the cut-in-two shape, per file.
-// 08M: Orłów's 3 monthly wpłaty ("lok1 0") plus one of Kustra's two ("114/1 2");
-// Kustra's other row ("114/1 ,") ends cleanly — no digit follows the space, so
-// there is nothing to detect (the same reason apartmentGlueInText reports a
-// number it can't find as clean, not suspicious). 07M has only that one Kustra
-// row; Orłów does not appear in it at all.
-const EXPECTED_GAP_COUNT: Record<string, number> = {
-  '08M_2026 (1).mt940': 4,
-  '07M_2026 (1).mt940': 1,
-};
 
 console.log('\n5. Rozcięte tytuły na plikach Bank Pocztowy');
 if (POCZTOWY_FILES.length === 0) {
@@ -748,30 +704,22 @@ if (POCZTOWY_FILES.length === 0) {
     const extractor = new INGRegexExtractor(kwiatowa);
     const income = stmt.transactions
       .filter(t => t.debitCredit === 'C')
-      .map(t => {
-        const combined = `${t.details.description.join('')} ${t.details.counterpartyName}`;
-        return { original: t, extracted: extractor.extract(t), hasGap: apartmentGapInText(combined) !== null };
-      });
+      .map(t => ({ original: t, extracted: extractor.extract(t) }));
 
-    const gapButNotHeldBack = income.filter(p => p.hasGap && p.extracted !== null);
-    const basename = path.basename(file);
+    const cut = income.filter(p =>
+      apartmentSplitInText(
+        `${p.original.details.description.join('')} ${p.original.details.counterpartyName}`,
+        p.extracted?.apartmentNumber ?? null,
+      ) !== null,
+    );
 
-    console.log(`\n  ${basename} — ${income.length} wpłat`);
+    console.log(`\n  ${path.basename(file)} — ${income.length} wpłat`);
     check(
       'żadna wpłata nie została zaksięgowana automatycznie na lokal 1',
       income.filter(p => p.extracted?.apartmentNumber === '1').length,
       0,
     );
-    check(
-      'liczba wpłat z rozciętym numerem w opisie zgadza się z oczekiwaną',
-      income.filter(p => p.hasGap).length,
-      EXPECTED_GAP_COUNT[basename] ?? 0,
-    );
-    check(
-      'każda wpłata z rozciętym numerem jest wstrzymana, niezależnie od tego, jaki numer wyszedł (łapie i Orłowa, i Kustrę mimo poprawnego adresu kontrahenta)',
-      gapButNotHeldBack.length,
-      0,
-    );
+    check('rozpoznany numer nigdy nie ma ogona (rozcięte wiersze są wstrzymane)', cut.length, 0);
 
     if (VERBOSE) {
       for (const p of income) {

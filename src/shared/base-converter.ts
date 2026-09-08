@@ -30,6 +30,7 @@ import { Kontrahent, Adres, KontrahentTyp } from './types';
 import {
   needsExplicitAccount,
   apartmentGlueInText,
+  apartmentSplitInText,
   apartmentWidthImplausible,
   HELD_BACK_CONFIDENCE,
 } from './apartment-account';
@@ -798,14 +799,16 @@ export abstract class BaseConverter<TRaw> {
             const norm = transactionsForAI[j];
             const aiText = `${norm.descBase} ${norm.descOpt}`;
             const aiApartment = extracted[j].apartmentNumber;
-            // The glue guard has to run again here, for the same reason the letter
-            // check does: by this point the matcher's own result is gone, and the
-            // model read the same unseparated "M.202-620" the regexes did. An
-            // answer of 202 would arrive carrying the model's own confidence, so
-            // the evidence is re-read from the text rather than trusted from the
+            // The glue and split guards have to run again here, for the same
+            // reason the letter check does: by this point the matcher's own result
+            // is gone, and the model read the same unseparated "M.202-620" — or
+            // the same cut-in-two "lok1 0" — the regexes did. An answer of 202, or
+            // of 1, would arrive carrying the model's own confidence, so the
+            // evidence is re-read from the text rather than trusted from the
             // producer — whichever producer it was.
-            const gluedNumber =
+            const doubtfulDigits =
               !!apartmentGlueInText(aiText, aiApartment) ||
+              !!apartmentSplitInText(aiText, aiApartment) ||
               apartmentWidthImplausible(aiApartment);
             const extractedData: BaseExtractedData = {
               ...extracted[j],
@@ -815,7 +818,7 @@ export abstract class BaseConverter<TRaw> {
               // the text here. Without this, an AI answer of "17" for text saying
               // "17A" would be booked with the model's own high confidence.
               needsAccount: needsExplicitAccount(aiApartment, null, aiText),
-              confidence: gluedNumber
+              confidence: doubtfulDigits
                 ? {
                     ...extracted[j].confidence,
                     apartment: Math.min(

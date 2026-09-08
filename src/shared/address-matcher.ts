@@ -19,6 +19,7 @@ import {
   letteredApartmentInText,
   stripAddressCodes,
   apartmentGlueInText,
+  apartmentSplitInText,
   apartmentWidthImplausible,
   HELD_BACK_CONFIDENCE,
 } from './apartment-account';
@@ -499,16 +500,20 @@ export class AddressMatcher {
       );
     }
 
-    // 10b. Glue guard — the same shape of danger as (b) above, one field over.
+    // 10b. Glue and split guards — the same shape of danger as (b) above, one
+    // field over.
     //
     // Step 2 removes the address codes we can split deterministically. This
     // catches what is left: a number standing on a field boundary the bank did
-    // not separate, or one so wide it has plainly swallowed its neighbour. Either
-    // way the digits may belong to two fields, and a wrong apartment number is
-    // indistinguishable from a right one once it reaches the books.
+    // not separate, one so wide it has plainly swallowed its neighbour, or — the
+    // mirror case — a number the sender's bank cut in two when it wrapped the
+    // title ("lok1 0" for lok10). Either way the digits we took may be only part
+    // of the story, and a wrong apartment number is indistinguishable from a
+    // right one once it reaches the books.
     const glueResidue = apartmentGlueInText(combinedText, apartmentNumber);
+    const splitResidue = apartmentSplitInText(combinedText, apartmentNumber);
     const implausibleWidth = apartmentWidthImplausible(apartmentNumber);
-    const gluedNumber = !!glueResidue || implausibleWidth;
+    const doubtfulDigits = !!glueResidue || !!splitResidue || implausibleWidth;
 
     if (implausibleWidth) {
       warnings.push(
@@ -517,6 +522,10 @@ export class AddressMatcher {
     } else if (glueResidue) {
       warnings.push(
         `Apartment "${apartmentNumber}" runs straight into "${glueResidue.trim()}" — the field boundary is unclear; verify before booking`
+      );
+    } else if (splitResidue) {
+      warnings.push(
+        `Apartment "${apartmentNumber}" is followed by "${splitResidue}" after a space — the bank may have cut one number in two (${apartmentNumber}${splitResidue}?); verify before booking`
       );
     }
 
@@ -528,7 +537,7 @@ export class AddressMatcher {
       tenantName,
       isZGN: false,
       confidence:
-        needsAccount || gluedNumber ? this.holdBackForReview(confidence) : confidence,
+        needsAccount || doubtfulDigits ? this.holdBackForReview(confidence) : confidence,
       warnings,
       matchedByManualMapping: false,
       accountOverride: null,

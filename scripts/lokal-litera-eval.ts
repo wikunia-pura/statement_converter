@@ -1,10 +1,11 @@
 /**
  * Regression harness for apartment numbers the matcher can silently get wrong:
- * a lost letter (17A vs 17), and address codes glued onto the number by a bank
- * that writes fixed-width fields with no separator (M.202-620 vs M.2 02-620).
+ * a lost letter (17A vs 17), address codes glued onto the number by a bank that
+ * writes fixed-width fields with no separator (M.202-620 vs M.2 02-620), and a
+ * number cut in two by the payer's bank wrapping the title (lok1 0 vs lok10).
  *
- * Both land in the same place — a plausible-looking number, high confidence, no
- * warning — so both belong to the same gate.
+ * All three land in the same place — a plausible-looking number, high confidence,
+ * no warning — so all three belong to the same gate.
  *
  * The bug this guards against moved real money: a payment for apartment 17A was
  * recognized as apartment 17 with 95% confidence, so it never surfaced for review
@@ -34,6 +35,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { AddressMatcher } from '../src/shared/address-matcher';
 import {
+  apartmentSplitInText,
   composeApartmentAccount,
   isAccountSymbol,
   isLetteredApartment,
@@ -51,6 +53,8 @@ import {
 import { PKOBPMT940Parser } from '../src/converters/pko-mt940/parser';
 import { RegexExtractor } from '../src/converters/pko-mt940/regex-extractor';
 import { CsvExporter } from '../src/converters/pko-mt940/csv-exporter';
+import { PocztowyMT940Parser } from '../src/converters/pocztowy/parser';
+import { RegexExtractor as INGRegexExtractor } from '../src/converters/ing/regex-extractor';
 import { readFileWithEncoding } from '../src/shared/encoding';
 import { Adres } from '../src/shared/types';
 
@@ -73,6 +77,8 @@ const bogunki: Adres[] = [{ id: 1, nazwa: 'Bogunki 5', createdAt: '' }];
 const bachmacka: Adres[] = [{ id: 2, nazwa: 'Bachmacka 6A', createdAt: '' }];
 /** The BOŚ camt.052 community, whose payer names arrive with the postal code glued on. */
 const pulawska: Adres[] = [{ id: 4, nazwa: 'Puławska 116', createdAt: '' }];
+/** The Bank Pocztowy community, whose payers' titles arrive cut into fixed-width lines. */
+const kwiatowa: Adres[] = [{ id: 5, nazwa: 'Kwiatowa 24A', createdAt: '' }];
 const withRules: Adres[] = [
   {
     id: 1,
@@ -335,6 +341,62 @@ const CASES: Case[] = [
     account: '204-2602620',
     heldBack: true,
   },
+
+  // ── A number cut in two by the payer's bank ──────────────────────────────
+  //
+  // The sender's bank writes the title into fixed-width lines and they come back
+  // joined with a space, so "lok10" arrives as "lok1 0" and "114/12" as "114/1 2".
+  // Read as written, that is apartment 1 at 95% confidence — the wrong owner's
+  // account, with no warning. The guard does not repair the number (the cut
+  // position is the sender's and cannot be told from a genuine space); it holds
+  // the row so the user sees "lok1 0" and decides.
+  {
+    name: 'rozcięty numer za "lok": lok1 0 to nie na pewno lokal 1 → wstrzymane',
+    addresses: kwiatowa,
+    description: 'fundusz remontowy Kwiatowa 24A lok1 0 lipiec',
+    counterparty: 'TOMASZ ORŁÓW KWIATOWA 24A/10 02-539 W',
+    apartment: '1',
+    account: '204-000001',
+    heldBack: true,
+  },
+  {
+    name: 'rozcięty numer po ukośniku: 114/1 2 → wstrzymane',
+    addresses: kwiatowa,
+    description: 'Fundusz remontowy, id. lokalu 114/1 2, sierpień 2026',
+    counterparty: 'KUSTRA JÓZEF',
+    apartment: '1',
+    account: '204-000001',
+    heldBack: true,
+  },
+  {
+    // The digits that legitimately follow an apartment number in a title are a
+    // date, an amount or a year — none of them may hold every such payment.
+    name: 'data po numerze lokalu nie jest ogonem (m. 5 08.2026)',
+    addresses: kwiatowa,
+    description: 'czynsz m. 5 08.2026',
+    counterparty: 'JAN K',
+    apartment: '5',
+    account: '204-000005',
+    heldBack: false,
+  },
+  {
+    name: 'rok po numerze lokalu nie jest ogonem (lokal 3 2026)',
+    addresses: kwiatowa,
+    description: 'czynsz lokal 3 2026',
+    counterparty: 'JAN K',
+    apartment: '3',
+    account: '204-000003',
+    heldBack: false,
+  },
+  {
+    name: 'numer referencyjny po lokalu nie jest ogonem (za szeroki w całości)',
+    addresses: kwiatowa,
+    description: 'czynsz m. 12 260826109199',
+    counterparty: 'JAN K',
+    apartment: '12',
+    account: '204-000012',
+    heldBack: false,
+  },
 ];
 
 console.log('\n1. Matcher i wyznaczanie konta');
@@ -493,6 +555,20 @@ check(
   false,
 );
 
+// The split guard is the same kind of cross-check: whoever answered "1" for
+// "lok1 0" — regex, AI or the cache — the text still shows the cut.
+check('ogon po "lok1 0"', apartmentSplitInText('Kwiatowa 24A lok1 0 lipiec', '1'), '0');
+check('ogon po "114/1 2"', apartmentSplitInText('id. lokalu 114/1 2, sierpień', '1'), '2');
+check('kilka spacji między połówkami', apartmentSplitInText('lok1  0 lipiec', '1'), '0');
+check('numer bez ogona jest czysty', apartmentSplitInText('Kwiatowa 24A lok10 lipiec', '10'), null);
+check('data to nie ogon', apartmentSplitInText('m. 5 08.2026', '5'), null);
+check('kwota to nie ogon', apartmentSplitInText('lokal 3 150,00 PLN', '3'), null);
+check('rok to nie ogon', apartmentSplitInText('lok 5 2026', '5'), null);
+check('kod pocztowy za budynkiem to nie ogon', apartmentSplitInText('Piaskowa lok 10 00-950', '10'), null);
+check('za szeroki w całości to nie ogon', apartmentSplitInText('m. 12 260826109199', '12'), null);
+check('litera kończy numer', apartmentSplitInText('lok 5A 3', '5A'), null);
+check('szukany numer musi być całym ciągiem cyfr', apartmentSplitInText('lok. 25 3', '2'), null);
+
 // ── 3. Whole pipeline over the real statement files ────────────────────────
 
 const DIR = path.join(__dirname, '..', 'test-data', 'Wierzbno');
@@ -607,6 +683,52 @@ if (FILES.length === 0) {
   const afterPick = exportWith(picked);
   check('po wyborze lokal 44 ląduje na 204-000044', afterPick.includes('204-000044'), true);
   check('drugi lokal reguły nie pojawia się w pliku', afterPick.includes('204-000031'), false);
+}
+
+// ── 5. Titles cut in two, on the real Bank Pocztowy files ──────────────────
+//
+// The fundusz-remontowy statements are where the cut lands inside the lokal
+// number. The extractor returns null for a held-back row — that is what sends it
+// to the user instead of the books — so "null" here is the pass condition.
+
+const POCZTOWY_FILES = ['08M_2026 (1).mt940', '07M_2026 (1).mt940']
+  .map(f => path.join(__dirname, '..', 'test-data', f))
+  .filter(f => fs.existsSync(f));
+
+console.log('\n5. Rozcięte tytuły na plikach Bank Pocztowy');
+if (POCZTOWY_FILES.length === 0) {
+  console.log('  (pominięto — brak plików 0xM_2026 (1).mt940 w test-data)');
+} else {
+  for (const file of POCZTOWY_FILES) {
+    const stmt = new PocztowyMT940Parser().parse(fs.readFileSync(file));
+    const extractor = new INGRegexExtractor(kwiatowa);
+    const income = stmt.transactions
+      .filter(t => t.debitCredit === 'C')
+      .map(t => ({ original: t, extracted: extractor.extract(t) }));
+
+    const cut = income.filter(p =>
+      apartmentSplitInText(
+        `${p.original.details.description.join('')} ${p.original.details.counterpartyName}`,
+        p.extracted?.apartmentNumber ?? null,
+      ) !== null,
+    );
+
+    console.log(`\n  ${path.basename(file)} — ${income.length} wpłat`);
+    check(
+      'żadna wpłata nie została zaksięgowana automatycznie na lokal 1',
+      income.filter(p => p.extracted?.apartmentNumber === '1').length,
+      0,
+    );
+    check('rozpoznany numer nigdy nie ma ogona (rozcięte wiersze są wstrzymane)', cut.length, 0);
+
+    if (VERBOSE) {
+      for (const p of income) {
+        console.log(
+          `      ${String(p.extracted?.apartmentNumber ?? 'WSTRZYMANE').padEnd(10)} ${p.original.details.description.join('').slice(0, 55).padEnd(55)} | ${p.original.details.counterpartyName.slice(0, 30)}`,
+        );
+      }
+    }
+  }
 }
 
 console.log(`\n${failures === 0 ? '✓ wszystkie sprawdzenia przeszły' : `✗ nieudanych sprawdzeń: ${failures}`}\n`);

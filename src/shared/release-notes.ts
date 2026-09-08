@@ -84,6 +84,66 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '7.2.0',
+    date: '2026-09-08',
+    title: 'Rozcięty numer lokalu już nie księguje się na złe mieszkanie',
+    tagline:
+      'Gdy bank nadawcy zawija długi tytuł przelewu, numer lokalu potrafi zostać rozcięty spacją w środku — taka wpłata trafia teraz do akceptacji zamiast automatycznie zaksięgować się na pierwszą cyfrę. PKO MT940 dostał też filtr pomijający wpłaty na indywidualne rachunki wirtualne (SWRK), które rozliczane są w module Scalanie wpłat.',
+    highlights: [
+      {
+        id: 'strazak-rozcietego-numeru-lokalu',
+        kind: 'fixed',
+        icon: 'shield',
+        title: 'Rozcięty numer lokalu w tytule przelewu trafia do akceptacji',
+        summary:
+          'Bank nadawcy potrafi zawinąć długi tytuł przelewu na kilka linii, a przy scalaniu wstawić spację dokładnie w środku numeru lokalu — „lok10” dochodzi jako „lok1 0”, „114/12” jako „114/1 2”. Do tej pory taka wpłata księgowała się automatycznie na lokal 1, z pewnością 95%.',
+        details: [
+          'Nie da się odróżnić prawdziwej spacji od tej wstawionej przez zawinięcie tytułu — bo obie wyglądają identycznie w tekście, a miejsce cięcia zależy od banku nadawcy, nie od naszego parsera. Dlatego appka niczego nie zgaduje: gdy tekst po numerze lokalu ciągnie się dalej cyframi (i nie jest to data, kwota ani rok), wpłata trafia do ręcznej weryfikacji zamiast zaksięgować się samodzielnie.',
+          'Mechanizm siedzi we wspólnym AddressMatcherze — obok istniejącego już strażnika sklejonego kodu pocztowego („M.202-620” to lokal 2, nie 202) i strażnika zgubionej litery („17” zamiast „17A”). Działa więc dla każdego banku, w regexie i po odpowiedzi AI, nie tylko dla Banku Pocztowego, na którym problem został znaleziony.',
+        ],
+        where: ['Konwerter', 'Akceptacja'],
+        steps: [
+          {
+            do: 'Skonwertuj wyciąg jak dotychczas.',
+            then: 'Wpłata z podejrzanym, rozciętym numerem trafia na ekran akceptacji zamiast zaksięgować się sama.',
+          },
+          {
+            do: 'Na ekranie akceptacji zobacz ostrzeżenie przy takiej wpłacie — pokazuje, jakie cyfry stoją po numerze lokalu, żeby było widać, co appka podejrzewa.',
+            then: 'Wpisz właściwy numer lokalu ręcznie i zaakceptuj — księguje się tak jak każda inna poprawka z tego ekranu.',
+          },
+        ],
+        expect: [
+          'Poprawne, niepocięte numery lokali księgują się jak dotychczas — próg dotyczy wyłącznie wpłat, w których tekst po numerze faktycznie ciągnie się dalej cyframi.',
+        ],
+        note: {
+          type: 'tip',
+          text: 'Jeśli po aktualizacji wpłata, która wcześniej zaksięgowała się sama, nagle pojawi się do ponownej weryfikacji — to efekt tej poprawki: pamięć podręczna z poprzednim (błędnym) odczytem została odświeżona.',
+        },
+      },
+      {
+        id: 'pko-mt940-pomija-swrk',
+        kind: 'improved',
+        icon: 'wallet',
+        title: 'PKO MT940 pomija wpłaty na indywidualne rachunki wirtualne (SWRK)',
+        summary:
+          'Przelewy na indywidualny rachunek wirtualny mieszkańca nie pojawiają się już na liście do akceptacji ani w pliku księgowym konwertera PKO MT940 — te wpłaty rozliczane są osobno, w module Scalanie wpłat.',
+        details: [
+          'Rozpoznawane po polu z identyfikatorem SWRK w danych przelewu. Filtr jest domyślnie włączony, więc nie trzeba nic zmieniać w ustawieniach — mniej wierszy do ręcznego oznaczania na ekranie akceptacji.',
+        ],
+        where: ['Konwerter', 'Bank: PKO BP (MT940)'],
+        steps: [
+          {
+            do: 'Wgraj wyciąg PKO MT940 i skonwertuj jak dotychczas.',
+            then: 'Wpłaty na rachunki wirtualne SWRK znikają z listy do akceptacji i z pliku księgowego.',
+          },
+        ],
+        expect: [
+          'Pozostałe wpłaty i wydatki konwertują się bez zmian; SWRK-owe wpłaty tej samej wspólnoty zostają wyłącznie w module Scalanie wpłat.',
+        ],
+      },
+    ],
+  },
+  {
     version: '7.1.0',
     date: '2026-09-07',
     title: 'Bank Pocztowy — kolejny bank, którego wyciąg konwertujesz bez przepisywania',

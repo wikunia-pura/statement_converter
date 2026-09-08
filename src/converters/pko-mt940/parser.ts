@@ -297,6 +297,7 @@ export class PKOBPMT940Parser {
       skipNegative?: boolean;
       skipBankFees?: boolean;
       onlyPositive?: boolean;
+      skipVirtualAccountTransfers?: boolean;
     } = {}
   ): MT940Transaction[] {
     return transactions.filter((trn) => {
@@ -312,6 +313,16 @@ export class PKOBPMT940Parser {
 
       // Skip bank fees (transaction type "N188")
       if (options.skipBankFees && trn.transactionType.includes('188')) {
+        return false;
+      }
+
+      // Skip transfers into an individual virtual sub-account (~63 field starts with
+      // "SWRK ..."). These are reconciled through a separate track outside this app.
+      // Default on: omitting the option (or passing anything but `false`) still filters.
+      if (
+        options.skipVirtualAccountTransfers !== false &&
+        trn.details.additionalInfo.trim().toUpperCase().startsWith('SWRK')
+      ) {
         return false;
       }
 

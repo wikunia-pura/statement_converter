@@ -150,6 +150,64 @@ export function apartmentGlueInText(
 }
 
 /**
+ * A digit run that reads as the head of a longer token rather than a bare number:
+ * a year, or digits about to continue into a date or an amount ("08.2026",
+ * "7/2026", "150,00"). Years are excluded the same way the matcher's own
+ * patterns exclude them.
+ */
+const LONGER_TOKEN_HEAD = /^(?:19|20)\d{2}$|^\d+(?=[.,/]\d)/;
+
+/**
+ * The digits that continue the recognized apartment number across a space
+ * ("lok1 0" → "0", "114/1 2" → "2"), or null when the number stands alone.
+ *
+ * Mirror image of apartmentGlueInText: that one catches a number the bank failed
+ * to separate from its neighbour, this one a number the bank separated from
+ * itself. The payer's bank writes a long transfer title into fixed-width lines
+ * and the lines come back joined with a space, so a title cut inside "lok10"
+ * arrives as "lok1 0" — and "lok1" is a perfectly good apartment 1 to every
+ * extractor, at full confidence. Where the cut falls is the sender's business,
+ * not ours: 35 characters at one bank, 34 at another (it counts bytes), some
+ * other width at a third, and the same position holds a genuine space as often
+ * as an inserted one. So nothing here tries to say where the cut was or to undo
+ * it. It only notices the shape the cut leaves behind and hands the row to the
+ * user, who can see "lok1 0" for what it is.
+ *
+ * Conservative in the same ways as the glue guard — stripped text, an occurrence
+ * where the number is the whole digit run, absence reported clean — and in three
+ * more, so that digits which legitimately follow an apartment number in a title
+ * do not hold every such payment:
+ *
+ *  - Only a plain-digit apartment can have a tail; a letter ends the number.
+ *  - The tail must be a bare digit run, not the head of a date, amount or year
+ *    ("m. 5 08.2026", "lokal 3 150,00", "lok 5 2026") — see LONGER_TOKEN_HEAD.
+ *  - Joined together the two runs must still be a plausible apartment number, by
+ *    the same line apartmentWidthImplausible draws: "m. 12 260826109199" is a
+ *    reference number after apartment 12, not one number in two pieces.
+ */
+export function apartmentSplitInText(
+  text: string | null | undefined,
+  apartmentNumber: string | null | undefined
+): string | null {
+  const apartment = (apartmentNumber ?? '').trim();
+  if (!/^\d+$/.test(apartment)) return null;
+
+  const scan = stripAddressCodes(text);
+  const match = scan.match(new RegExp(`${APARTMENT_MARKER}${apartment}(?![0-9])`, 'i'));
+  if (!match || match.index === undefined) return null;
+
+  const rest = scan.slice(match.index + match[0].length);
+  const tail = rest.match(/^\s+(\d+)/);
+  if (!tail) return null;
+
+  const afterSpace = rest.trimStart();
+  if (LONGER_TOKEN_HEAD.test(afterSpace)) return null;
+  if (apartmentWidthImplausible(apartment + tail[1])) return null;
+
+  return tail[1];
+}
+
+/**
  * True when the number is too wide to be a real apartment, which means it has
  * absorbed something that was glued to it.
  *

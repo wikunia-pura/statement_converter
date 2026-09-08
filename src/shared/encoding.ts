@@ -152,11 +152,25 @@ function hasMultiByteUtf8(buffer: Buffer): boolean {
  * becomes latin1 '¡', then if treated as Win1250 → 'ˇ', hence 'WODOCIˇGÓW'
  */
 function detectPolishEncoding(buffer: Buffer): string {
+  const polishChars = /[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/g;
+
+  // CP852 (DOS Latin-2) shares its 0x80-0x9F byte range with Windows-1250's
+  // Polish letters (e.g. cp852 ł=0x88, Ś=0x97, Ł=0x9D all fall in that band),
+  // so it must be ruled out before the high-byte shortcut below, which would
+  // otherwise misclassify a CP852 file as Windows-1250 (ń→ä, ł→�, ...).
+  // The two encodings don't share byte codes for Polish letters, so scoring
+  // each by recognized-character count cleanly tells them apart.
+  const cp852Score = (iconv.decode(buffer, 'cp852').match(polishChars) || []).length;
+  const win1250ScoreForCp852Check = (iconv.decode(buffer, 'win1250').match(polishChars) || []).length;
+  if (cp852Score > 0 && cp852Score > win1250ScoreForCp852Check) {
+    return 'cp852';
+  }
+
   // Bytes that differ between ISO-8859-2 and Windows-1250
   // If we see bytes in 0x80-0x9F range, it's likely Windows-1250
   // (ISO-8859-2 doesn't use 0x80-0x9F for printable characters)
   let hasWin1250HighBytes = false;
-  
+
   for (let i = 0; i < buffer.length; i++) {
     const byte = buffer[i];
     // 0x80-0x9F: used in Windows-1250 for Ś(0x8C), ś(0x9C), Ź(0x8F), ź(0x9F), etc.
@@ -175,7 +189,6 @@ function detectPolishEncoding(buffer: Buffer): string {
   const iso2Text = iconv.decode(buffer, 'iso-8859-2');
   const win1250Text = iconv.decode(buffer, 'win1250');
 
-  const polishChars = /[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/g;
   const iso2Score = (iso2Text.match(polishChars) || []).length;
   const win1250Score = (win1250Text.match(polishChars) || []).length;
 

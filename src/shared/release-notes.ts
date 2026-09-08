@@ -84,6 +84,35 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '7.2.1',
+    date: '2026-09-08',
+    title: 'Rozcięty numer lokalu trafia do akceptacji, nawet gdy odgadnięty poprawnie',
+    tagline:
+      'Wersja 7.2.0 łapała rozcięty numer lokalu tylko wtedy, gdy rozpoznany numer wciąż wyglądał na urwany. Gdy AI (albo inne, poprawne źródło w tym samym tekście, np. adres płacącego) prawidłowo odgadło pełny numer, wpłata księgowała się sama — mimo że tytuł przelewu nadal pokazywał podejrzane rozcięcie. Teraz strażnik patrzy wprost na tytuł przelewu, niezależnie od tego, jaki numer ostatecznie wyszedł skądkolwiek.',
+    highlights: [
+      {
+        id: 'strazak-rozcietego-numeru-niezaleznie-od-wyniku',
+        kind: 'fixed',
+        icon: 'shield',
+        title: 'Wpłata z rozciętym numerem trafia do akceptacji, nawet z dobrym wynikiem',
+        summary:
+          'Gdy tytuł przelewu pokazuje rozcięty numer lokalu („lok1 0”), a AI mimo to poprawnie odczyta go jako 10 — albo poprawny numer wyjdzie z zupełnie innej części tekstu, np. adresu płacącego — wpłata do tej pory księgowała się sama, bo strażnik z 7.2.0 sprawdzał tylko to, co ostatecznie zostało rozpoznane. Teraz sprawdza tytuł przelewu wprost: jeśli tam nadal widać rozcięcie, wpłata trafia do akceptacji bez względu na to, jaki numer ktokolwiek wcześniej ustalił.',
+        details: [
+          'Poprawne odgadnięcie rozciętego numeru jest wciąż zgadywaniem, ile by nie było trafne — appka nie ma jak zweryfikować, gdzie naprawdę padło cięcie w banku nadawcy. Dlatego liczy się samo podejrzane miejsce w tytule przelewu, a nie to, czy akurat tym razem wynik się zgadzał.',
+          'To ta sama zasada, na której już działa strażnik zgubionej litery: sprawdzany jest tekst transakcji, a nie to, co zwrócił regex, AI czy pamięć podręczna — i tak samo jak przy literze, sprawdzenie jest powtórzone w trzech miejscach: przy dopasowaniu regexem, po odpowiedzi AI i przy budowaniu listy do akceptacji (żeby złapać też wynik odczytany z pamięci podręcznej).',
+        ],
+        where: ['Konwerter', 'Akceptacja'],
+        expect: [
+          'Wpłaty bez śladu rozcięcia w tytule przelewu księgują się jak dotychczas — zmiana dotyczy wyłącznie tych, w których tytuł faktycznie pokazuje numer przecięty spacją.',
+        ],
+        note: {
+          type: 'tip',
+          text: 'Jeśli po aktualizacji zobaczysz do ponownej weryfikacji wpłatę, która wcześniej zaksięgowała się sama z poprawnym numerem — to celowe: tytuł przelewu nadal pokazuje rozcięcie, a poprzedni dobry wynik był szczęśliwym trafieniem, nie potwierdzeniem.',
+        },
+      },
+    ],
+  },
+  {
     version: '7.2.0',
     date: '2026-09-08',
     title: 'Rozcięty numer lokalu już nie księguje się na złe mieszkanie',

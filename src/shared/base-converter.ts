@@ -30,7 +30,7 @@ import { Kontrahent, Adres, KontrahentTyp } from './types';
 import {
   needsExplicitAccount,
   apartmentGlueInText,
-  apartmentSplitInText,
+  apartmentGapInText,
   apartmentWidthImplausible,
   HELD_BACK_CONFIDENCE,
 } from './apartment-account';
@@ -799,16 +799,17 @@ export abstract class BaseConverter<TRaw> {
             const norm = transactionsForAI[j];
             const aiText = `${norm.descBase} ${norm.descOpt}`;
             const aiApartment = extracted[j].apartmentNumber;
-            // The glue and split guards have to run again here, for the same
+            // The glue and gap guards have to run again here, for the same
             // reason the letter check does: by this point the matcher's own result
             // is gone, and the model read the same unseparated "M.202-620" — or
-            // the same cut-in-two "lok1 0" — the regexes did. An answer of 202, or
-            // of 1, would arrive carrying the model's own confidence, so the
-            // evidence is re-read from the text rather than trusted from the
-            // producer — whichever producer it was.
+            // the same cut-in-two "lok1 0" — the regexes did. The gap guard does
+            // not even look at aiApartment: an AI answer of "10" for "lok1 0" can
+            // be a *correct* guess, but it is still a guess about where the bank's
+            // cut fell, not a verified fact, so the ambiguous text holds the row
+            // regardless of what the model landed on.
             const doubtfulDigits =
               !!apartmentGlueInText(aiText, aiApartment) ||
-              !!apartmentSplitInText(aiText, aiApartment) ||
+              !!apartmentGapInText(aiText) ||
               apartmentWidthImplausible(aiApartment);
             const extractedData: BaseExtractedData = {
               ...extracted[j],

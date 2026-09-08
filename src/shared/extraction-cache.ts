@@ -36,7 +36,7 @@ export class ExtractionCache {
    * being served that 202 long after the code stopped producing it — and the fix
    * would look like it had not worked. Bump on every change to how text is read.
    */
-  private static readonly KEY_VERSION = 'v3';
+  private static readonly KEY_VERSION = 'v4';
 
   /**
    * Generate cache key from desc fields

@@ -19,7 +19,7 @@ import {
   letteredApartmentInText,
   stripAddressCodes,
   apartmentGlueInText,
-  apartmentSplitInText,
+  apartmentGapInText,
   apartmentWidthImplausible,
   HELD_BACK_CONFIDENCE,
 } from './apartment-account';
@@ -500,20 +500,24 @@ export class AddressMatcher {
       );
     }
 
-    // 10b. Glue and split guards — the same shape of danger as (b) above, one
+    // 10b. Glue and gap guards — the same shape of danger as (b) above, one
     // field over.
     //
     // Step 2 removes the address codes we can split deterministically. This
     // catches what is left: a number standing on a field boundary the bank did
     // not separate, one so wide it has plainly swallowed its neighbour, or — the
-    // mirror case — a number the sender's bank cut in two when it wrapped the
-    // title ("lok1 0" for lok10). Either way the digits we took may be only part
-    // of the story, and a wrong apartment number is indistinguishable from a
-    // right one once it reaches the books.
+    // mirror case — a lokal marker followed by a number the sender's bank cut in
+    // two when it wrapped the title ("lok1 0" for lok10). The gap guard runs on
+    // the text alone, independent of `apartmentNumber` — like the letter guard
+    // above, not like the glue guard: an AI answer, or a second address in the
+    // same text, can read "lok1 0" as apartment 10 and be right, but that is a
+    // guess about where the bank's cut fell, not a verified fact, so the
+    // ambiguous text still holds the row even when the number it produced
+    // happens to be correct.
     const glueResidue = apartmentGlueInText(combinedText, apartmentNumber);
-    const splitResidue = apartmentSplitInText(combinedText, apartmentNumber);
+    const gap = apartmentGapInText(combinedText);
     const implausibleWidth = apartmentWidthImplausible(apartmentNumber);
-    const doubtfulDigits = !!glueResidue || !!splitResidue || implausibleWidth;
+    const doubtfulDigits = !!glueResidue || !!gap || implausibleWidth;
 
     if (implausibleWidth) {
       warnings.push(
@@ -523,9 +527,9 @@ export class AddressMatcher {
       warnings.push(
         `Apartment "${apartmentNumber}" runs straight into "${glueResidue.trim()}" — the field boundary is unclear; verify before booking`
       );
-    } else if (splitResidue) {
+    } else if (gap) {
       warnings.push(
-        `Apartment "${apartmentNumber}" is followed by "${splitResidue}" after a space — the bank may have cut one number in two (${apartmentNumber}${splitResidue}?); verify before booking`
+        `The text has "${gap.head} ${gap.tail}" after a lokal marker — the bank may have cut one number in two (${gap.head}${gap.tail}?); verify before booking even though the recognized apartment is "${apartmentNumber}"`
       );
     }
 

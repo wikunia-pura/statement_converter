@@ -158,53 +158,59 @@ export function apartmentGlueInText(
 const LONGER_TOKEN_HEAD = /^(?:19|20)\d{2}$|^\d+(?=[.,/]\d)/;
 
 /**
- * The digits that continue the recognized apartment number across a space
- * ("lok1 0" → "0", "114/1 2" → "2"), or null when the number stands alone.
+ * A digit run right after an apartment marker, broken by a single embedded
+ * space ("lok1 0", "114/1 2") — the shape the payer's bank leaves when it
+ * wraps a long transfer title into fixed-width lines and the lines come back
+ * joined with a space, regardless of whether the cut fell inside a number.
+ * Returns the two halves, or null when no marker in the text has this shape.
  *
- * Mirror image of apartmentGlueInText: that one catches a number the bank failed
- * to separate from its neighbour, this one a number the bank separated from
- * itself. The payer's bank writes a long transfer title into fixed-width lines
- * and the lines come back joined with a space, so a title cut inside "lok10"
- * arrives as "lok1 0" — and "lok1" is a perfectly good apartment 1 to every
- * extractor, at full confidence. Where the cut falls is the sender's business,
- * not ours: 35 characters at one bank, 34 at another (it counts bytes), some
- * other width at a third, and the same position holds a genuine space as often
- * as an inserted one. So nothing here tries to say where the cut was or to undo
- * it. It only notices the shape the cut leaves behind and hands the row to the
- * user, who can see "lok1 0" for what it is.
+ * Deliberately independent of whatever apartment number was actually
+ * extracted — the same shape of independence as letteredApartmentInText,
+ * and for the same reason. An earlier version searched for the *recognized*
+ * number's own tail, which misses exactly the case that matters most: an AI
+ * can read "lok1 0" as apartment 10 and be right, or a payer's own address
+ * elsewhere in the same text can independently say ".../10" and be right —
+ * but either reading is still a guess about where the bank's cut fell, not a
+ * verified fact. 35 characters at one bank, 34 at another (it counts bytes),
+ * some other width at a third, and the same position holds a genuine space as
+ * often as an inserted one. So this checks the text itself for the shape a cut
+ * leaves behind — the same thing letteredApartmentInText does for a lost
+ * letter — rather than trusting whichever producer (regex, AI, a cached
+ * answer, or a second address in the same text) happened to land on the right
+ * number. A correct-looking reading of ambiguous text is not evidence the
+ * reading was verified, only that it was lucky or well-informed.
  *
- * Conservative in the same ways as the glue guard — stripped text, an occurrence
- * where the number is the whole digit run, absence reported clean — and in three
- * more, so that digits which legitimately follow an apartment number in a title
- * do not hold every such payment:
+ * Conservative in the same ways as the glue guard — stripped text, a marker
+ * immediately before the digits, a letter ends the number rather than
+ * continuing it — and in two more, so that digits which legitimately follow
+ * an apartment number in a title do not hold every such payment:
  *
- *  - Only a plain-digit apartment can have a tail; a letter ends the number.
- *  - The tail must be a bare digit run, not the head of a date, amount or year
- *    ("m. 5 08.2026", "lokal 3 150,00", "lok 5 2026") — see LONGER_TOKEN_HEAD.
- *  - Joined together the two runs must still be a plausible apartment number, by
- *    the same line apartmentWidthImplausible draws: "m. 12 260826109199" is a
- *    reference number after apartment 12, not one number in two pieces.
+ *  - The second half must be a bare digit run, not the head of a date, amount
+ *    or year ("m. 5 08.2026", "lokal 3 150,00", "lok 5 2026") — see
+ *    LONGER_TOKEN_HEAD.
+ *  - Joined together the two halves must still be a plausible apartment
+ *    number, by the same line apartmentWidthImplausible draws: "m. 12
+ *    260826109199" is a reference number after apartment 12, not one number
+ *    cut in two.
  */
-export function apartmentSplitInText(
-  text: string | null | undefined,
-  apartmentNumber: string | null | undefined
-): string | null {
-  const apartment = (apartmentNumber ?? '').trim();
-  if (!/^\d+$/.test(apartment)) return null;
+const APARTMENT_MARKER_GAP = new RegExp(
+  `${APARTMENT_MARKER}(\\d+)(?![A-Za-z])\\s+(\\d+)`,
+  'i'
+);
 
+export function apartmentGapInText(
+  text: string | null | undefined
+): { head: string; tail: string } | null {
   const scan = stripAddressCodes(text);
-  const match = scan.match(new RegExp(`${APARTMENT_MARKER}${apartment}(?![0-9])`, 'i'));
+  const match = scan.match(APARTMENT_MARKER_GAP);
   if (!match || match.index === undefined) return null;
 
-  const rest = scan.slice(match.index + match[0].length);
-  const tail = rest.match(/^\s+(\d+)/);
-  if (!tail) return null;
+  const [full, head, tail] = match;
+  const afterTail = scan.slice(match.index + full.length);
+  if (LONGER_TOKEN_HEAD.test(tail + afterTail)) return null;
+  if (apartmentWidthImplausible(head + tail)) return null;
 
-  const afterSpace = rest.trimStart();
-  if (LONGER_TOKEN_HEAD.test(afterSpace)) return null;
-  if (apartmentWidthImplausible(apartment + tail[1])) return null;
-
-  return tail[1];
+  return { head, tail };
 }
 
 /**

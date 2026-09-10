@@ -84,6 +84,88 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '7.2.3',
+    date: '2026-09-10',
+    title: 'Noty Świadczenia: dokument mówi „Nota”, bez dat „z dnia” i listy „Do:”, z nową linią ceny podgrzania',
+    tagline:
+      'Excel generowany z PDF-a korekty czyta się teraz jak nota: słowo „korekta” w każdej odmianie zamienia się na „Nota”, znikają zapisy „z dnia 2026.06.30” i „Do: 1/2026,2/2026,…”, a pod „Do zwrotu” pojawia się linia „Cena m³ podgrzania:”. Do tego drobiazg z wyglądu — przycisk „Otwórz plik” miał dwie ikony obok siebie, została jedna.',
+    highlights: [
+      {
+        id: 'noty-slowo-nota',
+        kind: 'improved',
+        icon: 'file-text',
+        title: 'W wygenerowanym Excelu zamiast „korekty” jest „Nota”',
+        summary:
+          'Każde wystąpienie słowa „korekta” — w dowolnej odmianie i niezależnie od tego, czy pochodzi z szablonu appki, czy z treści wczytanego PDF-a — zamienia się na odpowiednią formę słowa „Nota”.',
+        details: [
+          'Zamiana obejmuje nazwę arkusza (było „Korekta”, jest „Nota”), tytuł u góry („Nota nr ZR/1/1/2025”), nagłówki tabeli („Tytuł noty”, kolumna „Nota”) oraz każdy tekst przepisany z PDF-a: dane stron, nazwy pozycji rozliczenia i stopkę.',
+          'Odmiana jest dopasowywana, żeby zdania zostały poprawne po polsku: „korekty” → „noty”, „korekcie” → „nocie”, „korektę” → „notę”. Zapis wielkimi literami zostaje wielkimi („KOREKTA” → „NOTA”).',
+        ],
+        where: ['Noty Świadczenia'],
+        steps: [
+          {
+            do: 'Wejdź w menu bocznym w „Noty Świadczenia” i przeciągnij PDF-y na pole zrzutu (albo kliknij w nie i wybierz pliki).',
+            then: 'Pliki pojawią się w tabeli ze statusem „oczekuje”.',
+          },
+          {
+            do: 'Kliknij „Konwertuj wszystko” i wskaż folder na wyniki.',
+            then: 'Dla każdego PDF-a powstanie plik .xlsx o tej samej nazwie co PDF.',
+          },
+          {
+            do: 'Otwórz wynik przyciskiem „Otwórz plik” w wierszu pliku.',
+            then: 'W arkuszu „Nota” nie ma już nigdzie słowa „korekta”.',
+          },
+        ],
+        expect: [
+          'Nazwa pliku wynikowego nadal bierze się z nazwy PDF-a — jeśli sam PDF nazywa się „Korekta_…”, plik też tak się będzie nazywał. Zmiana dotyczy treści arkusza.',
+          'Formuły zostają bez zmian: kolumna „Nota” to „Powinno być − Było”, wiersz „Razem” sumuje kolumny, a kwota przy „Do zwrotu” to wartość bezwzględna z sumy.',
+        ],
+      },
+      {
+        id: 'noty-usuniete-daty-i-lista-do',
+        kind: 'improved',
+        icon: 'trash',
+        title: 'Znikają zapisy „z dnia …” oraz „Do: 1/2026,2/2026,…”',
+        summary:
+          'Data w formie „z dnia 2026.06.30” jest usuwana z dokumentu wszędzie, gdzie się pojawi, a lista okresów „Do: 1/2026,2/2026,3/2026,…” nie jest już w ogóle przepisywana do Excela.',
+        details: [
+          'Data znika nie tylko z tytułu na górze, ale też z każdego innego wiersza wczytanego z PDF-a — łącznie ze stopką. Rozpoznawane są zapisy „2026.06.30”, „30-06-2026” i „2026/06/30”.',
+          'Wiersz z listą okresów przestał być wypisywany, a sam wzorzec „Do: <miesiąc>/<rok>, …” jest dodatkowo wycinany z każdego innego tekstu, gdyby pojawił się w środku zdania.',
+        ],
+        where: ['Noty Świadczenia'],
+        expect: [
+          'Wiersz „Do zwrotu” i „Do zapłaty” zostaje nietknięty — usuwana jest tylko lista okresów po „Do:” z dwukropkiem.',
+          'Data wystawienia po prawej stronie u góry (miasto + data, np. „Warszawa, 2026.04.20”) zostaje — usuwany jest zapis „z dnia”, nie cała informacja o dacie.',
+        ],
+      },
+      {
+        id: 'noty-cena-podgrzania',
+        kind: 'new',
+        icon: 'file-text',
+        title: 'Nowa linia „Cena m³ podgrzania:” pod „Do zwrotu”',
+        summary:
+          'Bezpośrednio w wierszu poniżej kwoty „Do zwrotu” (lub „Do zapłaty”) dodawana jest linia „Cena m³ podgrzania:” — trójka jest zapisana jako indeks górny, tak jak w jednostce metra sześciennego.',
+        where: ['Noty Świadczenia'],
+        expect: [
+          'Linia jest wypisywana zawsze, bez kwoty — miejsce na wartość zostaje do uzupełnienia ręcznie w Excelu.',
+        ],
+      },
+      {
+        id: 'przycisk-otworz-plik-jedna-ikona',
+        kind: 'fixed',
+        icon: 'folder',
+        title: 'Przycisk „Otwórz plik” ma już tylko jedną ikonę',
+        summary:
+          'Przycisk pokazywał dwie ikonki teczki obok siebie — jedną z nowego zestawu ikon, drugą doklejoną jeszcze do samego napisu. Stara została usunięta.',
+        details: [
+          'Ten sam przycisk działa w kilku miejscach appki, więc podwójna ikona zniknęła również w „Odczyty liczników”, „Scalanie wpłat” i „Homebanking”.',
+        ],
+        where: ['Noty Świadczenia'],
+        expect: ['Zmiana czysto wizualna — przycisk otwiera plik dokładnie tak jak wcześniej.'],
+      },
+    ],
+  },
+  {
     version: '7.2.2',
     date: '2026-09-08',
     title: 'Powrót do księgowania z 7.2.0 dla rozciętego numeru lokalu, plus poprawka kodowania CP852',

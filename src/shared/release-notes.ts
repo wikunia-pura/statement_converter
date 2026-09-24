@@ -84,6 +84,45 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '7.2.4',
+    date: '2026-09-24',
+    title: 'Nazwa pliku wynikowego zawiera teraz typ konta',
+    tagline:
+      'Plik z konwersji nazywał się dotąd samym adresem i znacznikiem czasu, więc dwie konwersje z tego samego dnia, dla tego samego adresu, ale innego typu konta (np. „Eksploatacja” i „Fundusz remontowy”), różniły się w nazwie tylko sekundami. Teraz nazwa zawiera też typ konta, więc widać go bez otwierania pliku.',
+    highlights: [
+      {
+        id: 'nazwa-pliku-typ-konta',
+        kind: 'new',
+        icon: 'file-text',
+        title: 'Typ konta w nazwie pliku wynikowego',
+        summary:
+          'Plik zapisywany po konwersji ma w nazwie, obok adresu i znacznika czasu, także nazwę typu konta — np. „Aleja_Lotnikow_20_Eksploatacja_20260924_143025.txt”.',
+        details: [
+          'W nazwie ląduje ten sam typ konta, który zostaje użyty do księgowania: jeśli w tabeli plików wybrano konkretny typ w polu „Typ konta”, w nazwie pojawia się jego nazwa; jeśli nie wybrano, appka bierze typ domyślny (a w jego braku — pierwszy zdefiniowany), więc w praktyce ten człon nazwy pojawia się niemal zawsze.',
+        ],
+        where: ['Konwerter', 'tabela plików, kolumna „Adres”'],
+        steps: [
+          {
+            do: 'Dodaj plik, wybierz bank i adres.',
+            then: 'Gdy w systemie zdefiniowany jest choć jeden typ konta, pod adresem pojawia się pole „Typ konta” z listą w formacie „nazwa (symbol konta)”, np. „Eksploatacja (131-1)”.',
+          },
+          {
+            do: 'Wybierz typ konta (albo zostaw domyślny) i kliknij „Konwertuj wszystko”, wskazując folder na wyniki.',
+            then: 'Plik trafia do wskazanego folderu.',
+          },
+          {
+            do: 'Otwórz folder z wynikami.',
+            then: 'Nazwa pliku ma teraz cztery człony: adres, typ konta, datę i godzinę.',
+          },
+        ],
+        expect: [
+          'Gdy w systemie nie ma zdefiniowanego żadnego typu konta, nazwa pliku zostaje bez zmian — bez tego członu, tak jak dotychczas.',
+          'Zmiana dotyczy wyłącznie nazwy pliku. Zawartość pliku i księgowanie konwersji są takie same jak wcześniej.',
+        ],
+      },
+    ],
+  },
+  {
     version: '7.2.3',
     date: '2026-09-10',
     title: 'Noty Świadczenia: dokument mówi „Nota”, bez dat „z dnia” i listy „Do:”, z nową linią ceny podgrzania',

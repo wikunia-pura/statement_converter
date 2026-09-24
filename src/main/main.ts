@@ -156,13 +156,14 @@ function generateTimestamp(): string {
 }
 
 /**
- * Generate output filename with address and timestamp
- * Format: {address}_{timestamp}.txt
- * Example: Aleja_Lotnikow_20_20260227_143025.txt
+ * Generate output filename with address, account type and timestamp.
+ * Format: {address}_{accountType}_{timestamp}.txt
+ * Example: Aleja_Lotnikow_20_Eksploatacja_20260227_143025.txt
  */
 async function generateOutputFileName(
   adresId: number | null | undefined,
   db: DatabaseService,
+  accountTypeName?: string | null,
 ): Promise<string> {
   const timestamp = generateTimestamp();
 
@@ -179,18 +180,20 @@ async function generateOutputFileName(
     }
   }
 
-  return `${addressPart}_${timestamp}.txt`;
+  const accountTypePart = accountTypeName ? `_${sanitizeForFilename(accountTypeName)}` : '';
+
+  return `${addressPart}${accountTypePart}_${timestamp}.txt`;
 }
 
 /**
- * Resolve the accounting symbols for a conversion from the chosen KontoTyp id.
- * Falls back to the configured default type, then to the historical 131-1 / 204
- * behavior when no types exist.
+ * Resolve the accounting symbols and display name for a conversion from the
+ * chosen KontoTyp id. Falls back to the configured default type, then to the
+ * historical 131-1 / 204 behavior when no types exist.
  */
 async function resolveAccountConfig(
   accountTypeId: number | null | undefined,
   db: DatabaseService,
-): Promise<AccountConfig> {
+): Promise<{ config: AccountConfig; name: string | null }> {
   try {
     const types = await db.getKontoTypy();
     const chosen =
@@ -199,14 +202,17 @@ async function resolveAccountConfig(
       types[0];
     if (chosen) {
       return {
-        bankAccountSymbol: chosen.bankAccountSymbol || DEFAULT_ACCOUNT_CONFIG.bankAccountSymbol,
-        apartmentPrefix: chosen.apartmentPrefix || DEFAULT_ACCOUNT_CONFIG.apartmentPrefix,
+        config: {
+          bankAccountSymbol: chosen.bankAccountSymbol || DEFAULT_ACCOUNT_CONFIG.bankAccountSymbol,
+          apartmentPrefix: chosen.apartmentPrefix || DEFAULT_ACCOUNT_CONFIG.apartmentPrefix,
+        },
+        name: chosen.name || null,
       };
     }
   } catch (e) {
     log.warn(`[CONVERT] resolveAccountConfig failed, using default: ${e}`);
   }
-  return DEFAULT_ACCOUNT_CONFIG;
+  return { config: DEFAULT_ACCOUNT_CONFIG, name: null };
 }
 
 // Exit-time backup. Closing the window (or quitting) is intercepted exactly
@@ -1723,11 +1729,14 @@ function setupIpcHandlers() {
           fs.mkdirSync(outputFolder, { recursive: true });
         }
 
-        // Generate output filename with address and timestamp
-        const outputFileName = await generateOutputFileName(adresId, database);
-        const finalOutputPath = path.join(outputFolder, outputFileName);
+        const { config: accountConfig, name: accountTypeName } = await resolveAccountConfig(
+          accountTypeId,
+          database
+        );
 
-        const accountConfig = await resolveAccountConfig(accountTypeId, database);
+        // Generate output filename with address, account type and timestamp
+        const outputFileName = await generateOutputFileName(adresId, database, accountTypeName);
+        const finalOutputPath = path.join(outputFolder, outputFileName);
 
         // Perform conversion
         const result = await converterRegistry.convert(
@@ -1890,11 +1899,14 @@ function setupIpcHandlers() {
           fs.mkdirSync(outputFolder, { recursive: true });
         }
 
-        // Generate output filename with address and timestamp
-        const outputFileName = await generateOutputFileName(adresId, database);
-        const finalOutputPath = path.join(outputFolder, outputFileName);
+        const { config: accountConfig, name: accountTypeName } = await resolveAccountConfig(
+          accountTypeId,
+          database
+        );
 
-        const accountConfig = await resolveAccountConfig(accountTypeId, database);
+        // Generate output filename with address, account type and timestamp
+        const outputFileName = await generateOutputFileName(adresId, database, accountTypeName);
+        const finalOutputPath = path.join(outputFolder, outputFileName);
 
         try {
           // Perform conversion WITH AI

@@ -84,13 +84,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    version: '7.3.0',
+    version: '7.4.0',
     date: '2026-10-01',
-    title: 'Zadania, priorytety w Księgowaniach i nowy Pulpit',
+    title: 'Zadania, priorytety w Księgowaniach, nowy Pulpit i praca w tle',
     tagline:
-      'Zespół ma teraz wspólną tablicę zadań (do zrobienia, w toku, gotowe) z terminami, załącznikami i powiadomieniami na komputerze. W Księgowaniach można oznaczać priorytety i zostawiać uwagi przy wspólnotach, a Pulpit pokazuje Twoje zadania i jest czytelniej poukładany.',
+      'Zespół ma teraz wspólną tablicę zadań (do zrobienia, w toku, gotowe) z terminami, załącznikami i powiadomieniami na komputerze. W Księgowaniach można oznaczać priorytety i zostawiać uwagi przy wspólnotach, a Pulpit pokazuje Twoje zadania i jest czytelniej poukładany. Aplikacja działa teraz w tle i uruchamia się razem z komputerem, więc powiadomienia przychodzą także po zamknięciu okna.',
     stats: [
-      { value: '7', label: 'nowych funkcji' },
+      { value: '8', label: 'nowych funkcji' },
       { value: '2', label: 'ulepszenia' },
       { value: '1', label: 'poprawka' },
     ],
@@ -175,7 +175,7 @@ export const RELEASES: Release[] = [
         icon: 'alert-circle',
         title: 'Powiadomienia na komputerze o zadaniach',
         summary:
-          'Gdy aplikacja jest uruchomiona, dostajesz systemowe powiadomienie (Windows lub macOS), jeśli ktoś przypisze Ci zadanie, zmieni zadanie przypisane do Ciebie albo minie termin Twojego zadania.',
+          'Dostajesz systemowe powiadomienie (Windows lub macOS), jeśli ktoś przypisze Ci zadanie, zmieni zadanie przypisane do Ciebie albo minie termin Twojego zadania. Działa także po zamknięciu okna — patrz „Aplikacja działa w tle”.',
         details: [
           'Aplikacja sprawdza zadania przypisane do Ciebie mniej więcej raz na minutę. Powiadamia tylko o tym, co dotyczy Ciebie, i nigdy o zmianach, które sam wprowadziłeś.',
           'Powiadomienie o przeterminowaniu przychodzi raz dla danego terminu. Jeśli przesuniesz termin na późniejszy i on też minie, dostaniesz kolejne.',
@@ -193,7 +193,39 @@ export const RELEASES: Release[] = [
         ],
         note: {
           type: 'tip',
-          text: 'Powiadomienia działają tylko przy uruchomionej aplikacji. Zmiany z czasu, gdy była zamknięta, zgłosi pierwsze sprawdzenie po jej starcie. Jeśli powiadomienia się nie pokazują, sprawdź ustawienia powiadomień systemu dla FileFunky (i tryb „Nie przeszkadzać”).',
+          text: 'Powiadomienia działają, dopóki aplikacja jest uruchomiona (także ukryta w zasobniku). Gdy wyłączysz ją całkiem, zmiany z tego czasu zgłosi pierwsze sprawdzenie po jej starcie. Jeśli powiadomienia się nie pokazują, sprawdź ustawienia powiadomień systemu dla FileFunky i tryb „Nie przeszkadzać”.',
+        },
+      },
+      {
+        id: 'praca-w-tle',
+        kind: 'new',
+        icon: 'zap',
+        title: 'Aplikacja działa w tle i uruchamia się z komputerem',
+        summary:
+          'Zamknięcie okna (X) nie wyłącza już FileFunky — okno chowa się, a aplikacja działa dalej przy zegarze (Windows) lub na pasku menu (macOS). Dzięki temu powiadomienia o zadaniach przychodzą, nawet gdy okna nie widać.',
+        details: [
+          'Aplikacja uruchamia się też razem z komputerem — od razu w tle, bez otwierania okna — więc powiadomienia działają po każdym włączeniu komputera, bez ręcznego startu.',
+          'Pierwszy raz, gdy zamkniesz okno, pojawi się jednorazowe powiadomienie, że aplikacja została w tle.',
+        ],
+        where: ['ikona FileFunky przy zegarze (Windows) / na pasku menu (macOS)'],
+        steps: [
+          {
+            do: 'Kliknij ikonę FileFunky (na Windowsie wystarczy zwykłe kliknięcie; na macOS otwiera się menu), albo kliknij powiadomienie o zadaniu.',
+            then: 'Okno aplikacji wraca na wierzch.',
+          },
+          {
+            do: 'Żeby naprawdę zamknąć aplikację, kliknij ikonę prawym przyciskiem i wybierz „Zamknij FileFunky”.',
+            then: 'Aplikacja robi kopię zapasową danych i kończy działanie.',
+          },
+        ],
+        expect: [
+          'Kopia zapasowa „przy wyjściu” jest teraz robiona przy prawdziwym zamknięciu (z menu ikony, przy wyłączaniu komputera i przy instalacji aktualizacji), a nie przy każdym zamknięciu okna. Dodatkowo kopia powstaje przy pierwszym uruchomieniu danego dnia.',
+          'Drugie uruchomienie aplikacji (np. kliknięcie jej skrótu, gdy działa w tle) nie otwiera drugiej kopii, tylko przywraca okno.',
+          'Aplikacja w tle zajmuje niewielką ilość pamięci i sprawdza zadania mniej więcej raz na minutę.',
+        ],
+        note: {
+          type: 'tip',
+          text: 'Uruchamianie z komputerem jest zawsze włączone, a aplikacja ustawia je przy każdym starcie. Jeśli chcesz je wyłączyć, zrobisz to w systemowej liście programów startowych (na Windowsie: Menedżer zadań → Autostart; na macOS: Ustawienia systemowe → Ogólne → Elementy logowania) — przy następnym ręcznym uruchomieniu aplikacja włączy je ponownie.',
         },
       },
       {

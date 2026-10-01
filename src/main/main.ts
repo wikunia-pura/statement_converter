@@ -24,6 +24,7 @@ import { runAutoBackup, getBackupStatus, getBackupsDir, validateBackup } from '.
 import { conversionCache } from './conversionCache';
 import * as authService from './authService';
 import { ZadaniaNotifier, nameForMailbox } from './zadaniaNotifier';
+import { createTray, announceBackgroundOnce } from './tray';
 import {
   checkAttachmentFile,
   uploadAttachment,
@@ -233,6 +234,34 @@ async function resolveAccountConfig(
 // and lets the auto-updater's quit skip the whole dance.
 let backupOnExitDone = false;
 
+/**
+ * True once the app is really being quit (tray menu, Cmd+Q, the updater, a
+ * system shutdown) — as opposed to the window's X, which only hides the window.
+ * The window's `close` handler lets the close through only when this is set.
+ */
+let isQuitting = false;
+
+/**
+ * Closing the window hides it and leaves the app running — in the installed
+ * build only. In development the old behaviour stays: a dev server that could
+ * not be closed with its window would be a nuisance, not a feature.
+ */
+const RUN_IN_BACKGROUND = app.isPackaged;
+
+/** Launched by the system at login: start without taking over the screen. */
+let startHidden = false;
+
+/** Bring the window forward — and make one if it is gone. */
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
 function runExitBackup(resume: () => void) {
   if (backupOnExitDone || !database) {
     backupOnExitDone = true;
@@ -270,6 +299,8 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    // Opened by the system at login: load everything, show nothing.
+    show: !startHidden,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -277,7 +308,18 @@ function createWindow() {
     },
   });
 
+  // A start at login hides only the first window; any later one is wanted.
+  startHidden = false;
+
   mainWindow.on('close', (event) => {
+    // The X hides the window and leaves the app running — the task notifications
+    // live in this process. Only a real quit (see `isQuitting`) closes it.
+    if (RUN_IN_BACKGROUND && !isQuitting) {
+      event.preventDefault();
+      mainWindow?.hide();
+      announceBackgroundOnce(database.getSettings().language === 'en' ? 'en' : 'pl');
+      return;
+    }
     // Intercept the X button too — on the app-quit path before-quit fires only
     // after the window is gone, too late for an in-app notification.
     if (backupOnExitDone) return;
@@ -295,6 +337,13 @@ function createWindow() {
     mainWindow.loadURL(DEV_SERVER_URL);
     mainWindow.webContents.openDevTools();
   }
+
+  // Windows asks every window to close when the machine shuts down or the user
+  // logs off. A window that refuses (as the X does) would hold the shutdown up,
+  // so this is a quit, not a hide.
+  mainWindow.on('session-end', () => {
+    isQuitting = true;
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -3252,7 +3301,20 @@ function setupSessionWatch() {
   authService.watchSessionLoss();
 }
 
+// One copy of the app only. It now lives in the tray and starts with the
+// system, so a second launch (a double-click on the icon while it runs hidden)
+// must not start a second process — two would each fire the task notifications.
+// The second launch just brings the first one's window forward.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => showMainWindow());
+}
+
 app.whenReady().then(() => {
+  if (!gotSingleInstanceLock) return;
+
   // Set dock icon for macOS in development mode
   if (process.platform === 'darwin' && !app.isPackaged) {
     const iconPath = path.join(__dirname, '..', '..', '..', 'src', 'renderer', 'assets', 'icon-rounded.png');
@@ -3273,7 +3335,27 @@ app.whenReady().then(() => {
   setupIpcHandlers();
   setupAutoUpdater();
   setupSessionWatch();
+
+  // Started by the system at login: stay out of the way. Windows passes the flag
+  // we registered below; macOS reports it through the login-item settings.
+  startHidden =
+    RUN_IN_BACKGROUND &&
+    (process.argv.includes('--hidden') ||
+      (process.platform === 'darwin' && app.getLoginItemSettings().wasOpenedAtLogin));
   createWindow();
+
+  if (RUN_IN_BACKGROUND) {
+    createTray({
+      showWindow: showMainWindow,
+      quit: () => app.quit(),
+      getLanguage: () => (database.getSettings().language === 'en' ? 'en' : 'pl'),
+    });
+    // Always on, as asked: notifications about tasks only work while the app is
+    // running, so the app starts with the system, hidden. Set on every launch
+    // (not once) so a reinstall or an update cannot leave it unregistered; the
+    // person can still switch it off in the system's own startup list.
+    app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true, args: ['--hidden'] });
+  }
 
   // Windows files a notification under the app's AppUserModelID; without one
   // the toast is attributed to "electron.exe" and may be dropped altogether.
@@ -3290,14 +3372,8 @@ app.whenReady().then(() => {
     },
     getLanguage: () => (database.getSettings().language === 'en' ? 'en' : 'pl'),
     onOpen: () => {
-      if (!mainWindow || mainWindow.isDestroyed()) {
-        createWindow();
-        return;
-      }
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.show();
-      mainWindow.focus();
-      mainWindow.webContents.send('zadania:open');
+      showMainWindow();
+      mainWindow?.webContents.send('zadania:open');
     },
   }).start();
 
@@ -3319,11 +3395,9 @@ app.whenReady().then(() => {
     }
   }, 15000);
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
+  // macOS: a click on the Dock icon. A hidden window still counts as a window, so
+  // "there are none" is not the test any more — show whichever there is.
+  app.on('activate', () => showMainWindow());
 });
 
 /**
@@ -3397,6 +3471,9 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', (event) => {
+  // Every real quit passes through here — Cmd+Q, the tray's "Zamknij", the
+  // updater's quitAndInstall — so this is where the window stops refusing to close.
+  isQuitting = true;
   if (backupOnExitDone || !database) return;
   event.preventDefault();
   runExitBackup(() => app.quit());

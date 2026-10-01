@@ -286,7 +286,10 @@ const Settings: React.FC<SettingsProps> = ({
       .replace('{spotkaniaTypy}', String(counts.spotkaniaTypy))
       .replace('{spotkania}', String(counts.spotkania))
       .replace('{spotkaniaLokalizacje}', String(counts.spotkaniaLokalizacje))
-      .replace('{appUserNames}', String(counts.appUserNames));
+      .replace('{zadania}', String(counts.zadania))
+      .replace('{appUserNames}', String(counts.appUserNames))
+      .replace('{ksiegowaniaPriorytety}', String(counts.ksiegowaniaPriorytety))
+      .replace('{ksiegowaniaUwagi}', String(counts.ksiegowaniaUwagi));
   };
 
   const handleCreateBackup = async () => {

@@ -84,6 +84,269 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '7.3.0',
+    date: '2026-10-01',
+    title: 'Zadania, priorytety w Księgowaniach i nowy Pulpit',
+    tagline:
+      'Zespół ma teraz wspólną tablicę zadań (do zrobienia, w toku, gotowe) z terminami, załącznikami i powiadomieniami na komputerze. W Księgowaniach można oznaczać priorytety i zostawiać uwagi przy wspólnotach, a Pulpit pokazuje Twoje zadania i jest czytelniej poukładany.',
+    stats: [
+      { value: '7', label: 'nowych funkcji' },
+      { value: '2', label: 'ulepszenia' },
+      { value: '1', label: 'poprawka' },
+    ],
+    highlights: [
+      {
+        id: 'zadania-tablica',
+        kind: 'new',
+        icon: 'clipboard',
+        title: 'Zadania — wspólna tablica zespołu',
+        summary:
+          'Nowa pozycja „Zadania” w menu, zaraz pod Kalendarzem: prosta tablica z kolumnami „Do zrobienia”, „W toku” i „Gotowe”, wspólna dla wszystkich osób z dostępem do aplikacji.',
+        details: [
+          'Każde zadanie ma tytuł, opis, osobę, termin i załączniki. Osoby pochodzą z tej samej listy kont co uczestnicy spotkań w Kalendarzu — nie trzeba ich nigdzie dopisywać.',
+          'Pasek z lewej krawędzi karty pokazuje status: szary — do zrobienia, niebieski — w toku, zielony — gotowe.',
+        ],
+        where: ['Zadania'],
+        steps: [
+          {
+            do: 'Kliknij „Dodaj zadanie” (albo „+” w nagłówku kolumny, do której ma trafić).',
+            then: 'Otwiera się okno z polami: Tytuł, Opis, Przypisane do, Termin, Status i Załączniki.',
+          },
+          {
+            do: 'Wpisz tytuł (jest wymagany), wybierz osobę z listy i ewentualnie termin, po czym kliknij „Dodaj”.',
+            then: 'Karta pojawia się w wybranej kolumnie. Lista osób ma wyszukiwarkę: po wejściu na pole klawiszem Tab wystarczy zacząć pisać, żeby ją przefiltrować.',
+          },
+          {
+            do: 'Przeciągnij kartę do innej kolumny albo użyj strzałek na karcie.',
+            then: 'Status zmienia się od razu i jest widoczny dla całego zespołu.',
+          },
+          {
+            do: 'Kliknij imię osoby na karcie, żeby przypisać zadanie komuś innemu.',
+            then: 'Otwiera się lista z wyszukiwaniem. Wybór osoby zapisuje przypisanie od razu, bez otwierania okna edycji.',
+          },
+          {
+            do: 'Kliknij datę w prawym górnym rogu karty, żeby zmienić termin (na karcie bez terminu najedź na nią myszą i kliknij „Dodaj termin”).',
+            then: 'Otwiera się wybór daty; wybrana data zapisuje się od razu, a „Wyczyść” w wyborniku usuwa termin.',
+          },
+          {
+            do: 'Użyj filtrów nad tablicą: „Wszystkie”, „Przypisane do mnie”, „Nieprzypisane”, „Przeterminowane” albo wybierz konkretną osobę z listy.',
+            then: 'Tablica pokazuje tylko pasujące karty. „Przeterminowane” działa razem z wyborem osoby, więc „moje przeterminowane” to dwa kliknięcia.',
+          },
+        ],
+        expect: [
+          'Termin po dacie wyróżnia się na karcie na czerwono (najedź na niego, żeby zobaczyć „Po terminie”), a termin na dziś ma napis „Dziś”. Zadanie w kolumnie „Gotowe” nigdy nie liczy się jako przeterminowane.',
+          'Osoba na karcie ma własny kolor — patrz „Kolory osób”.',
+        ],
+      },
+      {
+        id: 'zadania-zalaczniki',
+        kind: 'new',
+        icon: 'paperclip',
+        title: 'Załączniki do zadań',
+        summary:
+          'Do zadania można dołączyć plik w dowolnym formacie, do 5 MB. Plik jest wspólny dla zespołu — każdy może go pobrać z karty.',
+        where: ['Zadania', 'Dodaj zadanie (albo edycja karty)', 'Załączniki'],
+        steps: [
+          {
+            do: 'W oknie zadania kliknij „Dodaj załącznik” i wybierz plik z dysku.',
+            then: 'Podczas wysyłania widać wskaźnik „Wysyłanie pliku…”, a przycisk zapisu czeka na jego koniec. Gotowy plik pojawia się na liście z nazwą i rozmiarem.',
+          },
+          {
+            do: 'Kliknij „Dodaj” (lub „Zapisz”), żeby zapisać zadanie z załącznikiem.',
+            then: 'Na karcie widać plik jako przycisk z nazwą i rozmiarem.',
+          },
+          {
+            do: 'Kliknij nazwę pliku na karcie.',
+            then: 'Otwiera się okno „Zapisz jako”; po wskazaniu miejsca plik zostaje pobrany i pojawia się komunikat „Zapisano plik.”.',
+          },
+        ],
+        expect: [
+          'Plik większy niż 5 MB zostanie odrzucony z komunikatem. Jeśli zamkniesz okno bez zapisu, wysłane w nim pliki są usuwane; plik usunięty z karty znika z serwera po zapisie.',
+          'Karta pokazuje do trzech plików, dalsze są pod „+ N więcej” (kliknij, żeby otworzyć edycję).',
+        ],
+        note: {
+          type: 'warning',
+          text: 'Kopia zapasowa zawiera opisy załączników (nazwy i rozmiary), ale nie same pliki — leżą w chmurze i nie ma ich w pliku kopii.',
+        },
+      },
+      {
+        id: 'zadania-powiadomienia',
+        kind: 'new',
+        icon: 'alert-circle',
+        title: 'Powiadomienia na komputerze o zadaniach',
+        summary:
+          'Gdy aplikacja jest uruchomiona, dostajesz systemowe powiadomienie (Windows lub macOS), jeśli ktoś przypisze Ci zadanie, zmieni zadanie przypisane do Ciebie albo minie termin Twojego zadania.',
+        details: [
+          'Aplikacja sprawdza zadania przypisane do Ciebie mniej więcej raz na minutę. Powiadamia tylko o tym, co dotyczy Ciebie, i nigdy o zmianach, które sam wprowadziłeś.',
+          'Powiadomienie o przeterminowaniu przychodzi raz dla danego terminu. Jeśli przesuniesz termin na późniejszy i on też minie, dostaniesz kolejne.',
+        ],
+        where: ['powiadomienie systemowe → kliknięcie'],
+        steps: [
+          {
+            do: 'Kliknij powiadomienie.',
+            then: 'Okno aplikacji wysuwa się na wierzch i otwiera się widok „Zadania”.',
+          },
+        ],
+        expect: [
+          'Gdy zdarzy się kilka rzeczy naraz (np. po dłuższej nieobecności), dostajesz jedno zbiorcze powiadomienie zamiast kilku.',
+          'Pierwsze uruchomienie po tej aktualizacji tylko zapamiętuje Twoje obecne zadania — nie dostaniesz powiadomień o tym, co już było na tablicy.',
+        ],
+        note: {
+          type: 'tip',
+          text: 'Powiadomienia działają tylko przy uruchomionej aplikacji. Zmiany z czasu, gdy była zamknięta, zgłosi pierwsze sprawdzenie po jej starcie. Jeśli powiadomienia się nie pokazują, sprawdź ustawienia powiadomień systemu dla FileFunky (i tryb „Nie przeszkadzać”).',
+        },
+      },
+      {
+        id: 'pulpit-moje-zadania',
+        kind: 'new',
+        icon: 'home',
+        title: 'Moje zadania na Pulpicie',
+        summary:
+          'Pulpit ma nową sekcję „Moje zadania” z czterema kafelkami: Przeterminowane, Dzisiaj, Nadchodzące i Wszystkie.',
+        where: ['Pulpit', 'Moje zadania'],
+        steps: [
+          {
+            do: 'Spójrz na baner sekcji.',
+            then: 'Widać w nim liczbę Twoich otwartych zadań i najbliższy termin.',
+          },
+          {
+            do: 'Kliknij kafelek, np. „Przeterminowane” albo „Wszystkie”.',
+            then: 'Otwiera się tablica „Zadania” z już ustawionym filtrem: „Przeterminowane” pokazuje Twoje zadania po terminie, „Wszystkie” — wszystkie zadania przypisane do Ciebie (także gotowe i bez terminu).',
+          },
+        ],
+        expect: [
+          '„Dzisiaj” i „Nadchodzące” otwierają Twoje zadania bez dodatkowego filtra terminu.',
+          'Kafelek na zero jest przygaszony i nieaktywny. Zadanie bez terminu liczy się tylko w kafelku „Wszystkie”, a gotowe nigdy nie jest „do zrobienia”.',
+        ],
+      },
+      {
+        id: 'kolory-osob',
+        kind: 'new',
+        icon: 'users',
+        title: 'Kolory osób',
+        summary:
+          'Każda osoba ma swój kolor: kropkę przy imieniu na karcie zadania i awatar w ustawieniach. Domyślnie kolor jest dobierany automatycznie, ale można go zmienić.',
+        where: ['Ustawienia', 'Użytkownicy', 'kolumna „Kolor”'],
+        steps: [
+          {
+            do: 'Kliknij kolorowe kółko przy osobie.',
+            then: 'Otwiera się systemowy wybór koloru.',
+          },
+          {
+            do: 'Wybierz kolor i zamknij okno wyboru.',
+            then: 'Kolor zapisuje się od razu i zmienia się u wszystkich osób korzystających z aplikacji.',
+          },
+          {
+            do: 'Żeby wrócić do koloru automatycznego, kliknij małe „×” obok kółka.',
+            then: 'Osoba dostaje z powrotem kolor dobrany z jej adresu e-mail.',
+          },
+        ],
+        expect: [
+          'Kolor automatyczny jest stały — ten sam na każdym komputerze i po każdym uruchomieniu, więc osobę można rozpoznać po kolorze.',
+          'Wybrane kolory są w kopii zapasowej razem z imionami.',
+        ],
+      },
+      {
+        id: 'ksiegowania-priorytety',
+        kind: 'new',
+        icon: 'flag',
+        title: 'Priorytety w Księgowaniach',
+        summary:
+          'Wspólnoty, które trzeba zrobić najpierw, można oznaczyć flagą i ustawić im kolejność. Priorytet dotyczy jednego miesiąca.',
+        where: ['Pulpit (albo Konwerter → Księgowania)', 'wiersz wspólnoty', 'ikona flagi'],
+        steps: [
+          {
+            do: 'Kliknij flagę przy wspólnocie.',
+            then: 'Wspólnota dostaje plakietkę „Priorytet N”, trafia na początek listy, na koniec kolejki priorytetów tego miesiąca.',
+          },
+          {
+            do: 'Opcjonalnie dodaj notatkę do priorytetu („Dodaj notatkę”) — napisz, dlaczego ta wspólnota jest przed innymi.',
+            then: 'Notatka jest widoczna pod wierszem wspólnoty dla całego zespołu.',
+          },
+          {
+            do: 'Kliknij „Kolejność priorytetów”, żeby ją zmienić — przeciągnij wiersz albo użyj strzałek „Wyżej” i „Niżej” — i zapisz przyciskiem „Zapisz kolejność”.',
+            then: 'Numer 1 jest do zrobienia najpierw. Zmiana dotyczy tylko tego miesiąca.',
+          },
+        ],
+        expect: [
+          'W banerze miesiąca ostatnia linia pokazuje teraz priorytety: kolejność i nazwy wspólnot (cztery pierwsze, reszta jako „+N więcej”). Gdy ich nie ma, widać „Brak priorytetów w tym miesiącu”.',
+          'Zdjęcie flagi usuwa też notatkę do priorytetu (aplikacja pyta o potwierdzenie).',
+        ],
+      },
+      {
+        id: 'ksiegowania-uwagi',
+        kind: 'new',
+        icon: 'message-square',
+        title: 'Uwagi do księgowania',
+        summary:
+          'Przy wspólnocie można zostawić uwagę dla zespołu („zaksięguj razem z fakturą X”). Aplikacja przypomni o niej w Konwerterze, gdy pojawi się wyciąg tej wspólnoty.',
+        where: ['Pulpit (albo Konwerter → Księgowania)', 'wiersz wspólnoty', 'ikona „Uwaga do księgowania”'],
+        steps: [
+          {
+            do: 'Kliknij ikonę uwagi przy wspólnocie, wpisz treść i kliknij „Dodaj uwagę”.',
+            then: 'Uwaga widnieje przy wspólnocie dla całego zespołu, aż ktoś oznaczy ją jako rozwiązaną.',
+          },
+          {
+            do: 'Wrzuć do Konwertera wyciąg tej wspólnoty.',
+            then: 'Pojawia się komunikat „Uwaga do księgowania” z treścią uwagi, a pod adresem w tabeli — wyróżniona uwaga. Komunikat pokazuje się raz na uwagę w danej sesji.',
+          },
+          {
+            do: 'Po zaksięgowaniu kliknij „Sprawa rozwiązana”.',
+            then: 'Konwerter przestaje przypominać o tej uwadze. „Otwórz ponownie” przywraca ją.',
+          },
+        ],
+        expect: [
+          'Uwaga nie jest przypisana do miesiąca ani do priorytetu: zostaje otwarta, dopóki ktoś jej nie rozwiąże. Rozwiązane uwagi są w osobnej sekcji przy wspólnocie.',
+        ],
+      },
+      {
+        id: 'pulpit-uklad',
+        kind: 'improved',
+        icon: 'sparkles',
+        title: 'Pulpit: trzy sekcje na własnych tłach, zwijane Księgowania',
+        summary:
+          'Kalendarz, zadania i księgowania stoją na osobnych tłach z przerwą między nimi, a Księgowania można zwinąć do samego banera miesiąca.',
+        details: [
+          'Tło sekcji Księgowania ma delikatny odcień koloru bieżącego miesiąca, a zawartość (kafelki, wyszukiwarka, lista wspólnot) leży w zaokrąglonym panelu tej samej szerokości co baner.',
+          'Kalendarz nie pokazuje już zielonego paska „Nic nie czeka”, gdy nic się nie dzieje — zostaje sam baner.',
+        ],
+        where: ['Pulpit', 'Księgowania', 'strzałka na końcu paska miesiąca'],
+        steps: [
+          {
+            do: 'Kliknij strzałkę po prawej stronie banera miesiąca.',
+            then: 'Zawartość Księgowań zwija się, zostaje sam baner. Kliknięcie ponownie rozwija.',
+          },
+        ],
+        expect: [
+          'Aplikacja pamięta, czy Księgowania były zwinięte — także po ponownym uruchomieniu. Zwijanie działa tylko na Pulpicie; zakładka „Księgowania” w Konwerterze jest zawsze rozwinięta.',
+        ],
+      },
+      {
+        id: 'wyszukiwanie-tab',
+        kind: 'improved',
+        icon: 'search',
+        title: 'Listy z wyszukiwarką: pisz od razu po wejściu klawiszem Tab',
+        summary:
+          'W listach wyboru z wyszukiwarką (adresy, osoby, szablony) wystarczy wejść na pole klawiszem Tab i zacząć pisać — lista otworzy się sama, z już wpisaną pierwszą literą.',
+        expect: [
+          'Pierwszy pasujący wynik jest od razu podświetlony, więc Enter wybiera go bez sięgania po mysz.',
+        ],
+      },
+      {
+        id: 'baner-bledy',
+        kind: 'fixed',
+        icon: 'alert-triangle',
+        title: 'Baner Księgowań i kafelek „Błędy” liczą to samo',
+        summary:
+          'Baner miesiąca pisał „5 błędy”, a kafelek „Błędy” pokazywał 2, bo baner liczył nieudane pliki, a kafelek wspólnoty z błędem. Teraz oba liczą wspólnoty.',
+        expect: [
+          'Baner pokazuje „N z błędami”, tyle samo co kafelek. Liczba nieudanych plików jest nadal widoczna na kartach wspólnot.',
+          'Jeśli wszystkie błędy dotyczą plików bez przypisanej wspólnoty, baner liczy te pliki i pisze o nich wprost („nieudane konwersje”).',
+        ],
+      },
+    ],
+  },
+  {
     version: '7.2.4',
     date: '2026-09-24',
     title: 'Nazwa pliku wynikowego zawiera teraz typ konta',

@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Adres,
   ConversionHistory,
+  KsiegowaniePriorytet,
+  KsiegowanieUwaga,
   Spotkanie,
   SpotkanieMailing,
   SpotkanieTyp,
@@ -23,6 +25,8 @@ import {
   upcomingSpotkania,
 } from '../../shared/calendar';
 import MeetingsIllustration from '../components/MeetingsIllustration';
+import PriorityOrderModal from '../components/PriorityOrderModal';
+import { NoteEditor, uwagaMeta, uwagaResolvedMeta } from '../components/PostingNotes';
 import { resolveOutputFilePath } from '../../shared/outputPaths';
 import {
   AddressBookingGroup,
@@ -36,6 +40,7 @@ import {
   matchesBookingSearch,
   monthLabel,
   monthsWithData,
+  pinPriorities,
   shiftMonthKey,
   sortGroups,
   toBookingRows,
@@ -56,6 +61,15 @@ interface Props {
   onShowInCalendar?: (filter: SpotkanieStateFilter) => void;
   /** Show the meetings/calendar area. Off in the Converter's tab — the calendar lives on the dashboard only. */
   showCalendar?: boolean;
+  /** A band rendered between the calendar and the bookings — the dashboard's task list. */
+  tasksArea?: React.ReactNode;
+  /**
+   * Makes the bookings area collapsible: the month banner always stays, the rest
+   * folds away. Left out in the Converter's tab, where the bookings ARE the page
+   * and folding them would leave it empty.
+   */
+  bookingsCollapsed?: boolean;
+  onToggleBookings?: () => void;
 }
 
 /** Polish plural: [one, few (2-4), many]. English: [singular, plural]. */
@@ -211,9 +225,10 @@ const CalendarAlerts: React.FC<{
         )}
       </header>
 
-      {/* Nothing outstanding is worth saying outright — four zeros would leave
-          the reader counting them to find that out. */}
-      {anything ? (
+      {/* Nothing outstanding means nothing to show: no tiles, and no reassurance
+          bar either — a band that says "all clear" is still a band to read. The
+          banner's own facts line already says so. */}
+      {anything && (
         <div className="ks-kal__tiles">
           {kinds.map((kind) => (
             <button
@@ -235,11 +250,6 @@ const CalendarAlerts: React.FC<{
             </button>
           ))}
         </div>
-      ) : (
-        <div className="ks-kal__clear">
-          <Icon name="check-circle" size={16} />
-          <span>{t.ksKalAllClear}</span>
-        </div>
       )}
     </section>
   );
@@ -255,8 +265,13 @@ const Ksiegowania: React.FC<Props> = ({
   onShowInHistory,
   onShowInCalendar,
   showCalendar = true,
+  tasksArea,
+  bookingsCollapsed = false,
+  onToggleBookings,
 }) => {
   const t = translations[language];
+  // Folding needs a host that can remember it; without one the area never folds.
+  const folded = !!onToggleBookings && bookingsCollapsed;
   const notify = useNotify();
   const locale = language === 'en' ? 'en-GB' : 'pl-PL';
 
@@ -267,6 +282,13 @@ const Ksiegowania: React.FC<Props> = ({
   const [spotkania, setSpotkania] = useState<Spotkanie[]>([]);
   const [spotkaniaTypy, setSpotkaniaTypy] = useState<SpotkanieTyp[]>([]);
   const [spotkaniaMailingi, setSpotkaniaMailingi] = useState<SpotkanieMailing[]>([]);
+  // The month's queue and the notes on communities — see `groupByAddress`.
+  const [priorities, setPriorities] = useState<KsiegowaniePriorytet[]>([]);
+  const [uwagi, setUwagi] = useState<KsiegowanieUwaga[]>([]);
+  const [showOrder, setShowOrder] = useState(false);
+  const [orderSaving, setOrderSaving] = useState(false);
+  // Rows (by group key) with a priority / note write in flight.
+  const [noteBusy, setNoteBusy] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   // A refresh must not blank the dashboard — only the first load shows a loader.
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -287,18 +309,25 @@ const Ksiegowania: React.FC<Props> = ({
     if (silent) setIsRefreshing(true);
     else setIsLoading(true);
     try {
-      const [historyData, adresyData, spotkaniaData, typyData, mailingiData] = await Promise.all([
-        window.electronAPI.getHistory(),
-        window.electronAPI.getAdresy(),
-        window.electronAPI.getSpotkania(),
-        window.electronAPI.getSpotkaniaTypy(),
-        window.electronAPI.getSpotkaniaMailingi(),
-      ]);
+      const [historyData, adresyData, spotkaniaData, typyData, mailingiData, priorityData, uwagiData] =
+        await Promise.all([
+          window.electronAPI.getHistory(),
+          window.electronAPI.getAdresy(),
+          window.electronAPI.getSpotkania(),
+          window.electronAPI.getSpotkaniaTypy(),
+          window.electronAPI.getSpotkaniaMailingi(),
+          // Priorities and notes are extras: a table that is not there yet (the
+          // migration not run) must not take the whole dashboard down with it.
+          window.electronAPI.getKsiegowaniaPriorytety().catch(() => [] as KsiegowaniePriorytet[]),
+          window.electronAPI.getKsiegowaniaUwagi().catch(() => [] as KsiegowanieUwaga[]),
+        ]);
       setHistory(historyData);
       setAdresy(adresyData);
       setSpotkania(spotkaniaData);
       setSpotkaniaTypy(typyData);
       setSpotkaniaMailingi(mailingiData);
+      setPriorities(priorityData);
+      setUwagi(uwagiData);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -336,8 +365,16 @@ const Ksiegowania: React.FC<Props> = ({
   const rows = useMemo(() => toBookingRows(history, adresy), [history, adresy]);
   const months = useMemo(() => monthsWithData(rows), [rows]);
   const { groups, totals } = useMemo(
-    () => groupByAddress(rows, adresy, monthKey),
-    [rows, adresy, monthKey],
+    () => groupByAddress(rows, adresy, monthKey, priorities, uwagi),
+    [rows, adresy, monthKey, priorities, uwagi],
+  );
+  /** The month's flagged communities, in queue order — the order dialog's list. */
+  const priorityGroups = useMemo(
+    () =>
+      groups
+        .filter((g) => g.priorityRank !== null)
+        .sort((a, b) => a.priorityRank! - b.priorityRank!),
+    [groups],
   );
 
   /**
@@ -357,7 +394,10 @@ const Ksiegowania: React.FC<Props> = ({
     const matching = groups.filter(
       (g) => matchesBookingFilter(g, filter) && matchesBookingSearch(g, search),
     );
-    const sorted = sortGroups(matching, sort, locale);
+    // The chosen sort decides the order; the priority queue is stuck on top of it
+    // afterwards (`pinPriorities`) rather than being a sort of its own.
+    const sortedPlain = sortGroups(matching, sort, locale);
+    const sorted = pinPriorities(sortedPlain);
     // A different key means the user asked for a new order — settle it afresh.
     const remembered = settled.current.key === orderKey ? settled.current.keys : [];
     const byKey = new Map(groups.map((g) => [g.key, g]));
@@ -369,16 +409,22 @@ const Ksiegowania: React.FC<Props> = ({
     const heldKeys = new Set(held.map((g) => g.key));
     // Rows that were not on screen yet: the whole list on the first load, or
     // whatever a later load added. They take their sorted places at the end.
-    const fresh = sorted.filter((g) => !heldKeys.has(g.key));
-    const list = [...held, ...fresh];
+    const fresh = sortedPlain.filter((g) => !heldKeys.has(g.key));
+    const heldOrder = [...held, ...fresh];
     // Remember what is actually on screen, every time — remembering only at
     // settle time would freeze the empty list of the very first render, and the
-    // list would go on re-sorting itself under every tick.
-    settled.current = { key: orderKey, keys: list.map((g) => g.key) };
+    // list would go on re-sorting itself under every tick. The order is kept
+    // WITHOUT the queue on top, so a priority that is taken off drops back to the
+    // place the list was holding it in, and a flag pulls a row up without
+    // re-sorting everything under it.
+    settled.current = { key: orderKey, keys: heldOrder.map((g) => g.key) };
+    const list = pinPriorities(heldOrder);
     const stale = list.length !== sorted.length || list.some((g, i) => g.key !== sorted[i]?.key);
     return { visible: list, orderStale: stale };
   }, [groups, filter, search, sort, locale, orderKey]);
 
+  /** How many of the rows on screen are the queue (they are pinned to the top). */
+  const queueLength = visible.filter((g) => g.priorityRank !== null).length;
   const searchActive = search.trim().length > 0;
   /** A lone result needs no second click; searching surfaces every hit. */
   const openByDefault = visible.length === 1;
@@ -457,6 +503,133 @@ const Ksiegowania: React.FC<Props> = ({
     }
   };
 
+  /* ----------------------- Priorities and notes ------------------------- */
+
+  /** Re-read the two small tables; the lists are short and the team shares them. */
+  const loadNotes = async () => {
+    const [priorityData, uwagiData] = await Promise.all([
+      window.electronAPI.getKsiegowaniaPriorytety().catch(() => null),
+      window.electronAPI.getKsiegowaniaUwagi().catch(() => null),
+    ]);
+    if (priorityData) setPriorities(priorityData);
+    if (uwagiData) setUwagi(uwagiData);
+  };
+
+  /**
+   * One write to the priority / note tables for one row, then a re-read. Not
+   * optimistic like the DOM tick: these are shared with the team, and what the
+   * row should show next (the rank, who wrote it) is only known to the table.
+   */
+  const runNoteAction = async (
+    key: string,
+    action: () => Promise<unknown>,
+    errorMessage: string,
+  ): Promise<boolean> => {
+    setNoteBusy((prev) => new Set(prev).add(key));
+    try {
+      await action();
+      await loadNotes();
+      return true;
+    } catch {
+      notify.error(errorMessage);
+      await loadNotes();
+      return false;
+    } finally {
+      setNoteBusy((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
+
+  const noteActionsFor = (group: AddressBookingGroup): NoteActions => ({
+    busy: noteBusy.has(group.key),
+    togglePriority: async () => {
+      const current = group.priority;
+      if (current) {
+        // A note is somebody's explanation — do not drop it on a stray click.
+        if (current.notatka.trim()) {
+          const ok = await notify.confirm(t.ksPrioRemoveConfirm.replace('{name}', group.nazwa), {
+            confirmLabel: t.ksPrioRemoveConfirmLabel,
+            danger: true,
+          });
+          if (!ok) return;
+        }
+        await runNoteAction(
+          group.key,
+          () => window.electronAPI.removeKsiegowaniePriorytet(current.id),
+          t.ksPrioError,
+        );
+      } else {
+        await runNoteAction(
+          group.key,
+          () => window.electronAPI.addKsiegowaniePriorytet(monthKey, group.adresId, group.nazwa, ''),
+          t.ksPrioError,
+        );
+      }
+    },
+    savePriorityNote: (text) =>
+      group.priority
+        ? runNoteAction(
+            group.key,
+            () => window.electronAPI.setKsiegowaniePriorytetNotatka(group.priority!.id, text),
+            t.ksPrioNoteError,
+          )
+        : Promise.resolve(false),
+    clearPriorityNote: async () => {
+      if (!group.priority) return false;
+      const id = group.priority.id;
+      const ok = await notify.confirm(t.ksPrioNoteDeleteConfirm, {
+        confirmLabel: t.ksPrioNoteDeleteConfirmLabel,
+        danger: true,
+      });
+      if (!ok) return false;
+      return runNoteAction(
+        group.key,
+        () => window.electronAPI.setKsiegowaniePriorytetNotatka(id, ''),
+        t.ksPrioNoteError,
+      );
+    },
+    addUwaga: (text) =>
+      runNoteAction(
+        group.key,
+        () => window.electronAPI.addKsiegowanieUwaga(group.adresId, group.nazwa, text),
+        t.ksUwagaError,
+      ),
+    updateUwaga: (id, text) =>
+      runNoteAction(group.key, () => window.electronAPI.updateKsiegowanieUwaga(id, text), t.ksUwagaError),
+    setUwagaResolved: (id, resolved) =>
+      runNoteAction(
+        group.key,
+        () => window.electronAPI.setKsiegowanieUwagaResolved(id, resolved),
+        t.ksUwagaError,
+      ),
+    deleteUwaga: async (id) => {
+      const ok = await notify.confirm(t.ksUwagaDeleteConfirm, {
+        confirmLabel: t.ksUwagaDeleteConfirmLabel,
+        danger: true,
+      });
+      if (!ok) return false;
+      return runNoteAction(group.key, () => window.electronAPI.deleteKsiegowanieUwaga(id), t.ksUwagaError);
+    },
+  });
+
+  const saveOrder = async (orderedPriorityIds: number[]) => {
+    setOrderSaving(true);
+    try {
+      await window.electronAPI.reorderKsiegowaniaPriorytety(monthKey, orderedPriorityIds);
+      await loadNotes();
+      setShowOrder(false);
+      notify.success(t.ksPrioOrderSaved);
+    } catch {
+      notify.error(t.ksPrioError);
+      await loadNotes();
+    } finally {
+      setOrderSaving(false);
+    }
+  };
+
   const openFile = async (filePath: string) => {
     const ok = await window.electronAPI.openFile(filePath);
     if (!ok) notify.error(t.fileNotFound);
@@ -520,27 +693,26 @@ const Ksiegowania: React.FC<Props> = ({
     )} ${t.ksFactsWithBooking}`,
     `${remaining} ${t.ksFactsLeft}`,
   ];
-  if (totals.errors > 0) facts.push(`${totals.errors} ${t.ksFactsErrors}`);
+  // The unit is the community, exactly as in the "Błędy" tile below: that tile
+  // counts communities with a failed conversion (2), while `totals.errors` counts
+  // the failed FILES behind them (5) — and a banner that said "5 błędy" over a
+  // tile that said 2 contradicted it. Only when every failure sits in the row
+  // with no community (so the tile reads 0) does the banner fall back to files,
+  // and then it says so.
+  const errorsOnlyInFiles = totals.withErrors === 0 && totals.errors > 0;
+  if (totals.withErrors > 0) facts.push(`${totals.withErrors} ${t.ksFactsErrors}`);
+  else if (errorsOnlyInFiles) facts.push(`${totals.errors} ${t.ksFactsErrorFiles}`);
 
   /**
-   * One sentence naming the next move. Errors outrank everything — a month with
-   * a failed conversion is not finished even when nothing is left to tick.
-   *
-   * Everything else is one case now, because `remaining` already covers both
-   * ways a community can be unfinished: files waiting for the tick, and no
-   * files at all. That also makes the sentence and the bar beside it agree by
-   * construction — "domknięty" appears exactly when the bar reads 100%.
+   * The banner's last line is about priorities and nothing else: which
+   * communities are flagged this month, in queue order. The month's other
+   * numbers are the facts line above and the tiles below, and the old "what to do
+   * next" sentence repeated them — so it gave way to the one thing the banner has
+   * that the rest of the screen does not summarise.
    */
-  const nudge = ((): { text: string; done: boolean } => {
-    if (totals.errors > 0) {
-      return { text: t.ksNudgeErrors.replace('{n}', String(totals.errors)), done: false };
-    }
-    if (totals.generated === 0) return { text: t.ksNudgeEmpty, done: false };
-    if (remaining > 0) {
-      return { text: t.ksNudgeTodo.replace('{n}', String(remaining)), done: false };
-    }
-    return { text: t.ksNudgeDone, done: true };
-  })();
+  const PRIORITY_SHOWN = 4;
+  const shownPriorities = priorityGroups.slice(0, PRIORITY_SHOWN);
+  const hiddenPriorities = priorityGroups.length - shownPriorities.length;
 
   return (
     // `--fill` so the lower band reaches the bottom of the window on a short
@@ -559,13 +731,22 @@ const Ksiegowania: React.FC<Props> = ({
           />
         )}
 
+        {tasksArea}
+
         {/* -------------------- Area two: the month's bookings -------------- */}
-        <section className={`ks-area ks-area--ksieg${showCalendar ? '' : ' ks-area--ksieg-solo'}`}>
-        {/* ---------------------------- Month bar --------------------------- */}
-        <header
-          className="ksieg-hero"
+        <section
+          className={`ks-area ks-area--ksieg${showCalendar ? '' : ' ks-area--ksieg-solo'}${
+            folded ? ' ks-area--folded' : ''
+          }`}
+          // On the section, not the banner: the band's ground takes the month's
+          // colour too, and the banner inherits it from here.
           style={{ ['--month-accent' as string]: monthAccent(monthNumber) }}
         >
+        {/* ---------------------------- Month bar --------------------------- */}
+        {/* The month's colour is the ground of the banner only; the content below
+            stands on the bookings' usual ground. */}
+        <div className="ksieg-banner-band">
+        <header className="ksieg-hero">
           <div className="ksieg-hero__art">
             <MonthIllustration month={monthNumber} />
           </div>
@@ -579,11 +760,30 @@ const Ksiegowania: React.FC<Props> = ({
               <span>{year}</span>
             </h1>
             <p className="ksieg-hero__facts">{facts.join(' · ')}</p>
-            {/* What to do next, read off the month's actual state. The tiles
-                and the bar give the numbers; this says what to do with them. */}
-            <p className={`ksieg-hero__nudge${nudge.done ? ' is-done' : ''}`}>
-              <Icon name={nudge.done ? 'check-circle' : 'arrow-right'} size={14} />
-              {nudge.text}
+            {/* The month's priority queue — order and communities, nothing else. */}
+            <p
+              className={`ksieg-hero__nudge ksieg-hero__prio${
+                priorityGroups.length === 0 ? ' is-empty' : ''
+              }`}
+            >
+              <Icon name="flag" size={14} />
+              {priorityGroups.length === 0 ? (
+                t.ksPrioNone
+              ) : (
+                <>
+                  <span className="ksieg-hero__prio-label">{t.ksPrioLine}</span>
+                  {shownPriorities.map((g) => (
+                    <span key={g.key} className="ksieg-hero__prio-item">
+                      <b>{g.priorityRank}</b> {g.nazwa}
+                    </span>
+                  ))}
+                  {hiddenPriorities > 0 && (
+                    <span className="ksieg-hero__prio-more">
+                      {t.ksPrioMore.replace('{n}', String(hiddenPriorities))}
+                    </span>
+                  )}
+                </>
+              )}
             </p>
           </div>
 
@@ -631,6 +831,18 @@ const Ksiegowania: React.FC<Props> = ({
             >
               <Icon name="refresh" size={16} />
             </button>
+            {onToggleBookings && (
+              <button
+                type="button"
+                className="ksieg-nav-arrow ksieg-fold"
+                onClick={onToggleBookings}
+                title={folded ? t.ksExpand : t.ksCollapse}
+                aria-label={folded ? t.ksExpand : t.ksCollapse}
+                aria-expanded={!folded}
+              >
+                <Icon name="chevron-down" size={17} />
+              </button>
+            )}
           </div>
 
           <div className="ksieg-hero__progress">
@@ -648,7 +860,10 @@ const Ksiegowania: React.FC<Props> = ({
             </div>
           </div>
         </header>
+        </div>
 
+        {!folded && (
+        <div className="ksieg-content">
         {/* ------------------------ Categories / filters -------------------- */}
         <BookingTiles totals={totals} language={language} filter={filter} onFilter={setFilter} />
 
@@ -682,6 +897,18 @@ const Ksiegowania: React.FC<Props> = ({
             onChange={(value) => setSort(value as BookingSort)}
             className="ksieg-toolbar__sort"
           />
+          {priorityGroups.length > 0 && (
+            <button
+              type="button"
+              className="ksieg-prio-order"
+              onClick={() => setShowOrder(true)}
+              title={t.ksPrioOrderHint}
+            >
+              <Icon name="flag" size={13} />
+              <span>{t.ksPrioOrderButton}</span>
+              <span className="ksieg-prio-order__count">{priorityGroups.length}</span>
+            </button>
+          )}
           {orderStale && (
             <button
               type="button"
@@ -703,25 +930,55 @@ const Ksiegowania: React.FC<Props> = ({
           </div>
         ) : (
           <div className="ksieg-rows">
-            {visible.map((group) => (
-              <CommunityRow
-                key={group.key}
-                group={group}
-                language={language}
-                locale={locale}
-                open={isOpen(group.key)}
-                onToggle={() => toggleRow(group.key)}
-                saving={saving}
-                formatDateTime={formatDateTime}
-                onSetBooked={setBooked}
-                onOpenFile={openFile}
-                onShowInHistory={onShowInHistory}
-              />
+            {visible.map((group, index) => (
+              <React.Fragment key={group.key}>
+                {/* The queue is set apart from the rest by a heading above it
+                    and a divider under it — the numbers on the rows say WHICH
+                    order, these say WHERE the queue ends. */}
+                {index === 0 && queueLength > 0 && (
+                  <div className="ksieg-queue-head">
+                    <Icon name="flag" size={14} />
+                    <b>{t.ksPrioQueueTitle}</b>
+                    <span>{t.ksPrioQueueSub}</span>
+                  </div>
+                )}
+                {index === queueLength && queueLength > 0 && (
+                  <div className="ksieg-queue-divider">
+                    <span>{t.ksPrioRest}</span>
+                  </div>
+                )}
+                <CommunityRow
+                  group={group}
+                  language={language}
+                  locale={locale}
+                  open={isOpen(group.key)}
+                  onToggle={() => toggleRow(group.key)}
+                  saving={saving}
+                  formatDateTime={formatDateTime}
+                  onSetBooked={setBooked}
+                  onOpenFile={openFile}
+                  onShowInHistory={onShowInHistory}
+                  notes={noteActionsFor(group)}
+                />
+              </React.Fragment>
             ))}
           </div>
         )}
+        </div>
+        )}
         </section>
       </div>
+
+      {showOrder && (
+        <PriorityOrderModal
+          groups={priorityGroups}
+          monthLabel={monthLabel(monthKey, locale)}
+          language={language}
+          saving={orderSaving}
+          onSave={(ids) => void saveOrder(ids)}
+          onClose={() => setShowOrder(false)}
+        />
+      )}
     </div>
   );
 };
@@ -830,6 +1087,25 @@ const Metric: React.FC<{ value: number; label: string; tone?: 'ok' | 'wait' | 'e
   </span>
 );
 
+/**
+ * What a row can do to its own priority and notes. Built per row by the view —
+ * which owns the data and the writes — so the row stays a presentation of one
+ * community and never learns about the month, the lists or the IPC.
+ */
+interface NoteActions {
+  /** A write for this row is in flight; its controls wait for it to land. */
+  busy: boolean;
+  /** Flag the community (end of the queue) or take the flag off. */
+  togglePriority: () => Promise<void>;
+  savePriorityNote: (text: string) => Promise<boolean>;
+  /** Empty the priority's note (asks first); the flag itself stays. */
+  clearPriorityNote: () => Promise<boolean>;
+  addUwaga: (text: string) => Promise<boolean>;
+  updateUwaga: (id: number, text: string) => Promise<boolean>;
+  setUwagaResolved: (id: number, resolved: boolean) => Promise<boolean>;
+  deleteUwaga: (id: number) => Promise<boolean>;
+}
+
 const CommunityRow: React.FC<{
   group: AddressBookingGroup;
   language: Language;
@@ -841,6 +1117,7 @@ const CommunityRow: React.FC<{
   onSetBooked: (ids: number[], booked: boolean, announce: boolean) => Promise<void>;
   onOpenFile: (filePath: string) => void;
   onShowInHistory?: (query: string) => void;
+  notes: NoteActions;
 }> = ({
   group,
   language,
@@ -852,8 +1129,18 @@ const CommunityRow: React.FC<{
   onSetBooked,
   onOpenFile,
   onShowInHistory,
+  notes,
 }) => {
   const t = translations[language];
+  // Which editor is open on this row. Local on purpose: it is a draft, and the
+  // row below the one being typed in must not care.
+  const [editingPrioNote, setEditingPrioNote] = useState(false);
+  const [composing, setComposing] = useState(false);
+  const [editingUwagaId, setEditingUwagaId] = useState<number | null>(null);
+  const openUwagi = group.uwagi.filter((u) => !u.resolvedAt);
+  const resolvedUwagi = group.uwagi.filter((u) => u.resolvedAt);
+  const canNote = !group.unassigned;
+  const showExtras = canNote && (group.priority !== null || openUwagi.length > 0 || composing);
   const bookings = group.rows.filter((r) => r.isBooking);
   const pendingIds = bookings.filter((r) => !r.bookedInDom).map((r) => r.entry.id);
   const bookedIds = bookings.filter((r) => r.bookedInDom).map((r) => r.entry.id);
@@ -875,7 +1162,11 @@ const CommunityRow: React.FC<{
     .join(' · ');
 
   return (
-    <article className={`ksieg-row ksieg-row--${group.state} ${open ? 'is-open' : ''}`}>
+    <article
+      className={`ksieg-row ksieg-row--${group.state} ${open ? 'is-open' : ''}${
+        group.priorityRank !== null ? ' ksieg-row--priority' : ''
+      }`}
+    >
       <button
         type="button"
         className="ksieg-row__head"
@@ -897,6 +1188,21 @@ const CommunityRow: React.FC<{
             <span className={`status-badge ksieg-state ksieg-state--${group.state}`}>
               {stateLabel(group.state, t)}
             </span>
+            {group.priorityRank !== null && (
+              <span
+                className="ksieg-prio-badge"
+                title={t.ksPrioBadgeHint.replace('{n}', String(group.priorityRank))}
+              >
+                <Icon name="flag" size={11} />
+                {t.ksPrioBadge.replace('{n}', String(group.priorityRank))}
+              </span>
+            )}
+            {group.openUwagi > 0 && (
+              <span className="ksieg-uwaga-badge" title={t.ksUwagaTitle}>
+                <Icon name="message-square" size={11} />
+                {group.openUwagi > 1 ? `${t.ksUwagaBadge} ${group.openUwagi}` : t.ksUwagaBadge}
+              </span>
+            )}
           </span>
           <span className="ksieg-row__sub">{subtitle}</span>
         </span>
@@ -916,6 +1222,35 @@ const CommunityRow: React.FC<{
 
       {/* The one action this view exists for — same place in every row. */}
       <div className="ksieg-row__cta">
+        {canNote && (
+          <span className="ksieg-row__tools">
+            <button
+              type="button"
+              className={`ksieg-tool ksieg-tool--flag${group.priority ? ' is-on' : ''}`}
+              disabled={notes.busy}
+              onClick={() => void notes.togglePriority()}
+              title={group.priority ? t.ksPrioUnflag : t.ksPrioFlag}
+              aria-label={group.priority ? t.ksPrioUnflag : t.ksPrioFlag}
+              aria-pressed={group.priority !== null}
+            >
+              <Icon name="flag" size={16} />
+            </button>
+            <button
+              type="button"
+              className={`ksieg-tool ksieg-tool--note${openUwagi.length > 0 ? ' is-on' : ''}`}
+              disabled={notes.busy}
+              onClick={() => setComposing(true)}
+              title={
+                openUwagi.length > 0
+                  ? t.ksUwagaButtonOpen.replace('{n}', String(openUwagi.length))
+                  : t.ksUwagaButton
+              }
+              aria-label={t.ksUwagaButton}
+            >
+              <Icon name="message-square" size={16} />
+            </button>
+          </span>
+        )}
         {pendingIds.length > 0 ? (
           <button
             type="button"
@@ -925,7 +1260,6 @@ const CommunityRow: React.FC<{
           >
             <Icon name="check-circle" size={16} />
             <span>{t.ksBookInDom}</span>
-            <span className="ksieg-book__count">{pendingIds.length}</span>
           </button>
         ) : group.generated > 0 ? (
           <div className="ksieg-book-done">
@@ -946,9 +1280,176 @@ const CommunityRow: React.FC<{
         )}
       </div>
 
+      {showExtras && (
+        <div className="ksieg-row__extras">
+          {/* The reason this community is in the queue, written for whoever does
+              the posting — in its own field so it is read without a click. */}
+          {group.priority && (
+            <div className={`ksieg-prionote${editingPrioNote ? ' is-editing' : ''}`}>
+              <span className="ksieg-prionote__label">
+                <Icon name="flag" size={13} />
+                {t.ksPrioNoteLabel}
+              </span>
+              {editingPrioNote ? (
+                <NoteEditor
+                  initial={group.priority.notatka}
+                  placeholder={t.ksPrioNotePlaceholder}
+                  saveLabel={t.save}
+                  cancelLabel={t.cancel}
+                  busy={notes.busy}
+                  allowEmpty
+                  onSave={async (text) => {
+                    if (await notes.savePriorityNote(text)) setEditingPrioNote(false);
+                  }}
+                  onCancel={() => setEditingPrioNote(false)}
+                />
+              ) : (
+                <>
+                  <p className={`ksieg-prionote__text${group.priority.notatka ? '' : ' is-empty'}`}>
+                    {group.priority.notatka || t.ksPrioNoteEmpty}
+                  </p>
+                  {/* The same two controls a posting note has. */}
+                  <div className="ksieg-uwaga__actions">
+                    <button
+                      type="button"
+                      className="button button-small button-ghost"
+                      disabled={notes.busy}
+                      onClick={() => setEditingPrioNote(true)}
+                      title={group.priority.notatka ? t.edit : t.ksPrioNoteAdd}
+                      aria-label={group.priority.notatka ? t.edit : t.ksPrioNoteAdd}
+                    >
+                      <Icon name="edit" size={13} />
+                    </button>
+                    {group.priority.notatka && (
+                      <button
+                        type="button"
+                        className="button button-small button-danger"
+                        disabled={notes.busy}
+                        onClick={() => void notes.clearPriorityNote()}
+                        title={t.delete}
+                        aria-label={t.delete}
+                      >
+                        <Icon name="trash" size={13} />
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Remarks about posting this community. Independent of the queue. */}
+          {openUwagi.map((uwaga) => (
+            <div
+              key={uwaga.id}
+              className={`ksieg-uwaga${editingUwagaId === uwaga.id ? ' is-editing' : ''}`}
+            >
+              <span className="ksieg-uwaga__icon">
+                <Icon name="message-square" size={15} />
+              </span>
+              {editingUwagaId === uwaga.id ? (
+                <NoteEditor
+                  initial={uwaga.tresc}
+                  placeholder={t.ksUwagaPlaceholder}
+                  saveLabel={t.save}
+                  cancelLabel={t.cancel}
+                  busy={notes.busy}
+                  onSave={async (text) => {
+                    if (await notes.updateUwaga(uwaga.id, text)) setEditingUwagaId(null);
+                  }}
+                  onCancel={() => setEditingUwagaId(null)}
+                />
+              ) : (
+                <>
+                  <div className="ksieg-uwaga__main">
+                    <p className="ksieg-uwaga__text">{uwaga.tresc}</p>
+                    <span className="ksieg-uwaga__meta">{uwagaMeta(uwaga, language, formatDateTime)}</span>
+                    {group.state === 'done' && (
+                      <span className="ksieg-uwaga__hint">{t.ksUwagaResolveHint}</span>
+                    )}
+                  </div>
+                  <div className="ksieg-uwaga__actions">
+                    <button
+                      type="button"
+                      className="button button-small button-success"
+                      disabled={notes.busy}
+                      title={t.ksUwagaResolveTip}
+                      onClick={() => void notes.setUwagaResolved(uwaga.id, true)}
+                    >
+                      <Icon name="check-circle" size={13} /> {t.ksUwagaResolve}
+                    </button>
+                    <button
+                      type="button"
+                      className="button button-small button-ghost"
+                      disabled={notes.busy}
+                      onClick={() => setEditingUwagaId(uwaga.id)}
+                      title={t.edit}
+                      aria-label={t.edit}
+                    >
+                      <Icon name="edit" size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      className="button button-small button-danger"
+                      disabled={notes.busy}
+                      onClick={() => void notes.deleteUwaga(uwaga.id)}
+                      title={t.delete}
+                      aria-label={t.delete}
+                    >
+                      <Icon name="trash" size={13} />
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+
+          {composing && (
+            <div className="ksieg-uwaga ksieg-uwaga--new is-editing">
+              <span className="ksieg-uwaga__icon">
+                <Icon name="message-square" size={15} />
+              </span>
+              <NoteEditor
+                placeholder={t.ksUwagaPlaceholder}
+                saveLabel={t.ksUwagaAddSave}
+                cancelLabel={t.cancel}
+                busy={notes.busy}
+                onSave={async (text) => {
+                  if (await notes.addUwaga(text)) setComposing(false);
+                }}
+                onCancel={() => setComposing(false)}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
       {open && (
         <div className="ksieg-row__body">
           {group.unassigned && <p className="ksieg-row__note">{t.ksUnassignedHint}</p>}
+          {resolvedUwagi.length > 0 && (
+            <details className="ksieg-resolved">
+              <summary>{t.ksUwagaResolvedHeading.replace('{n}', String(resolvedUwagi.length))}</summary>
+              {resolvedUwagi.map((uwaga) => (
+                <div key={uwaga.id} className="ksieg-resolved__item">
+                  <div className="ksieg-resolved__main">
+                    <p>{uwaga.tresc}</p>
+                    <span>
+                      {uwagaMeta(uwaga, language, formatDateTime)} · {uwagaResolvedMeta(uwaga, language, formatDateTime)}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="button button-small button-ghost"
+                    disabled={notes.busy}
+                    onClick={() => void notes.setUwagaResolved(uwaga.id, false)}
+                  >
+                    <Icon name="refresh" size={13} /> {t.ksUwagaReopen}
+                  </button>
+                </div>
+              ))}
+            </details>
+          )}
           {group.rows.length === 0 ? (
             <div className="ksieg-files-empty">
               <Icon name="calendar" size={16} /> {t.ksNothingThisMonth}

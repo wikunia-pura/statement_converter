@@ -289,6 +289,47 @@ export interface ConversionHistory {
   bookedInDomBy?: string | null;
 }
 
+/**
+ * A community flagged "do this first" on the Księgowania dashboard, for ONE
+ * month. The queue is the month's rows ordered by `position`; the number shown
+ * to the team (1st, 2nd, 3rd…) is the place in that order, not the stored
+ * `position`, which may have gaps after a removal.
+ *
+ * Belongs to a month on purpose: a priority is a statement about this month's
+ * work, and carried over it would pin communities that were finished weeks ago.
+ * Like `ConversionHistory`, it keeps the community's NAME beside the id — a
+ * restore renumbers the addresses and the name is what survives.
+ */
+export interface KsiegowaniePriorytet {
+  id: number;
+  /** `YYYY-MM`, the dashboard's month key. */
+  monthKey: string;
+  adresId: number | null;
+  adresNazwa: string;
+  position: number;
+  /** Why this one before the others — written for whoever does the posting. */
+  notatka: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+/**
+ * A remark about posting one community ("poczekaj na korektę faktury"). Not tied
+ * to a month or to a priority: it stays open until someone resolves it, and the
+ * Converter warns about it when that community's statement is dropped in.
+ */
+export interface KsiegowanieUwaga {
+  id: number;
+  adresId: number | null;
+  adresNazwa: string;
+  tresc: string;
+  createdBy: string;
+  createdAt: string;
+  /** Null while the matter is open. */
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+}
+
 /* ---------------- Odczyty liczników — operation history ---------------- */
 
 export type OdczytySkipReason = 'no-device' | 'no-value' | 'no-wm' | 'no-date';
@@ -530,11 +571,14 @@ export interface AppUser {
    */
   firstName?: string | null;
   lastName?: string | null;
+  /** `#rrggbb` chosen in Ustawienia → Użytkownicy; null = derived from the mailbox. */
+  color?: string | null;
   createdAt: string;
 }
 
 /**
- * A person's name as it travels in a backup: keyed by mailbox, never by id.
+ * A person's name — and the colour chosen for them — as they travel in a backup:
+ * keyed by mailbox, never by id.
  *
  * The rows of `app_users` themselves are not restorable — a trigger owns them,
  * mirroring the Supabase accounts — but the names ARE authored in this app and
@@ -545,6 +589,8 @@ export interface AppUserName {
   email: string;
   firstName?: string | null;
   lastName?: string | null;
+  /** The colour chosen for the person; absent in backups that predate colours. */
+  color?: string | null;
 }
 
 /**
@@ -701,6 +747,61 @@ export interface SpotkanieMailing {
   sentAt: string;
 }
 
+/* ------------------------------- Zadania ------------------------------- */
+
+/** The three Kanban columns, in the order they are shown. */
+export const ZADANIE_STATUSES = ['todo', 'in_progress', 'done'] as const;
+export type ZadanieStatus = (typeof ZADANIE_STATUSES)[number];
+
+/**
+ * One card on the "Zadania" board.
+ *
+ * The assignee is stored as a MAILBOX, not an `app_users` id: the mailbox is the
+ * key a backup already uses for people (`AppUserName`) and the one the session
+ * carries, so "assigned to me" and a restore both resolve without a lookup. The
+ * name shown is read from the live user list; a mailbox with no account behind
+ * it any more is shown as the mailbox itself.
+ */
+export interface Zadanie {
+  id: number;
+  tytul: string;
+  opis: string;
+  status: ZadanieStatus;
+  przypisanyEmail: string | null;
+  /** Deadline as `YYYY-MM-DD` (a day, not an instant), or null for none. */
+  termin: string | null;
+  zalaczniki: ZadanieZalacznik[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  /**
+   * Mailbox of whoever last changed the card — what lets the notifier skip a
+   * change the signed-in person made themselves.
+   */
+  updatedBy: string;
+}
+
+/**
+ * A file on a task. The bytes live in the Supabase Storage bucket
+ * `zadania-zalaczniki` under `sciezka`; only this description sits in the row.
+ * `sciezka` is minted by the main process (a uuid plus extension), never taken
+ * from the file's own name.
+ */
+export interface ZadanieZalacznik {
+  id: string;
+  nazwa: string;
+  rozmiar: number;
+  sciezka: string;
+  dodanyBy: string;
+  dodanyAt: string;
+}
+
+/** What the add/edit form submits. */
+export type ZadanieInput = Pick<
+  Zadanie,
+  'tytul' | 'opis' | 'status' | 'przypisanyEmail' | 'termin' | 'zalaczniki'
+>;
+
 /** Ordering of the contractor pick-lists in the transaction review screen. */
 export type ContractorSortOrder = 'name-asc' | 'name-desc' | 'account-asc' | 'account-desc';
 
@@ -724,6 +825,8 @@ export interface AppSettings {
   skipUserApproval: boolean; // Skip transaction review and generate files directly
   contractorSortOrder: ContractorSortOrder; // Ordering of contractor pick-lists in review (default: name-asc)
   sidebarCollapsed: boolean; // Collapse the navigation sidebar to an icon-only rail (default: true)
+  /** Dashboard: the Księgowania area is folded down to its month banner (default: false). */
+  bookingsCollapsed: boolean;
   /**
    * Kalendarz: show the instant hover card over a meeting in the month grid
    * (default: false). Off by default because a card that follows the cursor is
@@ -782,6 +885,11 @@ export interface AppSettings {
  * each meeting carry their own snapshot of the people; their NAMES are a
  * different matter and travel as `appUserNames`, because this app authors them
  * and nothing can rebuild them), the
+ * files of the Zadania board in the Supabase Storage bucket `zadania-zalaczniki`
+ * (a backup carries each task's attachment DESCRIPTIONS, so after a restore the
+ * links still point at the same objects — but the bytes are not in the JSON, and
+ * a bucket that is lost is lost; 5 MB per file would turn the backup into
+ * something that no longer fits in a request),
  * module files on disk (mailing PDFs, attachment copies) — history entries stay
  * readable without them — and `userData/zaliczki-cache` (the per-page OCR
  * results for "Podsumowanie zaliczek"). That cache is derived, not authored: its
@@ -813,12 +921,17 @@ export interface BackupData {
     spotkania?: Spotkanie[];
     /** Absent in backups written before meetings had locations. */
     spotkaniaLokalizacje?: SpotkanieLokalizacja[];
+    /** Absent in backups written before the Zadania board existed. */
+    zadania?: Zadanie[];
     /**
      * Names given to the accounts, keyed by mailbox. Only the names travel —
      * the accounts themselves belong to Supabase auth. Absent in backups
      * written before users could be named.
      */
     appUserNames?: AppUserName[];
+    /** Absent in backups written before the dashboard had priorities and notes. */
+    ksiegowaniaPriorytety?: KsiegowaniePriorytet[];
+    ksiegowaniaUwagi?: KsiegowanieUwaga[];
     /** Never carries `smtpPass` — the SMTP password stays on the machine. */
     settings: AppSettings;
   };
@@ -839,7 +952,10 @@ export interface BackupCounts {
   spotkaniaTypy: number;
   spotkania: number;
   spotkaniaLokalizacje: number;
+  zadania: number;
   appUserNames: number;
+  ksiegowaniaPriorytety: number;
+  ksiegowaniaUwagi: number;
 }
 
 export function countBackup(data: BackupData): BackupCounts {
@@ -857,7 +973,10 @@ export function countBackup(data: BackupData): BackupCounts {
     spotkaniaTypy: data.data.spotkaniaTypy?.length ?? 0,
     spotkania: data.data.spotkania?.length ?? 0,
     spotkaniaLokalizacje: data.data.spotkaniaLokalizacje?.length ?? 0,
+    zadania: data.data.zadania?.length ?? 0,
     appUserNames: data.data.appUserNames?.length ?? 0,
+    ksiegowaniaPriorytety: data.data.ksiegowaniaPriorytety?.length ?? 0,
+    ksiegowaniaUwagi: data.data.ksiegowaniaUwagi?.length ?? 0,
   };
 }
 
@@ -927,6 +1046,7 @@ export const IPC_CHANNELS = {
   SET_ALWAYS_USE_AI: 'settings:set-always-use-ai',
   SET_CONTRACTOR_SORT_ORDER: 'settings:set-contractor-sort-order',
   SET_SIDEBAR_COLLAPSED: 'settings:set-sidebar-collapsed',
+  SET_BOOKINGS_COLLAPSED: 'settings:set-bookings-collapsed',
   SET_CALENDAR_HOVER_CARD: 'settings:set-calendar-hover-card',
   SET_LAST_SEEN_VERSION: 'settings:set-last-seen-version',
   EXPORT_SETTINGS: 'settings:export',
@@ -1005,6 +1125,7 @@ export const IPC_CHANNELS = {
   // participant picker reads)
   GET_APP_USERS: 'kalendarz:get-app-users',
   SET_APP_USER_NAME: 'users:set-name',
+  SET_APP_USER_COLOR: 'users:set-color',
   GET_SPOTKANIA_TYPY: 'kalendarz:get-typy',
   ADD_SPOTKANIE_TYP: 'kalendarz:add-typ',
   UPDATE_SPOTKANIE_TYP: 'kalendarz:update-typ',
@@ -1021,6 +1142,29 @@ export const IPC_CHANNELS = {
   SET_SPOTKANIE_TERMIN_STATUS: 'kalendarz:set-termin-status',
   SET_SPOTKANIE_DOKUMENTY: 'kalendarz:set-dokumenty',
   GET_SPOTKANIA_MAILINGI: 'kalendarz:get-mailingi',
+
+  // Zadania (Kanban)
+  GET_ZADANIA: 'zadania:get',
+  ADD_ZADANIE: 'zadania:add',
+  UPDATE_ZADANIE: 'zadania:update',
+  SET_ZADANIE_STATUS: 'zadania:set-status',
+  DELETE_ZADANIE: 'zadania:delete',
+  ZADANIA_PICK_ATTACHMENT: 'zadania:pick-attachment',
+  ZADANIA_UPLOAD_ATTACHMENT: 'zadania:upload-attachment',
+  ZADANIA_DOWNLOAD_ATTACHMENT: 'zadania:download-attachment',
+  ZADANIA_DISCARD_ATTACHMENTS: 'zadania:discard-attachments',
+
+  // Księgowania: priorities with a note, and notes on a community
+  GET_KS_PRIORYTETY: 'ksiegowania:get-priorytety',
+  ADD_KS_PRIORYTET: 'ksiegowania:add-priorytet',
+  SET_KS_PRIORYTET_NOTATKA: 'ksiegowania:set-priorytet-notatka',
+  REMOVE_KS_PRIORYTET: 'ksiegowania:remove-priorytet',
+  REORDER_KS_PRIORYTETY: 'ksiegowania:reorder-priorytety',
+  GET_KS_UWAGI: 'ksiegowania:get-uwagi',
+  ADD_KS_UWAGA: 'ksiegowania:add-uwaga',
+  UPDATE_KS_UWAGA: 'ksiegowania:update-uwaga',
+  SET_KS_UWAGA_RESOLVED: 'ksiegowania:set-uwaga-resolved',
+  DELETE_KS_UWAGA: 'ksiegowania:delete-uwaga',
 
   // Auth (Supabase-backed)
   AUTH_SIGN_IN: 'auth:sign-in',

@@ -17,6 +17,8 @@
 /** Anything that carries a name: an `AppUser`, or a participant snapshot. */
 export interface NamedPerson {
   email: string;
+  /** `#rrggbb` chosen for the person, or empty for the automatic one. */
+  color?: string | null;
   displayName?: string | null;
   firstName?: string | null;
   lastName?: string | null;
@@ -79,4 +81,56 @@ export function personInitials(person: NamedPerson): string {
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('');
   return letters || person.email.slice(0, 1).toUpperCase() || '?';
+}
+
+/**
+ * Hues an automatic colour may take. Spread around the wheel and picked by
+ * hand-sized steps, so two people in a small office land on clearly different
+ * colours instead of two neighbouring blues.
+ */
+const AVATAR_HUES = [8, 28, 46, 98, 142, 168, 192, 214, 238, 262, 286, 318, 340];
+
+const AVATAR_SATURATION = 62;
+const AVATAR_LIGHTNESS = 54;
+
+/** `#rrggbb` — the only form a chosen colour is stored in. */
+export function isHexColor(value: unknown): value is string {
+  return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
+}
+
+/** The person's automatic hue, derived from the mailbox. */
+function automaticHue(email: string): number {
+  const key = (email ?? '').trim().toLowerCase();
+  // FNV-1a — tiny, and spreads similar mailboxes ("anna@", "anna2@") apart.
+  let hash = 2166136261;
+  for (let i = 0; i < key.length; i++) {
+    hash ^= key.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return AVATAR_HUES[(hash >>> 0) % AVATAR_HUES.length];
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const sat = s / 100;
+  const lig = l / 100;
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = sat * Math.min(lig, 1 - lig);
+  const channel = (n: number) =>
+    Math.round(255 * (lig - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))));
+  return `#${[0, 8, 4].map((n) => channel(n).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * A colour for a person, as `#rrggbb`: the one chosen in Ustawienia →
+ * Użytkownicy if there is one, otherwise derived from the mailbox.
+ *
+ * The automatic colour is derived rather than drawn at random each time:
+ * "random" only has to mean "nobody chose it", but a colour that changed on
+ * reload would stop being a way to recognise someone. The mailbox is the key a
+ * person is known by everywhere else (assignments, backups), so it is the key
+ * here too — the same colour on every machine and every launch.
+ */
+export function personColor(person: Pick<NamedPerson, 'email' | 'color'>): string {
+  if (isHexColor(person.color)) return person.color;
+  return hslToHex(automaticHue(person.email), AVATAR_SATURATION, AVATAR_LIGHTNESS);
 }

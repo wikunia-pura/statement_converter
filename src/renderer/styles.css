@@ -1398,28 +1398,70 @@ tbody tr:hover {
   background: color-mix(in srgb, var(--accent) 12%, var(--bg-app));
 }
 
-/* The bookings get a ground of their own — the app's sunken surface, not the
-   page ground. Given the page ground the band was invisible: correct about the
-   seam, useless as a wrapper, because nothing on screen said the section was
-   one. Three steps up in light mode now (0.756 → 0.854 → 0.966 for the cards),
-   so the band reads as a surface and the cards lift off it.
-   Deliberately not the month's colour — that would leave the two bands nearly
-   identical in a month whose accent is close to indigo, making the separation
-   depend on which month you happened to be looking at. */
+/* The whole bookings area stands on a very faint wash of the month's colour —
+   the banner's band and the ground around the content alike — down to the bottom
+   of the window. The content's frame (see
+   `.ksieg-content`) is this same colour, so it melts into the area and the veiled
+   panel inside it reads as a sheet set into the month's ground, with the banner
+   above it on the same ground. Only a trace of `--month-accent` over the page
+   ground (4%, 5% in dark mode): the calendar's band takes the brand indigo
+   at 12%, and this one has to sit quietly behind the content. The page's own
+   ground between this area and the bands above keeps them from touching. The
+   fallback is the neutral text colour, for a render without a month. */
 .ks-area--ksieg {
   margin-bottom: calc(-1 * var(--s-8));
-  padding-top: var(--s-6);
+  padding-top: 0;
   padding-bottom: var(--s-8);
-  background: var(--bg-surface-sunken);
-  box-shadow: inset 0 12px 16px -14px rgba(16, 24, 40, 0.25);
+  background: color-mix(in srgb, var(--month-accent, var(--text-secondary)) 4%, var(--bg-app));
 }
 
-/* In the Converter's tab the calendar banner above is hidden, so there is
-   nothing left for the inset shadow to separate from. */
+body.dark-mode .ks-area--ksieg {
+  background: color-mix(in srgb, var(--month-accent, var(--text-secondary)) 5%, var(--bg-app));
+}
+
+/* The banner's own band: the area's side padding is cancelled so the banner row
+   spans the full width and carries the area's top padding itself. It takes the
+   area's colour, so it has none of its own. */
+.ksieg-banner-band {
+  margin-left: calc(-1 * var(--s-8));
+  margin-right: calc(-1 * var(--s-8));
+  padding: var(--s-6) var(--s-8);
+}
+
+/* The content, held in a rounded panel set into the area's month colour. The
+   panel has the banner's own radius on all four corners, so the two cards read as
+   a pair, and it is exactly as wide as the banner. The colour around it is simply
+   the area's ground showing (the same colour as the area, which is why this is
+   a margin and not a border — a border of that colour would be invisible and
+   would only make the corners elliptical). It hangs straight from the banner with nothing between them. The
+   fill is a see-through veil — a neutral overlay, NOT the banner's colour, which
+   made it compete with the banner. Nothing about the cards inside changes. */
+.ksieg-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  /* Up against the banner's band, cancelling the area's own gap; flush with the
+     banner's left and right edges (the area's side padding is what puts both in
+     the same lines), and 8px of ground above the area's foot. */
+  margin: calc(-1 * var(--s-4)) 0 8px;
+  padding: var(--s-5);
+  background: rgba(255, 255, 255, 0.65);
+  border-radius: var(--r-xl);
+}
+
+body.dark-mode .ksieg-content {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* In the Converter's tab the other bands are hidden, so the bookings reach up to
+   the top edge on their own. */
 .ks-area--ksieg-solo {
   margin-top: calc(-1 * var(--s-8));
+}
+
+.ks-area--ksieg-solo .ksieg-banner-band {
   padding-top: var(--s-8);
-  box-shadow: none;
 }
 
 /* Dark mode: the same mix over a near-black ground gives a much smaller step,
@@ -1474,9 +1516,13 @@ body.dark-mode .ks-area--kal {
   position: relative;
 }
 
+/* The same 116px column as the month banner's art (`.ksieg-hero__art`) — and the
+   illustration inside is 116px wide whatever the column says. At 104px the
+   calendar's and the tasks' text started 12px to the left of the bookings', so
+   the three banners did not line up. */
 .ks-kal-hero__art {
   align-self: center;
-  width: 104px;
+  width: 116px;
 }
 
 .ks-kal-hero__id {
@@ -1564,24 +1610,6 @@ body.dark-mode .ks-kal-hero__facts {
   border-color: var(--border-strong);
   color: var(--text-primary);
 }
-
-/* Nothing outstanding, said in a sentence. Four zeros would leave the reader
-   counting them to find that out. */
-.ks-kal__clear {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  padding: var(--s-3) var(--s-4);
-  border-radius: var(--r-lg);
-  border: 1px solid var(--success-border);
-  background: var(--success-bg);
-  color: var(--success);
-  font-size: var(--fs-md);
-  font-weight: 550;
-}
-
-.ks-kal__clear > svg { flex-shrink: 0; }
-
 
 .ks-kal__tiles {
   display: grid;
@@ -4806,10 +4834,9 @@ body.dark-mode .rte-content th {
 .ksieg {
   display: flex;
   flex-direction: column;
-  /* No gap: the two bands touch, and the boundary between their grounds is the
-     separation. The air between their contents comes from their own padding —
-     24px from each side of the seam, which is more than any gap inside either. */
-  gap: 0;
+  /* The bands do not touch: the page's own ground shows between them, so each
+     reads as a section of its own. The air INSIDE a band comes from its padding. */
+  gap: var(--s-6);
 }
 
 /* ------------------------------ Month bar ------------------------------- */
@@ -5451,6 +5478,39 @@ body.dark-mode .month-art {
   padding: var(--s-4) var(--s-5) var(--s-4) var(--s-3);
 }
 
+/* The row's main slot has one width whichever of its three states it is in —
+   the button, "already in DOM" or "no file yet" — so the tools beside it stay put
+   as the work is ticked off. All three END at the row's right padding, the way
+   they did before the slot had a width: centring them left the shorter ones
+   stopping short of the button's edge. The width is that of the widest label
+   ("Zaksięgowane w DOM"), so the button is no wider than the text it gives way to. */
+.ksieg-row__cta > .ksieg-book,
+.ksieg-row__cta > .ksieg-book-done,
+.ksieg-row__cta > .ksieg-book-none {
+  width: 168px;
+  flex: 0 0 168px;
+}
+/* A touch narrower than the slot, with the difference given back as margin so
+   the column keeps its width and the tools beside it still do not move. */
+.ksieg-row__cta > .ksieg-book {
+  justify-content: center;
+  width: 156px;
+  flex: 0 0 156px;
+  margin-left: 12px;
+}
+.ksieg-row__cta > .ksieg-book-none { text-align: right; }
+
+/* The big button is trimmed to fit that slot: it is no wider than the
+   "Zaksięgowane w DOM" label it gives way to. */
+.ksieg-row__cta > .ksieg-book {
+  gap: 6px;
+  padding: 0 10px;
+  font-size: var(--fs-md);
+}
+.ksieg-row__cta > .ksieg-book .ksieg-book__count { min-width: 20px; padding: 1px 6px; }
+/* No room for the tick as well as the count; the count is the part that informs. */
+.ksieg-row__cta > .ksieg-book > svg { display: none; }
+
 /* Deliberately the loudest thing on the row: it is the only action here. */
 .ksieg-book {
   display: inline-flex;
@@ -5808,6 +5868,12 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 
 .content-body--fill > .ksieg > .ks-area--ksieg {
   flex: 1;
+}
+
+/* Folded, the band is only as tall as its banner. Without this it would still
+   take the rest of the window, and an empty ground would hang under the banner. */
+.content-body--fill > .ksieg > .ks-area--folded {
+  flex: none;
 }
 
 .kal {
@@ -6579,4 +6645,1094 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
   opacity: 0.45;
   cursor: default;
   text-decoration: none;
+}
+
+/* ==========================================================================
+   Zadania — a three-column Kanban
+   ========================================================================== */
+
+.zad-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--s-3);
+  margin-bottom: var(--s-4);
+}
+
+.zad-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  margin-bottom: var(--s-5);
+}
+
+.zad-filter-chip {
+  padding: 5px var(--s-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-pill);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.zad-filter-chip:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface-hover);
+}
+
+.zad-filter-chip.is-active {
+  color: var(--accent);
+  background: var(--accent-subtle);
+  border-color: var(--accent-border);
+  font-weight: 600;
+}
+
+.zad-filter-person {
+  min-width: 200px;
+}
+
+.zad-board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(240px, 1fr));
+  gap: var(--s-4);
+  align-items: start;
+}
+
+.zad-col {
+  background: var(--bg-surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-xl);
+  padding: var(--s-3);
+  min-height: 160px;
+}
+
+/* The column a dragged card would land in. */
+.zad-col.is-drop {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+
+.zad-col__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-1) var(--s-1) var(--s-3);
+}
+
+.zad-col__title {
+  font-weight: 600;
+  font-size: var(--fs-base);
+  color: var(--text-primary);
+}
+
+.zad-col__count {
+  margin-right: auto;
+  padding: 0 var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  line-height: 18px;
+}
+
+.zad-col__cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.zad-col__empty {
+  padding: var(--s-4) 0;
+  text-align: center;
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+}
+
+.zad-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  padding: var(--s-3);
+  box-shadow: var(--shadow-sm);
+  cursor: grab;
+}
+
+.zad-card:hover {
+  /* Three sides, not the shorthand: `border-color` would also repaint the left
+     edge and hide the status stripe. */
+  border-top-color: var(--border-strong);
+  border-right-color: var(--border-strong);
+  border-bottom-color: var(--border-strong);
+}
+
+.zad-card.is-dragging {
+  opacity: 0.45;
+}
+
+.zad-card__title {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.zad-card__desc {
+  margin-top: var(--s-1);
+  font-size: var(--fs-md);
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.zad-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+
+.zad-card__who {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.zad-card__who--none {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.zad-card__who-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zad-card__actions {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 2px;
+}
+
+.zad-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.zad-icon-btn:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.zad-icon-btn--danger:hover:not(:disabled) {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.zad-icon-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+@media (max-width: 900px) {
+  .zad-board {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
+   Księgowania — priority queue, priority notes, notes on a community
+   ========================================================================== */
+
+/* The queue sits on top of the list. It is set apart gently — a heading above,
+   a divider under, a tint and a number on its rows — rather than boxed in: it is
+   the same list in the same sort, only with the urgent part stuck to the top. */
+.ksieg-queue-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  padding: 0 var(--s-1);
+  font-size: var(--fs-sm);
+  color: var(--accent);
+}
+.ksieg-queue-head svg { align-self: center; }
+.ksieg-queue-head b { font-size: var(--fs-md); font-weight: 650; }
+.ksieg-queue-head span { color: var(--text-tertiary); }
+
+.ksieg-queue-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin: var(--s-2) 0 var(--s-1);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.ksieg-queue-divider::before,
+.ksieg-queue-divider::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--border-default);
+}
+
+.ksieg-row--priority {
+  background: color-mix(in srgb, var(--accent-subtle) 45%, var(--bg-surface));
+  border-color: var(--accent-border);
+}
+
+.ksieg-prio-badge,
+.ksieg-uwaga-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  white-space: nowrap;
+}
+.ksieg-prio-badge {
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent-border);
+  color: var(--accent);
+}
+.ksieg-uwaga-badge {
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  color: var(--warning);
+}
+
+.ksieg-prio-order {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0 var(--s-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+.ksieg-prio-order:hover { border-color: var(--accent); color: var(--accent); }
+.ksieg-prio-order:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ksieg-prio-order__count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: var(--r-pill);
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-size: var(--fs-xs);
+  text-align: center;
+}
+
+/* Two small icon buttons, left of the row's one big action. */
+.ksieg-row__cta { gap: var(--s-3); }
+.ksieg-row__tools { display: inline-flex; gap: var(--s-1); }
+.ksieg-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+.ksieg-tool:hover:not(:disabled) { background: var(--bg-surface-hover); color: var(--text-primary); }
+.ksieg-tool:disabled { opacity: 0.5; cursor: default; }
+.ksieg-tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ksieg-tool--flag.is-on {
+  background: var(--accent-subtle);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+.ksieg-tool--flag.is-on:hover:not(:disabled) { background: var(--accent-border); color: var(--accent); }
+.ksieg-tool--note.is-on {
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+  color: var(--warning);
+}
+
+/* Under the row's head, across both columns: what is written about this
+   community, readable without opening the row. */
+.ksieg-row__extras {
+  grid-column: 1 / span 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: 0 var(--s-5) var(--s-4) calc(var(--s-5) + 18px + var(--s-4));
+}
+
+.ksieg-prionote {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--r-lg);
+  background: var(--bg-surface);
+}
+.ksieg-prionote__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.ksieg-prionote__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ksieg-prionote__text.is-empty { color: var(--text-tertiary); font-style: italic; }
+.ksieg-prionote .ks-note-editor { flex: 1 1 auto; min-width: 0; }
+/* While a field is open the box is a form, not a line of text. */
+.ksieg-prionote.is-editing,
+.ksieg-uwaga.is-editing { align-items: flex-start; }
+
+.ksieg-uwaga {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--r-lg);
+  background: var(--warning-bg);
+}
+.ksieg-uwaga__icon { display: inline-flex; color: var(--warning); }
+.ksieg-uwaga.is-editing .ksieg-uwaga__icon { padding-top: 2px; }
+.ksieg-uwaga__main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ksieg-uwaga__text {
+  margin: 0;
+  font-size: var(--fs-md);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ksieg-uwaga__meta { font-size: var(--fs-xs); color: var(--text-tertiary); }
+.ksieg-uwaga__hint { font-size: var(--fs-xs); font-weight: 600; color: var(--success); }
+.ksieg-uwaga__actions { display: flex; align-items: center; gap: var(--s-1); flex: 0 0 auto; }
+.ksieg-uwaga .ks-note-editor { flex: 1 1 auto; min-width: 0; }
+
+.ks-note-editor { display: flex; flex-direction: column; gap: var(--s-2); }
+.ks-note-editor textarea { width: 100%; min-height: 64px; resize: vertical; font: inherit; }
+.ks-note-editor__actions { display: flex; gap: var(--s-2); }
+
+.ksieg-resolved { margin: 0 0 var(--s-3); font-size: var(--fs-sm); color: var(--text-tertiary); }
+.ksieg-resolved summary { cursor: pointer; font-weight: 600; }
+.ksieg-resolved__item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.ksieg-resolved__main { min-width: 0; }
+.ksieg-resolved__main p {
+  margin: 0;
+  color: var(--text-secondary);
+  text-decoration: line-through;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ksieg-resolved__main span { font-size: var(--fs-xs); }
+
+/* The reorder dialog */
+.ks-prio-modal { width: 560px; max-width: 94vw; }
+.ks-notice { width: 520px; max-width: 94vw; }
+.ks-notice__title { display: inline-flex; align-items: center; gap: var(--s-2); }
+.ks-prio-modal__hint { margin: 0 0 var(--s-3); font-size: var(--fs-md); }
+
+.ks-prio-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ks-prio-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-lg);
+  background: var(--bg-surface);
+  cursor: grab;
+  transition: border-color var(--t-fast), opacity var(--t-fast);
+}
+.ks-prio-item.is-dragging { opacity: 0.45; }
+.ks-prio-item.is-over { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.ks-prio-item__grip { display: inline-flex; color: var(--text-tertiary); }
+.ks-prio-item__rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-pill);
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent-border);
+  color: var(--accent);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.ks-prio-item__text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ks-prio-item__name { font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
+.ks-prio-item__note {
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ks-prio-item__moves { display: inline-flex; gap: var(--s-1); flex: 0 0 auto; }
+.ks-prio-item__moves button {
+  display: inline-flex;
+  padding: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.ks-prio-item__moves button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.ks-prio-item__moves button:disabled { opacity: 0.4; cursor: default; }
+
+/* The Converter's message about a note on the recognised community */
+.ks-notice__lead { margin: 0 0 var(--s-3); }
+.ks-notice__community { margin-bottom: var(--s-3); }
+.ks-notice__community h3 { margin: 0 0 var(--s-2); font-size: var(--fs-base); color: var(--text-primary); }
+.ks-notice__note {
+  margin-bottom: var(--s-2);
+  padding: var(--s-3);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--r-lg);
+  background: var(--warning-bg);
+}
+.ks-notice__note p {
+  margin: 0 0 2px;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ks-notice__note span { font-size: var(--fs-xs); color: var(--text-tertiary); }
+.ks-notice__hint { margin: var(--s-3) 0 0; font-size: var(--fs-sm); color: var(--text-tertiary); }
+
+/* …and the same note, kept under the file's address in the Converter table */
+.conv-note {
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--warning-border);
+  border-radius: var(--r-md);
+  background: var(--warning-bg);
+}
+.conv-note__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  color: var(--warning);
+}
+.conv-note__item { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 2px; }
+.conv-note__text {
+  margin: 2px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* --- Zadania: colour by status, on the card's left edge -------------------
+   Grey for what has not started, blue for what is under way, green for what is
+   finished — taken from the app's own tonal pairs, so both themes are covered.
+   The colour lives ONLY in the vertical stripe on each card: columns and cards
+   stay neutral, so the board reads calmly and the stripe is what says "status".
+   Each column sets one variable and its cards read it. */
+.zad-col {
+  --zc-accent: var(--text-tertiary);
+}
+
+.zad-col--in_progress {
+  --zc-accent: var(--info);
+}
+
+.zad-col--done {
+  --zc-accent: var(--success);
+}
+
+/* The column a dragged card would land in: outlined in that status's colour,
+   so the drop shows which status the card is about to take. */
+.zad-col.is-drop {
+  border-color: var(--zc-accent);
+  box-shadow: 0 0 0 1px var(--zc-accent) inset;
+}
+
+.zad-card {
+  border-left: 4px solid var(--zc-accent);
+}
+
+.zad-col--done .zad-card__title {
+  text-decoration: line-through;
+  text-decoration-color: var(--border-strong);
+  color: var(--text-secondary);
+}
+
+/* --- Zadania: deadline, attachments ------------------------------------- */
+.zad-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-2);
+}
+
+.zad-due,
+.zad-attach-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px var(--s-2);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface-sunken);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  line-height: 18px;
+}
+
+.zad-due--today {
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+  color: var(--warning);
+}
+
+.zad-due--overdue {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.zad-due--done {
+  opacity: 0.7;
+}
+
+.zad-due-input {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.zad-due-input input {
+  max-width: 200px;
+}
+
+.zad-files {
+  list-style: none;
+  margin: 0 0 var(--s-2);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.zad-file {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-1) var(--s-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+}
+
+.zad-file__name {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--fs-md);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zad-file__name:hover {
+  text-decoration: underline;
+}
+
+.zad-file__size {
+  flex-shrink: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.zad-upload {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.zad-upload__hint,
+.zad-upload__busy {
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+}
+
+.zad-upload__busy {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  color: var(--text-secondary);
+}
+
+/* The view-sized spinner, shrunk to sit on a line of text. */
+.zad-upload__spinner {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+
+/* --- Dashboard: the tasks band ------------------------------------------
+   Built like the calendar's: a full-width ground of its own, with the rounded
+   banner and the tiles standing inside it. The ground is a soft grey — the
+   calendar is indigo and the bookings take the month's colour, so a neutral
+   band between them keeps the three apart without a third loud colour — with
+   the page's own ground showing between the bands. */
+.ks-area--zad {
+  margin-left: calc(-1 * var(--s-8));
+  margin-right: calc(-1 * var(--s-8));
+  padding: var(--s-6) var(--s-8);
+  background: color-mix(in srgb, var(--text-secondary) 9%, var(--bg-app));
+}
+
+body.dark-mode .ks-area--zad {
+  background: color-mix(in srgb, var(--text-secondary) 11%, var(--bg-app));
+}
+
+/* The calendar banner's recipe in grey instead of the brand indigo. */
+.ks-kal-hero--zad::before,
+.ks-kal-hero--zad::after {
+  background: var(--text-secondary);
+}
+
+.ks-kal-hero--zad::after {
+  opacity: 0.08;
+}
+
+.ks-kal-hero--zad .ks-kal-hero__facts,
+body.dark-mode .ks-kal-hero--zad .ks-kal-hero__facts {
+  color: var(--text-secondary);
+}
+
+/* Tile tones for the task states, in the same palette as the calendar's. */
+.ks-kal-tile--today:not(.is-empty) .ks-kal-tile__icon {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+
+.ks-kal-tile--today:not(.is-empty) .ks-kal-tile__count { color: var(--warning); }
+
+.ks-kal-tile--upcoming:not(.is-empty) .ks-kal-tile__icon {
+  color: var(--info);
+  background: var(--info-bg);
+}
+
+.ks-kal-tile--upcoming:not(.is-empty) .ks-kal-tile__count { color: var(--info); }
+
+.ks-kal-tile--all:not(.is-empty) .ks-kal-tile__icon {
+  color: var(--accent);
+  background: var(--accent-subtle);
+}
+
+.ks-kal-tile--all:not(.is-empty) .ks-kal-tile__count { color: var(--accent); }
+
+/* --- Księgowania: fold down to the month banner --------------------------- */
+.ksieg-fold svg {
+  transition: transform var(--t-base);
+}
+
+/* Folded: the chevron points right, "there is more in here". */
+.ks-area--folded .ksieg-fold svg {
+  transform: rotate(-90deg);
+}
+
+/* Nothing sits under the banner when folded, so the band does not need the
+   generous foot that the list below it normally stands on. */
+.ks-area--folded {
+  padding-bottom: 0;
+}
+
+/* --- Zadania: the add/edit form's row ------------------------------------- */
+/* Assignee, deadline and status are short; side by side they use the width
+   instead of stacking three half-empty rows. */
+.zad-form-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.2fr);
+  gap: var(--s-4);
+}
+
+.zad-form-row .zad-due-input input {
+  max-width: none;
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 700px) {
+  .zad-form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- Zadania: attachments on a card --------------------------------------- */
+.zad-card__files {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--s-1);
+  margin-top: var(--s-3);
+}
+
+/* A file is a small chip, not a link: a paperclip in the brand colour, the name,
+   and the size at the far end. It is a button all the way, so it has to say so
+   with a border and a hover, and it must not inherit the browser's own button. */
+.zad-card__file {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  padding: 5px var(--s-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface-sunken);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+
+.zad-card__file > svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.zad-card__file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zad-card__file-size {
+  flex-shrink: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.zad-card__file:hover:not(:disabled) {
+  background: var(--accent-subtle);
+  border-color: var(--accent-border);
+}
+
+.zad-card__file:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.zad-card__file--more {
+  justify-content: center;
+  background: none;
+  border-style: dashed;
+  color: var(--text-secondary);
+}
+
+.zad-card__file.is-busy,
+.zad-file__name.is-busy {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+/* --- Zadania: a person's colour ------------------------------------------- */
+/* A plain round dot in the person's own colour (`--avatar`, set per card from
+   their mailbox): a soft top-light and a thin inner ring, so it reads as a
+   little bead rather than a flat sticker, in both themes. */
+.zad-avatar {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0) 55%),
+    var(--avatar, var(--accent));
+  box-shadow:
+    inset 0 0 0 1.5px rgba(255, 255, 255, 0.22),
+    0 1px 2px rgba(16, 24, 40, 0.25);
+}
+
+/* --- Zadania: card header, date top right, the person as a control --------- */
+.zad-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-2);
+}
+
+.zad-card__head .zad-card__title {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The date rides the corner and never wraps or shrinks. */
+.zad-card__head .zad-due-wrap {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.zad-due-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+/* The badge, as a button: reset to the badge's own look, plus a hover. */
+.zad-due--button {
+  font: inherit;
+  font-size: var(--fs-xs);
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.zad-due--button:hover {
+  border-color: var(--border-strong);
+}
+
+.zad-due--button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* The real date input, invisible and exactly over the badge: it exists only so
+   the browser's picker opens beside it. It takes no clicks of its own. */
+.zad-due-native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* A card with no date: a faint dashed "add" in the corner, only when it is
+   wanted — over the card, or on the keyboard. */
+.zad-due--ghost {
+  opacity: 0;
+  border-style: dashed;
+  background: none;
+  color: var(--text-tertiary);
+}
+
+.zad-card:hover .zad-due--ghost,
+.zad-due--ghost:focus-visible {
+  opacity: 1;
+}
+
+/* A person with no one assigned: an empty ring where the colour would be. */
+.zad-avatar--none {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--border-strong);
+}
+
+/* The picker, dressed as the name it replaces: no box, no chevron — until the
+   pointer is over it, when it shows itself to be a control. */
+.ui-select.zad-who-select {
+  width: auto;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.zad-who-select .ui-select__trigger {
+  width: auto;
+  max-width: 100%;
+  padding: 2px 6px;
+  border-color: transparent;
+  border-radius: var(--r-md);
+  background-color: transparent;
+  background-image: none;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+}
+
+.zad-who-select .ui-select__trigger:hover,
+.zad-who-select .ui-select__trigger[aria-expanded='true'] {
+  border-color: var(--border-default);
+  background-color: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.zad-who-select .ui-select__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Ustawienia → Użytkownicy: a person's colour -------------------------- */
+.users-color {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+
+/* The browser's colour input, turned into a round swatch: its own frame and
+   padding stripped so only the colour shows, with a ring that says "clickable". */
+.users-color__input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 2px solid var(--border-strong);
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.users-color__input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.users-color__input::-webkit-color-swatch {
+  border: none;
+  border-radius: 50%;
+}
+
+.users-color__input:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.users-color__input:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+/* The small × that gives a chosen colour back to the app. */
+.users-color__reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.users-color__reset:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+/* --- Księgowania banner: the priority line -------------------------------- */
+/* Reuses the nudge's slot and size, but it is a row of items, not a sentence. */
+.ksieg-hero__prio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px var(--s-3);
+}
+
+.ksieg-hero__prio.is-empty {
+  color: var(--text-tertiary);
+  font-weight: 450;
+}
+
+.ksieg-hero__prio-label {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* "1 Bokserska 34": the place in the queue, then the community. */
+.ksieg-hero__prio-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.ksieg-hero__prio-item b {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--r-pill);
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+
+.ksieg-hero__prio-more {
+  color: var(--text-tertiary);
+  font-weight: 450;
 }

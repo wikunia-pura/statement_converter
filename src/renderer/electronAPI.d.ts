@@ -1,6 +1,6 @@
 // Type definitions for Electron API exposed via preload
 
-import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent, AppUser, SpotkanieTyp, SpotkanieLokalizacja, Spotkanie, SpotkanieInput, SpotkanieMailing, SpotkanieTerminStatus } from '../shared/types';
+import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent, AppUser, SpotkanieTyp, SpotkanieLokalizacja, Spotkanie, SpotkanieInput, SpotkanieMailing, SpotkanieTerminStatus, KsiegowaniePriorytet, KsiegowanieUwaga, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik } from '../shared/types';
 
 // Zaliczki shared types (referenced by the main-process helpers)
 export type ZaliczkiCategory =
@@ -275,6 +275,7 @@ interface ElectronAPI {
   setAlwaysUseAI: (enabled: boolean) => Promise<boolean>;
   setContractorSortOrder: (sortOrder: string) => Promise<boolean>;
   setSidebarCollapsed: (collapsed: boolean) => Promise<boolean>;
+  setBookingsCollapsed: (collapsed: boolean) => Promise<boolean>;
   setCalendarHoverCard: (enabled: boolean) => Promise<boolean>;
   setLastSeenVersion: (version: string) => Promise<boolean>;
   exportSettings: () => Promise<{ success: boolean; filePath?: string }>;
@@ -431,6 +432,8 @@ interface ElectronAPI {
   getAppUsers: () => Promise<AppUser[]>;
   /** Name an account. Empty strings clear the name. */
   setAppUserName: (id: string, firstName: string, lastName: string) => Promise<boolean>;
+  /** null = back to the automatic colour. */
+  setAppUserColor: (id: string, color: string | null) => Promise<boolean>;
   getSpotkaniaTypy: () => Promise<SpotkanieTyp[]>;
   addSpotkanieTyp: (
     nazwa: string,
@@ -459,6 +462,58 @@ interface ElectronAPI {
   setSpotkanieDokumenty: (id: number, sent: boolean, opis: string) => Promise<boolean>;
   /** Every Mailing send triggered from a meeting, newest first. */
   getSpotkaniaMailingi: () => Promise<SpotkanieMailing[]>;
+
+  // Zadania — tablica Kanban
+  getZadania: () => Promise<Zadanie[]>;
+  /** `createdBy` is filled in by the main process from the session. */
+  addZadanie: (input: ZadanieInput) => Promise<Zadanie>;
+  updateZadanie: (id: number, input: ZadanieInput) => Promise<boolean>;
+  setZadanieStatus: (id: number, status: ZadanieStatus) => Promise<boolean>;
+  deleteZadanie: (id: number) => Promise<boolean>;
+  /** Opens the file dialog. null = cancelled; a refusal carries a code, not wording. */
+  zadaniaPickAttachment: () => Promise<
+    | { ok: true; token: string; nazwa: string; rozmiar: number }
+    | { ok: false; error: 'too_large' | 'not_a_file' | 'unreadable' }
+    | null
+  >;
+  /** Uploads the file a pick handed out a token for. */
+  zadaniaUploadAttachment: (
+    token: string,
+  ) => Promise<
+    | { ok: true; zalacznik: ZadanieZalacznik }
+    | { ok: false; error: 'too_large' | 'not_a_file' | 'unreadable' | 'failed' }
+  >;
+  /** Save dialog, then the file. false = the user cancelled. */
+  zadaniaDownloadAttachment: (zalacznik: { sciezka: string; nazwa: string }) => Promise<boolean>;
+  /** Remove uploads that never reached a card (a cancelled form). */
+  zadaniaDiscardAttachments: (paths: string[]) => Promise<boolean>;
+  onOpenZadania: (callback: () => void) => () => void;
+
+  // Księgowania: priorities with a note, and notes on a community. Who did it
+  // (`createdBy`, `resolvedBy`) is filled in by the main process from the session.
+  /** Every month's priorities; the view picks the month it shows. */
+  getKsiegowaniaPriorytety: () => Promise<KsiegowaniePriorytet[]>;
+  /** Flag a community for the month; it goes to the end of that month's queue. */
+  addKsiegowaniePriorytet: (
+    monthKey: string,
+    adresId: number | null,
+    adresNazwa: string,
+    notatka: string,
+  ) => Promise<KsiegowaniePriorytet>;
+  setKsiegowaniePriorytetNotatka: (id: number, notatka: string) => Promise<boolean>;
+  removeKsiegowaniePriorytet: (id: number) => Promise<boolean>;
+  /** Rewrite the month's queue to this order (ids of that month's priorities). */
+  reorderKsiegowaniaPriorytety: (monthKey: string, orderedIds: number[]) => Promise<boolean>;
+  /** Open and resolved alike; the callers split them. */
+  getKsiegowaniaUwagi: () => Promise<KsiegowanieUwaga[]>;
+  addKsiegowanieUwaga: (
+    adresId: number | null,
+    adresNazwa: string,
+    tresc: string,
+  ) => Promise<KsiegowanieUwaga>;
+  updateKsiegowanieUwaga: (id: number, tresc: string) => Promise<boolean>;
+  setKsiegowanieUwagaResolved: (id: number, resolved: boolean) => Promise<boolean>;
+  deleteKsiegowanieUwaga: (id: number) => Promise<boolean>;
   getSpotkaniaLokalizacje: () => Promise<SpotkanieLokalizacja[]>;
   addSpotkanieLokalizacja: (
     nazwa: string,

@@ -16,10 +16,21 @@ import {
   MailingSmtpConfig,
   SpotkanieInput,
   SpotkanieTerminStatus,
+  ZadanieInput,
+  ZadanieStatus,
+  ZadanieZalacznik,
 } from '../shared/types';
 import { runAutoBackup, getBackupStatus, getBackupsDir, validateBackup } from './backupService';
 import { conversionCache } from './conversionCache';
 import * as authService from './authService';
+import { ZadaniaNotifier, nameForMailbox } from './zadaniaNotifier';
+import {
+  checkAttachmentFile,
+  uploadAttachment,
+  downloadAttachment,
+  AttachmentRefusal,
+} from './zadaniaStorage';
+import { randomUUID } from 'crypto';
 import {
   consumeSessionExpiryNotice,
   onSessionLost,
@@ -2154,6 +2165,9 @@ function setupIpcHandlers() {
         const v = database.getSetting('sidebarCollapsed') as unknown;
         return !(v === false || v === 'false');
       })(),
+      // Expanded unless explicitly folded, so installs that predate this setting
+      // see the bookings exactly as before — `boolSetting` reads absent as false.
+      bookingsCollapsed: boolSetting('bookingsCollapsed'),
       // Opt-in, so an absent value reads as off — `boolSetting` already does
       // exactly that.
       calendarHoverCard: boolSetting('calendarHoverCard'),
@@ -2205,6 +2219,11 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.SET_SIDEBAR_COLLAPSED, async (_, collapsed: boolean) => {
     database.setSetting('sidebarCollapsed', collapsed.toString());
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SET_BOOKINGS_COLLAPSED, async (_, collapsed: boolean) => {
+    database.setSetting('bookingsCollapsed', collapsed.toString());
     return true;
   });
 
@@ -2745,6 +2764,110 @@ function setupIpcHandlers() {
     },
   );
 
+  // Zadania (Kanban)
+  ipcMain.handle(IPC_CHANNELS.GET_ZADANIA, async () => {
+    return await database.getZadania();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ADD_ZADANIE, async (_, input: ZadanieInput) => {
+    // Who filed the card comes from the session, never from the renderer.
+    const session = await authService.getSession();
+    return await database.addZadanie(input, session?.email ?? '');
+  });
+
+  ipcMain.handle(IPC_CHANNELS.UPDATE_ZADANIE, async (_, id: number, input: ZadanieInput) => {
+    // Who changed it also comes from the session: the notifier uses it to skip
+    // the changes the person made themselves.
+    const session = await authService.getSession();
+    await database.updateZadanie(id, input, session?.email ?? '');
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SET_ZADANIE_STATUS, async (_, id: number, status: ZadanieStatus) => {
+    const session = await authService.getSession();
+    await database.setZadanieStatus(id, status, session?.email ?? '');
+    return true;
+  });
+
+  // Attachments. Picking and uploading are two calls so the renderer can show a
+  // loader for the upload alone — the file dialog can stay open for minutes.
+  // The path never crosses to the renderer and back: the pick hands out a token,
+  // so the renderer cannot ask the main process to upload an arbitrary file.
+  const pendingAttachmentPicks = new Map<string, string>();
+
+  ipcMain.handle(IPC_CHANNELS.ZADANIA_PICK_ATTACHMENT, async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openFile'] });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const filePath = result.filePaths[0];
+    const checked = await checkAttachmentFile(filePath);
+    if (!checked.ok) return { ok: false as const, error: checked.error };
+    const token = randomUUID();
+    pendingAttachmentPicks.set(token, filePath);
+    return { ok: true as const, token, nazwa: path.basename(filePath), rozmiar: checked.size };
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.ZADANIA_UPLOAD_ATTACHMENT,
+    async (
+      _,
+      token: string,
+    ): Promise<
+      { ok: true; zalacznik: ZadanieZalacznik } | { ok: false; error: AttachmentRefusal | 'failed' }
+    > => {
+      const filePath = pendingAttachmentPicks.get(token);
+      pendingAttachmentPicks.delete(token);
+      if (!filePath) return { ok: false, error: 'failed' };
+      try {
+        const session = await authService.getSession();
+        return { ok: true, zalacznik: await uploadAttachment(filePath, session?.email ?? '') };
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message === 'too_large' || message === 'not_a_file' || message === 'unreadable') {
+          return { ok: false, error: message };
+        }
+        log.error('[ZADANIA] attachment upload failed:', message);
+        return { ok: false, error: 'failed' };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.ZADANIA_DOWNLOAD_ATTACHMENT,
+    async (_, zalacznik: Pick<ZadanieZalacznik, 'sciezka' | 'nazwa'>) => {
+      // Ask where to save BEFORE fetching: the dialog appears at once, and
+      // cancelling costs no download.
+      const result = await dialog.showSaveDialog(mainWindow!, {
+        defaultPath: path.basename(zalacznik.nazwa || 'zalacznik'),
+      });
+      if (result.canceled || !result.filePath) return false;
+      try {
+        await fs.promises.writeFile(result.filePath, await downloadAttachment(zalacznik.sciezka));
+      } catch (error: unknown) {
+        log.error(
+          '[ZADANIA] attachment download failed:',
+          error instanceof Error ? error.message : String(error),
+        );
+        throw error;
+      }
+      return true;
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.ZADANIA_DISCARD_ATTACHMENTS, async (_, paths: string[]) => {
+    await database.discardZadanieZalaczniki(Array.isArray(paths) ? paths.map(String) : []);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_ZADANIE, async (_, id: number) => {
+    await database.deleteZadanie(id);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SET_APP_USER_COLOR, async (_, id: string, color: string | null) => {
+    await database.setAppUserColor(id, color);
+    return true;
+  });
+
   ipcMain.handle(IPC_CHANNELS.GET_SPOTKANIA_TYPY, async () => {
     return await database.getSpotkaniaTypy();
   });
@@ -2839,6 +2962,85 @@ function setupIpcHandlers() {
       );
       return [];
     }
+  });
+
+  /* ----------------- Księgowania: priorities and notes ----------------- */
+  // Who flagged / wrote / resolved comes from the session, never from the
+  // renderer — it is a record of who did something, not a field to fill in.
+
+  const sessionEmail = async (): Promise<string> => {
+    try {
+      return (await authService.getSession())?.email ?? '';
+    } catch {
+      return ''; // a signature only — never block the work over it
+    }
+  };
+
+  ipcMain.handle(IPC_CHANNELS.GET_KS_PRIORYTETY, async () => database.getKsiegowaniaPriorytety());
+
+  ipcMain.handle(
+    IPC_CHANNELS.ADD_KS_PRIORYTET,
+    async (_, monthKey: string, adresId: number | null, adresNazwa: string, notatka: string) =>
+      database.addKsiegowaniePriorytet(monthKey, adresId, adresNazwa, notatka ?? '', await sessionEmail()),
+  );
+
+  ipcMain.handle(IPC_CHANNELS.SET_KS_PRIORYTET_NOTATKA, async (_, id: number, notatka: string) => {
+    await database.setKsiegowaniePriorytetNotatka(id, notatka ?? '');
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.REMOVE_KS_PRIORYTET, async (_, id: number) => {
+    await database.removeKsiegowaniePriorytet(id);
+    return true;
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.REORDER_KS_PRIORYTETY,
+    async (_, monthKey: string, orderedIds: number[]) => {
+      const ids = (Array.isArray(orderedIds) ? orderedIds : []).filter(
+        (id): id is number => typeof id === 'number' && Number.isFinite(id),
+      );
+      await database.reorderKsiegowaniaPriorytety(monthKey, ids);
+      return true;
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.GET_KS_UWAGI, async () => {
+    try {
+      return await database.getKsiegowaniaUwagi();
+    } catch (error: unknown) {
+      // The Converter asks on every drop: a missing note list (the migration not
+      // run yet, a network blip) must not stop anyone converting.
+      log.error(
+        '[KSIEGOWANIA] notes read failed:',
+        error instanceof Error ? error.message : String(error),
+      );
+      return [];
+    }
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.ADD_KS_UWAGA,
+    async (_, adresId: number | null, adresNazwa: string, tresc: string) =>
+      database.addKsiegowanieUwaga(adresId, adresNazwa, tresc, await sessionEmail()),
+  );
+
+  ipcMain.handle(IPC_CHANNELS.UPDATE_KS_UWAGA, async (_, id: number, tresc: string) => {
+    await database.updateKsiegowanieUwaga(id, tresc);
+    return true;
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.SET_KS_UWAGA_RESOLVED,
+    async (_, id: number, resolved: boolean) => {
+      await database.setKsiegowanieUwagaResolved(id, resolved === true, await sessionEmail());
+      return true;
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_KS_UWAGA, async (_, id: number) => {
+    await database.deleteKsiegowanieUwaga(id);
+    return true;
   });
 
   /* ------------------------- Meeting locations ------------------------- */
@@ -3072,6 +3274,32 @@ app.whenReady().then(() => {
   setupAutoUpdater();
   setupSessionWatch();
   createWindow();
+
+  // Windows files a notification under the app's AppUserModelID; without one
+  // the toast is attributed to "electron.exe" and may be dropped altogether.
+  if (process.platform === 'win32') app.setAppUserModelId('com.filefunky.app');
+  new ZadaniaNotifier({
+    getEmail: async () => (await authService.getSession())?.email ?? null,
+    getZadania: () => database.getZadania(),
+    resolveName: async (email) => {
+      try {
+        return nameForMailbox(await database.getAppUsers(), email);
+      } catch {
+        return email;
+      }
+    },
+    getLanguage: () => (database.getSettings().language === 'en' ? 'en' : 'pl'),
+    onOpen: () => {
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        createWindow();
+        return;
+      }
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+      mainWindow.webContents.send('zadania:open');
+    },
+  }).start();
 
   // Anthropic key lives in Supabase (app_config), not in the public binaries.
   // Try shortly after start (covers a restored session); sign-in retries too.

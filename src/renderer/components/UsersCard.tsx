@@ -1,6 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AppUser } from '../../shared/types';
-import { comparePeople, personInitials, personLabel } from '../../shared/app-users';
+import {
+  comparePeople,
+  isHexColor,
+  personColor,
+  personInitials,
+  personLabel,
+} from '../../shared/app-users';
 import { translations, Language } from '../translations';
 import { useNotify } from './Notifications';
 import Icon from './Icon';
@@ -30,6 +36,77 @@ function isDirty(user: AppUser, draft: Draft): boolean {
     draft.lastName.trim() !== (user.lastName ?? '').trim()
   );
 }
+
+interface ColorSwatchProps {
+  user: AppUser;
+  disabled: boolean;
+  label: string;
+  resetLabel: string;
+  /** A colour, or null to hand the person back to the automatic one. */
+  onCommit: (color: string | null) => void;
+}
+
+/**
+ * A round colour picker for one person.
+ *
+ * The browser's colour input fires `input` continuously while the picker is
+ * being dragged and `change` once it is closed on a colour. Saving on every
+ * `input` would be dozens of writes to the shared database per pick, so the
+ * swatch previews locally and saves on the native `change`. A chosen colour can
+ * be taken back with the small ×, which returns the person to the automatic
+ * colour derived from their mailbox.
+ */
+const ColorSwatch: React.FC<ColorSwatchProps> = ({
+  user,
+  disabled,
+  label,
+  resetLabel,
+  onCommit,
+}) => {
+  const shown = personColor(user);
+  const [value, setValue] = useState(shown);
+  const input = useRef<HTMLInputElement>(null);
+  const commit = useRef(onCommit);
+  commit.current = onCommit;
+
+  // Follows the saved colour when the list is re-read (a reset, or someone else's pick).
+  useEffect(() => setValue(shown), [shown]);
+
+  useEffect(() => {
+    const el = input.current;
+    if (!el) return;
+    const onChange = () => commit.current(el.value);
+    el.addEventListener('change', onChange);
+    return () => el.removeEventListener('change', onChange);
+  }, []);
+
+  return (
+    <span className="users-color">
+      <input
+        ref={input}
+        type="color"
+        className="users-color__input"
+        value={value}
+        disabled={disabled}
+        aria-label={`${label} — ${user.email}`}
+        title={label}
+        onChange={(e) => setValue(e.target.value)}
+      />
+      {isHexColor(user.color) && (
+        <button
+          type="button"
+          className="users-color__reset"
+          title={resetLabel}
+          aria-label={`${resetLabel} — ${user.email}`}
+          disabled={disabled}
+          onClick={() => onCommit(null)}
+        >
+          <Icon name="x" size={12} />
+        </button>
+      )}
+    </span>
+  );
+};
 
 /**
  * The accounts with access to the app, and a name for each.
@@ -91,6 +168,23 @@ const UsersCard: React.FC<Props> = ({ language, currentEmail, onNamesChanged }) 
     }
   };
 
+  /**
+   * Colours save the moment they are picked — unlike the names there is nothing
+   * to type and nothing to get half right, so a Save button would only be a step
+   * between choosing a colour and having it.
+   */
+  const saveColor = async (user: AppUser, color: string | null) => {
+    setSavingId(user.id);
+    try {
+      await window.electronAPI.setAppUserColor(user.id, color);
+      await load();
+    } catch (error) {
+      notify.error(error instanceof Error ? error.message : t.usersSaveFailed);
+    } finally {
+      setSavingId(null);
+    }
+  };
+
   return (
     <div className="card">
       <h2 style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -113,6 +207,7 @@ const UsersCard: React.FC<Props> = ({ language, currentEmail, onNamesChanged }) 
                   <th>{t.usersColumnPerson}</th>
                   <th style={{ width: '22%' }}>{t.usersColumnFirstName}</th>
                   <th style={{ width: '22%' }}>{t.usersColumnLastName}</th>
+                  <th style={{ width: '1%' }}>{t.usersColumnColor}</th>
                   <th style={{ width: '1%' }} aria-label={t.save} />
                 </tr>
               </thead>
@@ -125,7 +220,11 @@ const UsersCard: React.FC<Props> = ({ language, currentEmail, onNamesChanged }) 
                     <tr key={user.id}>
                       <td>
                         <div className="users-person">
-                          <span className="user-avatar user-avatar--sm" aria-hidden="true">
+                          <span
+                            className="user-avatar user-avatar--sm"
+                            style={{ background: personColor(user) }}
+                            aria-hidden="true"
+                          >
                             {personInitials(user)}
                           </span>
                           <span className="users-person__text">
@@ -161,6 +260,15 @@ const UsersCard: React.FC<Props> = ({ language, currentEmail, onNamesChanged }) 
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') void save(user);
                           }}
+                        />
+                      </td>
+                      <td>
+                        <ColorSwatch
+                          user={user}
+                          disabled={savingId === user.id}
+                          label={t.usersColorPick}
+                          resetLabel={t.usersColorReset}
+                          onCommit={(color) => void saveColor(user, color)}
                         />
                       </td>
                       <td>

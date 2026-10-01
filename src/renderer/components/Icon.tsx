@@ -54,7 +54,12 @@ type IconName =
   | 'file-check'
   | 'clock'
   | 'user-plus'
-  | 'home';
+  | 'home'
+  | 'flag'
+  | 'arrow-up'
+  | 'arrow-down'
+  | 'message-square'
+  | 'grip';
 
 interface IconProps {
   name: IconName;
@@ -127,6 +132,35 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
       <path d="M14 3v6h6" />
       <path d="M9 15l2 2 4-4" />
+    </>
+  ),
+  flag: (
+    <>
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+      <path d="M4 22v-7" />
+    </>
+  ),
+  'arrow-up': (
+    <>
+      <path d="M12 19V5" />
+      <path d="M5 12l7-7 7 7" />
+    </>
+  ),
+  'arrow-down': (
+    <>
+      <path d="M12 5v14" />
+      <path d="M19 12l-7 7-7-7" />
+    </>
+  ),
+  'message-square': <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
+  grip: (
+    <>
+      <circle cx="9" cy="6" r="1" />
+      <circle cx="15" cy="6" r="1" />
+      <circle cx="9" cy="12" r="1" />
+      <circle cx="15" cy="12" r="1" />
+      <circle cx="9" cy="18" r="1" />
+      <circle cx="15" cy="18" r="1" />
     </>
   ),
   home: (

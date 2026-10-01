@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { FileEntry, Bank, Adres, KontoTyp, ConversionReviewData, ReviewDecision, ConversionHistory } from '../../shared/types';
+import { FileEntry, Bank, Adres, KontoTyp, ConversionReviewData, ReviewDecision, ConversionHistory, KsiegowanieUwaga } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { generateId, formatDate } from '../../shared/utils';
 import { TransactionReviewScreen } from '../components/TransactionReviewScreen';
@@ -13,6 +13,8 @@ import { findAdresByAccountNumbers, normalizeAccount } from '../../shared/accoun
 import { resolveOutputFilePath } from '../../shared/outputPaths';
 import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
 import ConversionHistoryTimeline from '../components/ConversionHistoryTimeline';
+import { PostingNoteNotice, PostingNoteNoticeItem, uwagaMeta } from '../components/PostingNotes';
+import { openUwagiByAdresId } from '../../shared/bookings';
 
 interface SearchableAdresSelectProps {
   adresy: Adres[];
@@ -250,6 +252,15 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   const [isDarkMode, setIsDarkMode] = useState(document.body.classList.contains('dark-mode'));
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [progressByFile, setProgressByFile] = useState<Record<string, { label: string; percent: number }>>({});
+  // Open "uwagi do księgowania" (notes the team left on a community), read from
+  // the dashboard's table. They are re-read whenever an address is recognised or
+  // picked — a note written a minute ago by a colleague must still be seen.
+  const [openUwagi, setOpenUwagi] = useState<KsiegowanieUwaga[]>([]);
+  const openUwagiRef = useRef<KsiegowanieUwaga[]>([]);
+  const [noteNotices, setNoteNotices] = useState<PostingNoteNoticeItem[]>([]);
+  // Notes already announced in a message this session; the message is shown once
+  // per note, while the callout under the address stays as long as it is open.
+  const announcedUwagiRef = useRef<Set<number>>(new Set());
   const filesRef = useRef<FileEntry[]>(files);
   // Read from the queue callback, which outlives the render that scheduled it.
   const alwaysUseAIRef = useRef(alwaysUseAI);
@@ -338,6 +349,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   useEffect(() => {
     loadBanks();
     loadAdresy();
+    void loadUwagi();
     loadKontoTypy();
     loadSettings();
     loadHistory();
@@ -436,6 +448,57 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     }
   };
 
+  /** Open notes, fresh from the table; on failure, whatever was last known. */
+  const loadUwagi = async (): Promise<KsiegowanieUwaga[]> => {
+    try {
+      const open = (await window.electronAPI.getKsiegowaniaUwagi()).filter((u) => !u.resolvedAt);
+      openUwagiRef.current = open;
+      setOpenUwagi(open);
+      return open;
+    } catch {
+      return openUwagiRef.current; // a missing note list must never stop a conversion
+    }
+  };
+
+  /**
+   * Raise the message for communities that were just recognised (or picked) and
+   * have notes not yet announced. Everything announced here is remembered, so
+   * dropping a second statement of the same community does not repeat itself.
+   */
+  const announceUwagi = (adresIds: (number | null)[], open: KsiegowanieUwaga[], adresyList: Adres[]) => {
+    const byAdres = openUwagiByAdresId(adresyList, open);
+    const items: PostingNoteNoticeItem[] = [];
+    for (const id of new Set(adresIds.filter((x): x is number => x !== null))) {
+      const adres = adresyList.find((a) => a.id === id);
+      const unseen = (byAdres.get(id) ?? []).filter((u) => !announcedUwagiRef.current.has(u.id));
+      if (!adres || unseen.length === 0) continue;
+      unseen.forEach((u) => announcedUwagiRef.current.add(u.id));
+      items.push({ adresId: id, adresNazwa: adres.nazwa, uwagi: unseen });
+    }
+    if (items.length > 0) setNoteNotices((prev) => [...prev, ...items]);
+  };
+
+  /** "Sprawa rozwiązana" — the same act as on the dashboard, one click from the file. */
+  const resolveUwaga = async (id: number) => {
+    try {
+      await window.electronAPI.setKsiegowanieUwagaResolved(id, true);
+      await loadUwagi();
+      notify.success(t.convNoteResolved);
+    } catch {
+      notify.error(t.ksUwagaError);
+    }
+  };
+
+  const uwagiByAdres = useMemo(() => openUwagiByAdresId(adresy, openUwagi), [adresy, openUwagi]);
+
+  const formatNoteDate = (iso: string): string =>
+    new Date(iso).toLocaleString(language === 'en' ? 'en-GB' : 'pl-PL', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
   const loadAdresy = async () => {
     try {
       const adresyData = await window.electronAPI.getAdresy();
@@ -512,6 +575,10 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
       }),
     );
 
+    // Read the notes now, so the message below reflects what the team wrote up to
+    // this moment and not what was there when the view was opened.
+    const freshUwagi = await loadUwagi();
+
     // Create file entries, auto-pairing PDFs by matching base name
     const fileEntries: FileEntry[] = conversionFiles.map((file, idx) => {
       const baseName = file.fileName.replace(/\.[^.]+$/, '').toLowerCase();
@@ -552,6 +619,10 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     });
 
     setFiles([...updatedExisting, ...fileEntries]);
+
+    // A community was recognised from the statement: if the team left a note on
+    // it, say so before anyone starts posting.
+    announceUwagi(fileEntries.map((entry) => entry.adresId), freshUwagi, adresy);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -612,6 +683,10 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   };
 
   const handleAdresChange = (fileId: string, adresId: number | null) => {
+    // Picking a community by hand is as good a moment as recognising one.
+    if (adresId !== null) {
+      void loadUwagi().then((open) => announceUwagi([adresId], open, adresy));
+    }
     setFiles(
       files.map((file) =>
         // A manual change drops the "auto-matched" indicator — the badge is only
@@ -1267,6 +1342,28 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                               <Icon name="check" size={11} /> {t.autoMatchedFromAccount}
                             </div>
                           )}
+                          {file.adresId && (uwagiByAdres.get(file.adresId)?.length ?? 0) > 0 && (
+                            <div className="conv-note">
+                              <span className="conv-note__title">
+                                <Icon name="message-square" size={12} /> {t.convNoteInRow}
+                              </span>
+                              {uwagiByAdres.get(file.adresId)!.map((uwaga) => (
+                                <div key={uwaga.id} className="conv-note__item">
+                                  <p className="conv-note__text" title={uwagaMeta(uwaga, language, formatNoteDate)}>
+                                    {uwaga.tresc}
+                                  </p>
+                                  <button
+                                    type="button"
+                                    className="button button-small button-success"
+                                    title={t.ksUwagaResolveTip}
+                                    onClick={() => void resolveUwaga(uwaga.id)}
+                                  >
+                                    <Icon name="check-circle" size={13} /> {t.ksUwagaResolve}
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                           {!file.adresId &&
                             file.detectedAccounts &&
                             file.detectedAccounts.length > 0 &&
@@ -1540,6 +1637,15 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
             onFinalizeAndStop={handleFinalizeAndStop}
             onSkip={handleSkipFile}
             onCancel={handleCancelReview}
+          />
+        )}
+
+        {noteNotices.length > 0 && (
+          <PostingNoteNotice
+            items={noteNotices}
+            language={language}
+            formatDateTime={formatNoteDate}
+            onClose={() => setNoteNotices([])}
           />
         )}
 

@@ -54,6 +54,7 @@ const IPC_CHANNELS = {
   SET_ALWAYS_USE_AI: 'settings:set-always-use-ai',
   SET_CONTRACTOR_SORT_ORDER: 'settings:set-contractor-sort-order',
   SET_SIDEBAR_COLLAPSED: 'settings:set-sidebar-collapsed',
+  SET_BOOKINGS_COLLAPSED: 'settings:set-bookings-collapsed',
   SET_CALENDAR_HOVER_CARD: 'settings:set-calendar-hover-card',
   SET_LAST_SEEN_VERSION: 'settings:set-last-seen-version',
   EXPORT_SETTINGS: 'settings:export',
@@ -114,6 +115,7 @@ const IPC_CHANNELS = {
   MAILING_TEST_SMTP: 'mailing:test-smtp',
   GET_APP_USERS: 'kalendarz:get-app-users',
   SET_APP_USER_NAME: 'users:set-name',
+  SET_APP_USER_COLOR: 'users:set-color',
   GET_SPOTKANIA_TYPY: 'kalendarz:get-typy',
   ADD_SPOTKANIE_TYP: 'kalendarz:add-typ',
   UPDATE_SPOTKANIE_TYP: 'kalendarz:update-typ',
@@ -130,6 +132,25 @@ const IPC_CHANNELS = {
   SET_SPOTKANIE_TERMIN_STATUS: 'kalendarz:set-termin-status',
   SET_SPOTKANIE_DOKUMENTY: 'kalendarz:set-dokumenty',
   GET_SPOTKANIA_MAILINGI: 'kalendarz:get-mailingi',
+  GET_ZADANIA: 'zadania:get',
+  ADD_ZADANIE: 'zadania:add',
+  UPDATE_ZADANIE: 'zadania:update',
+  SET_ZADANIE_STATUS: 'zadania:set-status',
+  DELETE_ZADANIE: 'zadania:delete',
+  ZADANIA_PICK_ATTACHMENT: 'zadania:pick-attachment',
+  ZADANIA_UPLOAD_ATTACHMENT: 'zadania:upload-attachment',
+  ZADANIA_DOWNLOAD_ATTACHMENT: 'zadania:download-attachment',
+  ZADANIA_DISCARD_ATTACHMENTS: 'zadania:discard-attachments',
+  GET_KS_PRIORYTETY: 'ksiegowania:get-priorytety',
+  ADD_KS_PRIORYTET: 'ksiegowania:add-priorytet',
+  SET_KS_PRIORYTET_NOTATKA: 'ksiegowania:set-priorytet-notatka',
+  REMOVE_KS_PRIORYTET: 'ksiegowania:remove-priorytet',
+  REORDER_KS_PRIORYTETY: 'ksiegowania:reorder-priorytety',
+  GET_KS_UWAGI: 'ksiegowania:get-uwagi',
+  ADD_KS_UWAGA: 'ksiegowania:add-uwaga',
+  UPDATE_KS_UWAGA: 'ksiegowania:update-uwaga',
+  SET_KS_UWAGA_RESOLVED: 'ksiegowania:set-uwaga-resolved',
+  DELETE_KS_UWAGA: 'ksiegowania:delete-uwaga',
   AUTH_SIGN_IN: 'auth:sign-in',
   AUTH_SIGN_OUT: 'auth:sign-out',
   AUTH_GET_SESSION: 'auth:get-session',
@@ -267,6 +288,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.SET_CONTRACTOR_SORT_ORDER, sortOrder),
   setSidebarCollapsed: (collapsed: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_SIDEBAR_COLLAPSED, collapsed),
+  setBookingsCollapsed: (collapsed: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_BOOKINGS_COLLAPSED, collapsed),
   setCalendarHoverCard: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_CALENDAR_HOVER_CARD, enabled),
   setLastSeenVersion: (version: string) =>
@@ -390,6 +413,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAppUsers: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_USERS),
   setAppUserName: (id: string, firstName: string, lastName: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_APP_USER_NAME, id, firstName, lastName),
+  setAppUserColor: (id: string, color: string | null) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_APP_USER_COLOR, id, color),
   getSpotkaniaTypy: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SPOTKANIA_TYPY),
   addSpotkanieTyp: (
     nazwa: string,
@@ -428,6 +453,45 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setSpotkanieDokumenty: (id: number, sent: boolean, opis: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_SPOTKANIE_DOKUMENTY, id, sent, opis),
   getSpotkaniaMailingi: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SPOTKANIA_MAILINGI),
+  getZadania: () => ipcRenderer.invoke(IPC_CHANNELS.GET_ZADANIA),
+  addZadanie: (input: import('../shared/types').ZadanieInput) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ADD_ZADANIE, input),
+  updateZadanie: (id: number, input: import('../shared/types').ZadanieInput) =>
+    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_ZADANIE, id, input),
+  setZadanieStatus: (id: number, status: import('../shared/types').ZadanieStatus) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_ZADANIE_STATUS, id, status),
+  deleteZadanie: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ZADANIE, id),
+  zadaniaPickAttachment: () => ipcRenderer.invoke(IPC_CHANNELS.ZADANIA_PICK_ATTACHMENT),
+  zadaniaUploadAttachment: (token: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZADANIA_UPLOAD_ATTACHMENT, token),
+  zadaniaDownloadAttachment: (zalacznik: { sciezka: string; nazwa: string }) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZADANIA_DOWNLOAD_ATTACHMENT, zalacznik),
+  zadaniaDiscardAttachments: (paths: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZADANIA_DISCARD_ATTACHMENTS, paths),
+  /** A system notification about a task was clicked — open the board. */
+  onOpenZadania: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on('zadania:open', listener);
+    return () => ipcRenderer.off('zadania:open', listener);
+  },
+
+  // Księgowania: priorities with a note, and notes on a community
+  getKsiegowaniaPriorytety: () => ipcRenderer.invoke(IPC_CHANNELS.GET_KS_PRIORYTETY),
+  addKsiegowaniePriorytet: (monthKey: string, adresId: number | null, adresNazwa: string, notatka: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ADD_KS_PRIORYTET, monthKey, adresId, adresNazwa, notatka),
+  setKsiegowaniePriorytetNotatka: (id: number, notatka: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_KS_PRIORYTET_NOTATKA, id, notatka),
+  removeKsiegowaniePriorytet: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.REMOVE_KS_PRIORYTET, id),
+  reorderKsiegowaniaPriorytety: (monthKey: string, orderedIds: number[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.REORDER_KS_PRIORYTETY, monthKey, orderedIds),
+  getKsiegowaniaUwagi: () => ipcRenderer.invoke(IPC_CHANNELS.GET_KS_UWAGI),
+  addKsiegowanieUwaga: (adresId: number | null, adresNazwa: string, tresc: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ADD_KS_UWAGA, adresId, adresNazwa, tresc),
+  updateKsiegowanieUwaga: (id: number, tresc: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_KS_UWAGA, id, tresc),
+  setKsiegowanieUwagaResolved: (id: number, resolved: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_KS_UWAGA_RESOLVED, id, resolved),
+  deleteKsiegowanieUwaga: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_KS_UWAGA, id),
   getSpotkaniaLokalizacje: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SPOTKANIA_LOKALIZACJE),
   addSpotkanieLokalizacja: (nazwa: string, adres: string, opis: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.ADD_SPOTKANIE_LOKALIZACJA, nazwa, adres, opis),

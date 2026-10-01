@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
 
 export interface SearchableOption {
@@ -25,6 +26,20 @@ interface SearchableSelectProps {
   ariaLabel?: string;
   style?: React.CSSProperties;
   className?: string;
+  /**
+   * Draw the menu on top of everything instead of inside the field's container.
+   * The normal menu is positioned within its container, so a scrolling parent —
+   * a modal's body — clips it or grows a scrollbar around it. With this on, the
+   * menu is rendered on `document.body` and pinned to the field's position, so
+   * it overlaps whatever is below and the modal can stay as short as its content.
+   */
+  overlay?: boolean;
+  /**
+   * With `overlay`: never let the menu be narrower than this (px). A field that
+   * is only as wide as a name — a link-like trigger inside a card — would
+   * otherwise open a menu as narrow as the name, too small to search in.
+   */
+  menuMinWidth?: number;
 }
 
 /**
@@ -50,11 +65,21 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
   ariaLabel,
   style,
   className,
+  overlay = false,
+  menuMinWidth = 0,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // Where the field is on screen, for the overlay menu (viewport coordinates).
+  const [anchor, setAnchor] = useState<{
+    left: number;
+    width: number;
+    top: number;
+    bottom: number;
+  } | null>(null);
   const placement = useDropdownPlacement(containerRef, isOpen, 300);
 
   const valueStr = value == null ? '' : String(value);
@@ -74,21 +99,46 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     setActiveIndex(0);
   };
 
+  // Follows the field while the menu is open: the page can scroll or resize
+  // under a fixed menu, and one that stays behind would float over nothing.
+  useLayoutEffect(() => {
+    if (!isOpen || !overlay) return;
+    const measure = () => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (rect) {
+        setAnchor({ left: rect.left, width: rect.width, top: rect.top, bottom: rect.bottom });
+      }
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    // Capture: scrolling happens in an inner container, and scroll does not bubble.
+    window.addEventListener('scroll', measure, true);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+    };
+  }, [isOpen, overlay]);
+
   useEffect(() => {
     if (!isOpen) return;
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        close();
-      }
+      const target = event.target as Node;
+      // The overlay menu lives outside the container, so it needs its own check.
+      if (containerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      close();
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
-  const open = () => {
+  const open = (initialQuery = '') => {
     setIsOpen(true);
-    setQuery('');
-    setActiveIndex(Math.max(0, options.findIndex((o) => o.value === valueStr)));
+    setQuery(initialQuery);
+    // Typing to open starts a search, so the first match is the one Enter takes;
+    // opening to browse starts on the current value.
+    setActiveIndex(
+      initialQuery ? 0 : Math.max(0, options.findIndex((o) => o.value === valueStr)),
+    );
   };
 
   const pick = (v: string) => {
@@ -115,6 +165,86 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
   const sizeClass = size === 'sm' ? 'ui-select--sm' : size === 'lg' ? 'ui-select--lg' : '';
 
+  // The menu, built once so it can render either in place or — with `overlay` —
+  // on document.body, pinned to the field.
+  const menuStyle: React.CSSProperties =
+    overlay && anchor
+      ? {
+          position: 'fixed',
+          // Kept inside the window: a trigger near the right edge would otherwise
+          // open a menu that hangs off it.
+          left: Math.max(
+            8,
+            Math.min(anchor.left, window.innerWidth - Math.max(anchor.width, menuMinWidth) - 8),
+          ),
+          right: 'auto',
+          width: Math.max(anchor.width, menuMinWidth),
+          // Same flip as the in-place menu, expressed in viewport coordinates.
+          ...(placement.bottom !== undefined
+            ? { bottom: window.innerHeight - anchor.top + 2 }
+            : { top: anchor.bottom + 2 }),
+          maxHeight: placement.maxHeight,
+          // Above the modal overlay (1000) that the field itself may sit in.
+          zIndex: 3000,
+        }
+      : {
+          top: placement.top,
+          bottom: placement.bottom,
+          marginTop: placement.marginTop,
+          marginBottom: placement.marginBottom,
+          maxHeight: placement.maxHeight,
+        };
+
+  const menu = (
+    <div
+      ref={menuRef}
+      className="ui-select__menu ui-select__menu--searchable"
+      style={menuStyle}
+    >
+      <input
+        className="ui-select__search"
+        type="text"
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setActiveIndex(0);
+        }}
+        onKeyDown={handleKeyDown}
+        placeholder={searchPlaceholder ?? ''}
+        autoFocus
+        // A search opened by typing already holds its first letter; the caret
+        // belongs after it, or the next letter would land in front.
+        onFocus={(e) => {
+          const end = e.currentTarget.value.length;
+          e.currentTarget.setSelectionRange(end, end);
+        }}
+      />
+      <div className="ui-select__options" role="listbox">
+        {filtered.map((opt, i) => (
+          <div
+            key={opt.value}
+            role="option"
+            aria-selected={opt.value === valueStr}
+            className={
+              'ui-select__option' +
+              (opt.value === valueStr ? ' is-selected' : '') +
+              (i === activeIndex ? ' is-active' : '')
+            }
+            onClick={() => pick(opt.value)}
+            onMouseEnter={() => setActiveIndex(i)}
+            title={opt.hint ? `${opt.label} — ${opt.hint}` : opt.label}
+          >
+            <div className="ui-select__option-label">{opt.label}</div>
+            {opt.hint && <div className="ui-select__option-hint">{opt.hint}</div>}
+          </div>
+        ))}
+        {filtered.length === 0 && (
+          <div className="ui-select__empty">{emptyText ?? ''}</div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div
       ref={containerRef}
@@ -127,9 +257,16 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
         onClick={() => (isOpen ? close() : open())}
         onKeyDown={(e) => {
           if (disabled) return;
-          if (!isOpen && (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ')) {
+          if (isOpen) return;
+          if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             open();
+          } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            // Tabbed onto the field and started typing: that is a search, not a
+            // keystroke to swallow. The character goes into the filter box, which
+            // opens focused, so the person never has to open the list first.
+            e.preventDefault();
+            open(e.key);
           }
         }}
         disabled={disabled}
@@ -143,54 +280,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
         </span>
       </button>
 
-      {isOpen && (
-        <div
-          className="ui-select__menu ui-select__menu--searchable"
-          style={{
-            top: placement.top,
-            bottom: placement.bottom,
-            marginTop: placement.marginTop,
-            marginBottom: placement.marginBottom,
-            maxHeight: placement.maxHeight,
-          }}
-        >
-          <input
-            className="ui-select__search"
-            type="text"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setActiveIndex(0);
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder={searchPlaceholder ?? ''}
-            autoFocus
-          />
-          <div className="ui-select__options" role="listbox">
-            {filtered.map((opt, i) => (
-              <div
-                key={opt.value}
-                role="option"
-                aria-selected={opt.value === valueStr}
-                className={
-                  'ui-select__option' +
-                  (opt.value === valueStr ? ' is-selected' : '') +
-                  (i === activeIndex ? ' is-active' : '')
-                }
-                onClick={() => pick(opt.value)}
-                onMouseEnter={() => setActiveIndex(i)}
-                title={opt.hint ? `${opt.label} — ${opt.hint}` : opt.label}
-              >
-                <div className="ui-select__option-label">{opt.label}</div>
-                {opt.hint && <div className="ui-select__option-hint">{opt.hint}</div>}
-              </div>
-            ))}
-            {filtered.length === 0 && (
-              <div className="ui-select__empty">{emptyText ?? ''}</div>
-            )}
-          </div>
-        </div>
-      )}
+      {isOpen && (overlay ? (anchor ? createPortal(menu, document.body) : null) : menu)}
     </div>
   );
 };

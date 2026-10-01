@@ -27,8 +27,17 @@ import {
   SpotkanieMailing,
   SpotkanieTerminStatus,
   SpotkanieUczestnik,
+  Zadanie,
+  ZadanieInput,
+  ZadanieStatus,
+  ZadanieZalacznik,
+  ZADANIE_STATUSES,
+  KsiegowaniePriorytet,
+  KsiegowanieUwaga,
 } from '../shared/types';
 import { getSupabase } from './supabaseClient';
+import { removeAttachments } from './zadaniaStorage';
+import { ZADANIE_ATTACHMENT_MAX_BYTES, ZADANIE_STORAGE_KEY, isValidDayKey } from '../shared/zadania';
 import { normalizeAccount } from '../shared/account-extractor';
 import { buildApartmentMapping, mappingTargets } from '../shared/apartment-mapping';
 
@@ -46,6 +55,7 @@ interface SettingsStoreSchema {
     skipUserApproval: boolean;
     contractorSortOrder: 'name-asc' | 'name-desc' | 'account-asc' | 'account-desc';
     sidebarCollapsed: boolean;
+    bookingsCollapsed: boolean;
     /** Kalendarz: instant hover card over a meeting in the month grid. */
     calendarHoverCard: boolean;
     /** Release-notes version already shown on this machine ('' = never). */
@@ -85,8 +95,9 @@ const KONTO_TYP_COLS =
   'id, name, bankAccountSymbol:bank_account_symbol, apartmentPrefix:apartment_prefix, isDefault:is_default, createdAt:created_at';
 const HISTORY_COLS =
   'id, fileName:file_name, bankName:bank_name, converterName:converter_name, status, errorMessage:error_message, inputPath:input_path, outputPath:output_path, convertedAt:converted_at, adresId:adres_id, adresNazwa:adres_nazwa, bookedInDom:booked_in_dom, bookedInDomAt:booked_in_dom_at, bookedInDomBy:booked_in_dom_by';
-const APP_USER_COLS =
+const APP_USER_COLS_BASE =
   'id, email, displayName:display_name, firstName:first_name, lastName:last_name, createdAt:created_at';
+const APP_USER_COLS = `${APP_USER_COLS_BASE}, color`;
 const SPOTKANIE_TYP_COLS =
   'id, nazwa, kolor, opis, dniNaDokumenty:dni_na_dokumenty, createdAt:created_at';
 const SPOTKANIE_LOKALIZACJA_COLS = 'id, nazwa, adres, opis, createdAt:created_at';
@@ -106,6 +117,13 @@ const SPOTKANIE_MAILING_COLS =
   'id, spotkanieId:spotkanie_id, templateName:template_name, status, ' +
   'errorMessage:error_message, adresNazwa:adres_nazwa, jednostkaNazwa:jednostka_nazwa, ' +
   'jednostkaEmail:jednostka_email, subject, attachments, sentFrom:sent_from, sentAt:sent_at';
+const KS_PRIORYTET_COLS =
+  'id, monthKey:month_key, adresId:adres_id, adresNazwa:adres_nazwa, position, notatka, createdBy:created_by, createdAt:created_at';
+const KS_UWAGA_COLS =
+  'id, adresId:adres_id, adresNazwa:adres_nazwa, tresc, createdBy:created_by, createdAt:created_at, resolvedAt:resolved_at, resolvedBy:resolved_by';
+const ZADANIE_COLS =
+  'id, tytul, opis, status, przypisanyEmail:przypisany_email, termin, zalaczniki, ' +
+  'createdBy:created_by, createdAt:created_at, updatedAt:updated_at, updatedBy:updated_by';
 const ODCZYTY_HISTORY_COLS =
   'id, supplier, status, errorMessage:error_message, outputDir:output_dir, sources:source_files, outputs:output_files, readingCount:reading_count, skippedCount:skipped_count, convertedAt:converted_at';
 
@@ -187,6 +205,7 @@ class DatabaseService {
           skipUserApproval: false,
           contractorSortOrder: 'name-asc',
           sidebarCollapsed: true,
+          bookingsCollapsed: false,
           calendarHoverCard: false,
           lastSeenVersion: '',
           // home.pl defaults — the mailbox this is built for. Overridable in Settings.
@@ -1097,12 +1116,17 @@ class DatabaseService {
    * reach would hand every client the whole user table. See supabase/kalendarz.sql.
    */
   async getAppUsers(): Promise<AppUser[]> {
-    const { data, error } = await getSupabase()
-      .from('app_users')
-      .select(APP_USER_COLS)
-      .order('email', { ascending: true });
+    const read = (cols: string) =>
+      getSupabase().from('app_users').select(cols).order('email', { ascending: true });
+    let { data, error } = await read(APP_USER_COLS);
+    // The colour column arrives with a SQL script run in Supabase. Until it has
+    // been run, asking for it would fail — and with it EVERY list of people in the
+    // app (the picker, the cards, the greeting) — so read without it instead.
+    if (error && /color/i.test(error.message)) {
+      ({ data, error } = await read(APP_USER_COLS_BASE));
+    }
     if (error) throw new Error(`getAppUsers: ${error.message}`);
-    return (data ?? []) as AppUser[];
+    return (data ?? []) as unknown as AppUser[];
   }
 
   /**
@@ -1126,6 +1150,18 @@ class DatabaseService {
       })
       .eq('id', id);
     if (error) throw new Error(`setAppUserName: ${error.message}`);
+  }
+
+  /**
+   * Choose a person's colour, or hand it back to the app (null = automatic).
+   * Anything that is not `#rrggbb` is stored as null rather than refused: a
+   * colour that cannot be drawn is the same as no colour, and the column's own
+   * check would reject it anyway.
+   */
+  async setAppUserColor(id: string, color: string | null): Promise<void> {
+    const hex = typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : null;
+    const { error } = await getSupabase().from('app_users').update({ color: hex }).eq('id', id);
+    if (error) throw new Error(`setAppUserColor: ${error.message}`);
   }
 
   async getSpotkaniaTypy(): Promise<SpotkanieTyp[]> {
@@ -1266,6 +1302,167 @@ class DatabaseService {
   async deleteSpotkanieLokalizacja(id: number): Promise<void> {
     const { error } = await getSupabase().from('spotkania_lokalizacje').delete().eq('id', id);
     if (error) throw new Error(`deleteSpotkanieLokalizacja: ${error.message}`);
+  }
+
+  /* ----------------------------- Zadania (Kanban) ----------------------------- */
+
+  /** An unknown status is a bug upstream; refusing it beats filing a card nowhere. */
+  private static zadanieStatus(status: string): ZadanieStatus {
+    if (!(ZADANIE_STATUSES as readonly string[]).includes(status)) {
+      throw new Error(`Nieznany status zadania: ${status}`);
+    }
+    return status as ZadanieStatus;
+  }
+
+  private static zadanieTermin(value: string | null | undefined): string | null {
+    const termin = (value ?? '').trim();
+    if (!termin) return null;
+    if (!isValidDayKey(termin)) throw new Error(`Nieprawidłowy termin zadania: ${termin}`);
+    return termin;
+  }
+
+  /**
+   * The attachment descriptions the renderer sends back, checked field by field.
+   * The paths are keys this app minted, so anything else is refused outright —
+   * a card must never be made to point at some other object in the bucket.
+   */
+  private static zadanieZalaczniki(value: unknown): ZadanieZalacznik[] {
+    if (value == null) return [];
+    if (!Array.isArray(value)) throw new Error('Nieprawidłowe załączniki zadania.');
+    return value.map((raw): ZadanieZalacznik => {
+      const z = (raw ?? {}) as Partial<ZadanieZalacznik>;
+      const rozmiar = Number(z.rozmiar);
+      if (
+        typeof z.id !== 'string' ||
+        typeof z.sciezka !== 'string' ||
+        !ZADANIE_STORAGE_KEY.test(z.sciezka) ||
+        !Number.isInteger(rozmiar) ||
+        rozmiar < 0 ||
+        rozmiar > ZADANIE_ATTACHMENT_MAX_BYTES
+      ) {
+        throw new Error('Nieprawidłowy załącznik zadania.');
+      }
+      return {
+        id: z.id,
+        nazwa: String(z.nazwa ?? '').trim().slice(0, 255) || z.sciezka,
+        rozmiar,
+        sciezka: z.sciezka,
+        dodanyBy: String(z.dodanyBy ?? ''),
+        dodanyAt: String(z.dodanyAt ?? new Date().toISOString()),
+      };
+    });
+  }
+
+  private static zadaniePayload(input: ZadanieInput): Record<string, unknown> {
+    const tytul = (input.tytul ?? '').trim();
+    if (!tytul) throw new Error('Zadanie musi mieć tytuł.');
+    return {
+      tytul,
+      opis: (input.opis ?? '').trim(),
+      status: DatabaseService.zadanieStatus(input.status),
+      przypisany_email: (input.przypisanyEmail ?? '').trim() || null,
+      termin: DatabaseService.zadanieTermin(input.termin),
+      zalaczniki: DatabaseService.zadanieZalaczniki(input.zalaczniki),
+    };
+  }
+
+  /** Fill what a row written before a column existed leaves null. */
+  private static zadanieFromRow(r: any): Zadanie {
+    return {
+      ...r,
+      opis: r.opis ?? '',
+      przypisanyEmail: r.przypisanyEmail ?? null,
+      termin: r.termin ?? null,
+      zalaczniki: Array.isArray(r.zalaczniki) ? (r.zalaczniki as ZadanieZalacznik[]) : [],
+      createdBy: r.createdBy ?? '',
+      updatedBy: r.updatedBy ?? '',
+    } as Zadanie;
+  }
+
+  async getZadania(): Promise<Zadanie[]> {
+    const rows = await fetchAllPaged<any>('getZadania', (from, to) =>
+      getSupabase()
+        .from('zadania')
+        .select(ZADANIE_COLS)
+        .order('updated_at', { ascending: false })
+        .range(from, to),
+    );
+    return rows.map(DatabaseService.zadanieFromRow);
+  }
+
+  async addZadanie(input: ZadanieInput, createdBy: string): Promise<Zadanie> {
+    const { data, error } = await getSupabase()
+      .from('zadania')
+      .insert({
+        ...DatabaseService.zadaniePayload(input),
+        created_by: createdBy,
+        updated_by: createdBy,
+      })
+      .select(ZADANIE_COLS)
+      .single();
+    return DatabaseService.zadanieFromRow(unwrap(data, error, 'addZadanie'));
+  }
+
+  async updateZadanie(id: number, input: ZadanieInput, changedBy: string): Promise<void> {
+    const payload = DatabaseService.zadaniePayload(input);
+    const { data: before, error: readError } = await getSupabase()
+      .from('zadania')
+      .select('zalaczniki')
+      .eq('id', id)
+      .single();
+    if (readError) throw new Error(`updateZadanie (odczyt): ${readError.message}`);
+
+    const { error } = await getSupabase()
+      .from('zadania')
+      .update({ ...payload, updated_at: new Date().toISOString(), updated_by: changedBy })
+      .eq('id', id);
+    if (error) throw new Error(`updateZadanie: ${error.message}`);
+
+    // Only once the row no longer points at them: a file dropped from the form
+    // is deleted after the save that dropped it, never before.
+    const kept = new Set((payload.zalaczniki as ZadanieZalacznik[]).map(z => z.sciezka));
+    const dropped = DatabaseService.zadanieZalaczniki(before?.zalaczniki)
+      .map(z => z.sciezka)
+      .filter(p => !kept.has(p));
+    await removeAttachments(dropped);
+  }
+
+  /** Move a card between columns — the one edit the board makes without a form. */
+  async setZadanieStatus(id: number, status: ZadanieStatus, changedBy: string): Promise<void> {
+    const { error } = await getSupabase()
+      .from('zadania')
+      .update({
+        status: DatabaseService.zadanieStatus(status),
+        updated_at: new Date().toISOString(),
+        updated_by: changedBy,
+      })
+      .eq('id', id);
+    if (error) throw new Error(`setZadanieStatus: ${error.message}`);
+  }
+
+  async deleteZadanie(id: number): Promise<void> {
+    const { data: before } = await getSupabase()
+      .from('zadania')
+      .select('zalaczniki')
+      .eq('id', id)
+      .maybeSingle();
+    const { error } = await getSupabase().from('zadania').delete().eq('id', id);
+    if (error) throw new Error(`deleteZadanie: ${error.message}`);
+    await removeAttachments(
+      DatabaseService.zadanieZalaczniki(before?.zalaczniki).map(z => z.sciezka),
+    );
+  }
+
+  /**
+   * Remove uploads that never made it onto a card (the form was cancelled).
+   * Anything a card still points at is left alone, so a renderer that asked for
+   * the wrong path can delete nothing that is in use.
+   */
+  async discardZadanieZalaczniki(paths: string[]): Promise<void> {
+    const inUse = new Set(
+      (await this.getZadania()).flatMap(z => z.zalaczniki.map(a => a.sciezka)),
+    );
+    await removeAttachments(paths.filter(p => !inUse.has(p)));
   }
 
   /* ---------------------------- Meetings ---------------------------- */
@@ -1488,6 +1685,171 @@ class DatabaseService {
     if (error) throw new Error(`deleteSpotkanie: ${error.message}`);
   }
 
+  // ------------------ Księgowania: priorities and notes ------------------
+
+  async getKsiegowaniaPriorytety(): Promise<KsiegowaniePriorytet[]> {
+    const rows = await fetchAllPaged<any>('getKsiegowaniaPriorytety', (from, to) =>
+      getSupabase()
+        .from('ksiegowania_priorytety')
+        .select(KS_PRIORYTET_COLS)
+        .order('month_key', { ascending: false })
+        .order('position', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
+    return rows.map(r => ({
+      ...r,
+      adresId: r.adresId ?? null,
+      notatka: r.notatka ?? '',
+      createdBy: r.createdBy ?? '',
+    })) as KsiegowaniePriorytet[];
+  }
+
+  /**
+   * Flag a community for a month. It joins the END of that month's queue — the
+   * first one flagged is first, the next is second — which is the whole rule the
+   * team asked for; moving it is the reorder dialog's job.
+   *
+   * Flagging twice is a no-op that returns the existing row: the table is unique
+   * per (month, community), and two people clicking the flag at once should not
+   * turn into an error for the second of them.
+   */
+  async addKsiegowaniePriorytet(
+    monthKey: string,
+    adresId: number | null,
+    adresNazwa: string,
+    notatka: string,
+    createdBy: string,
+  ): Promise<KsiegowaniePriorytet> {
+    const nazwa = adresNazwa.trim();
+    if (!/^\d{4}-\d{2}$/.test(monthKey)) throw new Error('Nieprawidłowy miesiąc.');
+    if (!nazwa) throw new Error('Priorytet musi dotyczyć wspólnoty.');
+
+    const { data: existing, error: readError } = await getSupabase()
+      .from('ksiegowania_priorytety')
+      .select(KS_PRIORYTET_COLS)
+      .eq('month_key', monthKey)
+      .eq('adres_nazwa', nazwa)
+      .maybeSingle();
+    if (readError) throw new Error(`addKsiegowaniePriorytet (odczyt): ${readError.message}`);
+    if (existing) return existing as unknown as KsiegowaniePriorytet;
+
+    const { data: last, error: lastError } = await getSupabase()
+      .from('ksiegowania_priorytety')
+      .select('position')
+      .eq('month_key', monthKey)
+      .order('position', { ascending: false })
+      .limit(1);
+    if (lastError) throw new Error(`addKsiegowaniePriorytet (pozycja): ${lastError.message}`);
+    const position = ((last?.[0] as { position: number } | undefined)?.position ?? 0) + 1;
+
+    const { data, error } = await getSupabase()
+      .from('ksiegowania_priorytety')
+      .insert({
+        month_key: monthKey,
+        adres_id: adresId,
+        adres_nazwa: nazwa,
+        position,
+        notatka: notatka.trim(),
+        created_by: createdBy,
+      })
+      .select(KS_PRIORYTET_COLS)
+      .single();
+    return unwrap(data, error, 'addKsiegowaniePriorytet') as unknown as KsiegowaniePriorytet;
+  }
+
+  async setKsiegowaniePriorytetNotatka(id: number, notatka: string): Promise<void> {
+    const { error } = await getSupabase()
+      .from('ksiegowania_priorytety')
+      .update({ notatka: notatka.trim(), updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw new Error(`setKsiegowaniePriorytetNotatka: ${error.message}`);
+  }
+
+  async removeKsiegowaniePriorytet(id: number): Promise<void> {
+    const { error } = await getSupabase().from('ksiegowania_priorytety').delete().eq('id', id);
+    if (error) throw new Error(`removeKsiegowaniePriorytet: ${error.message}`);
+  }
+
+  /**
+   * Rewrite a month's queue to the given order: the first id becomes position 1,
+   * and so on. Ids that do not belong to the month are ignored by the filter, so
+   * a stale dialog cannot move another month's rows; a priority added by someone
+   * else while the dialog was open is not in the list and keeps its own place,
+   * which sorts it after the ones just numbered.
+   */
+  async reorderKsiegowaniaPriorytety(monthKey: string, orderedIds: number[]): Promise<void> {
+    for (let i = 0; i < orderedIds.length; i++) {
+      const { error } = await getSupabase()
+        .from('ksiegowania_priorytety')
+        .update({ position: i + 1, updated_at: new Date().toISOString() })
+        .eq('id', orderedIds[i])
+        .eq('month_key', monthKey);
+      if (error) throw new Error(`reorderKsiegowaniaPriorytety: ${error.message}`);
+    }
+  }
+
+  async getKsiegowaniaUwagi(): Promise<KsiegowanieUwaga[]> {
+    const rows = await fetchAllPaged<any>('getKsiegowaniaUwagi', (from, to) =>
+      getSupabase()
+        .from('ksiegowania_uwagi')
+        .select(KS_UWAGA_COLS)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to),
+    );
+    return rows.map(r => ({
+      ...r,
+      adresId: r.adresId ?? null,
+      createdBy: r.createdBy ?? '',
+      resolvedAt: r.resolvedAt ?? null,
+      resolvedBy: r.resolvedBy ?? null,
+    })) as KsiegowanieUwaga[];
+  }
+
+  async addKsiegowanieUwaga(
+    adresId: number | null,
+    adresNazwa: string,
+    tresc: string,
+    createdBy: string,
+  ): Promise<KsiegowanieUwaga> {
+    const nazwa = adresNazwa.trim();
+    const text = tresc.trim();
+    if (!nazwa) throw new Error('Uwaga musi dotyczyć wspólnoty.');
+    if (!text) throw new Error('Uwaga nie może być pusta.');
+    const { data, error } = await getSupabase()
+      .from('ksiegowania_uwagi')
+      .insert({ adres_id: adresId, adres_nazwa: nazwa, tresc: text, created_by: createdBy })
+      .select(KS_UWAGA_COLS)
+      .single();
+    return unwrap(data, error, 'addKsiegowanieUwaga') as unknown as KsiegowanieUwaga;
+  }
+
+  async updateKsiegowanieUwaga(id: number, tresc: string): Promise<void> {
+    const text = tresc.trim();
+    if (!text) throw new Error('Uwaga nie może być pusta.');
+    const { error } = await getSupabase().from('ksiegowania_uwagi').update({ tresc: text }).eq('id', id);
+    if (error) throw new Error(`updateKsiegowanieUwaga: ${error.message}`);
+  }
+
+  /** "Sprawa rozwiązana" — or back to open, which clears who resolved it. */
+  async setKsiegowanieUwagaResolved(id: number, resolved: boolean, by: string): Promise<void> {
+    const { error } = await getSupabase()
+      .from('ksiegowania_uwagi')
+      .update(
+        resolved
+          ? { resolved_at: new Date().toISOString(), resolved_by: by }
+          : { resolved_at: null, resolved_by: null },
+      )
+      .eq('id', id);
+    if (error) throw new Error(`setKsiegowanieUwagaResolved: ${error.message}`);
+  }
+
+  async deleteKsiegowanieUwaga(id: number): Promise<void> {
+    const { error } = await getSupabase().from('ksiegowania_uwagi').delete().eq('id', id);
+    if (error) throw new Error(`deleteKsiegowanieUwaga: ${error.message}`);
+  }
+
   // ---------------------------- App config ----------------------------
   // Shared secrets/config living in Supabase (`app_config`, authenticated
   // read-only). Keeps API keys out of the publicly downloadable binaries.
@@ -1571,7 +1933,10 @@ class DatabaseService {
       spotkaniaTypy,
       spotkania,
       spotkaniaLokalizacje,
+      zadania,
       appUsers,
+      ksiegowaniaPriorytety,
+      ksiegowaniaUwagi,
     ] = await Promise.all([
       this.getAllBanks(),
       this.getAllKontrahenci(),
@@ -1586,7 +1951,10 @@ class DatabaseService {
       this.getSpotkaniaTypy(),
       this.getSpotkania(),
       this.getSpotkaniaLokalizacje(),
+      this.getZadania(),
       this.getAppUsers(),
+      this.getKsiegowaniaPriorytety(),
+      this.getKsiegowaniaUwagi(),
     ]);
     return {
       format: 'filefunky-backup',
@@ -1607,6 +1975,9 @@ class DatabaseService {
         spotkaniaTypy,
         spotkania,
         spotkaniaLokalizacje,
+        zadania,
+        ksiegowaniaPriorytety,
+        ksiegowaniaUwagi,
         // The `app_users` ROWS are deliberately absent: they mirror the Supabase
         // auth accounts, rebuilt by a trigger, not data this app authors — and
         // the participants stored on each meeting carry their own snapshot. The
@@ -1614,11 +1985,12 @@ class DatabaseService {
         // them, so they travel keyed by mailbox. Accounts nobody has named carry
         // nothing worth restoring, hence the filter.
         appUserNames: appUsers
-          .filter(u => (u.firstName ?? '') !== '' || (u.lastName ?? '') !== '')
+          .filter(u => (u.firstName ?? '') !== '' || (u.lastName ?? '') !== '' || !!u.color)
           .map((u): AppUserName => ({
             email: u.email,
             firstName: u.firstName,
             lastName: u.lastName,
+            color: u.color ?? null,
           })),
         settings: this.settingsForExport(),
       },
@@ -1689,7 +2061,10 @@ class DatabaseService {
       spotkaniaTypy,
       spotkania,
       spotkaniaLokalizacje,
+      zadania,
       appUserNames,
+      ksiegowaniaPriorytety,
+      ksiegowaniaUwagi,
       settings,
     } = backup.data;
 
@@ -1990,6 +2365,79 @@ class DatabaseService {
       await this.deleteByIds('spotkania_lokalizacje', preexistingLokalizacjaIds);
     }
 
+    // Księgowania priorities and notes. Each key is absent in backups written
+    // before they existed, so a missing key leaves the live rows alone. The
+    // community link is re-pointed through the name, like history and meetings:
+    // the addresses above were re-inserted with fresh ids.
+    if (ksiegowaniaPriorytety) {
+      const { error: wipeError } = await getSupabase()
+        .from('ksiegowania_priorytety')
+        .delete()
+        .gt('id', 0);
+      if (wipeError) throw new Error(`restore ksiegowania_priorytety: ${wipeError.message}`);
+      await this.insertChunked(
+        'ksiegowania_priorytety',
+        ksiegowaniaPriorytety.map(p => ({
+          month_key: p.monthKey,
+          adres_id: p.adresNazwa
+            ? adresIdByNazwa.get(p.adresNazwa.trim().toLowerCase()) ?? null
+            : null,
+          adres_nazwa: p.adresNazwa,
+          position: p.position,
+          notatka: p.notatka ?? '',
+          created_by: p.createdBy ?? '',
+          created_at: p.createdAt,
+        })),
+      );
+    }
+
+    if (ksiegowaniaUwagi) {
+      const { error: wipeError } = await getSupabase()
+        .from('ksiegowania_uwagi')
+        .delete()
+        .gt('id', 0);
+      if (wipeError) throw new Error(`restore ksiegowania_uwagi: ${wipeError.message}`);
+      await this.insertChunked(
+        'ksiegowania_uwagi',
+        ksiegowaniaUwagi.map(u => ({
+          adres_id: u.adresNazwa
+            ? adresIdByNazwa.get(u.adresNazwa.trim().toLowerCase()) ?? null
+            : null,
+          adres_nazwa: u.adresNazwa,
+          tresc: u.tresc,
+          created_by: u.createdBy ?? '',
+          created_at: u.createdAt,
+          resolved_at: u.resolvedAt ?? null,
+          resolved_by: u.resolvedAt ? u.resolvedBy ?? null : null,
+        })),
+      );
+    }
+
+    // Zadania. Nothing points at them and they point at nothing but a mailbox
+    // (stable across a restore), so wipe-and-insert is the whole job. Gated on
+    // the key: a backup written before the board existed must leave live cards
+    // alone, not empty the board.
+    if (zadania) {
+      const { error: wipeError } = await getSupabase().from('zadania').delete().gt('id', 0);
+      if (wipeError) throw new Error(`restore zadania: ${wipeError.message}`);
+      await this.insertChunked(
+        'zadania',
+        zadania.map(z => ({
+          tytul: z.tytul,
+          opis: z.opis ?? '',
+          status: DatabaseService.zadanieStatus(z.status),
+          przypisany_email: z.przypisanyEmail ?? null,
+          // Absent in backups written before tasks had a deadline and files.
+          termin: DatabaseService.zadanieTermin(z.termin),
+          zalaczniki: DatabaseService.zadanieZalaczniki(z.zalaczniki),
+          created_by: z.createdBy ?? '',
+          created_at: z.createdAt,
+          updated_at: z.updatedAt,
+          updated_by: z.updatedBy ?? '',
+        })),
+      );
+    }
+
     // Names of the accounts. Applied one by one rather than wiped-and-inserted:
     // the rows belong to the auth trigger, so a restore can only ever say "this
     // mailbox is called X". A name for an account that no longer exists here
@@ -2003,6 +2451,9 @@ class DatabaseService {
         const id = idByEmail.get(person.email.trim().toLowerCase());
         if (!id) continue;
         await this.setAppUserName(id, person.firstName ?? null, person.lastName ?? null);
+        // Only when the backup says something about it: one written before
+        // colours existed must leave a colour chosen since untouched.
+        if (person.color !== undefined) await this.setAppUserColor(id, person.color ?? null);
       }
     }
 

@@ -19,6 +19,8 @@ import MailingHistoria from './views/MailingHistoria';
 import Kalendarz from './views/Kalendarz';
 import KalendarzTypy from './views/KalendarzTypy';
 import KalendarzLokalizacje from './views/KalendarzLokalizacje';
+import Zadania from './views/Zadania';
+import ZadaniaPulpit from './components/ZadaniaPulpit';
 import ModuleTabs from './components/ModuleTabs';
 import CoNowego from './views/CoNowego';
 import Login from './views/Login';
@@ -35,6 +37,7 @@ import { translations, Language } from './translations';
 import { AppUser, FileEntry } from '../shared/types';
 import { BookingFilter, currentMonthKey } from '../shared/bookings';
 import { SpotkanieStateFilter } from '../shared/calendar';
+import { DEFAULT_ZADANIA_FILTER, ZadaniaFilterSeed } from '../shared/zadania';
 import { releaseForVersion, shouldShowWhatsNew } from '../shared/release-notes';
 import { greetingName } from '../shared/app-users';
 import { NavigationProvider, HeaderNav } from './navigation';
@@ -78,6 +81,7 @@ type View =
   | 'odczyty'
   | 'mailing'
   | 'kalendarz'
+  | 'zadania'
   | 'conowego';
 
 /**
@@ -116,6 +120,9 @@ const App: React.FC = () => {
   // Sidebar starts collapsed (icon-only rail); the user can pin it expanded and
   // the choice persists via settings. Default true so it's collapsed on first run.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  // The dashboard's Księgowania area: folded to its month banner, or open. Kept
+  // here (and in settings) so it survives navigating away and restarting.
+  const [bookingsCollapsed, setBookingsCollapsed] = useState(false);
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [selectedBank, setSelectedBank] = useState<number | null>(null);
   const [zaliczkiFiles, setZaliczkiFiles] = useState<ZaliczkiFileEntry[]>([]);
@@ -144,6 +151,9 @@ const App: React.FC = () => {
    * that only navigated would leave them to find the twelve meetings it counted.
    */
   const [kalStateFilter, setKalStateFilter] = useState<SpotkanieStateFilter>('all');
+  // Where the Zadania filter bar starts: the dashboard's tiles set it, every other
+  // way in (the sidebar, a notification) resets it to "everything".
+  const [zadaniaSeed, setZadaniaSeed] = useState<ZadaniaFilterSeed>(DEFAULT_ZADANIA_FILTER);
   // The send form lives here so a detour to Adresy (to attach a missing city
   // unit) or to the templates tab doesn't throw away a half-filled mailing.
   const [mailingDraft, setMailingDraft] = useState<MailingDraft>(emptyMailingDraft);
@@ -189,6 +199,18 @@ const App: React.FC = () => {
         setSessionChecked(true);
       }
     })();
+  }, []);
+
+  // A system notification about a task was clicked: the main process has already
+  // brought the window forward, so all that is left is to open the board.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.electronAPI) return;
+    return window.electronAPI.onOpenZadania(() => {
+      setZadaniaSeed(DEFAULT_ZADANIA_FILTER);
+      navigate('zadania');
+    });
+    // `navigate` only talks to `setNav(prev => …)` and the tab setters, so the
+    // first render's copy is as good as any later one.
   }, []);
 
   // A session can also die mid-work: the refresh token expires or gets revoked,
@@ -376,6 +398,7 @@ const App: React.FC = () => {
       setDarkMode(settings.darkMode);
       setLanguage(settings.language || 'pl');
       setSidebarCollapsed(settings.sidebarCollapsed);
+      setBookingsCollapsed(settings.bookingsCollapsed);
       setLastSeenVersion(settings.lastSeenVersion ?? '');
       applyDarkMode(settings.darkMode);
     } catch (error) {
@@ -404,6 +427,12 @@ const App: React.FC = () => {
     const next = !sidebarCollapsed;
     setSidebarCollapsed(next);
     void window.electronAPI.setSidebarCollapsed(next);
+  };
+
+  const toggleBookings = () => {
+    const next = !bookingsCollapsed;
+    setBookingsCollapsed(next);
+    void window.electronAPI.setBookingsCollapsed(next);
   };
 
   const t = translations[language];
@@ -435,6 +464,7 @@ const App: React.FC = () => {
       odczyty: t.odczyty,
       mailing: t.mailing,
       kalendarz: t.kalendarz,
+      zadania: t.zadania,
       conowego: t.whatsNew,
     };
     const tabs: Record<string, string> = {
@@ -563,6 +593,15 @@ const App: React.FC = () => {
             active={currentView === 'kalendarz'}
             onClick={() => setCurrentView('kalendarz')}
           />
+          <NavItem
+            icon="clipboard"
+            label={t.zadania}
+            active={currentView === 'zadania'}
+            onClick={() => {
+              setZadaniaSeed(DEFAULT_ZADANIA_FILTER);
+              setCurrentView('zadania');
+            }}
+          />
           <div className="nav-divider" />
           <NavItem
             icon="folder"
@@ -666,6 +705,18 @@ const App: React.FC = () => {
             filter={ksiegFilter}
             setFilter={setKsiegFilter}
             userEmail={session.email}
+            bookingsCollapsed={bookingsCollapsed}
+            onToggleBookings={toggleBookings}
+            tasksArea={
+              <ZadaniaPulpit
+                language={language}
+                userEmail={session.email}
+                onOpen={(seed) => {
+                  setZadaniaSeed(seed);
+                  navigate('zadania');
+                }}
+              />
+            }
             onShowInHistory={(query) => {
               setHistorySearchSeed(query);
               navigate('converter', 'history');
@@ -854,6 +905,7 @@ const App: React.FC = () => {
             {kalendarzTab === 'places' && <KalendarzLokalizacje language={language} />}
           </>
         )}
+        {currentView === 'zadania' && <Zadania language={language} userEmail={session.email} initialFilter={zadaniaSeed} />}
         {currentView === 'conowego' && (
           <CoNowego language={language} appVersion={appVersion} />
         )}

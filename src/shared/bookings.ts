@@ -11,7 +11,7 @@
  * without another round trip.
  */
 
-import { Adres, ConversionHistory } from './types';
+import { Adres, ConversionHistory, KsiegowaniePriorytet, KsiegowanieUwaga } from './types';
 import { adresPartOfOutputPath, sanitizeForFilename } from './outputPaths';
 
 /* ------------------------------- Months -------------------------------- */
@@ -105,6 +105,50 @@ export function resolveHistoryAdres(
   return { adresId: null, adresNazwa: null };
 }
 
+/**
+ * The group key (`id:…` / `name:…`) a priority or note belongs to — the same
+ * keys `groupByAddress` gives its groups, so an item lands on the row it was
+ * written for. Like `resolveHistoryAdres`, the id is tried first and the name
+ * second: a restore renumbers the addresses, and the name is what survives.
+ */
+export function groupKeyOfAdresRef(
+  ref: { adresId: number | null; adresNazwa: string },
+  index: AdresIndex,
+): string {
+  if (ref.adresId != null) {
+    const byId = index.byId.get(ref.adresId);
+    if (byId) return `id:${byId.id}`;
+  }
+  const byName = index.byName.get(normalizeName(ref.adresNazwa));
+  if (byName) return `id:${byName.id}`;
+  // Community deleted since — the key a history row of it would get.
+  return `name:${ref.adresNazwa}`;
+}
+
+/**
+ * The open notes of every community, keyed by address id — what the Converter
+ * asks when it has recognised a community: "is there something to know before
+ * this one is posted?". Resolved notes never come back through here.
+ */
+export function openUwagiByAdresId(
+  adresy: Adres[],
+  uwagi: KsiegowanieUwaga[],
+): Map<number, KsiegowanieUwaga[]> {
+  const index = buildAdresIndex(adresy);
+  const out = new Map<number, KsiegowanieUwaga[]>();
+  for (const u of uwagi) {
+    if (u.resolvedAt) continue;
+    const key = groupKeyOfAdresRef(u, index);
+    if (!key.startsWith('id:')) continue; // a deleted community cannot be converted for
+    const id = Number(key.slice(3));
+    const bucket = out.get(id);
+    if (bucket) bucket.push(u);
+    else out.set(id, [u]);
+  }
+  for (const bucket of out.values()) bucket.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return out;
+}
+
 /* ------------------------------ Booking rows ---------------------------- */
 
 /** One history row, resolved: which community, which month, booked or not. */
@@ -169,6 +213,18 @@ export interface AddressBookingGroup {
   /** Newest booking in ANY month — the answer to "when was it last done?". */
   lastBookingEverAt: string | null;
   banks: string[];
+  /**
+   * Place in this month's priority queue — 1 for the first community to do, 2
+   * for the next — or null when it is not flagged. The number is the place in
+   * the order, not a stored value, so it never has gaps.
+   */
+  priorityRank: number | null;
+  /** The priority row behind `priorityRank`, for editing and removing it. */
+  priority: KsiegowaniePriorytet | null;
+  /** Every note on this community, newest first — open and resolved. */
+  uwagi: KsiegowanieUwaga[];
+  /** …of which still open: what the Converter warns about. */
+  openUwagi: number;
 }
 
 export interface BookingTotals {
@@ -211,6 +267,10 @@ export interface BookingTotals {
   domPercent: number;
 }
 
+function newestFirst(list: KsiegowanieUwaga[]): KsiegowanieUwaga[] {
+  return [...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id);
+}
+
 function stateOf(generated: number, booked: number): AddressBookingState {
   if (generated === 0) return 'missing';
   if (booked >= generated) return 'done';
@@ -227,6 +287,8 @@ export function groupByAddress(
   rows: BookingRow[],
   adresy: Adres[],
   monthKey: string,
+  priorities: KsiegowaniePriorytet[] = [],
+  uwagi: KsiegowanieUwaga[] = [],
 ): { groups: AddressBookingGroup[]; totals: BookingTotals } {
   const inMonth = new Map<string, BookingRow[]>();
   const lastBookingEver = new Map<string, string>();
@@ -249,6 +311,23 @@ export function groupByAddress(
     const bucket = inMonth.get(key);
     if (bucket) bucket.push(row);
     else inMonth.set(key, [row]);
+  }
+
+  // Priorities of THIS month and every note, each under the key of its row.
+  const refIndex = buildAdresIndex(adresy);
+  const priorityByKey = new Map<string, KsiegowaniePriorytet>();
+  for (const p of priorities) {
+    if (p.monthKey !== monthKey) continue;
+    const key = groupKeyOfAdresRef(p, refIndex);
+    // Unique per community and month in the table; keep the first if not.
+    if (!priorityByKey.has(key)) priorityByKey.set(key, p);
+  }
+  const uwagiByKey = new Map<string, KsiegowanieUwaga[]>();
+  for (const u of uwagi) {
+    const key = groupKeyOfAdresRef(u, refIndex);
+    const bucket = uwagiByKey.get(key);
+    if (bucket) bucket.push(u);
+    else uwagiByKey.set(key, [u]);
   }
 
   const groups: AddressBookingGroup[] = [];
@@ -281,6 +360,11 @@ export function groupByAddress(
       lastAt: sorted[0]?.entry.convertedAt ?? null,
       lastBookingEverAt: lastBookingEver.get(key) ?? null,
       banks: [...new Set(sorted.map((r) => r.entry.bankName).filter(Boolean))],
+      // The rank is settled for the whole list below, once every group exists.
+      priorityRank: null,
+      priority: unassigned ? null : priorityByKey.get(key) ?? null,
+      uwagi: unassigned ? [] : newestFirst(uwagiByKey.get(key) ?? []),
+      openUwagi: unassigned ? 0 : (uwagiByKey.get(key) ?? []).filter((u) => !u.resolvedAt).length,
     };
   };
 
@@ -299,6 +383,18 @@ export function groupByAddress(
   if (unassignedRows.length > 0) {
     groups.push(build('unassigned', null, '', unassignedRows, true));
   }
+
+  // The queue's numbers: a priority's place among the ones that landed on a row
+  // — so a flag on a community that has since been deleted does not leave a hole
+  // in "1, 2, 4".
+  groups
+    .filter((g) => g.priority)
+    .sort(
+      (a, b) => a.priority!.position - b.priority!.position || a.priority!.id - b.priority!.id,
+    )
+    .forEach((g, i) => {
+      g.priorityRank = i + 1;
+    });
 
   // Communities are the unit of this screen: that is what the list shows, what a
   // filter selects, what the tiles count and what the progress bar measures. The
@@ -365,6 +461,8 @@ export function matchesBookingSearch(group: AddressBookingGroup, query: string):
   const haystack = [
     group.nazwa,
     ...group.banks,
+    ...group.uwagi.map((u) => u.tresc),
+    group.priority?.notatka ?? '',
     ...group.rows.map((r) => `${r.entry.fileName} ${r.entry.converterName} ${r.entry.outputPath}`),
   ]
     .join(' ')
@@ -396,4 +494,21 @@ export function sortGroups(groups: AddressBookingGroup[], sort: BookingSort, loc
     if (rank[a.state] !== rank[b.state]) return rank[a.state] - rank[b.state];
     return byName(a, b);
   });
+}
+
+/**
+ * Stick the priority queue on top of whatever order the list already has.
+ *
+ * Not a sort of its own: the chosen sort (and the order the list is being held
+ * in) decides everything below the queue, and the queue — in its own order, 1st,
+ * 2nd, 3rd… — sits above it. Applying it AFTER the held order is what lets a
+ * flag pull a row to the top without re-sorting the rest of the list, and lets
+ * an unflagged row fall back to the place it was held in.
+ */
+export function pinPriorities(groups: AddressBookingGroup[]): AddressBookingGroup[] {
+  const queue = groups
+    .filter((g) => g.priorityRank !== null)
+    .sort((a, b) => a.priorityRank! - b.priorityRank!);
+  if (queue.length === 0) return groups;
+  return [...queue, ...groups.filter((g) => g.priorityRank === null)];
 }

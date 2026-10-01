@@ -289,7 +289,7 @@ export const translations = {
     // Backup
     backupTitle: 'Kopia zapasowa',
     backupDesc: 'Pełna kopia wszystkich danych: banki, kontrahenci, adresy (wraz z mapowaniami mieszkań), typy kont, historia konwersji oraz ustawienia — w jednym pliku JSON.',
-    backupAutoInfo: 'Aplikacja tworzy automatyczną kopię raz dziennie przy uruchomieniu (przechowywane jest 14 ostatnich).',
+    backupAutoInfo: 'Aplikacja tworzy automatyczną kopię co 4 godziny, gdy działa (także w tle), oraz przy zamknięciu. Z ostatnich 2 dni zostają wszystkie kopie, ze starszych — ostatnia z każdego dnia, do 14 dni wstecz.',
     backupLastAuto: 'Ostatnia kopia automatyczna',
     backupNever: 'jeszcze nie utworzono',
     backupCreate: 'Utwórz kopię zapasową',
@@ -1589,7 +1589,7 @@ export const translations = {
     // Backup
     backupTitle: 'Backup',
     backupDesc: 'A full copy of all data: banks, contractors, addresses (including apartment mappings), account types, conversion history and settings — in a single JSON file.',
-    backupAutoInfo: 'The app creates an automatic backup once a day at startup (the 14 most recent are kept).',
+    backupAutoInfo: 'The app creates an automatic backup every 4 hours while it runs (in the background too), and on quit. Every backup from the last 2 days is kept; older days keep only their last one, up to 14 days back.',
     backupLastAuto: 'Last automatic backup',
     backupNever: 'not created yet',
     backupCreate: 'Create backup',

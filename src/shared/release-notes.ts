@@ -84,14 +84,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    version: '7.4.0',
+    version: '7.5.0',
     date: '2026-10-01',
-    title: 'Zadania, priorytety w Księgowaniach, nowy Pulpit i praca w tle',
+    title: 'Zadania, priorytety w Księgowaniach, nowy Pulpit, praca w tle i kopie co 4 godziny',
     tagline:
-      'Zespół ma teraz wspólną tablicę zadań (do zrobienia, w toku, gotowe) z terminami, załącznikami i powiadomieniami na komputerze. W Księgowaniach można oznaczać priorytety i zostawiać uwagi przy wspólnotach, a Pulpit pokazuje Twoje zadania i jest czytelniej poukładany. Aplikacja działa teraz w tle i uruchamia się razem z komputerem, więc powiadomienia przychodzą także po zamknięciu okna.',
+      'Zespół ma teraz wspólną tablicę zadań (do zrobienia, w toku, gotowe) z terminami, załącznikami i powiadomieniami na komputerze. W Księgowaniach można oznaczać priorytety i zostawiać uwagi przy wspólnotach, a Pulpit pokazuje Twoje zadania i jest czytelniej poukładany. Aplikacja działa teraz w tle i uruchamia się razem z komputerem, więc powiadomienia przychodzą także po zamknięciu okna, a kopia zapasowa danych robi się sama co 4 godziny.',
     stats: [
       { value: '8', label: 'nowych funkcji' },
-      { value: '2', label: 'ulepszenia' },
+      { value: '3', label: 'ulepszenia' },
       { value: '1', label: 'poprawka' },
     ],
     highlights: [
@@ -219,7 +219,7 @@ export const RELEASES: Release[] = [
           },
         ],
         expect: [
-          'Kopia zapasowa „przy wyjściu” jest teraz robiona przy prawdziwym zamknięciu (z menu ikony, przy wyłączaniu komputera i przy instalacji aktualizacji), a nie przy każdym zamknięciu okna. Dodatkowo kopia powstaje przy pierwszym uruchomieniu danego dnia.',
+          'Kopia zapasowa „przy wyjściu” jest teraz robiona przy prawdziwym zamknięciu (z menu ikony, przy wyłączaniu komputera i przy instalacji aktualizacji), a nie przy każdym zamknięciu okna. Poza tym aplikacja robi kopie sama co 4 godziny — patrz „Kopia zapasowa co 4 godziny”.',
           'Drugie uruchomienie aplikacji (np. kliknięcie jej skrótu, gdy działa w tle) nie otwiera drugiej kopii, tylko przywraca okno.',
           'Aplikacja w tle zajmuje niewielką ilość pamięci i sprawdza zadania mniej więcej raz na minutę.',
         ],
@@ -329,6 +329,34 @@ export const RELEASES: Release[] = [
         ],
         expect: [
           'Uwaga nie jest przypisana do miesiąca ani do priorytetu: zostaje otwarta, dopóki ktoś jej nie rozwiąże. Rozwiązane uwagi są w osobnej sekcji przy wspólnocie.',
+        ],
+      },
+      {
+        id: 'kopia-co-4h',
+        kind: 'improved',
+        icon: 'shield',
+        title: 'Kopia zapasowa co 4 godziny',
+        summary:
+          'Aplikacja robi automatyczną kopię zapasową danych co 4 godziny, gdy działa (także w tle), oraz przy zamknięciu. Dotąd robiła ją raz dziennie przy uruchomieniu.',
+        details: [
+          'Każda kopia to osobny plik z godziną w nazwie (np. „auto-backup-2026-10-01-1200.json”), więc zły stan zapisany w południe nie nadpisze dobrego z rana.',
+          'Z ostatnich 2 dni zostają wszystkie kopie, ze starszych dni — ostatnia z każdego dnia, do 14 dni wstecz. Starsze kopie są usuwane same.',
+        ],
+        where: ['Ustawienia', 'Kopia zapasowa'],
+        steps: [
+          {
+            do: 'Otwórz Ustawienia i przewiń do sekcji kopii zapasowej.',
+            then: 'Widać opis zasad oraz „Ostatnia kopia automatyczna” z datą i godziną.',
+          },
+          {
+            do: 'Kliknij „Otwórz folder kopii”.',
+            then: 'Otwiera się folder z kopiami; najnowsza ma w nazwie najpóźniejszą godzinę.',
+          },
+        ],
+        expect: [
+          'Kopie co 4 godziny powstają po cichu, bez komunikatu. Komunikat pojawia się przy kopii zrobionej po uruchomieniu aplikacji oraz — jako ostrzeżenie — gdy wysłanie kopii do zdalnego repozytorium się nie udało (tam, gdzie jest skonfigurowane).',
+          'Komputer uśpiony albo wyłączony nie robi kopii; po powrocie aplikacja nadrabia ją, gdy tylko minie 4 godziny od ostatniej.',
+          'Kopia zdalna to nadal jeden plik na dzień, nadpisywany kolejnymi kopiami — poprzednie wersje zostają w historii repozytorium.',
         ],
       },
       {

@@ -248,6 +248,9 @@ let isQuitting = false;
  */
 const RUN_IN_BACKGROUND = app.isPackaged;
 
+/** How often the app asks whether a scheduled backup is due (the interval itself lives in backupService). */
+const BACKUP_CHECK_INTERVAL_MS = 10 * 60 * 1000;
+
 /** Launched by the system at login: start without taking over the screen. */
 let startHidden = false;
 
@@ -3383,17 +3386,26 @@ app.whenReady().then(() => {
     void loadCloudAIKey();
   }, 5000);
 
-  // Startup auto backup — a safety net for days whose exit backup never ran:
-  // it writes (and toasts) only when today's file is missing, i.e. on the
-  // first open of the day or after a crash killed the previous session before
-  // its exit backup. Delayed so the persisted Supabase session has time to
-  // restore; without a session the reads fail and the backup is skipped (logged).
-  setTimeout(async () => {
+  // Automatic backups: at least one every four hours while the app runs (and it
+  // now runs all day, in the tray), plus one on quit. `runAutoBackup` decides
+  // whether four hours have passed since the newest file, so asking often is
+  // cheap and survives sleep, restarts and a machine that was off.
+  //   - startup: after a delay, so the persisted Supabase session has time to
+  //     restore (without one the reads fail and the run is skipped, logged).
+  //     It also covers a session that crashed before its exit backup.
+  //   - scheduled: said aloud only when the off-site copy FAILED. A toast every
+  //     four hours over whatever the person is doing would be noise, but a copy
+  //     that silently stopped reaching the backups repo is exactly what they
+  //     need to hear about.
+  const runScheduledBackup = async (trigger: 'startup' | 'scheduled') => {
     const info = await runAutoBackup(database);
-    if (info && mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('backup:auto-created', { ...info, trigger: 'startup' });
+    if (!info || !mainWindow || mainWindow.isDestroyed()) return;
+    if (trigger === 'startup' || info.upload === 'failed') {
+      mainWindow.webContents.send('backup:auto-created', { ...info, trigger });
     }
-  }, 15000);
+  };
+  setTimeout(() => void runScheduledBackup('startup'), 15000);
+  setInterval(() => void runScheduledBackup('scheduled'), BACKUP_CHECK_INTERVAL_MS);
 
   // macOS: a click on the Dock icon. A hidden window still counts as a window, so
   // "there are none" is not the test any more — show whichever there is.

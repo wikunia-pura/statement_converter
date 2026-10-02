@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Adres,
   AppUser,
@@ -8,8 +9,17 @@ import {
   SpotkanieLokalizacja,
   SpotkanieMailing,
   SpotkanieTerminStatus,
+  SpotkanieMaterialyStatus,
+  SpotkanieMaterialyKrok,
+  SPOTKANIE_MATERIALY_KROKI,
+  SPOTKANIE_MATERIALY_POPRZEDNI,
   SpotkanieTyp,
   SpotkanieUczestnik,
+  Zadanie,
+  ZadanieInput,
+  ZgnJednostka,
+  ZgnPelnomocnik,
+  SpotkanieZarzadOsoba,
 } from '../../shared/types';
 import { comparePeople, personLabel, personName } from '../../shared/app-users';
 import { translations, Language } from '../translations';
@@ -20,6 +30,8 @@ import Select from '../components/Select';
 import SearchableSelect from '../components/SearchableSelect';
 import ModalDismiss from '../components/Modal';
 import MailingDetailsModal from '../components/MailingDetailsModal';
+import { ZadanieFormModal, ZadaniePreviewModal } from './Zadania';
+import { formatDayKey } from '../../shared/zadania';
 import MonthIllustration, { monthAccent } from '../components/MonthIllustration';
 import {
   buildMonthGrid,
@@ -91,6 +103,15 @@ interface Props {
     spotkanieNazwa: string;
     adresIds: number[];
   }) => void;
+  /** Open a linked task on the Zadania board. */
+  onOpenZadanie?: (zadanieId: number) => void;
+  /**
+   * Land on this meeting — a task's meeting link was followed from the board. A
+   * fresh `nonce` makes the same meeting land again.
+   */
+  focusRequest?: { spotkanieId: number; nonce: number; edit?: boolean } | null;
+  /** The request has landed — so a later visit to the calendar is not pulled back to it. */
+  onFocusHandled?: () => void;
 }
 
 /**
@@ -147,6 +168,35 @@ const DEFAULT_START = '10:00';
 const TIP_WIDTH = 300;
 const TIP_MARGIN = 8;
 
+/** Where the month/list choice is remembered (per computer). */
+const VIEW_MODE_KEY = 'kalendarz.viewMode';
+
+/** Width of the month/year count card — kept in step with `.kal-count-tip`. */
+const COUNT_TIP_WIDTH = 240;
+
+/**
+ * An open month/year count card: what it counts (a type, or every meeting), the
+ * two numbers, and where it hangs — under the chip or figure it explains.
+ */
+interface CountTipState {
+  label: string;
+  color: string | null;
+  month: number;
+  year: number;
+  left: number;
+  top: number;
+}
+
+/** "3 spotkania" / "5 spotkań" — the count with the word that fits it. */
+function meetingsCount(n: number, language: Language): string {
+  if (language === 'en') return `${n} ${n === 1 ? 'meeting' : 'meetings'}`;
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (n === 1) return `${n} spotkanie`;
+  if (mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14)) return `${n} spotkania`;
+  return `${n} spotkań`;
+}
+
 /** An open hover card: which meeting, and the viewport edges it hangs off. */
 interface TipState {
   spotkanie: Spotkanie;
@@ -155,12 +205,199 @@ interface TipState {
   bottom?: number;
 }
 
+/* ========================= A meeting's linked tasks ======================== */
+
+/**
+ * The tasks that belong to one meeting — in its form and on its card. Saved
+ * tasks can be edited, deleted and followed to the board; a new meeting's
+ * tasks are `pending`: kept in the form and added once the meeting exists,
+ * because until then there is no meeting for them to point at.
+ */
+const SpotkanieZadania: React.FC<{
+  zadania: Zadanie[];
+  pending?: ZadanieInput[];
+  users: AppUser[];
+  language: Language;
+  disabled?: boolean;
+  onAdd: () => void;
+  onPreview: (zadanie: Zadanie) => void;
+  onEdit: (zadanie: Zadanie) => void;
+  onDelete: (zadanie: Zadanie) => void;
+  onOpenBoard?: (zadanie: Zadanie) => void;
+  onRemovePending?: (index: number) => void;
+}> = ({
+  zadania,
+  pending = [],
+  users,
+  language,
+  disabled = false,
+  onAdd,
+  onPreview,
+  onEdit,
+  onDelete,
+  onOpenBoard,
+  onRemovePending,
+}) => {
+  const t = translations[language];
+  const dayLocale = language === 'en' ? 'en' : 'pl';
+  const statusLabel: Record<Zadanie['status'], string> = {
+    todo: t.zadColTodo,
+    in_progress: t.zadColInProgress,
+    done: t.zadColDone,
+  };
+  const who = (email: string | null): string | null => {
+    if (!email) return null;
+    const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+    return user ? personLabel(user) : email;
+  };
+  const meta = (z: Pick<ZadanieInput, 'przypisanyEmail' | 'termin'>): string =>
+    [who(z.przypisanyEmail), z.termin ? formatDayKey(z.termin, dayLocale) : null]
+      .filter(Boolean)
+      .join(' · ');
+
+  return (
+    <div className="kal-tasks">
+      <div className="kal-tasks__head">
+        <span className="kal-tasks__title">
+          <Icon name="clipboard" size={13} /> {t.kalTasksTitle}
+          {zadania.length + pending.length > 0 && (
+            <span className="kal-tasks__count">{zadania.length + pending.length}</span>
+          )}
+        </span>
+        <button
+          type="button"
+          className="link-button"
+          onClick={onAdd}
+          disabled={disabled}
+          title={t.kalAddTaskHint}
+        >
+          <Icon name="plus" size={12} /> {t.kalAddTask}
+        </button>
+      </div>
+      {zadania.length === 0 && pending.length === 0 ? (
+        <div className="kal-tasks__empty">{t.kalTasksEmpty}</div>
+      ) : (
+        <ul className="kal-tasks__list">
+          {zadania.map((z) => (
+            <li key={z.id} className={`kal-task kal-task--${z.status}`}>
+              <span className="kal-task__dot" title={statusLabel[z.status]} />
+              <button
+                type="button"
+                className="kal-task__body kal-task__body--open"
+                onClick={() => onPreview(z)}
+                title={t.kalTaskPreview}
+              >
+                <span className="kal-task__name">{z.tytul}</span>
+                <span className="kal-task__meta">
+                  {statusLabel[z.status]}
+                  {meta(z) && ` · ${meta(z)}`}
+                </span>
+              </button>
+              <span className="kal-task__actions">
+                {onOpenBoard && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenBoard(z)}
+                    title={t.kalTaskOpenBoard}
+                    aria-label={t.kalTaskOpenBoard}
+                  >
+                    <Icon name="arrow-right" size={13} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onEdit(z)}
+                  disabled={disabled}
+                  title={t.edit}
+                  aria-label={t.edit}
+                >
+                  <Icon name="edit" size={13} />
+                </button>
+                <button
+                  type="button"
+                  className="is-danger"
+                  onClick={() => onDelete(z)}
+                  disabled={disabled}
+                  title={t.delete}
+                  aria-label={t.delete}
+                >
+                  <Icon name="trash" size={13} />
+                </button>
+              </span>
+            </li>
+          ))}
+          {pending.map((p, i) => (
+            <li key={`pending-${i}`} className="kal-task kal-task--pending">
+              <span className="kal-task__dot" />
+              <span className="kal-task__body">
+                <span className="kal-task__name">{p.tytul}</span>
+                <span className="kal-task__meta">
+                  {t.kalTaskPending}
+                  {meta(p) && ` · ${meta(p)}`}
+                </span>
+              </span>
+              {onRemovePending && (
+                <span className="kal-task__actions">
+                  <button
+                    type="button"
+                    className="is-danger"
+                    onClick={() => onRemovePending(i)}
+                    disabled={disabled}
+                    title={t.kalTaskRemovePending}
+                    aria-label={t.kalTaskRemovePending}
+                  >
+                    <Icon name="x" size={13} />
+                  </button>
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};
+
+/* ============================ City unit / proxy ============================ */
+
+/** Where a meeting's materials stand, in words — card, chip card and preview. */
+export function materialyStatusLabel(
+  t: (typeof translations)['pl'],
+  status: SpotkanieMaterialyStatus,
+): string {
+  return {
+    brak: t.kalMatStateBrak,
+    potrzebne: t.kalMatStatePotrzebne,
+    do_przygotowania: t.kalMatStateDo,
+    przygotowane: t.kalMatStatePrzygotowane,
+    wyslane: t.kalMatStateWyslane,
+  }[status];
+}
+
+/** The picker's value for a unit (`j:12`) or a proxy (`p:7`); '' for none. */
+function zgnPickValue(jednostkaId: number | null, pelnomocnikId: number | null): string {
+  if (pelnomocnikId != null) return `p:${pelnomocnikId}`;
+  if (jednostkaId != null) return `j:${jednostkaId}`;
+  return '';
+}
+
+/** What a meeting shows for a proxy: their name and the unit they act for. */
+function pelnomocnikLabel(p: ZgnPelnomocnik, jednostki: ZgnJednostka[]): string {
+  const unit = jednostki.find((j) => j.id === p.jednostkaId);
+  return unit ? `${p.imieNazwisko} (${unit.nazwa})` : p.imieNazwisko;
+}
+
 /* ============================ The add/edit form ============================ */
 
 interface FormProps {
   language: Language;
   /** Meeting being edited, or null when adding a new one. */
   editing: Spotkanie | null;
+  /**
+   * With `editing` null: the meeting being cloned. The new one starts with all
+   * of its fields; saving adds a meeting and leaves the original untouched.
+   */
+  template?: Spotkanie | null;
   /** Day the form opens on (`YYYY-MM-DD`) — the cell the user clicked. */
   defaultDay: string;
   typy: SpotkanieTyp[];
@@ -170,15 +407,36 @@ interface FormProps {
   userEmail?: string;
   isSaving: boolean;
   error: string | null;
-  onSubmit: (input: SpotkanieInput) => void;
+  /**
+   * `pendingZadania`: tasks written for a meeting that did not exist yet.
+   * `materialyPotrzebne`: whether the meeting needs materials — saved through
+   * the materials action (it records who moved it), so it travels beside the input.
+   */
+  onSubmit: (
+    input: SpotkanieInput,
+    pendingZadania: ZadanieInput[],
+    materialyPotrzebne: boolean,
+  ) => void;
   onCancel: () => void;
   onManageTypes?: () => void;
   onManagePlaces?: () => void;
+  /** While editing: start a new meeting from this one instead. */
+  onClone?: () => void;
+  /** City units, and their proxies — the "with whom from the city" picker. */
+  zgnJednostki: ZgnJednostka[];
+  zgnPelnomocnicy: ZgnPelnomocnik[];
+  /** Tasks already linked to the meeting being edited. */
+  linkedZadania: Zadanie[];
+  /** A linked task was added, changed or deleted here — reload them. */
+  onZadaniaChanged: () => void;
+  onDeleteZadanie: (zadanie: Zadanie) => void;
+  onOpenZadanie?: (zadanie: Zadanie) => void;
 }
 
 const SpotkanieFormModal: React.FC<FormProps> = ({
   language,
   editing,
+  template = null,
   defaultDay,
   typy,
   lokalizacje,
@@ -191,14 +449,23 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
   onCancel,
   onManageTypes,
   onManagePlaces,
+  onClone,
+  zgnJednostki,
+  zgnPelnomocnicy,
+  linkedZadania,
+  onZadaniaChanged,
+  onDeleteZadanie,
+  onOpenZadanie,
 }) => {
   const t = translations[language];
-  const startParts = toParts(editing?.startsAt ?? null);
-  const endParts = toParts(editing?.endsAt ?? null);
+  // Where the fields start: the meeting being edited, else the one being cloned.
+  const base = editing ?? template;
+  const startParts = toParts(base?.startsAt ?? null);
+  const endParts = toParts(base?.endsAt ?? null);
 
-  const [typId, setTypId] = useState(editing?.typId != null ? String(editing.typId) : '');
-  const [adresId, setAdresId] = useState(editing?.adresId != null ? String(editing.adresId) : '');
-  const [nazwa, setNazwa] = useState(editing?.nazwa ?? '');
+  const [typId, setTypId] = useState(base?.typId != null ? String(base.typId) : '');
+  const [adresId, setAdresId] = useState(base?.adresId != null ? String(base.adresId) : '');
+  const [nazwa, setNazwa] = useState(base?.nazwa ?? '');
   /**
    * Whether the title has been written by hand and must stop following the two
    * pickers. An existing meeting counts as hand-written only when its name is
@@ -207,11 +474,11 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
    * silently overwritten.
    */
   const [nameEdited, setNameEdited] = useState(
-    editing
-      ? editing.nazwa.trim() !==
+    base
+      ? base.nazwa.trim() !==
         suggestSpotkanieTitle(
-          typy.find((typ) => typ.id === editing.typId)?.nazwa ?? null,
-          editing.adresNazwa,
+          typy.find((typ) => typ.id === base.typId)?.nazwa ?? null,
+          base.adresNazwa,
         )
       : false,
   );
@@ -220,11 +487,11 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
   // A new meeting gets a one-hour default; an existing one with no end keeps
   // none, so editing it doesn't invent an end time nobody asked for.
   const [timeTo, setTimeTo] = useState(
-    editing ? endParts.time : shiftTime(DEFAULT_START, 60),
+    base ? endParts.time : shiftTime(DEFAULT_START, 60),
   );
-  const [opis, setOpis] = useState(editing?.opis ?? '');
+  const [opis, setOpis] = useState(base?.opis ?? '');
   const [lokalizacjaId, setLokalizacjaId] = useState(
-    editing?.lokalizacjaId != null ? String(editing.lokalizacjaId) : '',
+    base?.lokalizacjaId != null ? String(base.lokalizacjaId) : '',
   );
   /**
    * Confirmed or still being agreed. A new meeting starts confirmed — that is
@@ -232,10 +499,72 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
    * the mark meaningless by the end of the first week.
    */
   const [terminStatus, setTerminStatus] = useState<SpotkanieTerminStatus>(
-    editing?.terminStatus ?? 'potwierdzony',
+    base?.terminStatus ?? 'potwierdzony',
   );
-  const [uczestnicy, setUczestnicy] = useState<SpotkanieUczestnik[]>(editing?.uczestnicy ?? []);
+  const [uczestnicy, setUczestnicy] = useState<SpotkanieUczestnik[]>(base?.uczestnicy ?? []);
+  // The community's board on this meeting: filled in from the community when it
+  // is picked, then the user's to trim.
+  const [zarzad, setZarzad] = useState<SpotkanieZarzadOsoba[]>(base?.zarzad ?? []);
+  // A new meeting needs materials unless the user says otherwise.
+  const [materialyPotrzebne, setMaterialyPotrzebne] = useState(
+    base ? base.materialyStatus !== 'brak' : true,
+  );
+  // A unit or one of its proxies, as one picker value (see `zgnPickValue`).
+  const [zgnPick, setZgnPick] = useState(
+    zgnPickValue(base?.zgnJednostkaId ?? null, base?.zgnPelnomocnikId ?? null),
+  );
   const [localError, setLocalError] = useState<string | null>(null);
+  // The task form, over this one: null = closed, otherwise the task being
+  // edited (or null for a new one). The meeting form stays open underneath and
+  // keeps whatever has been typed into it so far.
+  const notify = useNotify();
+  const [taskForm, setTaskForm] = useState<{ editing: Zadanie | null } | null>(null);
+  const [taskPreview, setTaskPreview] = useState<Zadanie | null>(null);
+  const [taskSaving, setTaskSaving] = useState(false);
+  const [taskError, setTaskError] = useState<string | null>(null);
+  // A meeting that is not saved yet has no id to link to: its tasks wait here.
+  const [pendingZadania, setPendingZadania] = useState<ZadanieInput[]>([]);
+
+  const closeTask = () => {
+    setTaskForm(null);
+    setTaskError(null);
+  };
+
+  const handleTaskSubmit = async (input: ZadanieInput) => {
+    if (!editing && !taskForm?.editing) {
+      setPendingZadania((prev) => [...prev, input]);
+      closeTask();
+      return;
+    }
+    setTaskSaving(true);
+    setTaskError(null);
+    try {
+      if (taskForm?.editing) {
+        await window.electronAPI.updateZadanie(taskForm.editing.id, input);
+        notify.success(t.kalTaskUpdated);
+      } else if (editing) {
+        await window.electronAPI.addZadanie({ ...input, spotkanieId: editing.id });
+        notify.success(t.kalTaskAdded);
+      }
+      closeTask();
+      onZadaniaChanged();
+    } catch (err: unknown) {
+      setTaskError(err instanceof Error ? err.message : t.zadSaveError);
+    } finally {
+      setTaskSaving(false);
+    }
+  };
+
+  /** Files of a pending task are already in the bucket; nothing else would remove them. */
+  const discardPending = (list: ZadanieInput[]) => {
+    const paths = list.flatMap((p) => p.zalaczniki.map((z) => z.sciezka));
+    if (paths.length > 0) void window.electronAPI.zadaniaDiscardAttachments(paths).catch(() => {});
+  };
+
+  const handleCancel = () => {
+    discardPending(pendingZadania);
+    onCancel();
+  };
 
   const chosen = new Set(uczestnicy.map((u) => u.userId));
   // Offered by name, in name order — the dropdown is read down, and mailbox
@@ -246,6 +575,13 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
     typy.find((typ) => String(typ.id) === id)?.nazwa ?? null;
   const adresNazwa = (id: string): string | null =>
     adresy.find((a) => String(a.id) === id)?.nazwa ?? null;
+
+  /** A community's board, as a meeting snapshots it. */
+  const boardOf = (id: string): SpotkanieZarzadOsoba[] =>
+    (adresy.find((a) => String(a.id) === id)?.zarzad ?? []).map(({ imieNazwisko, email }) => ({
+      imieNazwisko,
+      email,
+    }));
 
   /** The title the current pair of pickers would write. */
   const suggestion = suggestSpotkanieTitle(typNazwa(typId), adresNazwa(adresId));
@@ -299,6 +635,64 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
     ]);
   };
 
+  /**
+   * The unit or proxy picked, resolved for saving. A pick that no longer exists
+   * (deleted since) keeps the meeting's own snapshot rather than dropping it.
+   */
+  const resolveZgn = (): Pick<
+    SpotkanieInput,
+    'zgnJednostkaId' | 'zgnPelnomocnikId' | 'zgnNazwa'
+  > => {
+    const none = { zgnJednostkaId: null, zgnPelnomocnikId: null, zgnNazwa: '' };
+    if (!zgnPick) return none;
+    const [kind, raw] = zgnPick.split(':');
+    const id = Number(raw);
+    if (kind === 'p') {
+      const p = zgnPelnomocnicy.find((x) => x.id === id);
+      if (p) {
+        return {
+          zgnJednostkaId: p.jednostkaId,
+          zgnPelnomocnikId: p.id,
+          zgnNazwa: pelnomocnikLabel(p, zgnJednostki),
+        };
+      }
+    } else {
+      const j = zgnJednostki.find((x) => x.id === id);
+      if (j) return { zgnJednostkaId: j.id, zgnPelnomocnikId: null, zgnNazwa: j.nazwa };
+    }
+    return base && zgnPick === zgnPickValue(base.zgnJednostkaId, base.zgnPelnomocnikId)
+      ? {
+          zgnJednostkaId: base.zgnJednostkaId,
+          zgnPelnomocnikId: base.zgnPelnomocnikId,
+          zgnNazwa: base.zgnNazwa,
+        }
+      : none;
+  };
+
+  /**
+   * Units first, each followed by its proxies — the picker reads as "the unit,
+   * or somebody acting for it". A pick that is no longer in the dictionaries
+   * stays selectable under its snapshot name, so opening and saving the meeting
+   * never silently drops it.
+   */
+  const zgnOptions: { value: string; label: string; hint?: string; keywords?: string }[] = [
+    { value: '', label: t.kalNoZgn },
+  ];
+  for (const j of zgnJednostki) {
+    zgnOptions.push({ value: `j:${j.id}`, label: j.nazwa, hint: j.email || undefined });
+    for (const p of zgnPelnomocnicy.filter((x) => x.jednostkaId === j.id)) {
+      zgnOptions.push({
+        value: `p:${p.id}`,
+        label: `↳ ${p.imieNazwisko}`,
+        hint: [t.kalZgnProxyOf.replace('{unit}', j.nazwa), p.email].filter(Boolean).join(' · '),
+        keywords: `${j.nazwa} ${p.email}`,
+      });
+    }
+  }
+  if (zgnPick && !zgnOptions.some((o) => o.value === zgnPick) && base?.zgnNazwa) {
+    zgnOptions.push({ value: zgnPick, label: base.zgnNazwa });
+  }
+
   const handleSubmit = () => {
     const name = nazwa.trim();
     if (!name) {
@@ -317,28 +711,36 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
     }
     const adres = adresy.find((a) => String(a.id) === adresId) ?? null;
     const lokalizacja = lokalizacje.find((l) => String(l.id) === lokalizacjaId) ?? null;
-    onSubmit({
-      nazwa: name,
-      typId: typId ? Number(typId) : null,
-      adresId: adres ? adres.id : null,
-      // The name travels with the meeting: a restore renumbers the addresses,
-      // and this is what the link is re-pointed through afterwards.
-      adresNazwa: adres ? adres.nazwa : '',
-      lokalizacjaId: lokalizacja ? lokalizacja.id : null,
-      lokalizacjaNazwa: lokalizacja ? lokalizacja.nazwa : '',
-      startsAt,
-      endsAt,
-      opis: opis.trim(),
-      uczestnicy,
-      terminStatus,
-    });
+    onSubmit(
+      {
+        nazwa: name,
+        typId: typId ? Number(typId) : null,
+        adresId: adres ? adres.id : null,
+        // The name travels with the meeting: a restore renumbers the addresses,
+        // and this is what the link is re-pointed through afterwards.
+        adresNazwa: adres ? adres.nazwa : '',
+        lokalizacjaId: lokalizacja ? lokalizacja.id : null,
+        lokalizacjaNazwa: lokalizacja ? lokalizacja.nazwa : '',
+        startsAt,
+        endsAt,
+        opis: opis.trim(),
+        uczestnicy,
+        terminStatus,
+        ...resolveZgn(),
+        zarzad,
+      },
+      pendingZadania,
+      materialyPotrzebne,
+    );
   };
 
   return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
-        <ModalDismiss onClose={onCancel} ariaLabel={t.close} />
-        <div className="modal-header">{editing ? t.kalEditMeeting : t.kalNewMeeting}</div>
+    <div className="modal-overlay" onClick={handleCancel}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 'min(860px, 94vw)', maxWidth: 860 }}>
+        <ModalDismiss onClose={handleCancel} ariaLabel={t.close} />
+        <div className="modal-header">
+          {editing ? t.kalEditMeeting : template ? t.kalCloneMeeting : t.kalNewMeeting}
+        </div>
         <div className="modal-body">
           {/* The two decisions the user actually makes, first — the title below
               is written from them. */}
@@ -346,6 +748,7 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
             <div className="form-group">
               <label>{t.kalFieldType}</label>
               <Select
+                overlay
                 value={typId}
                 options={[
                   { value: '', label: t.kalNoType },
@@ -369,18 +772,70 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
             <div className="form-group">
               <label>{t.kalFieldAdres}</label>
               <SearchableSelect
+                overlay
                 value={adresId}
                 options={[
                   { value: '', label: t.kalNoAdres },
                   ...adresy.map((a) => ({ value: String(a.id), label: a.nazwa })),
                 ]}
-                onChange={(value) => applyPickers(typId, value)}
+                onChange={(value) => {
+                  applyPickers(typId, value);
+                  // A different community brings its own board: the list is
+                  // replaced, not appended to — the previous board was not
+                  // invited to this community's meeting.
+                  if (value !== adresId) setZarzad(boardOf(value));
+                  // The community's own city unit, offered when nothing is picked
+                  // yet — it is almost always the one the meeting is with.
+                  const unit = adresy.find((a) => String(a.id) === value)?.zgnJednostkaId;
+                  if (!zgnPick && unit != null) setZgnPick(`j:${unit}`);
+                }}
                 placeholder={t.kalNoAdres}
                 searchPlaceholder={t.searchAdres}
                 emptyText={t.kalNoResults}
                 ariaLabel={t.kalFieldAdres}
               />
             </div>
+          </div>
+
+          <div className="form-group">
+            <label>{t.kalMaterialsNeeded}</label>
+            <div className="kal-pill-switch" role="group" aria-label={t.kalMaterialsNeeded}>
+              {[true, false].map((needed) => (
+                <button
+                  key={String(needed)}
+                  type="button"
+                  className={`kal-pill-switch__opt${needed ? ' is-yes' : ''}${
+                    materialyPotrzebne === needed ? ' is-active' : ''
+                  }`}
+                  aria-pressed={materialyPotrzebne === needed}
+                  onClick={() => setMaterialyPotrzebne(needed)}
+                >
+                  {needed ? t.kalMaterialsYes : t.kalMaterialsNo}
+                </button>
+              ))}
+            </div>
+            <div className="kal-check__hint" style={{ marginTop: '6px' }}>
+              {t.kalMaterialsNeededHint}
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label>{t.kalFieldZgn}</label>
+            <SearchableSelect
+              overlay
+              value={zgnPick}
+              options={zgnOptions}
+              onChange={setZgnPick}
+              placeholder={t.kalNoZgn}
+              searchPlaceholder={t.kalZgnSearch}
+              emptyText={t.kalNoResults}
+              ariaLabel={t.kalFieldZgn}
+            />
+            {zgnJednostki.length === 0 && (
+              <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '6px' }}>
+                {t.kalZgnNoneYet}
+              </div>
+            )}
           </div>
 
           <div className="form-group">
@@ -494,6 +949,7 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
               <div style={{ fontSize: '12px', opacity: 0.7 }}>{t.kalNoPlaces}</div>
             ) : (
               <SearchableSelect
+                overlay
                 value={lokalizacjaId}
                 options={[
                   { value: '', label: t.kalNoPlaceOption },
@@ -512,6 +968,79 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
               />
             )}
           </div>
+
+          {(zarzad.length > 0 || boardOf(adresId).length > 0) && (
+            <div className="form-group">
+              <div className="kal-label-row">
+                <label>{t.kalFieldZarzad}</label>
+                {/* Back to the community's whole board after people were removed. */}
+                {boardOf(adresId).some(
+                  (m) => !zarzad.some((z) => z.imieNazwisko === m.imieNazwisko),
+                ) && (
+                  <button
+                    type="button"
+                    className="link-button"
+                    onClick={() => setZarzad(boardOf(adresId))}
+                  >
+                    {t.kalZarzadRestore}
+                  </button>
+                )}
+              </div>
+              {/* One by one, like the participants: the members not on the
+                  meeting yet. A permanently empty value makes it an action
+                  picker — each pick adds a person below. */}
+              {boardOf(adresId).length > 0 && (
+                <SearchableSelect
+                  overlay
+                  value=""
+                  options={boardOf(adresId)
+                    .filter((m) => !zarzad.some((z) => z.imieNazwisko === m.imieNazwisko))
+                    .map((m) => ({
+                      value: m.imieNazwisko,
+                      label: m.imieNazwisko,
+                      hint: m.email || undefined,
+                    }))}
+                  onChange={(name) => {
+                    const member = boardOf(adresId).find((m) => m.imieNazwisko === name);
+                    if (member) setZarzad((prev) => [...prev, member]);
+                  }}
+                  placeholder={
+                    boardOf(adresId).every((m) => zarzad.some((z) => z.imieNazwisko === m.imieNazwisko))
+                      ? t.kalZarzadAllAdded
+                      : t.kalZarzadAdd
+                  }
+                  searchPlaceholder={t.kalZarzadSearch}
+                  emptyText={t.kalParticipantsNoMatch}
+                  disabled={boardOf(adresId).every((m) =>
+                    zarzad.some((z) => z.imieNazwisko === m.imieNazwisko),
+                  )}
+                  ariaLabel={t.kalZarzadAdd}
+                />
+              )}
+              {zarzad.length > 0 ? (
+                <div className="kal-people">
+                  {zarzad.map((m) => (
+                    <span key={m.imieNazwisko} className="kal-person kal-person--board" title={m.email || undefined}>
+                      <Icon name="home" size={12} />
+                      <span className="kal-person__label">{m.imieNazwisko}</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setZarzad((prev) => prev.filter((p) => p.imieNazwisko !== m.imieNazwisko))
+                        }
+                        title={t.kalParticipantRemove}
+                        aria-label={t.kalParticipantRemove}
+                      >
+                        <Icon name="x" size={12} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: '12px', opacity: 0.65 }}>{t.kalZarzadNone}</div>
+              )}
+            </div>
+          )}
 
           <div className="form-group">
             <div className="kal-label-row">
@@ -548,6 +1077,7 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
               <div style={{ fontSize: '12px', opacity: 0.7 }}>{t.kalNoAccounts}</div>
             ) : (
               <SearchableSelect
+                overlay
                 // A permanently empty value turns the dropdown into an action
                 // picker: the trigger keeps its placeholder, each pick adds a
                 // person below instead of replacing a selection.
@@ -613,6 +1143,23 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
             />
           </div>
 
+          <SpotkanieZadania
+            zadania={editing ? linkedZadania : []}
+            pending={pendingZadania}
+            users={users}
+            language={language}
+            disabled={isSaving}
+            onAdd={() => setTaskForm({ editing: null })}
+            onPreview={setTaskPreview}
+            onEdit={(z) => setTaskForm({ editing: z })}
+            onDelete={onDeleteZadanie}
+            onOpenBoard={onOpenZadanie}
+            onRemovePending={(i) => {
+              discardPending([pendingZadania[i]]);
+              setPendingZadania((prev) => prev.filter((_, k) => k !== i));
+            }}
+          />
+
           {(localError || error) && (
             <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '8px' }}>
               {localError || error}
@@ -620,7 +1167,19 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
           )}
         </div>
         <div className="modal-footer">
-          <button className="button button-secondary" onClick={onCancel} disabled={isSaving}>
+          {editing && onClone && (
+            <button
+              type="button"
+              className="button button-secondary"
+              style={{ marginRight: 'auto' }}
+              onClick={onClone}
+              disabled={isSaving}
+              title={t.kalCloneHint}
+            >
+              <Icon name="copy" size={14} /> {t.kalClone}
+            </button>
+          )}
+          <button className="button button-secondary" onClick={handleCancel} disabled={isSaving}>
             <Icon name="x" size={14} /> {t.cancel}
           </button>
           <button
@@ -631,6 +1190,50 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
             <Icon name="save" size={14} /> {editing ? t.update : t.add}
           </button>
         </div>
+
+        {/* On document.body so the meeting modal's entry animation (a transform)
+            cannot become the task modal's containing block. Kept inside this
+            .modal in the React tree: portal clicks bubble through it, and its
+            stopPropagation is what keeps them from closing the meeting form. */}
+        {taskPreview &&
+          createPortal(
+            <ZadaniePreviewModal
+              key={taskPreview.id}
+              language={language}
+              zadanie={taskPreview}
+              users={users}
+              userEmail={userEmail ?? ''}
+              onCommentsChange={() => {}}
+              onEdit={() => {
+                setTaskForm({ editing: taskPreview });
+                setTaskPreview(null);
+              }}
+              onClose={() => setTaskPreview(null)}
+            />,
+            document.body,
+          )}
+
+        {taskForm &&
+          createPortal(
+            <ZadanieFormModal
+              key={taskForm.editing ? `edit-${taskForm.editing.id}` : 'new'}
+              language={language}
+              editing={taskForm.editing}
+              initialStatus="todo"
+              initialValues={{
+                termin: date || null,
+                spotkanieId: editing ? editing.id : null,
+              }}
+              users={users}
+              userEmail={userEmail ?? ''}
+              onCommentsChange={() => {}}
+              isSaving={taskSaving}
+              error={taskError}
+              onSubmit={handleTaskSubmit}
+              onCancel={closeTask}
+            />,
+            document.body,
+          )}
       </div>
     </div>
   );
@@ -650,6 +1253,7 @@ const MeetingCard: React.FC<{
   highlighted: boolean;
   busy: boolean;
   onEdit: () => void;
+  onClone: () => void;
   onDelete: () => void;
   /** "I have seen that the date moved." */
   onAckTermin: () => void;
@@ -657,12 +1261,22 @@ const MeetingCard: React.FC<{
   onTerminStatus: (status: SpotkanieTerminStatus) => void;
   /** Tick or untick "documents sent", with a note of what went out. */
   onDokumenty: (sent: boolean, opis: string) => void;
+  /** Move the materials status: none needed / to prepare / ready. */
+  onMaterialy: (status: SpotkanieMaterialyStatus) => void;
   /** Hand this meeting to the Mailing module. Absent when it has no community. */
   onSendMailing?: () => void;
   /** Open one recorded send in the mailing-details window. */
   onOpenMailing: (mailing: SpotkanieMailing) => void;
   /** Which meetings a mailing went out for, plus the types that carry deadlines. */
   docsCtx: SpotkaniaDocsContext;
+  /** Tasks linked to this meeting, and what can be done with them. */
+  zadania: Zadanie[];
+  users: AppUser[];
+  onAddTask: () => void;
+  onPreviewTask: (zadanie: Zadanie) => void;
+  onEditTask: (zadanie: Zadanie) => void;
+  onDeleteTask: (zadanie: Zadanie) => void;
+  onOpenTask?: (zadanie: Zadanie) => void;
 }> = ({
   spotkanie,
   typ,
@@ -673,6 +1287,7 @@ const MeetingCard: React.FC<{
   highlighted,
   busy,
   onEdit,
+  onClone,
   onDelete,
   onAckTermin,
   onTerminStatus,
@@ -680,6 +1295,14 @@ const MeetingCard: React.FC<{
   onSendMailing,
   onOpenMailing,
   docsCtx,
+  onMaterialy,
+  zadania,
+  users,
+  onAddTask,
+  onPreviewTask,
+  onEditTask,
+  onDeleteTask,
+  onOpenTask,
 }) => {
   const t = translations[language];
   const when = spotkanieWhen(spotkanie);
@@ -694,6 +1317,15 @@ const MeetingCard: React.FC<{
   // is the one thing on it that takes typing.
   const [editingDocs, setEditingDocs] = useState(false);
   const [docsOpis, setDocsOpis] = useState(spotkanie.dokumentyOpis);
+  const materialyMark: Record<SpotkanieMaterialyKrok, string> = {
+    do_przygotowania: t.kalMatMarkDo,
+    przygotowane: t.kalMatMarkPrzygotowane,
+    wyslane: t.kalMatMarkWyslane,
+  };
+  const materialyBy = (email: string): string => {
+    const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+    return user ? personLabel(user) : email;
+  };
 
   return (
     <article
@@ -770,16 +1402,31 @@ const MeetingCard: React.FC<{
             <Icon name="map-pin" size={13} /> {place}
           </span>
         )}
+        {spotkanie.zgnNazwa && (
+          <span className="kal-place" title={t.kalFieldZgn}>
+            <Icon name="shield" size={13} /> {spotkanie.zgnNazwa}
+          </span>
+        )}
       </div>
 
       {spotkanie.opis && <p className="kal-card__desc">{spotkanie.opis}</p>}
 
-      {spotkanie.uczestnicy.length > 0 && (
+      {(spotkanie.uczestnicy.length > 0 || spotkanie.zarzad.length > 0) && (
         <div className="kal-people">
           {spotkanie.uczestnicy.map((person) => (
             <span key={person.userId} className="kal-person kal-person--static" title={person.email}>
               <Icon name="users" size={12} />
               <span className="kal-person__label">{personLabel(person)}</span>
+            </span>
+          ))}
+          {spotkanie.zarzad.map((m) => (
+            <span
+              key={`z-${m.imieNazwisko}`}
+              className="kal-person kal-person--static kal-person--board"
+              title={[t.kalFieldZarzad, m.email].filter(Boolean).join(' · ')}
+            >
+              <Icon name="home" size={12} />
+              <span className="kal-person__label">{m.imieNazwisko}</span>
             </span>
           ))}
         </div>
@@ -794,7 +1441,7 @@ const MeetingCard: React.FC<{
         <div className="kal-card__actions">
           {tentative ? (
             <button
-              className="button button-small button-warning"
+              className="button button-small button-warning kal-card__action--wide"
               onClick={() => onTerminStatus('potwierdzony')}
               disabled={busy}
               title={t.kalTerminConfirmHint}
@@ -803,7 +1450,7 @@ const MeetingCard: React.FC<{
             </button>
           ) : (
             <button
-              className="button button-small button-info"
+              className="button button-small button-info kal-card__action--wide"
               onClick={() => onTerminStatus('wstepny')}
               disabled={busy}
               title={t.kalTerminUnconfirmHint}
@@ -814,11 +1461,84 @@ const MeetingCard: React.FC<{
           <button className="button button-small button-primary" onClick={onEdit} disabled={busy}>
             <Icon name="edit" size={13} /> {t.edit}
           </button>
+          <button
+            className="button button-small button-secondary"
+            onClick={onClone}
+            disabled={busy}
+            title={t.kalCloneHint}
+          >
+            <Icon name="copy" size={13} /> {t.kalClone}
+          </button>
           <button className="button button-small button-danger" onClick={onDelete} disabled={busy}>
             <Icon name="trash" size={13} /> {t.delete}
           </button>
         </div>
       </div>
+
+      <SpotkanieZadania
+        zadania={zadania}
+        users={users}
+        language={language}
+        disabled={busy}
+        onAdd={onAddTask}
+        onPreview={onPreviewTask}
+        onEdit={onEditTask}
+        onDelete={onDeleteTask}
+        onOpenBoard={onOpenTask}
+      />
+
+      {/* Materials, walled off like the paperwork below and run the same way:
+          where they stand, who moved them last, and one button per step. Each
+          step is announced to everyone (Ustawienia → Powiadomienia). Absent
+          when the meeting needs none. */}
+      {spotkanie.materialyStatus !== 'brak' && (
+        <div className={`kal-docs kal-mats kal-mats--${spotkanie.materialyStatus}`}>
+          <div className="kal-docs__head">
+            <span className="kal-docs__state kal-mats__state">
+              <Icon name="briefcase" size={14} />
+              {materialyStatusLabel(t, spotkanie.materialyStatus)}
+            </span>
+          </div>
+          {spotkanie.materialyZmienioneAt && spotkanie.materialyZmienioneBy && (
+            <span className="kal-docs__stamp">
+              {t.kalMaterialsChangedBy
+                .replace('{who}', materialyBy(spotkanie.materialyZmienioneBy))
+                .replace('{when}', formatStamp(spotkanie.materialyZmienioneAt, locale))}
+            </span>
+          )}
+          <div className="kal-mats__actions">
+            {SPOTKANIE_MATERIALY_KROKI.map((krok) => (
+              <button
+                key={krok}
+                type="button"
+                className={`button button-small ${
+                  spotkanie.materialyStatus === krok ? 'button-success' : 'button-secondary'
+                }`}
+                onClick={() => onMaterialy(krok)}
+                disabled={busy || spotkanie.materialyStatus === krok}
+                aria-pressed={spotkanie.materialyStatus === krok}
+              >
+                <Icon name={spotkanie.materialyStatus === krok ? 'check' : 'arrow-right'} size={13} />{' '}
+                {materialyMark[krok]}
+              </button>
+            ))}
+            {SPOTKANIE_MATERIALY_POPRZEDNI[spotkanie.materialyStatus] && (
+              <button
+                type="button"
+                className="button button-small button-secondary kal-mats__undo"
+                onClick={() => onMaterialy(SPOTKANIE_MATERIALY_POPRZEDNI[spotkanie.materialyStatus]!)}
+                disabled={busy}
+                title={t.kalMatUndoHint.replace(
+                  '{step}',
+                  materialyStatusLabel(t, SPOTKANIE_MATERIALY_POPRZEDNI[spotkanie.materialyStatus]!),
+                )}
+              >
+                <Icon name="undo" size={13} /> {t.kalMatUndo}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Paperwork, last on the card and walled off from it: it is the one part
           that is about what happened AFTER the meeting was arranged, and the one
@@ -985,6 +1705,9 @@ const Kalendarz: React.FC<Props> = ({
   onManageTypes,
   onManagePlaces,
   onSendDocuments,
+  onOpenZadanie,
+  focusRequest = null,
+  onFocusHandled,
 }) => {
   const t = translations[language];
   const notify = useNotify();
@@ -996,6 +1719,21 @@ const Kalendarz: React.FC<Props> = ({
   const [mailingi, setMailingi] = useState<SpotkanieMailing[]>([]);
   const [adresy, setAdresy] = useState<Adres[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
+  const [zadania, setZadania] = useState<Zadanie[]>([]);
+  const [zgnJednostki, setZgnJednostki] = useState<ZgnJednostka[]>([]);
+  const [zgnPelnomocnicy, setZgnPelnomocnicy] = useState<ZgnPelnomocnik[]>([]);
+  // The task form opened from a meeting card: which meeting, and the task being
+  // edited (null for a new one).
+  const [cardTask, setCardTask] = useState<{
+    spotkanie: Spotkanie;
+    editing: Zadanie | null;
+  } | null>(null);
+  const [cardTaskSaving, setCardTaskSaving] = useState(false);
+  // A task opened to read from a meeting card, with the meeting it belongs to.
+  const [taskPreview, setTaskPreview] = useState<{ spotkanie: Spotkanie; zadanie: Zadanie } | null>(
+    null,
+  );
+  const [cardTaskError, setCardTaskError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   // A refresh must not blank the month — only the first load shows a loader.
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -1019,9 +1757,36 @@ const Kalendarz: React.FC<Props> = ({
   // Set when a chip in the grid is clicked, so the panel says which of the day's
   // meetings the user actually pointed at.
   const [highlightId, setHighlightId] = useState<number | null>(null);
-  // null = closed; otherwise the meeting being edited (or null) and the day.
-  const [form, setForm] = useState<{ editing: Spotkanie | null; day: string } | null>(null);
+  // null = closed; otherwise the meeting being edited (or null), the day, and —
+  // for a clone — the meeting whose fields the new one starts with.
+  const [form, setForm] = useState<{
+    editing: Spotkanie | null;
+    day: string;
+    template?: Spotkanie;
+  } | null>(null);
   const [tip, setTip] = useState<TipState | null>(null);
+  const [countTip, setCountTip] = useState<CountTipState | null>(null);
+  /**
+   * The month as a grid with one day open beside it, or every meeting of the
+   * month as full cards, one after another. Remembered on this computer only — a
+   * way of looking, not data.
+   */
+  const [viewMode, setViewModeState] = useState<'month' | 'list'>(() => {
+    try {
+      return localStorage.getItem(VIEW_MODE_KEY) === 'list' ? 'list' : 'month';
+    } catch {
+      return 'month';
+    }
+  });
+  const setViewMode = (mode: 'month' | 'list') => {
+    setViewModeState(mode);
+    setTip(null);
+    try {
+      localStorage.setItem(VIEW_MODE_KEY, mode);
+    } catch {
+      // Storage refused: the choice simply lasts until the view closes.
+    }
+  };
   /**
    * Whether the hover card is switched on (Ustawienia → Wygląd). Read here
    * rather than threaded down from the app shell: this view is the only reader,
@@ -1081,9 +1846,45 @@ const Kalendarz: React.FC<Props> = ({
       setIsLoading(false);
       setIsRefreshing(false);
     }
+    await Promise.all([loadZadania(), loadZgn()]);
+  };
+
+  /** Apart too: without the units the picker is only empty, the calendar still works. */
+  const loadZgn = async () => {
+    try {
+      const [jednostki, pelnomocnicy] = await Promise.all([
+        window.electronAPI.mailingGetZgn(),
+        window.electronAPI.getZgnPelnomocnicy(),
+      ]);
+      setZgnJednostki(jednostki);
+      setZgnPelnomocnicy(pelnomocnicy);
+    } catch {
+      setZgnPelnomocnicy([]);
+    }
+  };
+
+  /** Apart from the calendar: a board that fails to load only hides the meetings' tasks. */
+  const loadZadania = async () => {
+    try {
+      setZadania(await window.electronAPI.getZadania());
+    } catch {
+      setZadania([]);
+    }
   };
 
   /* ------------------------------ Derived data ----------------------------- */
+
+  /** Each meeting's tasks, archived ones left out — they are off the board too. */
+  const zadaniaBySpotkanie = useMemo(() => {
+    const map = new Map<number, Zadanie[]>();
+    for (const z of zadania) {
+      if (z.spotkanieId === null || z.zarchiwizowane) continue;
+      const bucket = map.get(z.spotkanieId);
+      if (bucket) bucket.push(z);
+      else map.set(z.spotkanieId, [z]);
+    }
+    return map;
+  }, [zadania]);
 
   /**
    * What the document questions need beyond the meeting: which meetings a
@@ -1131,11 +1932,38 @@ const Kalendarz: React.FC<Props> = ({
   // panel are the working view and do follow the filter; the grid groups every
   // meeting, not just the month's, because its first and last row show days
   // belonging to the neighbouring months.
-  const monthSpotkania = useMemo(
-    () => spotkaniaInMonth(spotkania, monthKey),
-    [spotkania, monthKey],
-  );
+  /**
+   * Per type, how many meetings the month on screen and its whole year hold —
+   * the "3/13" on each filter chip. Like the month bar, these count what is
+   * scheduled, not what the search lets through. Key `null` is every type.
+   */
+  const typCounts = useMemo(() => {
+    const yearPrefix = `${monthKey.slice(0, 4)}-`;
+    const counts = new Map<number | null, { month: number; year: number }>();
+    const bump = (key: number | null, inMonth: boolean) => {
+      const c = counts.get(key) ?? { month: 0, year: 0 };
+      c.year += 1;
+      if (inMonth) c.month += 1;
+      counts.set(key, c);
+    };
+    for (const s of spotkania) {
+      const day = toDayKey(s.startsAt);
+      if (!day.startsWith(yearPrefix)) continue;
+      const inMonth = monthOfDayKey(day) === monthKey;
+      bump(null, inMonth);
+      if (s.typId !== null) bump(s.typId, inMonth);
+    }
+    return counts;
+  }, [spotkania, monthKey]);
+  const countOf = (key: number | null) => typCounts.get(key) ?? { month: 0, year: 0 };
+
   const byDay = useMemo(() => groupByDay(filtered, locale), [filtered, locale]);
+  /** The list view: the month's filtered meetings, by day, earliest first. */
+  const listDays = useMemo(() => {
+    if (viewMode !== 'list') return [];
+    const grouped = groupByDay(spotkaniaInMonth(filtered, monthKey), locale);
+    return [...grouped.keys()].sort().map((day) => ({ day, meetings: grouped.get(day) ?? [] }));
+  }, [viewMode, filtered, monthKey, locale]);
   const cells = useMemo(() => buildMonthGrid(monthKey), [monthKey]);
   const weekdays = useMemo(() => weekdayLabels(locale), [locale]);
 
@@ -1175,6 +2003,35 @@ const Kalendarz: React.FC<Props> = ({
     setTip(null);
   };
 
+  /** A new meeting with every field of `source` — saving adds, never overwrites. */
+  const openClone = (source: Spotkanie) => {
+    setFormError(null);
+    setForm({ editing: null, day: toDayKey(source.startsAt), template: source });
+    // The modal covers the chip, so its mouseleave may never fire.
+    setTip(null);
+  };
+
+  /** Hang the month/year count card under whatever it explains. */
+  const showCountTip = (
+    event: React.SyntheticEvent<HTMLElement>,
+    label: string,
+    color: string | null,
+    key: number | null,
+  ) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setCountTip({
+      label,
+      color,
+      ...countOf(key),
+      left: Math.max(
+        TIP_MARGIN,
+        Math.min(rect.left, window.innerWidth - COUNT_TIP_WIDTH - TIP_MARGIN),
+      ),
+      top: rect.bottom + TIP_MARGIN,
+    });
+  };
+  const hideCountTip = () => setCountTip(null);
+
   /**
    * Position the hover card off the chip's own box. Anchoring from whichever
    * viewport edge is further away means the card never has to be measured
@@ -1197,14 +2054,39 @@ const Kalendarz: React.FC<Props> = ({
     });
   };
 
-  const handleSubmit = async (input: SpotkanieInput) => {
+  const handleSubmit = async (
+    input: SpotkanieInput,
+    pendingZadania: ZadanieInput[],
+    materialyPotrzebne: boolean,
+  ) => {
     setIsSaving(true);
     setFormError(null);
     try {
       if (form?.editing) {
         await window.electronAPI.updateSpotkanie(form.editing.id, input);
+        // The form only says needed or not: unticking drops the materials,
+        // ticking a meeting that had none makes them needed, and a meeting
+        // already under way keeps the step it reached.
+        const was = form.editing.materialyStatus;
+        if (!materialyPotrzebne && was !== 'brak') {
+          await window.electronAPI.setSpotkanieMaterialy(form.editing.id, 'brak');
+        } else if (materialyPotrzebne && was === 'brak') {
+          await window.electronAPI.setSpotkanieMaterialy(form.editing.id, 'potrzebne');
+        }
       } else {
-        await window.electronAPI.addSpotkanie(input);
+        const created = await window.electronAPI.addSpotkanie(input);
+        if (materialyPotrzebne) {
+          await window.electronAPI.setSpotkanieMaterialy(created.id, 'potrzebne');
+        }
+        // The meeting exists now, so the tasks written for it can point at it.
+        // One that fails is said out loud; the meeting itself is already saved.
+        for (const z of pendingZadania) {
+          try {
+            await window.electronAPI.addZadanie({ ...z, spotkanieId: created.id });
+          } catch (err: unknown) {
+            notify.error(err instanceof Error ? err.message : t.zadSaveError);
+          }
+        }
       }
       setForm(null);
       await load(true);
@@ -1266,6 +2148,13 @@ const Kalendarz: React.FC<Props> = ({
       status === 'potwierdzony' ? t.kalTerminConfirmedDone : t.kalTerminTentativeDone,
     );
 
+  const handleMaterialy = (spotkanie: Spotkanie, status: SpotkanieMaterialyStatus) =>
+    runOnMeeting(
+      spotkanie.id,
+      () => window.electronAPI.setSpotkanieMaterialy(spotkanie.id, status),
+      t.kalMaterialsSavedDone,
+    );
+
   const handleDokumenty = (spotkanie: Spotkanie, sent: boolean, opis: string) =>
     runOnMeeting(
       spotkanie.id,
@@ -1313,6 +2202,59 @@ const Kalendarz: React.FC<Props> = ({
     selectDay(toDayKey(spotkanie.startsAt), spotkanie.id);
   };
 
+  /** Delete a meeting's task — from its card or from its form. */
+  const handleDeleteZadanie = async (z: Zadanie) => {
+    if (!(await notify.confirm(t.zadConfirmDelete.replace('{title}', z.tytul), { danger: true }))) {
+      return;
+    }
+    try {
+      await window.electronAPI.deleteZadanie(z.id);
+      notify.success(t.kalTaskDeleted);
+    } catch (err: unknown) {
+      notify.error(err instanceof Error ? err.message : t.zadSaveError);
+    }
+    await loadZadania();
+  };
+
+  const handleCardTaskSubmit = async (input: ZadanieInput) => {
+    if (!cardTask) return;
+    setCardTaskSaving(true);
+    setCardTaskError(null);
+    try {
+      if (cardTask.editing) {
+        await window.electronAPI.updateZadanie(cardTask.editing.id, input);
+        notify.success(t.kalTaskUpdated);
+      } else {
+        await window.electronAPI.addZadanie({ ...input, spotkanieId: cardTask.spotkanie.id });
+        notify.success(t.kalTaskAdded);
+      }
+      setCardTask(null);
+      await loadZadania();
+    } catch (err: unknown) {
+      setCardTaskError(err instanceof Error ? err.message : t.zadSaveError);
+    } finally {
+      setCardTaskSaving(false);
+    }
+  };
+
+  const openCardTask = (spotkanie: Spotkanie, editing: Zadanie | null) => {
+    setCardTaskError(null);
+    setCardTask({ spotkanie, editing });
+  };
+
+  // A meeting link followed from the board: its month, its day, the card lit.
+  useEffect(() => {
+    if (!focusRequest || isLoading) return;
+    const target = spotkania.find((s) => s.id === focusRequest.spotkanieId);
+    if (target) {
+      selectDay(toDayKey(target.startsAt), target.id);
+      if (focusRequest.edit) openForm(toDayKey(target.startsAt), target);
+    }
+    onFocusHandled?.();
+    // Only a new request moves the view; later reloads must not pull it back.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusRequest, isLoading]);
+
   /* ------------------------------- Rendering ------------------------------- */
 
   if (isLoading) {
@@ -1323,15 +2265,48 @@ const Kalendarz: React.FC<Props> = ({
     );
   }
 
+  /** One meeting, in full — the day panel and the list view show the same card. */
+  const renderMeetingCard = (s: Spotkanie) => (
+    <MeetingCard
+      key={s.id}
+      spotkanie={s}
+      typ={typOf(s, typy)}
+      place={lokalizacjaLabel(s, lokalizacje)}
+      mailings={mailingiBySpotkanie.get(s.id) ?? []}
+      language={language}
+      locale={locale}
+      highlighted={highlightId === s.id}
+      busy={busyId === s.id}
+      onEdit={() => openForm(toDayKey(s.startsAt), s)}
+      onClone={() => openClone(s)}
+      onDelete={() => void handleDelete(s)}
+      onAckTermin={() => void handleAckTermin(s)}
+      onTerminStatus={(status) => void handleTerminStatus(s, status)}
+      onDokumenty={(sent, opis) => void handleDokumenty(s, sent, opis)}
+      onMaterialy={(status) => void handleMaterialy(s, status)}
+      onSendMailing={
+        onSendDocuments && s.adresId !== null
+          ? () => handleSendMailing(s)
+          : undefined
+      }
+      onOpenMailing={(m) => void openMailingDetails(m)}
+      docsCtx={docsCtx}
+      zadania={zadaniaBySpotkanie.get(s.id) ?? []}
+      users={users}
+      onAddTask={() => openCardTask(s, null)}
+      onPreviewTask={(z) => setTaskPreview({ spotkanie: s, zadanie: z })}
+      onEditTask={(z) => openCardTask(s, z)}
+      onDeleteTask={(z) => void handleDeleteZadanie(z)}
+      onOpenTask={onOpenZadanie ? (z) => onOpenZadanie(z.id) : undefined}
+    />
+  );
+
   const monthNumber = Number(monthKey.split('-')[1]) || 1;
   const monthName = monthLabel(monthKey, locale).replace(/\s*\d{4}$/, '');
   const year = monthKey.split('-')[0];
   const searchActive = search.trim().length > 0;
 
-  const facts = [
-    `${t.kalFactsMeetings}: ${monthSpotkania.length}`,
-    `${t.kalFactsUpcoming}: ${upcoming.length}`,
-  ];
+  const facts = [`${t.kalFactsUpcoming}: ${upcoming.length}`];
   if (typy.length > 0) facts.push(`${t.kalFactsTypes}: ${typy.length}`);
 
   return (
@@ -1354,7 +2329,24 @@ const Kalendarz: React.FC<Props> = ({
               {monthName}
               <span>{year}</span>
             </h1>
-            <p className="ksieg-hero__facts">{facts.join(' · ')}</p>
+            <p className="ksieg-hero__facts">
+              {/* Month / year, explained on hover — the same figure the type
+                  chips carry, for every type at once. */}
+              <span
+                className="kal-count-fact"
+                tabIndex={0}
+                onMouseEnter={(e) => showCountTip(e, t.kalAllTypes, null, null)}
+                onMouseLeave={hideCountTip}
+                onFocus={(e) => showCountTip(e, t.kalAllTypes, null, null)}
+                onBlur={hideCountTip}
+              >
+                {t.kalFactsCount}:{' '}
+                <strong>
+                  {countOf(null).month}/{countOf(null).year}
+                </strong>
+              </span>
+              {facts.map((f) => ` · ${f}`).join('')}
+            </p>
           </div>
 
           <div className="ksieg-hero__nav">
@@ -1368,6 +2360,7 @@ const Kalendarz: React.FC<Props> = ({
               <Icon name="chevron-left" size={17} />
             </button>
             <Select
+              overlay
               value={monthKey}
               options={monthOptions}
               onChange={setMonthKey}
@@ -1472,8 +2465,15 @@ const Kalendarz: React.FC<Props> = ({
               className={`kal-filter${typFilter === null ? ' is-active' : ''}`}
               onClick={() => setTypFilter(null)}
               aria-pressed={typFilter === null}
+              onMouseEnter={(e) => showCountTip(e, t.kalAllTypes, null, null)}
+              onMouseLeave={hideCountTip}
+              onFocus={(e) => showCountTip(e, t.kalAllTypes, null, null)}
+              onBlur={hideCountTip}
             >
               {t.kalAllTypes}
+              <span className="kal-filter__count">
+                {countOf(null).month}/{countOf(null).year}
+              </span>
             </button>
             {typy.map((typ) => (
               <button
@@ -1483,12 +2483,40 @@ const Kalendarz: React.FC<Props> = ({
                 style={{ ['--chip' as string]: normalizeHexColor(typ.kolor) }}
                 onClick={() => setTypFilter(typFilter === typ.id ? null : typ.id)}
                 aria-pressed={typFilter === typ.id}
+                onMouseEnter={(e) =>
+                  showCountTip(e, typ.nazwa, normalizeHexColor(typ.kolor), typ.id)
+                }
+                onMouseLeave={hideCountTip}
+                onFocus={(e) => showCountTip(e, typ.nazwa, normalizeHexColor(typ.kolor), typ.id)}
+                onBlur={hideCountTip}
               >
                 <span className="kal-chip__dot" />
                 {typ.nazwa}
+                <span className="kal-filter__count">
+                  {countOf(typ.id).month}/{countOf(typ.id).year}
+                </span>
               </button>
             ))}
 
+          </div>
+
+          <div className="kal-view-toggle" role="group" aria-label={t.kalViewLabel}>
+            <button
+              type="button"
+              className={viewMode === 'month' ? 'is-active' : ''}
+              aria-pressed={viewMode === 'month'}
+              onClick={() => setViewMode('month')}
+            >
+              <Icon name="calendar" size={14} /> {t.kalViewMonth}
+            </button>
+            <button
+              type="button"
+              className={viewMode === 'list' ? 'is-active' : ''}
+              aria-pressed={viewMode === 'list'}
+              onClick={() => setViewMode('list')}
+            >
+              <Icon name="menu" size={14} /> {t.kalViewList}
+            </button>
           </div>
 
           <button
@@ -1500,242 +2528,303 @@ const Kalendarz: React.FC<Props> = ({
           </button>
         </div>
 
-        {/* ---------------------- The month and the day --------------------- */}
-        <div className="kal-layout">
-          <div className="kal-grid">
-            {/* Head and body scroll together in one container so their seven
-                columns stay aligned when a scrollbar appears, and the head is
-                sticky so it stays readable while they do. */}
-            <div className="kal-grid__scroll" onScroll={() => setTip(null)}>
-              <div className="kal-grid__head">
-                {weekdays.map((label) => (
-                  <span key={label}>{label}</span>
-                ))}
+        {/* ------------------- The list: the whole month ------------------- */}
+        {viewMode === 'list' && (
+          <div className="kal-list">
+            {listDays.length === 0 ? (
+              <div className="kal-side__empty">
+                <Icon name="calendar" size={26} />
+                <span>
+                  {searchActive || typFilter !== null || stateFilter !== 'all'
+                    ? t.kalNoResults
+                    : t.kalMonthEmpty}
+                </span>
               </div>
-              <div className="kal-grid__body">
-                {cells.map((cell) => {
-                  const meetings = byDay.get(cell.dayKey) ?? [];
-                  const shown = meetings.slice(0, CHIPS_PER_CELL);
-                  const more = meetings.length - shown.length;
-                  return (
-                    <div
-                      key={cell.dayKey}
-                      className={
-                        'kal-cell' +
-                        (cell.inMonth ? '' : ' kal-cell--outside') +
-                        (cell.isWeekend ? ' kal-cell--weekend' : '') +
-                        (cell.isToday ? ' kal-cell--today' : '') +
-                        (cell.dayKey === selectedDay ? ' is-selected' : '')
-                      }
-                      role="button"
-                      tabIndex={0}
-                      aria-label={formatDayLabel(cell.dayKey, locale)}
-                      title={`${formatDayLabel(cell.dayKey, locale)} — ${t.kalDayDoubleClick}`}
-                      onClick={() => selectDay(cell.dayKey)}
-                      // One click reads the day, two write to it — the same
-                      // convention as every other calendar. The hover "+" stays,
-                      // because a double-click is a gesture nobody can see.
-                      onDoubleClick={() => {
-                        selectDay(cell.dayKey);
-                        openForm(cell.dayKey);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          selectDay(cell.dayKey);
-                        }
-                      }}
+            ) : (
+              listDays.map(({ day, meetings }) => (
+                <section key={day} className="kal-list__day">
+                  <div className={`kal-list__head${day === todayKey() ? ' is-today' : ''}`}>
+                    <h3>{formatDayLabel(day, locale)}</h3>
+                    <span className="kal-list__count">{meetingsCount(meetings.length, language)}</span>
+                    <button
+                      type="button"
+                      className="button button-small button-secondary"
+                      onClick={() => openForm(day)}
                     >
-                      <div className="kal-cell__head">
-                        <span className="kal-cell__num">{cell.dayOfMonth}</span>
-                        <button
-                          type="button"
-                          className="kal-cell__add"
-                          title={t.kalDayAdd}
-                          aria-label={t.kalDayAdd}
-                          onClick={(e) => {
-                            e.stopPropagation();
+                      <Icon name="plus" size={13} /> {t.add}
+                    </button>
+                  </div>
+                  <div className="kal-list__cards">{meetings.map(renderMeetingCard)}</div>
+                </section>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* ---------------------- The month and the day --------------------- */}
+        {viewMode === 'month' && (
+          <div className="kal-layout">
+            <div className="kal-grid">
+              {/* Head and body scroll together in one container so their seven
+                  columns stay aligned when a scrollbar appears, and the head is
+                  sticky so it stays readable while they do. */}
+              <div className="kal-grid__scroll" onScroll={() => setTip(null)}>
+                <div className="kal-grid__head">
+                  {weekdays.map((label) => (
+                    <span key={label}>{label}</span>
+                  ))}
+                </div>
+                <div className="kal-grid__body">
+                  {cells.map((cell) => {
+                    const meetings = byDay.get(cell.dayKey) ?? [];
+                    const shown = meetings.slice(0, CHIPS_PER_CELL);
+                    const more = meetings.length - shown.length;
+                    return (
+                      <div
+                        key={cell.dayKey}
+                        className={
+                          'kal-cell' +
+                          (cell.inMonth ? '' : ' kal-cell--outside') +
+                          (cell.isWeekend ? ' kal-cell--weekend' : '') +
+                          (cell.isToday ? ' kal-cell--today' : '') +
+                          (cell.dayKey === selectedDay ? ' is-selected' : '')
+                        }
+                        role="button"
+                        tabIndex={0}
+                        aria-label={formatDayLabel(cell.dayKey, locale)}
+                        title={`${formatDayLabel(cell.dayKey, locale)} — ${t.kalDayDoubleClick}`}
+                        onClick={() => selectDay(cell.dayKey)}
+                        // One click reads the day, two write to it — the same
+                        // convention as every other calendar. The hover "+" stays,
+                        // because a double-click is a gesture nobody can see.
+                        onDoubleClick={() => {
+                          selectDay(cell.dayKey);
+                          openForm(cell.dayKey);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
                             selectDay(cell.dayKey);
-                            openForm(cell.dayKey);
-                          }}
-                          onDoubleClick={(e) => e.stopPropagation()}
-                        >
-                          <Icon name="plus" size={12} />
-                        </button>
-                      </div>
-                      <div className="kal-cell__chips">
-                        {shown.map((s) => {
-                          const typ = typOf(s, typy);
-                          return (
-                            <button
-                              key={s.id}
-                              type="button"
-                              className={
-                                'kal-chip kal-chip--button' +
-                                (hasUnreadTerminChange(s) ? ' is-changed' : '') +
-                                (isTerminWstepny(s) ? ' is-tentative' : '')
-                              }
-                              style={{
-                                ['--chip' as string]: normalizeHexColor(
-                                  typ?.kolor ?? DEFAULT_TYP_COLOR,
-                                ),
-                              }}
-                              /* With the card on, the title must be empty —
-                               not absent: that suppresses the native tooltip
-                               AND stops the browser falling back to the cell's
-                               title, which would otherwise arrive a second
-                               later on top of the card. With the card off, the
-                               native tooltip is the fallback, so the full name
-                               is still reachable. */
-                            title={
-                              hoverCard
-                                ? ''
-                                : `${formatTimeRange(s, locale)} — ${s.nazwa}\n${t.kalChipDoubleClick}`
-                            }
-                            onMouseEnter={(e) => showTip(e, s)}
-                            onMouseLeave={() => setTip(null)}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                selectDay(cell.dayKey, s.id);
-                              }}
-                              // Stopped from bubbling, or the cell underneath
-                              // would open a *new* meeting over this edit.
-                              onDoubleClick={(e) => {
-                                e.stopPropagation();
-                                selectDay(cell.dayKey, s.id);
-                                openForm(toDayKey(s.startsAt), s);
-                              }}
-                            >
-                              <span className="kal-chip__dot" />
-                              {hasUnreadTerminChange(s) && (
-                                <Icon name="alert-triangle" size={11} />
-                              )}
-                              {isTerminWstepny(s) && <Icon name="clock" size={11} />}
-                              <span className="kal-chip__time">
-                                {formatTime(s.startsAt, locale)}
-                              </span>
-                              <span className="kal-chip__name">{s.nazwa}</span>
-                            </button>
-                          );
-                        })}
-                        {more > 0 && (
+                          }
+                        }}
+                      >
+                        <div className="kal-cell__head">
+                          <span className="kal-cell__num">{cell.dayOfMonth}</span>
                           <button
                             type="button"
-                            className="kal-cell__more"
+                            className="kal-cell__add"
+                            title={t.kalDayAdd}
+                            aria-label={t.kalDayAdd}
                             onClick={(e) => {
                               e.stopPropagation();
                               selectDay(cell.dayKey);
+                              openForm(cell.dayKey);
                             }}
                             onDoubleClick={(e) => e.stopPropagation()}
                           >
-                            {t.kalMore.replace('{count}', String(more))}
+                            <Icon name="plus" size={12} />
                           </button>
-                        )}
+                        </div>
+                        <div className="kal-cell__chips">
+                          {shown.map((s) => {
+                            const typ = typOf(s, typy);
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                className={
+                                  'kal-chip kal-chip--button' +
+                                  (hasUnreadTerminChange(s) ? ' is-changed' : '') +
+                                  (isTerminWstepny(s) ? ' is-tentative' : '')
+                                }
+                                style={{
+                                  ['--chip' as string]: normalizeHexColor(
+                                    typ?.kolor ?? DEFAULT_TYP_COLOR,
+                                  ),
+                                }}
+                                /* With the card on, the title must be empty —
+                                 not absent: that suppresses the native tooltip
+                                 AND stops the browser falling back to the cell's
+                                 title, which would otherwise arrive a second
+                                 later on top of the card. With the card off, the
+                                 native tooltip is the fallback, so the full name
+                                 is still reachable. */
+                              title={
+                                hoverCard
+                                  ? ''
+                                  : `${formatTimeRange(s, locale)} — ${s.nazwa}\n${t.kalChipDoubleClick}`
+                              }
+                              onMouseEnter={(e) => showTip(e, s)}
+                              onMouseLeave={() => setTip(null)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  selectDay(cell.dayKey, s.id);
+                                }}
+                                // Stopped from bubbling, or the cell underneath
+                                // would open a *new* meeting over this edit.
+                                onDoubleClick={(e) => {
+                                  e.stopPropagation();
+                                  selectDay(cell.dayKey, s.id);
+                                  openForm(toDayKey(s.startsAt), s);
+                                }}
+                              >
+                                <span className="kal-chip__dot" />
+                                {hasUnreadTerminChange(s) && (
+                                  <Icon name="alert-triangle" size={11} />
+                                )}
+                                {isTerminWstepny(s) && <Icon name="clock" size={11} />}
+                                {s.materialyStatus !== 'brak' && (
+                                  <span
+                                    className={`kal-chip__mat kal-chip__mat--${s.materialyStatus}`}
+                                    aria-label={materialyStatusLabel(t, s.materialyStatus)}
+                                  >
+                                    <Icon name="briefcase" size={11} />
+                                  </span>
+                                )}
+                                <span className="kal-chip__time">
+                                  {formatTime(s.startsAt, locale)}
+                                </span>
+                                <span className="kal-chip__name">{s.nazwa}</span>
+                              </button>
+                            );
+                          })}
+                          {more > 0 && (
+                            <button
+                              type="button"
+                              className="kal-cell__more"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                selectDay(cell.dayKey);
+                              }}
+                              onDoubleClick={(e) => e.stopPropagation()}
+                            >
+                              {t.kalMore.replace('{count}', String(more))}
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          <aside className="kal-side">
-            <div className="kal-side__block kal-side__block--day">
-              <div className="kal-side__head">
-                <h3>{formatDayLabel(selectedDay, locale)}</h3>
-                <button
-                  type="button"
-                  className="button button-small button-secondary"
-                  onClick={() => openForm(selectedDay)}
-                >
-                  <Icon name="plus" size={13} /> {t.add}
-                </button>
-              </div>
-              {dayMeetings.length === 0 ? (
-                <div className="kal-side__empty">
-                  <Icon name="calendar" size={26} />
-                  <span>
-                    {searchActive || typFilter !== null || stateFilter !== 'all'
-                      ? t.kalNoResults
-                      : t.kalDayEmpty}
-                  </span>
-                </div>
-              ) : (
-                <div className="kal-side__list">
-                  {dayMeetings.map((s) => (
-                    <MeetingCard
-                      key={s.id}
-                      spotkanie={s}
-                      typ={typOf(s, typy)}
-                      place={lokalizacjaLabel(s, lokalizacje)}
-                      mailings={mailingiBySpotkanie.get(s.id) ?? []}
-                      language={language}
-                      locale={locale}
-                      highlighted={highlightId === s.id}
-                      busy={busyId === s.id}
-                      onEdit={() => openForm(toDayKey(s.startsAt), s)}
-                      onDelete={() => void handleDelete(s)}
-                      onAckTermin={() => void handleAckTermin(s)}
-                      onTerminStatus={(status) => void handleTerminStatus(s, status)}
-                      onDokumenty={(sent, opis) => void handleDokumenty(s, sent, opis)}
-                      onSendMailing={
-                        onSendDocuments && s.adresId !== null
-                          ? () => handleSendMailing(s)
-                          : undefined
-                      }
-                      onOpenMailing={(m) => void openMailingDetails(m)}
-                      docsCtx={docsCtx}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="kal-side__block kal-side__block--next">
-              <div className="kal-side__head">
-                <h3>{t.kalUpcoming}</h3>
-              </div>
-              {upcoming.length === 0 ? (
-                <div className="kal-side__empty kal-side__empty--sm">
-                  <span>{t.kalUpcomingEmpty}</span>
-                </div>
-              ) : (
-                <div className="kal-next">
-                  {upcoming.map((s) => {
-                    const typ = typOf(s, typy);
-                    return (
-                      <button
-                        key={s.id}
-                        type="button"
-                        className="kal-next__item"
-                        style={{
-                          ['--chip' as string]: normalizeHexColor(typ?.kolor ?? DEFAULT_TYP_COLOR),
-                        }}
-                        onClick={() => goToSpotkanie(s)}
-                      >
-                        <span className="kal-next__bar" />
-                        <span className="kal-next__body">
-                          <span className="kal-next__name">{s.nazwa}</span>
-                          <span className="kal-next__when">
-                            {formatStamp(s.startsAt, locale)}
-                            {s.adresNazwa ? ` · ${s.adresNazwa}` : ''}
-                          </span>
-                        </span>
-                        <Icon name="chevron-right" size={15} />
-                      </button>
                     );
                   })}
                 </div>
-              )}
+              </div>
             </div>
-          </aside>
-        </div>
+
+            <aside className="kal-side">
+              <div className="kal-side__block kal-side__block--day">
+                <div className="kal-side__head">
+                  <h3>{formatDayLabel(selectedDay, locale)}</h3>
+                  <button
+                    type="button"
+                    className="button button-small button-secondary"
+                    onClick={() => openForm(selectedDay)}
+                  >
+                    <Icon name="plus" size={13} /> {t.add}
+                  </button>
+                </div>
+                {dayMeetings.length === 0 ? (
+                  <div className="kal-side__empty">
+                    <Icon name="calendar" size={26} />
+                    <span>
+                      {searchActive || typFilter !== null || stateFilter !== 'all'
+                        ? t.kalNoResults
+                        : t.kalDayEmpty}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="kal-side__list">
+                    {dayMeetings.map(renderMeetingCard)}
+                  </div>
+                )}
+              </div>
+
+              <div className="kal-side__block kal-side__block--next">
+                <div className="kal-side__head">
+                  <h3>{t.kalUpcoming}</h3>
+                </div>
+                {upcoming.length === 0 ? (
+                  <div className="kal-side__empty kal-side__empty--sm">
+                    <span>{t.kalUpcomingEmpty}</span>
+                  </div>
+                ) : (
+                  <div className="kal-next">
+                    {upcoming.map((s) => {
+                      const typ = typOf(s, typy);
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          className="kal-next__item"
+                          style={{
+                            ['--chip' as string]: normalizeHexColor(typ?.kolor ?? DEFAULT_TYP_COLOR),
+                          }}
+                          onClick={() => goToSpotkanie(s)}
+                        >
+                          <span className="kal-next__bar" />
+                          <span className="kal-next__body">
+                            <span className="kal-next__name">{s.nazwa}</span>
+                            <span className="kal-next__when">
+                              {formatStamp(s.startsAt, locale)}
+                              {s.adresNazwa ? ` · ${s.adresNazwa}` : ''}
+                            </span>
+                          </span>
+                          <Icon name="chevron-right" size={15} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </aside>
+          </div>
+        )}
       </div>
 
       {/* Hover card for a chip in the grid. A native `title` waits about a
           second before it appears, and a cell is exactly where the user is
           scanning quickly — so this is rendered here, positioned in the
           viewport, and therefore never clipped by the grid's rounded overflow. */}
+      {countTip && (
+        <div
+          className="kal-count-tip"
+          role="tooltip"
+          style={{
+            left: countTip.left,
+            top: countTip.top,
+            ['--chip' as string]: countTip.color ?? 'var(--accent)',
+          }}
+        >
+          <div className="kal-count-tip__head">
+            <span className="kal-chip__dot" />
+            {countTip.label}
+          </div>
+          <div className="kal-count-tip__row">
+            <span>
+              {t.kalCountTipMonth} · {monthLabel(monthKey, locale)}
+            </span>
+            <strong>{meetingsCount(countTip.month, language)}</strong>
+          </div>
+          <div className="kal-count-tip__row">
+            <span>{t.kalCountTipYear.replace('{year}', year)}</span>
+            <strong>{meetingsCount(countTip.year, language)}</strong>
+          </div>
+          {countTip.year > 0 && (
+            <>
+              <div className="kal-count-tip__bar">
+                <span
+                  style={{ width: `${Math.round((countTip.month / countTip.year) * 100)}%` }}
+                />
+              </div>
+              <div className="kal-count-tip__share">
+                {t.kalCountTipShare.replace(
+                  '{pct}',
+                  String(Math.round((countTip.month / countTip.year) * 100)),
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {tip && (
         <div
           className="kal-tip"
@@ -1761,6 +2850,14 @@ const Kalendarz: React.FC<Props> = ({
               </span>
             </span>
           </div>
+          {tip.spotkanie.materialyStatus !== 'brak' && (
+            <div className="kal-tip__line">
+              <span className={`kal-chip__mat kal-chip__mat--${tip.spotkanie.materialyStatus}`}>
+                <Icon name="briefcase" size={12} />
+                {materialyStatusLabel(t, tip.spotkanie.materialyStatus)}
+              </span>
+            </div>
+          )}
           {tip.spotkanie.adresNazwa && (
             <div className="kal-tip__line">
               <Icon name="map-pin" size={12} /> {tip.spotkanie.adresNazwa}
@@ -1811,9 +2908,17 @@ const Kalendarz: React.FC<Props> = ({
         <SpotkanieFormModal
           // Remounting per target keeps the form's own state honest: opening a
           // different meeting must not inherit the previous one's fields.
-          key={form.editing ? `edit-${form.editing.id}` : `new-${form.day}`}
+          key={
+            form.editing
+              ? `edit-${form.editing.id}`
+              : form.template
+                ? `clone-${form.template.id}`
+                : `new-${form.day}`
+          }
           language={language}
           editing={form.editing}
+          template={form.template ?? null}
+          onClone={form.editing ? () => openClone(form.editing as Spotkanie) : undefined}
           defaultDay={form.day}
           typy={typy}
           lokalizacje={lokalizacje}
@@ -1829,6 +2934,49 @@ const Kalendarz: React.FC<Props> = ({
           }}
           onManageTypes={onManageTypes}
           onManagePlaces={onManagePlaces}
+          zgnJednostki={zgnJednostki}
+          zgnPelnomocnicy={zgnPelnomocnicy}
+          linkedZadania={form.editing ? zadaniaBySpotkanie.get(form.editing.id) ?? [] : []}
+          onZadaniaChanged={() => void loadZadania()}
+          onDeleteZadanie={(z) => void handleDeleteZadanie(z)}
+          onOpenZadanie={onOpenZadanie ? (z) => onOpenZadanie(z.id) : undefined}
+        />
+      )}
+
+      {taskPreview && (
+        <ZadaniePreviewModal
+          key={taskPreview.zadanie.id}
+          language={language}
+          zadanie={taskPreview.zadanie}
+          spotkanie={taskPreview.spotkanie}
+          users={users}
+          userEmail={userEmail ?? ''}
+          onCommentsChange={() => {}}
+          onEdit={() => {
+            openCardTask(taskPreview.spotkanie, taskPreview.zadanie);
+            setTaskPreview(null);
+          }}
+          onClose={() => setTaskPreview(null)}
+        />
+      )}
+
+      {cardTask && (
+        <ZadanieFormModal
+          key={cardTask.editing ? `edit-${cardTask.editing.id}` : `new-${cardTask.spotkanie.id}`}
+          language={language}
+          editing={cardTask.editing}
+          initialStatus="todo"
+          initialValues={{
+            termin: toDayKey(cardTask.spotkanie.startsAt),
+            spotkanieId: cardTask.spotkanie.id,
+          }}
+          users={users}
+          userEmail={userEmail ?? ''}
+          onCommentsChange={() => {}}
+          isSaving={cardTaskSaving}
+          error={cardTaskError}
+          onSubmit={(input) => void handleCardTaskSubmit(input)}
+          onCancel={() => setCardTask(null)}
         />
       )}
     </div>

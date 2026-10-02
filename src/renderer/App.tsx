@@ -27,6 +27,8 @@ import Login from './views/Login';
 import Logo from './components/Logo';
 import SplashScreen from './components/SplashScreen';
 import SidebarWelcome from './components/SidebarWelcome';
+import NotificationBell from './components/NotificationBell';
+import SidebarOrderModal, { SIDEBAR_DIVIDER } from './components/SidebarOrderModal';
 import Footer from './components/Footer';
 import Icon from './components/Icon';
 import UpdateNotification from './components/UpdateNotification';
@@ -34,9 +36,9 @@ import BackupNotifier from './components/BackupNotifier';
 import WhatsNewModal from './components/WhatsNewModal';
 import { NotificationProvider } from './components/Notifications';
 import { translations, Language } from './translations';
-import { AppUser, FileEntry } from '../shared/types';
+import { AppUser, FileEntry, NotificationTarget } from '../shared/types';
 import { BookingFilter, currentMonthKey } from '../shared/bookings';
-import { SpotkanieStateFilter } from '../shared/calendar';
+import { SpotkanieStateFilter, monthOfDayKey, toDayKey } from '../shared/calendar';
 import { DEFAULT_ZADANIA_FILTER, ZadaniaFilterSeed } from '../shared/zadania';
 import { releaseForVersion, shouldShowWhatsNew } from '../shared/release-notes';
 import { greetingName } from '../shared/app-users';
@@ -66,6 +68,79 @@ const NavItem: React.FC<NavItemProps> = ({ icon, label, active, onClick, title, 
     {badge && <span className="nav-dot" aria-hidden="true" />}
   </div>
 );
+
+/** A menu entry as the sidebar draws it. */
+interface SidebarItem {
+  id: MenuView;
+  icon: React.ComponentProps<typeof Icon>['name'];
+  label: string;
+  title?: string;
+  badge?: boolean;
+  onClick: () => void;
+}
+
+/**
+ * The order the menu has until somebody arranges it. `divider` is a separator
+ * line: unlike a view it may appear any number of times, and it moves, is added
+ * and is removed in the same dialog as the views — that is how sections work.
+ */
+const DEFAULT_SIDEBAR_ORDER = [
+  'pulpit',
+  'kalendarz',
+  'zadania',
+  'divider',
+  'converter',
+  'podsumowanie',
+  'noty',
+  'scalanie',
+  'homebanking',
+  'odczyty',
+  'mailing',
+  'divider',
+  'adresy',
+  'kontrahenci',
+  'banki',
+  'divider',
+  'conowego',
+  'settings',
+] as const;
+
+type MenuView = Exclude<(typeof DEFAULT_SIDEBAR_ORDER)[number], typeof SIDEBAR_DIVIDER>;
+
+/**
+ * The saved order made safe to draw: ids this build does not know are dropped,
+ * repeats are ignored, and a view the saved order never heard of (added by a
+ * later release) joins at the end instead of vanishing from the menu.
+ */
+function resolveSidebarOrder(saved: string[] | null): (MenuView | typeof SIDEBAR_DIVIDER)[] {
+  const known = new Set<string>(DEFAULT_SIDEBAR_ORDER);
+  const seen = new Set<string>();
+  const order: (MenuView | typeof SIDEBAR_DIVIDER)[] = [];
+  for (const id of saved ?? DEFAULT_SIDEBAR_ORDER) {
+    if (id === SIDEBAR_DIVIDER) order.push(SIDEBAR_DIVIDER);
+    else if (known.has(id) && !seen.has(id)) {
+      seen.add(id);
+      order.push(id as MenuView);
+    }
+  }
+  for (const id of DEFAULT_SIDEBAR_ORDER) {
+    if (id !== SIDEBAR_DIVIDER && !seen.has(id)) order.push(id);
+  }
+  return order;
+}
+
+/** What the sidebar draws: no separator first, last, or next to another one. */
+function tidyDividers<T>(entries: (T | typeof SIDEBAR_DIVIDER)[]): (T | typeof SIDEBAR_DIVIDER)[] {
+  const out: (T | typeof SIDEBAR_DIVIDER)[] = [];
+  for (const entry of entries) {
+    if (entry === SIDEBAR_DIVIDER && (out.length === 0 || out[out.length - 1] === SIDEBAR_DIVIDER)) {
+      continue;
+    }
+    out.push(entry);
+  }
+  if (out[out.length - 1] === SIDEBAR_DIVIDER) out.pop();
+  return out;
+}
 
 type View =
   | 'pulpit'
@@ -120,6 +195,11 @@ const App: React.FC = () => {
   // Sidebar starts collapsed (icon-only rail); the user can pin it expanded and
   // the choice persists via settings. Default true so it's collapsed on first run.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  // The order the person arranged the menu in (null = the default), and the
+  // dialog that arranges it.
+  const [sidebarOrder, setSidebarOrder] = useState<string[] | null>(null);
+  const [sidebarOrderOpen, setSidebarOrderOpen] = useState(false);
+  const [sidebarOrderSaving, setSidebarOrderSaving] = useState(false);
   // The dashboard's Księgowania area: folded to its month banner, or open. Kept
   // here (and in settings) so it survives navigating away and restarting.
   const [bookingsCollapsed, setBookingsCollapsed] = useState(false);
@@ -156,6 +236,12 @@ const App: React.FC = () => {
   const [zadaniaSeed, setZadaniaSeed] = useState<ZadaniaFilterSeed>(DEFAULT_ZADANIA_FILTER);
   // A task a notification asked for; the nonce lets the same task be asked for twice.
   const [zadaniaOpen, setZadaniaOpen] = useState<{ id: number; nonce: number } | null>(null);
+  // A task's meeting link, followed from the board: the meeting Kalendarz lands on.
+  const [kalFocus, setKalFocus] = useState<{
+    spotkanieId: number;
+    nonce: number;
+    edit?: boolean;
+  } | null>(null);
   // The send form lives here so a detour to Adresy (to attach a missing city
   // unit) or to the templates tab doesn't throw away a half-filled mailing.
   const [mailingDraft, setMailingDraft] = useState<MailingDraft>(emptyMailingDraft);
@@ -210,15 +296,38 @@ const App: React.FC = () => {
     // Same reasoning as the effect below: `navigate` is stable enough.
   }, []);
 
+  /** Open the board, on one card when there is one — what a clicked notification asks for. */
+  const openZadaniaCard = (zadanieId?: number) => {
+    setZadaniaSeed(DEFAULT_ZADANIA_FILTER);
+    setZadaniaOpen(zadanieId === undefined ? null : { id: zadanieId, nonce: Date.now() });
+    navigate('zadania');
+  };
+
+  /** Open Kalendarz on one meeting — it moves to the meeting's month by itself. */
+  const openSpotkanie = (spotkanieId: number, edit = false) => {
+    setKalFocus({ spotkanieId, nonce: Date.now(), edit });
+    navigate('kalendarz', 'calendar');
+  };
+
+  /** The bell's list sends a click to the same place its desktop toast would. */
+  const openNotificationTarget = (target: NotificationTarget) => {
+    if (target.view === 'ksiegowania') navigate('pulpit');
+    else if (target.view === 'kalendarz') openSpotkanie(target.spotkanieId);
+    else openZadaniaCard(target.zadanieId);
+  };
+
+  // A system notification about a meeting was clicked.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.electronAPI) return;
+    return window.electronAPI.onOpenSpotkanie((spotkanieId) => openSpotkanie(spotkanieId));
+    // Same reasoning as the effects around it: `navigate` is stable enough.
+  }, []);
+
   // A system notification about a task was clicked: the main process has already
   // brought the window forward, so all that is left is to open the board.
   useEffect(() => {
     if (typeof window === 'undefined' || !window.electronAPI) return;
-    return window.electronAPI.onOpenZadania((zadanieId) => {
-      setZadaniaSeed(DEFAULT_ZADANIA_FILTER);
-      setZadaniaOpen(zadanieId === undefined ? null : { id: zadanieId, nonce: Date.now() });
-      navigate('zadania');
-    });
+    return window.electronAPI.onOpenZadania((zadanieId) => openZadaniaCard(zadanieId));
     // `navigate` only talks to `setNav(prev => …)` and the tab setters, so the
     // first render's copy is as good as any later one.
   }, []);
@@ -408,6 +517,7 @@ const App: React.FC = () => {
       setDarkMode(settings.darkMode);
       setLanguage(settings.language || 'pl');
       setSidebarCollapsed(settings.sidebarCollapsed);
+      setSidebarOrder(settings.sidebarOrder ?? null);
       setBookingsCollapsed(settings.bookingsCollapsed);
       setLastSeenVersion(settings.lastSeenVersion ?? '');
       applyDarkMode(settings.darkMode);
@@ -506,6 +616,98 @@ const App: React.FC = () => {
     void window.electronAPI.setLastSeenVersion(currentRelease.version);
   };
 
+  /** Everything the menu can show, by view. The order is decided separately. */
+  const navConfig: Record<MenuView, SidebarItem> = {
+    pulpit: { id: 'pulpit', icon: 'home', label: t.pulpit, onClick: () => setCurrentView('pulpit') },
+    kalendarz: {
+      id: 'kalendarz',
+      icon: 'calendar',
+      label: t.kalendarz,
+      onClick: () => setCurrentView('kalendarz'),
+    },
+    zadania: {
+      id: 'zadania',
+      icon: 'clipboard',
+      label: t.zadania,
+      onClick: () => {
+        setZadaniaSeed(DEFAULT_ZADANIA_FILTER);
+        setZadaniaOpen(null);
+        setCurrentView('zadania');
+      },
+    },
+    converter: {
+      id: 'converter',
+      icon: 'folder',
+      label: t.converter,
+      onClick: () => setCurrentView('converter'),
+    },
+    podsumowanie: {
+      id: 'podsumowanie',
+      icon: 'bar-chart',
+      label: t.podsumowanieZaliczek,
+      onClick: () => setCurrentView('podsumowanie'),
+    },
+    noty: {
+      id: 'noty',
+      icon: 'file-text',
+      label: t.notySwiadczenia,
+      onClick: () => setCurrentView('noty'),
+    },
+    scalanie: {
+      id: 'scalanie',
+      icon: 'wallet',
+      label: t.scalanieWplat,
+      onClick: () => setCurrentView('scalanie'),
+    },
+    homebanking: {
+      id: 'homebanking',
+      icon: 'briefcase',
+      label: t.homebanking,
+      onClick: () => setCurrentView('homebanking'),
+    },
+    odczyty: { id: 'odczyty', icon: 'zap', label: t.odczyty, onClick: () => setCurrentView('odczyty') },
+    mailing: { id: 'mailing', icon: 'mail', label: t.mailing, onClick: () => setCurrentView('mailing') },
+    adresy: { id: 'adresy', icon: 'map-pin', label: t.adresy, onClick: () => setCurrentView('adresy') },
+    kontrahenci: {
+      id: 'kontrahenci',
+      icon: 'users',
+      label: t.kontrahenci,
+      onClick: () => setCurrentView('kontrahenci'),
+    },
+    banki: { id: 'banki', icon: 'building', label: t.banki, onClick: () => setCurrentView('banki') },
+    conowego: {
+      id: 'conowego',
+      icon: 'sparkles',
+      label: t.whatsNew,
+      title: hasUnreadRelease ? t.whatsNewNavDot : t.whatsNew,
+      badge: hasUnreadRelease,
+      onClick: () => {
+        setCurrentView('conowego');
+        markReleaseSeen();
+      },
+    },
+    settings: {
+      id: 'settings',
+      icon: 'settings',
+      label: t.settings,
+      onClick: () => setCurrentView('settings'),
+    },
+  };
+  const sidebarEntries = resolveSidebarOrder(sidebarOrder).map((id) =>
+    id === SIDEBAR_DIVIDER ? SIDEBAR_DIVIDER : navConfig[id],
+  );
+
+  const saveSidebarOrder = async (order: string[] | null) => {
+    setSidebarOrderSaving(true);
+    try {
+      await window.electronAPI.setSidebarOrder(order);
+      setSidebarOrder(order);
+      setSidebarOrderOpen(false);
+    } finally {
+      setSidebarOrderSaving(false);
+    }
+  };
+
   const splash = showSplash ? (
     <SplashScreen onDone={() => setShowSplash(false)} />
   ) : null;
@@ -587,112 +789,30 @@ const App: React.FC = () => {
               the data. Held back until the name is known, so it cannot greet a
               mailbox for a beat and then correct itself. */}
           {profileChecked && (
-            <SidebarWelcome language={language} name={myName} email={session.email} />
+            <SidebarWelcome
+              language={language}
+              name={myName}
+              email={session.email}
+              action={<NotificationBell language={language} onOpenTarget={openNotificationTarget} />}
+            />
           )}
         </div>
         <div className="sidebar-nav">
-          <NavItem
-            icon="home"
-            label={t.pulpit}
-            active={currentView === 'pulpit'}
-            onClick={() => setCurrentView('pulpit')}
-          />
-          <NavItem
-            icon="calendar"
-            label={t.kalendarz}
-            active={currentView === 'kalendarz'}
-            onClick={() => setCurrentView('kalendarz')}
-          />
-          <NavItem
-            icon="clipboard"
-            label={t.zadania}
-            active={currentView === 'zadania'}
-            onClick={() => {
-              setZadaniaSeed(DEFAULT_ZADANIA_FILTER);
-              setZadaniaOpen(null);
-              setCurrentView('zadania');
-            }}
-          />
-          <div className="nav-divider" />
-          <NavItem
-            icon="folder"
-            label={t.converter}
-            active={currentView === 'converter'}
-            onClick={() => setCurrentView('converter')}
-          />
-          <NavItem
-            icon="bar-chart"
-            label={t.podsumowanieZaliczek}
-            active={currentView === 'podsumowanie'}
-            onClick={() => setCurrentView('podsumowanie')}
-          />
-          <NavItem
-            icon="file-text"
-            label={t.notySwiadczenia}
-            active={currentView === 'noty'}
-            onClick={() => setCurrentView('noty')}
-          />
-          <NavItem
-            icon="wallet"
-            label={t.scalanieWplat}
-            active={currentView === 'scalanie'}
-            onClick={() => setCurrentView('scalanie')}
-          />
-          <NavItem
-            icon="briefcase"
-            label={t.homebanking}
-            active={currentView === 'homebanking'}
-            onClick={() => setCurrentView('homebanking')}
-          />
-          <NavItem
-            icon="zap"
-            label={t.odczyty}
-            active={currentView === 'odczyty'}
-            onClick={() => setCurrentView('odczyty')}
-          />
-          <NavItem
-            icon="mail"
-            label={t.mailing}
-            active={currentView === 'mailing'}
-            onClick={() => setCurrentView('mailing')}
-          />
-          <div className="nav-divider" />
-          <NavItem
-            icon="map-pin"
-            label={t.adresy}
-            active={currentView === 'adresy'}
-            onClick={() => setCurrentView('adresy')}
-          />
-          <NavItem
-            icon="users"
-            label={t.kontrahenci}
-            active={currentView === 'kontrahenci'}
-            onClick={() => setCurrentView('kontrahenci')}
-          />
-          <NavItem
-            icon="building"
-            label={t.banki}
-            active={currentView === 'banki'}
-            onClick={() => setCurrentView('banki')}
-          />
-          <div className="nav-divider" />
-          <NavItem
-            icon="sparkles"
-            label={t.whatsNew}
-            title={hasUnreadRelease ? t.whatsNewNavDot : t.whatsNew}
-            badge={hasUnreadRelease}
-            active={currentView === 'conowego'}
-            onClick={() => {
-              setCurrentView('conowego');
-              markReleaseSeen();
-            }}
-          />
-          <NavItem
-            icon="settings"
-            label={t.settings}
-            active={currentView === 'settings'}
-            onClick={() => setCurrentView('settings')}
-          />
+          {tidyDividers(sidebarEntries).map((item, index) =>
+            item === SIDEBAR_DIVIDER ? (
+              <div key={`divider-${index}`} className="nav-divider" />
+            ) : (
+              <NavItem
+                key={item.id}
+                icon={item.icon}
+                label={item.label}
+                title={item.title}
+                badge={item.badge}
+                active={currentView === item.id}
+                onClick={item.onClick}
+              />
+            ),
+          )}
           <div className="nav-divider" />
           {/* Who is signed in belongs to the welcome panel at the top; what is
               left down here is the one action — and its own target, so reading
@@ -898,6 +1018,9 @@ const App: React.FC = () => {
                 stateFilter={kalStateFilter}
                 setStateFilter={setKalStateFilter}
                 userEmail={session.email}
+                onOpenZadanie={(id) => openZadaniaCard(id)}
+                focusRequest={kalFocus}
+                onFocusHandled={() => setKalFocus(null)}
                 onManageTypes={() => navigate('kalendarz', 'types')}
                 onManagePlaces={() => navigate('kalendarz', 'places')}
                 onSendDocuments={(ctx) => {
@@ -917,7 +1040,20 @@ const App: React.FC = () => {
             {kalendarzTab === 'places' && <KalendarzLokalizacje language={language} />}
           </>
         )}
-        {currentView === 'zadania' && <Zadania language={language} userEmail={session.email} initialFilter={zadaniaSeed} openRequest={zadaniaOpen} />}
+        {currentView === 'zadania' && <Zadania
+            language={language}
+            userEmail={session.email}
+            initialFilter={zadaniaSeed}
+            openRequest={zadaniaOpen}
+            onOpenSpotkanie={(s) => {
+              setKalMonth(monthOfDayKey(toDayKey(s.startsAt)));
+              openSpotkanie(s.id);
+            }}
+            onEditSpotkanie={(s) => {
+              setKalMonth(monthOfDayKey(toDayKey(s.startsAt)));
+              openSpotkanie(s.id, true);
+            }}
+          />}
         {currentView === 'conowego' && (
           <CoNowego language={language} appVersion={appVersion} />
         )}
@@ -929,10 +1065,26 @@ const App: React.FC = () => {
             onLanguageChange={handleLanguageChange}
             userEmail={session.email}
             onUserNamesChanged={loadProfile}
+            onOpenSidebarOrder={() => setSidebarOrderOpen(true)}
+            onSettingsRestored={loadSettings}
           />
         )}
       </div>
       </div>
+      {sidebarOrderOpen && (
+        <SidebarOrderModal
+          items={sidebarEntries.map((entry) =>
+            entry === SIDEBAR_DIVIDER
+              ? { id: SIDEBAR_DIVIDER, label: '', icon: 'align-justify' as const }
+              : { id: entry.id, label: entry.label, icon: entry.icon },
+          )}
+          defaultOrder={[...DEFAULT_SIDEBAR_ORDER]}
+          language={language}
+          saving={sidebarOrderSaving}
+          onSave={(order) => void saveSidebarOrder(order)}
+          onClose={() => setSidebarOrderOpen(false)}
+        />
+      )}
       <Footer language={language} appVersion={appVersion} />
     </div>
     </NavigationProvider>

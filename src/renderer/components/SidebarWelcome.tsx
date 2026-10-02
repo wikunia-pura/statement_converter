@@ -8,6 +8,8 @@ interface Props {
   name: string;
   /** Shown in the tooltip — which account this greeting belongs to. */
   email: string;
+  /** Sits at the top right of the block (the notification bell). */
+  action?: React.ReactNode;
 }
 
 /**
@@ -24,7 +26,7 @@ interface Props {
  * and goes cold and pale in winter, and the app quietly says what time of year
  * it is before a single number is read.
  */
-const SidebarWelcome: React.FC<Props> = ({ language, name, email }) => {
+const SidebarWelcome: React.FC<Props> = ({ language, name, email, action }) => {
   const t = translations[language];
   // Today's month, read on every render: an app left open across midnight on
   // the 31st should turn over with the calendar.
@@ -42,7 +44,10 @@ const SidebarWelcome: React.FC<Props> = ({ language, name, email }) => {
         ['--month-accent' as string]: monthAccent(month),
       }}
     >
-      <span className="welcome__word">{t.greetingWord}</span>
+      <div className="welcome__top">
+        <span className="welcome__word">{t.greetingWord}</span>
+        {action}
+      </div>
       <span className="welcome__name">{name}</span>
       <span className="welcome__rule" aria-hidden="true" />
     </div>

@@ -1,7 +1,7 @@
 // Type definitions for Electron API exposed via preload
 
 import type { NotificationPrefs } from '../shared/notifications';
-import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent, AppUser, SpotkanieTyp, SpotkanieLokalizacja, Spotkanie, SpotkanieInput, SpotkanieMailing, SpotkanieTerminStatus, KsiegowaniePriorytet, KsiegowanieUwaga, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik, ZadanieKomentarz, ZadanieKomentarzInput, ZadanieKomentarzPodsumowanie, ZadanieNotatka } from '../shared/types';
+import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, ZgnPelnomocnik, ZarzadOsoba, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent, AppUser, SpotkanieTyp, SpotkanieLokalizacja, Spotkanie, SpotkanieInput, SpotkanieMailing, SpotkanieTerminStatus, SpotkanieMaterialyStatus, SpotkanieMaterialyKrok, KsiegowaniePriorytet, KsiegowanieUwaga, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik, ZadanieKomentarz, ZadanieKomentarzInput, ZadanieKomentarzPodsumowanie, ZadanieNotatka } from '../shared/types';
 
 // Zaliczki shared types (referenced by the main-process helpers)
 export type ZaliczkiCategory =
@@ -276,9 +276,24 @@ interface ElectronAPI {
   setAlwaysUseAI: (enabled: boolean) => Promise<boolean>;
   setContractorSortOrder: (sortOrder: string) => Promise<boolean>;
   setSidebarCollapsed: (collapsed: boolean) => Promise<boolean>;
+  /** The menu's order as view ids; null restores the default. */
+  setSidebarOrder: (order: string[] | null) => Promise<boolean>;
   setBookingsCollapsed: (collapsed: boolean) => Promise<boolean>;
   setCalendarHoverCard: (enabled: boolean) => Promise<boolean>;
   /** The signed-in person's own switches (only the flipped ones). */
+  /** Raises a real system notification whose click opens a card — to check the whole path. */
+  /** The bell's list for the signed-in person, newest first. */
+  getInbox: () => Promise<import('../shared/types').InboxNotification[]>;
+  /** ids null = all. */
+  markInboxRead: (ids: string[] | null) => Promise<boolean>;
+  deleteInbox: (ids: string[] | null) => Promise<boolean>;
+  /** The list changed (a notification arrived) — read it again. */
+  onInboxChanged: (callback: () => void) => () => void;
+  sendTestNotification: () => Promise<{ shown: boolean; withTask: boolean }>;
+  /** A test of one materials notification, about the nearest meeting. */
+  sendTestMaterialyNotification: (
+    krok: SpotkanieMaterialyKrok,
+  ) => Promise<{ shown: boolean; withMeeting: boolean }>;
   getNotificationPrefs: () => Promise<NotificationPrefs>;
   /** Switch a notification on or off for the signed-in person. A locked or unknown one is refused (false). */
   setNotificationPref: (id: string, enabled: boolean) => Promise<boolean>;
@@ -373,6 +388,13 @@ interface ElectronAPI {
   mailingAddZgn: (nazwa: string, email: string) => Promise<ZgnJednostka>;
   mailingUpdateZgn: (id: number, nazwa: string, email: string) => Promise<boolean>;
   mailingDeleteZgn: (id: number) => Promise<boolean>;
+  /** Replace a community's board — the whole list, as the modal holds it. */
+  setAdresZarzad: (id: number, zarzad: ZarzadOsoba[]) => Promise<boolean>;
+  /** Every proxy of every city unit. */
+  getZgnPelnomocnicy: () => Promise<ZgnPelnomocnik[]>;
+  addZgnPelnomocnik: (jednostkaId: number, imieNazwisko: string, email: string) => Promise<ZgnPelnomocnik>;
+  updateZgnPelnomocnik: (id: number, imieNazwisko: string, email: string) => Promise<boolean>;
+  deleteZgnPelnomocnik: (id: number) => Promise<boolean>;
 
   // Mailing — pola dynamiczne
   mailingGetPola: () => Promise<MailingPole[]>;
@@ -465,6 +487,8 @@ interface ElectronAPI {
   setSpotkanieTerminStatus: (id: number, status: SpotkanieTerminStatus) => Promise<boolean>;
   /** Tick or untick "documents sent", with a note of what went out. */
   setSpotkanieDokumenty: (id: number, sent: boolean, opis: string) => Promise<boolean>;
+  /** Move the materials status; who and when come from the session. */
+  setSpotkanieMaterialy: (id: number, status: SpotkanieMaterialyStatus) => Promise<boolean>;
   /** Every Mailing send triggered from a meeting, newest first. */
   getSpotkaniaMailingi: () => Promise<SpotkanieMailing[]>;
 
@@ -480,6 +504,8 @@ interface ElectronAPI {
    */
   moveZadanie: (id: number, status: ZadanieStatus, orderedIds: number[]) => Promise<boolean>;
   deleteZadanie: (id: number) => Promise<boolean>;
+  /** Hide a card from the board (kept in the archive) or bring it back. */
+  archiveZadanie: (id: number, archived: boolean) => Promise<boolean>;
   /** Opens the file dialog. null = cancelled; a refusal carries a code, not wording. */
   zadaniaPickAttachment: () => Promise<
     | { ok: true; token: string; nazwa: string; rozmiar: number }
@@ -498,6 +524,7 @@ interface ElectronAPI {
   /** Remove uploads that never reached a card (a cancelled form). */
   zadaniaDiscardAttachments: (paths: string[]) => Promise<boolean>;
   onOpenKsiegowania: (callback: () => void) => () => void;
+  onOpenSpotkanie: (callback: (spotkanieId: number) => void) => () => void;
   /** One entry per card that has comments — its count and newest comment. */
   getZadaniaKomentarzePodsumowanie: () => Promise<ZadanieKomentarzPodsumowanie[]>;
   /** Notes pinned to the board, newest first. */

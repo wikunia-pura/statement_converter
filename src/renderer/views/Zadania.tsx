@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AppUser,
+  Spotkanie,
+  SpotkanieTyp,
   Zadanie,
   ZadanieInput,
   ZadanieKomentarz,
@@ -25,6 +27,7 @@ import {
   matchesDue,
 } from '../../shared/zadania';
 import { comparePeople, personColor, personLabel } from '../../shared/app-users';
+import { toDayKey } from '../../shared/calendar';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
@@ -34,6 +37,7 @@ import Select from '../components/Select';
 import SearchableSelect from '../components/SearchableSelect';
 import ZadanieKomentarze, { CommentText } from '../components/ZadanieKomentarze';
 import ZadaniaNotatki from '../components/ZadaniaNotatki';
+import SpotkaniePreviewModal from '../components/SpotkaniePreviewModal';
 
 interface Props {
   language: Language;
@@ -46,6 +50,10 @@ interface Props {
    * `nonce` makes the same card open again after it was closed.
    */
   openRequest?: { id: number; nonce: number } | null;
+  /** Show a task's meeting in Kalendarz — from the meeting preview a card's link opens. */
+  onOpenSpotkanie?: (spotkanie: Spotkanie) => void;
+  /** Open that meeting's edit form in Kalendarz. */
+  onEditSpotkanie?: (spotkanie: Spotkanie) => void;
 }
 
 /**
@@ -56,11 +64,47 @@ interface Props {
 type Filter =
   { kind: 'all' } | { kind: 'mine' } | { kind: 'none' } | { kind: 'person'; email: string };
 
+/**
+ * How long a single click on a card's title waits before opening the preview —
+ * long enough for the second click of a double-click (rename) to arrive first.
+ */
+const TITLE_PREVIEW_DELAY_MS = 450;
+
 /** Mailboxes compare case-insensitively; an empty one matches nothing. */
 function sameMailbox(a: string | null | undefined, b: string | null | undefined): boolean {
   const left = (a ?? '').trim().toLowerCase();
   return left !== '' && left === (b ?? '').trim().toLowerCase();
 }
+
+/**
+ * The meeting a task belongs to, as a link: its name and day. A meeting that is
+ * not (or no longer) loaded shows nothing — the database nulls the link when the
+ * meeting goes, so this is only ever a moment's gap.
+ */
+const SpotkanieLink: React.FC<{
+  spotkanie: Spotkanie | undefined;
+  t: (typeof translations)['pl'];
+  locale: 'pl' | 'en';
+  onOpen?: (spotkanie: Spotkanie) => void;
+}> = ({ spotkanie, t, locale, onOpen }) => {
+  if (!spotkanie) return null;
+  const text = `${spotkanie.nazwa} · ${formatDayKey(toDayKey(spotkanie.startsAt), locale)}`;
+  return (
+    <button
+      type="button"
+      className="zad-meeting"
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpen?.(spotkanie);
+      }}
+      disabled={!onOpen}
+      title={onOpen ? t.zadMeetingPreview : text}
+    >
+      <Icon name="calendar" size={12} />
+      <span className="zad-meeting__text">{text}</span>
+    </button>
+  );
+};
 
 /** The wording of the three priorities, in the order they are offered. */
 function priorityLabels(t: (typeof translations)['pl']): Record<ZadaniePriorytet, string> {
@@ -100,6 +144,8 @@ interface FormModalProps {
   editing: Zadanie | null;
   /** Column a new card starts in (the one whose "+" was pressed). */
   initialStatus: ZadanieStatus;
+  /** Fields a new card starts with — a task added from a meeting carries its date and link. */
+  initialValues?: Partial<Pick<ZadanieInput, 'tytul' | 'opis' | 'termin' | 'spotkanieId'>>;
   users: AppUser[];
   /** The signed-in mailbox, for the comments. */
   userEmail: string;
@@ -110,10 +156,11 @@ interface FormModalProps {
   onCancel: () => void;
 }
 
-const ZadanieFormModal: React.FC<FormModalProps> = ({
+export const ZadanieFormModal: React.FC<FormModalProps> = ({
   language,
   editing,
   initialStatus,
+  initialValues,
   users,
   userEmail,
   onCommentsChange,
@@ -123,14 +170,14 @@ const ZadanieFormModal: React.FC<FormModalProps> = ({
   onCancel,
 }) => {
   const t = translations[language];
-  const [tytul, setTytul] = useState(editing?.tytul ?? '');
-  const [opis, setOpis] = useState(editing?.opis ?? '');
+  const [tytul, setTytul] = useState(editing?.tytul ?? initialValues?.tytul ?? '');
+  const [opis, setOpis] = useState(editing?.opis ?? initialValues?.opis ?? '');
   const [status, setStatus] = useState<ZadanieStatus>(editing?.status ?? initialStatus);
   const [priorytet, setPriorytet] = useState<ZadaniePriorytet>(
     editing?.priorytet ?? DEFAULT_ZADANIE_PRIORYTET,
   );
   const [email, setEmail] = useState(editing?.przypisanyEmail ?? '');
-  const [termin, setTermin] = useState(editing?.termin ?? '');
+  const [termin, setTermin] = useState(editing?.termin ?? initialValues?.termin ?? '');
   const [zalaczniki, setZalaczniki] = useState<ZadanieZalacznik[]>(editing?.zalaczniki ?? []);
   const [uploading, setUploading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -242,6 +289,8 @@ const ZadanieFormModal: React.FC<FormModalProps> = ({
       przypisanyEmail: email || null,
       termin: termin || null,
       zalaczniki,
+      // Not a field of the form: a card keeps the meeting it was made for.
+      spotkanieId: editing ? editing.spotkanieId : initialValues?.spotkanieId ?? null,
     });
   };
 
@@ -250,7 +299,7 @@ const ZadanieFormModal: React.FC<FormModalProps> = ({
       <div
         className="modal"
         onClick={(e) => e.stopPropagation()}
-        style={{ width: 'min(660px, 94vw)', maxWidth: 660 }}
+        style={{ width: 'min(780px, 94vw)', maxWidth: 780 }}
       >
         <ModalDismiss onClose={handleCancel} ariaLabel={t.close} />
         <div className="modal-header">{editing ? t.zadEdit : t.zadAdd}</div>
@@ -291,24 +340,50 @@ const ZadanieFormModal: React.FC<FormModalProps> = ({
           <div className="zad-form-row">
             <div className="form-group">
               <label>{t.zadFieldAssignee}</label>
-              <SearchableSelect
-                value={email}
-                options={assigneeOptions}
-                onChange={setEmail}
-                placeholder={t.zadUnassigned}
-                searchPlaceholder={t.zadSearchPerson}
-                emptyText={t.zadNoPersonFound}
-                ariaLabel={t.zadFieldAssignee}
-                // On top of the modal, not inside its scrolling body: the list is not
-                // clipped, and the modal stays only as tall as its content.
-                overlay
-              />
+              <div className="zad-assignee-input">
+                <div className="zad-assignee-input__select">
+                  <SearchableSelect
+                    value={email}
+                    options={assigneeOptions}
+                    onChange={setEmail}
+                    placeholder={t.zadUnassigned}
+                    searchPlaceholder={t.zadSearchPerson}
+                    emptyText={t.zadNoPersonFound}
+                    ariaLabel={t.zadFieldAssignee}
+                    // On top of the modal, not inside its scrolling body: the list is not
+                    // clipped, and the modal stays only as tall as its content.
+                    overlay
+                  />
+                </div>
+                {!sameMailbox(email, userEmail) && (
+                  <button
+                    type="button"
+                    className="button button-secondary button-small"
+                    title={t.zadAssignToMe}
+                    aria-label={t.zadAssignToMe}
+                    onClick={() => setEmail(userEmail)}
+                  >
+                    <Icon name="user-plus" size={13} /> {t.zadAssignToMeShort}
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="form-group">
               <label>{t.zadFieldDue}</label>
               <div className="zad-due-input">
                 <input type="date" value={termin} onChange={(e) => setTermin(e.target.value)} />
+                {termin !== dayKey() && (
+                  <button
+                    type="button"
+                    className="button button-secondary button-small"
+                    title={t.zadDueSetToday}
+                    aria-label={t.zadDueSetToday}
+                    onClick={() => setTermin(dayKey())}
+                  >
+                    <Icon name="clock" size={13} /> {t.zadDueTodayShort}
+                  </button>
+                )}
                 {termin && (
                   <button
                     type="button"
@@ -533,6 +608,141 @@ const ZadanieCommentsModal: React.FC<CommentsModalProps> = ({
   );
 };
 
+interface PreviewModalProps {
+  language: Language;
+  zadanie: Zadanie;
+  spotkanie?: Spotkanie;
+  onOpenSpotkanie?: (spotkanie: Spotkanie) => void;
+  users: AppUser[];
+  userEmail: string;
+  onCommentsChange: (zadanieId: number, komentarze: ZadanieKomentarz[]) => void;
+  onEdit: () => void;
+  onClose: () => void;
+}
+
+/**
+ * A card to read, not to change: what a clicked notification opens. Everything
+ * is shown as text; the way into the form is the "Edytuj" button. The
+ * conversation stays live — a comment saves on its own, it is not an edit of
+ * the card.
+ */
+export const ZadaniePreviewModal: React.FC<PreviewModalProps> = ({
+  language,
+  zadanie: z,
+  spotkanie,
+  onOpenSpotkanie,
+  users,
+  userEmail,
+  onCommentsChange,
+  onEdit,
+  onClose,
+}) => {
+  const t = translations[language];
+  const locale = language === 'en' ? 'en' : 'pl';
+  const { busyId, download } = useAttachmentDownload(t);
+  const statusLabels: Record<ZadanieStatus, string> = {
+    todo: t.zadColTodo,
+    in_progress: t.zadColInProgress,
+    done: t.zadColDone,
+  };
+  const assignee = z.przypisanyEmail
+    ? users.find((u) => sameMailbox(u.email, z.przypisanyEmail))
+    : undefined;
+  const assigneeText = z.przypisanyEmail
+    ? assignee
+      ? personLabel(assignee)
+      : z.przypisanyEmail
+    : t.zadUnassigned;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: 'min(660px, 94vw)', maxWidth: 660 }}
+      >
+        <ModalDismiss onClose={onClose} ariaLabel={t.close} />
+        <div className="modal-header">{t.zadPreviewTitle}</div>
+        <div className="modal-body">
+          <div className="zad-preview__title">{z.tytul}</div>
+          <div className="zad-preview__meta">
+            <span className={`zad-prio zad-prio--${z.priorytet}`}>
+              <PriorityMark priorytet={z.priorytet} />
+              {priorityLabels(t)[z.priorytet]}
+            </span>
+            <span className="zad-preview__chip">{statusLabels[z.status]}</span>
+            {z.zarchiwizowane && (
+              <span className="zad-preview__chip">
+                <Icon name="archive" size={12} /> {t.zadArchivedBadge}
+              </span>
+            )}
+          </div>
+          <dl className="zad-preview__facts">
+            <dt>{t.zadFieldAssignee}</dt>
+            <dd>{assigneeText}</dd>
+            <dt>{t.zadFieldDue}</dt>
+            <dd>{z.termin ? formatDayKey(z.termin, locale) : '—'}</dd>
+            {spotkanie && (
+              <>
+                <dt>{t.zadFieldMeeting}</dt>
+                <dd>
+                  <SpotkanieLink
+                    spotkanie={spotkanie}
+                    t={t}
+                    locale={locale}
+                    onOpen={onOpenSpotkanie}
+                  />
+                </dd>
+              </>
+            )}
+          </dl>
+          <div className="form-group">
+            <label>{t.zadFieldDescription}</label>
+            <div className="zad-preview__desc">{z.opis || t.zadPreviewNoDescription}</div>
+          </div>
+          {z.zalaczniki.length > 0 && (
+            <div className="form-group">
+              <label>{t.zadFieldAttachments}</label>
+              <ul className="zad-files">
+                {z.zalaczniki.map((a) => (
+                  <li key={a.id} className="zad-file">
+                    <Icon name="paperclip" size={14} />
+                    <button
+                      type="button"
+                      className={`zad-file__name${busyId === a.id ? ' is-busy' : ''}`}
+                      title={t.zadAttachDownload}
+                      disabled={busyId !== null}
+                      onClick={() => void download(a)}
+                    >
+                      {a.nazwa}
+                    </button>
+                    <span className="zad-file__size">{formatBytes(a.rozmiar)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <ZadanieKomentarze
+            language={language}
+            zadanieId={z.id}
+            users={users}
+            userEmail={userEmail}
+            onChange={onCommentsChange}
+          />
+        </div>
+        <div className="modal-footer">
+          <button className="button button-secondary" onClick={onClose}>
+            <Icon name="x" size={14} /> {t.close}
+          </button>
+          <button className="button button-primary" onClick={onEdit}>
+            <Icon name="edit" size={14} /> {t.edit}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 /** The mark in front of a priority's name: an arrow for high and low, a dot for normal. */
 const PriorityMark: React.FC<{ priorytet: ZadaniePriorytet }> = ({ priorytet }) =>
   priorytet === 'normal' ? (
@@ -729,12 +939,19 @@ const Zadania: React.FC<Props> = ({
   userEmail,
   initialFilter = DEFAULT_ZADANIA_FILTER,
   openRequest = null,
+  onOpenSpotkanie,
+  onEditSpotkanie,
 }) => {
   const t = translations[language];
   const notify = useNotify();
   const { busyId: downloadingId, download: downloadAttachment } = useAttachmentDownload(t);
   const [zadania, setZadania] = useState<Zadanie[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
+  // Only to name the meeting a card belongs to.
+  const [spotkaniaById, setSpotkaniaById] = useState<Map<number, Spotkanie>>(new Map());
+  const [spotkaniaTypy, setSpotkaniaTypy] = useState<SpotkanieTyp[]>([]);
+  // The meeting a card's link was clicked for, shown to read.
+  const [meetingPreview, setMeetingPreview] = useState<Spotkanie | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -743,6 +960,17 @@ const Zadania: React.FC<Props> = ({
   const [filter, setFilter] = useState<Filter>({ kind: initialFilter.who });
   const [dueFilter, setDueFilter] = useState<ZadaniaDueFilter>(initialFilter.due);
   const [prioFilter, setPrioFilter] = useState<'all' | ZadaniePriorytet>('all');
+  // The archive is a working set of its own, not one more narrowing: the board
+  // shows either the live cards or the put-away ones.
+  const [showArchived, setShowArchived] = useState(false);
+  // The card whose title is being typed over, straight on the board.
+  const [renaming, setRenaming] = useState<{ id: number; value: string } | null>(null);
+  // Enter and the blur it causes both arrive: only the first one counts.
+  const renameSettled = useRef(true);
+  // A click on a title waits a beat: a second click means "rename", not "read".
+  const previewTimer = useRef<number | undefined>(undefined);
+  // A card opened to read (a clicked notification), apart from the form that edits.
+  const [preview, setPreview] = useState<Zadanie | null>(null);
   // null = closed; otherwise the card being edited (null = add) and the column
   // a new card starts in.
   const [formState, setFormState] = useState<{
@@ -792,6 +1020,17 @@ const Zadania: React.FC<Props> = ({
     } catch {
       setSummaries(new Map());
     }
+    // Same: a calendar that fails to load only costs the cards their meeting link.
+    try {
+      const [rows, typy] = await Promise.all([
+        window.electronAPI.getSpotkania(),
+        window.electronAPI.getSpotkaniaTypy(),
+      ]);
+      setSpotkaniaById(new Map(rows.map((s) => [s.id, s])));
+      setSpotkaniaTypy(typy);
+    } catch {
+      setSpotkaniaById(new Map());
+    }
   };
 
   /** A conversation changed in a modal: the card under it shows the same. */
@@ -806,7 +1045,7 @@ const Zadania: React.FC<Props> = ({
   };
 
   // A clicked notification: read the board afresh (the card may be newer than
-  // what this view loaded) and open the card it was about.
+  // what this view loaded) and show the card it was about — to read, not to edit.
   useEffect(() => {
     if (!openRequest) return;
     let cancelled = false;
@@ -816,7 +1055,7 @@ const Zadania: React.FC<Props> = ({
         if (cancelled) return;
         setZadania(fresh);
         const card = fresh.find((z) => z.id === openRequest.id);
-        if (card) setFormState({ editing: card, status: card.status });
+        if (card) setPreview(card);
       } catch {
         if (!cancelled) notify.error(t.zadLoadError);
       }
@@ -850,12 +1089,20 @@ const Zadania: React.FC<Props> = ({
     () =>
       zadania.filter(
         (z) =>
+          z.zarchiwizowane === showArchived &&
           passesWho(z) &&
           matchesDue(z, dueFilter, dayKey()) &&
           (prioFilter === 'all' || z.priorytet === prioFilter)
       ),
-    [zadania, filter, dueFilter, prioFilter, userEmail]
+    [zadania, filter, dueFilter, prioFilter, showArchived, userEmail]
   );
+
+  // The two sizes of the archive switch, and the total the "shown of" line is
+  // measured against: the cards of the view being looked at.
+  const archiveCounts = useMemo(() => {
+    const archived = zadania.filter((z) => z.zarchiwizowane).length;
+    return { active: zadania.length - archived, archived };
+  }, [zadania]);
 
   // The number on each chip: how many cards it would show given the OTHER two
   // groups — so a chip says what clicking it yields, not what exists in total.
@@ -869,7 +1116,7 @@ const Zadania: React.FC<Props> = ({
     };
     const prio: Record<ZadaniePriorytet, number> = { high: 0, normal: 0, low: 0 };
     for (const z of zadania) {
-      if (!passesWho(z)) continue;
+      if (z.zarchiwizowane !== showArchived || !passesWho(z)) continue;
       const prioOk = prioFilter === 'all' || z.priorytet === prioFilter;
       if (prioOk) {
         for (const key of Object.keys(due) as (keyof typeof due)[]) {
@@ -879,13 +1126,15 @@ const Zadania: React.FC<Props> = ({
       if (matchesDue(z, dueFilter, day)) prio[z.priorytet] += 1;
     }
     return { due, prio };
-  }, [zadania, filter, dueFilter, prioFilter, userEmail]);
+  }, [zadania, filter, dueFilter, prioFilter, showArchived, userEmail]);
 
-  const filtersActive = filter.kind !== 'all' || dueFilter !== 'all' || prioFilter !== 'all';
+  const filtersActive =
+    filter.kind !== 'all' || dueFilter !== 'all' || prioFilter !== 'all' || showArchived;
   const clearFilters = () => {
     setFilter({ kind: 'all' });
     setDueFilter('all');
     setPrioFilter('all');
+    setShowArchived(false);
   };
 
   /**
@@ -915,10 +1164,11 @@ const Zadania: React.FC<Props> = ({
    */
   const patchCard = async (
     z: Zadanie,
-    patch: Partial<Pick<Zadanie, 'przypisanyEmail' | 'termin' | 'priorytet'>>
+    patch: Partial<Pick<Zadanie, 'tytul' | 'przypisanyEmail' | 'termin' | 'priorytet'>>
   ) => {
     const next = { ...z, ...patch };
     if (
+      next.tytul === z.tytul &&
       next.przypisanyEmail === z.przypisanyEmail &&
       next.termin === z.termin &&
       next.priorytet === z.priorytet
@@ -935,6 +1185,7 @@ const Zadania: React.FC<Props> = ({
         przypisanyEmail: next.przypisanyEmail,
         termin: next.termin,
         zalaczniki: next.zalaczniki,
+        spotkanieId: next.spotkanieId,
       });
     } catch (err: unknown) {
       notify.error(err instanceof Error ? err.message : t.zadSaveError);
@@ -943,6 +1194,31 @@ const Zadania: React.FC<Props> = ({
   };
 
   const reassign = (z: Zadanie, email: string) => patchCard(z, { przypisanyEmail: email || null });
+
+  const startRename = (z: Zadanie) => {
+    renameSettled.current = false;
+    setRenaming({ id: z.id, value: z.tytul });
+  };
+
+  /** Enter or leaving the box saves (an empty or unchanged title just closes it); Esc drops it. */
+  const settleRename = (z: Zadanie, save: boolean) => {
+    if (renameSettled.current) return;
+    renameSettled.current = true;
+    const tytul = (renaming?.id === z.id ? renaming.value : z.tytul).trim();
+    setRenaming(null);
+    if (save && tytul && tytul !== z.tytul) void patchCard(z, { tytul });
+  };
+
+  /** Put a card away, or bring it back. Optimistic, like the other quick edits on a card. */
+  const setArchived = async (z: Zadanie, archived: boolean) => {
+    setZadania((prev) => prev.map((c) => (c.id === z.id ? { ...c, zarchiwizowane: archived } : c)));
+    try {
+      await window.electronAPI.archiveZadanie(z.id, archived);
+    } catch (err: unknown) {
+      notify.error(err instanceof Error ? err.message : t.zadSaveError);
+      await load();
+    }
+  };
 
   const personOptions = useMemo(
     () =>
@@ -989,7 +1265,7 @@ const Zadania: React.FC<Props> = ({
    * a failed write puts the board back to what the database says.
    */
   /**
-   * Put a card in a column, at a place: `top` (arriving from a button), `end`
+   * Put a card in a column, at a place: `end`
    * (dropped on the empty part of a column) or next to another card. The order is
    * worked out on the WHOLE column, filters or not — a hidden card keeps its
    * place between the visible ones — then shown at once and saved; a failed save
@@ -998,7 +1274,7 @@ const Zadania: React.FC<Props> = ({
   const placeCard = async (
     id: number,
     status: ZadanieStatus,
-    place: 'top' | 'end' | { id: number; after: boolean }
+    place: 'end' | { id: number; after: boolean }
   ) => {
     const card = zadania.find((z) => z.id === id);
     if (!card) return;
@@ -1011,8 +1287,7 @@ const Zadania: React.FC<Props> = ({
       .sort(compareZadaniaOrder);
 
     let index = others.length;
-    if (place === 'top') index = 0;
-    else if (place !== 'end') {
+    if (place !== 'end') {
       const at = others.findIndex((z) => z.id === place.id);
       if (at >= 0) index = place.after ? at + 1 : at;
     }
@@ -1041,11 +1316,6 @@ const Zadania: React.FC<Props> = ({
       notify.error(err instanceof Error ? err.message : t.zadSaveError);
       await load();
     }
-  };
-
-  const moveTo = (id: number, status: ZadanieStatus) => {
-    const card = zadania.find((z) => z.id === id);
-    if (card && card.status !== status) void placeCard(id, status, 'top');
   };
 
   if (isLoading) {
@@ -1107,6 +1377,7 @@ const Zadania: React.FC<Props> = ({
       </div>
 
       <div className="zad-filterbar" role="group" aria-label={t.zadFilterLabel}>
+        <div className="zad-filterbar__grid">
         <div className="zad-fgroup">
           <span className="zad-fgroup__label">
             <Icon name="users" size={13} /> {t.zadFilterGroupWho}
@@ -1213,12 +1484,36 @@ const Zadania: React.FC<Props> = ({
           ])}
         </div>
 
+        <div className="zad-fgroup">
+          <span className="zad-fgroup__label">
+            <Icon name="archive" size={13} /> {t.zadFilterGroupArchive}
+          </span>
+          {seg(t.zadFilterGroupArchive, [
+            {
+              key: 'active',
+              label: t.zadFilterActive,
+              active: !showArchived,
+              count: archiveCounts.active,
+              onClick: () => setShowArchived(false),
+            },
+            {
+              key: 'archived',
+              label: t.zadFilterArchived,
+              active: showArchived,
+              count: archiveCounts.archived,
+              onClick: () => setShowArchived(true),
+            },
+          ])}
+        </div>
+
+        </div>
+
         {filtersActive && (
           <div className="zad-filterbar__result">
             <span>
               {t.zadFilterShown
                 .replace('{shown}', String(visible.length))
-                .replace('{total}', String(zadania.length))}
+                .replace('{total}', String(showArchived ? archiveCounts.archived : archiveCounts.active))}
             </span>
             <button type="button" className="zad-filterbar__clear" onClick={clearFilters}>
               <Icon name="x" size={12} /> {t.zadFilterClear}
@@ -1231,7 +1526,7 @@ const Zadania: React.FC<Props> = ({
       <ZadaniaNotatki language={language} users={users} userEmail={userEmail} />
 
       <div className="zad-board">
-        {columns.map((col, colIndex) => {
+        {columns.map((col) => {
           // The order somebody dragged them into; cards never placed keep the old one
           // (latest change on top).
           const cards = visible
@@ -1303,6 +1598,32 @@ const Zadania: React.FC<Props> = ({
                           : ''
                       }`}
                       draggable
+                      // A click on the card itself reads it. Buttons, inputs and the
+                      // pickers keep their own clicks, and a click inside a menu drawn
+                      // on the page body (a portal) reaches here through React but is
+                      // not inside the card, so it is not a click on the card.
+                      onClick={(e) => {
+                        const target = e.target as HTMLElement;
+                        if (!e.currentTarget.contains(target)) return;
+                        if (target.closest('button, input, select, textarea, a, .zad-who-select')) return;
+                        window.clearTimeout(previewTimer.current);
+                        if (target.closest('.zad-card__title--editable')) {
+                          // The second click of a double-click renames — read from
+                          // the click itself, not from `dblclick`, which arrives only
+                          // after the system's double-click interval, often later
+                          // than a short preview delay (so the preview won).
+                          if (e.detail >= 2) {
+                            startRename(z);
+                            return;
+                          }
+                          previewTimer.current = window.setTimeout(
+                            () => setPreview(z),
+                            TITLE_PREVIEW_DELAY_MS,
+                          );
+                        } else {
+                          setPreview(z);
+                        }
+                      }}
                       onDragStart={(e) => {
                         e.dataTransfer.effectAllowed = 'move';
                         // Some engines refuse a drag that carries no payload.
@@ -1326,7 +1647,37 @@ const Zadania: React.FC<Props> = ({
                       }}
                     >
                       <div className="zad-card__head">
-                        <div className="zad-card__title">{z.tytul}</div>
+                        {renaming?.id === z.id ? (
+                          <input
+                            className="zad-card__title-input"
+                            type="text"
+                            autoFocus
+                            // A card is draggable; the box must not start a drag.
+                            draggable={false}
+                            value={renaming.value}
+                            aria-label={t.zadFieldTitle}
+                            onFocus={(e) => e.currentTarget.select()}
+                            onChange={(e) => setRenaming({ id: z.id, value: e.target.value })}
+                            onBlur={() => settleRename(z, true)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                settleRename(z, true);
+                              } else if (e.key === 'Escape') {
+                                e.preventDefault();
+                                settleRename(z, false);
+                              }
+                            }}
+                          />
+                        ) : (
+                          <div
+                            className="zad-card__title zad-card__title--editable"
+                            title={t.zadRenameTitle}
+                            onDoubleClick={() => window.clearTimeout(previewTimer.current)}
+                          >
+                            {z.tytul}
+                          </div>
+                        )}
                         {/* Top right, where the eye goes to ask "when?". Clicking it
                             opens the date picker; on a card with no date there is
                             a faint "add" in the same spot, shown on hover. */}
@@ -1346,6 +1697,14 @@ const Zadania: React.FC<Props> = ({
                           />
                         </div>
                       </div>
+                      {z.spotkanieId !== null && (
+                        <SpotkanieLink
+                          spotkanie={spotkaniaById.get(z.spotkanieId)}
+                          t={t}
+                          locale={locale}
+                          onOpen={setMeetingPreview}
+                        />
+                      )}
                       {z.opis && <div className="zad-card__desc">{z.opis}</div>}
                       {z.zalaczniki.length > 0 && (
                         <div className="zad-card__files">
@@ -1422,6 +1781,29 @@ const Zadania: React.FC<Props> = ({
                           />
                         </span>
                         <span className="zad-card__actions">
+                          {/* Two shortcuts that disappear once they have nothing to do. */}
+                          {z.termin !== today && (
+                            <button
+                              type="button"
+                              className="zad-icon-btn"
+                              title={t.zadDueSetToday}
+                              aria-label={t.zadDueSetToday}
+                              onClick={() => void patchCard(z, { termin: today })}
+                            >
+                              <Icon name="clock" size={14} />
+                            </button>
+                          )}
+                          {!sameMailbox(z.przypisanyEmail, userEmail) && (
+                            <button
+                              type="button"
+                              className="zad-icon-btn"
+                              title={t.zadAssignToMe}
+                              aria-label={t.zadAssignToMe}
+                              onClick={() => void reassign(z, userEmail)}
+                            >
+                              <Icon name="user-plus" size={14} />
+                            </button>
+                          )}
                           {/* Always there, even on a card with no comments yet. */}
                           <button
                             type="button"
@@ -1435,26 +1817,6 @@ const Zadania: React.FC<Props> = ({
                           <button
                             type="button"
                             className="zad-icon-btn"
-                            title={t.zadMoveLeft}
-                            aria-label={t.zadMoveLeft}
-                            disabled={colIndex === 0}
-                            onClick={() => void moveTo(z.id, columns[colIndex - 1].status)}
-                          >
-                            <Icon name="chevron-left" size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            className="zad-icon-btn"
-                            title={t.zadMoveRight}
-                            aria-label={t.zadMoveRight}
-                            disabled={colIndex === columns.length - 1}
-                            onClick={() => void moveTo(z.id, columns[colIndex + 1].status)}
-                          >
-                            <Icon name="chevron-right" size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            className="zad-icon-btn"
                             title={t.edit}
                             aria-label={t.edit}
                             onClick={() => {
@@ -1463,6 +1825,15 @@ const Zadania: React.FC<Props> = ({
                             }}
                           >
                             <Icon name="edit" size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            className="zad-icon-btn"
+                            title={z.zarchiwizowane ? t.zadUnarchive : t.zadArchive}
+                            aria-label={z.zarchiwizowane ? t.zadUnarchive : t.zadArchive}
+                            onClick={() => void setArchived(z, !z.zarchiwizowane)}
+                          >
+                            <Icon name={z.zarchiwizowane ? 'undo' : 'archive'} size={14} />
                           </button>
                           <button
                             type="button"
@@ -1497,6 +1868,56 @@ const Zadania: React.FC<Props> = ({
           error={error}
           onSubmit={handleSubmit}
           onCancel={() => setFormState(null)}
+        />
+      )}
+
+      {preview && (
+        <ZadaniePreviewModal
+          key={preview.id}
+          language={language}
+          zadanie={preview}
+          spotkanie={
+            preview.spotkanieId !== null ? spotkaniaById.get(preview.spotkanieId) : undefined
+          }
+          onOpenSpotkanie={(s) => {
+            setPreview(null);
+            setMeetingPreview(s);
+          }}
+          users={users}
+          userEmail={userEmail}
+          onCommentsChange={handleCommentsChange}
+          onEdit={() => {
+            setError(null);
+            setFormState({ editing: preview, status: preview.status });
+            setPreview(null);
+          }}
+          onClose={() => setPreview(null)}
+        />
+      )}
+
+      {meetingPreview && (
+        <SpotkaniePreviewModal
+          key={meetingPreview.id}
+          language={language}
+          spotkanie={meetingPreview}
+          typ={spotkaniaTypy.find((typ) => typ.id === meetingPreview.typId) ?? null}
+          onShowInCalendar={
+            onOpenSpotkanie
+              ? () => {
+                  setMeetingPreview(null);
+                  onOpenSpotkanie(meetingPreview);
+                }
+              : undefined
+          }
+          onEdit={
+            onEditSpotkanie
+              ? () => {
+                  setMeetingPreview(null);
+                  onEditSpotkanie(meetingPreview);
+                }
+              : undefined
+          }
+          onClose={() => setMeetingPreview(null)}
         />
       )}
 

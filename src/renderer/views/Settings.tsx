@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Converter, ContractorSortOrder, BackupCounts, MailingSmtpStatus } from '../../shared/types';
+import { Converter, ContractorSortOrder, BackupCounts, MailingSmtpStatus, SpotkanieMaterialyKrok } from '../../shared/types';
 import {
   NOTIFICATION_DEFS,
   NOTIFICATION_GROUPS,
@@ -23,6 +23,10 @@ interface SettingsProps {
   userEmail?: string;
   /** Fired when someone's name changes, so the greeting updates immediately. */
   onUserNamesChanged?: () => void;
+  /** Opens the dialog that arranges the sidebar menu (it lives in App, which owns the menu). */
+  onOpenSidebarOrder?: () => void;
+  /** Fired after settings came back from a file or a backup, so App re-reads what it keeps (menu order). */
+  onSettingsRestored?: () => void;
 }
 
 const Settings: React.FC<SettingsProps> = ({
@@ -32,6 +36,8 @@ const Settings: React.FC<SettingsProps> = ({
   onLanguageChange,
   userEmail,
   onUserNamesChanged,
+  onOpenSidebarOrder,
+  onSettingsRestored,
 }) => {
   const t = translations[language];
   const notify = useNotify();
@@ -182,6 +188,34 @@ const Settings: React.FC<SettingsProps> = ({
       t.notifKsiegowaniaPriorytetNotatkaDesc,
     ],
     ksiegowaniaUwaga: [t.notifKsiegowaniaUwaga, t.notifKsiegowaniaUwagaDesc],
+    spotkanieMaterialyDoPrzygotowania: [
+      t.notifSpotkanieMaterialyDo,
+      t.notifSpotkanieMaterialyDoDesc,
+    ],
+    spotkanieMaterialyPrzygotowane: [
+      t.notifSpotkanieMaterialyPrzygotowane,
+      t.notifSpotkanieMaterialyPrzygotowaneDesc,
+    ],
+    spotkanieMaterialyWyslane: [
+      t.notifSpotkanieMaterialyWyslane,
+      t.notifSpotkanieMaterialyWyslaneDesc,
+    ],
+  };
+
+  /** Which materials step each Kalendarz switch is about — for its test button. */
+  const materialyTestKrok: Partial<Record<NotificationId, SpotkanieMaterialyKrok>> = {
+    spotkanieMaterialyDoPrzygotowania: 'do_przygotowania',
+    spotkanieMaterialyPrzygotowane: 'przygotowane',
+    spotkanieMaterialyWyslane: 'wyslane',
+  };
+
+  const handleSendTestMaterialy = async (krok: SpotkanieMaterialyKrok) => {
+    try {
+      const result = await window.electronAPI.sendTestMaterialyNotification(krok);
+      if (!result.shown) notify.error(t.notifTestFailed);
+    } catch {
+      notify.error(t.notifTestFailed);
+    }
   };
 
   const handleNotificationToggle = async (id: NotificationId) => {
@@ -197,6 +231,15 @@ const Settings: React.FC<SettingsProps> = ({
     if (!saved) {
       setNotificationPrefs((prev) => ({ ...prev, [id]: !next }));
       notify.error(t.notifSaveError);
+    }
+  };
+
+  const handleSendTestNotification = async () => {
+    try {
+      const result = await window.electronAPI.sendTestNotification();
+      if (!result.shown) notify.error(t.notifTestFailed);
+    } catch {
+      notify.error(t.notifTestFailed);
     }
   };
 
@@ -260,6 +303,7 @@ const Settings: React.FC<SettingsProps> = ({
           setAlwaysUseAI(settings.alwaysUseAI !== false);
           setCalendarHoverCard(settings.calendarHoverCard ?? false);
           setContractorSortOrder(settings.contractorSortOrder ?? 'name-asc');
+          onSettingsRestored?.();
         } else if (result.error) {
           notify.error(`${t.importError}: ${result.error}`);
         }
@@ -323,6 +367,7 @@ const Settings: React.FC<SettingsProps> = ({
       .replace('{history}', String(counts.history))
       .replace('{odczytyHistory}', String(counts.odczytyHistory))
       .replace('{zgnJednostki}', String(counts.zgnJednostki))
+      .replace('{zgnPelnomocnicy}', String(counts.zgnPelnomocnicy))
       .replace('{mailingPola}', String(counts.mailingPola))
       .replace('{mailingSzablony}', String(counts.mailingSzablony))
       .replace('{mailingHistory}', String(counts.mailingHistory))
@@ -367,6 +412,7 @@ const Settings: React.FC<SettingsProps> = ({
         const settings = await window.electronAPI.getSettings();
         if (settings.darkMode !== darkMode) onDarkModeChange(settings.darkMode);
         if (settings.language !== language) onLanguageChange(settings.language);
+        onSettingsRestored?.();
       } else if (result.error) {
         notify.error(`${t.backupError}: ${result.error}`);
       }
@@ -470,6 +516,25 @@ const Settings: React.FC<SettingsProps> = ({
 
           <div className="settings-row">
             <div className="settings-label">
+              <span
+                className="settings-label-main"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Icon name="menu" size={14} /> {t.sidebarOrderLabel}
+              </span>
+              <span className="settings-label-sub">{t.sidebarOrderHint}</span>
+            </div>
+            <button
+              type="button"
+              className="button button-secondary"
+              onClick={() => onOpenSidebarOrder?.()}
+            >
+              {t.sidebarOrderOpen}
+            </button>
+          </div>
+
+          <div className="settings-row">
+            <div className="settings-label">
               <span className="settings-label-main">{t.contractorSortOrder}</span>
               <span className="settings-label-sub">{t.contractorSortOrderDesc}</span>
             </div>
@@ -530,10 +595,27 @@ const Settings: React.FC<SettingsProps> = ({
             <Icon name="info" size={20} /> {t.notifTitle}
           </h2>
           <p className="settings-label-sub" style={{ marginBottom: '12px' }}>{t.notifIntro}</p>
+          <div className="settings-row">
+            <div className="settings-label">
+              <span className="settings-label-main">{t.notifTestLabel}</span>
+              <span className="settings-label-sub">{t.notifTestDesc}</span>
+            </div>
+            <button
+              type="button"
+              className="button button-secondary"
+              onClick={() => void handleSendTestNotification()}
+            >
+              <Icon name="info" size={14} /> {t.notifTestButton}
+            </button>
+          </div>
           {NOTIFICATION_GROUPS.map((group) => (
             <div key={group}>
               <div className="notif-group">
-                {group === 'zadania' ? t.notifGroupZadania : t.notifGroupKsiegowania}
+                {group === 'zadania'
+                  ? t.notifGroupZadania
+                  : group === 'kalendarz'
+                    ? t.notifGroupKalendarz
+                    : t.notifGroupKsiegowania}
               </div>
               {NOTIFICATION_DEFS.filter((d) => d.group === group).map((def) => {
                 const [label, desc] = notificationText[def.id];
@@ -544,6 +626,16 @@ const Settings: React.FC<SettingsProps> = ({
                       <span className="settings-label-sub">{desc}</span>
                     </div>
                     <div className="notif-control">
+                      {materialyTestKrok[def.id] && (
+                        <button
+                          type="button"
+                          className="button button-small button-secondary"
+                          title={t.notifTestMaterialyHint}
+                          onClick={() => void handleSendTestMaterialy(materialyTestKrok[def.id]!)}
+                        >
+                          <Icon name="info" size={13} /> {t.notifTestButton}
+                        </button>
+                      )}
                       {def.locked && <span className="notif-locked">{t.notifAlwaysOn}</span>}
                       <label className="toggle-switch" title={def.locked ? t.notifAlwaysOn : undefined}>
                         <input

@@ -1,6 +1,16 @@
 import Store from 'electron-store';
 import log from 'electron-log';
-import { KsiegowaniePriorytet, KsiegowanieUwaga, Zadanie, ZadanieKomentarz } from '../shared/types';
+import {
+  SPOTKANIE_MATERIALY_STATUSES,
+  KsiegowaniePriorytet,
+  KsiegowanieUwaga,
+  NotificationTarget,
+  Spotkanie,
+  SpotkanieMaterialyKrok,
+  Zadanie,
+  ZadanieKomentarz,
+} from '../shared/types';
+import { addToInbox, markInboxRead } from './notificationInbox';
 import { dayKey, isOverdue } from '../shared/zadania';
 import { personLabel } from '../shared/app-users';
 import { showSystemNotification } from './systemNotification';
@@ -28,6 +38,11 @@ import { NotificationId, NotificationPrefs, isNotificationEnabled } from '../sha
  *   - a community was flagged as a priority,
  *   - a priority got a note (written or changed),
  *   - a community got a plain note.
+ *
+ * Kalendarz — the materials of any meeting, whoever takes part in it:
+ *   - someone marked them ready to be prepared,
+ *   - someone marked them prepared,
+ *   - someone marked them sent.
  *
  * My own edits never notify me. Every notification has a switch in Ustawienia →
  * Powiadomienia, per person (the first five are locked on, the rest start off).
@@ -59,6 +74,11 @@ interface PersonState {
   priorytety?: Record<string, string>;
   /** Highest community-note id already dealt with; absent until the baseline. */
   lastUwagaId?: number;
+  /**
+   * Meeting id → `status|changedAt` of its materials, as last seen. Absent until
+   * the first Kalendarz poll, which only takes the baseline.
+   */
+  materialy?: Record<string, string>;
 }
 
 interface StoreSchema {
@@ -66,7 +86,7 @@ interface StoreSchema {
 }
 
 /** Where a click on a notification goes. */
-export type NotifierTarget = { view: 'zadania'; zadanieId?: number } | { view: 'ksiegowania' };
+export type NotifierTarget = NotificationTarget;
 
 interface Deps {
   getEmail: () => Promise<string | null>;
@@ -77,6 +97,7 @@ interface Deps {
   getLatestKomentarzId: () => Promise<number>;
   getPriorytety: () => Promise<KsiegowaniePriorytet[]>;
   getUwagi: () => Promise<KsiegowanieUwaga[]>;
+  getSpotkania: () => Promise<Spotkanie[]>;
   /** The person's own notification switches, from their account. */
   getNotificationPrefs: (email: string) => Promise<NotificationPrefs>;
   /** Display name of a mailbox (typed name, else the mailbox) — "Anna przypisała Ci…". */
@@ -84,6 +105,8 @@ interface Deps {
   getLanguage: () => 'pl' | 'en';
   /** Bring the window forward and open what the notification was about. */
   onOpen: (target: NotifierTarget) => void;
+  /** The bell's list changed — tell the window. */
+  onInboxChanged: () => void;
 }
 
 const TEXT = {
@@ -105,6 +128,18 @@ const TEXT = {
       `${who} – „${name}”: ${text}`,
     uwagaTitle: 'Nowa notatka do wspólnoty',
     uwagaBody: (who: string, name: string, text: string) => `${who} – „${name}”: ${text}`,
+    materialyTitle: {
+      do_przygotowania: 'Materiały gotowe do przygotowania',
+      przygotowane: 'Materiały przygotowane',
+      wyslane: 'Materiały wysłane',
+    },
+    materialyBody: (who: string, name: string, when: string) => `${who} – „${name}” (${when})`,
+    materialyTestBody: (name: string, when: string) =>
+      `Test – kliknij, aby otworzyć spotkanie „${name}” (${when})`,
+    materialyTestBodyEmpty: 'Test – kliknij, aby otworzyć Kalendarz (brak spotkań do pokazania).',
+    testTitle: 'Powiadomienie testowe',
+    testBody: (title: string) => `Kliknij, aby otworzyć podgląd zadania: ${title}`,
+    testBodyEmpty: 'Kliknij, aby otworzyć tablicę zadań (brak zadań do pokazania).',
     summaryTitle: 'Powiadomienia',
     summaryBody: (n: number) => `Masz ${n} nowych powiadomień.`,
   },
@@ -126,6 +161,18 @@ const TEXT = {
       `${who} – "${name}": ${text}`,
     uwagaTitle: 'New note on a community',
     uwagaBody: (who: string, name: string, text: string) => `${who} – "${name}": ${text}`,
+    materialyTitle: {
+      do_przygotowania: 'Materials ready to be prepared',
+      przygotowane: 'Materials prepared',
+      wyslane: 'Materials sent',
+    },
+    materialyBody: (who: string, name: string, when: string) => `${who} – "${name}" (${when})`,
+    materialyTestBody: (name: string, when: string) =>
+      `Test – click to open the meeting "${name}" (${when})`,
+    materialyTestBodyEmpty: 'Test – click to open the Calendar (no meeting to show).',
+    testTitle: 'Test notification',
+    testBody: (title: string) => `Click to open the task preview: ${title}`,
+    testBodyEmpty: 'Click to open the task board (there is no task to show).',
     summaryTitle: 'Notifications',
     summaryBody: (n: number) => `You have ${n} new notifications.`,
   },
@@ -152,6 +199,28 @@ function fingerprint(text: string): string {
 }
 
 const mailbox = (value: string | null | undefined): string => (value ?? '').trim().toLowerCase();
+
+/** Each announced materials step, and the switch in Ustawienia that governs it. */
+const MATERIALY_NOTIFICATION: Record<SpotkanieMaterialyKrok, NotificationId> = {
+  do_przygotowania: 'spotkanieMaterialyDoPrzygotowania',
+  przygotowane: 'spotkanieMaterialyPrzygotowane',
+  wyslane: 'spotkanieMaterialyWyslane',
+};
+
+function isMaterialyKrok(value: string): value is SpotkanieMaterialyKrok {
+  return value in MATERIALY_NOTIFICATION;
+}
+
+/** A meeting's start as the toast shows it. */
+function meetingWhen(startsAt: string, lang: 'pl' | 'en'): string {
+  return new Date(startsAt).toLocaleString(lang === 'en' ? 'en-GB' : 'pl-PL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
 export class Notifier {
   // The store keeps its original name: it already holds what people have seen,
@@ -202,6 +271,14 @@ export class Notifier {
           error instanceof Error ? error.message : error,
         );
       }
+      try {
+        events.push(...(await this.diffMaterialy(email)));
+      } catch (error) {
+        log.warn(
+          '[NOTIFIER] Kalendarz check failed:',
+          error instanceof Error ? error.message : error,
+        );
+      }
       // Read after the diffs, and only when there is something to show. If the read
       // fails the defaults apply (the opt-in ones stay off) — a notification that
       // was meant to be off must never get through because the lookup broke.
@@ -215,7 +292,7 @@ export class Notifier {
             error instanceof Error ? error.message : error,
           );
         }
-        this.show(events.filter((e) => isNotificationEnabled(prefs, e.id)));
+        this.show(events.filter((e) => isNotificationEnabled(prefs, e.id)), email);
       }
     } catch (error) {
       // Quiet on purpose: an offline machine or a dead session is not worth a
@@ -239,6 +316,9 @@ export class Notifier {
 
     for (const z of mine) {
       seen[String(z.id)] = z.updatedAt;
+      // Put away on purpose: no news about it, but it stays in `seen` so that
+      // bringing it back is not announced as a card that was just assigned.
+      if (z.zarchiwizowane) continue;
       const byMe = mailbox(z.updatedBy) === email;
       const target: NotifierTarget = { view: 'zadania', zadanieId: z.id };
 
@@ -417,23 +497,168 @@ export class Notifier {
     return events;
   }
 
-  private show(events: Event[]): void {
+  /**
+   * Materials of any meeting that somebody else marked as ready to be prepared,
+   * prepared or sent since the last poll — the whole office prepares them, not
+   * only the people in the room. "Not needed" and "needed" are not news.
+   */
+  private async diffMaterialy(email: string): Promise<Event[]> {
+    const people = this.store.get('people');
+    const state = people[email];
+    if (!state) return [];
+
+    const mine = await this.deps.getSpotkania();
+    const snapshot: Record<string, string> = {};
+    for (const s of mine) {
+      snapshot[String(s.id)] = `${s.materialyStatus}|${s.materialyZmienioneAt ?? ''}`;
+    }
+
+    const events: Event[] = [];
+    // The first run only takes the picture, like the other sources.
+    if (state.materialy !== undefined) {
+      const text = TEXT[this.deps.getLanguage()];
+      const lang = this.deps.getLanguage();
+      for (const s of mine) {
+        const before = state.materialy[String(s.id)];
+        if (before === snapshot[String(s.id)]) continue;
+        const krok = s.materialyStatus;
+        if (!isMaterialyKrok(krok)) continue;
+        // Only a step forward is news. Going back ("Cofnij" on the card) lands on
+        // a step that was already announced once, and says nothing new.
+        const rank = (status: string) =>
+          SPOTKANIE_MATERIALY_STATUSES.indexOf(status as (typeof SPOTKANIE_MATERIALY_STATUSES)[number]);
+        if (rank(krok) <= rank(before.split('|')[0])) continue;
+        if (mailbox(s.materialyZmienioneBy) === email) continue;
+        // A meeting created since the last poll arrives with whatever it already
+        // had: only a status changed on a meeting already seen is announced.
+        if (state.materialy[String(s.id)] === undefined) continue;
+        events.push({
+          id: MATERIALY_NOTIFICATION[krok],
+          title: text.materialyTitle[krok],
+          body: text.materialyBody(
+            await this.deps.resolveName(s.materialyZmienioneBy ?? ''),
+            s.nazwa,
+            meetingWhen(s.startsAt, lang),
+          ),
+          target: { view: 'kalendarz', spotkanieId: s.id },
+        });
+      }
+    }
+
+    // Pruned to the meetings that exist now, so deleted ones do not pile up.
+    people[email] = { ...state, materialy: snapshot };
+    this.store.set('people', people);
+    return events;
+  }
+
+  private show(events: Event[], email: string): void {
     if (events.length === 0) return;
     const text = TEXT[this.deps.getLanguage()];
-    const toShow: { title: string; body: string; target: NotifierTarget }[] =
-      events.length > MAX_INDIVIDUAL
-        ? [{ title: text.summaryTitle, body: text.summaryBody(events.length), target: this.summaryTarget(events) }]
-        : events;
-    for (const e of toShow) {
-      showSystemNotification({ title: e.title, body: e.body }, () => this.deps.onOpen(e.target));
+    // The bell keeps every event on its own, even when the desktop gets one summary.
+    const stored = addToInbox(
+      email,
+      events.map((e) => ({ kind: e.id, title: e.title, body: e.body, target: e.target })),
+    );
+    this.deps.onInboxChanged();
+    if (events.length > MAX_INDIVIDUAL) {
+      showSystemNotification(
+        { title: text.summaryTitle, body: text.summaryBody(events.length) },
+        () => this.deps.onOpen(this.summaryTarget(events)),
+      );
+      return;
     }
+    events.forEach((e, i) => {
+      // `addToInbox` returns newest first, so the entry of event i is mirrored.
+      const entry = stored[stored.length - 1 - i];
+      showSystemNotification({ title: e.title, body: e.body }, () => {
+        if (entry) {
+          markInboxRead(email, [entry.id]);
+          this.deps.onInboxChanged();
+        }
+        this.deps.onOpen(e.target);
+      });
+    });
+  }
+
+  /**
+   * A notification on demand, to check that one arrives and that clicking it
+   * opens the card. It points at the newest card assigned to this person, else
+   * the newest on the board; with an empty board it opens the board itself.
+   */
+  async sendTest(): Promise<{ shown: boolean; withTask: boolean }> {
+    const email = mailbox(await this.deps.getEmail());
+    const all = await this.deps.getZadania();
+    const newest = (list: Zadanie[]) =>
+      [...list].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+    const task =
+      newest(all.filter((z) => !z.zarchiwizowane && mailbox(z.przypisanyEmail) === email)) ??
+      newest(all.filter((z) => !z.zarchiwizowane));
+    const text = TEXT[this.deps.getLanguage()];
+    const target: NotifierTarget = task ? { view: 'zadania', zadanieId: task.id } : { view: 'zadania' };
+    const title = text.testTitle;
+    const body = task ? text.testBody(task.tytul) : text.testBodyEmpty;
+    const [entry] = email ? addToInbox(email, [{ kind: 'test', title, body, target }]) : [];
+    if (entry) this.deps.onInboxChanged();
+    showSystemNotification({ title, body }, () => {
+      if (entry) {
+        markInboxRead(email, [entry.id]);
+        this.deps.onInboxChanged();
+      }
+      this.deps.onOpen(target);
+    });
+    return { shown: true, withTask: !!task };
+  }
+
+  /**
+   * One materials notification on demand, with its real title, about the
+   * nearest upcoming meeting (else the latest one) — so a click can be checked
+   * to open it. Shown whatever the switch says: it is a test of the toast.
+   */
+  async sendTestMaterialy(
+    krok: SpotkanieMaterialyKrok,
+  ): Promise<{ shown: boolean; withMeeting: boolean }> {
+    if (!isMaterialyKrok(krok)) return { shown: false, withMeeting: false };
+    const email = mailbox(await this.deps.getEmail());
+    const lang = this.deps.getLanguage();
+    const text = TEXT[lang];
+    let meeting: Spotkanie | undefined;
+    try {
+      const all = await this.deps.getSpotkania();
+      const now = Date.now();
+      const byStart = [...all].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+      meeting =
+        byStart.find((s) => new Date(s.startsAt).getTime() >= now) ?? byStart[byStart.length - 1];
+    } catch (error) {
+      log.warn('[NOTIFIER] test: meetings not read:', error instanceof Error ? error.message : error);
+    }
+    const title = text.materialyTitle[krok];
+    const body = meeting
+      ? text.materialyTestBody(meeting.nazwa, meetingWhen(meeting.startsAt, lang))
+      : text.materialyTestBodyEmpty;
+    // With no meeting there is nothing to land on; the calendar opens on today.
+    const target: NotifierTarget = { view: 'kalendarz', spotkanieId: meeting?.id ?? 0 };
+    const [entry] = email
+      ? addToInbox(email, [{ kind: 'test', title, body, target }])
+      : [];
+    if (entry) this.deps.onInboxChanged();
+    showSystemNotification({ title, body }, () => {
+      if (entry) {
+        markInboxRead(email, [entry.id]);
+        this.deps.onInboxChanged();
+      }
+      this.deps.onOpen(target);
+    });
+    return { shown: true, withMeeting: !!meeting };
   }
 
   /** A summary opens the place all its events share, else the task board. */
   private summaryTarget(events: Event[]): NotifierTarget {
-    return events.every((e) => e.target.view === 'ksiegowania')
-      ? { view: 'ksiegowania' }
-      : { view: 'zadania' };
+    if (events.every((e) => e.target.view === 'ksiegowania')) return { view: 'ksiegowania' };
+    const first = events[0]?.target;
+    if (first?.view === 'kalendarz' && events.every((e) => e.target.view === 'kalendarz')) {
+      return first;
+    }
+    return { view: 'zadania' };
   }
 }
 

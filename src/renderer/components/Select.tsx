@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
 
 export interface SelectOption {
@@ -21,6 +22,12 @@ interface SelectProps {
   ariaLabel?: string;
   style?: React.CSSProperties;
   className?: string;
+  /**
+   * Draw the menu on top of everything, as `SearchableSelect`'s `overlay` does:
+   * rendered on `document.body` and pinned to the field, so a modal's scrolling
+   * body neither clips it nor grows a scrollbar around it.
+   */
+  overlay?: boolean;
 }
 
 /**
@@ -40,10 +47,19 @@ const Select: React.FC<SelectProps> = ({
   ariaLabel,
   style,
   className,
+  overlay = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // Where the field is on screen, for the overlay menu (viewport coordinates).
+  const [anchor, setAnchor] = useState<{
+    left: number;
+    width: number;
+    top: number;
+    bottom: number;
+  } | null>(null);
   const placement = useDropdownPlacement(containerRef, isOpen);
 
   const valueStr = value == null ? '' : String(value);
@@ -52,14 +68,35 @@ const Select: React.FC<SelectProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-        setActiveIndex(-1);
-      }
+      const target = event.target as Node;
+      // The overlay menu lives outside the container, so it needs its own check.
+      if (containerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setIsOpen(false);
+      setActiveIndex(-1);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
+
+  // Follows the field while the overlay menu is open: the modal body can scroll
+  // under a fixed menu, and one that stays behind would float over nothing.
+  useLayoutEffect(() => {
+    if (!isOpen || !overlay) return;
+    const measure = () => {
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (rect) {
+        setAnchor({ left: rect.left, width: rect.width, top: rect.top, bottom: rect.bottom });
+      }
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    // Capture: scrolling happens in an inner container, and scroll does not bubble.
+    window.addEventListener('scroll', measure, true);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+    };
+  }, [isOpen, overlay]);
 
   const close = () => {
     setIsOpen(false);
@@ -106,6 +143,49 @@ const Select: React.FC<SelectProps> = ({
     ? selected.triggerLabel ?? selected.label
     : placeholder ?? '';
 
+  const menuStyle: React.CSSProperties =
+    overlay && anchor
+      ? {
+          position: 'fixed',
+          left: Math.max(8, Math.min(anchor.left, window.innerWidth - anchor.width - 8)),
+          right: 'auto',
+          width: anchor.width,
+          ...(placement.bottom !== undefined
+            ? { bottom: window.innerHeight - anchor.top + 2 }
+            : { top: anchor.bottom + 2 }),
+          maxHeight: placement.maxHeight,
+          // Above the modal overlay (1000) that the field itself may sit in.
+          zIndex: 3000,
+        }
+      : {
+          top: placement.top,
+          bottom: placement.bottom,
+          marginTop: placement.marginTop,
+          marginBottom: placement.marginBottom,
+          maxHeight: placement.maxHeight,
+        };
+
+  const menu = (
+    <div ref={menuRef} className="ui-select__menu" role="listbox" style={menuStyle}>
+      {options.map((opt, i) => (
+        <div
+          key={opt.value}
+          role="option"
+          aria-selected={opt.value === valueStr}
+          className={
+            'ui-select__option' +
+            (opt.value === valueStr ? ' is-selected' : '') +
+            (i === activeIndex ? ' is-active' : '')
+          }
+          onClick={() => pick(opt.value)}
+          onMouseEnter={() => setActiveIndex(i)}
+        >
+          {opt.label}
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <div
       ref={containerRef}
@@ -128,36 +208,7 @@ const Select: React.FC<SelectProps> = ({
         </span>
       </button>
 
-      {isOpen && (
-        <div
-          className="ui-select__menu"
-          role="listbox"
-          style={{
-            top: placement.top,
-            bottom: placement.bottom,
-            marginTop: placement.marginTop,
-            marginBottom: placement.marginBottom,
-            maxHeight: placement.maxHeight,
-          }}
-        >
-          {options.map((opt, i) => (
-            <div
-              key={opt.value}
-              role="option"
-              aria-selected={opt.value === valueStr}
-              className={
-                'ui-select__option' +
-                (opt.value === valueStr ? ' is-selected' : '') +
-                (i === activeIndex ? ' is-active' : '')
-              }
-              onClick={() => pick(opt.value)}
-              onMouseEnter={() => setActiveIndex(i)}
-            >
-              {opt.label}
-            </div>
-          ))}
-        </div>
-      )}
+      {isOpen && (overlay ? (anchor ? createPortal(menu, document.body) : null) : menu)}
     </div>
   );
 };

@@ -16,6 +16,8 @@ import {
   MailingSmtpConfig,
   SpotkanieInput,
   SpotkanieTerminStatus,
+  SpotkanieMaterialyStatus,
+  SpotkanieMaterialyKrok,
   ZadanieInput,
   ZadanieStatus,
   ZadanieZalacznik,
@@ -25,6 +27,7 @@ import { runAutoBackup, getBackupStatus, getBackupsDir, validateBackup } from '.
 import { conversionCache } from './conversionCache';
 import * as authService from './authService';
 import { Notifier, nameForMailbox } from './notifier';
+import { deleteFromInbox, listInbox, markInboxRead } from './notificationInbox';
 import { NOTIFICATION_DEFS } from '../shared/notifications';
 import { createTray, announceBackgroundOnce } from './tray';
 import {
@@ -80,6 +83,7 @@ const DEV_SERVER_PORT = 3000;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
 
 let mainWindow: BrowserWindow | null = null;
+let notifier: Notifier | null = null;
 
 // How often the app re-checks for a new version while the user works. A single
 // check at startup was not enough: this app runs for days at a time, and a
@@ -2219,6 +2223,17 @@ function setupIpcHandlers() {
         const v = database.getSetting('sidebarCollapsed') as unknown;
         return !(v === false || v === 'false');
       })(),
+      // A JSON list of view ids the person arranged; null = the default order.
+      sidebarOrder: (() => {
+        const raw = database.getSetting('sidebarOrder') as unknown;
+        if (typeof raw !== 'string' || !raw) return null;
+        try {
+          const parsed: unknown = JSON.parse(raw);
+          return Array.isArray(parsed) ? parsed.map(String) : null;
+        } catch {
+          return null;
+        }
+      })(),
       // Expanded unless explicitly folded, so installs that predate this setting
       // see the bookings exactly as before — `boolSetting` reads absent as false.
       bookingsCollapsed: boolSetting('bookingsCollapsed'),
@@ -2273,6 +2288,45 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.SET_SIDEBAR_COLLAPSED, async (_, collapsed: boolean) => {
     database.setSetting('sidebarCollapsed', collapsed.toString());
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.GET_INBOX, async () => {
+    const session = await authService.getSession();
+    return session?.email ? listInbox(session.email) : [];
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MARK_INBOX_READ, async (_, ids: string[] | null) => {
+    const session = await authService.getSession();
+    if (!session?.email) return false;
+    markInboxRead(session.email, Array.isArray(ids) ? ids.map(String) : null);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_INBOX, async (_, ids: string[] | null) => {
+    const session = await authService.getSession();
+    if (!session?.email) return false;
+    deleteFromInbox(session.email, Array.isArray(ids) ? ids.map(String) : null);
+    return true;
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.SEND_TEST_MATERIALY_NOTIFICATION,
+    async (_, krok: SpotkanieMaterialyKrok) => {
+      if (!notifier) return { shown: false, withMeeting: false };
+      return await notifier.sendTestMaterialy(krok);
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.SEND_TEST_NOTIFICATION, async () => {
+    if (!notifier) return { shown: false, withTask: false };
+    return await notifier.sendTest();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SET_SIDEBAR_ORDER, async (_, order: string[] | null) => {
+    // null = back to the default order: store nothing rather than a copy of it.
+    const clean = Array.isArray(order) ? order.map(String) : null;
+    database.setSetting('sidebarOrder', clean ? JSON.stringify(clean) : '');
     return true;
   });
 
@@ -2669,6 +2723,37 @@ function setupIpcHandlers() {
     return true;
   });
 
+  // Zarząd — a community's board, edited as one list in its Adresy modal.
+  ipcMain.handle(IPC_CHANNELS.SET_ADRES_ZARZAD, async (_, id: number, zarzad: unknown) => {
+    await database.setAdresZarzad(id, zarzad);
+    return true;
+  });
+
+  // Pełnomocnicy — people acting for a unit, managed under it in Adresy.
+  ipcMain.handle(IPC_CHANNELS.GET_ZGN_PELNOMOCNICY, async () => {
+    return await database.getZgnPelnomocnicy();
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.ADD_ZGN_PELNOMOCNIK,
+    async (_, jednostkaId: number, imieNazwisko: string, email: string) => {
+      return await database.addZgnPelnomocnik(jednostkaId, imieNazwisko, email);
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.UPDATE_ZGN_PELNOMOCNIK,
+    async (_, id: number, imieNazwisko: string, email: string) => {
+      await database.updateZgnPelnomocnik(id, imieNazwisko, email);
+      return true;
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_ZGN_PELNOMOCNIK, async (_, id: number) => {
+    await database.deleteZgnPelnomocnik(id);
+    return true;
+  });
+
   ipcMain.handle(IPC_CHANNELS.MAILING_GET_POLA, async () => {
     return await database.getMailingPola();
   });
@@ -2990,6 +3075,12 @@ function setupIpcHandlers() {
     return true;
   });
 
+  ipcMain.handle(IPC_CHANNELS.ARCHIVE_ZADANIE, async (_, id: number, archived: boolean) => {
+    const session = await authService.getSession();
+    await database.setZadanieArchived(Number(id), archived === true, session?.email ?? '');
+    return true;
+  });
+
   ipcMain.handle(IPC_CHANNELS.SET_APP_USER_COLOR, async (_, id: string, color: string | null) => {
     await database.setAppUserColor(id, color);
     return true;
@@ -3064,6 +3155,16 @@ function setupIpcHandlers() {
     IPC_CHANNELS.SET_SPOTKANIE_TERMIN_STATUS,
     async (_, id: number, status: SpotkanieTerminStatus) => {
       await database.setSpotkanieTerminStatus(id, status);
+      return true;
+    },
+  );
+
+  // Who moved it is the session, never the renderer — the notifier relies on it.
+  ipcMain.handle(
+    IPC_CHANNELS.SET_SPOTKANIE_MATERIALY,
+    async (_, id: number, status: SpotkanieMaterialyStatus) => {
+      const session = await authService.getSession();
+      await database.setSpotkanieMaterialy(id, status, session?.email ?? '');
       return true;
     },
   );
@@ -3438,13 +3539,14 @@ app.whenReady().then(() => {
   // Windows files a notification under the app's AppUserModelID; without one
   // the toast is attributed to "electron.exe" and may be dropped altogether.
   if (process.platform === 'win32') app.setAppUserModelId('com.filefunky.app');
-  new Notifier({
+  notifier = new Notifier({
     getEmail: async () => (await authService.getSession())?.email ?? null,
     getZadania: () => database.getZadania(),
     getKomentarzeAfter: (afterId) => database.getZadaniaKomentarzeAfter(afterId),
     getLatestKomentarzId: () => database.getLatestZadanieKomentarzId(),
     getPriorytety: () => database.getKsiegowaniaPriorytety(),
     getUwagi: () => database.getKsiegowaniaUwagi(),
+    getSpotkania: () => database.getSpotkania(),
     getNotificationPrefs: (email) => database.getNotificationPrefs(email),
     resolveName: async (email) => {
       try {
@@ -3454,12 +3556,16 @@ app.whenReady().then(() => {
       }
     },
     getLanguage: () => (database.getSettings().language === 'en' ? 'en' : 'pl'),
+    onInboxChanged: () => mainWindow?.webContents.send('inbox:changed'),
     onOpen: (target) => {
       showMainWindow();
       if (target.view === 'ksiegowania') mainWindow?.webContents.send('ksiegowania:open');
-      else mainWindow?.webContents.send('zadania:open', target.zadanieId);
+      else if (target.view === 'kalendarz') {
+        mainWindow?.webContents.send('kalendarz:open', target.spotkanieId);
+      } else mainWindow?.webContents.send('zadania:open', target.zadanieId);
     },
-  }).start();
+  });
+  notifier.start();
 
   // Anthropic key lives in Supabase (app_config), not in the public binaries.
   // Try shortly after start (covers a restored session); sign-in retries too.

@@ -20,6 +20,7 @@ const IPC_CHANNELS = {
   GET_ADRESY: 'db:get-adresy',
   ADD_ADRES: 'db:add-adres',
   UPDATE_ADRES: 'db:update-adres',
+  SET_ADRES_ZARZAD: 'db:set-adres-zarzad',
   DELETE_ADRES: 'db:delete-adres',
   DELETE_ALL_ADRESY: 'db:delete-all-adresy',
   IMPORT_ADRESY_FROM_FILE: 'db:import-adresy-from-file',
@@ -54,10 +55,15 @@ const IPC_CHANNELS = {
   SET_ALWAYS_USE_AI: 'settings:set-always-use-ai',
   SET_CONTRACTOR_SORT_ORDER: 'settings:set-contractor-sort-order',
   SET_SIDEBAR_COLLAPSED: 'settings:set-sidebar-collapsed',
+  SET_SIDEBAR_ORDER: 'settings:set-sidebar-order',
   SET_BOOKINGS_COLLAPSED: 'settings:set-bookings-collapsed',
   SET_CALENDAR_HOVER_CARD: 'settings:set-calendar-hover-card',
   GET_NOTIFICATION_PREFS: 'notifications:get-prefs',
   SET_NOTIFICATION_PREF: 'notifications:set-pref',
+  SEND_TEST_NOTIFICATION: 'notifications:send-test',
+  GET_INBOX: 'inbox:get',
+  MARK_INBOX_READ: 'inbox:mark-read',
+  DELETE_INBOX: 'inbox:delete',
   SET_LAST_SEEN_VERSION: 'settings:set-last-seen-version',
   EXPORT_SETTINGS: 'settings:export',
   IMPORT_SETTINGS: 'settings:import',
@@ -98,6 +104,10 @@ const IPC_CHANNELS = {
   MAILING_ADD_ZGN: 'mailing:add-zgn',
   MAILING_UPDATE_ZGN: 'mailing:update-zgn',
   MAILING_DELETE_ZGN: 'mailing:delete-zgn',
+  GET_ZGN_PELNOMOCNICY: 'zgn:get-pelnomocnicy',
+  ADD_ZGN_PELNOMOCNIK: 'zgn:add-pelnomocnik',
+  UPDATE_ZGN_PELNOMOCNIK: 'zgn:update-pelnomocnik',
+  DELETE_ZGN_PELNOMOCNIK: 'zgn:delete-pelnomocnik',
   MAILING_GET_POLA: 'mailing:get-pola',
   MAILING_ADD_POLE: 'mailing:add-pole',
   MAILING_UPDATE_POLE: 'mailing:update-pole',
@@ -133,12 +143,15 @@ const IPC_CHANNELS = {
   ACK_SPOTKANIE_TERMIN: 'kalendarz:ack-termin',
   SET_SPOTKANIE_TERMIN_STATUS: 'kalendarz:set-termin-status',
   SET_SPOTKANIE_DOKUMENTY: 'kalendarz:set-dokumenty',
+  SET_SPOTKANIE_MATERIALY: 'kalendarz:set-materialy',
+  SEND_TEST_MATERIALY_NOTIFICATION: 'notifications:send-test-materialy',
   GET_SPOTKANIA_MAILINGI: 'kalendarz:get-mailingi',
   GET_ZADANIA: 'zadania:get',
   ADD_ZADANIE: 'zadania:add',
   UPDATE_ZADANIE: 'zadania:update',
   MOVE_ZADANIE: 'zadania:move',
   DELETE_ZADANIE: 'zadania:delete',
+  ARCHIVE_ZADANIE: 'zadania:archive',
   ZADANIA_PICK_ATTACHMENT: 'zadania:pick-attachment',
   ZADANIA_UPLOAD_ATTACHMENT: 'zadania:upload-attachment',
   ZADANIA_DOWNLOAD_ATTACHMENT: 'zadania:download-attachment',
@@ -298,10 +311,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.SET_CONTRACTOR_SORT_ORDER, sortOrder),
   setSidebarCollapsed: (collapsed: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_SIDEBAR_COLLAPSED, collapsed),
+  setSidebarOrder: (order: string[] | null) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_SIDEBAR_ORDER, order),
   setBookingsCollapsed: (collapsed: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_BOOKINGS_COLLAPSED, collapsed),
   setCalendarHoverCard: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_CALENDAR_HOVER_CARD, enabled),
+  getInbox: () => ipcRenderer.invoke(IPC_CHANNELS.GET_INBOX),
+  /** ids null = all. */
+  markInboxRead: (ids: string[] | null) => ipcRenderer.invoke(IPC_CHANNELS.MARK_INBOX_READ, ids),
+  deleteInbox: (ids: string[] | null) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_INBOX, ids),
+  onInboxChanged: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on('inbox:changed', listener);
+    return () => ipcRenderer.off('inbox:changed', listener);
+  },
+  sendTestNotification: () => ipcRenderer.invoke(IPC_CHANNELS.SEND_TEST_NOTIFICATION),
+  sendTestMaterialyNotification: (krok: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SEND_TEST_MATERIALY_NOTIFICATION, krok),
   getNotificationPrefs: () => ipcRenderer.invoke(IPC_CHANNELS.GET_NOTIFICATION_PREFS),
   setNotificationPref: (id: string, enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_NOTIFICATION_PREF, id, enabled),
@@ -381,6 +408,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   mailingUpdateZgn: (id: number, nazwa: string, email: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.MAILING_UPDATE_ZGN, id, nazwa, email),
   mailingDeleteZgn: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.MAILING_DELETE_ZGN, id),
+  getZgnPelnomocnicy: () => ipcRenderer.invoke(IPC_CHANNELS.GET_ZGN_PELNOMOCNICY),
+  setAdresZarzad: (id: number, zarzad: unknown[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_ADRES_ZARZAD, id, zarzad),
+  addZgnPelnomocnik: (jednostkaId: number, imieNazwisko: string, email: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ADD_ZGN_PELNOMOCNIK, jednostkaId, imieNazwisko, email),
+  updateZgnPelnomocnik: (id: number, imieNazwisko: string, email: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_ZGN_PELNOMOCNIK, id, imieNazwisko, email),
+  deleteZgnPelnomocnik: (id: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.DELETE_ZGN_PELNOMOCNIK, id),
   mailingGetPola: () => ipcRenderer.invoke(IPC_CHANNELS.MAILING_GET_POLA),
   mailingAddPole: (nazwa: string, tekst: string, jednostka: string, typWartosci: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.MAILING_ADD_POLE, nazwa, tekst, jednostka, typWartosci),
@@ -465,6 +501,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.SET_SPOTKANIE_TERMIN_STATUS, id, status),
   setSpotkanieDokumenty: (id: number, sent: boolean, opis: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_SPOTKANIE_DOKUMENTY, id, sent, opis),
+  setSpotkanieMaterialy: (id: number, status: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_SPOTKANIE_MATERIALY, id, status),
   getSpotkaniaMailingi: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SPOTKANIA_MAILINGI),
   getZadania: () => ipcRenderer.invoke(IPC_CHANNELS.GET_ZADANIA),
   addZadanie: (input: import('../shared/types').ZadanieInput) =>
@@ -477,6 +515,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     orderedIds: number[],
   ) => ipcRenderer.invoke(IPC_CHANNELS.MOVE_ZADANIE, id, status, orderedIds),
   deleteZadanie: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ZADANIE, id),
+  archiveZadanie: (id: number, archived: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ARCHIVE_ZADANIE, id, archived),
   zadaniaPickAttachment: () => ipcRenderer.invoke(IPC_CHANNELS.ZADANIA_PICK_ATTACHMENT),
   zadaniaUploadAttachment: (token: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.ZADANIA_UPLOAD_ATTACHMENT, token),
@@ -489,6 +529,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const listener = () => callback();
     ipcRenderer.on('ksiegowania:open', listener);
     return () => ipcRenderer.off('ksiegowania:open', listener);
+  },
+  /** A notification about a meeting (its materials) was clicked — open it in Kalendarz. */
+  onOpenSpotkanie: (callback: (spotkanieId: number) => void) => {
+    const listener = (_: unknown, spotkanieId: number) => callback(spotkanieId);
+    ipcRenderer.on('kalendarz:open', listener);
+    return () => ipcRenderer.off('kalendarz:open', listener);
   },
   getZadaniaKomentarzePodsumowanie: () =>
     ipcRenderer.invoke(IPC_CHANNELS.GET_ZADANIA_KOMENTARZE_PODSUMOWANIE),

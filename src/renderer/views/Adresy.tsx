@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Adres, Bank, ApartmentMapping, KontoTyp, ZgnJednostka } from '../../shared/types';
+import { Adres, Bank, ApartmentMapping, KontoTyp, ZgnJednostka, ZgnPelnomocnik, ZarzadOsoba } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import { normalizeAccount } from '../../shared/account-extractor';
@@ -437,6 +437,231 @@ const ApartmentMappingFormModal: React.FC<ApartmentMappingFormModalProps> = ({
   );
 };
 
+interface ZarzadPersonFormModalProps {
+  language: Language;
+  /** Person being edited, or null when adding one. */
+  editing: ZarzadOsoba | null;
+  isSaving: boolean;
+  onSubmit: (data: { imieNazwisko: string; email: string }) => void;
+  onCancel: () => void;
+}
+
+/** Add/edit one board member: a name, and a mailbox if there is one. */
+const ZarzadPersonFormModal: React.FC<ZarzadPersonFormModalProps> = ({
+  language,
+  editing,
+  isSaving,
+  onSubmit,
+  onCancel,
+}) => {
+  const t = translations[language];
+  const [imieNazwisko, setImieNazwisko] = useState(editing?.imieNazwisko || '');
+  const [email, setEmail] = useState(editing?.email || '');
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  const handleSubmit = () => {
+    const n = imieNazwisko.trim();
+    const e = email.trim();
+    if (!n) {
+      setLocalError(t.zarzadNameRequired);
+      return;
+    }
+    if (e && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
+      setLocalError(t.zgnEmailInvalid);
+      return;
+    }
+    onSubmit({ imieNazwisko: n, email: e });
+  };
+
+  const submitOnEnter = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); onCancel(); }} style={{ zIndex: 1100 }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+        <ModalDismiss onClose={onCancel} />
+        <div className="modal-header">{editing ? t.zarzadEdit : t.zarzadAdd}</div>
+        <div className="modal-body">
+          <div className="form-group">
+            <label>{t.zgnProxyName} <span style={{ color: 'red' }}>*</span></label>
+            <input
+              type="text"
+              value={imieNazwisko}
+              onChange={(e) => { setImieNazwisko(e.target.value); if (localError) setLocalError(null); }}
+              placeholder={t.zgnProxyNamePlaceholder}
+              onKeyDown={submitOnEnter}
+              autoFocus
+            />
+          </div>
+          <div className="form-group">
+            <label>{t.zgnUnitEmail}</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => { setEmail(e.target.value); if (localError) setLocalError(null); }}
+              placeholder="np. jan.kowalski@example.pl"
+              onKeyDown={submitOnEnter}
+            />
+          </div>
+          {localError && (
+            <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '8px' }}>{localError}</div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="button button-secondary" onClick={onCancel} disabled={isSaving}>
+            <Icon name="x" size={14} />{' '}{t.cancel}
+          </button>
+          <button
+            className="button button-success"
+            onClick={handleSubmit}
+            disabled={isSaving || !imieNazwisko.trim()}
+          >
+            <Icon name="save" size={14} />{' '}{editing ? t.update : t.add}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * A community's board, in a modal like the apartment rules: the list of people,
+ * each with edit and delete, and "add" on top. Every change saves the whole list
+ * at once — it is one value on the address.
+ */
+const ZarzadModal: React.FC<{
+  adres: Adres;
+  language: Language;
+  onClose: () => void;
+  onSaved: () => void;
+}> = ({ adres, language, onClose, onSaved }) => {
+  const t = translations[language];
+  const notify = useNotify();
+  const [members, setMembers] = useState<ZarzadOsoba[]>(adres.zarzad || []);
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [formState, setFormState] = useState<{ editing: ZarzadOsoba | null } | null>(null);
+
+  const persist = async (next: ZarzadOsoba[]) => {
+    setIsSaving(true);
+    setError(null);
+    try {
+      await window.electronAPI.setAdresZarzad(adres.id, next);
+      setMembers(next);
+      onSaved();
+      return true;
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Unknown error');
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleFormSubmit = async (data: { imieNazwisko: string; email: string }) => {
+    const editing = formState?.editing;
+    const next = editing
+      ? members.map((m) => (m.id === editing.id ? { ...m, ...data } : m))
+      : [...members, { id: `z${Date.now().toString(36)}`, ...data }];
+    if (await persist(next)) setFormState(null);
+  };
+
+  const handleDelete = async (m: ZarzadOsoba) => {
+    if (!(await notify.confirm(t.zarzadConfirmDelete.replace('{name}', m.imieNazwisko), { danger: true }))) {
+      return;
+    }
+    await persist(members.filter((x) => x.id !== m.id));
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 'min(720px, 94vw)', maxWidth: 720 }}>
+        <ModalDismiss onClose={onClose} />
+        <div className="modal-header">
+          {t.zarzadTitle} — {adres.nazwa}
+        </div>
+        <div className="modal-body">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '12px' }}>
+            <div style={{ fontSize: '12px', opacity: 0.7 }}>{t.zarzadHint}</div>
+            <button
+              className="button button-primary"
+              onClick={() => setFormState({ editing: null })}
+              disabled={isSaving}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              <Icon name="plus" size={14} />{' '}{t.zarzadAdd}
+            </button>
+          </div>
+
+          {error && (
+            <div style={{ fontSize: '12px', color: 'var(--danger)', marginBottom: '8px' }}>{error}</div>
+          )}
+
+          {members.length > 0 ? (
+            <table>
+              <thead>
+                <tr>
+                  <th>{t.zgnProxyName}</th>
+                  <th>{t.zgnUnitEmail}</th>
+                  <th>{t.actions}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {members.map((m) => (
+                  <tr key={m.id}>
+                    <td style={{ fontWeight: 600 }}>{m.imieNazwisko}</td>
+                    <td style={{ wordBreak: 'break-all', opacity: m.email ? 1 : 0.5 }}>{m.email || '—'}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          className="button button-small button-primary"
+                          onClick={() => setFormState({ editing: m })}
+                          disabled={isSaving}
+                        >
+                          <Icon name="edit" size={13} />{' '}{t.edit}
+                        </button>
+                        <button
+                          className="button button-small button-danger"
+                          onClick={() => void handleDelete(m)}
+                          disabled={isSaving}
+                        >
+                          <Icon name="trash" size={13} />{' '}{t.delete}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="empty-state">{t.zarzadEmpty}</div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="button button-secondary" onClick={onClose}>
+            <Icon name="x" size={14} />{' '}{t.close}
+          </button>
+        </div>
+      </div>
+
+      {formState && (
+        <ZarzadPersonFormModal
+          key={formState.editing ? `edit-${formState.editing.id}` : 'new'}
+          language={language}
+          editing={formState.editing}
+          isSaving={isSaving}
+          onSubmit={(data) => void handleFormSubmit(data)}
+          onCancel={() => setFormState(null)}
+        />
+      )}
+    </div>
+  );
+};
+
 interface ApartmentMappingsModalProps {
   adres: Adres;
   language: Language;
@@ -726,6 +951,109 @@ const ZgnUnitFormModal: React.FC<ZgnUnitFormModalProps> = ({
   );
 };
 
+interface ZgnProxyFormModalProps {
+  language: Language;
+  /** The unit the proxy acts for — named in the header. */
+  jednostka: ZgnJednostka;
+  /** Proxy being edited, or null when adding one. */
+  editing: ZgnPelnomocnik | null;
+  isSaving: boolean;
+  error: string | null;
+  zIndex?: number;
+  onSubmit: (data: { imieNazwisko: string; email: string }) => void;
+  onCancel: () => void;
+}
+
+/** Add/edit one proxy of a unit: a name, and a mailbox if there is one. */
+const ZgnProxyFormModal: React.FC<ZgnProxyFormModalProps> = ({
+  language,
+  jednostka,
+  editing,
+  isSaving,
+  error,
+  zIndex = 1100,
+  onSubmit,
+  onCancel,
+}) => {
+  const t = translations[language];
+  const [imieNazwisko, setImieNazwisko] = useState(editing?.imieNazwisko || '');
+  const [email, setEmail] = useState(editing?.email || '');
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  const handleSubmit = () => {
+    const n = imieNazwisko.trim();
+    const e = email.trim();
+    if (!n) {
+      setLocalError(t.zgnProxyNameRequired);
+      return;
+    }
+    // Optional, and as loose as the unit's own check when it is given.
+    if (e && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
+      setLocalError(t.zgnEmailInvalid);
+      return;
+    }
+    onSubmit({ imieNazwisko: n, email: e });
+  };
+
+  const submitOnEnter = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); onCancel(); }} style={{ zIndex }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+        <ModalDismiss onClose={onCancel} />
+        <div className="modal-header">
+          {(editing ? t.zgnProxyEdit : t.zgnProxyAdd)} — {jednostka.nazwa}
+        </div>
+        <div className="modal-body">
+          <div className="form-group">
+            <label>{t.zgnProxyName} <span style={{ color: 'red' }}>*</span></label>
+            <input
+              type="text"
+              value={imieNazwisko}
+              onChange={(e) => { setImieNazwisko(e.target.value); if (localError) setLocalError(null); }}
+              placeholder={t.zgnProxyNamePlaceholder}
+              onKeyDown={submitOnEnter}
+              autoFocus
+            />
+          </div>
+          <div className="form-group">
+            <label>{t.zgnUnitEmail}</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => { setEmail(e.target.value); if (localError) setLocalError(null); }}
+              placeholder="np. jan.kowalski@um.example.pl"
+              onKeyDown={submitOnEnter}
+            />
+          </div>
+          {(localError || error) && (
+            <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '8px' }}>
+              {localError || error}
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="button button-secondary" onClick={onCancel} disabled={isSaving}>
+            <Icon name="x" size={14} />{' '}{t.cancel}
+          </button>
+          <button
+            className="button button-success"
+            onClick={handleSubmit}
+            disabled={isSaving || !imieNazwisko.trim()}
+          >
+            <Icon name="save" size={14} />{' '}{editing ? t.update : t.add}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 interface ZgnUnitsPanelProps {
   language: Language;
   jednostki: ZgnJednostka[];
@@ -757,6 +1085,71 @@ const ZgnUnitsPanel: React.FC<ZgnUnitsPanelProps> = ({
   const [error, setError] = useState<string | null>(null);
   // null = closed; { editing: null } = add; { editing: <jednostka> } = edit.
   const [formState, setFormState] = useState<{ editing: ZgnJednostka | null } | null>(null);
+  // Proxies of every unit, loaded here: they are only ever managed in this panel.
+  const [pelnomocnicy, setPelnomocnicy] = useState<ZgnPelnomocnik[]>([]);
+  const [proxyForm, setProxyForm] = useState<{
+    jednostka: ZgnJednostka;
+    editing: ZgnPelnomocnik | null;
+  } | null>(null);
+
+  const loadPelnomocnicy = async () => {
+    try {
+      setPelnomocnicy(await window.electronAPI.getZgnPelnomocnicy());
+    } catch {
+      setPelnomocnicy([]);
+    }
+  };
+
+  // Again whenever the units change: deleting one takes its proxies with it.
+  useEffect(() => {
+    void loadPelnomocnicy();
+  }, [jednostki]);
+
+  const proxiesOf = (jednostkaId: number) =>
+    pelnomocnicy.filter((p) => p.jednostkaId === jednostkaId);
+
+  const handleProxySubmit = async (data: { imieNazwisko: string; email: string }) => {
+    if (!proxyForm) return;
+    setIsSaving(true);
+    setError(null);
+    try {
+      if (proxyForm.editing) {
+        await window.electronAPI.updateZgnPelnomocnik(
+          proxyForm.editing.id,
+          data.imieNazwisko,
+          data.email,
+        );
+      } else {
+        await window.electronAPI.addZgnPelnomocnik(
+          proxyForm.jednostka.id,
+          data.imieNazwisko,
+          data.email,
+        );
+      }
+      setProxyForm(null);
+      await loadPelnomocnicy();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleProxyDelete = async (p: ZgnPelnomocnik) => {
+    if (!(await notify.confirm(t.zgnProxyConfirmDelete.replace('{name}', p.imieNazwisko), { danger: true }))) {
+      return;
+    }
+    setIsSaving(true);
+    setError(null);
+    try {
+      await window.electronAPI.deleteZgnPelnomocnik(p.id);
+      await loadPelnomocnicy();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleFormSubmit = async (data: { nazwa: string; email: string }) => {
     setIsSaving(true);
@@ -779,10 +1172,12 @@ const ZgnUnitsPanel: React.FC<ZgnUnitsPanelProps> = ({
 
   const handleDelete = async (jednostka: ZgnJednostka) => {
     const used = adresy.filter((a) => a.zgnJednostkaId === jednostka.id).length;
+    const proxies = proxiesOf(jednostka.id).length;
     const message =
-      used > 0
+      (used > 0
         ? t.zgnConfirmDeleteUsed.replace('{count}', String(used))
-        : t.zgnConfirmDelete;
+        : t.zgnConfirmDelete) +
+      (proxies > 0 ? ` ${t.zgnConfirmDeleteProxies.replace('{count}', String(proxies))}` : '');
     if (!(await notify.confirm(message, { danger: true }))) return;
     setIsSaving(true);
     setError(null);
@@ -831,6 +1226,7 @@ const ZgnUnitsPanel: React.FC<ZgnUnitsPanelProps> = ({
               <th>{t.zgnUnitName}</th>
               <th>{t.zgnUnitEmail}</th>
               <th>{t.zgnUnitUsedBy}</th>
+              <th>{t.zgnProxies}</th>
               <th>{t.actions}</th>
             </tr>
           </thead>
@@ -840,6 +1236,43 @@ const ZgnUnitsPanel: React.FC<ZgnUnitsPanelProps> = ({
                 <td>{j.nazwa}</td>
                 <td style={{ wordBreak: 'break-all' }}>{j.email}</td>
                 <td>{adresy.filter((a) => a.zgnJednostkaId === j.id).length}</td>
+                <td>
+                  <div className="zgn-proxies">
+                    {proxiesOf(j.id).map((p) => (
+                      <span key={p.id} className="zgn-proxy" title={p.email || undefined}>
+                        <span className="zgn-proxy__name">{p.imieNazwisko}</span>
+                        {p.email && <span className="zgn-proxy__email">{p.email}</span>}
+                        <button
+                          type="button"
+                          onClick={() => { setError(null); setProxyForm({ jednostka: j, editing: p }); }}
+                          disabled={isSaving}
+                          title={t.edit}
+                          aria-label={t.edit}
+                        >
+                          <Icon name="edit" size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          className="is-danger"
+                          onClick={() => void handleProxyDelete(p)}
+                          disabled={isSaving}
+                          title={t.delete}
+                          aria-label={t.delete}
+                        >
+                          <Icon name="trash" size={12} />
+                        </button>
+                      </span>
+                    ))}
+                    <button
+                      type="button"
+                      className="link-button zgn-proxies__add"
+                      onClick={() => { setError(null); setProxyForm({ jednostka: j, editing: null }); }}
+                      disabled={isSaving}
+                    >
+                      <Icon name="plus" size={12} /> {t.zgnProxyAdd}
+                    </button>
+                  </div>
+                </td>
                 <td>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
@@ -875,6 +1308,20 @@ const ZgnUnitsPanel: React.FC<ZgnUnitsPanelProps> = ({
           zIndex={formZIndex}
           onSubmit={handleFormSubmit}
           onCancel={() => { setFormState(null); setError(null); }}
+        />
+      )}
+
+      {proxyForm && (
+        <ZgnProxyFormModal
+          key={proxyForm.editing ? `edit-${proxyForm.editing.id}` : `new-${proxyForm.jednostka.id}`}
+          language={language}
+          jednostka={proxyForm.jednostka}
+          editing={proxyForm.editing}
+          isSaving={isSaving}
+          error={error}
+          zIndex={formZIndex}
+          onSubmit={(data) => void handleProxySubmit(data)}
+          onCancel={() => { setProxyForm(null); setError(null); }}
         />
       )}
     </>
@@ -946,7 +1393,13 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
   const [isLoading, setIsLoading] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [mappingsAdres, setMappingsAdres] = useState<Adres | null>(null);
+  // By id, not the row itself: saving reloads the list (and shows the loader,
+  // which remounts the modal), so the modal must pick up the fresh row — a kept
+  // copy would reopen showing the list as it was before the save.
+  const [mappingsAdresId, setMappingsAdresId] = useState<number | null>(null);
+  const [zarzadAdresId, setZarzadAdresId] = useState<number | null>(null);
+  const mappingsAdres = adresy.find((a) => a.id === mappingsAdresId) ?? null;
+  const zarzadAdres = adresy.find((a) => a.id === zarzadAdresId) ?? null;
 
   // Honor incoming prefill from the Converter: open the "add" modal with the
   // detected account pre-loaded so the user only needs to type the nazwa.
@@ -1585,6 +2038,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                       <th>{t.swrkIdentifiers}</th>
                       <th>{t.accountNumbers}</th>
                       <th>{t.zgnUnit}</th>
+                      <th>{t.zarzadTitle}</th>
                       <th>{t.apartmentMappings}</th>
                       <th>{t.actions}</th>
                     </tr>
@@ -1643,7 +2097,20 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                         <td>
                           <button
                             className="button button-small button-secondary"
-                            onClick={() => setMappingsAdres(adres)}
+                            onClick={() => setZarzadAdresId(adres.id)}
+                            title={
+                              adres.zarzad && adres.zarzad.length > 0
+                                ? adres.zarzad.map((m) => m.imieNazwisko).join(', ')
+                                : t.zarzadTitle
+                            }
+                          ><Icon name="users" size={13} />{' '}
+                            {t.zarzadTitle} ({adres.zarzad?.length ?? 0})
+                          </button>
+                        </td>
+                        <td>
+                          <button
+                            className="button button-small button-secondary"
+                            onClick={() => setMappingsAdresId(adres.id)}
                             title={t.apartmentMappingsTitle}
                           ><Icon name="clipboard" size={13} />{' '}
                             {t.apartmentMappings} ({adres.apartmentMappings?.length ?? 0})
@@ -1692,11 +2159,20 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
           </div>
         )}
 
+        {zarzadAdres && (
+          <ZarzadModal
+            adres={zarzadAdres}
+            language={language}
+            onClose={() => setZarzadAdresId(null)}
+            onSaved={loadData}
+          />
+        )}
+
         {mappingsAdres && (
           <ApartmentMappingsModal
             adres={mappingsAdres}
             language={language}
-            onClose={() => setMappingsAdres(null)}
+            onClose={() => setMappingsAdresId(null)}
             onSaved={loadData}
           />
         )}

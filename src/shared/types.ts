@@ -127,8 +127,21 @@ export interface Adres {
   apartmentMappings?: ApartmentMapping[];
   /** City unit ("jednostka ZGN") notified by the Mailing module when this community's rates change. Null ⇒ the address can't be mailed until one is picked. */
   zgnJednostkaId?: number | null;
+  /** The community's board — added to a meeting when the community is picked there. */
+  zarzad?: ZarzadOsoba[];
   createdAt: string;
 }
+
+/** One member of a community's board (Adresy → Zarząd). */
+export interface ZarzadOsoba {
+  /** Stable within the list, so an edit or a delete hits the right person. */
+  id: string;
+  imieNazwisko: string;
+  email: string;
+}
+
+/** A board member on a meeting — a snapshot, so it outlives a change to the board. */
+export type SpotkanieZarzadOsoba = Pick<ZarzadOsoba, 'imieNazwisko' | 'email'>;
 
 /**
  * A city unit that must be told when a housing community changes its monthly-fee
@@ -138,6 +151,15 @@ export interface Adres {
 export interface ZgnJednostka {
   id: number;
   nazwa: string;
+  email: string;
+  createdAt: string;
+}
+
+/** A person acting for one city unit — managed under that unit in Adresy. */
+export interface ZgnPelnomocnik {
+  id: number;
+  jednostkaId: number;
+  imieNazwisko: string;
   email: string;
   createdAt: string;
 }
@@ -673,6 +695,42 @@ export interface SpotkanieLokalizacja {
  */
 export type SpotkanieTerminStatus = 'potwierdzony' | 'wstepny';
 
+/**
+ * Materials for a meeting, handled like its documents. `brak`: none needed (the
+ * form's "materials needed" unticked). `potrzebne`: needed, nothing marked yet —
+ * where a meeting created in the app starts. Then the three steps the card's
+ * buttons mark, each announced to everyone: ready to be prepared, prepared, sent.
+ */
+export type SpotkanieMaterialyStatus =
+  | 'brak'
+  | 'potrzebne'
+  | 'do_przygotowania'
+  | 'przygotowane'
+  | 'wyslane';
+export const SPOTKANIE_MATERIALY_STATUSES: readonly SpotkanieMaterialyStatus[] = [
+  'brak',
+  'potrzebne',
+  'do_przygotowania',
+  'przygotowane',
+  'wyslane',
+];
+/** The step before each one — what "Cofnij" on the card goes back to. */
+export const SPOTKANIE_MATERIALY_POPRZEDNI: Partial<
+  Record<SpotkanieMaterialyStatus, SpotkanieMaterialyStatus>
+> = {
+  do_przygotowania: 'potrzebne',
+  przygotowane: 'do_przygotowania',
+  wyslane: 'przygotowane',
+};
+
+/** The three steps that are marked on the card — and notified. */
+export type SpotkanieMaterialyKrok = 'do_przygotowania' | 'przygotowane' | 'wyslane';
+export const SPOTKANIE_MATERIALY_KROKI: readonly SpotkanieMaterialyKrok[] = [
+  'do_przygotowania',
+  'przygotowane',
+  'wyslane',
+];
+
 export interface Spotkanie {
   id: number;
   nazwa: string;
@@ -715,6 +773,26 @@ export interface Spotkanie {
   dokumentyWyslaneBy: string | null;
   /** What was sent, in the sender's own words. */
   dokumentyOpis: string;
+  /**
+   * The city unit the meeting is with, or — with `zgnPelnomocnikId` set too —
+   * one of that unit's proxies. Null when none. `zgnNazwa` is what the meeting
+   * shows ("Jan Kowalski (ZGN Wola)" for a proxy), kept so a deleted unit or a
+   * restore leaves the meeting readable. All absent in older rows and backups.
+   */
+  zgnJednostkaId: number | null;
+  zgnPelnomocnikId: number | null;
+  zgnNazwa: string;
+  /**
+   * The community's board members the meeting is with, filled in from the
+   * community when it is picked and editable in the form. Absent in older rows
+   * and backups — read as none.
+   */
+  zarzad: SpotkanieZarzadOsoba[];
+  /** Absent in rows and backups written before the column existed — read as `brak`. */
+  materialyStatus: SpotkanieMaterialyStatus;
+  /** Who last moved the materials status, and when; null until somebody does. */
+  materialyZmienioneAt: string | null;
+  materialyZmienioneBy: string | null;
   /** E-mail of whoever created the meeting. */
   createdBy: string;
   createdAt: string;
@@ -742,6 +820,9 @@ export type SpotkanieInput = Omit<
   | 'dokumentyWyslaneAt'
   | 'dokumentyWyslaneBy'
   | 'dokumentyOpis'
+  | 'materialyStatus'
+  | 'materialyZmienioneAt'
+  | 'materialyZmienioneBy'
 >;
 
 /**
@@ -763,6 +844,26 @@ export interface SpotkanieMailing {
   attachmentNames: string[];
   sentFrom: string;
   sentAt: string;
+}
+
+/* ------------------------- Notification inbox -------------------------- */
+
+/** Where a click on a notification goes. */
+export type NotificationTarget =
+  | { view: 'zadania'; zadanieId?: number }
+  | { view: 'ksiegowania' }
+  | { view: 'kalendarz'; spotkanieId: number };
+
+/** One entry of the bell's list in the sidebar. */
+export interface InboxNotification {
+  id: string;
+  /** What kind it was (a `NotificationId`, or 'test'). */
+  kind: string;
+  title: string;
+  body: string;
+  target: NotificationTarget;
+  createdAt: string;
+  read: boolean;
 }
 
 /* ------------------------------- Zadania ------------------------------- */
@@ -802,6 +903,13 @@ export interface Zadanie {
   /** Deadline as `YYYY-MM-DD` (a day, not an instant), or null for none. */
   termin: string | null;
   zalaczniki: ZadanieZalacznik[];
+  /** Hidden from the board (and the notifier) but kept. Absent in older backups — read as false. */
+  zarchiwizowane: boolean;
+  /**
+   * The meeting this task belongs to (Kalendarz), or null for a task of its
+   * own. Absent in older backups — read as null. Deleting the meeting nulls it.
+   */
+  spotkanieId: number | null;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -830,7 +938,14 @@ export interface ZadanieZalacznik {
 /** What the add/edit form submits. */
 export type ZadanieInput = Pick<
   Zadanie,
-  'tytul' | 'opis' | 'status' | 'priorytet' | 'przypisanyEmail' | 'termin' | 'zalaczniki'
+  | 'tytul'
+  | 'opis'
+  | 'status'
+  | 'priorytet'
+  | 'przypisanyEmail'
+  | 'termin'
+  | 'zalaczniki'
+  | 'spotkanieId'
 >;
 
 /**
@@ -902,6 +1017,8 @@ export interface AppSettings {
   skipUserApproval: boolean; // Skip transaction review and generate files directly
   contractorSortOrder: ContractorSortOrder; // Ordering of contractor pick-lists in review (default: name-asc)
   sidebarCollapsed: boolean; // Collapse the navigation sidebar to an icon-only rail (default: true)
+  /** View ids in the order the person arranged the menu; null = the default order. */
+  sidebarOrder?: string[] | null;
   /** Dashboard: the Księgowania area is folded down to its month banner (default: false). */
   bookingsCollapsed: boolean;
   /**
@@ -990,6 +1107,8 @@ export interface BackupData {
     odczytyHistory?: OdczytyHistoryEntry[];
     /** Absent in backups written before the Mailing module existed. */
     zgnJednostki?: ZgnJednostka[];
+    /** Proxies of the units above, by `jednostkaId`. Absent in backups written before they existed. */
+    zgnPelnomocnicy?: ZgnPelnomocnik[];
     mailingPola?: MailingPole[];
     mailingSzablony?: MailingSzablon[];
     mailingHistory?: MailingHistoryEntry[];
@@ -1033,6 +1152,7 @@ export interface BackupCounts {
   history: number;
   odczytyHistory: number;
   zgnJednostki: number;
+  zgnPelnomocnicy: number;
   mailingPola: number;
   mailingSzablony: number;
   mailingHistory: number;
@@ -1057,6 +1177,7 @@ export function countBackup(data: BackupData): BackupCounts {
     history: data.data.history.length,
     odczytyHistory: data.data.odczytyHistory?.length ?? 0,
     zgnJednostki: data.data.zgnJednostki?.length ?? 0,
+    zgnPelnomocnicy: data.data.zgnPelnomocnicy?.length ?? 0,
     mailingPola: data.data.mailingPola?.length ?? 0,
     mailingSzablony: data.data.mailingSzablony?.length ?? 0,
     mailingHistory: data.data.mailingHistory?.length ?? 0,
@@ -1098,6 +1219,7 @@ export const IPC_CHANNELS = {
   GET_ADRESY: 'db:get-adresy',
   ADD_ADRES: 'db:add-adres',
   UPDATE_ADRES: 'db:update-adres',
+  SET_ADRES_ZARZAD: 'db:set-adres-zarzad',
   DELETE_ADRES: 'db:delete-adres',
   DELETE_ALL_ADRESY: 'db:delete-all-adresy',
   IMPORT_ADRESY_FROM_FILE: 'db:import-adresy-from-file',
@@ -1139,10 +1261,15 @@ export const IPC_CHANNELS = {
   SET_ALWAYS_USE_AI: 'settings:set-always-use-ai',
   SET_CONTRACTOR_SORT_ORDER: 'settings:set-contractor-sort-order',
   SET_SIDEBAR_COLLAPSED: 'settings:set-sidebar-collapsed',
+  SET_SIDEBAR_ORDER: 'settings:set-sidebar-order',
   SET_BOOKINGS_COLLAPSED: 'settings:set-bookings-collapsed',
   SET_CALENDAR_HOVER_CARD: 'settings:set-calendar-hover-card',
   GET_NOTIFICATION_PREFS: 'notifications:get-prefs',
   SET_NOTIFICATION_PREF: 'notifications:set-pref',
+  SEND_TEST_NOTIFICATION: 'notifications:send-test',
+  GET_INBOX: 'inbox:get',
+  MARK_INBOX_READ: 'inbox:mark-read',
+  DELETE_INBOX: 'inbox:delete',
   SET_LAST_SEEN_VERSION: 'settings:set-last-seen-version',
   EXPORT_SETTINGS: 'settings:export',
   IMPORT_SETTINGS: 'settings:import',
@@ -1198,6 +1325,10 @@ export const IPC_CHANNELS = {
   MAILING_ADD_ZGN: 'mailing:add-zgn',
   MAILING_UPDATE_ZGN: 'mailing:update-zgn',
   MAILING_DELETE_ZGN: 'mailing:delete-zgn',
+  GET_ZGN_PELNOMOCNICY: 'zgn:get-pelnomocnicy',
+  ADD_ZGN_PELNOMOCNIK: 'zgn:add-pelnomocnik',
+  UPDATE_ZGN_PELNOMOCNIK: 'zgn:update-pelnomocnik',
+  DELETE_ZGN_PELNOMOCNIK: 'zgn:delete-pelnomocnik',
   MAILING_GET_POLA: 'mailing:get-pola',
   MAILING_ADD_POLE: 'mailing:add-pole',
   MAILING_UPDATE_POLE: 'mailing:update-pole',
@@ -1236,6 +1367,8 @@ export const IPC_CHANNELS = {
   ACK_SPOTKANIE_TERMIN: 'kalendarz:ack-termin',
   SET_SPOTKANIE_TERMIN_STATUS: 'kalendarz:set-termin-status',
   SET_SPOTKANIE_DOKUMENTY: 'kalendarz:set-dokumenty',
+  SET_SPOTKANIE_MATERIALY: 'kalendarz:set-materialy',
+  SEND_TEST_MATERIALY_NOTIFICATION: 'notifications:send-test-materialy',
   GET_SPOTKANIA_MAILINGI: 'kalendarz:get-mailingi',
 
   // Zadania (Kanban)
@@ -1244,6 +1377,7 @@ export const IPC_CHANNELS = {
   UPDATE_ZADANIE: 'zadania:update',
   MOVE_ZADANIE: 'zadania:move',
   DELETE_ZADANIE: 'zadania:delete',
+  ARCHIVE_ZADANIE: 'zadania:archive',
   ZADANIA_PICK_ATTACHMENT: 'zadania:pick-attachment',
   ZADANIA_UPLOAD_ATTACHMENT: 'zadania:upload-attachment',
   ZADANIA_DOWNLOAD_ATTACHMENT: 'zadania:download-attachment',

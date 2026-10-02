@@ -3166,6 +3166,231 @@ body.dark-mode .bank-illustration-svg {
    what happened AFTER the meeting was arranged, and the only part with controls
    of its own. Negative margins pull it to the card's edges so the tint reads as
    a footer rather than as a box floating inside one. */
+/* Materials on the card: the documents' own footer look, stacked above it.
+   The negative bottom margin swallows the card's gap, so the two sections
+   read as one block. The state is tinted by how far along it is. */
+.kal-mats {
+  margin-bottom: calc(-1 * var(--s-2));
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.kal-mats--potrzebne .kal-mats__state { color: var(--text-secondary); }
+.kal-mats--do_przygotowania .kal-mats__state { color: var(--warning); }
+.kal-mats--przygotowane .kal-mats__state { color: var(--info); }
+.kal-mats--wyslane .kal-mats__state { color: var(--success); }
+
+.kal-mats__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+/* Undo sits apart from the steps, at the row's end. */
+.kal-mats__undo { margin-left: auto; }
+
+/* "Materials needed" in the form: a two-way pill switch, a line of explanation under it. */
+.kal-pill-switch {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-pill);
+  background: var(--bg-surface);
+}
+
+.kal-pill-switch__opt {
+  padding: 5px 14px;
+  border: none;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.kal-pill-switch__opt:hover { color: var(--text-primary); }
+
+.kal-pill-switch__opt.is-active {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.kal-pill-switch__opt.is-yes.is-active {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.kal-check__hint { font-size: var(--fs-xs); color: var(--text-tertiary); }
+
+/* The materials mark on a chip in the month and in its hover card. */
+.kal-chip__mat { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.kal-chip__mat--potrzebne { color: var(--text-tertiary); }
+.kal-chip__mat--do_przygotowania { color: var(--warning); }
+.kal-chip__mat--przygotowane { color: var(--info); }
+.kal-chip__mat--wyslane { color: var(--success); }
+
+
+/* A meeting's tasks — on its card and in its form. One row per task: a status
+   dot, the title, who and when, and the three things you can do to it. */
+.kal-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: var(--s-2);
+  padding-top: var(--s-2);
+  border-top: 1px dashed var(--border-subtle);
+}
+
+.kal-tasks__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+}
+
+.kal-tasks__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  font-weight: 650;
+  color: var(--text-secondary);
+}
+
+.kal-tasks__count {
+  padding: 0 6px;
+  border-radius: var(--r-pill);
+  background: var(--bg-surface-hover);
+  font-size: 11px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.kal-tasks__head .link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-sm);
+}
+
+.kal-tasks__empty {
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+}
+
+.kal-tasks__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.kal-task {
+  --task-tone: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 6px var(--s-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+}
+
+.kal-task--in_progress { --task-tone: var(--accent); }
+.kal-task--done { --task-tone: var(--success); }
+.kal-task--pending { border-style: dashed; }
+
+.kal-task__dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--task-tone);
+}
+
+.kal-task--pending .kal-task__dot {
+  background: transparent;
+  border: 1.5px solid var(--text-tertiary);
+}
+
+.kal-task__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+/* The task's text is the way into its preview. */
+.kal-task__body--open {
+  align-items: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.kal-task__body--open > span { max-width: 100%; }
+
+.kal-task__body--open:hover .kal-task__name {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.kal-task__name {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kal-task--done .kal-task__name {
+  text-decoration: line-through;
+  color: var(--text-secondary);
+}
+
+.kal-task__meta {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-tertiary);
+  overflow-wrap: anywhere;
+}
+
+.kal-task__actions {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.kal-task__actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.kal-task__actions button:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.kal-task__actions button.is-danger:hover:not(:disabled) { color: var(--danger); }
+.kal-task__actions button:disabled { opacity: 0.5; cursor: default; }
+
 .kal-docs {
   display: flex;
   flex-direction: column;
@@ -5997,6 +6222,90 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 
 /* ------------------------- Month grid + day panel ------------------------- */
 
+/* Month grid ↔ list. A segmented pair, like the other two-way switches. */
+.kal-view-toggle {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-pill);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+.kal-view-toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px var(--s-3);
+  border: none;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.kal-view-toggle button:hover { color: var(--text-primary); }
+
+.kal-view-toggle button.is-active {
+  background: var(--accent-subtle);
+  color: var(--text-primary);
+}
+
+/* The list view: every meeting of the month as the day panel's own card, one
+   day after another. Scrolls inside the view, like the grid does. */
+.kal-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  flex: 1;
+  min-height: 420px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.kal-list__day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.kal-list__head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  background: var(--bg-surface-sunken);
+}
+
+.kal-list__head.is-today { border-color: var(--accent); }
+
+.kal-list__head h3 {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.kal-list__count {
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+  margin-right: auto;
+}
+
+.kal-list__cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
 .kal-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 384px;
@@ -6226,6 +6535,7 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .kal-side__empty {
@@ -6248,6 +6558,7 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
   display: flex;
   flex-direction: column;
   gap: var(--s-2);
+  min-width: 0;
   padding: var(--s-3);
   /* The type's colour as a left rule: identifies the meeting at a glance
      without tinting the whole card, which would fight the badges. */
@@ -6347,9 +6658,31 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
   color: var(--text-tertiary);
 }
 
+/* In the day panel the four buttons do not fit one row, and letting them wrap
+   left them ragged. So a fixed pattern: the date's state on its own row, then
+   Edytuj / Klonuj / Usuń in three equal columns. */
 .kal-card__actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--s-2);
+  width: 100%;
+  min-width: 0;
+}
+
+.kal-card__actions > .button {
+  justify-content: center;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.kal-card__action--wide { grid-column: 1 / -1; }
+
+/* The list view's cards are wide enough for one row, aligned right. */
+.kal-list .kal-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  width: auto;
   margin-left: auto;
 }
 
@@ -6482,6 +6815,96 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
   box-shadow: var(--shadow-lg);
   pointer-events: none;
   animation: kalTipIn var(--t-fast) both;
+}
+
+/* "3/13" on a type filter: meetings in the month on screen / in its year. */
+.kal-filter__count {
+  margin-left: 2px;
+  padding: 0 6px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--chip, var(--accent)) 14%, var(--bg-surface-hover));
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+}
+
+.kal-filter.is-active .kal-filter__count {
+  background: color-mix(in srgb, var(--chip, var(--accent)) 26%, var(--bg-surface));
+  color: var(--text-primary);
+}
+
+.kal-count-fact {
+  cursor: help;
+  border-bottom: 1px dotted var(--border-strong);
+  outline: none;
+}
+
+.kal-count-fact strong {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The month/year card under a filter chip or the month bar's count. Fixed in
+   the viewport like `.kal-tip`, so no toolbar can clip it. */
+.kal-count-tip {
+  position: fixed;
+  z-index: 900; /* over the grid, under the modals (1000) */
+  width: 240px; /* COUNT_TIP_WIDTH in views/Kalendarz.tsx */
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--s-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+  animation: kalTipIn var(--t-fast) both;
+}
+
+.kal-count-tip__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-base);
+  font-weight: 650;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.kal-count-tip__row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-2);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.kal-count-tip__row strong {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.kal-count-tip__bar {
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--bg-surface-hover);
+  overflow: hidden;
+}
+
+.kal-count-tip__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--chip, var(--accent));
+}
+
+.kal-count-tip__share {
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 
 /* Fades in over one frame-ish; there is deliberately no delay, because the
@@ -6672,10 +7095,9 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
    important. Each group is a segmented control, so the three questions read as
    three rows of choices rather than a dozen loose pills. */
 .zad-filterbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--s-3) var(--s-6);
+  /* The panel is the container the grid below measures itself against: the
+     window is the wrong thing to measure, the sidebar takes part of it. */
+  container-type: inline-size;
   margin-bottom: var(--s-5);
   padding: var(--s-3) var(--s-4);
   border: 1px solid var(--border-default);
@@ -6683,9 +7105,27 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
   background: var(--bg-surface);
 }
 
+/* One group per row; two columns, each as wide as its widest group and no wider,
+   once the panel has room for both — so the groups sit close together instead of
+   at the far ends of two equal halves. */
+.zad-filterbar__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--s-3) var(--s-6);
+}
+
+@container (min-width: 1160px) {
+  .zad-filterbar__grid {
+    grid-template-columns: repeat(2, max-content);
+  }
+}
+
 .zad-fgroup {
   display: flex;
   flex-direction: column;
+  /* Each track only as wide as its options, not stretched to the grid cell. */
+  align-items: flex-start;
   gap: var(--s-1);
   min-width: 0;
 }
@@ -6771,8 +7211,9 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 .zad-filterbar__result {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  margin-top: var(--s-3);
   gap: var(--s-3);
-  margin-left: auto;
   font-size: var(--fs-sm);
   color: var(--text-tertiary);
 }
@@ -7000,6 +7441,60 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
   font-weight: 600;
   color: var(--text-primary);
   overflow-wrap: anywhere;
+}
+
+/* The meeting a task belongs to — on a card, and in the preview. */
+.zad-meeting {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  margin-top: var(--s-1);
+  padding: 2px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-pill);
+  background: var(--accent-subtle);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* On a card the link is a strip of its own, shaped like the comment strip
+   below it (same height, same full width), in the accent instead of amber. */
+.zad-card .zad-meeting {
+  display: flex;
+  gap: var(--s-2);
+  width: 100%;
+  margin-top: var(--s-3);
+  padding: var(--s-2) var(--s-3);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border-default));
+  border-radius: var(--r-lg);
+  font-size: var(--fs-sm);
+  font-weight: 550;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.zad-card .zad-meeting > svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  color: var(--accent);
+}
+
+.zad-meeting:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.zad-meeting:disabled { cursor: default; }
+
+.zad-meeting__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .zad-card__desc {
@@ -7355,6 +7850,8 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.ks-prio-item--divider { background: transparent; border-style: dashed; padding: var(--s-2) var(--s-3); }
+.ks-prio-item__rule { display: block; height: 0; border-top: 2px solid var(--border-default); margin: 4px 0; }
 .ks-prio-item__moves { display: inline-flex; gap: var(--s-1); flex: 0 0 auto; }
 .ks-prio-item__moves button {
   display: inline-flex;
@@ -7490,7 +7987,7 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 
 .zad-due-input {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: var(--s-2);
 }
 
@@ -7830,14 +8327,22 @@ body.dark-mode .ks-kal-hero--zad .ks-kal-hero__facts {
    instead of stacking three half-empty rows. */
 .zad-form-row {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.2fr);
+  grid-template-columns: minmax(0, 1.6fr) minmax(min-content, 1.6fr) minmax(0, 1fr);
   gap: var(--s-4);
 }
 
+/* The date field keeps room for the whole date and its picker icon: the "Dziś"
+   and clear buttons beside it never shrink, so without a floor they squeezed
+   the field down to nothing. */
 .zad-form-row .zad-due-input input {
   max-width: none;
   flex: 1;
-  min-width: 0;
+  min-width: 150px;
+}
+
+.zad-due-input > button {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 @media (max-width: 700px) {
@@ -8699,3 +9204,395 @@ body.dark-mode .ks-kal-hero--zad .ks-kal-hero__facts {
   grid-column: 2;
   margin-left: 0;
 }
+
+/* --- Zadania: title typed over on the card, quick form buttons, the preview --- */
+.zad-card__title--editable {
+  cursor: text;
+  border-radius: var(--r-md);
+}
+
+.zad-card__title--editable:hover {
+  background: var(--bg-surface-hover);
+}
+
+.zad-card__title-input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 2px var(--s-2);
+  font: inherit;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-md);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+  outline: none;
+}
+
+.zad-assignee-input {
+  display: flex;
+  align-items: stretch;
+  gap: var(--s-2);
+}
+
+/* The quick buttons next to a field are as tall as the field, not as tall as a
+   small button. */
+.zad-assignee-input > .button,
+.zad-due-input > .button {
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.zad-due-input > .zad-icon-btn {
+  align-self: center;
+}
+
+.zad-assignee-input__select {
+  flex: 1;
+  min-width: 0;
+}
+
+.zad-preview__title {
+  font-size: var(--fs-lg, 16px);
+  font-weight: 700;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+  margin-bottom: var(--s-2);
+}
+
+.zad-preview__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  margin-bottom: var(--s-3);
+}
+
+.zad-preview__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--s-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+.zad-preview__facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--s-1) var(--s-3);
+  margin: 0 0 var(--s-3);
+  font-size: var(--fs-md);
+}
+
+.zad-preview__facts dt {
+  color: var(--text-tertiary);
+}
+
+.zad-preview__facts dd {
+  margin: 0;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.zad-preview__desc {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: var(--fs-md);
+}
+
+/* --- The notification bell by the greeting, and its list ------------------- */
+.welcome__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+}
+
+/* The bell is the one part of the greeting that stays on the collapsed rail: a
+   counter that vanished with the rest would hide exactly what it is for. */
+.sidebar.collapsed .welcome {
+  display: flex;
+  align-items: center;
+  padding: var(--s-2) 0;
+  animation: none;
+}
+
+.sidebar.collapsed .welcome__word,
+.sidebar.collapsed .welcome__name,
+.sidebar.collapsed .welcome__rule {
+  display: none;
+}
+
+.sidebar.collapsed .welcome__top {
+  justify-content: center;
+}
+
+.bell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color var(--t-fast), color var(--t-fast);
+}
+
+.bell:hover,
+.bell.is-open {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.bell__count {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: var(--r-pill);
+  background: var(--danger);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.inbox {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  width: 360px;
+  max-width: calc(100vw - 24px);
+  max-height: min(430px, calc(100vh - 16px));
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lg, 0 12px 32px rgba(0, 0, 0, 0.28));
+  overflow: hidden;
+}
+
+.inbox__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--s-3) var(--s-3) var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.inbox__title {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.inbox__bulk,
+.inbox__actions {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.inbox__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.inbox__icon:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.inbox__icon:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.inbox__empty {
+  padding: var(--s-6) var(--s-4);
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: var(--fs-md);
+}
+
+.inbox__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.inbox__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-1);
+  padding: var(--s-2) var(--s-2) var(--s-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.inbox__item:last-child {
+  border-bottom: none;
+}
+
+.inbox__item:hover {
+  background: var(--bg-surface-hover);
+}
+
+.inbox__open {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: var(--s-2);
+  align-items: flex-start;
+  padding: var(--s-1) 0 var(--s-1) var(--s-3);
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.inbox__dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.inbox__item.is-unread .inbox__dot {
+  background: var(--accent);
+}
+
+.inbox__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.inbox__item-title {
+  font-size: var(--fs-md);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.inbox__item.is-unread .inbox__item-title {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.inbox__item-body {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.inbox__time {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+/* Proxies of a city unit, in the units table: one chip per person with its own
+   edit / delete, and the add link last. */
+.zgn-proxies {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+/* One proxy per row: the name, the mailbox after it, and the two buttons
+   pushed to the row's right edge. */
+.zgn-proxy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 4px 3px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  font-size: var(--fs-sm);
+}
+
+.zgn-proxy__name { font-weight: 600; color: var(--text-primary); white-space: nowrap; }
+
+.zgn-proxy__email {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-tertiary);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+
+.zgn-proxy__name + button { margin-left: auto; }
+
+.zgn-proxy button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.zgn-proxy button:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.zgn-proxy button.is-danger:hover:not(:disabled) { color: var(--danger); }
+
+.zgn-proxies__add {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+/* A board member on a meeting: the participant chip, tinted so the community's
+   people read apart from the office's own. */
+.kal-person--board {
+  border-color: color-mix(in srgb, var(--info) 35%, var(--border-default));
+  background: color-mix(in srgb, var(--info) 10%, var(--bg-surface));
+}
+
+.kal-person--board > svg { color: var(--info); }

@@ -345,7 +345,13 @@ export function groupByAddress(
     );
     const bookings = sorted.filter((r) => r.isBooking);
     const booked = bookings.filter((r) => r.bookedInDom).length;
-    const errors = sorted.filter((r) => r.entry.status === 'error').length;
+    // A failed attempt stops needing attention once the community has a file for
+    // the month (generated, or already ticked in DOM): the retry worked, so the
+    // old error is history. The rows stay in `rows`; only the alarm goes.
+    const errors =
+      bookings.length > 0
+        ? 0
+        : sorted.filter((r) => r.entry.status === 'error' && !r.bookedInDom).length;
     return {
       adresId,
       key,

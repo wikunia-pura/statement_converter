@@ -798,6 +798,7 @@ const Ksiegowania: React.FC<Props> = ({
               <Icon name="chevron-left" size={17} />
             </button>
             <Select
+              overlay
               value={monthKey}
               options={monthOptions}
               onChange={setMonthKey}

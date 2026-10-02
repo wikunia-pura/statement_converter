@@ -81,7 +81,9 @@ const ZadaniaPulpit: React.FC<Props> = ({ language, userEmail, onOpen }) => {
   const stats = useMemo(() => {
     const today = dayKey();
     const me = userEmail.trim().toLowerCase();
-    const all = (zadania ?? []).filter((z) => (z.przypisanyEmail ?? '').trim().toLowerCase() === me);
+    const all = (zadania ?? []).filter(
+      (z) => !z.zarchiwizowane && (z.przypisanyEmail ?? '').trim().toLowerCase() === me
+    );
     const open = all.filter((z) => z.status !== 'done');
     const count = { overdue: 0, today: 0, upcoming: 0 };
     const lists: Record<'overdue' | 'today' | 'upcoming', Zadanie[]> = {

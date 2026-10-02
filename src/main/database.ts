@@ -14,6 +14,9 @@ import {
   BackupData,
   OdczytyHistoryEntry,
   ZgnJednostka,
+  ZgnPelnomocnik,
+  ZarzadOsoba,
+  SpotkanieZarzadOsoba,
   MailingPole,
   MailingPoleTyp,
   MailingSzablon,
@@ -28,6 +31,8 @@ import {
   SpotkanieInput,
   SpotkanieMailing,
   SpotkanieTerminStatus,
+  SpotkanieMaterialyStatus,
+  SPOTKANIE_MATERIALY_STATUSES,
   SpotkanieUczestnik,
   Zadanie,
   ZadanieInput,
@@ -96,8 +101,10 @@ function normalizeTypy(row: { typy?: unknown; typ?: unknown }): KontrahentTyp[] 
   return [((row.typ as KontrahentTyp) || 'Kontrahent')];
 }
 const ADRES_COLS =
-  'id, nazwa, alternativeNames:alternative_names, swrkIdentifiers:swrk_identifiers, accountNumbers:account_numbers, accountTypes:account_types, bankId:bank_id, apartmentMappings:apartment_mappings, zgnJednostkaId:zgn_jednostka_id, createdAt:created_at';
+  'id, nazwa, alternativeNames:alternative_names, swrkIdentifiers:swrk_identifiers, accountNumbers:account_numbers, accountTypes:account_types, bankId:bank_id, apartmentMappings:apartment_mappings, zgnJednostkaId:zgn_jednostka_id, zarzad, createdAt:created_at';
 const ZGN_COLS = 'id, nazwa, email, createdAt:created_at';
+const ZGN_PELNOMOCNIK_COLS =
+  'id, jednostkaId:jednostka_id, imieNazwisko:imie_nazwisko, email, createdAt:created_at';
 const MAILING_POLE_COLS =
   'id, nazwa, tekst, jednostka, typWartosci:typ_wartosci, createdAt:created_at';
 const MAILING_SZABLON_COLS =
@@ -124,6 +131,10 @@ const SPOTKANIE_COLS =
   'terminZmianaOdczytanaBy:termin_zmiana_odczytana_by, ' +
   'dokumentyWyslaneAt:dokumenty_wyslane_at, dokumentyWyslaneBy:dokumenty_wyslane_by, ' +
   'dokumentyOpis:dokumenty_opis, ' +
+  'materialyStatus:materialy_status, materialyZmienioneAt:materialy_zmienione_at, ' +
+  'materialyZmienioneBy:materialy_zmienione_by, ' +
+  'zgnJednostkaId:zgn_jednostka_id, zgnPelnomocnikId:zgn_pelnomocnik_id, zgnNazwa:zgn_nazwa, ' +
+  'zarzad, ' +
   'createdBy:created_by, createdAt:created_at, updatedAt:updated_at';
 /** Slim projection of a mailing send, as a meeting shows it. */
 const SPOTKANIE_MAILING_COLS =
@@ -135,7 +146,8 @@ const KS_PRIORYTET_COLS =
 const KS_UWAGA_COLS =
   'id, adresId:adres_id, adresNazwa:adres_nazwa, tresc, createdBy:created_by, createdAt:created_at, resolvedAt:resolved_at, resolvedBy:resolved_by';
 const ZADANIE_COLS =
-  'id, tytul, opis, status, priorytet, pozycja, przypisanyEmail:przypisany_email, termin, zalaczniki, ' +
+  'id, tytul, opis, status, priorytet, pozycja, przypisanyEmail:przypisany_email, termin, zalaczniki, zarchiwizowane, ' +
+  'spotkanieId:spotkanie_id, ' +
   'createdBy:created_by, createdAt:created_at, updatedAt:updated_at, updatedBy:updated_by';
 const ZADANIE_KOMENTARZ_COLS =
   'id, zadanieId:zadanie_id, autorEmail:autor_email, tresc, mentions, createdAt:created_at';
@@ -456,6 +468,7 @@ class DatabaseService {
       bankId: a.bankId ?? null,
       apartmentMappings: a.apartmentMappings ?? [],
       zgnJednostkaId: a.zgnJednostkaId ?? null,
+      zarzad: DatabaseService.zarzadList(a.zarzad),
     })) as Adres[];
     this.cache.adresy = this.cacheSet(data);
     return data;
@@ -574,6 +587,44 @@ class DatabaseService {
     const adres = unwrap(data, error, 'addAdres') as Adres;
     this.invalidateCache('adresy');
     return adres;
+  }
+
+  /**
+   * A board as stored: people with a name, mailboxes trimmed, an id each. Reads
+   * the same from a row, a backup or the renderer, so a hand-edited value never
+   * reaches the table half-formed.
+   */
+  private static zarzadList(value: unknown): ZarzadOsoba[] {
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((raw, i): ZarzadOsoba[] => {
+      const p = (raw ?? {}) as Partial<ZarzadOsoba>;
+      const imieNazwisko = String(p.imieNazwisko ?? '').trim();
+      if (!imieNazwisko) return [];
+      return [
+        {
+          id: String(p.id ?? '').trim() || `z${Date.now().toString(36)}${i}`,
+          imieNazwisko,
+          email: String(p.email ?? '').trim(),
+        },
+      ];
+    });
+  }
+
+  /** A meeting's board members: the same people, without the list's ids. */
+  private static spotkanieZarzad(value: unknown): SpotkanieZarzadOsoba[] {
+    return DatabaseService.zarzadList(value).map(({ imieNazwisko, email }) => ({
+      imieNazwisko,
+      email,
+    }));
+  }
+
+  async setAdresZarzad(id: number, zarzad: unknown): Promise<void> {
+    const { error } = await getSupabase()
+      .from('adresy')
+      .update({ zarzad: DatabaseService.zarzadList(zarzad) })
+      .eq('id', id);
+    if (error) throw new Error(`setAdresZarzad: ${error.message}`);
+    this.invalidateCache('adresy');
   }
 
   async updateAdres(
@@ -930,6 +981,48 @@ class DatabaseService {
     const { error } = await getSupabase().from('zgn_jednostki').delete().eq('id', id);
     if (error) throw new Error(`deleteZgnJednostka: ${error.message}`);
     this.invalidateCache('adresy');
+  }
+
+  // ------------------------- Jednostki ZGN — pełnomocnicy -------------------------
+
+  async getZgnPelnomocnicy(): Promise<ZgnPelnomocnik[]> {
+    const { data, error } = await getSupabase()
+      .from('zgn_pelnomocnicy')
+      .select(ZGN_PELNOMOCNIK_COLS)
+      .order('imie_nazwisko', { ascending: true });
+    if (error) throw new Error(`getZgnPelnomocnicy: ${error.message}`);
+    return (data ?? []) as unknown as ZgnPelnomocnik[];
+  }
+
+  async addZgnPelnomocnik(
+    jednostkaId: number,
+    imieNazwisko: string,
+    email: string,
+  ): Promise<ZgnPelnomocnik> {
+    const name = (imieNazwisko ?? '').trim();
+    if (!name) throw new Error('Pełnomocnik musi mieć imię i nazwisko.');
+    const { data, error } = await getSupabase()
+      .from('zgn_pelnomocnicy')
+      .insert({ jednostka_id: jednostkaId, imie_nazwisko: name, email: (email ?? '').trim() })
+      .select(ZGN_PELNOMOCNIK_COLS)
+      .single();
+    return unwrap(data, error, 'addZgnPelnomocnik') as unknown as ZgnPelnomocnik;
+  }
+
+  async updateZgnPelnomocnik(id: number, imieNazwisko: string, email: string): Promise<void> {
+    const name = (imieNazwisko ?? '').trim();
+    if (!name) throw new Error('Pełnomocnik musi mieć imię i nazwisko.');
+    const { error } = await getSupabase()
+      .from('zgn_pelnomocnicy')
+      .update({ imie_nazwisko: name, email: (email ?? '').trim() })
+      .eq('id', id);
+    if (error) throw new Error(`updateZgnPelnomocnik: ${error.message}`);
+  }
+
+  /** Meetings that named this proxy keep their `zgn_nazwa`; only the link goes. */
+  async deleteZgnPelnomocnik(id: number): Promise<void> {
+    const { error } = await getSupabase().from('zgn_pelnomocnicy').delete().eq('id', id);
+    if (error) throw new Error(`deleteZgnPelnomocnik: ${error.message}`);
   }
 
   // ------------------------ Mailing — pola dynamiczne ------------------------
@@ -1389,7 +1482,16 @@ class DatabaseService {
       przypisany_email: (input.przypisanyEmail ?? '').trim() || null,
       termin: DatabaseService.zadanieTermin(input.termin),
       zalaczniki: DatabaseService.zadanieZalaczniki(input.zalaczniki),
+      spotkanie_id: DatabaseService.zadanieSpotkanieId(input.spotkanieId),
     };
+  }
+
+  /** A meeting id, or null — anything else would be a broken link, not a task. */
+  private static zadanieSpotkanieId(value: unknown): number | null {
+    if (value == null) return null;
+    const id = Number(value);
+    if (!Number.isInteger(id) || id <= 0) throw new Error(`Nieprawidłowe spotkanie zadania: ${value}`);
+    return id;
   }
 
   /** Fill what a row written before a column existed leaves null. */
@@ -1402,6 +1504,8 @@ class DatabaseService {
       przypisanyEmail: r.przypisanyEmail ?? null,
       termin: r.termin ?? null,
       zalaczniki: Array.isArray(r.zalaczniki) ? (r.zalaczniki as ZadanieZalacznik[]) : [],
+      zarchiwizowane: r.zarchiwizowane === true,
+      spotkanieId: r.spotkanieId != null ? Number(r.spotkanieId) : null,
       createdBy: r.createdBy ?? '',
       updatedBy: r.updatedBy ?? '',
     } as Zadanie;
@@ -1513,6 +1617,23 @@ class DatabaseService {
     );
     const failed = results.find((r) => r.error);
     if (failed?.error) throw new Error(`moveZadanie (kolejność): ${failed.error.message}`);
+  }
+
+  /**
+   * Archive a card or bring it back. It is an edit of the card (so `updated_by`
+   * is set and a person's own archiving is not notified back to them), and it
+   * leaves the place in its column alone.
+   */
+  async setZadanieArchived(id: number, archived: boolean, changedBy: string): Promise<void> {
+    const { error } = await getSupabase()
+      .from('zadania')
+      .update({
+        zarchiwizowane: archived,
+        updated_at: new Date().toISOString(),
+        updated_by: changedBy,
+      })
+      .eq('id', id);
+    if (error) throw new Error(`setZadanieArchived: ${error.message}`);
   }
 
   async deleteZadanie(id: number): Promise<void> {
@@ -1766,6 +1887,13 @@ class DatabaseService {
       dokumentyWyslaneAt: r.dokumentyWyslaneAt ?? null,
       dokumentyWyslaneBy: r.dokumentyWyslaneBy ?? null,
       dokumentyOpis: r.dokumentyOpis ?? '',
+      zgnJednostkaId: r.zgnJednostkaId != null ? Number(r.zgnJednostkaId) : null,
+      zgnPelnomocnikId: r.zgnPelnomocnikId != null ? Number(r.zgnPelnomocnikId) : null,
+      zgnNazwa: r.zgnNazwa ?? '',
+      zarzad: DatabaseService.spotkanieZarzad(r.zarzad),
+      materialyStatus: DatabaseService.materialyStatus(r.materialyStatus),
+      materialyZmienioneAt: r.materialyZmienioneAt ?? null,
+      materialyZmienioneBy: r.materialyZmienioneBy ?? null,
       createdBy: r.createdBy ?? '',
     })) as Spotkanie[];
   }
@@ -1798,6 +1926,11 @@ class DatabaseService {
       opis: input.opis,
       uczestnicy: input.uczestnicy,
       termin_status: input.terminStatus === 'wstepny' ? 'wstepny' : 'potwierdzony',
+      // A proxy always comes with its own unit; no unit means no proxy either.
+      zgn_jednostka_id: input.zgnJednostkaId ?? null,
+      zgn_pelnomocnik_id: input.zgnJednostkaId != null ? input.zgnPelnomocnikId ?? null : null,
+      zgn_nazwa: input.zgnJednostkaId != null ? (input.zgnNazwa ?? '').trim() : '',
+      zarzad: DatabaseService.spotkanieZarzad(input.zarzad),
     };
   }
 
@@ -1871,6 +2004,39 @@ class DatabaseService {
       })
       .eq('id', id);
     if (error) throw new Error(`ackSpotkanieTermin: ${error.message}`);
+  }
+
+  /**
+   * A stored materials status; anything unknown (or absent) reads as none
+   * needed. `gotowe` is the earlier draft's name for `przygotowane`.
+   */
+  private static materialyStatus(value: unknown): SpotkanieMaterialyStatus {
+    if (value === 'gotowe') return 'przygotowane';
+    return SPOTKANIE_MATERIALY_STATUSES.includes(value as SpotkanieMaterialyStatus)
+      ? (value as SpotkanieMaterialyStatus)
+      : 'brak';
+  }
+
+  /** Move the materials status, recording who did it — the notifier reads that. */
+  async setSpotkanieMaterialy(
+    id: number,
+    status: SpotkanieMaterialyStatus,
+    who: string,
+  ): Promise<void> {
+    if (!SPOTKANIE_MATERIALY_STATUSES.includes(status)) {
+      throw new Error(`Nieznany status materiałów: ${status}`);
+    }
+    const now = new Date().toISOString();
+    const { error } = await getSupabase()
+      .from('spotkania')
+      .update({
+        materialy_status: status,
+        materialy_zmienione_at: now,
+        materialy_zmienione_by: who,
+        updated_at: now,
+      })
+      .eq('id', id);
+    if (error) throw new Error(`setSpotkanieMaterialy: ${error.message}`);
   }
 
   /** Settle a tentative date, or put a settled one back to tentative. */
@@ -2255,6 +2421,7 @@ class DatabaseService {
       history,
       odczytyHistory,
       zgnJednostki,
+      zgnPelnomocnicy,
       mailingPola,
       mailingSzablony,
       mailingHistory,
@@ -2276,6 +2443,7 @@ class DatabaseService {
       this.getAllHistory(),
       this.getOdczytyHistory(),
       this.getZgnJednostki(),
+      this.getZgnPelnomocnicy(),
       this.getMailingPola(),
       this.getMailingSzablony(),
       this.getMailingHistory(),
@@ -2303,6 +2471,7 @@ class DatabaseService {
         history,
         odczytyHistory,
         zgnJednostki,
+        zgnPelnomocnicy,
         mailingPola,
         mailingSzablony,
         mailingHistory,
@@ -2392,6 +2561,7 @@ class DatabaseService {
       history,
       odczytyHistory,
       zgnJednostki,
+      zgnPelnomocnicy,
       mailingPola,
       mailingSzablony,
       mailingHistory,
@@ -2476,6 +2646,8 @@ class DatabaseService {
           apartment_mappings: a.apartmentMappings ?? [],
           zgn_jednostka_id:
             a.zgnJednostkaId != null ? zgnIdMap.get(a.zgnJednostkaId) ?? null : null,
+          // Absent in backups written before communities had a board.
+          zarzad: DatabaseService.zarzadList(a.zarzad),
           created_at: a.createdAt,
         };
       }),
@@ -2484,6 +2656,30 @@ class DatabaseService {
     await this.deleteByIds('banks', preexistingBankIds);
     await this.deleteByIds('konto_typy', preexistingTypIds);
     await this.deleteByIds('zgn_jednostki', preexistingZgnIds);
+
+    // Proxies. Removing the old units above took their proxies with them (ON
+    // DELETE CASCADE) — they could only ever act for those rows — so the backup's
+    // proxies come back under the fresh unit ids. A backup written before
+    // proxies existed has none to bring back. The old id → new id map is what
+    // the meetings below re-point their proxy through.
+    const zgnPelnomocnikIdMap = new Map<number, number>();
+    const pelnomocnicyToRestore = (zgnPelnomocnicy ?? []).filter(p =>
+      zgnIdMap.has(p.jednostkaId),
+    );
+    for (const slice of DatabaseService.chunk(pelnomocnicyToRestore)) {
+      const sliceMap = await this.insertRemapped(
+        'zgn_pelnomocnicy',
+        'id',
+        slice.map(p => p.id),
+        slice.map(p => ({
+          jednostka_id: zgnIdMap.get(p.jednostkaId),
+          imie_nazwisko: p.imieNazwisko,
+          email: p.email ?? '',
+          created_at: p.createdAt,
+        })),
+      );
+      sliceMap.forEach((newId, oldId) => zgnPelnomocnikIdMap.set(oldId, newId));
+    }
 
     await this.deleteAllKontrahenci();
     await this.insertChunked(
@@ -2622,6 +2818,12 @@ class DatabaseService {
       );
     }
 
+    // Old meeting id → new one, filled by the meetings' restore below and read by
+    // the tasks' — a task's meeting link is re-pointed through it. Empty when the
+    // backup carries no meetings: the live meetings then keep ids the backup
+    // cannot be trusted to know, so a task's link is dropped rather than guessed.
+    const spotkanieIdMap = new Map<number, number>();
+
     // Kalendarz. Gated on the meetings rather than on the types, because the two
     // keys are written together and the types only exist to be pointed at: a
     // backup with types but no meetings would replace the dictionary out from
@@ -2661,45 +2863,68 @@ class DatabaseService {
 
       const { error: wipeError } = await getSupabase().from('spotkania').delete().gt('id', 0);
       if (wipeError) throw new Error(`restore spotkania: ${wipeError.message}`);
-      await this.insertChunked(
-        'spotkania',
-        spotkania.map(m => ({
-          nazwa: m.nazwa,
-          typ_id: m.typId != null ? spotkanieTypIdMap.get(m.typId) ?? null : null,
-          // The addresses above were re-inserted with fresh ids, so the backup's
-          // number means nothing now; the name is what survives a restore, and
-          // it is also what the meeting displays.
-          adres_id: m.adresNazwa
-            ? adresIdByNazwa.get(m.adresNazwa.trim().toLowerCase()) ?? null
-            : null,
-          adres_nazwa: m.adresNazwa ?? '',
-          // Re-pointed through the fresh dictionary ids; the name travels
-          // regardless, which is what a meeting actually displays.
-          lokalizacja_id:
-            m.lokalizacjaId != null ? lokalizacjaIdMap.get(m.lokalizacjaId) ?? null : null,
-          lokalizacja_nazwa: m.lokalizacjaNazwa ?? '',
-          starts_at: m.startsAt,
-          ends_at: m.endsAt ?? null,
-          opis: m.opis ?? '',
-          // The participants are a snapshot of accounts, whose ids are auth
-          // uuids — stable across a restore, so they travel verbatim.
-          uczestnicy: m.uczestnicy ?? [],
-          // Absent in backups written before these columns existed: a meeting
-          // from back then meant a real date and no paperwork trail.
-          termin_status: m.terminStatus === 'wstepny' ? 'wstepny' : 'potwierdzony',
-          termin_zmieniony_at: m.terminZmienionyAt ?? null,
-          termin_zmieniony_z: m.terminZmienionyZ ?? null,
-          termin_zmieniony_by: m.terminZmienionyBy ?? null,
-          termin_zmiana_odczytana_at: m.terminZmianaOdczytanaAt ?? null,
-          termin_zmiana_odczytana_by: m.terminZmianaOdczytanaBy ?? null,
-          dokumenty_wyslane_at: m.dokumentyWyslaneAt ?? null,
-          dokumenty_wyslane_by: m.dokumentyWyslaneBy ?? null,
-          dokumenty_opis: m.dokumentyOpis ?? '',
-          created_by: m.createdBy ?? '',
-          created_at: m.createdAt,
-          updated_at: m.updatedAt,
-        })),
-      );
+      // Chunked, and remapped per chunk: the tasks restored further down point at
+      // these meetings by id, and Postgres hands every one of them a fresh id.
+      for (const slice of DatabaseService.chunk(spotkania)) {
+        const sliceMap = await this.insertRemapped(
+          'spotkania',
+          'id',
+          slice.map(m => m.id),
+          slice.map(m => ({
+            nazwa: m.nazwa,
+            typ_id: m.typId != null ? spotkanieTypIdMap.get(m.typId) ?? null : null,
+            // The addresses above were re-inserted with fresh ids, so the backup's
+            // number means nothing now; the name is what survives a restore, and
+            // it is also what the meeting displays.
+            adres_id: m.adresNazwa
+              ? adresIdByNazwa.get(m.adresNazwa.trim().toLowerCase()) ?? null
+              : null,
+            adres_nazwa: m.adresNazwa ?? '',
+            // Re-pointed through the fresh dictionary ids; the name travels
+            // regardless, which is what a meeting actually displays.
+            lokalizacja_id:
+              m.lokalizacjaId != null ? lokalizacjaIdMap.get(m.lokalizacjaId) ?? null : null,
+            lokalizacja_nazwa: m.lokalizacjaNazwa ?? '',
+            starts_at: m.startsAt,
+            ends_at: m.endsAt ?? null,
+            opis: m.opis ?? '',
+            // The participants are a snapshot of accounts, whose ids are auth
+            // uuids — stable across a restore, so they travel verbatim.
+            uczestnicy: m.uczestnicy ?? [],
+            // Absent in backups written before these columns existed: a meeting
+            // from back then meant a real date and no paperwork trail.
+            termin_status: m.terminStatus === 'wstepny' ? 'wstepny' : 'potwierdzony',
+            termin_zmieniony_at: m.terminZmienionyAt ?? null,
+            termin_zmieniony_z: m.terminZmienionyZ ?? null,
+            termin_zmieniony_by: m.terminZmienionyBy ?? null,
+            termin_zmiana_odczytana_at: m.terminZmianaOdczytanaAt ?? null,
+            termin_zmiana_odczytana_by: m.terminZmianaOdczytanaBy ?? null,
+            dokumenty_wyslane_at: m.dokumentyWyslaneAt ?? null,
+            dokumenty_wyslane_by: m.dokumentyWyslaneBy ?? null,
+            dokumenty_opis: m.dokumentyOpis ?? '',
+            // Re-pointed through the units and proxies restored above; the name
+            // travels regardless. All absent in backups written before meetings
+            // could be assigned a city unit.
+            zgn_jednostka_id:
+              m.zgnJednostkaId != null ? zgnIdMap.get(m.zgnJednostkaId) ?? null : null,
+            zgn_pelnomocnik_id:
+              m.zgnPelnomocnikId != null
+                ? zgnPelnomocnikIdMap.get(m.zgnPelnomocnikId) ?? null
+                : null,
+            zgn_nazwa: m.zgnNazwa ?? '',
+            // Absent in backups written before meetings carried board members.
+            zarzad: DatabaseService.spotkanieZarzad(m.zarzad),
+            // Absent in backups written before meetings had a materials status.
+            materialy_status: DatabaseService.materialyStatus(m.materialyStatus),
+            materialy_zmienione_at: m.materialyZmienioneAt ?? null,
+            materialy_zmienione_by: m.materialyZmienioneBy ?? null,
+            created_by: m.createdBy ?? '',
+            created_at: m.createdAt,
+            updated_at: m.updatedAt,
+          })),
+        );
+        sliceMap.forEach((newId, oldId) => spotkanieIdMap.set(oldId, newId));
+      }
 
       await this.deleteByIds('spotkania_typy', preexistingSpotkanieTypIds);
       await this.deleteByIds('spotkania_lokalizacje', preexistingLokalizacjaIds);
@@ -2783,6 +3008,12 @@ class DatabaseService {
               // Absent in backups written before tasks had a deadline and files.
               termin: DatabaseService.zadanieTermin(z.termin),
               zalaczniki: DatabaseService.zadanieZalaczniki(z.zalaczniki),
+              // Absent in backups written before tasks could be archived.
+              zarchiwizowane: z.zarchiwizowane === true,
+              // Re-pointed through the meetings restored above. Absent in backups
+              // written before tasks could belong to a meeting.
+              spotkanie_id:
+                z.spotkanieId != null ? spotkanieIdMap.get(z.spotkanieId) ?? null : null,
               created_by: z.createdBy ?? '',
               created_at: z.createdAt,
               updated_at: z.updatedAt,

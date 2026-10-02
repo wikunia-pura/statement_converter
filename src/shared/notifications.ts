@@ -7,16 +7,17 @@
  * of the notification itself is in the main process (`notifier.ts`).
  *
  * `locked` notifications are the ones the app has always shown: they stay on and
- * the list shows them as such. The others are opt-in (`defaultOn: false`): a new
- * kind of notification must not start interrupting everyone on update — each
- * person turns on what they want, and the choice belongs to their account
+ * the list shows them as such. The others can be switched off, and most are
+ * opt-in (`defaultOn: false`): a new kind of notification must not start
+ * interrupting everyone on update. The exception is one asked for as on by
+ * default — the meeting-materials steps: the whole office prepares them. Either way the choice belongs to the person's account
  * (`notification_prefs`, keyed by mailbox), not to the machine.
  *
  * Adding a notification means adding it here, the two translation keys, and the
  * code in `notifier.ts` that raises it.
  */
 
-export type NotificationGroup = 'zadania' | 'ksiegowania';
+export type NotificationGroup = 'zadania' | 'ksiegowania' | 'kalendarz';
 
 export const NOTIFICATION_DEFS = [
   // Zadania — about tasks assigned to me, and comments.
@@ -29,11 +30,19 @@ export const NOTIFICATION_DEFS = [
   { id: 'ksiegowaniaPriorytet', group: 'ksiegowania', locked: false, defaultOn: false },
   { id: 'ksiegowaniaPriorytetNotatka', group: 'ksiegowania', locked: false, defaultOn: false },
   { id: 'ksiegowaniaUwaga', group: 'ksiegowania', locked: false, defaultOn: false },
+  // Kalendarz — the materials of any meeting, for everyone.
+  { id: 'spotkanieMaterialyDoPrzygotowania', group: 'kalendarz', locked: false, defaultOn: true },
+  { id: 'spotkanieMaterialyPrzygotowane', group: 'kalendarz', locked: false, defaultOn: true },
+  { id: 'spotkanieMaterialyWyslane', group: 'kalendarz', locked: false, defaultOn: true },
 ] as const;
 
 export type NotificationId = (typeof NOTIFICATION_DEFS)[number]['id'];
 
-export const NOTIFICATION_GROUPS: readonly NotificationGroup[] = ['zadania', 'ksiegowania'];
+export const NOTIFICATION_GROUPS: readonly NotificationGroup[] = [
+  'zadania',
+  'ksiegowania',
+  'kalendarz',
+];
 
 /** One person's switches: only the ones they have flipped are stored. */
 export type NotificationPrefs = Partial<Record<NotificationId, boolean>>;

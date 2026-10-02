@@ -56,6 +56,8 @@ const IPC_CHANNELS = {
   SET_SIDEBAR_COLLAPSED: 'settings:set-sidebar-collapsed',
   SET_BOOKINGS_COLLAPSED: 'settings:set-bookings-collapsed',
   SET_CALENDAR_HOVER_CARD: 'settings:set-calendar-hover-card',
+  GET_NOTIFICATION_PREFS: 'notifications:get-prefs',
+  SET_NOTIFICATION_PREF: 'notifications:set-pref',
   SET_LAST_SEEN_VERSION: 'settings:set-last-seen-version',
   EXPORT_SETTINGS: 'settings:export',
   IMPORT_SETTINGS: 'settings:import',
@@ -135,12 +137,20 @@ const IPC_CHANNELS = {
   GET_ZADANIA: 'zadania:get',
   ADD_ZADANIE: 'zadania:add',
   UPDATE_ZADANIE: 'zadania:update',
-  SET_ZADANIE_STATUS: 'zadania:set-status',
+  MOVE_ZADANIE: 'zadania:move',
   DELETE_ZADANIE: 'zadania:delete',
   ZADANIA_PICK_ATTACHMENT: 'zadania:pick-attachment',
   ZADANIA_UPLOAD_ATTACHMENT: 'zadania:upload-attachment',
   ZADANIA_DOWNLOAD_ATTACHMENT: 'zadania:download-attachment',
   ZADANIA_DISCARD_ATTACHMENTS: 'zadania:discard-attachments',
+  GET_ZADANIE_KOMENTARZE: 'zadania:get-komentarze',
+  GET_ZADANIA_NOTATKI: 'zadania:get-notatki',
+  ADD_ZADANIE_NOTATKA: 'zadania:add-notatka',
+  DELETE_ZADANIE_NOTATKA: 'zadania:delete-notatka',
+  UPDATE_ZADANIE_NOTATKA: 'zadania:update-notatka',
+  GET_ZADANIA_KOMENTARZE_PODSUMOWANIE: 'zadania:get-komentarze-podsumowanie',
+  ADD_ZADANIE_KOMENTARZ: 'zadania:add-komentarz',
+  DELETE_ZADANIE_KOMENTARZ: 'zadania:delete-komentarz',
   GET_KS_PRIORYTETY: 'ksiegowania:get-priorytety',
   ADD_KS_PRIORYTET: 'ksiegowania:add-priorytet',
   SET_KS_PRIORYTET_NOTATKA: 'ksiegowania:set-priorytet-notatka',
@@ -292,6 +302,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.SET_BOOKINGS_COLLAPSED, collapsed),
   setCalendarHoverCard: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_CALENDAR_HOVER_CARD, enabled),
+  getNotificationPrefs: () => ipcRenderer.invoke(IPC_CHANNELS.GET_NOTIFICATION_PREFS),
+  setNotificationPref: (id: string, enabled: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_NOTIFICATION_PREF, id, enabled),
   setLastSeenVersion: (version: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_LAST_SEEN_VERSION, version),
   exportSettings: () => ipcRenderer.invoke(IPC_CHANNELS.EXPORT_SETTINGS),
@@ -458,8 +471,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.ADD_ZADANIE, input),
   updateZadanie: (id: number, input: import('../shared/types').ZadanieInput) =>
     ipcRenderer.invoke(IPC_CHANNELS.UPDATE_ZADANIE, id, input),
-  setZadanieStatus: (id: number, status: import('../shared/types').ZadanieStatus) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SET_ZADANIE_STATUS, id, status),
+  moveZadanie: (
+    id: number,
+    status: import('../shared/types').ZadanieStatus,
+    orderedIds: number[],
+  ) => ipcRenderer.invoke(IPC_CHANNELS.MOVE_ZADANIE, id, status, orderedIds),
   deleteZadanie: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ZADANIE, id),
   zadaniaPickAttachment: () => ipcRenderer.invoke(IPC_CHANNELS.ZADANIA_PICK_ATTACHMENT),
   zadaniaUploadAttachment: (token: string) =>
@@ -468,9 +484,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.ZADANIA_DOWNLOAD_ATTACHMENT, zalacznik),
   zadaniaDiscardAttachments: (paths: string[]) =>
     ipcRenderer.invoke(IPC_CHANNELS.ZADANIA_DISCARD_ATTACHMENTS, paths),
-  /** A system notification about a task was clicked — open the board. */
-  onOpenZadania: (callback: () => void) => {
+  /** A notification about Księgowania (priority, note) was clicked — open the dashboard. */
+  onOpenKsiegowania: (callback: () => void) => {
     const listener = () => callback();
+    ipcRenderer.on('ksiegowania:open', listener);
+    return () => ipcRenderer.off('ksiegowania:open', listener);
+  },
+  getZadaniaKomentarzePodsumowanie: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_ZADANIA_KOMENTARZE_PODSUMOWANIE),
+  getZadaniaNotatki: () => ipcRenderer.invoke(IPC_CHANNELS.GET_ZADANIA_NOTATKI),
+  addZadanieNotatka: (tresc: string) => ipcRenderer.invoke(IPC_CHANNELS.ADD_ZADANIE_NOTATKA, tresc),
+  updateZadanieNotatka: (id: number, tresc: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_ZADANIE_NOTATKA, id, tresc),
+  deleteZadanieNotatka: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ZADANIE_NOTATKA, id),
+  getZadanieKomentarze: (zadanieId: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_ZADANIE_KOMENTARZE, zadanieId),
+  addZadanieKomentarz: (input: import('../shared/types').ZadanieKomentarzInput) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ADD_ZADANIE_KOMENTARZ, input),
+  deleteZadanieKomentarz: (id: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.DELETE_ZADANIE_KOMENTARZ, id),
+  /**
+   * A system notification about a task was clicked — open the board, on that
+   * task when the notification was about one.
+   */
+  onOpenZadania: (callback: (zadanieId?: number) => void) => {
+    const listener = (_event: unknown, zadanieId?: number) =>
+      callback(typeof zadanieId === 'number' ? zadanieId : undefined);
     ipcRenderer.on('zadania:open', listener);
     return () => ipcRenderer.off('zadania:open', listener);
   },

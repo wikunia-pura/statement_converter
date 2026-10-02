@@ -1,4 +1,5 @@
 import { Menu, Notification, Tray, nativeImage } from 'electron';
+import { showSystemNotification } from './systemNotification';
 import Store from 'electron-store';
 import { TRAY_ICON_PNG_BASE64 } from './trayIcon';
 
@@ -81,8 +82,8 @@ export function announceBackgroundOnce(language: 'pl' | 'en'): void {
   if (hintStore.get('hintShown') || !Notification.isSupported()) return;
   hintStore.set('hintShown', true);
   const t = TEXT[language];
-  new Notification({
+  showSystemNotification({
     title: t.hintTitle,
     body: process.platform === 'darwin' ? t.hintBodyMac : t.hintBodyWin,
-  }).show();
+  });
 }

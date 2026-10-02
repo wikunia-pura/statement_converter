@@ -62,15 +62,55 @@ export function formatBytes(bytes: number): string {
 /** Storage object keys are minted by the main process: a uuid plus a short lowercase extension. */
 export const ZADANIE_STORAGE_KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\.[a-z0-9]{1,16})?$/;
 
+/** The deadline filter of the board; `none` = tasks with no date at all. */
+export type ZadaniaDueFilter = 'all' | 'overdue' | 'today' | 'upcoming' | 'none';
+
+/**
+ * Whether a task passes the deadline filter. A finished task is never due: it
+ * is not late, not "for today" and not "still to come" — which is also how the
+ * dashboard counts them, so a tile and the board it opens agree on the number.
+ */
+export function matchesDue(
+  z: Pick<Zadanie, 'termin' | 'status'>,
+  filter: ZadaniaDueFilter,
+  today: string,
+): boolean {
+  switch (filter) {
+    case 'all':
+      return true;
+    case 'none':
+      return !z.termin;
+    case 'overdue':
+    case 'today':
+    case 'upcoming':
+      return z.status !== 'done' && dueBucket(z.termin, today) === filter;
+  }
+}
+
+/**
+ * The order of cards within a column: the place somebody dragged them to, and —
+ * for cards never placed, or sharing a number — latest change on top, which is
+ * how the board always looked before cards could be moved.
+ */
+export function compareZadaniaOrder(
+  a: Pick<Zadanie, 'pozycja' | 'updatedAt' | 'id'>,
+  b: Pick<Zadanie, 'pozycja' | 'updatedAt' | 'id'>,
+): number {
+  return (
+    a.pozycja - b.pozycja ||
+    b.updatedAt.localeCompare(a.updatedAt) ||
+    b.id - a.id
+  );
+}
+
 /**
  * A filter the dashboard hands to the board when one of its tiles is clicked:
- * whose tasks, and whether only the overdue ones. The board's own filter bar is
- * the same two questions, so a tile lands on a view the person can read straight
- * off the chips.
+ * whose tasks, and which deadlines. The board's own filter bar asks the same two
+ * questions, so a tile lands on a view the person can read straight off the chips.
  */
 export interface ZadaniaFilterSeed {
   who: 'all' | 'mine';
-  overdue: boolean;
+  due: ZadaniaDueFilter;
 }
 
-export const DEFAULT_ZADANIA_FILTER: ZadaniaFilterSeed = { who: 'all', overdue: false };
+export const DEFAULT_ZADANIA_FILTER: ZadaniaFilterSeed = { who: 'all', due: 'all' };

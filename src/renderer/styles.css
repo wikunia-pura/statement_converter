@@ -152,6 +152,15 @@ body,
   height: 100%;
 }
 
+/* A remark about a community or a card (Księgowania notes, a comment on a task):
+   a faint amber wash, not the full warning tint. Defined on `body`, where the
+   dark theme's colours are set, so the mix follows the theme. */
+body {
+  --note-bg: color-mix(in srgb, var(--warning) 5%, var(--bg-surface));
+  --note-border: color-mix(in srgb, var(--warning) 20%, var(--border-default));
+  --note-chip: color-mix(in srgb, var(--warning) 14%, var(--bg-surface));
+}
+
 body {
   font-family: var(--font-sans);
   font-size: var(--fs-base);
@@ -6659,35 +6668,247 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
   margin-bottom: var(--s-4);
 }
 
-.zad-filters {
+/* The filter bar: one panel, three labelled groups — who, which deadlines, how
+   important. Each group is a segmented control, so the three questions read as
+   three rows of choices rather than a dozen loose pills. */
+.zad-filterbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s-3) var(--s-6);
+  margin-bottom: var(--s-5);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-lg);
+  background: var(--bg-surface);
+}
+
+.zad-fgroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+}
+
+.zad-fgroup__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.zad-fgroup__controls {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--s-2);
-  margin-bottom: var(--s-5);
 }
 
-.zad-filter-chip {
-  padding: 5px var(--s-3);
+/* A row of joined options in a sunken track; the chosen one is a raised tile. */
+.zad-seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
   border: 1px solid var(--border-default);
   border-radius: var(--r-pill);
-  background: var(--bg-surface);
+  background: var(--bg-surface-sunken);
+}
+
+.zad-seg__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px var(--s-3);
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  background: transparent;
   color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.zad-seg__btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface-hover);
+}
+
+.zad-seg__btn.is-active {
+  color: var(--accent);
+  background: var(--bg-surface);
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow-sm);
+  font-weight: 600;
+}
+
+/* An option that would show nothing stays clickable, but recedes. */
+.zad-seg__btn.is-empty:not(.is-active) {
+  color: var(--text-tertiary);
+}
+
+.zad-seg__count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: var(--r-pill);
+  background: var(--bg-surface-hover);
+  color: var(--text-tertiary);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-align: center;
+}
+
+.zad-seg__btn.is-active .zad-seg__count {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+.zad-filterbar__result {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin-left: auto;
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+}
+
+.zad-filterbar__clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
   font: inherit;
   font-size: var(--fs-sm);
   cursor: pointer;
 }
 
-.zad-filter-chip:hover {
+.zad-filterbar__clear:hover {
+  text-decoration: underline;
+}
+
+/* --- Zadania: priority ---------------------------------------------------- */
+.zad-prio-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+.zad-prio-dot--high { background: var(--danger); }
+.zad-prio-dot--normal { background: var(--accent); }
+.zad-prio-dot--low { background: var(--info); }
+
+/* On a card, under the date. */
+.zad-prio {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+}
+.zad-prio--high {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+}
+/* On a card the pill is a button: reset to the pill's own look, plus a hover. */
+.zad-prio--button {
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.zad-prio--button:hover {
+  border-color: var(--border-strong);
+}
+
+.zad-prio--button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* The choices, drawn on the page body so a scrolling column cannot clip them. */
+.zad-prio-menu {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 140px;
+  padding: var(--s-1);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.zad-prio-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 5px var(--s-2);
+  border: none;
+  border-radius: var(--r-sm, 4px);
+  background: none;
   color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.zad-prio-menu__item:hover {
   background: var(--bg-surface-hover);
 }
 
-.zad-filter-chip.is-active {
-  color: var(--accent);
-  background: var(--accent-subtle);
-  border-color: var(--accent-border);
+.zad-prio-menu__item.is-active {
   font-weight: 600;
+}
+
+.zad-prio-menu__item > svg:last-child {
+  margin-left: auto;
+  color: var(--accent);
+}
+
+/* The mark, in the colour of the priority it stands for. */
+/* (Two classes: the priority's own pill colours are declared further down.) */
+.zad-prio-menu .zad-prio-menu__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  background: none;
+  border: none;
+}
+
+/* Normal is the quiet one: neutral, so high and low are what draw the eye. */
+.zad-prio--normal {
+  color: var(--text-secondary);
+  background: var(--bg-surface-sunken);
+  border-color: var(--border-default);
+}
+.zad-prio--low {
+  color: var(--info);
+  background: var(--info-bg);
+  border-color: var(--info-border);
+}
+
+/* A high-priority card gets a faint red rim as well, so it stands out in a long
+   column before the label is read. (Not an edge stripe: the left edge already
+   carries the status colour.) */
+.zad-card--high {
+  box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--danger-border);
 }
 
 .zad-filter-person {
@@ -6753,6 +6974,7 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 }
 
 .zad-card {
+  position: relative;
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--r-md);
@@ -7038,9 +7260,9 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
   align-items: center;
   gap: var(--s-3);
   padding: var(--s-3);
-  border: 1px solid var(--warning-border);
+  border: 1px solid var(--note-border);
   border-radius: var(--r-lg);
-  background: var(--warning-bg);
+  background: var(--note-bg);
 }
 .ksieg-uwaga__icon { display: inline-flex; color: var(--warning); }
 .ksieg-uwaga.is-editing .ksieg-uwaga__icon { padding-top: 2px; }
@@ -7153,9 +7375,9 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 .ks-notice__note {
   margin-bottom: var(--s-2);
   padding: var(--s-3);
-  border: 1px solid var(--warning-border);
+  border: 1px solid var(--note-border);
   border-radius: var(--r-lg);
-  background: var(--warning-bg);
+  background: var(--note-bg);
 }
 .ks-notice__note p {
   margin: 0 0 2px;
@@ -7170,9 +7392,9 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 .conv-note {
   margin-top: 6px;
   padding: 6px 8px;
-  border: 1px solid var(--warning-border);
+  border: 1px solid var(--note-border);
   border-radius: var(--r-md);
-  background: var(--warning-bg);
+  background: var(--note-bg);
 }
 .conv-note__title {
   display: inline-flex;
@@ -7402,6 +7624,191 @@ body.dark-mode .ks-kal-hero--zad .ks-kal-hero__facts {
 
 .ks-kal-tile--all:not(.is-empty) .ks-kal-tile__count { color: var(--accent); }
 
+/* --- Pulpit → Zadania: hover card over a tile ------------------------------ */
+/* Fixed in the viewport like `.kal-tip`, for the same reasons: it lands on the
+   first frame with no measuring, and no ancestor can clip it. The cards inside
+   are the board's own, shrunk: same stripe-for-status, same deadline badge. */
+.zp-tip {
+  --zp-tone: var(--accent);
+  --zp-tone-bg: var(--accent-subtle);
+  position: fixed;
+  z-index: 900; /* over the dashboard, under the modals (1000) */
+  width: 340px; /* TIP_WIDTH in components/ZadaniaPulpit.tsx */
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+  animation: kalTipIn var(--t-fast) both;
+}
+
+.zp-tip--overdue { --zp-tone: var(--danger); --zp-tone-bg: var(--danger-bg); }
+.zp-tip--today { --zp-tone: var(--warning); --zp-tone-bg: var(--warning-bg); }
+.zp-tip--upcoming { --zp-tone: var(--info); --zp-tone-bg: var(--info-bg); }
+
+.zp-tip__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.zp-tip__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-sm);
+  color: var(--zp-tone);
+  background: var(--zp-tone-bg);
+}
+
+.zp-tip__title {
+  font-size: var(--fs-base);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.zp-tip__count {
+  margin-left: auto;
+  padding: 0 var(--s-2);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface-sunken);
+  color: var(--zp-tone);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  line-height: 18px;
+}
+
+/* The board's three columns, as three numbers. */
+.zp-tip__strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--s-2);
+}
+
+.zp-tip__col {
+  --zp-col: var(--text-tertiary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--s-1) var(--s-2);
+  border: 1px solid var(--border-subtle);
+  border-top: 3px solid var(--zp-col);
+  border-radius: var(--r-md);
+  background: var(--bg-surface-sunken);
+}
+
+.zp-tip__col--in_progress { --zp-col: var(--info); }
+.zp-tip__col--done { --zp-col: var(--success); }
+
+.zp-tip__col-count {
+  font-size: var(--fs-md);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.zp-tip__col-label {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.zp-tip__cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.zp-card {
+  --zp-card: var(--text-tertiary);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--border-default);
+  border-left: 4px solid var(--zp-card);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.zp-card--in_progress { --zp-card: var(--info); }
+.zp-card--done { --zp-card: var(--success); }
+
+.zp-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-2);
+}
+
+.zp-card__title {
+  min-width: 0;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.zp-card--done .zp-card__title {
+  text-decoration: line-through;
+  text-decoration-color: var(--border-strong);
+  color: var(--text-secondary);
+}
+
+.zp-card__head .zad-due { flex-shrink: 0; }
+
+.zp-card__desc {
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.zp-card__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.zp-card__attach {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.zp-tip__more {
+  text-align: center;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.zp-tip__hint {
+  margin-top: 2px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
 /* --- Księgowania: fold down to the month banner --------------------------- */
 .ksieg-fold svg {
   transition: transform var(--t-base);
@@ -7549,6 +7956,48 @@ body.dark-mode .ks-kal-hero--zad .ks-kal-hero__facts {
 .zad-due-wrap {
   position: relative;
   display: inline-flex;
+}
+
+/* The corner of a card: the date and the priority, stacked, and ALWAYS the same
+   size — whatever the date says ("Dziś", "03.10.2026", "Dodaj termin") and
+   whichever priority it is, both are one fixed pill, so the column never wobbles. */
+.zad-card__side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.zad-card__side .zad-due-wrap {
+  display: flex;
+  width: 108px;
+  height: 24px;
+}
+
+.zad-card__side .zad-due--button,
+.zad-card__side .zad-prio {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 108px;
+  height: 24px;
+  min-height: 24px;
+  max-height: 24px;
+  margin: 0;
+  padding: 0 var(--s-2);
+  font-size: var(--fs-xs);
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zad-card__side svg {
+  display: block;
+  flex-shrink: 0;
 }
 
 /* The badge, as a button: reset to the badge's own look, plus a hover. */
@@ -7735,4 +8184,518 @@ body.dark-mode .ks-kal-hero--zad .ks-kal-hero__facts {
 .ksieg-hero__prio-more {
   color: var(--text-tertiary);
   font-weight: 450;
+}
+
+/* --- Zadania: comments on a card ------------------------------------------ */
+.zad-comments {
+  margin-top: var(--s-4);
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--border-default);
+}
+
+.zad-comments__title {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-bottom: var(--s-2);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.zad-comments__count {
+  padding: 0 var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+
+.zad-comments__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  max-height: 260px;
+  overflow-y: auto;
+  margin-bottom: var(--s-3);
+}
+
+.zad-comments__empty,
+.zad-comments__later {
+  padding: var(--s-3) 0;
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+}
+
+.zad-comments__later {
+  margin-top: var(--s-4);
+  border-top: 1px solid var(--border-default);
+}
+
+.zad-comments__empty--error {
+  color: var(--danger);
+}
+
+.zad-comment {
+  display: flex;
+  gap: var(--s-2);
+}
+
+.zad-comment__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.zad-comment__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  font-size: var(--fs-xs);
+}
+
+.zad-comment__author {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.zad-comment__time {
+  color: var(--text-tertiary);
+}
+
+/* The bead sits level with the first line of the comment, not centred on it. */
+.zad-comment__avatar {
+  margin-top: 2px;
+}
+
+.zad-comment__delete {
+  margin-left: auto;
+}
+
+.zad-comment__confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-left: auto;
+  color: var(--text-secondary);
+}
+
+.zad-comment__link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.zad-comment__link:hover {
+  text-decoration: underline;
+}
+
+.zad-comment__link--danger {
+  color: var(--danger);
+}
+
+/* `pre-wrap`: a comment keeps the line breaks it was written with. */
+.zad-comment__text {
+  margin-top: 2px;
+  font-size: var(--fs-md);
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A tag in the text and in the box is the mailing editors' pill (`.ff-chip`, see
+   "Dynamic fields as pills" above); these only adjust it for people. */
+.zad-pill {
+  font-size: inherit;
+}
+
+/* In a posted comment the pill is a label, not a control. */
+.zad-pill--static {
+  cursor: default;
+}
+
+/* A tag of the signed-in person stands out from the other tags. */
+.zad-pill--me {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.zad-comments__compose {
+  position: relative;
+}
+
+.zad-comments__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  margin-top: var(--s-2);
+}
+
+/* The @ list opens ABOVE the box: the box sits at the bottom of the modal, where
+   a list below it would be clipped by the modal's scrolling body. */
+.zad-suggest {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  z-index: 5;
+  margin: 0 0 var(--s-1);
+  padding: var(--s-1);
+  list-style: none;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.zad-suggest__item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-1) var(--s-2);
+  border-radius: var(--r-sm, 4px);
+  cursor: pointer;
+}
+
+.zad-suggest__item.is-active {
+  background: var(--accent-subtle);
+}
+
+.zad-suggest__name {
+  font-size: var(--fs-md);
+  color: var(--text-primary);
+}
+
+.zad-suggest__hint {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.zad-suggest__empty {
+  padding: var(--s-1) var(--s-2);
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+}
+
+/* --- Settings: the notifications list ------------------------------------- */
+.notif-group {
+  margin: var(--s-4) 0 var(--s-1);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.notif-control {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex-shrink: 0;
+}
+
+.notif-locked {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+/* A locked switch is shown on and cannot move: dimmed, and no pointer. */
+.toggle-switch input:disabled + .toggle-slider {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* The comment box: a contenteditable, so it can hold pills. Looks like the form's
+   other inputs; the placeholder is the box's own `data-placeholder` while empty. */
+.zad-editor {
+  min-height: 64px;
+  max-height: 140px;
+  overflow-y: auto;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-md);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  outline: none;
+}
+
+.zad-editor:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.zad-editor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.zad-editor[contenteditable='false'] {
+  opacity: 0.6;
+}
+
+.zad-comments__hint--error {
+  color: var(--danger);
+}
+
+/* In the comments modal the title and the divider are the modal's own. */
+.zad-comments--bare {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.zad-comments--bare .zad-comments__list {
+  max-height: min(50vh, 420px);
+}
+
+.zad-comments-modal__task {
+  margin-bottom: var(--s-3);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+/* --- Zadania: the newest comment on a card -------------------------------- */
+/* The amber of a note in Księgowania (`.ksieg-uwaga`): a comment on a card and a
+   note on a community are the same kind of remark, so they look alike. */
+.zad-card__comment {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  width: 100%;
+  margin-top: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--note-border);
+  border-radius: var(--r-lg);
+  background: var(--note-bg);
+  color: var(--warning);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.zad-card__comment:hover {
+  border-color: color-mix(in srgb, var(--warning) 45%, var(--border-default));
+}
+
+.zad-card__comment > svg {
+  flex-shrink: 0;
+}
+
+/* Smaller pills, so a tag does not make its line taller than the text around it. */
+.zad-card__comment .zad-pill {
+  padding: 0 6px;
+  font-size: var(--fs-xs);
+  vertical-align: middle;
+}
+
+.zad-card__comment-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.zad-card__comment-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.zad-card__comment-count {
+  flex-shrink: 0;
+  padding: 0 var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--note-chip);
+  color: var(--warning);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+
+/* Where a dragged card would land: a line in the gap above or below this one. */
+.zad-card.is-drop-before::before,
+.zad-card.is-drop-after::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  pointer-events: none;
+}
+.zad-card.is-drop-before::before { top: -6px; }
+.zad-card.is-drop-after::after { bottom: -6px; }
+
+/* --- Zadania: notes pinned to the view ------------------------------------ */
+.zad-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin-bottom: var(--s-5);
+}
+
+.zad-notes__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+.zad-notes__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.zad-notes__title:disabled {
+  cursor: default;
+}
+
+.zad-notes__count {
+  padding: 0 var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--note-chip);
+  color: var(--warning);
+  letter-spacing: 0;
+}
+
+.zad-notes__error {
+  font-size: var(--fs-sm);
+  color: var(--danger);
+}
+
+.zad-notes__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.zad-notes__form textarea {
+  width: 100%;
+  font: inherit;
+}
+
+.zad-notes__form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--s-2);
+}
+
+.zad-notes__form-actions .zad-upload__hint {
+  margin-right: auto;
+}
+
+/* Wide, low notes: two or three to a row. The text on top; under it, on one
+   line, who wrote it and when, with the actions at the far end. */
+.zad-notes__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
+  gap: var(--s-2);
+}
+
+/* The amber of a note in Księgowania, the same as a comment's strip on a card. */
+.zad-note {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--s-3);
+  row-gap: 2px;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--note-border);
+  border-radius: var(--r-lg);
+  background: var(--note-bg);
+}
+
+/* While it is reworded the note is a form again: the box above its buttons. */
+.zad-note.is-editing {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--s-2);
+}
+
+.zad-note.is-editing textarea {
+  width: 100%;
+  font: inherit;
+}
+
+.zad-note__text {
+  grid-column: 1 / -1;
+  margin: 0;
+  min-width: 0;
+  font-size: var(--fs-md);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.zad-note__meta {
+  grid-column: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  font-size: var(--fs-xs);
+}
+
+.zad-note__who {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.zad-note__author {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.zad-note__time {
+  color: var(--text-tertiary);
+}
+
+.zad-note__actions {
+  grid-column: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.zad-note__confirm {
+  grid-column: 2;
+  margin-left: 0;
 }

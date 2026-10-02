@@ -1,9 +1,31 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Zadanie } from '../../shared/types';
+import { Zadanie, ZadanieStatus } from '../../shared/types';
 import { ZadaniaFilterSeed, dayKey, dueBucket, formatDayKey } from '../../shared/zadania';
 import { translations, Language } from '../translations';
 import Icon from './Icon';
 import TasksIllustration from './TasksIllustration';
+
+/** Hover card geometry — kept in step with `.zp-tip` in the stylesheet. */
+const TIP_WIDTH = 340;
+const TIP_MARGIN = 8;
+/** Cards a hover card lists before it collapses the rest into "+N więcej". */
+const TIP_CARDS = 4;
+
+/** An open hover card: which tile, and the viewport edges it hangs off. */
+interface TipState {
+  key: string;
+  left: number;
+  top?: number;
+  bottom?: number;
+}
+
+/** Soonest deadline first; a task with no date goes after every dated one. */
+function byDeadline(a: Zadanie, b: Zadanie): number {
+  if (a.termin === b.termin) return a.id - b.id;
+  if (!a.termin) return 1;
+  if (!b.termin) return -1;
+  return a.termin < b.termin ? -1 : 1;
+}
 
 interface Props {
   language: Language;
@@ -30,6 +52,16 @@ const ZadaniaPulpit: React.FC<Props> = ({ language, userEmail, onOpen }) => {
   const t = translations[language];
   const locale = language === 'en' ? 'en' : 'pl';
   const [zadania, setZadania] = useState<Zadanie[] | null>(null);
+  const [tip, setTip] = useState<TipState | null>(null);
+
+  // The card is anchored to the viewport, so it would be left hanging in place
+  // while the dashboard moves underneath it: close it on any scroll.
+  useEffect(() => {
+    if (!tip) return undefined;
+    const close = () => setTip(null);
+    window.addEventListener('scroll', close, true);
+    return () => window.removeEventListener('scroll', close, true);
+  }, [tip]);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,22 +84,43 @@ const ZadaniaPulpit: React.FC<Props> = ({ language, userEmail, onOpen }) => {
     const all = (zadania ?? []).filter((z) => (z.przypisanyEmail ?? '').trim().toLowerCase() === me);
     const open = all.filter((z) => z.status !== 'done');
     const count = { overdue: 0, today: 0, upcoming: 0 };
+    const lists: Record<'overdue' | 'today' | 'upcoming', Zadanie[]> = {
+      overdue: [],
+      today: [],
+      upcoming: [],
+    };
     let next: Zadanie | null = null;
     for (const z of open) {
       const bucket = dueBucket(z.termin, today);
       if (!bucket) continue;
       count[bucket] += 1;
+      lists[bucket].push(z);
       // The nearest deadline that has not passed — what the banner says is next.
       if (bucket !== 'overdue' && (!next || (z.termin ?? '') < (next.termin ?? ''))) next = z;
     }
+    // What the "Wszystkie" card previews: what is still to do first, finished last.
+    const everything = [...open]
+      .sort(byDeadline)
+      .concat(all.filter((z) => z.status === 'done').sort(byDeadline));
+    const byStatus: Record<ZadanieStatus, number> = { todo: 0, in_progress: 0, done: 0 };
+    for (const z of all) byStatus[z.status] += 1;
     return {
       ...count,
+      lists: {
+        overdue: lists.overdue.sort(byDeadline),
+        today: lists.today.sort(byDeadline),
+        upcoming: lists.upcoming.sort(byDeadline),
+        all: everything,
+      },
+      byStatus,
       total: all.length,
       open: open.length,
       undated: open.filter((z) => !z.termin).length,
       next,
     };
   }, [zadania, userEmail]);
+
+  const today = dayKey();
 
   // Nothing until the read answers: a flash of zeros that then fills in is worse
   // than a band that appears a beat late.
@@ -82,6 +135,26 @@ const ZadaniaPulpit: React.FC<Props> = ({ language, userEmail, onOpen }) => {
       : t.zadDashFactsNoNext,
   ];
 
+  /**
+   * Position the hover card off the tile's own box. Anchoring from whichever
+   * viewport edge is further away means the card never has to be measured
+   * before it is placed, so it appears on the first frame (as the calendar's does).
+   */
+  const showTip = (event: React.SyntheticEvent<HTMLElement>, key: string) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const left = Math.max(
+      TIP_MARGIN,
+      Math.min(rect.left, window.innerWidth - TIP_WIDTH - TIP_MARGIN),
+    );
+    const below = rect.bottom <= window.innerHeight / 2;
+    setTip({
+      key,
+      left,
+      top: below ? rect.bottom + TIP_MARGIN : undefined,
+      bottom: below ? undefined : window.innerHeight - rect.top + TIP_MARGIN,
+    });
+  };
+
   const tiles: {
     key: string;
     seed: ZadaniaFilterSeed;
@@ -93,7 +166,7 @@ const ZadaniaPulpit: React.FC<Props> = ({ language, userEmail, onOpen }) => {
   }[] = [
     {
       key: 'overdue',
-      seed: { who: 'mine', overdue: true },
+      seed: { who: 'mine', due: 'overdue' },
       count: stats.overdue,
       tone: 'overdue',
       icon: 'alert-circle',
@@ -102,7 +175,7 @@ const ZadaniaPulpit: React.FC<Props> = ({ language, userEmail, onOpen }) => {
     },
     {
       key: 'today',
-      seed: { who: 'mine', overdue: false },
+      seed: { who: 'mine', due: 'today' },
       count: stats.today,
       tone: 'today',
       icon: 'clock',
@@ -111,7 +184,7 @@ const ZadaniaPulpit: React.FC<Props> = ({ language, userEmail, onOpen }) => {
     },
     {
       key: 'upcoming',
-      seed: { who: 'mine', overdue: false },
+      seed: { who: 'mine', due: 'upcoming' },
       count: stats.upcoming,
       tone: 'upcoming',
       icon: 'calendar',
@@ -120,7 +193,7 @@ const ZadaniaPulpit: React.FC<Props> = ({ language, userEmail, onOpen }) => {
     },
     {
       key: 'all',
-      seed: { who: 'mine', overdue: false },
+      seed: { who: 'mine', due: 'all' },
       count: stats.total,
       tone: 'all',
       icon: 'clipboard',
@@ -152,7 +225,7 @@ const ZadaniaPulpit: React.FC<Props> = ({ language, userEmail, onOpen }) => {
           <button
             type="button"
             className="ks-area__action"
-            onClick={() => onOpen({ who: 'mine', overdue: false })}
+            onClick={() => onOpen({ who: 'mine', due: 'all' })}
           >
             {t.zadDashOpen} <Icon name="arrow-right" size={13} />
           </button>
@@ -165,9 +238,19 @@ const ZadaniaPulpit: React.FC<Props> = ({ language, userEmail, onOpen }) => {
             key={tile.key}
             type="button"
             className={`ks-kal-tile ks-kal-tile--${tile.tone}${tile.count === 0 ? ' is-empty' : ''}`}
-            onClick={() => onOpen(tile.seed)}
+            onClick={() => {
+              setTip(null);
+              onOpen(tile.seed);
+            }}
             disabled={tile.count === 0}
-            title={tile.count === 0 ? tile.hint : t.zadDashOpenWhat.replace('{what}', tile.label)}
+            // A tile with something behind it gets the hover card instead of the
+            // native tooltip; an empty one is disabled, never fires hover, and
+            // keeps the plain hint.
+            title={tile.count === 0 ? tile.hint : undefined}
+            onMouseEnter={tile.count > 0 ? (e) => showTip(e, tile.key) : undefined}
+            onMouseLeave={() => setTip(null)}
+            onFocus={tile.count > 0 ? (e) => showTip(e, tile.key) : undefined}
+            onBlur={() => setTip(null)}
           >
             <span className="ks-kal-tile__icon">
               <Icon name={tile.icon} size={16} />
@@ -178,6 +261,85 @@ const ZadaniaPulpit: React.FC<Props> = ({ language, userEmail, onOpen }) => {
           </button>
         ))}
       </div>
+
+      {tip && (() => {
+        const tile = tiles.find((x) => x.key === tip.key);
+        const cards = stats.lists[tip.key as keyof typeof stats.lists] ?? [];
+        if (!tile) return null;
+        const columns: { status: ZadanieStatus; label: string }[] = [
+          { status: 'todo', label: t.zadColTodo },
+          { status: 'in_progress', label: t.zadColInProgress },
+          { status: 'done', label: t.zadColDone },
+        ];
+        return (
+          <div
+            className={`zp-tip zp-tip--${tile.tone}`}
+            role="tooltip"
+            style={{ left: tip.left, top: tip.top, bottom: tip.bottom }}
+          >
+            <div className="zp-tip__head">
+              <span className="zp-tip__icon">
+                <Icon name={tile.icon} size={13} />
+              </span>
+              <span className="zp-tip__title">{tile.label}</span>
+              <span className="zp-tip__count">{tile.count}</span>
+            </div>
+
+            {/* The board in miniature: how the tasks split across its three columns. */}
+            {tip.key === 'all' && (
+              <div className="zp-tip__strip">
+                {columns.map((col) => (
+                  <span key={col.status} className={`zp-tip__col zp-tip__col--${col.status}`}>
+                    <span className="zp-tip__col-count">{stats.byStatus[col.status]}</span>
+                    <span className="zp-tip__col-label">{col.label}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="zp-tip__cards">
+              {cards.slice(0, TIP_CARDS).map((z) => {
+                const done = z.status === 'done';
+                const bucket = dueBucket(z.termin, today);
+                const statusLabel = columns.find((c) => c.status === z.status)?.label;
+                return (
+                  <div key={z.id} className={`zp-card zp-card--${z.status}`}>
+                    <div className="zp-card__head">
+                      <span className="zp-card__title">{z.tytul}</span>
+                      {z.termin && (
+                        <span
+                          className={`zad-due zad-due--${done ? 'done' : (bucket ?? 'upcoming')}`}
+                        >
+                          <Icon name="calendar" size={11} />
+                          {!done && bucket === 'today'
+                            ? t.zadDueToday
+                            : formatDayKey(z.termin, locale)}
+                        </span>
+                      )}
+                    </div>
+                    {z.opis && <div className="zp-card__desc">{z.opis}</div>}
+                    <div className="zp-card__meta">
+                      <span className="zp-card__status">{statusLabel}</span>
+                      {z.zalaczniki.length > 0 && (
+                        <span className="zp-card__attach">
+                          <Icon name="paperclip" size={11} /> {z.zalaczniki.length}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {cards.length > TIP_CARDS && (
+                <div className="zp-tip__more">
+                  {t.zadDashMore.replace('{count}', String(cards.length - TIP_CARDS))}
+                </div>
+              )}
+            </div>
+
+            <div className="zp-tip__hint">{t.zadDashOpenWhat.replace('{what}', tile.label)}</div>
+          </div>
+        );
+      })()}
     </section>
   );
 };

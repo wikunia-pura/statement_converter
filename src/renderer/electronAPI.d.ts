@@ -1,6 +1,7 @@
 // Type definitions for Electron API exposed via preload
 
-import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent, AppUser, SpotkanieTyp, SpotkanieLokalizacja, Spotkanie, SpotkanieInput, SpotkanieMailing, SpotkanieTerminStatus, KsiegowaniePriorytet, KsiegowanieUwaga, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik } from '../shared/types';
+import type { NotificationPrefs } from '../shared/notifications';
+import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent, AppUser, SpotkanieTyp, SpotkanieLokalizacja, Spotkanie, SpotkanieInput, SpotkanieMailing, SpotkanieTerminStatus, KsiegowaniePriorytet, KsiegowanieUwaga, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik, ZadanieKomentarz, ZadanieKomentarzInput, ZadanieKomentarzPodsumowanie, ZadanieNotatka } from '../shared/types';
 
 // Zaliczki shared types (referenced by the main-process helpers)
 export type ZaliczkiCategory =
@@ -277,6 +278,10 @@ interface ElectronAPI {
   setSidebarCollapsed: (collapsed: boolean) => Promise<boolean>;
   setBookingsCollapsed: (collapsed: boolean) => Promise<boolean>;
   setCalendarHoverCard: (enabled: boolean) => Promise<boolean>;
+  /** The signed-in person's own switches (only the flipped ones). */
+  getNotificationPrefs: () => Promise<NotificationPrefs>;
+  /** Switch a notification on or off for the signed-in person. A locked or unknown one is refused (false). */
+  setNotificationPref: (id: string, enabled: boolean) => Promise<boolean>;
   setLastSeenVersion: (version: string) => Promise<boolean>;
   exportSettings: () => Promise<{ success: boolean; filePath?: string }>;
   importSettings: () => Promise<{ success: boolean; error?: string }>;
@@ -468,7 +473,12 @@ interface ElectronAPI {
   /** `createdBy` is filled in by the main process from the session. */
   addZadanie: (input: ZadanieInput) => Promise<Zadanie>;
   updateZadanie: (id: number, input: ZadanieInput) => Promise<boolean>;
-  setZadanieStatus: (id: number, status: ZadanieStatus) => Promise<boolean>;
+  /**
+   * Put a card in a column: its status, and the order of that whole column
+   * (`orderedIds`, top first). Reordering touches neither `updatedAt` nor
+   * `updatedBy`, so it never counts as a change to notify about.
+   */
+  moveZadanie: (id: number, status: ZadanieStatus, orderedIds: number[]) => Promise<boolean>;
   deleteZadanie: (id: number) => Promise<boolean>;
   /** Opens the file dialog. null = cancelled; a refusal carries a code, not wording. */
   zadaniaPickAttachment: () => Promise<
@@ -487,7 +497,23 @@ interface ElectronAPI {
   zadaniaDownloadAttachment: (zalacznik: { sciezka: string; nazwa: string }) => Promise<boolean>;
   /** Remove uploads that never reached a card (a cancelled form). */
   zadaniaDiscardAttachments: (paths: string[]) => Promise<boolean>;
-  onOpenZadania: (callback: () => void) => () => void;
+  onOpenKsiegowania: (callback: () => void) => () => void;
+  /** One entry per card that has comments — its count and newest comment. */
+  getZadaniaKomentarzePodsumowanie: () => Promise<ZadanieKomentarzPodsumowanie[]>;
+  /** Notes pinned to the board, newest first. */
+  getZadaniaNotatki: () => Promise<ZadanieNotatka[]>;
+  /** `autorEmail` is filled in by the main process from the session. */
+  addZadanieNotatka: (tresc: string) => Promise<ZadanieNotatka>;
+  /** Only the author's own note can be reworded; returns false when nobody is signed in. */
+  updateZadanieNotatka: (id: number, tresc: string) => Promise<boolean>;
+  /** Only the author's own note goes; returns false when nobody is signed in. */
+  deleteZadanieNotatka: (id: number) => Promise<boolean>;
+  getZadanieKomentarze: (zadanieId: number) => Promise<ZadanieKomentarz[]>;
+  /** `autorEmail` is filled in by the main process from the session. */
+  addZadanieKomentarz: (input: ZadanieKomentarzInput) => Promise<ZadanieKomentarz>;
+  /** Only the author's own comment goes; returns false when nobody is signed in. */
+  deleteZadanieKomentarz: (id: number) => Promise<boolean>;
+  onOpenZadania: (callback: (zadanieId?: number) => void) => () => void;
 
   // Księgowania: priorities with a note, and notes on a community. Who did it
   // (`createdBy`, `resolvedBy`) is filled in by the main process from the session.

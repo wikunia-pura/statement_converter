@@ -1,4 +1,5 @@
 import Store from 'electron-store';
+import log from 'electron-log';
 import path from 'path';
 import { app } from 'electron';
 import {
@@ -20,6 +21,7 @@ import {
   MailingSmtpConfig,
   AppUser,
   AppUserName,
+  NotificationPrefsRow,
   SpotkanieTyp,
   SpotkanieLokalizacja,
   Spotkanie,
@@ -31,13 +33,24 @@ import {
   ZadanieInput,
   ZadanieStatus,
   ZadanieZalacznik,
+  ZadanieKomentarz,
+  ZadanieKomentarzInput,
+  ZadanieNotatka,
+  ZADANIE_NOTATKA_MAX_LENGTH,
+  ZadanieKomentarzPodsumowanie,
   ZADANIE_STATUSES,
+  ZADANIE_PRIORYTETY,
+  DEFAULT_ZADANIE_PRIORYTET,
+  ZadaniePriorytet,
+  ZADANIE_KOMENTARZ_MAX_LENGTH,
   KsiegowaniePriorytet,
   KsiegowanieUwaga,
 } from '../shared/types';
 import { getSupabase } from './supabaseClient';
 import { removeAttachments } from './zadaniaStorage';
 import { ZADANIE_ATTACHMENT_MAX_BYTES, ZADANIE_STORAGE_KEY, isValidDayKey } from '../shared/zadania';
+import { NOTIFICATION_DEFS } from '../shared/notifications';
+import type { NotificationId, NotificationPrefs } from '../shared/notifications';
 import { normalizeAccount } from '../shared/account-extractor';
 import { buildApartmentMapping, mappingTargets } from '../shared/apartment-mapping';
 
@@ -118,12 +131,15 @@ const SPOTKANIE_MAILING_COLS =
   'errorMessage:error_message, adresNazwa:adres_nazwa, jednostkaNazwa:jednostka_nazwa, ' +
   'jednostkaEmail:jednostka_email, subject, attachments, sentFrom:sent_from, sentAt:sent_at';
 const KS_PRIORYTET_COLS =
-  'id, monthKey:month_key, adresId:adres_id, adresNazwa:adres_nazwa, position, notatka, createdBy:created_by, createdAt:created_at';
+  'id, monthKey:month_key, adresId:adres_id, adresNazwa:adres_nazwa, position, notatka, notatkaBy:notatka_by, createdBy:created_by, createdAt:created_at';
 const KS_UWAGA_COLS =
   'id, adresId:adres_id, adresNazwa:adres_nazwa, tresc, createdBy:created_by, createdAt:created_at, resolvedAt:resolved_at, resolvedBy:resolved_by';
 const ZADANIE_COLS =
-  'id, tytul, opis, status, przypisanyEmail:przypisany_email, termin, zalaczniki, ' +
+  'id, tytul, opis, status, priorytet, pozycja, przypisanyEmail:przypisany_email, termin, zalaczniki, ' +
   'createdBy:created_by, createdAt:created_at, updatedAt:updated_at, updatedBy:updated_by';
+const ZADANIE_KOMENTARZ_COLS =
+  'id, zadanieId:zadanie_id, autorEmail:autor_email, tresc, mentions, createdAt:created_at';
+const ZADANIE_NOTATKA_COLS = 'id, tresc, autorEmail:autor_email, createdAt:created_at';
 const ODCZYTY_HISTORY_COLS =
   'id, supplier, status, errorMessage:error_message, outputDir:output_dir, sources:source_files, outputs:output_files, readingCount:reading_count, skippedCount:skipped_count, convertedAt:converted_at';
 
@@ -1314,6 +1330,15 @@ class DatabaseService {
     return status as ZadanieStatus;
   }
 
+  /** Absent (an old backup, an older renderer) means `normal`; anything else unknown is refused. */
+  private static zadaniePriorytet(value: string | null | undefined): ZadaniePriorytet {
+    if (value == null || value === '') return DEFAULT_ZADANIE_PRIORYTET;
+    if (!(ZADANIE_PRIORYTETY as readonly string[]).includes(value)) {
+      throw new Error(`Nieznany priorytet zadania: ${value}`);
+    }
+    return value as ZadaniePriorytet;
+  }
+
   private static zadanieTermin(value: string | null | undefined): string | null {
     const termin = (value ?? '').trim();
     if (!termin) return null;
@@ -1360,6 +1385,7 @@ class DatabaseService {
       tytul,
       opis: (input.opis ?? '').trim(),
       status: DatabaseService.zadanieStatus(input.status),
+      priorytet: DatabaseService.zadaniePriorytet(input.priorytet),
       przypisany_email: (input.przypisanyEmail ?? '').trim() || null,
       termin: DatabaseService.zadanieTermin(input.termin),
       zalaczniki: DatabaseService.zadanieZalaczniki(input.zalaczniki),
@@ -1371,6 +1397,8 @@ class DatabaseService {
     return {
       ...r,
       opis: r.opis ?? '',
+      priorytet: DatabaseService.zadaniePriorytet(r.priorytet),
+      pozycja: Number(r.pozycja ?? 0),
       przypisanyEmail: r.przypisanyEmail ?? null,
       termin: r.termin ?? null,
       zalaczniki: Array.isArray(r.zalaczniki) ? (r.zalaczniki as ZadanieZalacznik[]) : [],
@@ -1390,11 +1418,25 @@ class DatabaseService {
     return rows.map(DatabaseService.zadanieFromRow);
   }
 
+  /** The place just above the top card of a column — where a card arriving there goes. */
+  private async zadanieTopPozycja(status: ZadanieStatus): Promise<number> {
+    const { data, error } = await getSupabase()
+      .from('zadania')
+      .select('pozycja')
+      .eq('status', status)
+      .order('pozycja', { ascending: true })
+      .limit(1);
+    if (error) throw new Error(`zadanieTopPozycja: ${error.message}`);
+    return ((data?.[0] as { pozycja: number } | undefined)?.pozycja ?? 1) - 1;
+  }
+
   async addZadanie(input: ZadanieInput, createdBy: string): Promise<Zadanie> {
+    const payload = DatabaseService.zadaniePayload(input);
     const { data, error } = await getSupabase()
       .from('zadania')
       .insert({
-        ...DatabaseService.zadaniePayload(input),
+        ...payload,
+        pozycja: await this.zadanieTopPozycja(payload.status as ZadanieStatus),
         created_by: createdBy,
         updated_by: createdBy,
       })
@@ -1407,14 +1449,20 @@ class DatabaseService {
     const payload = DatabaseService.zadaniePayload(input);
     const { data: before, error: readError } = await getSupabase()
       .from('zadania')
-      .select('zalaczniki')
+      .select('zalaczniki, status')
       .eq('id', id)
       .single();
     if (readError) throw new Error(`updateZadanie (odczyt): ${readError.message}`);
 
+    // A card the form sends to another column lands on top of it, like one moved
+    // there by hand; an edit that keeps the column keeps the place.
+    const pozycja =
+      before?.status !== payload.status
+        ? { pozycja: await this.zadanieTopPozycja(payload.status as ZadanieStatus) }
+        : {};
     const { error } = await getSupabase()
       .from('zadania')
-      .update({ ...payload, updated_at: new Date().toISOString(), updated_by: changedBy })
+      .update({ ...payload, ...pozycja, updated_at: new Date().toISOString(), updated_by: changedBy })
       .eq('id', id);
     if (error) throw new Error(`updateZadanie: ${error.message}`);
 
@@ -1427,17 +1475,44 @@ class DatabaseService {
     await removeAttachments(dropped);
   }
 
-  /** Move a card between columns — the one edit the board makes without a form. */
-  async setZadanieStatus(id: number, status: ZadanieStatus, changedBy: string): Promise<void> {
-    const { error } = await getSupabase()
+  /**
+   * Put a card in a column and set the order of that column. `orderedIds` is the
+   * whole column, top first, with the card already in its place: it is numbered
+   * 1..n. Only a change of column is an edit of the card (and so touches
+   * `updated_at` / `updated_by`, which the notifier reads); reordering is not —
+   * moving a card up must not tell its assignee it "changed".
+   */
+  async moveZadanie(
+    id: number,
+    status: ZadanieStatus,
+    orderedIds: number[],
+    changedBy: string,
+  ): Promise<void> {
+    const target = DatabaseService.zadanieStatus(status);
+    const ids = [...new Set(orderedIds.filter((n) => Number.isInteger(n)))];
+    if (!ids.includes(id)) throw new Error('Przenoszona karta musi być w nowej kolejności.');
+
+    const { data: current, error: readError } = await getSupabase()
       .from('zadania')
-      .update({
-        status: DatabaseService.zadanieStatus(status),
-        updated_at: new Date().toISOString(),
-        updated_by: changedBy,
-      })
-      .eq('id', id);
-    if (error) throw new Error(`setZadanieStatus: ${error.message}`);
+      .select('status')
+      .eq('id', id)
+      .single();
+    if (readError) throw new Error(`moveZadanie (odczyt): ${readError.message}`);
+    if (current?.status !== target) {
+      const { error } = await getSupabase()
+        .from('zadania')
+        .update({ status: target, updated_at: new Date().toISOString(), updated_by: changedBy })
+        .eq('id', id);
+      if (error) throw new Error(`moveZadanie (status): ${error.message}`);
+    }
+
+    const results = await Promise.all(
+      ids.map((cardId, i) =>
+        getSupabase().from('zadania').update({ pozycja: i + 1 }).eq('id', cardId),
+      ),
+    );
+    const failed = results.find((r) => r.error);
+    if (failed?.error) throw new Error(`moveZadanie (kolejność): ${failed.error.message}`);
   }
 
   async deleteZadanie(id: number): Promise<void> {
@@ -1463,6 +1538,201 @@ class DatabaseService {
       (await this.getZadania()).flatMap(z => z.zalaczniki.map(a => a.sciezka)),
     );
     await removeAttachments(paths.filter(p => !inUse.has(p)));
+  }
+
+  /* ------------------------- Zadania: komentarze ------------------------- */
+
+  /**
+   * The tagged mailboxes of a comment, checked: lower-cased, de-duplicated, and
+   * only things that look like a mailbox — the notifier matches them literally,
+   * so a stray value must not become a tag nobody can ever see.
+   */
+  private static komentarzMentions(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    const seen = new Set<string>();
+    for (const raw of value) {
+      const email = String(raw ?? '').trim().toLowerCase();
+      if (/^[^\s@]+@[^\s@]+$/.test(email)) seen.add(email);
+    }
+    return [...seen];
+  }
+
+  private static komentarzFromRow(r: any): ZadanieKomentarz {
+    return {
+      ...r,
+      autorEmail: r.autorEmail ?? '',
+      mentions: Array.isArray(r.mentions) ? (r.mentions as string[]) : [],
+    } as ZadanieKomentarz;
+  }
+
+  /** One task's conversation, oldest first. */
+  async getZadanieKomentarze(zadanieId: number): Promise<ZadanieKomentarz[]> {
+    const rows = await fetchAllPaged<any>('getZadanieKomentarze', (from, to) =>
+      getSupabase()
+        .from('zadania_komentarze')
+        .select(ZADANIE_KOMENTARZ_COLS)
+        .eq('zadanie_id', zadanieId)
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
+    return rows.map(DatabaseService.komentarzFromRow);
+  }
+
+  /** Count and newest comment of every card that has any — what the board's cards show. */
+  async getZadaniaKomentarzePodsumowanie(): Promise<ZadanieKomentarzPodsumowanie[]> {
+    try {
+      const rows = await fetchAllPaged<any>('getZadaniaKomentarzePodsumowanie', (from, to) =>
+        getSupabase()
+          .from('zadania_komentarze_podsumowanie')
+          .select(`${ZADANIE_KOMENTARZ_COLS}, liczba`)
+          .order('zadanie_id', { ascending: true })
+          .range(from, to),
+      );
+      return rows.map(({ liczba, ...komentarz }) => ({
+        zadanieId: komentarz.zadanieId as number,
+        liczba: Number(liczba),
+        ostatni: DatabaseService.komentarzFromRow(komentarz),
+      }));
+    } catch (error) {
+      // The view is only a shortcut (see zadania-komentarze.sql). Without it —
+      // the SQL not re-run yet — the same answer is worked out from the comments
+      // themselves: slower for a very long history, identical in result, and the
+      // board never loses its comment strips over a missing view.
+      log.warn(
+        '[ZADANIA] comment summary view unavailable, reading the comments instead:',
+        error instanceof Error ? error.message : error,
+      );
+      const byCard = new Map<number, ZadanieKomentarzPodsumowanie>();
+      // Oldest first, so the last one written for a card is the one that stays.
+      for (const k of await this.getZadaniaKomentarze()) {
+        byCard.set(k.zadanieId, {
+          zadanieId: k.zadanieId,
+          liczba: (byCard.get(k.zadanieId)?.liczba ?? 0) + 1,
+          ostatni: k,
+        });
+      }
+      return [...byCard.values()];
+    }
+  }
+
+  /** Every comment — for the backup, which is the only reader that needs them all. */
+  async getZadaniaKomentarze(): Promise<ZadanieKomentarz[]> {
+    const rows = await fetchAllPaged<any>('getZadaniaKomentarze', (from, to) =>
+      getSupabase()
+        .from('zadania_komentarze')
+        .select(ZADANIE_KOMENTARZ_COLS)
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
+    return rows.map(DatabaseService.komentarzFromRow);
+  }
+
+  /**
+   * Comments newer than `afterId`, oldest first — the notifier's cursor. Ids only
+   * grow, so "greater than the last one seen" is the whole query.
+   */
+  async getZadaniaKomentarzeAfter(afterId: number): Promise<ZadanieKomentarz[]> {
+    const rows = await fetchAllPaged<any>('getZadaniaKomentarzeAfter', (from, to) =>
+      getSupabase()
+        .from('zadania_komentarze')
+        .select(ZADANIE_KOMENTARZ_COLS)
+        .gt('id', afterId)
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
+    return rows.map(DatabaseService.komentarzFromRow);
+  }
+
+  /** Id of the newest comment, or 0 when there is none — where a first poll starts from. */
+  async getLatestZadanieKomentarzId(): Promise<number> {
+    const { data, error } = await getSupabase()
+      .from('zadania_komentarze')
+      .select('id')
+      .order('id', { ascending: false })
+      .limit(1);
+    if (error) throw new Error(`getLatestZadanieKomentarzId: ${error.message}`);
+    return (data?.[0] as { id: number } | undefined)?.id ?? 0;
+  }
+
+  async addZadanieKomentarz(
+    input: ZadanieKomentarzInput,
+    autorEmail: string,
+  ): Promise<ZadanieKomentarz> {
+    const tresc = (input.tresc ?? '').trim();
+    if (!tresc) throw new Error('Komentarz nie może być pusty.');
+    if (tresc.length > ZADANIE_KOMENTARZ_MAX_LENGTH) throw new Error('Komentarz jest za długi.');
+    if (!autorEmail) throw new Error('Brak zalogowanego użytkownika.');
+    const { data, error } = await getSupabase()
+      .from('zadania_komentarze')
+      .insert({
+        zadanie_id: input.zadanieId,
+        autor_email: autorEmail,
+        tresc,
+        mentions: DatabaseService.komentarzMentions(input.mentions),
+      })
+      .select(ZADANIE_KOMENTARZ_COLS)
+      .single();
+    return DatabaseService.komentarzFromRow(unwrap(data, error, 'addZadanieKomentarz'));
+  }
+
+  /** Only the author's own comment: the filter is the rule, not a courtesy of the UI. */
+  async deleteZadanieKomentarz(id: number, autorEmail: string): Promise<void> {
+    const { error } = await getSupabase()
+      .from('zadania_komentarze')
+      .delete()
+      .eq('id', id)
+      .eq('autor_email', autorEmail);
+    if (error) throw new Error(`deleteZadanieKomentarz: ${error.message}`);
+  }
+
+  /* --------------------- Zadania: przypięte notatki --------------------- */
+
+  /** Notes pinned to the board, newest first. */
+  async getZadaniaNotatki(): Promise<ZadanieNotatka[]> {
+    const rows = await fetchAllPaged<any>('getZadaniaNotatki', (from, to) =>
+      getSupabase()
+        .from('zadania_notatki')
+        .select(ZADANIE_NOTATKA_COLS)
+        .order('id', { ascending: false })
+        .range(from, to),
+    );
+    return rows.map(r => ({ ...r, autorEmail: r.autorEmail ?? '' })) as ZadanieNotatka[];
+  }
+
+  async addZadanieNotatka(tresc: string, autorEmail: string): Promise<ZadanieNotatka> {
+    const text = tresc.trim();
+    if (!text) throw new Error('Notatka nie może być pusta.');
+    if (text.length > ZADANIE_NOTATKA_MAX_LENGTH) throw new Error('Notatka jest za długa.');
+    if (!autorEmail) throw new Error('Brak zalogowanego użytkownika.');
+    const { data, error } = await getSupabase()
+      .from('zadania_notatki')
+      .insert({ tresc: text, autor_email: autorEmail })
+      .select(ZADANIE_NOTATKA_COLS)
+      .single();
+    return unwrap(data, error, 'addZadanieNotatka') as unknown as ZadanieNotatka;
+  }
+
+  /** Only the author's own note: the filter is the rule, not a courtesy of the UI. */
+  async updateZadanieNotatka(id: number, tresc: string, autorEmail: string): Promise<void> {
+    const text = tresc.trim();
+    if (!text) throw new Error('Notatka nie może być pusta.');
+    if (text.length > ZADANIE_NOTATKA_MAX_LENGTH) throw new Error('Notatka jest za długa.');
+    const { error } = await getSupabase()
+      .from('zadania_notatki')
+      .update({ tresc: text })
+      .eq('id', id)
+      .eq('autor_email', autorEmail);
+    if (error) throw new Error(`updateZadanieNotatka: ${error.message}`);
+  }
+
+  /** Only the author's own note: the filter is the rule, not a courtesy of the UI. */
+  async deleteZadanieNotatka(id: number, autorEmail: string): Promise<void> {
+    const { error } = await getSupabase()
+      .from('zadania_notatki')
+      .delete()
+      .eq('id', id)
+      .eq('autor_email', autorEmail);
+    if (error) throw new Error(`deleteZadanieNotatka: ${error.message}`);
   }
 
   /* ---------------------------- Meetings ---------------------------- */
@@ -1701,6 +1971,7 @@ class DatabaseService {
       ...r,
       adresId: r.adresId ?? null,
       notatka: r.notatka ?? '',
+      notatkaBy: r.notatkaBy ?? '',
       createdBy: r.createdBy ?? '',
     })) as KsiegowaniePriorytet[];
   }
@@ -1751,6 +2022,9 @@ class DatabaseService {
         adres_nazwa: nazwa,
         position,
         notatka: notatka.trim(),
+        // The note is written by whoever flags it, so the notifier has an author
+        // for it from the first moment.
+        notatka_by: createdBy,
         created_by: createdBy,
       })
       .select(KS_PRIORYTET_COLS)
@@ -1758,10 +2032,14 @@ class DatabaseService {
     return unwrap(data, error, 'addKsiegowaniePriorytet') as unknown as KsiegowaniePriorytet;
   }
 
-  async setKsiegowaniePriorytetNotatka(id: number, notatka: string): Promise<void> {
+  /**
+   * `by` is the mailbox of whoever wrote the note: the notifier skips a note its
+   * own author wrote. `updated_at` is not enough for that — a reorder bumps it too.
+   */
+  async setKsiegowaniePriorytetNotatka(id: number, notatka: string, by: string): Promise<void> {
     const { error } = await getSupabase()
       .from('ksiegowania_priorytety')
-      .update({ notatka: notatka.trim(), updated_at: new Date().toISOString() })
+      .update({ notatka: notatka.trim(), notatka_by: by, updated_at: new Date().toISOString() })
       .eq('id', id);
     if (error) throw new Error(`setKsiegowaniePriorytetNotatka: ${error.message}`);
   }
@@ -1850,6 +2128,56 @@ class DatabaseService {
     if (error) throw new Error(`deleteKsiegowanieUwaga: ${error.message}`);
   }
 
+  // ------------------------ Notification switches ------------------------
+  // One row per person (mailbox), in the cloud: the choice belongs to the
+  // account, so it is the same on every machine the person signs in on.
+
+  /** Only known notifications with a true/false — whatever else was sent is dropped. */
+  private static notificationPrefsClean(value: unknown): NotificationPrefs {
+    const out: NotificationPrefs = {};
+    if (value && typeof value === 'object') {
+      for (const def of NOTIFICATION_DEFS) {
+        const v = (value as Record<string, unknown>)[def.id];
+        if (typeof v === 'boolean') out[def.id] = v;
+      }
+    }
+    return out;
+  }
+
+  /** What this person has flipped; nobody who never opened the list has a row. */
+  async getNotificationPrefs(email: string): Promise<NotificationPrefs> {
+    const { data, error } = await getSupabase()
+      .from('notification_prefs')
+      .select('prefs')
+      .eq('email', email.trim().toLowerCase())
+      .maybeSingle();
+    if (error) throw new Error(`getNotificationPrefs: ${error.message}`);
+    return DatabaseService.notificationPrefsClean(data?.prefs);
+  }
+
+  async getAllNotificationPrefs(): Promise<NotificationPrefsRow[]> {
+    const { data, error } = await getSupabase()
+      .from('notification_prefs')
+      .select('email, prefs')
+      .order('email', { ascending: true });
+    if (error) throw new Error(`getAllNotificationPrefs: ${error.message}`);
+    return (data ?? []).map(r => ({
+      email: r.email as string,
+      prefs: DatabaseService.notificationPrefsClean(r.prefs),
+    }));
+  }
+
+  /** Flip one switch, keeping the person's others. */
+  async setNotificationPref(email: string, id: NotificationId, enabled: boolean): Promise<void> {
+    const key = email.trim().toLowerCase();
+    if (!key) throw new Error('Brak zalogowanego użytkownika.');
+    const prefs = { ...(await this.getNotificationPrefs(key)), [id]: enabled };
+    const { error } = await getSupabase()
+      .from('notification_prefs')
+      .upsert({ email: key, prefs, updated_at: new Date().toISOString() });
+    if (error) throw new Error(`setNotificationPref: ${error.message}`);
+  }
+
   // ---------------------------- App config ----------------------------
   // Shared secrets/config living in Supabase (`app_config`, authenticated
   // read-only). Keeps API keys out of the publicly downloadable binaries.
@@ -1934,9 +2262,12 @@ class DatabaseService {
       spotkania,
       spotkaniaLokalizacje,
       zadania,
+      zadaniaKomentarze,
+      zadaniaNotatki,
       appUsers,
       ksiegowaniaPriorytety,
       ksiegowaniaUwagi,
+      notificationPrefs,
     ] = await Promise.all([
       this.getAllBanks(),
       this.getAllKontrahenci(),
@@ -1952,9 +2283,12 @@ class DatabaseService {
       this.getSpotkania(),
       this.getSpotkaniaLokalizacje(),
       this.getZadania(),
+      this.getZadaniaKomentarze(),
+      this.getZadaniaNotatki(),
       this.getAppUsers(),
       this.getKsiegowaniaPriorytety(),
       this.getKsiegowaniaUwagi(),
+      this.getAllNotificationPrefs(),
     ]);
     return {
       format: 'filefunky-backup',
@@ -1976,8 +2310,11 @@ class DatabaseService {
         spotkania,
         spotkaniaLokalizacje,
         zadania,
+        zadaniaKomentarze,
+        zadaniaNotatki,
         ksiegowaniaPriorytety,
         ksiegowaniaUwagi,
+        notificationPrefs,
         // The `app_users` ROWS are deliberately absent: they mirror the Supabase
         // auth accounts, rebuilt by a trigger, not data this app authors — and
         // the participants stored on each meeting carry their own snapshot. The
@@ -2062,9 +2399,12 @@ class DatabaseService {
       spotkania,
       spotkaniaLokalizacje,
       zadania,
+      zadaniaKomentarze,
+      zadaniaNotatki,
       appUserNames,
       ksiegowaniaPriorytety,
       ksiegowaniaUwagi,
+      notificationPrefs,
       settings,
     } = backup.data;
 
@@ -2385,6 +2725,8 @@ class DatabaseService {
           adres_nazwa: p.adresNazwa,
           position: p.position,
           notatka: p.notatka ?? '',
+          // Absent in backups written before notes had an author.
+          notatka_by: p.notatkaBy || null,
           created_by: p.createdBy ?? '',
           created_at: p.createdAt,
         })),
@@ -2413,27 +2755,101 @@ class DatabaseService {
       );
     }
 
-    // Zadania. Nothing points at them and they point at nothing but a mailbox
-    // (stable across a restore), so wipe-and-insert is the whole job. Gated on
-    // the key: a backup written before the board existed must leave live cards
-    // alone, not empty the board.
+    // Zadania. Wipe-and-insert, but no longer "nothing points at them": the
+    // comments do, and they go with the wipe (ON DELETE CASCADE). Postgres hands
+    // the re-inserted cards fresh ids, so the comments are re-pointed through an
+    // old id → new id map, exactly like adresy → banks. Gated on the key: a
+    // backup written before the board existed must leave live cards alone, not
+    // empty the board. A backup that has cards but no comments (written before
+    // comments existed) restores the board with empty conversations — they could
+    // not belong to those cards anyway.
     if (zadania) {
       const { error: wipeError } = await getSupabase().from('zadania').delete().gt('id', 0);
       if (wipeError) throw new Error(`restore zadania: ${wipeError.message}`);
+      const zadanieIdMap = new Map<number, number>();
+      for (const slice of DatabaseService.chunk(zadania)) {
+        const { data, error } = await getSupabase()
+          .from('zadania')
+          .insert(
+            slice.map(z => ({
+              tytul: z.tytul,
+              opis: z.opis ?? '',
+              status: DatabaseService.zadanieStatus(z.status),
+              // Absent in backups written before tasks had a priority.
+              priorytet: DatabaseService.zadaniePriorytet(z.priorytet),
+              // Absent in backups written before cards could be reordered.
+              pozycja: Number.isFinite(z.pozycja) ? z.pozycja : 0,
+              przypisany_email: z.przypisanyEmail ?? null,
+              // Absent in backups written before tasks had a deadline and files.
+              termin: DatabaseService.zadanieTermin(z.termin),
+              zalaczniki: DatabaseService.zadanieZalaczniki(z.zalaczniki),
+              created_by: z.createdBy ?? '',
+              created_at: z.createdAt,
+              updated_at: z.updatedAt,
+              updated_by: z.updatedBy ?? '',
+            })),
+          )
+          .select('id');
+        if (error || !data) {
+          throw new Error(`restore zadania: ${error?.message ?? 'no data returned'}`);
+        }
+        // PostgREST returns inserted rows in payload order.
+        (data as unknown as { id: number }[]).forEach((row, i) =>
+          zadanieIdMap.set(slice[i].id, row.id),
+        );
+      }
       await this.insertChunked(
-        'zadania',
-        zadania.map(z => ({
-          tytul: z.tytul,
-          opis: z.opis ?? '',
-          status: DatabaseService.zadanieStatus(z.status),
-          przypisany_email: z.przypisanyEmail ?? null,
-          // Absent in backups written before tasks had a deadline and files.
-          termin: DatabaseService.zadanieTermin(z.termin),
-          zalaczniki: DatabaseService.zadanieZalaczniki(z.zalaczniki),
-          created_by: z.createdBy ?? '',
-          created_at: z.createdAt,
-          updated_at: z.updatedAt,
-          updated_by: z.updatedBy ?? '',
+        'zadania_komentarze',
+        (zadaniaKomentarze ?? []).flatMap(k => {
+          const zadanieId = zadanieIdMap.get(k.zadanieId);
+          // A comment whose card is not in the backup has nowhere to live.
+          if (zadanieId === undefined) return [];
+          return [
+            {
+              zadanie_id: zadanieId,
+              autor_email: k.autorEmail ?? '',
+              tresc: k.tresc,
+              mentions: DatabaseService.komentarzMentions(k.mentions),
+              created_at: k.createdAt,
+            },
+          ];
+        }),
+      );
+    }
+
+    // Notes pinned to the board. Pointed at by nothing, so wipe-and-insert is the
+    // whole job; gated on the key, so a backup from before they existed leaves the
+    // live notes alone.
+    if (zadaniaNotatki) {
+      const { error: wipeError } = await getSupabase()
+        .from('zadania_notatki')
+        .delete()
+        .gt('id', 0);
+      if (wipeError) throw new Error(`restore zadania_notatki: ${wipeError.message}`);
+      await this.insertChunked(
+        'zadania_notatki',
+        zadaniaNotatki.map(n => ({
+          tresc: n.tresc,
+          autor_email: n.autorEmail ?? '',
+          created_at: n.createdAt,
+        })),
+      );
+    }
+
+    // Each person's notification switches: keyed by mailbox and pointed at by
+    // nothing, so wipe-and-insert is the whole job. Gated on the key — a backup
+    // from before the switches existed must not reset everybody's choices.
+    if (notificationPrefs) {
+      const { error: wipeError } = await getSupabase()
+        .from('notification_prefs')
+        .delete()
+        .neq('email', '');
+      if (wipeError) throw new Error(`restore notification_prefs: ${wipeError.message}`);
+      await this.insertChunked(
+        'notification_prefs',
+        notificationPrefs.map(r => ({
+          email: r.email.trim().toLowerCase(),
+          prefs: DatabaseService.notificationPrefsClean(r.prefs),
         })),
       );
     }

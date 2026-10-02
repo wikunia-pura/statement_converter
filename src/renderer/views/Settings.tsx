@@ -1,5 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Converter, ContractorSortOrder, BackupCounts, MailingSmtpStatus } from '../../shared/types';
+import {
+  NOTIFICATION_DEFS,
+  NOTIFICATION_GROUPS,
+  NotificationId,
+  NotificationPrefs,
+  isNotificationEnabled,
+} from '../../shared/notifications';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import Icon from '../components/Icon';
@@ -35,6 +42,7 @@ const Settings: React.FC<SettingsProps> = ({
   const [skipUserApproval, setSkipUserApproval] = useState(false);
   const [alwaysUseAI, setAlwaysUseAI] = useState(true);
   const [calendarHoverCard, setCalendarHoverCard] = useState(false);
+  const [notificationPrefs, setNotificationPrefs] = useState<NotificationPrefs>({});
   const [contractorSortOrder, setContractorSortOrder] = useState<ContractorSortOrder>('name-asc');
   const [isLoading, setIsLoading] = useState(true);
   const [backupStatus, setBackupStatus] = useState<{
@@ -69,11 +77,13 @@ const Settings: React.FC<SettingsProps> = ({
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [convertersData, settings, backupInfo, smtpStatus] = await Promise.all([
+      const [convertersData, settings, backupInfo, smtpStatus, notificationData] = await Promise.all([
         window.electronAPI.getConverters(),
         window.electronAPI.getSettings(),
         window.electronAPI.backupGetStatus(),
         window.electronAPI.mailingGetSmtp(),
+        // A failed read must not blank the whole page: the defaults show instead.
+        window.electronAPI.getNotificationPrefs().catch((): NotificationPrefs => ({})),
       ]);
       setConverters(convertersData);
       setBackupStatus(backupInfo);
@@ -85,6 +95,7 @@ const Settings: React.FC<SettingsProps> = ({
       setSkipUserApproval(settings.skipUserApproval ?? false);
       setAlwaysUseAI(settings.alwaysUseAI !== false);
       setCalendarHoverCard(settings.calendarHoverCard ?? false);
+      setNotificationPrefs(notificationData);
       setContractorSortOrder(settings.contractorSortOrder ?? 'name-asc');
     } catch (error) {
       console.error('Error loading data:', error);
@@ -155,6 +166,38 @@ const Settings: React.FC<SettingsProps> = ({
     const newValue = !alwaysUseAI;
     await window.electronAPI.setAlwaysUseAI(newValue);
     setAlwaysUseAI(newValue);
+  };
+
+  // Typed over every id, so a notification added to the list without its wording
+  // here is a compile error rather than a blank row.
+  const notificationText: Record<NotificationId, [string, string]> = {
+    zadanieAssigned: [t.notifZadanieAssigned, t.notifZadanieAssignedDesc],
+    zadanieChanged: [t.notifZadanieChanged, t.notifZadanieChangedDesc],
+    zadanieOverdue: [t.notifZadanieOverdue, t.notifZadanieOverdueDesc],
+    zadanieMention: [t.notifZadanieMention, t.notifZadanieMentionDesc],
+    zadanieComment: [t.notifZadanieComment, t.notifZadanieCommentDesc],
+    ksiegowaniaPriorytet: [t.notifKsiegowaniaPriorytet, t.notifKsiegowaniaPriorytetDesc],
+    ksiegowaniaPriorytetNotatka: [
+      t.notifKsiegowaniaPriorytetNotatka,
+      t.notifKsiegowaniaPriorytetNotatkaDesc,
+    ],
+    ksiegowaniaUwaga: [t.notifKsiegowaniaUwaga, t.notifKsiegowaniaUwagaDesc],
+  };
+
+  const handleNotificationToggle = async (id: NotificationId) => {
+    const next = !isNotificationEnabled(notificationPrefs, id);
+    // Optimistic: the switch moves at once, and goes back if the write is refused.
+    setNotificationPrefs((prev) => ({ ...prev, [id]: next }));
+    let saved = false;
+    try {
+      saved = await window.electronAPI.setNotificationPref(id, next);
+    } catch {
+      saved = false;
+    }
+    if (!saved) {
+      setNotificationPrefs((prev) => ({ ...prev, [id]: !next }));
+      notify.error(t.notifSaveError);
+    }
   };
 
   const handleCalendarHoverCardToggle = async () => {
@@ -287,6 +330,9 @@ const Settings: React.FC<SettingsProps> = ({
       .replace('{spotkania}', String(counts.spotkania))
       .replace('{spotkaniaLokalizacje}', String(counts.spotkaniaLokalizacje))
       .replace('{zadania}', String(counts.zadania))
+      .replace('{zadaniaKomentarze}', String(counts.zadaniaKomentarze))
+      .replace('{zadaniaNotatki}', String(counts.zadaniaNotatki))
+      .replace('{notificationPrefs}', String(counts.notificationPrefs))
       .replace('{appUserNames}', String(counts.appUserNames))
       .replace('{ksiegowaniaPriorytety}', String(counts.ksiegowaniaPriorytety))
       .replace('{ksiegowaniaUwagi}', String(counts.ksiegowaniaUwagi));
@@ -476,6 +522,44 @@ const Settings: React.FC<SettingsProps> = ({
               <span className="toggle-slider"></span>
             </label>
           </div>
+        </div>
+
+        {/* Notifications: what may interrupt, and which of it can be switched off */}
+        <div className="card">
+          <h2 style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Icon name="info" size={20} /> {t.notifTitle}
+          </h2>
+          <p className="settings-label-sub" style={{ marginBottom: '12px' }}>{t.notifIntro}</p>
+          {NOTIFICATION_GROUPS.map((group) => (
+            <div key={group}>
+              <div className="notif-group">
+                {group === 'zadania' ? t.notifGroupZadania : t.notifGroupKsiegowania}
+              </div>
+              {NOTIFICATION_DEFS.filter((d) => d.group === group).map((def) => {
+                const [label, desc] = notificationText[def.id];
+                return (
+                  <div className="settings-row" key={def.id}>
+                    <div className="settings-label">
+                      <span className="settings-label-main">{label}</span>
+                      <span className="settings-label-sub">{desc}</span>
+                    </div>
+                    <div className="notif-control">
+                      {def.locked && <span className="notif-locked">{t.notifAlwaysOn}</span>}
+                      <label className="toggle-switch" title={def.locked ? t.notifAlwaysOn : undefined}>
+                        <input
+                          type="checkbox"
+                          checked={isNotificationEnabled(notificationPrefs, def.id)}
+                          disabled={def.locked}
+                          onChange={() => void handleNotificationToggle(def.id)}
+                        />
+                        <span className="toggle-slider"></span>
+                      </label>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
         </div>
 
         {/* Output Folder Settings */}

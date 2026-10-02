@@ -154,6 +154,8 @@ const App: React.FC = () => {
   // Where the Zadania filter bar starts: the dashboard's tiles set it, every other
   // way in (the sidebar, a notification) resets it to "everything".
   const [zadaniaSeed, setZadaniaSeed] = useState<ZadaniaFilterSeed>(DEFAULT_ZADANIA_FILTER);
+  // A task a notification asked for; the nonce lets the same task be asked for twice.
+  const [zadaniaOpen, setZadaniaOpen] = useState<{ id: number; nonce: number } | null>(null);
   // The send form lives here so a detour to Adresy (to attach a missing city
   // unit) or to the templates tab doesn't throw away a half-filled mailing.
   const [mailingDraft, setMailingDraft] = useState<MailingDraft>(emptyMailingDraft);
@@ -201,12 +203,20 @@ const App: React.FC = () => {
     })();
   }, []);
 
+  // A notification about Księgowania was clicked: the priorities live on the dashboard.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.electronAPI) return;
+    return window.electronAPI.onOpenKsiegowania(() => navigate('pulpit'));
+    // Same reasoning as the effect below: `navigate` is stable enough.
+  }, []);
+
   // A system notification about a task was clicked: the main process has already
   // brought the window forward, so all that is left is to open the board.
   useEffect(() => {
     if (typeof window === 'undefined' || !window.electronAPI) return;
-    return window.electronAPI.onOpenZadania(() => {
+    return window.electronAPI.onOpenZadania((zadanieId) => {
       setZadaniaSeed(DEFAULT_ZADANIA_FILTER);
+      setZadaniaOpen(zadanieId === undefined ? null : { id: zadanieId, nonce: Date.now() });
       navigate('zadania');
     });
     // `navigate` only talks to `setNav(prev => …)` and the tab setters, so the
@@ -599,6 +609,7 @@ const App: React.FC = () => {
             active={currentView === 'zadania'}
             onClick={() => {
               setZadaniaSeed(DEFAULT_ZADANIA_FILTER);
+              setZadaniaOpen(null);
               setCurrentView('zadania');
             }}
           />
@@ -713,6 +724,7 @@ const App: React.FC = () => {
                 userEmail={session.email}
                 onOpen={(seed) => {
                   setZadaniaSeed(seed);
+                  setZadaniaOpen(null);
                   navigate('zadania');
                 }}
               />
@@ -905,7 +917,7 @@ const App: React.FC = () => {
             {kalendarzTab === 'places' && <KalendarzLokalizacje language={language} />}
           </>
         )}
-        {currentView === 'zadania' && <Zadania language={language} userEmail={session.email} initialFilter={zadaniaSeed} />}
+        {currentView === 'zadania' && <Zadania language={language} userEmail={session.email} initialFilter={zadaniaSeed} openRequest={zadaniaOpen} />}
         {currentView === 'conowego' && (
           <CoNowego language={language} appVersion={appVersion} />
         )}

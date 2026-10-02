@@ -1,5 +1,7 @@
 // Shared types for the application
 
+import type { NotificationPrefs } from './notifications';
+
 export interface Bank {
   id: number;
   name: string;
@@ -309,6 +311,12 @@ export interface KsiegowaniePriorytet {
   position: number;
   /** Why this one before the others — written for whoever does the posting. */
   notatka: string;
+  /**
+   * Mailbox of whoever last wrote `notatka` — what lets the notifier skip a
+   * note the signed-in person wrote themselves. Absent in backups written before
+   * the notifications existed.
+   */
+  notatkaBy?: string;
   createdBy: string;
   createdAt: string;
 }
@@ -585,6 +593,16 @@ export interface AppUser {
  * cannot be rebuilt from anything. So a restore carries them across and applies
  * them to whichever live account has that mailbox.
  */
+/**
+ * One person's notification switches (Ustawienia → Powiadomienia), keyed by
+ * mailbox like everything else that belongs to a person. Lives in the cloud, so
+ * the choice follows the account to any machine.
+ */
+export interface NotificationPrefsRow {
+  email: string;
+  prefs: NotificationPrefs;
+}
+
 export interface AppUserName {
   email: string;
   firstName?: string | null;
@@ -753,6 +771,11 @@ export interface SpotkanieMailing {
 export const ZADANIE_STATUSES = ['todo', 'in_progress', 'done'] as const;
 export type ZadanieStatus = (typeof ZADANIE_STATUSES)[number];
 
+/** How much a task matters, most urgent first. A new task is `normal`. */
+export const ZADANIE_PRIORYTETY = ['high', 'normal', 'low'] as const;
+export type ZadaniePriorytet = (typeof ZADANIE_PRIORYTETY)[number];
+export const DEFAULT_ZADANIE_PRIORYTET: ZadaniePriorytet = 'normal';
+
 /**
  * One card on the "Zadania" board.
  *
@@ -767,6 +790,14 @@ export interface Zadanie {
   tytul: string;
   opis: string;
   status: ZadanieStatus;
+  /** Absent in backups written before tasks had a priority — read as `normal`. */
+  priorytet: ZadaniePriorytet;
+  /**
+   * Place in its column, lowest on top (see `compareZadaniaOrder`). Absent in
+   * backups written before cards could be reordered — read as 0, which falls
+   * back to "latest change on top".
+   */
+  pozycja: number;
   przypisanyEmail: string | null;
   /** Deadline as `YYYY-MM-DD` (a day, not an instant), or null for none. */
   termin: string | null;
@@ -799,8 +830,54 @@ export interface ZadanieZalacznik {
 /** What the add/edit form submits. */
 export type ZadanieInput = Pick<
   Zadanie,
-  'tytul' | 'opis' | 'status' | 'przypisanyEmail' | 'termin' | 'zalaczniki'
+  'tytul' | 'opis' | 'status' | 'priorytet' | 'przypisanyEmail' | 'termin' | 'zalaczniki'
 >;
+
+/**
+ * One comment in a task's conversation.
+ *
+ * The text keeps the readable "@Anna Nowak"; `mentions` carries the tagged
+ * MAILBOXES, which is what the notifier reads — so renaming a person never
+ * un-tags them, and a typed "@" with no pick behind it tags nobody.
+ */
+export interface ZadanieKomentarz {
+  id: number;
+  zadanieId: number;
+  /** Mailbox of the author, taken from the session — never from the renderer. */
+  autorEmail: string;
+  tresc: string;
+  mentions: string[];
+  createdAt: string;
+}
+
+/** What the board shows on a card: how many comments it has, and the newest. */
+export interface ZadanieKomentarzPodsumowanie {
+  zadanieId: number;
+  liczba: number;
+  ostatni: ZadanieKomentarz;
+}
+
+/**
+ * A note pinned to the Zadania view itself — a remark for the whole board, shown
+ * under the filters, not tied to any card. Like a comment: a text, its author's
+ * mailbox, and when it was written.
+ */
+export interface ZadanieNotatka {
+  id: number;
+  tresc: string;
+  /** Mailbox of the author, taken from the session — never from the renderer. */
+  autorEmail: string;
+  createdAt: string;
+}
+
+/** Longest pinned note accepted; the form shows the same limit. */
+export const ZADANIE_NOTATKA_MAX_LENGTH = 1000;
+
+/** What the comment box submits. */
+export type ZadanieKomentarzInput = Pick<ZadanieKomentarz, 'zadanieId' | 'tresc' | 'mentions'>;
+
+/** Longest comment accepted; the box shows the same limit. */
+export const ZADANIE_KOMENTARZ_MAX_LENGTH = 2000;
 
 /** Ordering of the contractor pick-lists in the transaction review screen. */
 export type ContractorSortOrder = 'name-asc' | 'name-desc' | 'account-asc' | 'account-desc';
@@ -924,11 +1001,21 @@ export interface BackupData {
     /** Absent in backups written before the Zadania board existed. */
     zadania?: Zadanie[];
     /**
+     * Comments on the tasks above, tied to them by `zadanieId` (which a restore
+     * remaps — tasks come back with fresh ids). Absent in backups written before
+     * tasks had comments.
+     */
+    zadaniaKomentarze?: ZadanieKomentarz[];
+    /** Notes pinned to the Zadania view. Absent in backups written before they existed. */
+    zadaniaNotatki?: ZadanieNotatka[];
+    /**
      * Names given to the accounts, keyed by mailbox. Only the names travel —
      * the accounts themselves belong to Supabase auth. Absent in backups
      * written before users could be named.
      */
     appUserNames?: AppUserName[];
+    /** Absent in backups written before notifications could be switched per person. */
+    notificationPrefs?: NotificationPrefsRow[];
     /** Absent in backups written before the dashboard had priorities and notes. */
     ksiegowaniaPriorytety?: KsiegowaniePriorytet[];
     ksiegowaniaUwagi?: KsiegowanieUwaga[];
@@ -953,7 +1040,10 @@ export interface BackupCounts {
   spotkania: number;
   spotkaniaLokalizacje: number;
   zadania: number;
+  zadaniaKomentarze: number;
+  zadaniaNotatki: number;
   appUserNames: number;
+  notificationPrefs: number;
   ksiegowaniaPriorytety: number;
   ksiegowaniaUwagi: number;
 }
@@ -974,7 +1064,10 @@ export function countBackup(data: BackupData): BackupCounts {
     spotkania: data.data.spotkania?.length ?? 0,
     spotkaniaLokalizacje: data.data.spotkaniaLokalizacje?.length ?? 0,
     zadania: data.data.zadania?.length ?? 0,
+    zadaniaKomentarze: data.data.zadaniaKomentarze?.length ?? 0,
+    zadaniaNotatki: data.data.zadaniaNotatki?.length ?? 0,
     appUserNames: data.data.appUserNames?.length ?? 0,
+    notificationPrefs: data.data.notificationPrefs?.length ?? 0,
     ksiegowaniaPriorytety: data.data.ksiegowaniaPriorytety?.length ?? 0,
     ksiegowaniaUwagi: data.data.ksiegowaniaUwagi?.length ?? 0,
   };
@@ -1048,6 +1141,8 @@ export const IPC_CHANNELS = {
   SET_SIDEBAR_COLLAPSED: 'settings:set-sidebar-collapsed',
   SET_BOOKINGS_COLLAPSED: 'settings:set-bookings-collapsed',
   SET_CALENDAR_HOVER_CARD: 'settings:set-calendar-hover-card',
+  GET_NOTIFICATION_PREFS: 'notifications:get-prefs',
+  SET_NOTIFICATION_PREF: 'notifications:set-pref',
   SET_LAST_SEEN_VERSION: 'settings:set-last-seen-version',
   EXPORT_SETTINGS: 'settings:export',
   IMPORT_SETTINGS: 'settings:import',
@@ -1147,12 +1242,20 @@ export const IPC_CHANNELS = {
   GET_ZADANIA: 'zadania:get',
   ADD_ZADANIE: 'zadania:add',
   UPDATE_ZADANIE: 'zadania:update',
-  SET_ZADANIE_STATUS: 'zadania:set-status',
+  MOVE_ZADANIE: 'zadania:move',
   DELETE_ZADANIE: 'zadania:delete',
   ZADANIA_PICK_ATTACHMENT: 'zadania:pick-attachment',
   ZADANIA_UPLOAD_ATTACHMENT: 'zadania:upload-attachment',
   ZADANIA_DOWNLOAD_ATTACHMENT: 'zadania:download-attachment',
   ZADANIA_DISCARD_ATTACHMENTS: 'zadania:discard-attachments',
+  GET_ZADANIE_KOMENTARZE: 'zadania:get-komentarze',
+  GET_ZADANIA_NOTATKI: 'zadania:get-notatki',
+  ADD_ZADANIE_NOTATKA: 'zadania:add-notatka',
+  DELETE_ZADANIE_NOTATKA: 'zadania:delete-notatka',
+  UPDATE_ZADANIE_NOTATKA: 'zadania:update-notatka',
+  GET_ZADANIA_KOMENTARZE_PODSUMOWANIE: 'zadania:get-komentarze-podsumowanie',
+  ADD_ZADANIE_KOMENTARZ: 'zadania:add-komentarz',
+  DELETE_ZADANIE_KOMENTARZ: 'zadania:delete-komentarz',
 
   // Księgowania: priorities with a note, and notes on a community
   GET_KS_PRIORYTETY: 'ksiegowania:get-priorytety',

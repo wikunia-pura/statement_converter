@@ -84,13 +84,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    version: '7.5.0',
-    date: '2026-10-01',
-    title: 'Zadania, priorytety w Księgowaniach, nowy Pulpit, praca w tle i kopie co 4 godziny',
+    version: '8.0.0',
+    date: '2026-10-02',
+    title: 'Zadania z komentarzami, priorytetami, filtrami i notatkami; powiadomienia pod Twoją kontrolą',
     tagline:
-      'Zespół ma teraz wspólną tablicę zadań (do zrobienia, w toku, gotowe) z terminami, załącznikami i powiadomieniami na komputerze. W Księgowaniach można oznaczać priorytety i zostawiać uwagi przy wspólnotach, a Pulpit pokazuje Twoje zadania i jest czytelniej poukładany. Aplikacja działa teraz w tle i uruchamia się razem z komputerem, więc powiadomienia przychodzą także po zamknięciu okna, a kopia zapasowa danych robi się sama co 4 godziny.',
+      'Tablica zadań dostała komentarze z oznaczaniem osób (@), priorytety, filtry po terminie i priorytecie, zmianę kolejności kart przeciąganiem oraz przypięte notatki. W Ustawieniach jest teraz lista powiadomień — część możesz włączać i wyłączać — a powiadomienia nie znikają, dopóki ich nie zamkniesz. Razem z tym wydaniem dochodzi wszystko z poprzedniej wersji: wspólna tablica zadań, priorytety i uwagi w Księgowaniach, nowy Pulpit, praca w tle i kopia zapasowa co 4 godziny.',
     stats: [
-      { value: '8', label: 'nowych funkcji' },
+      { value: '14', label: 'nowych funkcji' },
       { value: '3', label: 'ulepszenia' },
       { value: '1', label: 'poprawka' },
     ],
@@ -103,7 +103,7 @@ export const RELEASES: Release[] = [
         summary:
           'Nowa pozycja „Zadania” w menu, zaraz pod Kalendarzem: prosta tablica z kolumnami „Do zrobienia”, „W toku” i „Gotowe”, wspólna dla wszystkich osób z dostępem do aplikacji.',
         details: [
-          'Każde zadanie ma tytuł, opis, osobę, termin i załączniki. Osoby pochodzą z tej samej listy kont co uczestnicy spotkań w Kalendarzu — nie trzeba ich nigdzie dopisywać.',
+          'Każde zadanie ma tytuł, opis, osobę, termin, priorytet i załączniki. Osoby pochodzą z tej samej listy kont co uczestnicy spotkań w Kalendarzu — nie trzeba ich nigdzie dopisywać.',
           'Pasek z lewej krawędzi karty pokazuje status: szary — do zrobienia, niebieski — w toku, zielony — gotowe.',
         ],
         where: ['Zadania'],
@@ -129,13 +129,161 @@ export const RELEASES: Release[] = [
             then: 'Otwiera się wybór daty; wybrana data zapisuje się od razu, a „Wyczyść” w wyborniku usuwa termin.',
           },
           {
-            do: 'Użyj filtrów nad tablicą: „Wszystkie”, „Przypisane do mnie”, „Nieprzypisane”, „Przeterminowane” albo wybierz konkretną osobę z listy.',
-            then: 'Tablica pokazuje tylko pasujące karty. „Przeterminowane” działa razem z wyborem osoby, więc „moje przeterminowane” to dwa kliknięcia.',
+            do: 'Użyj filtrów nad tablicą (opis w „Filtry zadań”).',
+            then: 'Tablica pokazuje tylko pasujące karty.',
           },
         ],
         expect: [
           'Termin po dacie wyróżnia się na karcie na czerwono (najedź na niego, żeby zobaczyć „Po terminie”), a termin na dziś ma napis „Dziś”. Zadanie w kolumnie „Gotowe” nigdy nie liczy się jako przeterminowane.',
           'Osoba na karcie ma własny kolor — patrz „Kolory osób”.',
+        ],
+      },
+      {
+        id: 'zadania-komentarze',
+        kind: 'new',
+        icon: 'message-square',
+        title: 'Komentarze do zadań z oznaczaniem osób',
+        summary:
+          'Pod każdym zadaniem można prowadzić rozmowę: pisać komentarze i oznaczać koleżanki i kolegów znakiem @. Ostatni komentarz widać od razu na karcie.',
+        details: [
+          'Oznaczona osoba, a także osoba przypisana do zadania, dostaje powiadomienie na komputerze — patrz „Powiadomienia w Ustawieniach”.',
+          'Na karcie zadania, pod opisem, widać ostatni komentarz (do dwóch linii) i liczbę wszystkich komentarzy. Ikona dymka w dolnym rzędzie karty jest zawsze — także wtedy, gdy komentarzy jeszcze nie ma.',
+        ],
+        where: ['Zadania', 'karta zadania', 'ikona dymka „Dodaj komentarz”'],
+        steps: [
+          {
+            do: 'Kliknij ikonę dymka na karcie.',
+            then: 'Otwiera się okno „Komentarze” z listą rozmowy i polem do pisania, z kursorem od razu w polu.',
+          },
+          {
+            do: 'Napisz komentarz. Żeby kogoś oznaczyć, wpisz @ i zacznij pisać imię lub nazwisko, a potem wybierz osobę z listy (strzałki i Enter albo klik).',
+            then: 'Osoba pojawia się w tekście jako kolorowa „pigułka”, w tym samym stylu co pola dynamiczne w Mailingu. Backspace usuwa całą pigułkę naraz.',
+          },
+          {
+            do: 'Kliknij „Dodaj komentarz” albo naciśnij Ctrl+Enter (na macOS Cmd+Enter).',
+            then: 'Komentarz trafia na listę z Twoim kolorem, godziną i datą. Zwykły Enter robi nową linię.',
+          },
+          {
+            do: 'Kliknij pasek z ostatnim komentarzem na karcie.',
+            then: 'Otwiera się to samo okno z całą rozmową.',
+          },
+        ],
+        expect: [
+          'Komentarz usuniesz ikoną kosza przy nim (po potwierdzeniu), ale tylko własny. Komentarzy nie da się edytować. Komentarz może mieć do 2000 znaków.',
+          'Otwarta rozmowa odświeża się sama co pół minuty, więc odpowiedź kolegi pojawia się bez zamykania okna.',
+          'Rozmowę widać też w oknie edycji zadania, pod załącznikami. Przy nowym, jeszcze niezapisanym zadaniu komentarzy dodać się nie da.',
+        ],
+        note: {
+          type: 'tip',
+          text: 'Kopia zapasowa zawiera komentarze. Usunięcie zadania usuwa też jego komentarze.',
+        },
+      },
+      {
+        id: 'zadania-priorytet',
+        kind: 'new',
+        icon: 'flag',
+        title: 'Priorytet zadania: wysoki, zwykły, niski',
+        summary:
+          'Każde zadanie ma priorytet. Domyślnie „Zwykły”; „Wysoki” i „Niski” widać na karcie jako plakietkę pod datą.',
+        where: ['Zadania', 'karta zadania', 'plakietka priorytetu'],
+        steps: [
+          {
+            do: 'Kliknij plakietkę priorytetu pod datą na karcie.',
+            then: 'Otwiera się małe menu z trzema opcjami: Wysoki, Zwykły, Niski.',
+          },
+          {
+            do: 'Wybierz priorytet.',
+            then: 'Zmiana zapisuje się od razu, bez otwierania okna edycji — tak samo jak zmiana osoby albo terminu.',
+          },
+        ],
+        expect: [
+          'Priorytet ustawisz też w oknie zadania, w polu „Priorytet”. Nowe zadania i wszystkie dotychczasowe mają „Zwykły”.',
+          'Zadanie o wysokim priorytecie ma delikatną czerwoną obwódkę, a plakietka daty i plakietka priorytetu mają zawsze ten sam rozmiar.',
+          'Zmiana priorytetu przez kogoś innego jest zmianą zadania, więc osoba przypisana dostanie powiadomienie „Zadanie zostało zmienione”.',
+        ],
+      },
+      {
+        id: 'zadania-filtry',
+        kind: 'new',
+        icon: 'search',
+        title: 'Filtry zadań: kto, termin, priorytet',
+        summary:
+          'Nad tablicą są trzy grupy filtrów — Kto, Termin i Priorytet — które łączą się ze sobą, np. „moje, na dziś, wysoki priorytet”.',
+        where: ['Zadania', 'panel filtrów nad tablicą'],
+        steps: [
+          {
+            do: 'W grupie „Kto” wybierz „Wszystkie”, „Przypisane do mnie”, „Nieprzypisane” albo konkretną osobę z listy.',
+            then: 'Tablica pokazuje tylko karty tej osoby.',
+          },
+          {
+            do: 'W grupie „Termin” kliknij „Przeterminowane”, „Na dziś”, „Przyszłe” albo „Bez terminu”.',
+            then: 'Tablica zawęża się do kart z takim terminem. Ponowne kliknięcie aktywnego filtru wyłącza go.',
+          },
+          {
+            do: 'W grupie „Priorytet” kliknij „Wysoki”, „Zwykły” albo „Niski”.',
+            then: 'Tablica pokazuje tylko karty o tym priorytecie.',
+          },
+          {
+            do: 'Kliknij „Wyczyść filtry”.',
+            then: 'Wszystkie trzy grupy wracają do „Wszystkie”.',
+          },
+        ],
+        expect: [
+          'Przy filtrach terminu i priorytetu jest liczba kart: pokazuje, ile kart zobaczysz po kliknięciu, przy aktualnych wyborach w pozostałych grupach. Opcja z zerem jest przygaszona, ale nadal działa.',
+          'Gdy jakikolwiek filtr jest włączony, panel pisze „Pokazano X z Y”.',
+          'Zadania w kolumnie „Gotowe” nigdy nie są „przeterminowane”, „na dziś” ani „przyszłe” — tak samo jak na Pulpicie, dlatego liczby na kafelkach Pulpitu i na tablicy się zgadzają.',
+        ],
+      },
+      {
+        id: 'zadania-kolejnosc',
+        kind: 'new',
+        icon: 'grip',
+        title: 'Zmiana kolejności kart przeciąganiem',
+        summary:
+          'Kartę można przeciągnąć w inne miejsce kolumny albo do innej kolumny — dokładnie tam, gdzie ma stać. Kolejność widzi cały zespół.',
+        where: ['Zadania', 'karta zadania'],
+        steps: [
+          {
+            do: 'Złap kartę i przeciągnij ją nad inną kartą.',
+            then: 'Niebieska linia między kartami pokazuje, gdzie karta wyląduje: górna połowa karty oznacza „przed nią”, dolna — „po niej”.',
+          },
+          {
+            do: 'Puść kartę.',
+            then: 'Karta staje w wybranym miejscu, a kolejność zapisuje się dla wszystkich. Puszczenie na pustym miejscu kolumny stawia kartę na końcu.',
+          },
+        ],
+        expect: [
+          'Strzałki na karcie i zmiana statusu w oknie zadania wstawiają kartę na górę nowej kolumny.',
+          'Nowe zadanie trafia na górę kolumny. Przy włączonym filtrze ukryte karty zachowują swoje miejsce między widocznymi.',
+          'Samo przestawienie kart nie jest zmianą zadania, więc nie wysyła powiadomień. Zmiana kolumny — wysyła.',
+        ],
+      },
+      {
+        id: 'zadania-notatki',
+        kind: 'new',
+        icon: 'pin',
+        title: 'Przypięte notatki w Zadaniach',
+        summary:
+          'Pod filtrami można przypiąć notatki widoczne dla całego zespołu — uwagi do całej tablicy, a nie do jednego zadania.',
+        where: ['Zadania', 'Przypięte notatki'],
+        steps: [
+          {
+            do: 'Kliknij „Dodaj notatkę”, wpisz treść i kliknij „Przypnij” (albo Ctrl+Enter).',
+            then: 'Notatka pojawia się pod filtrami jako bursztynowa karteczka, z Twoim kolorem, nazwiskiem oraz datą i godziną pod tekstem.',
+          },
+          {
+            do: 'Kliknij ołówek przy swojej notatce, żeby ją poprawić, albo kosz, żeby ją usunąć.',
+            then: 'Edycja zamienia karteczkę w pole z tekstem (Zapisz / Anuluj); usunięcie pyta o potwierdzenie.',
+          },
+          {
+            do: 'Kliknij nagłówek „Przypięte notatki”.',
+            then: 'Lista notatek zwija się lub rozwija; aplikacja pamięta to na tym komputerze.',
+          },
+        ],
+        expect: [
+          'Notatek może być dowolnie wiele (każda do 1000 znaków). Przypiąć może każdy, ale edytować i usuwać można tylko swoje.',
+          'Notatki dodane przez innych pojawiają się po wejściu w widok albo po najwyżej minucie. Nie ma powiadomień o nowej notatce.',
+          'Notatki są w kopii zapasowej.',
         ],
       },
       {
@@ -179,12 +327,13 @@ export const RELEASES: Release[] = [
         details: [
           'Aplikacja sprawdza zadania przypisane do Ciebie mniej więcej raz na minutę. Powiadamia tylko o tym, co dotyczy Ciebie, i nigdy o zmianach, które sam wprowadziłeś.',
           'Powiadomienie o przeterminowaniu przychodzi raz dla danego terminu. Jeśli przesuniesz termin na późniejszy i on też minie, dostaniesz kolejne.',
+          'Dostajesz też powiadomienie, gdy ktoś oznaczy Cię (@) w komentarzu do dowolnego zadania albo skomentuje zadanie przypisane do Ciebie — nawet bez oznaczania. Gdy komentarz robi jedno i drugie, powiadomienie jest jedno.',
         ],
         where: ['powiadomienie systemowe → kliknięcie'],
         steps: [
           {
             do: 'Kliknij powiadomienie.',
-            then: 'Okno aplikacji wysuwa się na wierzch i otwiera się widok „Zadania”.',
+            then: 'Okno aplikacji wysuwa się na wierzch i otwiera się widok „Zadania”, a przy powiadomieniu o konkretnym zadaniu — od razu to zadanie.',
           },
         ],
         expect: [
@@ -194,6 +343,41 @@ export const RELEASES: Release[] = [
         note: {
           type: 'tip',
           text: 'Powiadomienia działają, dopóki aplikacja jest uruchomiona (także ukryta w zasobniku). Gdy wyłączysz ją całkiem, zmiany z tego czasu zgłosi pierwsze sprawdzenie po jej starcie. Jeśli powiadomienia się nie pokazują, sprawdź ustawienia powiadomień systemu dla FileFunky i tryb „Nie przeszkadzać”.',
+        },
+      },
+      {
+        id: 'ustawienia-powiadomienia',
+        kind: 'new',
+        icon: 'info',
+        title: 'Powiadomienia w Ustawieniach i trzy nowe z Księgowań',
+        summary:
+          'W Ustawieniach jest lista wszystkich powiadomień. Te, które aplikacja pokazywała dotąd, są zawsze włączone. Trzy nowe, z Księgowań, są domyślnie wyłączone — włączasz te, które chcesz dostawać.',
+        details: [
+          'Ustawienia powiadomień są przypisane do Twojego konta, nie do komputera: po zalogowaniu na innym komputerze masz te same przełączniki.',
+          'Powiadomienie, które jest wyłączone, nie „odtworzy się” po włączeniu — dostaniesz tylko to, co stanie się od tej chwili.',
+        ],
+        where: ['Ustawienia', 'Powiadomienia'],
+        steps: [
+          {
+            do: 'Otwórz Ustawienia i przewiń do karty „Powiadomienia”.',
+            then: 'Widać dwie grupy: „Zadania” (pięć powiadomień z etykietą „Zawsze włączone” i zablokowanym przełącznikiem) oraz „Księgowania” (trzy przełączniki do włączenia).',
+          },
+          {
+            do: 'W grupie „Księgowania” włącz wybrane powiadomienia.',
+            then: 'Dostajesz powiadomienie, gdy ktoś inny: oznaczy wspólnotę jako priorytet, doda lub zmieni notatkę w priorytecie albo doda zwykłą notatkę (uwagę) do wspólnoty.',
+          },
+          {
+            do: 'Kliknij takie powiadomienie.',
+            then: 'Okno aplikacji wraca na wierzch i otwiera się Pulpit z Księgowaniami.',
+          },
+        ],
+        expect: [
+          'Własne działania nigdy nie powiadamiają Ciebie. Wyczyszczenie notatki w priorytecie nie jest powiadomieniem.',
+          'Powiadomienia z komputera nie znikają same: zostają na ekranie, dopóki ich nie zamkniesz lub nie klikniesz.',
+        ],
+        note: {
+          type: 'warning',
+          text: 'Na macOS to, czy powiadomienie zostaje na ekranie, zależy od ustawienia systemu: wybierz styl „Alerty” w Ustawienia systemowe → Powiadomienia → FileFunky. Domyślny styl „Banery” znika po kilku sekundach i aplikacja nie może tego zmienić. Na Windowsie powiadomienia zostają bez dodatkowych ustawień.',
         },
       },
       {
@@ -242,12 +426,16 @@ export const RELEASES: Release[] = [
             then: 'Widać w nim liczbę Twoich otwartych zadań i najbliższy termin.',
           },
           {
+            do: 'Najedź myszą na kafelek, który ma liczbę większą od zera (bez klikania).',
+            then: 'Pojawia się podgląd: do czterech zadań z tytułem, terminem, opisem, statusem i liczbą załączników, a pod nimi „+ N więcej”, jeśli jest ich więcej. Podgląd „Wszystkie” pokazuje dodatkowo, ile zadań jest w każdej kolumnie.',
+          },
+          {
             do: 'Kliknij kafelek, np. „Przeterminowane” albo „Wszystkie”.',
-            then: 'Otwiera się tablica „Zadania” z już ustawionym filtrem: „Przeterminowane” pokazuje Twoje zadania po terminie, „Wszystkie” — wszystkie zadania przypisane do Ciebie (także gotowe i bez terminu).',
+            then: 'Otwiera się tablica „Zadania” z już ustawionymi filtrami: „Przeterminowane”, „Dzisiaj” i „Nadchodzące” pokazują Twoje zadania z odpowiednim terminem, „Wszystkie” — wszystkie zadania przypisane do Ciebie (także gotowe i bez terminu).',
           },
         ],
         expect: [
-          '„Dzisiaj” i „Nadchodzące” otwierają Twoje zadania bez dodatkowego filtra terminu.',
+          'Podgląd działa też z klawiatury (po wejściu na kafelek klawiszem Tab) i znika przy przewijaniu strony.',
           'Kafelek na zero jest przygaszony i nieaktywny. Zadanie bez terminu liczy się tylko w kafelku „Wszystkie”, a gotowe nigdy nie jest „do zrobienia”.',
         ],
       },

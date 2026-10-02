@@ -19,11 +19,13 @@ import {
   ZadanieInput,
   ZadanieStatus,
   ZadanieZalacznik,
+  ZadanieKomentarzInput,
 } from '../shared/types';
 import { runAutoBackup, getBackupStatus, getBackupsDir, validateBackup } from './backupService';
 import { conversionCache } from './conversionCache';
 import * as authService from './authService';
-import { ZadaniaNotifier, nameForMailbox } from './zadaniaNotifier';
+import { Notifier, nameForMailbox } from './notifier';
+import { NOTIFICATION_DEFS } from '../shared/notifications';
 import { createTray, announceBackgroundOnce } from './tray';
 import {
   checkAttachmentFile,
@@ -2284,6 +2286,25 @@ function setupIpcHandlers() {
     return true;
   });
 
+  // Notification switches, per signed-in person. Only a notification that exists
+  // and is not locked can be switched: the renderer's list already shows the
+  // locked ones as fixed, and this keeps a stray call from storing a switch for
+  // something the app never asked about.
+  ipcMain.handle(IPC_CHANNELS.SET_NOTIFICATION_PREF, async (_, id: string, enabled: boolean) => {
+    const def = NOTIFICATION_DEFS.find((d) => d.id === id);
+    if (!def || def.locked) return false;
+    // The switch belongs to whoever is signed in — the renderer never names the person.
+    const email = (await authService.getSession())?.email;
+    if (!email) return false;
+    await database.setNotificationPref(email, def.id, enabled === true);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.GET_NOTIFICATION_PREFS, async () => {
+    const email = (await authService.getSession())?.email;
+    return email ? await database.getNotificationPrefs(email) : {};
+  });
+
   ipcMain.handle(IPC_CHANNELS.SET_LAST_SEEN_VERSION, async (_, version: string) => {
     database.setSetting('lastSeenVersion', version);
     return true;
@@ -2835,11 +2856,19 @@ function setupIpcHandlers() {
     return true;
   });
 
-  ipcMain.handle(IPC_CHANNELS.SET_ZADANIE_STATUS, async (_, id: number, status: ZadanieStatus) => {
-    const session = await authService.getSession();
-    await database.setZadanieStatus(id, status, session?.email ?? '');
-    return true;
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.MOVE_ZADANIE,
+    async (_, id: number, status: ZadanieStatus, orderedIds: number[]) => {
+      const session = await authService.getSession();
+      await database.moveZadanie(
+        id,
+        status,
+        Array.isArray(orderedIds) ? orderedIds.map(Number) : [],
+        session?.email ?? '',
+      );
+      return true;
+    },
+  );
 
   // Attachments. Picking and uploading are two calls so the renderer can show a
   // loader for the upload alone — the file dialog can stay open for minutes.
@@ -2907,6 +2936,52 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.ZADANIA_DISCARD_ATTACHMENTS, async (_, paths: string[]) => {
     await database.discardZadanieZalaczniki(Array.isArray(paths) ? paths.map(String) : []);
+    return true;
+  });
+
+  // Comments on a task. The author comes from the session, as it does for a card:
+  // the notifier skips a person's own comments by it, and delete is scoped to it.
+  ipcMain.handle(IPC_CHANNELS.GET_ZADANIE_KOMENTARZE, async (_, zadanieId: number) => {
+    return await database.getZadanieKomentarze(zadanieId);
+  });
+
+  // Notes pinned to the board. The author comes from the session, as for comments.
+  ipcMain.handle(IPC_CHANNELS.GET_ZADANIA_NOTATKI, async () => {
+    return await database.getZadaniaNotatki();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ADD_ZADANIE_NOTATKA, async (_, tresc: string) => {
+    const session = await authService.getSession();
+    return await database.addZadanieNotatka(String(tresc ?? ''), session?.email ?? '');
+  });
+
+  ipcMain.handle(IPC_CHANNELS.UPDATE_ZADANIE_NOTATKA, async (_, id: number, tresc: string) => {
+    const session = await authService.getSession();
+    if (!session?.email) return false;
+    await database.updateZadanieNotatka(id, String(tresc ?? ''), session.email);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_ZADANIE_NOTATKA, async (_, id: number) => {
+    const session = await authService.getSession();
+    if (!session?.email) return false;
+    await database.deleteZadanieNotatka(id, session.email);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.GET_ZADANIA_KOMENTARZE_PODSUMOWANIE, async () => {
+    return await database.getZadaniaKomentarzePodsumowanie();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ADD_ZADANIE_KOMENTARZ, async (_, input: ZadanieKomentarzInput) => {
+    const session = await authService.getSession();
+    return await database.addZadanieKomentarz(input, session?.email ?? '');
+  });
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_ZADANIE_KOMENTARZ, async (_, id: number) => {
+    const session = await authService.getSession();
+    if (!session?.email) return false;
+    await database.deleteZadanieKomentarz(id, session.email);
     return true;
   });
 
@@ -3037,7 +3112,7 @@ function setupIpcHandlers() {
   );
 
   ipcMain.handle(IPC_CHANNELS.SET_KS_PRIORYTET_NOTATKA, async (_, id: number, notatka: string) => {
-    await database.setKsiegowaniePriorytetNotatka(id, notatka ?? '');
+    await database.setKsiegowaniePriorytetNotatka(id, notatka ?? '', await sessionEmail());
     return true;
   });
 
@@ -3363,9 +3438,14 @@ app.whenReady().then(() => {
   // Windows files a notification under the app's AppUserModelID; without one
   // the toast is attributed to "electron.exe" and may be dropped altogether.
   if (process.platform === 'win32') app.setAppUserModelId('com.filefunky.app');
-  new ZadaniaNotifier({
+  new Notifier({
     getEmail: async () => (await authService.getSession())?.email ?? null,
     getZadania: () => database.getZadania(),
+    getKomentarzeAfter: (afterId) => database.getZadaniaKomentarzeAfter(afterId),
+    getLatestKomentarzId: () => database.getLatestZadanieKomentarzId(),
+    getPriorytety: () => database.getKsiegowaniaPriorytety(),
+    getUwagi: () => database.getKsiegowaniaUwagi(),
+    getNotificationPrefs: (email) => database.getNotificationPrefs(email),
     resolveName: async (email) => {
       try {
         return nameForMailbox(await database.getAppUsers(), email);
@@ -3374,9 +3454,10 @@ app.whenReady().then(() => {
       }
     },
     getLanguage: () => (database.getSettings().language === 'en' ? 'en' : 'pl'),
-    onOpen: () => {
+    onOpen: (target) => {
       showMainWindow();
-      mainWindow?.webContents.send('zadania:open');
+      if (target.view === 'ksiegowania') mainWindow?.webContents.send('ksiegowania:open');
+      else mainWindow?.webContents.send('zadania:open', target.zadanieId);
     },
   }).start();
 

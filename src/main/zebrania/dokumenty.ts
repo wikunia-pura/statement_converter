@@ -70,6 +70,15 @@ export interface SprawozdanieOpcje {
 
 /* ================================== HTML ================================== */
 
+/** A document's name as a file name: "Jadźwingów 5/7" keeps its number as "5-7". */
+export function nazwaPliku(text: string): string {
+  return text
+    .replace(/\//g, '-')
+    .replace(/[<>:"\\|?*\u0000-\u001f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function esc(text: string): string {
   return text
     .replace(/&/g, '&amp;')
@@ -85,7 +94,12 @@ const num = (n: number | null | undefined) => esc(formatKwota(n));
  * band at the top of the card — the logo on the left, the document and the
  * community it is for on the right.
  */
-function shell(doc: { label: string; sub?: string; adres: string; stopka: string }, body: string): string {
+export function shell(
+  doc: { label: string; sub?: string; adres: string; stopka: string },
+  body: string,
+  /** Styles of a document that needs more than the shared ones (the meeting package's cover). */
+  extraCss = '',
+): string {
   const adres = doc.adres.trim();
   return `<!DOCTYPE html>
 <html lang="pl">
@@ -188,6 +202,7 @@ ${INTER_FONT_FACES}
   .notes ul { margin: 1.5mm 0 0 4mm; padding: 0; }
   .notes li { margin: 1mm 0; }
   .colophon { margin-top: 8mm; padding-top: 3mm; border-top: 1px solid #edf0f2; color: ${MUTED}; font-size: 7.5pt; }
+${extraCss}
 </style>
 </head>
 <body>
@@ -223,7 +238,7 @@ const WIN_ANSI = /^[\x20-\x7e\u00b7]*$/;
  * into the tinted gap the frame leaves there. `left` goes on the other side
  * when the built-in font can write it (no Polish letters).
  */
-async function stampPages(filePath: string, left: string): Promise<void> {
+export async function stampPages(filePath: string, left: string): Promise<void> {
   const pdf = await PDFDocument.load(fs.readFileSync(filePath));
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const color = rgb(0x5b / 255, 0x66 / 255, 0x70 / 255);
@@ -237,6 +252,11 @@ async function stampPages(filePath: string, left: string): Promise<void> {
     if (left && WIN_ANSI.test(left)) page.drawText(left, { x: 12 * mm, y: 5 * mm, size, font, color });
   });
   fs.writeFileSync(filePath, await pdf.save());
+}
+
+/** Render a document in the frame above, unnumbered — for a file put together from several. */
+export async function renderDocumentRaw(html: string, outPath: string): Promise<void> {
+  await renderHtmlToPdf(html, outPath, DOC_PRINT);
 }
 
 /** Render a document in the frame above, then number its pages. */
@@ -263,7 +283,7 @@ function sectionTable(sec: SprawozdanieSekcja): string {
 const zl = (n: number) => `${num(n)} zł`;
 
 /** The document's particulars in one ruled strip; the first leads, set larger. */
-function factsStrip(items: string[][]): string {
+export function factsStrip(items: string[][]): string {
   return `<div class="facts-strip">${items
     .map(([k, v], i) => `<div${i === 0 ? ' class="okres"' : ''}><span>${esc(k)}</span><b>${esc(v)}</b></div>`)
     .join('')}</div>`;

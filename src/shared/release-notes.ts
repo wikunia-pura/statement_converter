@@ -84,6 +84,87 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '9.2.0',
+    date: '2026-10-04',
+    title: 'Podsumowanie zebrania i pakiet PDF do wysyłki',
+    tagline:
+      'Zakładka „Podsumowanie” w Zebraniach pokazuje, co jest gotowe w materiałach, i najważniejsze liczby ze sprawozdania i planu. Jednym przyciskiem pobierasz pakiet PDF: stronę tytułową ze spisem zawartości, a za nią zawiadomienie, sprawozdanie i plan — tylko te części, których potrzebuje odbiorca. Menu ma też nowy, uporządkowany układ.',
+    stats: [
+      { value: '2', label: 'nowe funkcje' },
+      { value: '1', label: 'ulepszenie' },
+    ],
+    highlights: [
+      {
+        id: 'zebranie-podsumowanie',
+        kind: 'new',
+        icon: 'clipboard',
+        title: 'Podsumowanie zebrania',
+        summary:
+          'Pierwsza zakładka zebrania pokazuje w jednym miejscu, co jest gotowe w wybranej wersji materiałów, i najważniejsze liczby ze sprawozdania i planu.',
+        details: [
+          'Zawiadomienie, sprawozdanie i plan mają po jednym wierszu z oznaczeniem „Gotowe”, „Do uzupełnienia” albo „Brak”. Zawiadomienie jest „do uzupełnienia”, gdy ma niewypełnione pola — wiersz je wymienia. Plan jest „do uzupełnienia”, gdy liczono go ze sprawozdania za inny okres.',
+          '„Sprawozdanie finansowe w skrócie” to te same kafelki i ważne uwagi, którymi otwiera się PDF sprawozdania.',
+          '„Plan gospodarczy w skrócie” pokazuje stawki zaliczek „A” i „B” za 1 m² miesięcznie (także ich zmianę w ciągu roku), planowane koszty, remonty z funduszu, spłatę kredytu i stan funduszu remontowego na koniec roku.',
+        ],
+        where: ['Zebrania', 'wybrane zebranie', 'Podsumowanie'],
+        steps: [
+          {
+            do: 'Kliknij zebranie na liście.',
+            then: 'Otwiera się na zakładce „Podsumowanie” dla aktualnej wersji. Inną wersję wybierzesz na pasku „Wersje materiałów”.',
+          },
+          {
+            do: 'Kliknij wiersz części, np. „Plan gospodarczy”.',
+            then: 'Przechodzisz do zakładki tej części, żeby ją przygotować albo poprawić.',
+          },
+        ],
+      },
+      {
+        id: 'zebranie-pakiet-pdf',
+        kind: 'new',
+        icon: 'download',
+        title: 'Pakiet PDF do wysyłki',
+        summary:
+          'Jeden plik z materiałami na zebranie: strona tytułowa z terminem, spisem zawartości i najważniejszymi liczbami, a za nią wybrane części — dla zarządu, właścicieli albo kogoś z zewnątrz.',
+        details: [
+          'Strona tytułowa ma nazwę zebrania, termin, miejsce i wersję materiałów, spis części z numerami stron oraz sprawozdanie i plan w skrócie.',
+          'Każda część wygląda dokładnie tak, jak pobierasz ją w jej zakładce. W planie data zebrania wpisuje się sama.',
+          'Strony są numerowane w całym pliku.',
+        ],
+        where: ['Zebrania', 'wybrane zebranie', 'Podsumowanie', 'Pakiet PDF do wysyłki'],
+        steps: [
+          {
+            do: 'Przełącznikami wybierz części: „Zawiadomienie o zebraniu”, „Sprawozdania finansowe” (z akapitem wstępnym albo bez) i „Plan gospodarczy”.',
+            then: 'Części, których ta wersja jeszcze nie ma, są wyłączone i opisane.',
+          },
+          {
+            do: 'Kliknij „Pobierz pakiet PDF”.',
+            then: 'Plik „Materiały na zebranie - {wspólnota} - {data}.pdf” zapisuje się w folderze Pobrane, a komunikat ma przycisk „Otwórz”.',
+          },
+        ],
+        expect: [
+          'Różnym osobom wyślesz różne pakiety — np. zarządowi wszystko, a właścicielom samo zawiadomienie i plan.',
+          'Zawiadomienia z niewypełnionymi polami nie da się włączyć do pakietu — najpierw uzupełnij je w zakładce „Zawiadomienie o zebraniu”.',
+        ],
+      },
+      {
+        id: 'menu-uklad',
+        kind: 'improved',
+        icon: 'menu',
+        title: 'Nowy domyślny układ menu',
+        summary:
+          'Menu jest podzielone na grupy: Pulpit, Zadania i Kalendarz; potem Zebrania, Sprawozdania i Plany gospodarcze; dalej konwersje i Mailing, słowniki (Adresy, Kontrahenci, Banki), a na końcu Co nowego i Ustawienia.',
+        where: ['Ustawienia', 'Zmień kolejność menu'],
+        steps: [
+          {
+            do: 'Jeśli wcześniej ułożyłeś menu po swojemu, w Ustawieniach kliknij „Zmień kolejność menu”, a potem „Przywróć domyślną” i „Zapisz kolejność”.',
+            then: 'Menu ma nowy układ z liniami między grupami.',
+          },
+        ],
+        expect: ['Własny układ menu zostaje, dopóki sam go nie zmienisz.'],
+      },
+    ],
+  },
+  {
     version: '9.1.0',
     date: '2026-10-04',
     title: 'Sprawozdania finansowe i plany gospodarcze — w Zebraniach i w dwóch nowych modułach',

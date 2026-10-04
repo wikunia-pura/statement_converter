@@ -458,21 +458,14 @@ function exportBaseName(
   return `${what}${where}${when}`;
 }
 
+/** What one letter is rendered from — a download's request without its formats. */
+export type MailingLetterRequest = Omit<MailingExportRequest, 'formats' | 'attachPdf'>;
+
 /**
- * "Pobierz jako e-mail / PDF": render one letter exactly as a send would and
- * save it to the Downloads folder — a PDF, and/or an .eml the user's mail program
- * opens as a ready-to-send draft (`X-Unsent: 1`): recipients, subject, the HTML
- * body with its letterhead, and the PDF attached. Nothing goes over SMTP and
- * nothing is written to the mailing history — this is a file, not a send.
+ * One letter rendered exactly as a send would: its subject and body with every
+ * field filled in, and the recipients it resolves to.
  */
-export async function exportMailing(
-  deps: MailingExportDeps,
-  request: MailingExportRequest,
-): Promise<MailingExportResult> {
-  const { database } = deps;
-  if (!request.formats || request.formats.length === 0) {
-    throw new Error('Wybierz, w jakiej postaci pobrać wiadomość.');
-  }
+async function prepareLetter(database: DatabaseService, request: MailingLetterRequest) {
   const [pola, adresy, jednostki, pelnomocnicy, spotkanie, typy] = await Promise.all([
     database.getMailingPola(),
     database.getAllAdresy(),
@@ -495,8 +488,6 @@ export async function exportMailing(
     tableFields: request.tableFields ?? [],
     kalendarz: request.kalendarz ?? null,
   };
-  const subject = renderPlain(request.temat, ctx);
-  const renderedBody = renderHtml(request.tresc, ctx);
   // Same rule as a send: the meeting's own proxy and board apply to its community.
   const meetingHere =
     spotkanie && (adres == null || spotkanie.adresId === adres.id) ? spotkanie : null;
@@ -505,6 +496,42 @@ export async function exportMailing(
     request.adresaci ?? DEFAULT_MAILING_ADRESACI,
     request.wykluczeni ?? [],
   ).odbiorcy;
+  return {
+    adresNazwa,
+    typNazwa,
+    subject: renderPlain(request.temat, ctx),
+    renderedBody: renderHtml(request.tresc, ctx),
+    odbiorcy,
+  };
+}
+
+/** A letter's PDF, as "Pobierz PDF" writes it — for documents that carry it inside them. */
+export async function renderLetterPdf(
+  database: DatabaseService,
+  request: MailingLetterRequest,
+  outPath: string,
+): Promise<{ subject: string }> {
+  const { subject, renderedBody } = await prepareLetter(database, request);
+  await renderHtmlToPdf(buildDocumentHtml(renderedBody, { forPdf: true, logoSrc: MAILING_LOGO_SVG_DATA_URI }), outPath);
+  return { subject };
+}
+
+/**
+ * "Pobierz jako e-mail / PDF": render one letter exactly as a send would and
+ * save it to the Downloads folder — a PDF, and/or an .eml the user's mail program
+ * opens as a ready-to-send draft (`X-Unsent: 1`): recipients, subject, the HTML
+ * body with its letterhead, and the PDF attached. Nothing goes over SMTP and
+ * nothing is written to the mailing history — this is a file, not a send.
+ */
+export async function exportMailing(
+  deps: MailingExportDeps,
+  request: MailingExportRequest,
+): Promise<MailingExportResult> {
+  const { database } = deps;
+  if (!request.formats || request.formats.length === 0) {
+    throw new Error('Wybierz, w jakiej postaci pobrać wiadomość.');
+  }
+  const { adresNazwa, typNazwa, subject, renderedBody, odbiorcy } = await prepareLetter(database, request);
 
   const dir = deps.downloadsDir;
   fs.mkdirSync(dir, { recursive: true });

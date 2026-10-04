@@ -35,6 +35,7 @@ import {
   Sprawozdanie,
   SprawozdanieExportRequest,
   PlanWlasnyExportRequest,
+  ZebraniePakietRequest,
   KalendarzPdfRequest,
   ZadanieInput,
   ZadanieStatus,
@@ -98,12 +99,13 @@ import {
 import { verifySmtp } from './mailing/sender';
 import { uniquePath } from './mailing/service';
 import { parseSprawozdaniaPdf } from './zebrania/sprawozdanieParser';
-import { planPdf, planXlsx, sprawozdaniePdf, sprawozdanieXlsx } from './zebrania/dokumenty';
+import { nazwaPliku, planPdf, planXlsx, sprawozdaniePdf, sprawozdanieXlsx } from './zebrania/dokumenty';
 import { kalendarzPdf, kalendarzPdfName } from './kalendarz/pdf';
 import { KALENDARZ_PDF_MAX_MIESIECY, kalendarzOkresProblem } from '../shared/calendar';
 import { nazwaNieruchomosci } from '../shared/plan-gospodarczy';
 import { formatData } from '../shared/sprawozdanie';
 import { planWZebraniach, planyZZebran } from '../shared/plany';
+import { eksportujPakiet } from './zebrania/pakiet';
 import { wersjaLabel } from '../shared/zebrania';
 
 // Log environment variable for testing
@@ -3315,21 +3317,13 @@ function setupIpcHandlers() {
     return { lista, plikNazwa: path.basename(filePath) };
   };
 
-  // "Jadźwingów 5/7" keeps its number as "5-7" rather than losing the slash.
-  const cleanFileName = (text: string) =>
-    text
-      .replace(/\//g, '-')
-      .replace(/[<>:"\\|?*\u0000-\u001f]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-
   /** A statement's PDF or Excel, written to Downloads under a name saying whose and when. */
   const writeSprawozdanie = async (
     spr: Sprawozdanie,
     format: ZebranieDokumentFormat,
     opts: { adres: string; wstep: boolean; wstepTekst: SprawozdanieWstepTekst | null },
   ): Promise<string> => {
-    const name = cleanFileName(
+    const name = nazwaPliku(
       `Sprawozdanie finansowe - ${nazwaNieruchomosci(spr.nazwa)} - ${formatData(spr.okresOd)}-${formatData(spr.okresDo)}`,
     );
     const filePath = uniquePath(app.getPath('downloads'), `${name}.${format}`);
@@ -3454,7 +3448,7 @@ function setupIpcHandlers() {
     } else {
       const plan = wersja.plan;
       if (!plan) throw new Error('Ta wersja nie ma jeszcze planu gospodarczego.');
-      const name = cleanFileName(`Plan gospodarczy ${plan.rok} - ${plan.nieruchomosc}`);
+      const name = nazwaPliku(`Plan gospodarczy ${plan.rok} - ${plan.nieruchomosc}`);
       filePath = uniquePath(dir, `${name}.${request.format}`);
       const ctx = { dataZebrania: request.dataZebrania, adres: zebranie?.adresNazwa || plan.nieruchomosc };
       if (request.format === 'pdf') await planPdf(plan, ctx, filePath);
@@ -3471,6 +3465,13 @@ function setupIpcHandlers() {
       // The file is in Downloads either way; only the record of it is missing.
       log.warn('[ZEBRANIA] download not recorded:', error instanceof Error ? error.message : error);
     }
+    return { filePath };
+  });
+
+  /** "Pakiet PDF": a version's materials in one file, behind a cover summing them up. */
+  ipcMain.handle(IPC_CHANNELS.ZEBRANIA_PAKIET_EXPORT, async (_, request: ZebraniePakietRequest) => {
+    const filePath = await eksportujPakiet({ database, downloadsDir: app.getPath('downloads') }, request);
+    log.info(`[ZEBRANIA] package written: ${path.basename(filePath)}`);
     return { filePath };
   });
 
@@ -3522,7 +3523,7 @@ function setupIpcHandlers() {
     if (!row) throw new Error('Tego planu już nie ma — mógł zostać usunięty.');
     const plan = row.plan;
     const wspolnota = (await database.getZebraniaWspolnoty().catch(() => [])).find((w) => w.vdomNr === row.nrWsp);
-    const name = cleanFileName(`Plan gospodarczy ${plan.rok} - ${plan.nieruchomosc}`);
+    const name = nazwaPliku(`Plan gospodarczy ${plan.rok} - ${plan.nieruchomosc}`);
     const filePath = uniquePath(app.getPath('downloads'), `${name}.${request.format}`);
     // No meeting: the date under "przyjęto na zebraniu w dniu" stays a blank to fill in.
     const ctx = { dataZebrania: null, adres: wspolnota?.adresNazwa || plan.nieruchomosc };

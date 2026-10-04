@@ -1528,6 +1528,20 @@ export interface PlanWlasnyExportRequest {
   format: ZebranieDokumentFormat;
 }
 
+/**
+ * "Pakiet PDF" of one version: a cover summing the materials up, then the
+ * parts asked for, in one file — what goes to the board, the owners or
+ * anyone else, each with what they need.
+ */
+export interface ZebraniePakietRequest {
+  wersjaId: number;
+  zawiadomienie: boolean;
+  sprawozdanie: boolean;
+  /** The statement opens with its introduction. */
+  wstep: boolean;
+  plan: boolean;
+}
+
 /** Which document to produce, in which format. */
 export type ZebranieDokument = 'sprawozdanie' | 'plan';
 export type ZebranieDokumentFormat = 'xlsx' | 'pdf';
@@ -2170,6 +2184,7 @@ export const IPC_CHANNELS = {
   SPRAWOZDANIA_IMPORT_WLASNE: 'sprawozdania:import-wlasne',
   SPRAWOZDANIE_DELETE_WLASNE: 'sprawozdania:delete-wlasne',
   SPRAWOZDANIE_EXPORT: 'sprawozdania:export',
+  ZEBRANIA_PAKIET_EXPORT: 'zebrania:pakiet-export',
   PLANY_WLASNE_GET: 'plany:get',
   PLAN_WLASNY_ADD: 'plany:add',
   PLAN_WLASNY_SET: 'plany:set',

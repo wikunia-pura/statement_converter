@@ -94,11 +94,12 @@ interface SidebarItem {
  */
 const DEFAULT_SIDEBAR_ORDER = [
   'pulpit',
+  'zadania',
   'kalendarz',
+  'divider',
   'zebrania',
   'sprawozdania',
   'plany',
-  'zadania',
   'divider',
   'converter',
   'podsumowanie',

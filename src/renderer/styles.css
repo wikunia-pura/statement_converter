@@ -11814,6 +11814,59 @@ body.dark-mode .mve-subject .ff-chip__missing {
 
 .zeb-doc-actions__buttons { display: flex; flex-wrap: wrap; gap: var(--s-2); }
 
+/* ---- A meeting's summary: the parts of a version, each a way to its tab ---- */
+.zpod-parts { list-style: none; display: flex; flex-direction: column; gap: var(--s-2); }
+
+/* One part: icon, what it is and where it stands, the state as a badge. The
+   left rule repeats the state, so three of them read at a glance. */
+.zpod-part {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  color: var(--text-tertiary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--t-fast), background-color var(--t-fast);
+}
+.zpod-part:hover { background: var(--bg-surface-hover); }
+.zpod-part:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
+.zpod-part--gotowe { border-left-color: var(--success); }
+.zpod-part--uzupelnij { border-left-color: var(--warning); }
+
+.zpod-part__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 32px;
+  height: 32px;
+  border-radius: var(--r-md);
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+.zpod-part--brak .zpod-part__icon { background: var(--bg-surface-sunken); color: var(--text-tertiary); }
+
+.zpod-part__main { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.zpod-part__main strong { font-size: var(--fs-md); font-weight: 600; color: var(--text-primary); }
+.zpod-part__main span {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The package's parts: the introduction belongs to the statement, so it sits under it. */
+.zpod-switch--nested { margin-left: var(--s-6); }
+.switch-row.is-disabled { cursor: default; opacity: 0.6; }
+.switch-row.is-disabled:hover { border-color: var(--border-default); }
+
 /* ---- Sprawozdania: the statement library as a module of its own ---- */
 /* The left rule says where a statement came from: Zebrania (the source of
    truth) in the calendar link's blue, one added here in neutral grey. */

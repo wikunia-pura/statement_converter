@@ -158,6 +158,7 @@ const IPC_CHANNELS = {
   SPRAWOZDANIA_IMPORT_WLASNE: 'sprawozdania:import-wlasne',
   SPRAWOZDANIE_DELETE_WLASNE: 'sprawozdania:delete-wlasne',
   SPRAWOZDANIE_EXPORT: 'sprawozdania:export',
+  ZEBRANIA_PAKIET_EXPORT: 'zebrania:pakiet-export',
   PLANY_WLASNE_GET: 'plany:get',
   PLAN_WLASNY_ADD: 'plany:add',
   PLAN_WLASNY_SET: 'plany:set',
@@ -570,6 +571,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   importSprawozdaniaWlasne: () => ipcRenderer.invoke(IPC_CHANNELS.SPRAWOZDANIA_IMPORT_WLASNE),
   deleteSprawozdanieWlasne: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.SPRAWOZDANIE_DELETE_WLASNE, id),
   exportSprawozdanie: (request: unknown) => ipcRenderer.invoke(IPC_CHANNELS.SPRAWOZDANIE_EXPORT, request),
+  exportZebraniePakiet: (request: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_PAKIET_EXPORT, request),
   // Plany gospodarcze
   getPlanyWlasne: () => ipcRenderer.invoke(IPC_CHANNELS.PLANY_WLASNE_GET),
   addPlanWlasny: (nrWsp: number, nazwa: string, plan: unknown) =>

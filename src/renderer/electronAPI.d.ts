@@ -2,7 +2,7 @@
 
 import type { NotificationPrefs } from '../shared/notifications';
 import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, ZgnPelnomocnik, ZarzadOsoba, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent, AppUser, SpotkanieTyp, SpotkanieLokalizacja, Spotkanie, SpotkanieInput, KalendarzPdfRequest, SpotkanieMailing, SpotkanieTerminStatus, SpotkanieMaterialyStatus, SpotkanieMaterialyKrok, KsiegowaniePriorytet,
-  KsiegowaniePrzypisanie, KsiegowanieUwaga, KsiegowaniePlik, ScanDecision, ScanProgress, ScanReport, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik, ZadanieKomentarz, ZadanieKomentarzInput, ZadanieKomentarzPodsumowanie, ZadanieNotatka, MailingAdresaci, MailingTypDef, MailingKalendarzContext, MailingExportRequest, MailingExportResult, Zebranie, ZebranieInput, ZebranieStatus, ZebranieWersja, ZebranieWersjaInput, SprawozdaniaImportResult, SprawozdaniaWlasneImportResult, SprawozdanieExportRequest, PlanWlasny, PlanWlasnyExportRequest, SprawozdanieZapisane, SprawozdanieWstepTekst, PlanGospodarczy, ZebraniaWspolnota, AdresUdzialy, ZebraniaUstawienia, ZebranieDokumentRequest } from '../shared/types';
+  KsiegowaniePrzypisanie, KsiegowanieUwaga, KsiegowaniePlik, ScanDecision, ScanProgress, ScanReport, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik, ZadanieKomentarz, ZadanieKomentarzInput, ZadanieKomentarzPodsumowanie, ZadanieNotatka, MailingAdresaci, MailingTypDef, MailingKalendarzContext, MailingExportRequest, MailingExportResult, Zebranie, ZebranieInput, ZebranieStatus, ZebranieWersja, ZebranieWersjaInput, SprawozdaniaImportResult, SprawozdaniaWlasneImportResult, SprawozdanieExportRequest, PlanWlasny, PlanWlasnyExportRequest, ZebraniePakietRequest, SprawozdanieZapisane, SprawozdanieWstepTekst, PlanGospodarczy, ZebraniaWspolnota, AdresUdzialy, ZebraniaUstawienia, ZebranieDokumentRequest } from '../shared/types';
 import type { MailingRecipientsResolved } from '../shared/mailing-recipients';
 
 // Zaliczki shared types (referenced by the main-process helpers)
@@ -559,6 +559,8 @@ interface ElectronAPI {
   deleteSprawozdanieWlasne: (id: number) => Promise<boolean>;
   /** Write a library statement to Downloads as PDF or Excel; the path of the file. */
   exportSprawozdanie: (request: SprawozdanieExportRequest) => Promise<{ filePath: string }>;
+  /** Write a version's materials as one PDF (cover + the parts asked for) to Downloads. */
+  exportZebraniePakiet: (request: ZebraniePakietRequest) => Promise<{ filePath: string }>;
   /** Plans made in Plany gospodarcze (Zebrania's are read from the versions). */
   getPlanyWlasne: () => Promise<PlanWlasny[]>;
   /** Refused when Zebrania has a plan of this community (vDom number) and year. */

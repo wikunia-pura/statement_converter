@@ -35,6 +35,7 @@ import MeetingsIllustration from '../components/MeetingsIllustration';
 import ZawiadomienieModal from '../components/ZawiadomienieModal';
 import ZebranieSprawozdanie from '../components/ZebranieSprawozdanie';
 import ZebraniePlan from '../components/ZebraniePlan';
+import ZebraniePodsumowanie from '../components/ZebraniePodsumowanie';
 import ZebraniaUstawieniaModal from '../components/ZebraniaUstawieniaModal';
 import { defaultUstawienia, foldText } from '../../shared/plan-gospodarczy';
 
@@ -733,6 +734,15 @@ const ZebranieScreen: React.FC<{
       <div className="content-body">
         {activeTab.id === 'zawiadomienie' ? (
           notice
+        ) : activeTab.id === 'podsumowanie' && wersja ? (
+          <ZebraniePodsumowanie
+            key={wersja.id}
+            language={language}
+            locale={locale}
+            wersja={wersja}
+            dane={dane}
+            onTab={onTab}
+          />
         ) : activeTab.id === 'sprawozdania' && wersja ? (
           <ZebranieSprawozdanie
             key={wersja.id}

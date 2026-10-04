@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
+import { titleIfTruncated, useMenuInViewport } from '../hooks/useMenuInViewport';
 
 export interface SearchableOption {
   /** Option value. Numbers should be pre-stringified by the caller. */
@@ -81,6 +82,9 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     bottom: number;
   } | null>(null);
   const placement = useDropdownPlacement(containerRef, isOpen, 300);
+  // The width the menu opened at, held while the search narrows the list: a menu
+  // that shrinks with every typed letter would jump under the pointer.
+  const [openWidth, setOpenWidth] = useState<number | null>(null);
 
   const valueStr = value == null ? '' : String(value);
   const selected = options.find((o) => o.value === valueStr);
@@ -92,6 +96,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
       `${o.label} ${o.hint ?? ''} ${o.keywords ?? ''}`.toLowerCase().includes(q),
     );
   }, [options, query]);
+  const shift = useMenuInViewport(menuRef, isOpen, [anchor, filtered]);
 
   const close = () => {
     setIsOpen(false);
@@ -118,6 +123,16 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
       window.removeEventListener('scroll', measure, true);
     };
   }, [isOpen, overlay]);
+
+  useLayoutEffect(() => {
+    if (!isOpen) {
+      setOpenWidth(null);
+      return;
+    }
+    if (openWidth === null && menuRef.current) {
+      setOpenWidth(menuRef.current.getBoundingClientRect().width);
+    }
+  }, [isOpen, anchor, openWidth]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -171,14 +186,11 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     overlay && anchor
       ? {
           position: 'fixed',
-          // Kept inside the window: a trigger near the right edge would otherwise
-          // open a menu that hangs off it.
-          left: Math.max(
-            8,
-            Math.min(anchor.left, window.innerWidth - Math.max(anchor.width, menuMinWidth) - 8),
-          ),
+          left: anchor.left,
           right: 'auto',
-          width: Math.max(anchor.width, menuMinWidth),
+          // As wide as the longest option, never narrower than the field; the
+          // shift below keeps it inside the window.
+          minWidth: Math.max(anchor.width, menuMinWidth, openWidth ?? 0),
           // Same flip as the in-place menu, expressed in viewport coordinates.
           ...(placement.bottom !== undefined
             ? { bottom: window.innerHeight - anchor.top + 2 }
@@ -186,6 +198,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
           maxHeight: placement.maxHeight,
           // Above the modal overlay (1000) that the field itself may sit in.
           zIndex: 3000,
+          transform: shift ? `translateX(-${shift}px)` : undefined,
         }
       : {
           top: placement.top,
@@ -193,6 +206,8 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
           marginTop: placement.marginTop,
           marginBottom: placement.marginBottom,
           maxHeight: placement.maxHeight,
+          minWidth: openWidth ?? undefined,
+          transform: shift ? `translateX(-${shift}px)` : undefined,
         };
 
   const menu = (
@@ -271,6 +286,8 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
         }}
         disabled={disabled}
         title={title}
+        // A value cut with an ellipsis shows in full on hover.
+        onMouseEnter={title ? undefined : (e) => titleIfTruncated(e.currentTarget)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-label={ariaLabel}

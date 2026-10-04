@@ -520,6 +520,10 @@ export class Notifier {
       const lang = this.deps.getLanguage();
       for (const s of mine) {
         const before = state.materialy[String(s.id)];
+        // A meeting created since the last poll arrives with whatever it already
+        // had: only a status changed on a meeting already seen is announced.
+        // Checked first — `before` is what the step comparison below reads.
+        if (before === undefined) continue;
         if (before === snapshot[String(s.id)]) continue;
         const krok = s.materialyStatus;
         if (!isMaterialyKrok(krok)) continue;
@@ -529,9 +533,6 @@ export class Notifier {
           SPOTKANIE_MATERIALY_STATUSES.indexOf(status as (typeof SPOTKANIE_MATERIALY_STATUSES)[number]);
         if (rank(krok) <= rank(before.split('|')[0])) continue;
         if (mailbox(s.materialyZmienioneBy) === email) continue;
-        // A meeting created since the last poll arrives with whatever it already
-        // had: only a status changed on a meeting already seen is announced.
-        if (state.materialy[String(s.id)] === undefined) continue;
         events.push({
           id: MATERIALY_NOTIFICATION[krok],
           title: text.materialyTitle[krok],

@@ -1,7 +1,7 @@
 import React from 'react';
 import { translations, Language } from '../translations';
 import Icon from './Icon';
-import ModalDismiss from './Modal';
+import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
 import ReleaseNotesBody from './ReleaseNotes';
 import { Release } from '../../shared/release-notes';
 
@@ -30,28 +30,27 @@ const WhatsNewModal: React.FC<WhatsNewModalProps> = ({
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div
-        className="modal wn-modal"
+        className="modal modal--xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={t.whatsNewModalTitle}
       >
         <ModalDismiss onClose={onClose} ariaLabel={t.close} />
-        <div className="modal-header wn-modal__header">
-          <Icon name="sparkles" size={18} /> {t.whatsNewModalTitle}
-        </div>
+        <ModalHeader icon="sparkles" title={t.whatsNewModalTitle} subtitle={t.whatsNewModalIntro} />
         <div className="modal-body wn-modal__body">
-          <p className="wn-modal__intro">{t.whatsNewModalIntro}</p>
           <ReleaseNotesBody release={release} language={language} compactHero />
         </div>
-        <div className="modal-footer">
-          <button type="button" className="button button-secondary" onClick={onOpenFullView}>
-            <Icon name="file-text" size={14} />{' '}{t.whatsNewSeeAll}
-          </button>
-          <button type="button" className="button button-primary" onClick={onClose}>
-            <Icon name="check" size={14} />{' '}{t.whatsNewGotIt}
-          </button>
-        </div>
+        <ModalFooter
+          note={
+            <button type="button" className="button button-small button-subtle" onClick={onOpenFullView}>
+              <Icon name="file-text" size={13} /> {t.whatsNewSeeAll}
+            </button>
+          }
+          onCancel={onClose}
+          cancelLabel={t.whatsNewGotIt}
+          autoFocus="cancel"
+        />
       </div>
     </div>
   );

@@ -3,6 +3,9 @@ import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 import path from 'path';
 import fs from 'fs';
+import { pathToFileURL } from 'url';
+import { spawn } from 'child_process';
+import { isConversionCancelled } from '../shared/conversion-cancel';
 import DatabaseService from './database';
 import ConverterRegistry, { setDatabaseInstance } from './converterRegistry';
 import {
@@ -18,6 +21,11 @@ import {
   SpotkanieTerminStatus,
   SpotkanieMaterialyStatus,
   SpotkanieMaterialyKrok,
+  MailingAdresaci,
+  MailingExportRequest,
+  ZebranieInput,
+  ZebranieStatus,
+  ZebranieWersjaInput,
   ZadanieInput,
   ZadanieStatus,
   ZadanieZalacznik,
@@ -46,6 +54,8 @@ import { formatApartmentMappingLine, parseApartmentMappingLine } from '../shared
 import { extractPdfText } from '../shared/pdf-utils';
 import { sanitizeForFilename } from '../shared/outputPaths';
 import { extractAccountNumbersFromFile } from '../shared/account-extractor-node';
+import { resolveScanConflicts, scanStatementsFolder, sha1, statementPeriodOf } from './statementScanner';
+import type { ConversionHistory, ScanDecision } from '../shared/types';
 import {
   DEFAULT_ZALICZKI_MODEL,
   ZALICZKI_MODELS,
@@ -72,6 +82,8 @@ import {
   MailingSendRequest,
   getMailingFilesInfo,
   cleanupMailingFiles,
+  exportMailing,
+  previewOdbiorcy,
 } from './mailing/service';
 import { verifySmtp } from './mailing/sender';
 
@@ -1760,9 +1772,64 @@ function setupIpcHandlers() {
     },
   );
 
+  /**
+   * Write a conversion to the history log and to the dashboard's record, with
+   * the month the STATEMENT covers — read from its transactions, the way the
+   * folder scan reads them. September's statement converted in October is
+   * September's work; the conversion date said October. Unreadable ⇒ no month,
+   * and the dashboard falls back to the conversion date.
+   *
+   * The input file's hash goes with it: it links the conversion to the pinned
+   * statement even after someone renames or moves the file in the folder.
+   */
+  const recordConversion = async (
+    converterId: string | null | undefined,
+    data: Parameters<typeof database.addConversionHistory>[0],
+  ): Promise<void> => {
+    let monthKey: string | null = null;
+    let inputHash: string | null = null;
+    if (data.inputPath && fs.existsSync(data.inputPath)) {
+      // Labels for the dashboard — never fail a conversion over either.
+      if (converterId) {
+        try {
+          monthKey = (await statementPeriodOf(converterId, data.inputPath))?.monthKey ?? null;
+        } catch {
+          monthKey = null;
+        }
+      }
+      try {
+        inputHash = await sha1(data.inputPath);
+      } catch {
+        inputHash = null;
+      }
+    }
+    await database.addConversionHistory({ ...data, monthKey, inputHash });
+  };
+
+  // Conversions in flight, by input file — "Anuluj" aborts one by its path.
+  const activeConversions = new Map<string, AbortController>();
+  const startConversion = (inputPath: string): AbortController => {
+    activeConversions.get(inputPath)?.abort();
+    const controller = new AbortController();
+    activeConversions.set(inputPath, controller);
+    return controller;
+  };
+  const endConversion = (inputPath: string, controller: AbortController) => {
+    if (activeConversions.get(inputPath) === controller) activeConversions.delete(inputPath);
+  };
+
+  ipcMain.handle(IPC_CHANNELS.CANCEL_CONVERSION, async (_, inputPath: string) => {
+    const controller = activeConversions.get(inputPath);
+    if (!controller) return false;
+    log.info(`[CONVERT] cancel requested: ${path.basename(inputPath)}`);
+    controller.abort();
+    return true;
+  });
+
   ipcMain.handle(
     IPC_CHANNELS.CONVERT_FILE,
     async (_, inputPath: string, bankId: number, fileName: string, adresId?: number | null, accountTypeId?: number | null) => {
+      const controller = startConversion(inputPath);
       try {
         // Nothing here works without a session: the bank, address and
         // contractor lookups all live in Supabase, and an unauthorized read
@@ -1817,7 +1884,8 @@ function setupIpcHandlers() {
           fileName,
           bank.name,
           undefined,
-          accountConfig
+          accountConfig,
+          controller.signal
         );
 
         // Check if review is needed
@@ -1829,7 +1897,7 @@ function setupIpcHandlers() {
         }
 
         // Save to history (only if no review needed)
-        await database.addConversionHistory({
+        await recordConversion(bank.converterId, {
           fileName,
           bankName: bank.name,
           converterName: converter.name,
@@ -1844,12 +1912,17 @@ function setupIpcHandlers() {
           outputPath: finalOutputPath,
         };
       } catch (error: unknown) {
+        // Cancelled by the user: not a failure, nothing to record.
+        if (isConversionCancelled(error)) {
+          log.info(`[CONVERT] cancelled: ${fileName}`);
+          return { success: false, cancelled: true };
+        }
         // Save error to history
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         const bank = await database.getBankById(bankId);
         if (bank) {
           const converter = converterRegistry.getConverter(bank.converterId);
-          await database.addConversionHistory({
+          await recordConversion(bank.converterId, {
             fileName,
             bankName: bank.name,
             converterName: converter?.name || 'Unknown',
@@ -1865,6 +1938,8 @@ function setupIpcHandlers() {
           success: false,
           error: errorMessage,
         };
+      } finally {
+        endConversion(inputPath, controller);
       }
     }
   );
@@ -1935,6 +2010,7 @@ function setupIpcHandlers() {
           // ignore — renderer may have closed
         }
       };
+      const controller = startConversion(inputPath);
       try {
         // Nothing here works without a session: the bank, address and
         // contractor lookups all live in Supabase, and an unauthorized read
@@ -1988,7 +2064,8 @@ function setupIpcHandlers() {
             fileName,
             bank.name,
             onProgress,
-            accountConfig
+            accountConfig,
+            controller.signal
           );
 
           // Check if review is needed
@@ -1999,7 +2076,7 @@ function setupIpcHandlers() {
             };
           }
 
-          await database.addConversionHistory({
+          await recordConversion(bank.converterId, {
             fileName,
             bankName: bank.name,
             converterName: converter.name,
@@ -2014,6 +2091,8 @@ function setupIpcHandlers() {
             outputPath: finalOutputPath,
           };
         } catch (aiError: unknown) {
+          // Cancelled — never "fall back" into a second, non-AI conversion.
+          if (isConversionCancelled(aiError)) throw aiError;
           const aiErrorMessage = getErrorMessage(aiError);
           
           // Check if this is a billing/quota error - if so, don't fallback, just fail
@@ -2042,7 +2121,8 @@ function setupIpcHandlers() {
               fileName,
               bank.name,
               onProgress,
-              accountConfig
+              accountConfig,
+              controller.signal
             );
 
             // Check if review is needed
@@ -2054,7 +2134,7 @@ function setupIpcHandlers() {
               };
             }
 
-            await database.addConversionHistory({
+            await recordConversion(bank.converterId, {
               fileName,
               bankName: bank.name,
               converterName: converter.name,
@@ -2070,17 +2150,22 @@ function setupIpcHandlers() {
               warningMessage: fallbackMessage,
             };
           } catch (fallbackError: unknown) {
+            if (isConversionCancelled(fallbackError)) throw fallbackError;
             // If even standard conversion fails, throw original AI error
             log.error('[Fallback Failed]:', fallbackError);
             throw new Error(`AI failed: ${aiErrorMessage}. Standard conversion also failed.`);
           }
         }
       } catch (error: unknown) {
+        if (isConversionCancelled(error)) {
+          log.info(`[CONVERT_AI] cancelled: ${fileName}`);
+          return { success: false, cancelled: true };
+        }
         const errorMessage = getErrorMessage(error);
         const bank = await database.getBankById(bankId);
         if (bank) {
           const converter = converterRegistry.getConverter(bank.converterId);
-          await database.addConversionHistory({
+          await recordConversion(bank.converterId, {
             fileName,
             bankName: bank.name,
             converterName: converter?.name || 'Unknown',
@@ -2096,6 +2181,8 @@ function setupIpcHandlers() {
           success: false,
           error: errorMessage,
         };
+      } finally {
+        endConversion(inputPath, controller);
       }
     }
   );
@@ -2110,7 +2197,7 @@ function setupIpcHandlers() {
         // Add to history
         if (result.fileName && result.bankName && result.inputPath && result.outputPath) {
           const converter = converterRegistry.getConverter(result.converterId || '');
-          await database.addConversionHistory({
+          await recordConversion(result.converterId, {
             fileName: result.fileName,
             bankName: result.bankName,
             converterName: converter?.name || 'Unknown',
@@ -2188,8 +2275,22 @@ function setupIpcHandlers() {
       }
       const result = await shell.openPath(filePath);
       // shell.openPath returns empty string on success, error message on failure
-      return result === '';
-    } catch {
+      if (result === '') return true;
+      // The file is there, but no program is registered for its type — the
+      // usual case for a bank file (.mt940, .exp, .sta…). Those are text, so
+      // they open in the system's text editor instead of failing as "missing".
+      if (!fs.statSync(filePath).isFile()) return false;
+      log.info(`[OPEN] no program for ${path.extname(filePath) || 'this file'}, opening as text:`, result);
+      if (process.platform === 'darwin') {
+        spawn('open', ['-t', filePath], { detached: true, stdio: 'ignore' }).unref();
+      } else if (process.platform === 'win32') {
+        spawn('notepad.exe', [filePath], { detached: true, stdio: 'ignore' }).unref();
+      } else {
+        shell.showItemInFolder(filePath);
+      }
+      return true;
+    } catch (error: unknown) {
+      log.warn('[OPEN] could not open', filePath, getErrorMessage(error));
       return false;
     }
   });
@@ -2207,6 +2308,7 @@ function setupIpcHandlers() {
       outputFolder: database.getSetting('outputFolder') || '',
       impexFolder: database.getSetting('impexFolder') || '',
       swrkFolder: database.getSetting('swrkFolder') || '',
+      statementsFolder: database.getSetting('statementsFolder') || '',
       darkMode: boolSetting('darkMode'),
       language: database.getSetting('language') || 'pl',
       skipUserApproval: boolSetting('skipUserApproval'),
@@ -2237,6 +2339,18 @@ function setupIpcHandlers() {
       // Expanded unless explicitly folded, so installs that predate this setting
       // see the bookings exactly as before — `boolSetting` reads absent as false.
       bookingsCollapsed: boolSetting('bookingsCollapsed'),
+      // A JSON list of filter ids, as for the menu; null = the default order.
+      bookingsTileOrder: (() => {
+        const raw = database.getSetting('bookingsTileOrder') as unknown;
+        if (typeof raw !== 'string' || !raw) return null;
+        try {
+          const parsed: unknown = JSON.parse(raw);
+          return Array.isArray(parsed) ? parsed.map(String) : null;
+        } catch {
+          return null;
+        }
+      })(),
+      bookingsMonth: database.getSetting('bookingsMonth') || '',
       // Opt-in, so an absent value reads as off — `boolSetting` already does
       // exactly that.
       calendarHoverCard: boolSetting('calendarHoverCard'),
@@ -2258,6 +2372,11 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.SET_SWRK_FOLDER, async (_, folderPath: string) => {
     database.setSetting('swrkFolder', folderPath);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SET_STATEMENTS_FOLDER, async (_, folderPath: string) => {
+    database.setSetting('statementsFolder', folderPath);
     return true;
   });
 
@@ -2330,8 +2449,19 @@ function setupIpcHandlers() {
     return true;
   });
 
+  ipcMain.handle(IPC_CHANNELS.SET_BOOKINGS_TILE_ORDER, async (_, order: string[] | null) => {
+    const clean = Array.isArray(order) ? order.map(String) : null;
+    database.setSetting('bookingsTileOrder', clean ? JSON.stringify(clean) : '');
+    return true;
+  });
+
   ipcMain.handle(IPC_CHANNELS.SET_BOOKINGS_COLLAPSED, async (_, collapsed: boolean) => {
     database.setSetting('bookingsCollapsed', collapsed.toString());
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SET_BOOKINGS_MONTH, async (_, monthKey: string) => {
+    database.setSetting('bookingsMonth', /^\d{4}-\d{2}$/.test(monthKey ?? '') ? monthKey : '');
     return true;
   });
 
@@ -2471,11 +2601,94 @@ function setupIpcHandlers() {
     }
   });
 
-  // Mark / unmark history rows as posted in the external "DOM" program. The app
-  // has no window into DOM, so this is purely the user's own tick — stored with
-  // who set it, because the history table is shared by the whole team.
+  // The dashboard's own conversion records — NOT the history log, which the
+  // Historia module may clear. A missing table (the migration not run yet) falls
+  // back to the history, so the dashboard still shows the month meanwhile.
+  // Conversions made before the statement month and the input file's hash were
+  // recorded: fill them in from the source file where this machine can still
+  // read it (paths are the converting machine's — another computer's files are
+  // simply skipped). The hash only from a file unchanged since the conversion —
+  // a newer version saved under the same name is not what was converted, and
+  // its hash would link the conversion to a statement it never read.
+  // Once per record per session; the next dashboard load shows the result.
+  const sourceBackfillTried = new Set<number>();
+  const HASH_CLOCK_SKEW_MS = 2 * 60 * 1000; // file server vs database clock, as in shared/bookings
+  const backfillSourceFacts = async (rows: ConversionHistory[]): Promise<void> => {
+    const todo = rows.filter(
+      (r) =>
+        (!r.monthKey || !r.inputHash) &&
+        r.status === 'success' &&
+        !sourceBackfillTried.has(r.id) &&
+        !!r.inputPath &&
+        fs.existsSync(r.inputPath),
+    );
+    if (todo.length === 0) return;
+    const banks = await database.getAllBanks();
+    let months = 0;
+    let hashes = 0;
+    for (const row of todo) {
+      sourceBackfillTried.add(row.id);
+      const facts: { monthKey?: string; inputHash?: string } = {};
+      if (!row.monthKey) {
+        const bank = banks.find((b) => b.name === row.bankName && !!b.converterId);
+        try {
+          const period = bank ? await statementPeriodOf(bank.converterId, row.inputPath) : null;
+          if (period) facts.monthKey = period.monthKey;
+        } catch {
+          /* unreadable now — it stays in the month it was converted in */
+        }
+      }
+      if (!row.inputHash) {
+        try {
+          const { mtimeMs } = await fs.promises.stat(row.inputPath);
+          if (mtimeMs <= Date.parse(row.convertedAt) + HASH_CLOCK_SKEW_MS) facts.inputHash = await sha1(row.inputPath);
+        } catch {
+          /* unreadable now — it links by file name, as before */
+        }
+      }
+      if (facts.monthKey || facts.inputHash) {
+        try {
+          await database.setKsiegowanieSourceFacts(row.id, facts);
+          if (facts.monthKey) months++;
+          if (facts.inputHash) hashes++;
+        } catch (error: unknown) {
+          log.warn(`[KSIEGOWANIA] conversion ${row.id} not updated:`, getErrorMessage(error));
+        }
+      }
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    if (months > 0 || hashes > 0) {
+      log.info(`[KSIEGOWANIA] older conversions filled in: ${months} statement month(s), ${hashes} input hash(es)`);
+    }
+  };
+
+  ipcMain.handle(IPC_CHANNELS.GET_KS_KONWERSJE, async () => {
+    try {
+      const rows = await database.getKsiegowaniaKonwersje();
+      void backfillSourceFacts(rows).catch((error: unknown) =>
+        log.warn('[KSIEGOWANIA] source facts backfill failed:', getErrorMessage(error)),
+      );
+      return rows;
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      // Only when the table itself is not there yet (its migration not run) is
+      // the history an acceptable stand-in. For any other failure it is not:
+      // its ids are not the dashboard's, and a DOM tick set on a history row
+      // would land on an unrelated dashboard record.
+      if (/ksiegowania_konwersje/.test(message) && /relation|Could not find the table/.test(message)) {
+        log.error('[KSIEGOWANIA] conversion records table missing, showing the history instead:', message);
+        return await database.getAllHistory();
+      }
+      log.error('[KSIEGOWANIA] conversion records read failed:', message);
+      throw error;
+    }
+  });
+
+  // Mark / unmark conversion records as posted in the external "DOM" program.
+  // The app has no window into DOM, so this is purely the user's own tick —
+  // stored with who set it, because the records are shared by the whole team.
   ipcMain.handle(
-    IPC_CHANNELS.SET_HISTORY_BOOKED_IN_DOM,
+    IPC_CHANNELS.SET_KS_BOOKED_IN_DOM,
     async (_, ids: number[], booked: boolean) => {
       try {
         const clean = (Array.isArray(ids) ? ids : []).filter(
@@ -2490,13 +2703,41 @@ function setupIpcHandlers() {
             by = null; // signature only — never block the tick over it
           }
         }
-        await database.setHistoryBookedInDom(clean, booked, by);
+        await database.setKsiegowanieBookedInDom(clean, booked, by);
         return { success: true, updated: clean.length };
       } catch (error: unknown) {
         return { success: false, error: getErrorMessage(error) };
       }
     },
   );
+
+  // A pinned statement posted without converting it — the fallback when it went
+  // into DOM some other way. Signed like the DOM tick.
+  ipcMain.handle(IPC_CHANNELS.MARK_KS_PLIK_BOOKED, async (_, plikId: number) => {
+    try {
+      if (typeof plikId !== 'number' || !Number.isFinite(plikId)) throw new Error('invalid file id');
+      let by: string | null = null;
+      try {
+        by = (await authService.getSession())?.email ?? null;
+      } catch {
+        by = null;
+      }
+      await database.markKsiegowaniePlikBooked(plikId, by);
+      return { success: true };
+    } catch (error: unknown) {
+      return { success: false, error: getErrorMessage(error) };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.UNDO_KS_MANUAL, async (_, id: number) => {
+    try {
+      if (typeof id !== 'number' || !Number.isFinite(id)) throw new Error('invalid record id');
+      await database.undoKsiegowanieManual(id);
+      return { success: true };
+    } catch (error: unknown) {
+      return { success: false, error: getErrorMessage(error) };
+    }
+  });
 
   // Backup — full snapshot (Supabase tables + local settings) to a single JSON file
   ipcMain.handle(IPC_CHANNELS.BACKUP_EXPORT, async () => {
@@ -2723,6 +2964,14 @@ function setupIpcHandlers() {
     return true;
   });
 
+  ipcMain.handle(
+    IPC_CHANNELS.SET_ZGN_ADRESY,
+    async (_, jednostkaId: number, adresIds: number[]) => {
+      await database.setZgnJednostkaAdresy(jednostkaId, adresIds);
+      return true;
+    },
+  );
+
   // Zarząd — a community's board, edited as one list in its Adresy modal.
   ipcMain.handle(IPC_CHANNELS.SET_ADRES_ZARZAD, async (_, id: number, zarzad: unknown) => {
     await database.setAdresZarzad(id, zarzad);
@@ -2895,6 +3144,159 @@ function setupIpcHandlers() {
   ipcMain.handle(IPC_CHANNELS.MAILING_TEST_SMTP, async () => {
     return await verifySmtp(database.getMailingSmtp());
   });
+
+  // Typy mailingu — the kinds templates belong to, each with default recipients.
+  ipcMain.handle(IPC_CHANNELS.MAILING_GET_TYPY, async () => {
+    return await database.getMailingTypy();
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.MAILING_ADD_TYP,
+    async (_, nazwa: string, opis: string, adresaci: MailingAdresaci) => {
+      return await database.addMailingTyp(nazwa, opis ?? '', adresaci);
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.MAILING_UPDATE_TYP,
+    async (_, id: number, nazwa: string, opis: string, adresaci: MailingAdresaci) => {
+      await database.updateMailingTyp(id, nazwa, opis ?? '', adresaci);
+      return true;
+    },
+  );
+
+  // Refusals (built-in kind, kind still used by templates) come back as an
+  // error message the UI shows as it is — they are answers, not crashes.
+  ipcMain.handle(IPC_CHANNELS.MAILING_DELETE_TYP, async (_, id: number) => {
+    try {
+      await database.deleteMailingTyp(id);
+      return { success: true };
+    } catch (error: unknown) {
+      return { error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  // "Pobierz jako e-mail / PDF" — the letter as files in Downloads, no send.
+  ipcMain.handle(IPC_CHANNELS.MAILING_EXPORT, async (_, request: MailingExportRequest) => {
+    try {
+      const smtp = database.getMailingSmtp();
+      const result = await exportMailing(
+        {
+          database,
+          downloadsDir: app.getPath('downloads'),
+          fromAddress: smtp.user ?? '',
+          fromName: smtp.fromName ?? '',
+        },
+        request,
+      );
+      return { success: true, ...result };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      log.error('[MAILING] export failed:', message);
+      return { error: message };
+    }
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.MAILING_RESOLVE_ODBIORCY,
+    async (
+      _,
+      request: {
+        adresId: number | null;
+        spotkanieId?: number | null;
+        adresaci: MailingAdresaci;
+        wykluczeni?: string[];
+      },
+    ) => {
+      return await previewOdbiorcy(database, request);
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.MAILING_SHOW_IN_FOLDER, async (_, filePath: string) => {
+    if (typeof filePath !== 'string' || !fs.existsSync(filePath)) return false;
+    shell.showItemInFolder(filePath);
+    return true;
+  });
+
+  /* ------------------------------ Zebrania ------------------------------ */
+  // Who created / edited / marked comes from the session, never from the
+  // renderer — it is a record of who did something, not a field to fill in.
+
+  const zebraniaWho = async (): Promise<string> => {
+    try {
+      return (await authService.getSession())?.email ?? '';
+    } catch {
+      return '';
+    }
+  };
+
+  ipcMain.handle(IPC_CHANNELS.GET_ZEBRANIA, async () => {
+    return await database.getZebrania();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ZEBRANIE_FROM_SPOTKANIE, async (_, spotkanieId: number) => {
+    return await database.createZebranieFromSpotkanie(spotkanieId, await zebraniaWho());
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ZEBRANIE_ENSURE_FOR_SPOTKANIE, async (_, spotkanieId: number) => {
+    return await database.ensureZebranieForSpotkanie(spotkanieId, await zebraniaWho());
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ADD_ZEBRANIE, async (_, input: ZebranieInput) => {
+    return await database.addZebranie(input, await zebraniaWho());
+  });
+
+  ipcMain.handle(IPC_CHANNELS.UPDATE_ZEBRANIE, async (_, id: number, input: ZebranieInput) => {
+    await database.updateZebranie(id, input);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_ZEBRANIE, async (_, id: number) => {
+    await database.deleteZebranie(id);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ADD_ZEBRANIE_WERSJA, async (_, zebranieId: number) => {
+    return await database.addZebranieWersja(zebranieId, await zebraniaWho());
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.UPDATE_ZEBRANIE_WERSJA,
+    async (_, id: number, input: ZebranieWersjaInput) => {
+      await database.updateZebranieWersja(id, input, await zebraniaWho());
+      return true;
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.SET_ZEBRANIE_WERSJA_STATUS,
+    async (_, id: number, status: ZebranieStatus) => {
+      await database.setZebranieWersjaStatus(id, status, await zebraniaWho());
+      return true;
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.RECORD_ZEBRANIE_POBRANIE,
+    async (_, wersjaId: number, materialId: string, pliki: string[]) => {
+      try {
+        await database.recordZebraniePobranie(
+          wersjaId,
+          materialId,
+          Array.isArray(pliki) ? pliki.map(String) : [],
+          await zebraniaWho(),
+        );
+        return true;
+      } catch (error: unknown) {
+        // A record of a download, not the download: the files are already there.
+        log.error(
+          '[ZEBRANIA] download record failed:',
+          error instanceof Error ? error.message : String(error),
+        );
+        return false;
+      }
+    },
+  );
 
   // Kalendarz (spotkania)
   ipcMain.handle(IPC_CHANNELS.GET_APP_USERS, async () => {
@@ -3269,6 +3671,109 @@ function setupIpcHandlers() {
   ipcMain.handle(IPC_CHANNELS.DELETE_KS_UWAGA, async (_, id: number) => {
     await database.deleteKsiegowanieUwaga(id);
     return true;
+  });
+
+  /* ------------- Księgowania: "Znajdź pliki księgowe" (folder scan) ------------- */
+
+  ipcMain.handle(IPC_CHANNELS.GET_KS_PLIKI, async () => {
+    try {
+      return await database.getKsiegowaniaPliki();
+    } catch (error: unknown) {
+      // The dashboard reads this on every load: a missing table (the migration
+      // not run yet) must only hide the scan's filters, not the dashboard.
+      log.error('[KSIEGOWANIA] files read failed:', error instanceof Error ? error.message : String(error));
+      return [];
+    }
+  });
+
+  // One scan at a time: a second click while the first is reading the folder
+  // would pin the same files twice.
+  let scanRunning = false;
+
+  ipcMain.handle(IPC_CHANNELS.SCAN_KS_PLIKI, async (event, monthKey: string) => {
+    if (!/^\d{4}-\d{2}$/.test(monthKey ?? '')) return { success: false, error: 'invalid-month' };
+    const root = (database.getSetting('statementsFolder') || '').trim();
+    if (!root) return { success: false, error: 'no-folder' };
+    if (!fs.existsSync(root)) return { success: false, error: 'folder-missing', folder: root };
+    if (scanRunning) return { success: false, error: 'busy' };
+    scanRunning = true;
+    try {
+      await authService.requireSession();
+      const [adresy, banks, kontoTypy, history, existing] = await Promise.all([
+        database.getAllAdresy(),
+        database.getAllBanks(),
+        database.getKontoTypy(),
+        // Converted / ticked is the dashboard's state, not the history log's.
+        database.getKsiegowaniaKonwersje(),
+        database.getKsiegowaniaPliki(monthKey),
+      ]);
+      const report = await scanStatementsFolder(
+        {
+          root,
+          monthKey,
+          adresy,
+          banks: banks.filter((b) => !!b.converterId),
+          kontoTypy,
+          history,
+          existing,
+          scannedBy: await sessionEmail(),
+          onProgress: (p) => {
+            if (!event.sender.isDestroyed()) event.sender.send('ksiegowania:scan-progress', p);
+          },
+        },
+        database,
+      );
+      log.info(
+        `[KSIEGOWANIA] scan ${monthKey}: examined ${report.examined}, added ${report.added.length}, ` +
+          `conflicts ${report.conflicts.length}, errors ${report.errors.length}, unrecognized ${report.unrecognized.length}`,
+      );
+      return { success: true, report };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      log.error('[KSIEGOWANIA] scan failed:', message);
+      return { success: false, error: message };
+    } finally {
+      scanRunning = false;
+    }
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.RESOLVE_KS_SCAN,
+    async (_, decisions: { id: string; decision: ScanDecision }[]) => {
+      const root = (database.getSetting('statementsFolder') || '').trim();
+      const valid = (Array.isArray(decisions) ? decisions : []).filter(
+        (d) => typeof d?.id === 'string' && ['replace', 'keep', 'add'].includes(d?.decision),
+      );
+      return resolveScanConflicts(root, valid, database);
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.DELETE_KS_PLIK, async (_, id: number) => {
+    await database.deleteKsiegowaniePlik(id);
+    return true;
+  });
+
+  // A PDF's preview from the scan report: a small window over the app, with
+  // Chromium's own PDF viewer — so a file the scan could not place can be read
+  // without leaving the dialog. Falls back to the system's viewer.
+  ipcMain.handle(IPC_CHANNELS.PREVIEW_PDF, async (_, filePath: string) => {
+    if (typeof filePath !== 'string' || !/\.pdf$/i.test(filePath) || !fs.existsSync(filePath)) return false;
+    const preview = new BrowserWindow({
+      parent: mainWindow ?? undefined,
+      width: 920,
+      height: 1080,
+      title: path.basename(filePath),
+      autoHideMenuBar: true,
+      webPreferences: { plugins: true, contextIsolation: true, nodeIntegration: false, sandbox: true },
+    });
+    try {
+      await preview.loadURL(pathToFileURL(filePath).toString());
+      return true;
+    } catch (error: unknown) {
+      log.warn('[PREVIEW] PDF viewer failed, opening with the system viewer:', getErrorMessage(error));
+      if (!preview.isDestroyed()) preview.destroy();
+      return (await shell.openPath(filePath)) === '';
+    }
   });
 
   /* ------------------------- Meeting locations ------------------------- */

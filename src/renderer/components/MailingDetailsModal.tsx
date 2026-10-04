@@ -1,12 +1,13 @@
-import React from 'react';
-import { MailingHistoryEntry } from '../../shared/types';
+import React, { useEffect, useState } from 'react';
+import { MailingHistoryEntry, MailingTypDef } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { useNotify } from './Notifications';
 import Icon from './Icon';
-import ModalDismiss from './Modal';
+import { FormSection } from './FormSection';
+import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
 import { buildMailShell, formatFieldValue } from '../../shared/mailing-template';
 import { MAILING_LOGO_SVG_DATA_URI } from '../../shared/mailing-logo';
-import { MAILING_TYPE_OPTIONS } from '../views/Mailing';
+import { MailingOdbiorcyList } from './MailingRecipientsEditor';
 
 /**
  * One send, in full — extracted from the Mailing history so the Kalendarz can
@@ -41,6 +42,26 @@ interface DetailsModalProps {
 const MailingDetailsModal: React.FC<DetailsModalProps> = ({ entry, language, onClose }) => {
   const t = translations[language];
   const notify = useNotify();
+  /**
+   * Kinds, for the kind's display name. Loaded here rather than passed in: the
+   * modal is opened from the history and from the Kalendarz alike, and a row
+   * stores only the kind's key. Until they arrive (or for a deleted kind) the
+   * key itself is shown.
+   */
+  const [typy, setTypy] = useState<MailingTypDef[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    window.electronAPI
+      .mailingGetTypy()
+      .then((data) => {
+        if (alive) setTypy(data);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const openAttachment = async (filePath: string) => {
     const ok = await window.electronAPI.openFile(filePath);
@@ -49,71 +70,75 @@ const MailingDetailsModal: React.FC<DetailsModalProps> = ({ entry, language, onC
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 760 }}>
+      <div className="modal modal--lg" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onClose} />
-        <div className="modal-header">{t.mailingDetailsTitle}</div>
-        <div className="modal-body">
-          <table style={{ marginBottom: '18px' }}>
-            <tbody>
-              <tr>
-                <th style={{ width: '32%' }}>{t.mailingHistorySentAt}</th>
-                <td>{formatDateTime(entry.sentAt, language)}</td>
-              </tr>
-              <tr>
-                <th>{t.mailingType}</th>
-                <td>
-                  {MAILING_TYPE_OPTIONS.find((o) => o.value === entry.typ)?.label ?? entry.typ}
-                </td>
-              </tr>
-              <tr>
-                <th>{t.mailingTemplate}</th>
-                <td>{entry.templateName || '—'}</td>
-              </tr>
-              <tr>
-                <th>{t.mailingResultAddress}</th>
-                <td>{entry.adresNazwa || '—'}</td>
-              </tr>
-              <tr>
-                <th>{t.mailingResultRecipient}</th>
-                <td>
-                  {entry.jednostkaNazwa || '—'}
-                  {entry.jednostkaEmail && (
-                    <div style={{ opacity: 0.7, fontSize: '12px' }}>{entry.jednostkaEmail}</div>
-                  )}
-                </td>
-              </tr>
-              <tr>
-                <th>{t.mailingHistoryFrom}</th>
-                <td>{entry.sentFrom || '—'}</td>
-              </tr>
-              <tr>
-                <th>{t.mailingResultStatus}</th>
-                <td>
-                  {entry.status === 'success' ? (
-                    <span style={{ color: 'var(--success)' }}>{t.mailingStatusSent}</span>
-                  ) : (
-                    <span style={{ color: 'var(--danger)' }}>
-                      {entry.errorMessage ?? t.mailingStatusError}
-                    </span>
-                  )}
-                  {entry.status === 'success' && entry.errorMessage && (
-                    <div style={{ color: 'var(--danger)', fontSize: '12px', marginTop: '4px' }}>
-                      {entry.errorMessage}
-                    </div>
-                  )}
-                </td>
-              </tr>
-              <tr>
-                <th>{t.mailingSubject}</th>
-                <td>{entry.subject || '—'}</td>
-              </tr>
-            </tbody>
-          </table>
+        <ModalHeader
+          icon="mail"
+          title={t.mailingDetailsTitle}
+          subtitle={[entry.adresNazwa, formatDateTime(entry.sentAt, language)].filter(Boolean).join(' · ')}
+        />
+        <div className="modal-body modal-body--sectioned">
+          <FormSection icon="mail" title={t.mailingDetailsSectionSend}>
+            <dl className="facts">
+              <dt>{t.mailingHistorySentAt}</dt>
+              <dd>{formatDateTime(entry.sentAt, language)}</dd>
+              <dt>{t.mailingType}</dt>
+              <dd>{typy.find((k) => k.klucz === entry.typ)?.nazwa ?? entry.typ}</dd>
+              <dt>{t.mailingTemplate}</dt>
+              <dd>{entry.templateName || '—'}</dd>
+              <dt>{t.mailingResultAddress}</dt>
+              <dd>{entry.adresNazwa || '—'}</dd>
+              <dt>{t.mailingHistoryFrom}</dt>
+              <dd>{entry.sentFrom || '—'}</dd>
+              <dt>{t.mailingResultStatus}</dt>
+              <dd>
+                {entry.status === 'success' ? (
+                  <span className="result-status is-ok">
+                    <Icon name="check-circle" size={14} /> {t.mailingStatusSent}
+                  </span>
+                ) : (
+                  <span className="result-status is-error">
+                    <Icon name="x-circle" size={14} /> {entry.errorMessage ?? t.mailingStatusError}
+                  </span>
+                )}
+                {entry.status === 'success' && entry.errorMessage && (
+                  <div className="form-field__error">{entry.errorMessage}</div>
+                )}
+              </dd>
+            </dl>
+          </FormSection>
+
+          <FormSection icon="users" title={t.mailingResultRecipient}>
+            {/* Rows written since kinds have recipients list every addressee
+                with its group; older rows only know the one city unit. */}
+            {entry.odbiorcy && entry.odbiorcy.length > 0 ? (
+              <MailingOdbiorcyList language={language} odbiorcy={entry.odbiorcy} showGroup />
+            ) : (
+              <div>
+                {entry.jednostkaNazwa || '—'}
+                {entry.jednostkaEmail && <div className="form-table__sub">{entry.jednostkaEmail}</div>}
+              </div>
+            )}
+          </FormSection>
+
+          <FormSection icon="file-text" title={t.mailingDetailsSectionContent}>
+            <dl className="facts">
+              <dt>{t.mailingSubject}</dt>
+              <dd>{entry.subject || '—'}</dd>
+            </dl>
+            <div
+              className="mailing-preview"
+              // Stored body of a message this user composed and already sent, with
+              // the letterhead re-added so the record looks like what went out.
+              dangerouslySetInnerHTML={{
+                __html: buildMailShell(entry.bodyHtml, MAILING_LOGO_SVG_DATA_URI),
+              }}
+            />
+          </FormSection>
 
           {entry.fieldValues.length > 0 && (
-            <>
-              <h3 style={{ fontSize: '14px', marginBottom: '8px' }}>{t.mailingValuesTitle}</h3>
-              <table style={{ marginBottom: '18px' }}>
+            <FormSection icon="edit" title={t.mailingValuesTitle}>
+              <table className="form-table">
                 <thead>
                   <tr>
                     <th>{t.mailingFieldName}</th>
@@ -124,56 +149,43 @@ const MailingDetailsModal: React.FC<DetailsModalProps> = ({ entry, language, onC
                 <tbody>
                   {entry.fieldValues.map((f) => (
                     <tr key={f.nazwa}>
-                      <td>{f.nazwa}</td>
-                      <td>{f.tekst || '—'}</td>
+                      <td className="form-table__label">{f.nazwa}</td>
+                      <td>{f.tekst || <span className="cell-empty">—</span>}</td>
                       {/* With the unit, exactly as the sent letter read it. */}
-                      <td>{formatFieldValue(f.wartosc, f) || '—'}</td>
+                      <td>{formatFieldValue(f.wartosc, f) || <span className="cell-empty">—</span>}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </>
+            </FormSection>
           )}
 
-          <h3 style={{ fontSize: '14px', marginBottom: '8px' }}>{t.mailingBody}</h3>
-          <div
-            className="mailing-preview"
-            style={{ marginBottom: '18px' }}
-            // Stored body of a message this user composed and already sent, with
-            // the letterhead re-added so the record looks like what went out.
-            dangerouslySetInnerHTML={{
-              __html: buildMailShell(entry.bodyHtml, MAILING_LOGO_SVG_DATA_URI),
-            }}
-          />
-
-          <h3 style={{ fontSize: '14px', marginBottom: '8px' }}>{t.mailingAttachmentsTitle}</h3>
-          {entry.attachments.length > 0 ? (
-            <div>
-              {entry.attachments.map((a) => (
-                <div
-                  key={a.filePath}
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}
-                >
-                  <Icon name={a.kind === 'pdf' ? 'file-text' : 'clipboard'} size={14} />
-                  <button
-                    className="button button-small button-secondary"
-                    onClick={() => openAttachment(a.filePath)}
-                    title={a.filePath}
-                  >
-                    {a.fileName}
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ fontSize: '13px', opacity: 0.7 }}>{t.mailingNoAttachments}</div>
-          )}
+          <FormSection icon="paperclip" title={t.mailingAttachmentsTitle}>
+            {entry.attachments.length > 0 ? (
+              <div className="file-list">
+                {entry.attachments.map((a) => (
+                  <div key={a.filePath} className="file-list__row">
+                    <Icon name={a.kind === 'pdf' ? 'file-text' : 'paperclip'} size={14} />
+                    <button
+                      type="button"
+                      className="file-list__name file-list__name--link"
+                      onClick={() => openAttachment(a.filePath)}
+                      title={a.filePath}
+                    >
+                      {a.fileName}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="form-empty">
+                <Icon name="paperclip" size={16} />
+                {t.mailingNoAttachments}
+              </div>
+            )}
+          </FormSection>
         </div>
-        <div className="modal-footer">
-          <button className="button button-secondary" onClick={onClose}>
-            {t.close}
-          </button>
-        </div>
+        <ModalFooter onCancel={onClose} cancelLabel={t.close} />
       </div>
     </div>
   );

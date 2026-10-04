@@ -3,7 +3,7 @@ import React from 'react';
 // Lucide-style line icons (1.5 stroke, 24x24, rounded). Inline SVG, zero deps.
 // https://lucide.dev (ISC license) — selected paths reproduced here.
 
-type IconName =
+export type IconName =
   | 'folder'
   | 'bar-chart'
   | 'map-pin'
@@ -64,7 +64,9 @@ type IconName =
   | 'archive'
   | 'undo'
   | 'grip'
-  | 'copy';
+  | 'copy'
+  | 'more'
+  | 'minus';
 
 interface IconProps {
   name: IconName;
@@ -187,6 +189,14 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <rect x="9" y="9" width="12" height="12" rx="2" />
       <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
+    </>
+  ),
+  minus: <path d="M5 12h14" />,
+  more: (
+    <>
+      <circle cx="5" cy="12" r="1.2" />
+      <circle cx="12" cy="12" r="1.2" />
+      <circle cx="19" cy="12" r="1.2" />
     </>
   ),
   grip: (

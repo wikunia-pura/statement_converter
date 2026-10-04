@@ -3,8 +3,9 @@ import { Spotkanie, SpotkanieLokalizacja } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
+import { FormField, FormSection, RequiredNote } from '../components/FormSection';
 import Icon from '../components/Icon';
-import ModalDismiss from '../components/Modal';
+import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
 
 interface Props {
   language: Language;
@@ -63,68 +64,78 @@ const LokalizacjaFormModal: React.FC<FormModalProps> = ({
 
   const message = localError ?? error;
 
+  const submitOnEnter = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+  const unchanged =
+    !!editing &&
+    nazwa.trim() === editing.nazwa &&
+    adres.trim() === (editing.adres || '') &&
+    opis.trim() === (editing.opis || '');
+
   return (
     <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+      <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onCancel} ariaLabel={t.close} />
-        <div className="modal-header">{editing ? t.kalLokEdit : t.kalLokAdd}</div>
-        <div className="modal-body">
-          <div className="form-group">
-            <label htmlFor="lok-nazwa">{t.kalLokName}</label>
-            <input
-              id="lok-nazwa"
-              type="text"
-              value={nazwa}
-              placeholder={t.kalLokNamePlaceholder}
-              autoFocus
-              disabled={isSaving}
-              onChange={(e) => {
-                setNazwa(e.target.value);
-                if (localError) setLocalError(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSubmit();
-              }}
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="lok-adres">{t.kalLokAddress}</label>
-            <input
-              id="lok-adres"
-              type="text"
-              value={adres}
-              placeholder={t.kalLokAddressPlaceholder}
-              disabled={isSaving}
-              onChange={(e) => setAdres(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSubmit();
-              }}
-            />
-            <div style={{ fontSize: '12px', opacity: 0.7, marginTop: '4px' }}>
-              {t.kalLokAddressHint}
-            </div>
-          </div>
-          <div className="form-group">
-            <label htmlFor="lok-opis">{t.kalLokDesc}</label>
-            <textarea
-              id="lok-opis"
-              rows={3}
-              value={opis}
-              placeholder={t.kalLokDescPlaceholder}
-              disabled={isSaving}
-              onChange={(e) => setOpis(e.target.value)}
-            />
-          </div>
-          {message && <div style={{ fontSize: '12px', color: 'var(--danger)' }}>{message}</div>}
+        <ModalHeader
+          icon="map-pin"
+          title={editing ? t.kalLokEdit : t.kalLokAdd}
+          subtitle={editing ? editing.nazwa : t.kalLokFormSubtitleAdd}
+        />
+        <div className="modal-body modal-body--sectioned">
+          <FormSection icon="map-pin" title={t.kalLokSection} description={t.kalLokSectionDesc}>
+            <FormField label={t.kalLokName} htmlFor="lok-nazwa" required error={message}>
+              <input
+                id="lok-nazwa"
+                type="text"
+                value={nazwa}
+                placeholder={t.kalLokNamePlaceholder}
+                autoFocus
+                disabled={isSaving}
+                onChange={(e) => {
+                  setNazwa(e.target.value);
+                  if (localError) setLocalError(null);
+                }}
+                onKeyDown={submitOnEnter}
+              />
+            </FormField>
+            <FormField label={t.kalLokAddress} htmlFor="lok-adres" hint={t.kalLokAddressHint}>
+              <input
+                id="lok-adres"
+                type="text"
+                value={adres}
+                placeholder={t.kalLokAddressPlaceholder}
+                disabled={isSaving}
+                onChange={(e) => setAdres(e.target.value)}
+                onKeyDown={submitOnEnter}
+              />
+            </FormField>
+            <FormField label={t.kalLokDesc} htmlFor="lok-opis">
+              <textarea
+                id="lok-opis"
+                rows={3}
+                value={opis}
+                placeholder={t.kalLokDescPlaceholder}
+                disabled={isSaving}
+                onChange={(e) => setOpis(e.target.value)}
+              />
+            </FormField>
+          </FormSection>
         </div>
-        <div className="modal-footer">
-          <button className="button button-secondary" onClick={onCancel} disabled={isSaving}>
-            {t.cancel}
-          </button>
-          <button className="button button-primary" onClick={handleSubmit} disabled={isSaving}>
-            <Icon name="save" size={14} /> {isSaving ? t.loading : t.save}
-          </button>
-        </div>
+        <ModalFooter
+          note={<RequiredNote label={t.formRequiredNote} />}
+          onCancel={onCancel}
+          cancelLabel={t.cancel}
+          onSubmit={handleSubmit}
+          submitLabel={editing ? t.save : t.kalLokAdd}
+          submitIcon={editing ? 'save' : 'plus'}
+          submitDisabled={unchanged || !nazwa.trim()}
+          submitTitle={unchanged ? t.noChangesToSave : t.kalLokNameRequired}
+          busy={isSaving}
+        />
       </div>
     </div>
   );
@@ -239,20 +250,11 @@ const KalendarzLokalizacje: React.FC<Props> = ({ language }) => {
 
   return (
     <div className="content-body">
-      <div className="card">
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            gap: '12px',
-            marginBottom: '15px',
-          }}
-        >
-          <div>
-            <h2 style={{ margin: '0 0 8px' }}>{t.kalLokTitle}</h2>
-            <div style={{ fontSize: '13px', opacity: 0.75, maxWidth: '80ch' }}>{t.kalLokHint}</div>
-          </div>
+      <FormSection
+        icon="map-pin"
+        title={t.kalLokTitle}
+        description={t.kalLokHint}
+        aside={
           <button
             className="button button-primary"
             onClick={() => {
@@ -260,27 +262,27 @@ const KalendarzLokalizacje: React.FC<Props> = ({ language }) => {
               setFormState({ editing: null });
             }}
             disabled={isSaving}
-            style={{ whiteSpace: 'nowrap' }}
           >
             <Icon name="plus" size={14} /> {t.kalLokAdd}
           </button>
-        </div>
-
+        }
+      >
         {error && !formState && (
-          <div style={{ fontSize: '12px', color: 'var(--danger)', marginBottom: '10px' }}>
-            {error}
+          <div className="callout callout--danger" role="alert">
+            <Icon name="alert-triangle" size={16} />
+            <div className="callout__body">{error}</div>
           </div>
         )}
 
         {lokalizacje.length > 0 ? (
-          <table>
+          <table className="data-table">
             <thead>
               <tr>
                 <th>{t.kalLokName}</th>
                 <th>{t.kalLokAddress}</th>
                 <th>{t.kalLokDesc}</th>
                 <th>{t.kalLokUsage}</th>
-                <th>{t.actions}</th>
+                <th className="data-table__actions">{t.actions}</th>
               </tr>
             </thead>
             <tbody>
@@ -292,13 +294,14 @@ const KalendarzLokalizacje: React.FC<Props> = ({ language }) => {
                       <strong>{lok.nazwa}</strong>
                     </span>
                   </td>
-                  <td>{lok.adres || '—'}</td>
-                  <td>{lok.opis || '—'}</td>
+                  <td>{lok.adres || <span className="cell-empty">—</span>}</td>
+                  <td>{lok.opis || <span className="cell-empty">—</span>}</td>
                   <td>{usageById.get(lok.id) ?? 0}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                  <td className="data-table__actions">
+                    <div className="row-actions">
                       <button
-                        className="button button-small button-primary"
+                        type="button"
+                        className="button button-small button-secondary"
                         onClick={() => {
                           setError(null);
                           setFormState({ editing: lok });
@@ -308,11 +311,14 @@ const KalendarzLokalizacje: React.FC<Props> = ({ language }) => {
                         <Icon name="edit" size={13} /> {t.edit}
                       </button>
                       <button
-                        className="button button-small button-danger"
+                        type="button"
+                        className="button button-ghost button-icon icon-danger"
                         onClick={() => handleDelete(lok)}
                         disabled={isSaving}
+                        title={t.delete}
+                        aria-label={`${t.delete}: ${lok.nazwa}`}
                       >
-                        <Icon name="trash" size={13} /> {t.delete}
+                        <Icon name="trash" size={15} />
                       </button>
                     </div>
                   </td>
@@ -321,9 +327,12 @@ const KalendarzLokalizacje: React.FC<Props> = ({ language }) => {
             </tbody>
           </table>
         ) : (
-          <div className="empty-state">{t.kalLokEmpty}</div>
+          <div className="form-empty">
+            <Icon name="map-pin" size={16} />
+            {t.kalLokEmpty}
+          </div>
         )}
-      </div>
+      </FormSection>
 
       {formState && (
         <LokalizacjaFormModal

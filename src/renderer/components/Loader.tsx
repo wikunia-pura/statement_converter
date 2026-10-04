@@ -16,4 +16,17 @@ const Loader: React.FC<LoaderProps> = ({ label }) => (
   </div>
 );
 
+/**
+ * Blocks the whole window while a long operation (an import) runs: a dimmed
+ * backdrop with the spinner and what is happening.
+ */
+export const BusyOverlay: React.FC<{ label: string }> = ({ label }) => (
+  <div className="busy-overlay" role="status" aria-live="polite">
+    <div className="busy-overlay__box">
+      <div className="loader-spinner" />
+      <span className="busy-overlay__text">{label}</span>
+    </div>
+  </div>
+);
+
 export default Loader;

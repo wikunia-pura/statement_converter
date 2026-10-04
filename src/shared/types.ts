@@ -274,6 +274,8 @@ export interface ConversionReviewData {
   adresName: string | null;
   transactions: TransactionForReview[];
   pdfLines?: string[];  // Extracted PDF text lines for cross-reference
+  /** The attached statement PDF itself, so the review screen can open it. */
+  pdfPath?: string;
   /**
    * Apartment-account prefix resolved for this conversion ("204", "205"), taken
    * from the KontoTyp of the community account the file belongs to. The review
@@ -302,6 +304,19 @@ export interface ConversionHistory {
   adresId?: number | null;
   adresNazwa?: string | null;
   /**
+   * The month the converted statement covers (`YYYY-MM`), read from its
+   * transactions when it was converted. Only the dashboard's own records carry
+   * it; absent on older rows, which then count in the month of conversion.
+   */
+  monthKey?: string | null;
+  /**
+   * SHA-1 of the converted input file — the hash the folder scan keeps in
+   * `KsiegowaniePlik.fileHash` — so the conversion stays linked to its pinned
+   * statement after the file is renamed or moved. Only the dashboard's own
+   * records carry it; absent on older rows, which then link by file name.
+   */
+  inputHash?: string | null;
+  /**
    * Whether the accounting file this conversion produced has been posted in the
    * external "DOM" program. The app cannot see into DOM, so this is the user's
    * own tick — set from the Księgowania view, shared across installs.
@@ -311,6 +326,12 @@ export interface ConversionHistory {
   bookedInDomAt?: string | null;
   /** E-mail of the user who ticked it, so a shared team can tell who posted. */
   bookedInDomBy?: string | null;
+  /**
+   * Marked as posted without a conversion ("Oznacz jako zaksięgowane") — a
+   * fallback for a statement posted some other way. Such a record has no
+   * output file; undoing the mark deletes it. Dashboard records only.
+   */
+  manual?: boolean;
 }
 
 /**
@@ -358,6 +379,149 @@ export interface KsiegowanieUwaga {
   /** Null while the matter is open. */
   resolvedAt: string | null;
   resolvedBy: string | null;
+}
+
+/**
+ * A file the folder scan ("Znajdź pliki księgowe") pinned to a community for
+ * one month: a statement to convert, its PDF, or a statement that turned out to
+ * be unreadable (`status: 'error'`).
+ *
+ * The month is the statement's own period, not the day it was found. The path
+ * is relative to the statements folder and uses `/`, because the folder is
+ * shared and mounted differently on every machine; each install joins it with
+ * its own Settings → "Folder z wyciągami".
+ *
+ * Whether a statement has been converted is not stored: it is read from the
+ * dashboard's conversion records (same community and the same content by
+ * `fileHash`, or — for conversions that did not record it — the same file name,
+ * converted after the file's last change; see `linkConversions`), so a
+ * conversion made by dragging the file in by hand counts just the same.
+ *
+ * Like the other dashboard tables it keeps the community's NAME beside the id:
+ * a restore renumbers the addresses and the name is what survives.
+ */
+export interface KsiegowaniePlik {
+  id: number;
+  /** `YYYY-MM` the statement covers. */
+  monthKey: string;
+  kind: 'statement' | 'pdf';
+  status: 'ok' | 'error';
+  /** What is wrong with an `error` row, written for the user. */
+  errorMessage: string | null;
+  adresId: number | null;
+  adresNazwa: string;
+  /** The community account the file is for, 26 digits. */
+  accountNumber: string | null;
+  /** Account type at the time of the scan ("Eksploatacja"), for display. */
+  accountTypeName: string | null;
+  /** Bank to convert with — statements only. */
+  bankId: number | null;
+  bankName: string | null;
+  converterId: string | null;
+  /** Relative to the statements folder, `/`-separated. */
+  relPath: string;
+  fileName: string;
+  /** A renamed PDF's name as it was found. */
+  originalName: string | null;
+  fileSize: number;
+  /** Last change of the file (ISO) — a conversion older than this is of an older version. */
+  fileMtime: string;
+  /** SHA-1 of the content: same hash = same file, wherever it lies. */
+  fileHash: string;
+  /**
+   * Newer files the user chose NOT to swap in ("Zostaw obecny"), by hash — so
+   * the next scan does not ask about the same file again.
+   */
+  ignoredHashes: string[];
+  /** First and last day the file covers (`YYYY-MM-DD`). */
+  periodFrom: string | null;
+  periodTo: string | null;
+  scannedAt: string;
+  scannedBy: string | null;
+}
+
+/** A file the scan found, described for the report and the decision dialog. */
+export interface ScanFoundFile {
+  relPath: string;
+  fileName: string;
+  kind: 'statement' | 'pdf';
+  adresNazwa: string;
+  accountNumber: string | null;
+  accountTypeName: string | null;
+  periodFrom: string | null;
+  periodTo: string | null;
+  fileMtime: string;
+  /** A PDF's name before the scan renamed it. */
+  originalName?: string | null;
+  /** What is wrong with a file pinned as an error. */
+  errorMessage?: string | null;
+}
+
+/**
+ * Why a file the scan looked at could not be pinned to a community. Codes, not
+ * sentences, so the report speaks the user's language; `detail` carries what
+ * the sentence needs (an account number, a converter, an error).
+ */
+export type ScanProblem =
+  | 'unknown-account'
+  | 'no-account'
+  | 'ambiguous-account'
+  | 'no-period'
+  | 'unknown-bank'
+  | 'no-bank-row'
+  | 'unsupported-format'
+  | 'parse-failed'
+  | 'pdf-no-text'
+  | 'read-failed';
+
+export interface ScanUnrecognized {
+  relPath: string;
+  fileName: string;
+  problem: ScanProblem;
+  detail?: string;
+  /** The community, when it was recognised and something else failed. */
+  adresNazwa?: string;
+}
+
+/**
+ * A found file that competes with one already pinned: the same account and
+ * period (`version` — a newer copy of the same statement), or an overlapping
+ * period (`overlap`). The user decides; nothing is replaced on its own.
+ */
+export interface ScanConflict {
+  id: string;
+  kind: 'version' | 'overlap';
+  existing: KsiegowaniePlik;
+  found: ScanFoundFile;
+  /** The pinned statement was already converted (not yet ticked in DOM): replacing it outdates that accounting file. */
+  existingConverted: boolean;
+}
+
+export type ScanDecision = 'replace' | 'keep' | 'add';
+
+export interface ScanReport {
+  monthKey: string;
+  /** Files looked at (after skipping the ones too old to be this month's). */
+  examined: number;
+  added: ScanFoundFile[];
+  /** Pinned before and unchanged. */
+  unchanged: number;
+  /** Same content as a pinned file, lying elsewhere — left alone. */
+  duplicates: number;
+  /** Newer files for statements already ticked in DOM — not offered. */
+  skippedBooked: number;
+  conflicts: ScanConflict[];
+  /** Statements of a recognised community that could not be read — pinned as errors. */
+  errors: ScanFoundFile[];
+  unrecognized: ScanUnrecognized[];
+  /** PDFs pinned under their old name because renaming failed. */
+  renameFailures: { relPath: string; message: string }[];
+}
+
+export interface ScanProgress {
+  phase: 'walk' | 'read';
+  done: number;
+  total: number;
 }
 
 /* ---------------- Odczyty liczników — operation history ---------------- */
@@ -420,10 +584,78 @@ export interface OdczytyHistoryEntry {
 /* ----------------------- Mailing (rate-change mails) ----------------------- */
 
 /**
- * Kind of mailing being sent. Drives which recipient the app resolves and which
- * templates it offers; only one kind exists so far.
+ * Kind of mailing being sent — the stable `klucz` of a `MailingTypDef`. Drives
+ * which templates are offered and who the mail goes to by default.
+ *
+ * A string rather than a union: the kinds are a dictionary the office defines
+ * (Mailing → Typy mailingu). Templates and history rows store the key, not the
+ * row id, so a restore — which renumbers every row — leaves them pointing at the
+ * same kind, and renaming a kind never rewrites what a sent letter was filed as.
  */
-export type MailingTyp = 'zgn-zaliczki';
+export type MailingTyp = string;
+
+/** The key every template and history row had before kinds were definable. */
+export const MAILING_TYP_ZGN = 'zgn-zaliczki';
+/**
+ * The one built-in kind: a meeting notice. Fixed in code because the Kalendarz
+ * and Zebrania flows look templates up by it — it cannot be deleted or renamed,
+ * only its default recipients can be changed.
+ */
+export const MAILING_TYP_ZAWIADOMIENIE = 'zawiadomienie-o-zebraniu';
+export const MAILING_TYP_ZAWIADOMIENIE_NAZWA = 'Zawiadomienie o zebraniu';
+
+/**
+ * Who a mailing goes to, per community. Every enabled group is resolved for each
+ * community in the send and the addresses are merged (deduplicated by mailbox)
+ * into one message:
+ *
+ *   `zgn`         — the community's city unit (the original and only recipient
+ *                   before kinds existed),
+ *   `pelnomocnik` — that unit's proxies; from a meeting, the proxy the meeting
+ *                   names (or every proxy of the unit when it names none),
+ *   `zarzad`      — the community's board members with a mailbox; from a
+ *                   meeting, the board members on the meeting,
+ *   `wlasne`      — fixed addresses typed by the user.
+ *
+ * The kind holds the default; the send screen can change it for one send.
+ */
+export interface MailingAdresaci {
+  zgn: boolean;
+  pelnomocnik: boolean;
+  zarzad: boolean;
+  wlasne: string[];
+}
+
+export const DEFAULT_MAILING_ADRESACI: MailingAdresaci = {
+  zgn: true,
+  pelnomocnik: false,
+  zarzad: false,
+  wlasne: [],
+};
+
+/** Which group a resolved recipient came from — kept on the history row. */
+export type MailingOdbiorcaRodzaj = 'zgn' | 'pelnomocnik' | 'zarzad' | 'wlasne';
+
+/** One resolved recipient of one community's mail. */
+export interface MailingOdbiorca {
+  rodzaj: MailingOdbiorcaRodzaj;
+  /** Unit name, person's name — empty for a bare custom address. */
+  nazwa: string;
+  email: string;
+}
+
+/** A kind of mailing, as defined in Mailing → Typy mailingu. */
+export interface MailingTypDef {
+  id: number;
+  /** Stable key stored on templates and history rows — never changes. */
+  klucz: MailingTyp;
+  nazwa: string;
+  opis: string;
+  /** True for the built-in meeting notice: not deletable, not renamable. */
+  systemowy: boolean;
+  adresaci: MailingAdresaci;
+  createdAt: string;
+}
 
 /**
  * Kind of value a dynamic field takes. `tekst` is the original behaviour and the
@@ -537,6 +769,13 @@ export interface MailingHistoryEntry {
   sentAt: string;
   /** The meeting this send was triggered from, when it was. */
   spotkanieId?: number | null;
+  /**
+   * Everyone this mail was addressed to. `jednostkaNazwa`/`jednostkaEmail` still
+   * carry a readable summary (names / mailboxes joined with ", ") so old screens
+   * and old rows read the same; absent in rows written before kinds had
+   * recipients — those went to the unit in `jednostkaEmail` alone.
+   */
+  odbiorcy?: MailingOdbiorca[];
 }
 
 /**
@@ -571,6 +810,63 @@ export interface MailingSendResult {
   errorMessage?: string;
   subject: string;
   attachments: MailingAttachment[];
+  odbiorcy?: MailingOdbiorca[];
+}
+
+/**
+ * Values the Kalendarz hands a letter — what the "… z kalendarza" fields and
+ * "Adres zebrania" resolve to. Already spelled for the letter (dd.mm.rrrr, gg:mm)
+ * so the preview, the PDF, the .eml and the sent mail cannot disagree. Built by
+ * `buildKalendarzContext` in shared/mailing-template; every part may be empty
+ * (a meeting with no location), and an empty part is then typed by hand.
+ */
+export interface MailingKalendarzContext {
+  dataText: string;
+  godzinaText: string;
+  adresWspolnoty: string;
+  adresZebrania: string;
+}
+
+/** What a letter is rendered for, beyond its text and the typed values. */
+export interface MailingRecipientSource {
+  /** Community the letter is about; null for a letter about none (custom addresses only). */
+  adresId: number | null;
+  /** The meeting it came from — its proxy and board members replace the community's. */
+  spotkanieId?: number | null;
+}
+
+/**
+ * "Pobierz jako e-mail / PDF": render one letter and save it to the user's
+ * Downloads folder. Same rendering as a send; nothing goes over SMTP and nothing
+ * is written to the mailing history.
+ */
+export interface MailingExportRequest {
+  typ: MailingTyp;
+  /** For the file name; the text below is the authority, as in a send. */
+  templateName: string;
+  temat: string;
+  tresc: string;
+  values: Record<string, string>;
+  tableFields?: string[];
+  kalendarz?: MailingKalendarzContext | null;
+  /** Community the letter is about — substitutes `{{Adres Wspólnoty}}` and picks recipients. */
+  adresId: number | null;
+  /** Used when `adresId` is null or no longer resolves (a standalone Zebranie). */
+  adresNazwa?: string;
+  spotkanieId?: number | null;
+  adresaci: MailingAdresaci;
+  /** Mailboxes (lower-cased) unticked for this letter. */
+  wykluczeni?: string[];
+  formats: ('pdf' | 'eml')[];
+  /** Attach the letter as a PDF inside the .eml. Defaults to true. */
+  attachPdf?: boolean;
+}
+
+export interface MailingExportResult {
+  /** Absolute paths of the files written, in `formats` order. */
+  files: { format: 'pdf' | 'eml'; filePath: string }[];
+  /** Recipients written into the .eml's To header. */
+  odbiorcy: MailingOdbiorca[];
 }
 
 /** Progress of a send, streamed to the renderer per community. */
@@ -846,6 +1142,113 @@ export interface SpotkanieMailing {
   sentAt: string;
 }
 
+/* ------------------------------- Zebrania -------------------------------- */
+
+/**
+ * Status of one version of a meeting's materials. Mirrors the meeting's own
+ * materials status (see `zebranieStatusFromMaterialy` / `materialyFromZebranieStatus`
+ * in shared/zebrania): the newest version and the meeting always say the same.
+ */
+export type ZebranieStatus = 'w_przygotowaniu' | 'przygotowane';
+export const ZEBRANIE_STATUSES: readonly ZebranieStatus[] = ['w_przygotowaniu', 'przygotowane'];
+
+/** Kind of material a version holds. Only the meeting notice exists so far. */
+export type ZebranieMaterialRodzaj = 'zawiadomienie';
+
+/**
+ * One prepared document — for now the meeting notice. Self-contained: the text
+ * is copied from the template when the material is created and edited here, so
+ * changing or deleting the template later never rewrites a prepared letter.
+ */
+export interface ZebranieMaterial {
+  /** Stable within the version (uuid). */
+  id: string;
+  rodzaj: ZebranieMaterialRodzaj;
+  typ: MailingTyp;
+  /** Informational: the template the text started from. Null once it is gone. */
+  szablonId: number | null;
+  szablonNazwa: string;
+  temat: string;
+  /** Body HTML with `{{field}}` placeholders, as edited for this meeting. */
+  tresc: string;
+  /** Values typed in the visual editor, keyed by field name. */
+  values: Record<string, string>;
+  tableFields: string[];
+  adresaci: MailingAdresaci;
+  /** Mailboxes (lower-cased) unticked for this letter. */
+  wykluczeni: string[];
+  updatedAt: string;
+  updatedBy: string;
+  /** Downloads made from it, newest last — a record, not the files themselves. */
+  pobrania: { at: string; by: string; pliki: string[] }[];
+}
+
+/**
+ * One version of a meeting's materials — 1.0 first, then revisions 1.1, 1.2 …
+ * after corrections. A new revision starts as a copy of the newest one. Every
+ * version stays editable.
+ */
+export interface ZebranieWersja {
+  id: number;
+  zebranieId: number;
+  major: number;
+  minor: number;
+  status: ZebranieStatus;
+  /** What changed in this revision, in the author's words. */
+  opis: string;
+  materialy: ZebranieMaterial[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+/**
+ * A meeting's materials being prepared ("Zebrania").
+ *
+ * Linked to a Kalendarz meeting (1:1) or standalone. When linked, the date,
+ * community and location are READ FROM THE MEETING through `spotkanieId` — the
+ * columns below are then only a fallback snapshot (refreshed when the meeting is
+ * deleted, so the entry still says what it was about). When standalone, they
+ * are the entry's own data, typed in the Zebrania module.
+ */
+export interface Zebranie {
+  id: number;
+  /** Null for a standalone entry, or once the meeting was deleted. */
+  spotkanieId: number | null;
+  nazwa: string;
+  adresId: number | null;
+  adresNazwa: string;
+  lokalizacjaId: number | null;
+  lokalizacjaNazwa: string;
+  /** Location's street address, snapshotted alongside its name. */
+  lokalizacjaAdres: string;
+  startsAt: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  /** Oldest first; the last one is the current version. Never empty for a saved entry. */
+  wersje: ZebranieWersja[];
+}
+
+/** What the standalone form edits. A linked entry's data comes from its meeting. */
+export type ZebranieInput = Pick<
+  Zebranie,
+  | 'nazwa'
+  | 'adresId'
+  | 'adresNazwa'
+  | 'lokalizacjaId'
+  | 'lokalizacjaNazwa'
+  | 'lokalizacjaAdres'
+  | 'startsAt'
+>;
+
+/** What a version's edit form submits. */
+export interface ZebranieWersjaInput {
+  opis: string;
+  materialy: ZebranieMaterial[];
+}
+
 /* ------------------------- Notification inbox -------------------------- */
 
 /** Where a click on a notification goes. */
@@ -1002,6 +1405,12 @@ export interface AppSettings {
   impexFolder: string;
   /** Default destination folder for "Scalanie wpłat" merged outputs. Empty string ⇒ ask the user during merge. */
   swrkFolder: string;
+  /**
+   * The parent folder "Znajdź pliki księgowe" scans, recursively, for statement
+   * files and their PDFs. Machine-local: the shared folder is mounted under a
+   * different path on every machine. Empty ⇒ the scan asks for it first.
+   */
+  statementsFolder: string;
   darkMode: boolean;
   language: 'pl' | 'en';
   aiConfidenceThreshold: number; // Minimum confidence to skip AI warning (default: 95)
@@ -1021,6 +1430,13 @@ export interface AppSettings {
   sidebarOrder?: string[] | null;
   /** Dashboard: the Księgowania area is folded down to its month banner (default: false). */
   bookingsCollapsed: boolean;
+  /** Dashboard: the filter tiles in the order the person arranged them; null = the default. */
+  bookingsTileOrder?: string[] | null;
+  /**
+   * The month the Pulpit / Księgowania view was last left on (`YYYY-MM`), so
+   * coming back — or restarting the app — lands on it. '' ⇒ the current month.
+   */
+  bookingsMonth: string;
   /**
    * Kalendarz: show the instant hover card over a meeting in the month grid
    * (default: false). Off by default because a card that follows the cursor is
@@ -1138,6 +1554,27 @@ export interface BackupData {
     /** Absent in backups written before the dashboard had priorities and notes. */
     ksiegowaniaPriorytety?: KsiegowaniePriorytet[];
     ksiegowaniaUwagi?: KsiegowanieUwaga[];
+    /**
+     * Files the folder scan pinned to communities. Only the records travel —
+     * the files stay in the statements folder. Absent in backups written
+     * before the scan existed.
+     */
+    ksiegowaniaPliki?: KsiegowaniePlik[];
+    /**
+     * The dashboard's own conversion records with the DOM ticks — the posting
+     * state, kept apart from `history` (the log, which may be cleared). Absent
+     * in backups written before the split; such a backup leaves the live
+     * records alone.
+     */
+    ksiegowaniaKonwersje?: ConversionHistory[];
+    /** Absent in backups written before mailing kinds were definable. */
+    mailingTypy?: MailingTypDef[];
+    /**
+     * Zebrania entries, each carrying its versions in `wersje`. Re-pointed at the
+     * restored meetings by `spotkanieId`. Absent in backups written before the
+     * module existed.
+     */
+    zebrania?: Zebranie[];
     /** Never carries `smtpPass` — the SMTP password stays on the machine. */
     settings: AppSettings;
   };
@@ -1166,6 +1603,11 @@ export interface BackupCounts {
   notificationPrefs: number;
   ksiegowaniaPriorytety: number;
   ksiegowaniaUwagi: number;
+  ksiegowaniaPliki: number;
+  ksiegowaniaKonwersje: number;
+  mailingTypy: number;
+  zebrania: number;
+  zebraniaWersje: number;
 }
 
 export function countBackup(data: BackupData): BackupCounts {
@@ -1191,6 +1633,11 @@ export function countBackup(data: BackupData): BackupCounts {
     notificationPrefs: data.data.notificationPrefs?.length ?? 0,
     ksiegowaniaPriorytety: data.data.ksiegowaniaPriorytety?.length ?? 0,
     ksiegowaniaUwagi: data.data.ksiegowaniaUwagi?.length ?? 0,
+    ksiegowaniaPliki: data.data.ksiegowaniaPliki?.length ?? 0,
+    ksiegowaniaKonwersje: data.data.ksiegowaniaKonwersje?.length ?? 0,
+    mailingTypy: data.data.mailingTypy?.length ?? 0,
+    zebrania: data.data.zebrania?.length ?? 0,
+    zebraniaWersje: (data.data.zebrania ?? []).reduce((n, z) => n + (z.wersje?.length ?? 0), 0),
   };
 }
 
@@ -1243,6 +1690,7 @@ export const IPC_CHANNELS = {
   SELECT_OUTPUT_FOLDER: 'files:select-output-folder',
   CONVERT_FILE: 'files:convert',
   CONVERT_FILE_WITH_AI: 'files:convert-with-ai',
+  CANCEL_CONVERSION: 'files:cancel-conversion',
   FINALIZE_CONVERSION: 'files:finalize-conversion',
   RERUN_EXPENSE_AI: 'files:rerun-expense-ai',
   TOUCH_CONVERSION: 'files:touch-conversion',
@@ -1255,6 +1703,7 @@ export const IPC_CHANNELS = {
   SET_OUTPUT_FOLDER: 'settings:set-output-folder',
   SET_IMPEX_FOLDER: 'settings:set-impex-folder',
   SET_SWRK_FOLDER: 'settings:set-swrk-folder',
+  SET_STATEMENTS_FOLDER: 'settings:set-statements-folder',
   SET_DARK_MODE: 'settings:set-dark-mode',
   SET_LANGUAGE: 'settings:set-language',
   SET_SKIP_USER_APPROVAL: 'settings:set-skip-user-approval',
@@ -1263,6 +1712,8 @@ export const IPC_CHANNELS = {
   SET_SIDEBAR_COLLAPSED: 'settings:set-sidebar-collapsed',
   SET_SIDEBAR_ORDER: 'settings:set-sidebar-order',
   SET_BOOKINGS_COLLAPSED: 'settings:set-bookings-collapsed',
+  SET_BOOKINGS_TILE_ORDER: 'settings:set-bookings-tile-order',
+  SET_BOOKINGS_MONTH: 'settings:set-bookings-month',
   SET_CALENDAR_HOVER_CARD: 'settings:set-calendar-hover-card',
   GET_NOTIFICATION_PREFS: 'notifications:get-prefs',
   SET_NOTIFICATION_PREF: 'notifications:set-pref',
@@ -1279,7 +1730,10 @@ export const IPC_CHANNELS = {
   CLEAR_HISTORY: 'history:clear',
   IMPORT_HISTORY_FROM_FILE: 'history:import-from-file',
   EXPORT_HISTORY_TO_FILE: 'history:export-to-file',
-  SET_HISTORY_BOOKED_IN_DOM: 'history:set-booked-in-dom',
+  SET_KS_BOOKED_IN_DOM: 'ksiegowania:set-booked-in-dom',
+  GET_KS_KONWERSJE: 'ksiegowania:get-konwersje',
+  MARK_KS_PLIK_BOOKED: 'ksiegowania:mark-plik-booked',
+  UNDO_KS_MANUAL: 'ksiegowania:undo-manual',
 
   // Backup (full snapshot: Supabase tables + local settings)
   BACKUP_EXPORT: 'backup:export',
@@ -1325,6 +1779,7 @@ export const IPC_CHANNELS = {
   MAILING_ADD_ZGN: 'mailing:add-zgn',
   MAILING_UPDATE_ZGN: 'mailing:update-zgn',
   MAILING_DELETE_ZGN: 'mailing:delete-zgn',
+  SET_ZGN_ADRESY: 'mailing:set-zgn-adresy',
   GET_ZGN_PELNOMOCNICY: 'zgn:get-pelnomocnicy',
   ADD_ZGN_PELNOMOCNIK: 'zgn:add-pelnomocnik',
   UPDATE_ZGN_PELNOMOCNIK: 'zgn:update-pelnomocnik',
@@ -1346,6 +1801,25 @@ export const IPC_CHANNELS = {
   MAILING_GET_SMTP: 'mailing:get-smtp',
   MAILING_SET_SMTP: 'mailing:set-smtp',
   MAILING_TEST_SMTP: 'mailing:test-smtp',
+  MAILING_GET_TYPY: 'mailing:get-typy',
+  MAILING_ADD_TYP: 'mailing:add-typ',
+  MAILING_UPDATE_TYP: 'mailing:update-typ',
+  MAILING_DELETE_TYP: 'mailing:delete-typ',
+  MAILING_EXPORT: 'mailing:export',
+  MAILING_RESOLVE_ODBIORCY: 'mailing:resolve-odbiorcy',
+  MAILING_SHOW_IN_FOLDER: 'mailing:show-in-folder',
+
+  // Zebrania (meeting materials, versioned)
+  GET_ZEBRANIA: 'zebrania:get',
+  ZEBRANIE_FROM_SPOTKANIE: 'zebrania:from-spotkanie',
+  ZEBRANIE_ENSURE_FOR_SPOTKANIE: 'zebrania:ensure-for-spotkanie',
+  ADD_ZEBRANIE: 'zebrania:add',
+  UPDATE_ZEBRANIE: 'zebrania:update',
+  DELETE_ZEBRANIE: 'zebrania:delete',
+  ADD_ZEBRANIE_WERSJA: 'zebrania:add-wersja',
+  UPDATE_ZEBRANIE_WERSJA: 'zebrania:update-wersja',
+  SET_ZEBRANIE_WERSJA_STATUS: 'zebrania:set-wersja-status',
+  RECORD_ZEBRANIE_POBRANIE: 'zebrania:record-pobranie',
 
   // Kalendarz (meetings, their user-defined types, and the account list the
   // participant picker reads)
@@ -1402,6 +1876,11 @@ export const IPC_CHANNELS = {
   UPDATE_KS_UWAGA: 'ksiegowania:update-uwaga',
   SET_KS_UWAGA_RESOLVED: 'ksiegowania:set-uwaga-resolved',
   DELETE_KS_UWAGA: 'ksiegowania:delete-uwaga',
+  GET_KS_PLIKI: 'ksiegowania:get-pliki',
+  SCAN_KS_PLIKI: 'ksiegowania:scan-pliki',
+  RESOLVE_KS_SCAN: 'ksiegowania:resolve-scan',
+  DELETE_KS_PLIK: 'ksiegowania:delete-plik',
+  PREVIEW_PDF: 'files:preview-pdf',
 
   // Auth (Supabase-backed)
   AUTH_SIGN_IN: 'auth:sign-in',

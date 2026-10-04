@@ -20,7 +20,9 @@ import {
   ZgnJednostka,
   ZgnPelnomocnik,
   SpotkanieZarzadOsoba,
+  Zebranie,
 } from '../../shared/types';
+import { latestWersja, wersjaLabel, zebranieForSpotkanie } from '../../shared/zebrania';
 import { comparePeople, personLabel, personName } from '../../shared/app-users';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
@@ -28,9 +30,12 @@ import Loader from '../components/Loader';
 import Icon from '../components/Icon';
 import Select from '../components/Select';
 import SearchableSelect from '../components/SearchableSelect';
-import ModalDismiss from '../components/Modal';
+import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
+import { FormField, FormRow, FormSection, RequiredNote } from '../components/FormSection';
 import MailingDetailsModal from '../components/MailingDetailsModal';
 import { ZadanieFormModal, ZadaniePreviewModal } from './Zadania';
+import { zebranieStatusLabel } from './Zebrania';
+import ZawiadomienieModal from '../components/ZawiadomienieModal';
 import { formatDayKey } from '../../shared/zadania';
 import MonthIllustration, { monthAccent } from '../components/MonthIllustration';
 import {
@@ -112,6 +117,10 @@ interface Props {
   focusRequest?: { spotkanieId: number; nonce: number; edit?: boolean } | null;
   /** The request has landed — so a later visit to the calendar is not pulled back to it. */
   onFocusHandled?: () => void;
+  /** Open a meeting's materials entry in the Zebrania module. */
+  onOpenZebranie?: (zebranieId: number) => void;
+  /** "Mailing → Szablony" — the notice flow's way out when no notice template exists. */
+  onOpenSzablony?: () => void;
 }
 
 /**
@@ -260,18 +269,15 @@ const SpotkanieZadania: React.FC<{
       <div className="kal-tasks__head">
         <span className="kal-tasks__title">
           <Icon name="clipboard" size={13} /> {t.kalTasksTitle}
-          {zadania.length + pending.length > 0 && (
-            <span className="kal-tasks__count">{zadania.length + pending.length}</span>
-          )}
         </span>
         <button
           type="button"
-          className="link-button"
+          className="button button-small button-subtle"
           onClick={onAdd}
           disabled={disabled}
           title={t.kalAddTaskHint}
         >
-          <Icon name="plus" size={12} /> {t.kalAddTask}
+          <Icon name="plus" size={13} /> {t.kalAddTask}
         </button>
       </div>
       {zadania.length === 0 && pending.length === 0 ? (
@@ -373,6 +379,29 @@ export function materialyStatusLabel(
     wyslane: t.kalMatStateWyslane,
   }[status];
 }
+
+/** The materials state as a short badge word — the section title says "Materiały". */
+function materialyStepLabel(
+  t: (typeof translations)['pl'],
+  status: SpotkanieMaterialyStatus,
+): string {
+  return {
+    brak: t.kalMaterialsNo,
+    potrzebne: t.kalMaterialsYes,
+    do_przygotowania: t.kalMatStepDo,
+    przygotowane: t.kalMatStepPrzygotowane,
+    wyslane: t.kalMatStepWyslane,
+  }[status];
+}
+
+/** How far along the materials are, as a badge tone. */
+const MATERIALY_TONE: Record<SpotkanieMaterialyStatus, string> = {
+  brak: 'status-neutral',
+  potrzebne: 'status-neutral',
+  do_przygotowania: 'status-pending',
+  przygotowane: 'status-info',
+  wyslane: 'status-success',
+};
 
 /** The picker's value for a unit (`j:12`) or a proxy (`p:7`); '' for none. */
 function zgnPickValue(jednostkaId: number | null, pelnomocnikId: number | null): string {
@@ -734,300 +763,295 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
     );
   };
 
+  const board = boardOf(adresId);
+  const boardMissing = board.filter((m) => !zarzad.some((z) => z.imieNazwisko === m.imieNazwisko));
+  const errorText = localError || error;
+
   return (
     <div className="modal-overlay" onClick={handleCancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 'min(860px, 94vw)', maxWidth: 860 }}>
+      <div className="modal modal--xl" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={handleCancel} ariaLabel={t.close} />
-        <div className="modal-header">
-          {editing ? t.kalEditMeeting : template ? t.kalCloneMeeting : t.kalNewMeeting}
-        </div>
-        <div className="modal-body">
+        <ModalHeader
+          icon="calendar"
+          title={editing ? t.kalEditMeeting : template ? t.kalCloneMeeting : t.kalNewMeeting}
+          subtitle={editing ? editing.nazwa : t.kalFormSubtitleAdd}
+        />
+        <div className="modal-body modal-body--sectioned">
           {/* The two decisions the user actually makes, first — the title below
               is written from them. */}
-          <div className="kal-form-row kal-form-row--two">
-            <div className="form-group">
-              <label>{t.kalFieldType}</label>
-              <Select
-                overlay
-                value={typId}
-                options={[
-                  { value: '', label: t.kalNoType },
-                  ...typy.map((typ) => ({ value: String(typ.id), label: typ.nazwa })),
-                ]}
-                onChange={(value) => applyPickers(value, adresId)}
-                placeholder={t.kalNoType}
-                ariaLabel={t.kalFieldType}
-              />
-              {typy.length === 0 && (
-                <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '6px' }}>
-                  {t.kalNoTypesYet}{' '}
-                  {onManageTypes && (
-                    <button type="button" className="link-button" onClick={onManageTypes}>
-                      {t.kalTypyTitle}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="form-group">
-              <label>{t.kalFieldAdres}</label>
-              <SearchableSelect
-                overlay
-                value={adresId}
-                options={[
-                  { value: '', label: t.kalNoAdres },
-                  ...adresy.map((a) => ({ value: String(a.id), label: a.nazwa })),
-                ]}
-                onChange={(value) => {
-                  applyPickers(typId, value);
-                  // A different community brings its own board: the list is
-                  // replaced, not appended to — the previous board was not
-                  // invited to this community's meeting.
-                  if (value !== adresId) setZarzad(boardOf(value));
-                  // The community's own city unit, offered when nothing is picked
-                  // yet — it is almost always the one the meeting is with.
-                  const unit = adresy.find((a) => String(a.id) === value)?.zgnJednostkaId;
-                  if (!zgnPick && unit != null) setZgnPick(`j:${unit}`);
-                }}
-                placeholder={t.kalNoAdres}
-                searchPlaceholder={t.searchAdres}
-                emptyText={t.kalNoResults}
-                ariaLabel={t.kalFieldAdres}
-              />
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label>{t.kalMaterialsNeeded}</label>
-            <div className="kal-pill-switch" role="group" aria-label={t.kalMaterialsNeeded}>
-              {[true, false].map((needed) => (
-                <button
-                  key={String(needed)}
-                  type="button"
-                  className={`kal-pill-switch__opt${needed ? ' is-yes' : ''}${
-                    materialyPotrzebne === needed ? ' is-active' : ''
-                  }`}
-                  aria-pressed={materialyPotrzebne === needed}
-                  onClick={() => setMaterialyPotrzebne(needed)}
-                >
-                  {needed ? t.kalMaterialsYes : t.kalMaterialsNo}
-                </button>
-              ))}
-            </div>
-            <div className="kal-check__hint" style={{ marginTop: '6px' }}>
-              {t.kalMaterialsNeededHint}
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label>{t.kalFieldZgn}</label>
-            <SearchableSelect
-              overlay
-              value={zgnPick}
-              options={zgnOptions}
-              onChange={setZgnPick}
-              placeholder={t.kalNoZgn}
-              searchPlaceholder={t.kalZgnSearch}
-              emptyText={t.kalNoResults}
-              ariaLabel={t.kalFieldZgn}
-            />
-            {zgnJednostki.length === 0 && (
-              <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '6px' }}>
-                {t.kalZgnNoneYet}
-              </div>
-            )}
-          </div>
-
-          <div className="form-group">
-            <div className="kal-label-row">
-              <label>
-                {t.kalFieldName} <span style={{ color: 'red' }}>*</span>
-              </label>
-              {/* Only offered once it would actually change something — after a
-                  manual edit, with a suggestion available to go back to. */}
-              {nameEdited && suggestion && suggestion !== nazwa.trim() && (
-                <button type="button" className="link-button" onClick={restoreSuggestedTitle}>
-                  {t.kalTitleRestore}
-                </button>
-              )}
-            </div>
-            <input
-              type="text"
-              value={nazwa}
-              onChange={(e) => {
-                setNazwa(e.target.value);
-                setNameEdited(true);
-                if (localError) setLocalError(null);
-              }}
-              placeholder={suggestion || t.kalFieldNamePlaceholder}
-            />
-            <div style={{ fontSize: '11px', opacity: 0.65, marginTop: '4px' }}>
-              {nameEdited ? t.kalFieldNameHintEdited : t.kalFieldNameHint}
-            </div>
-          </div>
-
-          {/* When. */}
-          <div className="kal-form-row">
-            <div className="form-group">
-              <label>
-                {t.kalFieldDate} <span style={{ color: 'red' }}>*</span>
-              </label>
+          <FormSection icon="calendar" title={t.kalSectionMeeting} description={t.kalSectionMeetingDesc}>
+            <FormRow>
+              <FormField
+                label={t.kalFieldType}
+                hint={
+                  typy.length === 0 ? (
+                    <>
+                      {t.kalNoTypesYet}{' '}
+                      {onManageTypes && (
+                        <button type="button" className="link-button" onClick={onManageTypes}>
+                          {t.kalTypyTitle}
+                        </button>
+                      )}
+                    </>
+                  ) : undefined
+                }
+              >
+                <Select
+                  overlay
+                  value={typId}
+                  options={[
+                    { value: '', label: t.kalNoType },
+                    ...typy.map((typ) => ({ value: String(typ.id), label: typ.nazwa })),
+                  ]}
+                  onChange={(value) => applyPickers(value, adresId)}
+                  placeholder={t.kalNoType}
+                  ariaLabel={t.kalFieldType}
+                />
+              </FormField>
+              <FormField label={t.kalFieldAdres}>
+                <SearchableSelect
+                  overlay
+                  value={adresId}
+                  options={[
+                    { value: '', label: t.kalNoAdres },
+                    ...adresy.map((a) => ({ value: String(a.id), label: a.nazwa })),
+                  ]}
+                  onChange={(value) => {
+                    applyPickers(typId, value);
+                    // A different community brings its own board: the list is
+                    // replaced, not appended to — the previous board was not
+                    // invited to this community's meeting.
+                    if (value !== adresId) setZarzad(boardOf(value));
+                    // The community's own city unit, offered when nothing is picked
+                    // yet — it is almost always the one the meeting is with.
+                    const unit = adresy.find((a) => String(a.id) === value)?.zgnJednostkaId;
+                    if (!zgnPick && unit != null) setZgnPick(`j:${unit}`);
+                  }}
+                  placeholder={t.kalNoAdres}
+                  searchPlaceholder={t.searchAdres}
+                  emptyText={t.kalNoResults}
+                  ariaLabel={t.kalFieldAdres}
+                />
+              </FormField>
+            </FormRow>
+            <FormField
+              label={t.kalFieldName}
+              htmlFor="kal-meeting-name"
+              required
+              hint={nameEdited ? t.kalFieldNameHintEdited : t.kalFieldNameHint}
+              action={
+                // Only offered once it would actually change something — after a
+                // manual edit, with a suggestion available to go back to.
+                nameEdited && suggestion && suggestion !== nazwa.trim() ? (
+                  <button type="button" className="button button-small button-subtle" onClick={restoreSuggestedTitle}>
+                    <Icon name="refresh" size={13} /> {t.kalTitleRestore}
+                  </button>
+                ) : undefined
+              }
+            >
               <input
-                type="date"
-                value={date}
+                id="kal-meeting-name"
+                type="text"
+                value={nazwa}
                 onChange={(e) => {
-                  setDate(e.target.value);
+                  setNazwa(e.target.value);
+                  setNameEdited(true);
                   if (localError) setLocalError(null);
                 }}
+                placeholder={suggestion || t.kalFieldNamePlaceholder}
               />
-            </div>
-            <div className="form-group">
-              <label>
-                {t.kalFieldTimeFrom} <span style={{ color: 'red' }}>*</span>
-              </label>
-              <input
-                type="time"
-                value={timeFrom}
-                onChange={(e) => handleStartChange(e.target.value)}
+            </FormField>
+            <FormField label={t.kalFieldDesc} htmlFor="kal-meeting-desc">
+              <textarea
+                id="kal-meeting-desc"
+                value={opis}
+                onChange={(e) => setOpis(e.target.value)}
+                placeholder={t.kalFieldDescPlaceholder}
+                rows={3}
               />
-            </div>
-            <div className="form-group">
-              <label>{t.kalFieldTimeTo}</label>
-              <input
-                type="time"
-                value={timeTo}
-                onChange={(e) => {
-                  setTimeTo(e.target.value);
-                  if (localError) setLocalError(null);
-                }}
-              />
-              <div style={{ fontSize: '11px', opacity: 0.65, marginTop: '4px' }}>
-                {t.kalFieldTimeToHint}
-              </div>
-            </div>
-          </div>
+            </FormField>
+          </FormSection>
 
-          {/* Is that date settled? Two radios rather than a checkbox: "wstępny"
-              is a real state somebody chose, not the absence of a tick. */}
-          <div className="form-group">
-            <label>{t.kalFieldTermin}</label>
-            <div className="kal-termin-choice">
-              {(['potwierdzony', 'wstepny'] as SpotkanieTerminStatus[]).map((value) => (
-                <label
-                  key={value}
-                  className={`kal-termin-option${terminStatus === value ? ' is-active' : ''}`}
-                >
-                  <input
-                    type="radio"
-                    name="kal-termin-status"
-                    value={value}
-                    checked={terminStatus === value}
-                    onChange={() => setTerminStatus(value)}
-                  />
-                  <Icon name={value === 'potwierdzony' ? 'check-circle' : 'clock'} size={14} />
-                  <span>{value === 'potwierdzony' ? t.kalTerminConfirmed : t.kalTerminTentative}</span>
-                </label>
-              ))}
+          <FormSection icon="clock" title={t.kalSectionWhen} description={t.kalSectionWhenDesc}>
+            <div className="form-grid form-grid--3">
+              <FormField label={t.kalFieldDate} htmlFor="kal-meeting-date" required>
+                <input
+                  id="kal-meeting-date"
+                  type="date"
+                  value={date}
+                  onChange={(e) => {
+                    setDate(e.target.value);
+                    if (localError) setLocalError(null);
+                  }}
+                />
+              </FormField>
+              <FormField label={t.kalFieldTimeFrom} htmlFor="kal-meeting-from" required>
+                <input
+                  id="kal-meeting-from"
+                  type="time"
+                  value={timeFrom}
+                  onChange={(e) => handleStartChange(e.target.value)}
+                />
+              </FormField>
+              <FormField label={t.kalFieldTimeTo} htmlFor="kal-meeting-to" hint={t.kalFieldTimeToHint}>
+                <input
+                  id="kal-meeting-to"
+                  type="time"
+                  value={timeTo}
+                  onChange={(e) => {
+                    setTimeTo(e.target.value);
+                    if (localError) setLocalError(null);
+                  }}
+                />
+              </FormField>
             </div>
-            <div style={{ fontSize: '11px', opacity: 0.65, marginTop: '4px' }}>
-              {t.kalFieldTerminHint}
-            </div>
-          </div>
+            {/* Is that date settled? Two radios rather than a checkbox: "wstępny"
+                is a real state somebody chose, not the absence of a tick. */}
+            <FormField label={t.kalFieldTermin} hint={t.kalFieldTerminHint}>
+              <div className="kal-termin-choice">
+                {(['potwierdzony', 'wstepny'] as SpotkanieTerminStatus[]).map((value) => (
+                  <label
+                    key={value}
+                    className={`kal-termin-option${terminStatus === value ? ' is-active' : ''}`}
+                  >
+                    <input
+                      type="radio"
+                      name="kal-termin-status"
+                      value={value}
+                      checked={terminStatus === value}
+                      onChange={() => setTerminStatus(value)}
+                    />
+                    <Icon name={value === 'potwierdzony' ? 'check-circle' : 'clock'} size={14} />
+                    <span>{value === 'potwierdzony' ? t.kalTerminConfirmed : t.kalTerminTentative}</span>
+                  </label>
+                ))}
+              </div>
+            </FormField>
+          </FormSection>
 
           {/* Where. Picked from the dictionary, never typed — three spellings of
               one address is exactly what the dictionary exists to prevent. */}
-          <div className="form-group">
-            <div className="kal-label-row">
-              <label>{t.kalFieldPlace}</label>
-              {onManagePlaces && (
-                <button type="button" className="link-button" onClick={onManagePlaces}>
-                  {t.kalManagePlaces}
-                </button>
-              )}
-            </div>
-            {lokalizacje.length === 0 ? (
-              <div style={{ fontSize: '12px', opacity: 0.7 }}>{t.kalNoPlaces}</div>
-            ) : (
-              <SearchableSelect
-                overlay
-                value={lokalizacjaId}
-                options={[
-                  { value: '', label: t.kalNoPlaceOption },
-                  ...lokalizacje.map((lok) => ({
-                    value: String(lok.id),
-                    label: lok.nazwa,
-                    hint: lok.adres || undefined,
-                    keywords: `${lok.nazwa} ${lok.adres} ${lok.opis}`,
-                  })),
-                ]}
-                onChange={setLokalizacjaId}
-                placeholder={t.kalPlacePlaceholder}
-                searchPlaceholder={t.kalPlaceSearch}
-                emptyText={t.kalPlaceNoMatch}
-                ariaLabel={t.kalFieldPlace}
-              />
-            )}
-          </div>
-
-          {(zarzad.length > 0 || boardOf(adresId).length > 0) && (
-            <div className="form-group">
-              <div className="kal-label-row">
-                <label>{t.kalFieldZarzad}</label>
-                {/* Back to the community's whole board after people were removed. */}
-                {boardOf(adresId).some(
-                  (m) => !zarzad.some((z) => z.imieNazwisko === m.imieNazwisko),
-                ) && (
-                  <button
-                    type="button"
-                    className="link-button"
-                    onClick={() => setZarzad(boardOf(adresId))}
-                  >
-                    {t.kalZarzadRestore}
-                  </button>
+          <FormSection icon="map-pin" title={t.kalSectionWhere} description={t.kalSectionWhereDesc}>
+            <FormRow>
+              <FormField
+                label={t.kalFieldPlace}
+                hint={lokalizacje.length === 0 ? t.kalNoPlaces : undefined}
+                action={
+                  onManagePlaces ? (
+                    <button type="button" className="button button-small button-subtle" onClick={onManagePlaces}>
+                      {t.kalManagePlaces}
+                    </button>
+                  ) : undefined
+                }
+              >
+                {lokalizacje.length > 0 && (
+                  <SearchableSelect
+                    overlay
+                    value={lokalizacjaId}
+                    options={[
+                      { value: '', label: t.kalNoPlaceOption },
+                      ...lokalizacje.map((lok) => ({
+                        value: String(lok.id),
+                        label: lok.nazwa,
+                        hint: lok.adres || undefined,
+                        keywords: `${lok.nazwa} ${lok.adres} ${lok.opis}`,
+                      })),
+                    ]}
+                    onChange={setLokalizacjaId}
+                    placeholder={t.kalPlacePlaceholder}
+                    searchPlaceholder={t.kalPlaceSearch}
+                    emptyText={t.kalPlaceNoMatch}
+                    ariaLabel={t.kalFieldPlace}
+                  />
                 )}
-              </div>
-              {/* One by one, like the participants: the members not on the
-                  meeting yet. A permanently empty value makes it an action
-                  picker — each pick adds a person below. */}
-              {boardOf(adresId).length > 0 && (
+              </FormField>
+              <FormField label={t.kalFieldZgn} hint={zgnJednostki.length === 0 ? t.kalZgnNoneYet : undefined}>
                 <SearchableSelect
                   overlay
-                  value=""
-                  options={boardOf(adresId)
-                    .filter((m) => !zarzad.some((z) => z.imieNazwisko === m.imieNazwisko))
-                    .map((m) => ({
-                      value: m.imieNazwisko,
-                      label: m.imieNazwisko,
-                      hint: m.email || undefined,
-                    }))}
-                  onChange={(name) => {
-                    const member = boardOf(adresId).find((m) => m.imieNazwisko === name);
-                    if (member) setZarzad((prev) => [...prev, member]);
-                  }}
-                  placeholder={
-                    boardOf(adresId).every((m) => zarzad.some((z) => z.imieNazwisko === m.imieNazwisko))
-                      ? t.kalZarzadAllAdded
-                      : t.kalZarzadAdd
-                  }
-                  searchPlaceholder={t.kalZarzadSearch}
-                  emptyText={t.kalParticipantsNoMatch}
-                  disabled={boardOf(adresId).every((m) =>
-                    zarzad.some((z) => z.imieNazwisko === m.imieNazwisko),
-                  )}
-                  ariaLabel={t.kalZarzadAdd}
+                  value={zgnPick}
+                  options={zgnOptions}
+                  onChange={setZgnPick}
+                  placeholder={t.kalNoZgn}
+                  searchPlaceholder={t.kalZgnSearch}
+                  emptyText={t.kalNoResults}
+                  ariaLabel={t.kalFieldZgn}
                 />
-              )}
-              {zarzad.length > 0 ? (
-                <div className="kal-people">
-                  {zarzad.map((m) => (
-                    <span key={m.imieNazwisko} className="kal-person kal-person--board" title={m.email || undefined}>
-                      <Icon name="home" size={12} />
-                      <span className="kal-person__label">{m.imieNazwisko}</span>
+              </FormField>
+            </FormRow>
+          </FormSection>
+
+          <FormSection icon="users" title={t.kalSectionPeople} description={t.kalSectionPeopleDesc}>
+            <FormField
+              label={t.kalFieldParticipants}
+              hint={users.length === 0 ? t.kalNoAccounts : t.kalFieldParticipantsHint}
+              action={
+                users.length > 0 ? (
+                  <>
+                    {/* "Everyone" is one of the two common answers here — a
+                        committee meeting is for the whole office — so it is a
+                        button, not fifteen picks from the dropdown. */}
+                    <button
+                      type="button"
+                      className="button button-small button-subtle"
+                      onClick={addAllParticipants}
+                      disabled={available.length === 0}
+                    >
+                      {t.kalParticipantsAddAll.replace('{count}', String(users.length))}
+                    </button>
+                    {uczestnicy.length > 0 && (
                       <button
                         type="button"
-                        onClick={() =>
-                          setZarzad((prev) => prev.filter((p) => p.imieNazwisko !== m.imieNazwisko))
-                        }
+                        className="button button-small button-subtle"
+                        onClick={() => setUczestnicy([])}
+                      >
+                        {t.kalParticipantsClear}
+                      </button>
+                    )}
+                  </>
+                ) : undefined
+              }
+            >
+              {users.length > 0 && (
+                <SearchableSelect
+                  overlay
+                  // A permanently empty value turns the dropdown into an action
+                  // picker: the trigger keeps its placeholder, each pick adds a
+                  // person below instead of replacing a selection.
+                  value=""
+                  options={available.map((u) => ({
+                    value: u.id,
+                    // Pick people by name; the mailbox drops to the hint line and
+                    // stays searchable, so it is still there when two people
+                    // share a first name — or when nobody has named them yet.
+                    label: personLabel(u),
+                    hint: personName(u) ? u.email : undefined,
+                    // Searchable by name, by mailbox, and by whatever name the
+                    // account itself carries — someone may still look for the
+                    // label they saw before anyone was named here.
+                    keywords: `${u.email} ${personName(u) ?? ''} ${u.displayName ?? ''}${
+                      u.email === userEmail ? ' ja me' : ''
+                    }`,
+                  }))}
+                  onChange={addParticipant}
+                  placeholder={available.length === 0 ? t.kalParticipantsAllAdded : t.kalParticipantsAdd}
+                  searchPlaceholder={t.kalParticipantsSearch}
+                  emptyText={t.kalParticipantsNoMatch}
+                  disabled={available.length === 0}
+                  ariaLabel={t.kalParticipantsAdd}
+                />
+              )}
+              {uczestnicy.length > 0 && (
+                <div className="kal-people">
+                  {uczestnicy.map((person) => (
+                    <span key={person.userId} className="kal-person">
+                      <Icon name="users" size={12} />
+                      <span className="kal-person__label">
+                        {personLabel(person)}
+                        {person.email === userEmail && <em className="kal-person__you"> ({t.kalYou})</em>}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setUczestnicy((prev) => prev.filter((p) => p.userId !== person.userId))}
                         title={t.kalParticipantRemove}
                         aria-label={t.kalParticipantRemove}
                       >
@@ -1036,160 +1060,135 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
                     </span>
                   ))}
                 </div>
-              ) : (
-                <div style={{ fontSize: '12px', opacity: 0.65 }}>{t.kalZarzadNone}</div>
               )}
-            </div>
-          )}
+            </FormField>
 
-          <div className="form-group">
-            <div className="kal-label-row">
-              <label>{t.kalFieldParticipants}</label>
-              {users.length > 0 && (
-                <div className="kal-bulk">
-                  {/* "Everyone" is one of the two common answers here — a
-                      committee meeting is for the whole office — so it is a
-                      button, not fifteen picks from the dropdown. */}
-                  <button
-                    type="button"
-                    className="link-button"
-                    onClick={addAllParticipants}
-                    disabled={available.length === 0}
-                  >
-                    {t.kalParticipantsAddAll.replace('{count}', String(users.length))}
-                  </button>
-                  {uczestnicy.length > 0 && (
-                    <button
-                      type="button"
-                      className="link-button"
-                      onClick={() => setUczestnicy([])}
-                    >
-                      {t.kalParticipantsClear}
+            {(zarzad.length > 0 || board.length > 0) && (
+              <FormField
+                label={t.kalFieldZarzad}
+                hint={zarzad.length === 0 ? t.kalZarzadNone : undefined}
+                action={
+                  // Back to the community's whole board after people were removed.
+                  boardMissing.length > 0 && zarzad.length > 0 ? (
+                    <button type="button" className="button button-small button-subtle" onClick={() => setZarzad(board)}>
+                      <Icon name="refresh" size={13} /> {t.kalZarzadRestore}
                     </button>
-                  )}
-                </div>
-              )}
-            </div>
-            <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
-              {t.kalFieldParticipantsHint}
-            </div>
-            {users.length === 0 ? (
-              <div style={{ fontSize: '12px', opacity: 0.7 }}>{t.kalNoAccounts}</div>
-            ) : (
-              <SearchableSelect
-                overlay
-                // A permanently empty value turns the dropdown into an action
-                // picker: the trigger keeps its placeholder, each pick adds a
-                // person below instead of replacing a selection.
-                value=""
-                options={available.map((u) => ({
-                  value: u.id,
-                  // Pick people by name; the mailbox drops to the hint line and
-                  // stays searchable, so it is still there when two people
-                  // share a first name — or when nobody has named them yet.
-                  label: personLabel(u),
-                  hint: personName(u) ? u.email : undefined,
-                  // Searchable by name, by mailbox, and by whatever name the
-                  // account itself carries — someone may still look for the
-                  // label they saw before anyone was named here.
-                  keywords: `${u.email} ${personName(u) ?? ''} ${u.displayName ?? ''}${
-                    u.email === userEmail ? ' ja me' : ''
-                  }`,
-                }))}
-                onChange={addParticipant}
-                placeholder={
-                  available.length === 0 ? t.kalParticipantsAllAdded : t.kalParticipantsAdd
+                  ) : undefined
                 }
-                searchPlaceholder={t.kalParticipantsSearch}
-                emptyText={t.kalParticipantsNoMatch}
-                disabled={available.length === 0}
-                ariaLabel={t.kalParticipantsAdd}
-              />
+              >
+                {/* One by one, like the participants: the members not on the
+                    meeting yet. A permanently empty value makes it an action
+                    picker — each pick adds a person below. */}
+                {board.length > 0 && (
+                  <SearchableSelect
+                    overlay
+                    value=""
+                    options={boardMissing.map((m) => ({
+                      value: m.imieNazwisko,
+                      label: m.imieNazwisko,
+                      hint: m.email || undefined,
+                    }))}
+                    onChange={(name) => {
+                      const member = board.find((m) => m.imieNazwisko === name);
+                      if (member) setZarzad((prev) => [...prev, member]);
+                    }}
+                    placeholder={boardMissing.length === 0 ? t.kalZarzadAllAdded : t.kalZarzadAdd}
+                    searchPlaceholder={t.kalZarzadSearch}
+                    emptyText={t.kalParticipantsNoMatch}
+                    disabled={boardMissing.length === 0}
+                    ariaLabel={t.kalZarzadAdd}
+                  />
+                )}
+                {zarzad.length > 0 && (
+                  <div className="kal-people">
+                    {zarzad.map((m) => (
+                      <span key={m.imieNazwisko} className="kal-person kal-person--board" title={m.email || undefined}>
+                        <Icon name="home" size={12} />
+                        <span className="kal-person__label">{m.imieNazwisko}</span>
+                        <button
+                          type="button"
+                          onClick={() => setZarzad((prev) => prev.filter((p) => p.imieNazwisko !== m.imieNazwisko))}
+                          title={t.kalParticipantRemove}
+                          aria-label={t.kalParticipantRemove}
+                        >
+                          <Icon name="x" size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </FormField>
             )}
-            {uczestnicy.length > 0 && (
-              <div className="kal-people">
-                {uczestnicy.map((person) => (
-                  <span key={person.userId} className="kal-person">
-                    <Icon name="users" size={12} />
-                    <span className="kal-person__label">
-                      {personLabel(person)}
-                      {person.email === userEmail && (
-                        <em className="kal-person__you"> ({t.kalYou})</em>
-                      )}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setUczestnicy((prev) => prev.filter((p) => p.userId !== person.userId))
-                      }
-                      title={t.kalParticipantRemove}
-                      aria-label={t.kalParticipantRemove}
-                    >
-                      <Icon name="x" size={12} />
-                    </button>
-                  </span>
+          </FormSection>
+
+          <FormSection icon="paperclip" title={t.kalSectionWork} description={t.kalSectionWorkDesc}>
+            <FormField label={t.kalMaterialsNeeded} hint={t.kalMaterialsNeededHint}>
+              <div className="kal-pill-switch" role="group" aria-label={t.kalMaterialsNeeded}>
+                {[true, false].map((needed) => (
+                  <button
+                    key={String(needed)}
+                    type="button"
+                    className={`kal-pill-switch__opt${needed ? ' is-yes' : ''}${
+                      materialyPotrzebne === needed ? ' is-active' : ''
+                    }`}
+                    aria-pressed={materialyPotrzebne === needed}
+                    onClick={() => setMaterialyPotrzebne(needed)}
+                  >
+                    {needed ? t.kalMaterialsYes : t.kalMaterialsNo}
+                  </button>
                 ))}
               </div>
-            )}
-          </div>
-
-          <div className="form-group">
-            <label>{t.kalFieldDesc}</label>
-            <textarea
-              value={opis}
-              onChange={(e) => setOpis(e.target.value)}
-              placeholder={t.kalFieldDescPlaceholder}
-              rows={3}
+            </FormField>
+            <SpotkanieZadania
+              zadania={editing ? linkedZadania : []}
+              pending={pendingZadania}
+              users={users}
+              language={language}
+              disabled={isSaving}
+              onAdd={() => setTaskForm({ editing: null })}
+              onPreview={setTaskPreview}
+              onEdit={(z) => setTaskForm({ editing: z })}
+              onDelete={onDeleteZadanie}
+              onOpenBoard={onOpenZadanie}
+              onRemovePending={(i) => {
+                discardPending([pendingZadania[i]]);
+                setPendingZadania((prev) => prev.filter((_, k) => k !== i));
+              }}
             />
-          </div>
+          </FormSection>
 
-          <SpotkanieZadania
-            zadania={editing ? linkedZadania : []}
-            pending={pendingZadania}
-            users={users}
-            language={language}
-            disabled={isSaving}
-            onAdd={() => setTaskForm({ editing: null })}
-            onPreview={setTaskPreview}
-            onEdit={(z) => setTaskForm({ editing: z })}
-            onDelete={onDeleteZadanie}
-            onOpenBoard={onOpenZadanie}
-            onRemovePending={(i) => {
-              discardPending([pendingZadania[i]]);
-              setPendingZadania((prev) => prev.filter((_, k) => k !== i));
-            }}
-          />
-
-          {(localError || error) && (
-            <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '8px' }}>
-              {localError || error}
+          {errorText && (
+            <div className="callout callout--danger" role="alert">
+              <Icon name="alert-triangle" size={16} />
+              <div className="callout__body">{errorText}</div>
             </div>
           )}
         </div>
-        <div className="modal-footer">
-          {editing && onClone && (
-            <button
-              type="button"
-              className="button button-secondary"
-              style={{ marginRight: 'auto' }}
-              onClick={onClone}
-              disabled={isSaving}
-              title={t.kalCloneHint}
-            >
-              <Icon name="copy" size={14} /> {t.kalClone}
-            </button>
-          )}
-          <button className="button button-secondary" onClick={handleCancel} disabled={isSaving}>
-            <Icon name="x" size={14} /> {t.cancel}
-          </button>
-          <button
-            className="button button-success"
-            onClick={handleSubmit}
-            disabled={isSaving || !nazwa.trim()}
-          >
-            <Icon name="save" size={14} /> {editing ? t.update : t.add}
-          </button>
-        </div>
+        <ModalFooter
+          note={
+            editing && onClone ? (
+              <button
+                type="button"
+                className="button button-small button-subtle"
+                onClick={onClone}
+                disabled={isSaving}
+                title={t.kalCloneHint}
+              >
+                <Icon name="copy" size={13} /> {t.kalClone}
+              </button>
+            ) : (
+              <RequiredNote label={t.formRequiredNote} />
+            )
+          }
+          onCancel={handleCancel}
+          cancelLabel={t.cancel}
+          onSubmit={handleSubmit}
+          submitLabel={editing ? t.save : t.kalNewMeeting}
+          submitIcon={editing ? 'save' : 'plus'}
+          submitDisabled={!nazwa.trim()}
+          submitTitle={t.kalNameRequired}
+          busy={isSaving}
+        />
 
         {/* On document.body so the meeting modal's entry animation (a transform)
             cannot become the task modal's containing block. Kept inside this
@@ -1263,6 +1262,14 @@ const MeetingCard: React.FC<{
   onDokumenty: (sent: boolean, opis: string) => void;
   /** Move the materials status: none needed / to prepare / ready. */
   onMaterialy: (status: SpotkanieMaterialyStatus) => void;
+  /** The meeting's entry in the Zebrania module, once "Przygotuj materiały" made one. */
+  zebranie?: Zebranie;
+  /** "Przygotuj materiały": create the meeting's Zebrania entry. */
+  onPrzygotuj?: () => void;
+  /** Open the meeting's entry in the Zebrania module. */
+  onOpenZebranie?: () => void;
+  /** "Zawiadomienie o zebraniu". Absent when the meeting has no community. */
+  onZawiadomienie?: () => void;
   /** Hand this meeting to the Mailing module. Absent when it has no community. */
   onSendMailing?: () => void;
   /** Open one recorded send in the mailing-details window. */
@@ -1296,6 +1303,10 @@ const MeetingCard: React.FC<{
   onOpenMailing,
   docsCtx,
   onMaterialy,
+  zebranie,
+  onPrzygotuj,
+  onOpenZebranie,
+  onZawiadomienie,
   zadania,
   users,
   onAddTask,
@@ -1326,6 +1337,32 @@ const MeetingCard: React.FC<{
     const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
     return user ? personLabel(user) : email;
   };
+  const zebranieWersja = zebranie ? latestWersja(zebranie) : null;
+  // "Przygotuj materiały" only once the meeting says its materials are to be
+  // prepared, and only while it has no entry yet — after that the button is
+  // "Otwórz w Zebraniach": one meeting, one entry.
+  const canPrzygotuj = !zebranie && !!onPrzygotuj && spotkanie.materialyStatus === 'do_przygotowania';
+  const zawiadomienieButton = onZawiadomienie && (
+    <button
+      type="button"
+      className="button button-small button-secondary"
+      onClick={onZawiadomienie}
+      disabled={busy}
+      title={t.zebraniaKalNoticeHint}
+    >
+      <Icon name="mail" size={13} /> {t.zebraniaKalNotice}
+    </button>
+  );
+
+  const materialyStep = SPOTKANIE_MATERIALY_KROKI.indexOf(
+    spotkanie.materialyStatus as SpotkanieMaterialyKrok,
+  );
+  const materialyPrev = SPOTKANIE_MATERIALY_POPRZEDNI[spotkanie.materialyStatus];
+  const docsBadge = sent
+    ? { tone: 'status-success', label: t.kalPreviewDocsSent }
+    : overdue
+      ? { tone: 'status-error', label: t.kalDocsBadgeOverdue }
+      : { tone: 'status-neutral', label: t.kalPreviewDocsNotSent };
 
   return (
     <article
@@ -1337,15 +1374,12 @@ const MeetingCard: React.FC<{
       }
       style={{ ['--chip' as string]: color }}
     >
+      {/* When, and the three things done to a meeting — always in view, as
+          icons in the corner (each says what it does on hover). */}
       <div className="kal-card__head">
         <span className="kal-card__time">
-          <Icon name="clock" size={13} /> {formatTimeRange(spotkanie, locale)}
+          <Icon name="clock" size={14} /> {formatTimeRange(spotkanie, locale)}
         </span>
-        {tentative && (
-          <span className="status-badge kal-badge kal-badge--tentative">
-            <Icon name="clock" size={11} /> {t.kalTerminTentative}
-          </span>
-        )}
         {when === 'now' && <span className="status-badge kal-badge kal-badge--now">{t.kalNow}</span>}
         {when === 'today' && (
           <span className="status-badge kal-badge kal-badge--today">{t.kalTodayBadge}</span>
@@ -1353,7 +1387,45 @@ const MeetingCard: React.FC<{
         {when === 'past' && (
           <span className="status-badge kal-badge kal-badge--past">{t.kalPast}</span>
         )}
+        <div className="kal-card__tools">
+          <button
+            type="button"
+            className="button button-ghost button-icon"
+            onClick={onEdit}
+            disabled={busy}
+            title={t.edit}
+            aria-label={`${t.edit}: ${spotkanie.nazwa}`}
+          >
+            <Icon name="edit" size={15} />
+          </button>
+          <button
+            type="button"
+            className="button button-ghost button-icon"
+            onClick={onClone}
+            disabled={busy}
+            title={t.kalCloneHint}
+            aria-label={`${t.kalClone}: ${spotkanie.nazwa}`}
+          >
+            <Icon name="copy" size={15} />
+          </button>
+          <button
+            type="button"
+            className="button button-ghost button-icon icon-danger"
+            onClick={onDelete}
+            disabled={busy}
+            title={t.delete}
+            aria-label={`${t.delete}: ${spotkanie.nazwa}`}
+          >
+            <Icon name="trash" size={15} />
+          </button>
+        </div>
       </div>
+
+      <h4 className="kal-card__name">{spotkanie.nazwa}</h4>
+      <span className="kal-chip kal-card__type" style={{ ['--chip' as string]: color }}>
+        <span className="kal-chip__dot" />
+        <span className="kal-chip__name">{typ ? typ.nazwa : t.kalNoType}</span>
+      </span>
 
       {/* The moved date, said out loud. Everyone wrote the old one down, so this
           outranks everything else on the card until somebody acknowledges it. */}
@@ -1385,197 +1457,241 @@ const MeetingCard: React.FC<{
         </div>
       )}
 
-      <h4 className="kal-card__name">{spotkanie.nazwa}</h4>
-
-      <div className="kal-card__meta">
-        <span className="kal-chip" style={{ ['--chip' as string]: color }}>
-          <span className="kal-chip__dot" />
-          <span className="kal-chip__name">{typ ? typ.nazwa : t.kalNoType}</span>
-        </span>
-        {spotkanie.adresNazwa && (
-          <span className="kal-card__adres">
-            <Icon name="building" size={13} /> {spotkanie.adresNazwa}
-          </span>
-        )}
-        {place && (
-          <span className="kal-place">
-            <Icon name="map-pin" size={13} /> {place}
-          </span>
-        )}
-        {spotkanie.zgnNazwa && (
-          <span className="kal-place" title={t.kalFieldZgn}>
-            <Icon name="shield" size={13} /> {spotkanie.zgnNazwa}
-          </span>
-        )}
-      </div>
-
-      {spotkanie.opis && <p className="kal-card__desc">{spotkanie.opis}</p>}
-
-      {(spotkanie.uczestnicy.length > 0 || spotkanie.zarzad.length > 0) && (
-        <div className="kal-people">
-          {spotkanie.uczestnicy.map((person) => (
-            <span key={person.userId} className="kal-person kal-person--static" title={person.email}>
-              <Icon name="users" size={12} />
-              <span className="kal-person__label">{personLabel(person)}</span>
-            </span>
-          ))}
-          {spotkanie.zarzad.map((m) => (
-            <span
-              key={`z-${m.imieNazwisko}`}
-              className="kal-person kal-person--static kal-person--board"
-              title={[t.kalFieldZarzad, m.email].filter(Boolean).join(' · ')}
-            >
-              <Icon name="home" size={12} />
-              <span className="kal-person__label">{m.imieNazwisko}</span>
-            </span>
-          ))}
+      {/* A tentative date is a state with one way out, so the strip carries it. */}
+      {tentative && (
+        <div className="kal-alert kal-alert--tentative">
+          <Icon name="clock" size={15} />
+          <div className="kal-alert__body">
+            <strong>{t.kalTerminTentative}</strong>
+            <span>{t.kalTerminUnconfirmHint}</span>
+          </div>
+          <button
+            type="button"
+            className="button button-small button-info"
+            onClick={() => onTerminStatus('potwierdzony')}
+            disabled={busy}
+            title={t.kalTerminConfirmHint}
+          >
+            <Icon name="check-circle" size={13} /> {t.kalTerminConfirm}
+          </button>
         </div>
       )}
 
-      <div className="kal-card__foot">
-        {spotkanie.createdBy && (
-          <span className="kal-card__author">
-            {t.kalCreatedBy.replace('{who}', spotkanie.createdBy)}
+      {/* Every fact under a label, one per line — read without guessing what an
+          icon stands for. */}
+      <section className="kal-section">
+        <div className="kal-section__head">
+          <span className="kal-section__title">
+            <Icon name="info" size={13} /> {t.kalSectionDetails}
           </span>
-        )}
-        <div className="kal-card__actions">
-          {tentative ? (
-            <button
-              className="button button-small button-warning kal-card__action--wide"
-              onClick={() => onTerminStatus('potwierdzony')}
-              disabled={busy}
-              title={t.kalTerminConfirmHint}
-            >
-              <Icon name="check-circle" size={13} /> {t.kalTerminConfirm}
-            </button>
-          ) : (
-            <button
-              className="button button-small button-info kal-card__action--wide"
-              onClick={() => onTerminStatus('wstepny')}
-              disabled={busy}
-              title={t.kalTerminUnconfirmHint}
-            >
-              <Icon name="clock" size={13} /> {t.kalTerminUnconfirm}
-            </button>
+          {!tentative && (
+            <div className="kal-section__actions">
+              <button
+                type="button"
+                className="button button-small button-subtle"
+                onClick={() => onTerminStatus('wstepny')}
+                disabled={busy}
+                title={t.kalTerminUnconfirmHint}
+              >
+                <Icon name="clock" size={13} /> {t.kalTerminUnconfirm}
+              </button>
+            </div>
           )}
-          <button className="button button-small button-primary" onClick={onEdit} disabled={busy}>
-            <Icon name="edit" size={13} /> {t.edit}
-          </button>
-          <button
-            className="button button-small button-secondary"
-            onClick={onClone}
-            disabled={busy}
-            title={t.kalCloneHint}
-          >
-            <Icon name="copy" size={13} /> {t.kalClone}
-          </button>
-          <button className="button button-small button-danger" onClick={onDelete} disabled={busy}>
-            <Icon name="trash" size={13} /> {t.delete}
-          </button>
         </div>
-      </div>
+        <dl className="kal-details">
+          {spotkanie.adresNazwa && (
+            <>
+              <dt>{t.kalDetAdres}</dt>
+              <dd>{spotkanie.adresNazwa}</dd>
+            </>
+          )}
+          {place && (
+            <>
+              <dt>{t.kalDetPlace}</dt>
+              <dd>{place}</dd>
+            </>
+          )}
+          {spotkanie.zgnNazwa && (
+            <>
+              <dt>{t.kalDetZgn}</dt>
+              <dd>{spotkanie.zgnNazwa}</dd>
+            </>
+          )}
+          {spotkanie.createdBy && (
+            <>
+              <dt>{t.kalDetAuthor}</dt>
+              <dd className="kal-details__quiet">{spotkanie.createdBy}</dd>
+            </>
+          )}
+        </dl>
+        {spotkanie.opis && <p className="kal-card__desc">{spotkanie.opis}</p>}
+      </section>
 
-      <SpotkanieZadania
-        zadania={zadania}
-        users={users}
-        language={language}
-        disabled={busy}
-        onAdd={onAddTask}
-        onPreview={onPreviewTask}
-        onEdit={onEditTask}
-        onDelete={onDeleteTask}
-        onOpenBoard={onOpenTask}
-      />
-
-      {/* Materials, walled off like the paperwork below and run the same way:
-          where they stand, who moved them last, and one button per step. Each
-          step is announced to everyone (Ustawienia → Powiadomienia). Absent
-          when the meeting needs none. */}
-      {spotkanie.materialyStatus !== 'brak' && (
-        <div className={`kal-docs kal-mats kal-mats--${spotkanie.materialyStatus}`}>
-          <div className="kal-docs__head">
-            <span className="kal-docs__state kal-mats__state">
-              <Icon name="briefcase" size={14} />
-              {materialyStatusLabel(t, spotkanie.materialyStatus)}
+      {/* Who comes: the office's people and the community's board, each under
+          its own label rather than told apart by an icon. */}
+      {(spotkanie.uczestnicy.length > 0 || spotkanie.zarzad.length > 0) && (
+        <section className="kal-section">
+          <div className="kal-section__head">
+            <span className="kal-section__title">
+              <Icon name="users" size={13} /> {t.kalSectionPeople}
             </span>
           </div>
+          {spotkanie.uczestnicy.length > 0 && (
+            <div className="kal-card__group">
+              <span className="kal-card__label">{t.kalPeopleOffice}</span>
+              <div className="kal-people">
+                {spotkanie.uczestnicy.map((person) => (
+                  <span key={person.userId} className="kal-person kal-person--static" title={person.email}>
+                    <Icon name="users" size={12} />
+                    <span className="kal-person__label">{personLabel(person)}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {spotkanie.zarzad.length > 0 && (
+            <div className="kal-card__group">
+              <span className="kal-card__label">{t.kalFieldZarzad}</span>
+              <div className="kal-people">
+                {spotkanie.zarzad.map((m) => (
+                  <span
+                    key={`z-${m.imieNazwisko}`}
+                    className="kal-person kal-person--static kal-person--board"
+                    title={m.email ?? undefined}
+                  >
+                    <Icon name="home" size={12} />
+                    <span className="kal-person__label">{m.imieNazwisko}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Materials: where they stand as a badge, the three steps as a stepper —
+          each step is one click and is announced to everyone (Ustawienia →
+          Powiadomienia). Absent when the meeting needs none. */}
+      {spotkanie.materialyStatus !== 'brak' && (
+        <section className="kal-section">
+          <div className="kal-section__head">
+            <span className="kal-section__title">
+              <Icon name="briefcase" size={13} /> {t.kalMaterialsLabel}
+            </span>
+            <span className={`status-badge ${MATERIALY_TONE[spotkanie.materialyStatus]}`}>
+              {materialyStepLabel(t, spotkanie.materialyStatus)}
+            </span>
+            {materialyPrev && (
+              <div className="kal-section__actions">
+                <button
+                  type="button"
+                  className="button button-small button-subtle"
+                  onClick={() => onMaterialy(materialyPrev)}
+                  disabled={busy}
+                  title={t.kalMatUndoHint.replace('{step}', materialyStatusLabel(t, materialyPrev))}
+                >
+                  <Icon name="undo" size={13} /> {t.kalMatUndo}
+                </button>
+              </div>
+            )}
+          </div>
+          <ol className="kal-steps">
+            {SPOTKANIE_MATERIALY_KROKI.map((krok, i) => {
+              const done = i < materialyStep;
+              const current = i === materialyStep;
+              return (
+                <li key={krok}>
+                  <button
+                    type="button"
+                    className={`kal-step${done ? ' is-done' : ''}${current ? ' is-current' : ''}`}
+                    onClick={() => onMaterialy(krok)}
+                    disabled={busy || current}
+                    aria-pressed={current}
+                    title={current ? undefined : materialyMark[krok]}
+                  >
+                    <span className="kal-step__dot">
+                      {done || current ? <Icon name="check" size={11} /> : i + 1}
+                    </span>
+                    <span className="kal-step__label">{materialyStepLabel(t, krok)}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
           {spotkanie.materialyZmienioneAt && spotkanie.materialyZmienioneBy && (
-            <span className="kal-docs__stamp">
+            <span className="kal-section__stamp">
               {t.kalMaterialsChangedBy
                 .replace('{who}', materialyBy(spotkanie.materialyZmienioneBy))
                 .replace('{when}', formatStamp(spotkanie.materialyZmienioneAt, locale))}
             </span>
           )}
-          <div className="kal-mats__actions">
-            {SPOTKANIE_MATERIALY_KROKI.map((krok) => (
-              <button
-                key={krok}
-                type="button"
-                className={`button button-small ${
-                  spotkanie.materialyStatus === krok ? 'button-success' : 'button-secondary'
-                }`}
-                onClick={() => onMaterialy(krok)}
-                disabled={busy || spotkanie.materialyStatus === krok}
-                aria-pressed={spotkanie.materialyStatus === krok}
-              >
-                <Icon name={spotkanie.materialyStatus === krok ? 'check' : 'arrow-right'} size={13} />{' '}
-                {materialyMark[krok]}
-              </button>
-            ))}
-            {SPOTKANIE_MATERIALY_POPRZEDNI[spotkanie.materialyStatus] && (
-              <button
-                type="button"
-                className="button button-small button-secondary kal-mats__undo"
-                onClick={() => onMaterialy(SPOTKANIE_MATERIALY_POPRZEDNI[spotkanie.materialyStatus]!)}
-                disabled={busy}
-                title={t.kalMatUndoHint.replace(
-                  '{step}',
-                  materialyStatusLabel(t, SPOTKANIE_MATERIALY_POPRZEDNI[spotkanie.materialyStatus]!),
+          {/* Where the materials themselves are made: the meeting's entry in
+              Zebrania (its newest version and that version's state — the same
+              state as above, kept in step by the main process) and the notice. */}
+          {(zebranie || canPrzygotuj || zawiadomienieButton) && (
+            <div className="kal-zeb">
+              {zebranie && (
+                <span className="kal-zeb__state">
+                  <Icon name="file-check" size={13} />
+                  {zebranieWersja
+                    ? t.zebraniaKalEntry
+                        .replace('{v}', wersjaLabel(zebranieWersja))
+                        .replace('{status}', zebranieStatusLabel(t, zebranieWersja.status))
+                    : t.zebrania}
+                </span>
+              )}
+              <div className="kal-zeb__actions">
+                {zawiadomienieButton}
+                {zebranie && onOpenZebranie && (
+                  <button
+                    type="button"
+                    className="button button-small button-secondary"
+                    onClick={onOpenZebranie}
+                    disabled={busy}
+                  >
+                    <Icon name="arrow-right" size={13} /> {t.zebraniaKalOpen}
+                  </button>
                 )}
-              >
-                <Icon name="undo" size={13} /> {t.kalMatUndo}
-              </button>
-            )}
-          </div>
-        </div>
+                {canPrzygotuj && (
+                  <button
+                    type="button"
+                    className="button button-small button-primary"
+                    onClick={onPrzygotuj}
+                    disabled={busy}
+                    title={t.zebraniaKalPrepareHint}
+                  >
+                    <Icon name="briefcase" size={13} /> {t.zebraniaKalPrepare}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
       )}
 
-      {/* Paperwork, last on the card and walled off from it: it is the one part
-          that is about what happened AFTER the meeting was arranged, and the one
-          part with its own controls. Two ways in, one question answered — did it
-          go out? */}
-      <div className={`kal-docs${overdue ? ' is-overdue' : ''}`}>
-        <div className="kal-docs__head">
-          <span className={`kal-docs__state${sent ? ' is-sent' : ''}`}>
-            <Icon name={sent ? 'file-check' : 'file-text'} size={14} />
-            {sent ? t.kalDocsSent : t.kalDocsNotSent}
+      {/* Paperwork, last on the card: the one part about what happened AFTER the
+          meeting was arranged. Two ways in, one question answered — did it go out? */}
+      <section className={`kal-section kal-section--docs${overdue ? ' is-overdue' : ''}`}>
+        <div className="kal-section__head">
+          <span className="kal-section__title">
+            <Icon name={sent ? 'file-check' : 'file-text'} size={13} /> {t.kalPreviewDocs}
           </span>
-          <div className="kal-docs__actions">
-            {!editingDocs && (
+          <span className={`status-badge ${docsBadge.tone}`}>{docsBadge.label}</span>
+          {!editingDocs && (
+            <div className="kal-section__actions">
               <button
                 type="button"
-                className="button button-small button-secondary"
+                className="button button-small button-subtle"
                 onClick={() => {
                   setDocsOpis(spotkanie.dokumentyOpis);
                   setEditingDocs(true);
                 }}
                 disabled={busy}
               >
-                <Icon name={sent ? 'edit' : 'check'} size={13} />{' '}
-                {sent ? t.kalDocsEdit : t.kalDocsMark}
+                <Icon name={sent ? 'edit' : 'check'} size={13} /> {sent ? t.kalDocsEdit : t.kalDocsMark}
               </button>
-            )}
-            {onSendMailing && (
-              <button
-                type="button"
-                className="button button-small button-info"
-                onClick={onSendMailing}
-                disabled={busy}
-              >
-                <Icon name="mail" size={13} /> {t.kalDocsSendMailing}
-              </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* The notice period, but only for a kind of meeting that has one — and
@@ -1595,7 +1711,7 @@ const MeetingCard: React.FC<{
         {sent && !editingDocs && (
           <div className="kal-docs__note">
             {spotkanie.dokumentyOpis && <p>{spotkanie.dokumentyOpis}</p>}
-            <span className="kal-docs__stamp">
+            <span className="kal-section__stamp">
               {t.kalDocsStamp
                 .replace('{when}', formatStamp(spotkanie.dokumentyWyslaneAt ?? '', locale))
                 .replace('{who}', spotkanie.dokumentyWyslaneBy || '—')}
@@ -1613,17 +1729,19 @@ const MeetingCard: React.FC<{
               autoFocus
             />
             <div className="kal-docs__form-actions">
-              <button
-                type="button"
-                className="button button-small button-primary"
-                onClick={() => {
-                  onDokumenty(true, docsOpis);
-                  setEditingDocs(false);
-                }}
-                disabled={busy}
-              >
-                <Icon name="check" size={13} /> {t.kalDocsSave}
-              </button>
+              {sent && (
+                <button
+                  type="button"
+                  className="button button-small button-ghost icon-danger kal-docs__undo"
+                  onClick={() => {
+                    onDokumenty(false, '');
+                    setEditingDocs(false);
+                  }}
+                  disabled={busy}
+                >
+                  <Icon name="undo" size={13} /> {t.kalDocsUndo}
+                </button>
+              )}
               <button
                 type="button"
                 className="button button-small button-secondary"
@@ -1632,19 +1750,17 @@ const MeetingCard: React.FC<{
               >
                 {t.cancel}
               </button>
-              {sent && (
-                <button
-                  type="button"
-                  className="button button-small button-danger"
-                  onClick={() => {
-                    onDokumenty(false, '');
-                    setEditingDocs(false);
-                  }}
-                  disabled={busy}
-                >
-                  <Icon name="x" size={13} /> {t.kalDocsUndo}
-                </button>
-              )}
+              <button
+                type="button"
+                className="button button-small button-success"
+                onClick={() => {
+                  onDokumenty(true, docsOpis);
+                  setEditingDocs(false);
+                }}
+                disabled={busy}
+              >
+                <Icon name="check" size={13} /> {t.kalDocsSave}
+              </button>
             </div>
           </div>
         )}
@@ -1679,7 +1795,41 @@ const MeetingCard: React.FC<{
             ))}
           </ul>
         )}
-      </div>
+
+        {/* Sending is the section's way forward; right-aligned, like every action row. */}
+        {!editingDocs && (onSendMailing || (spotkanie.materialyStatus === 'brak' && zawiadomienieButton)) && (
+          <div className="kal-section__buttons">
+            {/* No materials section to hold it when none are needed — the
+                notice is still a document this meeting may send. */}
+            {spotkanie.materialyStatus === 'brak' && zawiadomienieButton}
+            {onSendMailing && (
+              <button
+                type="button"
+                className="button button-small button-secondary"
+                onClick={onSendMailing}
+                disabled={busy}
+              >
+                <Icon name="mail" size={13} /> {t.kalDocsSendMailing}
+              </button>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* Tasks last: follow-ups to the meeting, not facts about it. */}
+      <section className="kal-section">
+        <SpotkanieZadania
+          zadania={zadania}
+          users={users}
+          language={language}
+          disabled={busy}
+          onAdd={onAddTask}
+          onPreview={onPreviewTask}
+          onEdit={onEditTask}
+          onDelete={onDeleteTask}
+          onOpenBoard={onOpenTask}
+        />
+      </section>
     </article>
   );
 };
@@ -1708,12 +1858,18 @@ const Kalendarz: React.FC<Props> = ({
   onOpenZadanie,
   focusRequest = null,
   onFocusHandled,
+  onOpenZebranie,
+  onOpenSzablony,
 }) => {
   const t = translations[language];
   const notify = useNotify();
   const locale = language === 'en' ? 'en-GB' : 'pl-PL';
 
   const [spotkania, setSpotkania] = useState<Spotkanie[]>([]);
+  /** Zebrania entries — which meetings already have one, and at which version. */
+  const [zebrania, setZebrania] = useState<Zebranie[]>([]);
+  /** The meeting whose notice is open in the full-screen editor. */
+  const [zawiadomienieFor, setZawiadomienieFor] = useState<number | null>(null);
   const [typy, setTypy] = useState<SpotkanieTyp[]>([]);
   const [lokalizacje, setLokalizacje] = useState<SpotkanieLokalizacja[]>([]);
   const [mailingi, setMailingi] = useState<SpotkanieMailing[]>([]);
@@ -1846,7 +2002,20 @@ const Kalendarz: React.FC<Props> = ({
       setIsLoading(false);
       setIsRefreshing(false);
     }
-    await Promise.all([loadZadania(), loadZgn()]);
+    await Promise.all([loadZadania(), loadZgn(), loadZebrania()]);
+  };
+
+  /**
+   * Apart as well: without the entries the cards only lose their Zebrania line.
+   * Reloaded with everything else after every write on a card — a materials
+   * status moved here has moved the newest version with it (main process).
+   */
+  const loadZebrania = async () => {
+    try {
+      setZebrania(await window.electronAPI.getZebrania());
+    } catch {
+      setZebrania([]);
+    }
   };
 
   /** Apart too: without the units the picker is only empty, the calendar still works. */
@@ -2054,6 +2223,27 @@ const Kalendarz: React.FC<Props> = ({
     });
   };
 
+  /**
+   * A meeting that needs materials gets its entry in Zebrania as soon as it is
+   * saved — that is where the materials are prepared. Unticking materials later
+   * leaves the entry alone: it may already hold a prepared notice.
+   *
+   * The meeting itself is already saved by then, so a failure here is said out
+   * loud but does not fail the save; "Przygotuj materiały" on the card can still
+   * create the entry later.
+   */
+  const ensureZebranie = async (spotkanieId: number) => {
+    const had = !!zebranieForSpotkanie(zebrania, spotkanieId);
+    try {
+      await window.electronAPI.ensureZebranieForSpotkanie(spotkanieId);
+      if (!had) notify.success(t.zebraniaAutoCreated);
+    } catch (err: unknown) {
+      notify.error(
+        `${t.zebraniaAutoCreateError}${err instanceof Error ? `: ${err.message}` : ''}`,
+      );
+    }
+  };
+
   const handleSubmit = async (
     input: SpotkanieInput,
     pendingZadania: ZadanieInput[],
@@ -2073,10 +2263,12 @@ const Kalendarz: React.FC<Props> = ({
         } else if (materialyPotrzebne && was === 'brak') {
           await window.electronAPI.setSpotkanieMaterialy(form.editing.id, 'potrzebne');
         }
+        if (materialyPotrzebne) await ensureZebranie(form.editing.id);
       } else {
         const created = await window.electronAPI.addSpotkanie(input);
         if (materialyPotrzebne) {
           await window.electronAPI.setSpotkanieMaterialy(created.id, 'potrzebne');
+          await ensureZebranie(created.id);
         }
         // The meeting exists now, so the tasks written for it can point at it.
         // One that fails is said out loud; the meeting itself is already saved.
@@ -2155,6 +2347,35 @@ const Kalendarz: React.FC<Props> = ({
       t.kalMaterialsSavedDone,
     );
 
+  /**
+   * "Przygotuj materiały": the meeting's entry in Zebrania, version 1.0. Then
+   * offered at once — the entry is where the work continues, but the user may
+   * have more to do on the calendar first.
+   */
+  const handlePrzygotuj = async (spotkanie: Spotkanie) => {
+    setBusyId(spotkanie.id);
+    let created: Zebranie | null = null;
+    try {
+      created = await window.electronAPI.zebranieFromSpotkanie(spotkanie.id);
+      await load(true);
+    } catch (err: unknown) {
+      notify.error(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setBusyId(null);
+    }
+    if (!created) return;
+    const w = latestWersja(created);
+    if (!onOpenZebranie) {
+      notify.success(t.zebraniaKalPreparedDone);
+      return;
+    }
+    const go = await notify.confirm(
+      t.zebraniaKalPrepared.replace('{v}', w ? wersjaLabel(w) : '1.0'),
+      { confirmLabel: t.zebraniaKalOpen, cancelLabel: t.zebraniaKalStay },
+    );
+    if (go) onOpenZebranie(created.id);
+  };
+
   const handleDokumenty = (spotkanie: Spotkanie, sent: boolean, opis: string) =>
     runOnMeeting(
       spotkanie.id,
@@ -2195,11 +2416,6 @@ const Kalendarz: React.FC<Props> = ({
     } catch (err: unknown) {
       notify.error(err instanceof Error ? err.message : 'Unknown error');
     }
-  };
-
-  /** Follow a meeting from the "coming up" list to its own day. */
-  const goToSpotkanie = (spotkanie: Spotkanie) => {
-    selectDay(toDayKey(spotkanie.startsAt), spotkanie.id);
   };
 
   /** Delete a meeting's task — from its card or from its form. */
@@ -2284,6 +2500,17 @@ const Kalendarz: React.FC<Props> = ({
       onTerminStatus={(status) => void handleTerminStatus(s, status)}
       onDokumenty={(sent, opis) => void handleDokumenty(s, sent, opis)}
       onMaterialy={(status) => void handleMaterialy(s, status)}
+      zebranie={zebranieForSpotkanie(zebrania, s.id)}
+      onPrzygotuj={() => void handlePrzygotuj(s)}
+      onOpenZebranie={
+        onOpenZebranie
+          ? () => {
+              const z = zebranieForSpotkanie(zebrania, s.id);
+              if (z) onOpenZebranie(z.id);
+            }
+          : undefined
+      }
+      onZawiadomienie={s.adresId !== null ? () => setZawiadomienieFor(s.id) : undefined}
       onSendMailing={
         onSendDocuments && s.adresId !== null
           ? () => handleSendMailing(s)
@@ -2736,44 +2963,6 @@ const Kalendarz: React.FC<Props> = ({
                   </div>
                 )}
               </div>
-
-              <div className="kal-side__block kal-side__block--next">
-                <div className="kal-side__head">
-                  <h3>{t.kalUpcoming}</h3>
-                </div>
-                {upcoming.length === 0 ? (
-                  <div className="kal-side__empty kal-side__empty--sm">
-                    <span>{t.kalUpcomingEmpty}</span>
-                  </div>
-                ) : (
-                  <div className="kal-next">
-                    {upcoming.map((s) => {
-                      const typ = typOf(s, typy);
-                      return (
-                        <button
-                          key={s.id}
-                          type="button"
-                          className="kal-next__item"
-                          style={{
-                            ['--chip' as string]: normalizeHexColor(typ?.kolor ?? DEFAULT_TYP_COLOR),
-                          }}
-                          onClick={() => goToSpotkanie(s)}
-                        >
-                          <span className="kal-next__bar" />
-                          <span className="kal-next__body">
-                            <span className="kal-next__name">{s.nazwa}</span>
-                            <span className="kal-next__when">
-                              {formatStamp(s.startsAt, locale)}
-                              {s.adresNazwa ? ` · ${s.adresNazwa}` : ''}
-                            </span>
-                          </span>
-                          <Icon name="chevron-right" size={15} />
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
             </aside>
           </div>
         )}
@@ -2894,6 +3083,18 @@ const Kalendarz: React.FC<Props> = ({
           {tip.spotkanie.opis && <p className="kal-tip__desc">{tip.spotkanie.opis}</p>}
           <div className="kal-tip__hint">{t.kalChipDoubleClick}</div>
         </div>
+      )}
+
+      {zawiadomienieFor !== null && (
+        <ZawiadomienieModal
+          key={zawiadomienieFor}
+          language={language}
+          userEmail={userEmail ?? ''}
+          spotkanieId={zawiadomienieFor}
+          onClose={() => setZawiadomienieFor(null)}
+          onChanged={() => void load(true)}
+          onOpenSzablony={onOpenSzablony}
+        />
       )}
 
       {mailingDetails && (

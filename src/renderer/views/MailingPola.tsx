@@ -3,12 +3,14 @@ import { MailingPole, MailingPoleTyp } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
+import { FormField, FormSection, RequiredNote } from '../components/FormSection';
 import Icon from '../components/Icon';
-import ModalDismiss from '../components/Modal';
+import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
 import {
   BUILTIN_MAILING_FIELDS,
   fieldPlaceholder,
   formatFieldValue,
+  kalendarzFieldOf,
   normalizeFieldName,
 } from '../../shared/mailing-template';
 
@@ -98,121 +100,108 @@ const FieldFormModal: React.FC<FieldFormModalProps> = ({
     onSubmit({ nazwa: n, tekst, jednostka: usesUnit ? jednostka.trim() : '', typWartosci });
   };
 
+  const submitOnEnter = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+  const errorText = localError || error;
+
   return (
     <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+      <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onCancel} />
-        <div className="modal-header">{editing ? t.edit : t.mailingFieldAdd}</div>
-        <div className="modal-body">
-          <div className="form-group">
-            <label>{t.mailingFieldName} <span style={{ color: 'red' }}>*</span></label>
-            <input
-              type="text"
-              value={nazwa}
-              onChange={(e) => { setNazwa(e.target.value); if (localError) setLocalError(null); }}
-              placeholder={t.mailingFieldNamePlaceholder}
-              autoFocus
-            />
-          </div>
-          <div className="form-group">
-            <label>{t.mailingFieldText}</label>
-            <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
-              {t.mailingFieldTextHint}
-            </div>
-            <input
-              type="text"
-              value={tekst}
-              onChange={(e) => setTekst(e.target.value)}
-              placeholder={t.mailingFieldTextPlaceholder}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleSubmit();
-                }
-              }}
-            />
-          </div>
-          <div className="form-group">
-            <label>{t.mailingFieldValueType}</label>
-            <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
-              {t.mailingFieldValueTypeHint}
-            </div>
-            {/* The same segmented switch as the editor's "Wstaw" control — one
-                visual language for "pick one of a few" inside the module. */}
-            <div className="ff-part-toggle" role="group" aria-label={t.mailingFieldValueType}>
-              {VALUE_TYPES.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  className={`ff-part-toggle__item${typWartosci === option ? ' is-active' : ''}`}
-                  aria-pressed={typWartosci === option}
-                  onClick={() => setTypWartosci(option)}
-                >
-                  {valueTypeLabel(option, t)}
-                </button>
-              ))}
-            </div>
-          </div>
-          {usesUnit && (
-            <div className="form-group">
-              <label>{t.mailingFieldUnit}</label>
-              <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
-                {t.mailingFieldUnitHint}
-              </div>
+        <ModalHeader
+          icon="sparkles"
+          title={editing ? t.mailingFieldEdit : t.mailingFieldAdd}
+          subtitle={editing ? editing.nazwa : t.mailingFieldFormSubtitleAdd}
+        />
+        <div className="modal-body modal-body--sectioned">
+          <FormSection icon="sparkles" title={t.mailingFieldSection} description={t.mailingFieldSectionDesc}>
+            <FormField label={t.mailingFieldName} htmlFor="pole-name" required error={errorText}>
               <input
+                id="pole-name"
                 type="text"
-                value={jednostka}
-                onChange={(e) => setJednostka(e.target.value)}
-                placeholder={t.mailingFieldUnitPlaceholder}
-                style={{ maxWidth: '220px' }}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleSubmit();
-                  }
-                }}
+                value={nazwa}
+                onChange={(e) => { setNazwa(e.target.value); if (localError) setLocalError(null); }}
+                placeholder={t.mailingFieldNamePlaceholder}
+                autoFocus
               />
-            </div>
-          )}
+            </FormField>
+            <FormField label={t.mailingFieldText} htmlFor="pole-text" hint={t.mailingFieldTextHint}>
+              <input
+                id="pole-text"
+                type="text"
+                value={tekst}
+                onChange={(e) => setTekst(e.target.value)}
+                placeholder={t.mailingFieldTextPlaceholder}
+                onKeyDown={submitOnEnter}
+              />
+            </FormField>
+          </FormSection>
+
+          <FormSection icon="edit" title={t.mailingFieldSectionValue} description={t.mailingFieldSectionValueDesc}>
+            <FormField label={t.mailingFieldValueType} hint={t.mailingFieldValueTypeHint}>
+              {/* The same segmented switch as the editor's "Wstaw" control — one
+                  visual language for "pick one of a few" inside the module. */}
+              <div className="zad-seg" role="radiogroup" aria-label={t.mailingFieldValueType}>
+                {VALUE_TYPES.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    role="radio"
+                    aria-checked={typWartosci === option}
+                    className={`zad-seg__btn${typWartosci === option ? ' is-active' : ''}`}
+                    onClick={() => setTypWartosci(option)}
+                  >
+                    {valueTypeLabel(option, t)}
+                  </button>
+                ))}
+              </div>
+            </FormField>
+            {usesUnit && (
+              <FormField label={t.mailingFieldUnit} htmlFor="pole-unit" hint={t.mailingFieldUnitHint}>
+                <div className="form-inline form-inline--narrow">
+                  <input
+                    id="pole-unit"
+                    type="text"
+                    value={jednostka}
+                    onChange={(e) => setJednostka(e.target.value)}
+                    placeholder={t.mailingFieldUnitPlaceholder}
+                    onKeyDown={submitOnEnter}
+                  />
+                </div>
+              </FormField>
+            )}
+          </FormSection>
 
           {(nazwa.trim() || tekst.trim() || (usesUnit && jednostka.trim())) && (
-            <div style={{ fontSize: '12px', opacity: 0.75, display: 'grid', gap: '4px' }}>
-              <div>{t.mailingFieldPreview}:</div>
-              <div>
-                <code>{fieldPlaceholder(nazwa || '…')}</code> →{' '}
-                <em>{[tekst.trim(), valueSample].filter(Boolean).join(' ')}</em>
-              </div>
+            <FormSection icon="eye" title={t.mailingFieldPreview}>
               {/* The two halves separately — this is where a user meets them, and
                   seeing what each resolves to is shorter than explaining it. */}
-              <div>
-                <code>{fieldPlaceholder(nazwa || '…', 'label')}</code> →{' '}
-                <em>{tekst.trim() || nazwa.trim() || '…'}</em>
-              </div>
-              <div>
-                <code>{fieldPlaceholder(nazwa || '…', 'value')}</code> →{' '}
-                <em>{valueSample}</em>
-              </div>
-            </div>
-          )}
-
-          {(localError || error) && (
-            <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '8px' }}>
-              {localError || error}
-            </div>
+              <dl className="placeholder-preview">
+                <dt><code className="code-chip">{fieldPlaceholder(nazwa || '…')}</code></dt>
+                <dd>{[tekst.trim(), valueSample].filter(Boolean).join(' ')}</dd>
+                <dt><code className="code-chip">{fieldPlaceholder(nazwa || '…', 'label')}</code></dt>
+                <dd>{tekst.trim() || nazwa.trim() || '…'}</dd>
+                <dt><code className="code-chip">{fieldPlaceholder(nazwa || '…', 'value')}</code></dt>
+                <dd>{valueSample}</dd>
+              </dl>
+            </FormSection>
           )}
         </div>
-        <div className="modal-footer">
-          <button className="button button-secondary" onClick={onCancel} disabled={isSaving}>
-            <Icon name="x" size={14} />{' '}{t.cancel}
-          </button>
-          <button
-            className="button button-success"
-            onClick={handleSubmit}
-            disabled={isSaving || !nazwa.trim()}
-          >
-            <Icon name="save" size={14} />{' '}{editing ? t.update : t.add}
-          </button>
-        </div>
+        <ModalFooter
+          note={<RequiredNote label={t.formRequiredNote} />}
+          onCancel={onCancel}
+          cancelLabel={t.cancel}
+          onSubmit={handleSubmit}
+          submitLabel={editing ? t.save : t.mailingFieldAdd}
+          submitIcon={editing ? 'save' : 'plus'}
+          submitDisabled={!nazwa.trim()}
+          submitTitle={t.mailingFieldNameRequired}
+          busy={isSaving}
+        />
       </div>
     </div>
   );
@@ -311,85 +300,84 @@ const MailingPola: React.FC<Props> = ({ language }) => {
 
   return (
     <div className="content-body">
-      <div className="card">
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            gap: '12px',
-            marginBottom: '15px',
-          }}
-        >
-          <div>
-            <h2 style={{ margin: '0 0 8px' }}>{t.mailingFieldsTitle}</h2>
-            <div style={{ fontSize: '13px', opacity: 0.75, maxWidth: '80ch' }}>
-              {t.mailingFieldsHint}
-            </div>
-            <div style={{ fontSize: '12px', opacity: 0.7, maxWidth: '80ch', marginTop: '8px' }}>
-              {t.mailingFieldPlaceholderPartsHint}
-            </div>
-          </div>
+      <FormSection
+        icon="sparkles"
+        title={t.mailingFieldsTitle}
+        description={t.mailingFieldsHint}
+        aside={
           <button
             className="button button-primary"
             onClick={() => { setError(null); setFormState({ editing: null }); }}
             disabled={isSaving}
-            style={{ whiteSpace: 'nowrap' }}
           >
             <Icon name="plus" size={14} />{' '}{t.mailingFieldAdd}
           </button>
+        }
+      >
+        <div className="callout callout--info">
+          <Icon name="info" size={16} />
+          <div className="callout__body">{t.mailingFieldPlaceholderPartsHint}</div>
         </div>
 
         {error && !formState && (
-          <div style={{ fontSize: '12px', color: 'var(--danger)', marginBottom: '10px' }}>{error}</div>
+          <div className="callout callout--danger" role="alert">
+            <Icon name="alert-triangle" size={16} />
+            <div className="callout__body">{error}</div>
+          </div>
         )}
 
         {pola.length > 0 ? (
-          <table>
+          <table className="data-table">
             <thead>
               <tr>
                 <th>{t.mailingFieldName}</th>
                 <th>{t.mailingFieldPlaceholder}</th>
                 <th>{t.mailingFieldText}</th>
                 <th>{t.mailingFieldUnit}</th>
-                <th>{t.actions}</th>
+                <th className="data-table__actions">{t.actions}</th>
               </tr>
             </thead>
             <tbody>
               {pola.map((p) => (
                 <tr key={p.id}>
-                  <td>
-                    <div>{p.nazwa}</div>
-                    {/* Only the non-default kinds are called out — a dictionary
-                        of text fields labelled "tekst" fifty times says nothing. */}
-                    {p.typWartosci !== 'tekst' && (
-                      <div style={{ fontSize: '12px', opacity: 0.6 }}>
-                        {valueTypeLabel(p.typWartosci, t)}
-                      </div>
-                    )}
+                  <td className="data-table__name">
+                    <span className="cell-with-badge">
+                      <span className="cell-title">{p.nazwa}</span>
+                      {/* Only the non-default kinds are called out — a dictionary
+                          of text fields labelled "tekst" fifty times says nothing. */}
+                      {p.typWartosci !== 'tekst' && (
+                        <span className="form-section__badge is-neutral">{valueTypeLabel(p.typWartosci, t)}</span>
+                      )}
+                    </span>
                   </td>
-                  <td style={{ fontFamily: 'monospace', fontSize: '12px' }}>
-                    <div>{fieldPlaceholder(p.nazwa)}</div>
-                    <div style={{ opacity: 0.6 }}>{fieldPlaceholder(p.nazwa, 'label')}</div>
-                    <div style={{ opacity: 0.6 }}>{fieldPlaceholder(p.nazwa, 'value')}</div>
-                  </td>
-                  <td>{p.tekst || '—'}</td>
-                  <td>{p.jednostka || '—'}</td>
                   <td>
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                    <div className="code-stack">
+                      <code className="code-chip">{fieldPlaceholder(p.nazwa)}</code>
+                      <code className="code-chip is-quiet">{fieldPlaceholder(p.nazwa, 'label')}</code>
+                      <code className="code-chip is-quiet">{fieldPlaceholder(p.nazwa, 'value')}</code>
+                    </div>
+                  </td>
+                  <td>{p.tekst || <span className="cell-empty">—</span>}</td>
+                  <td>{p.jednostka || <span className="cell-empty">—</span>}</td>
+                  <td className="data-table__actions">
+                    <div className="row-actions">
                       <button
-                        className="button button-small button-primary"
+                        type="button"
+                        className="button button-small button-secondary"
                         onClick={() => { setError(null); setFormState({ editing: p }); }}
                         disabled={isSaving}
                       >
                         <Icon name="edit" size={13} />{' '}{t.edit}
                       </button>
                       <button
-                        className="button button-small button-danger"
+                        type="button"
+                        className="button button-ghost button-icon icon-danger"
                         onClick={() => handleDelete(p)}
                         disabled={isSaving}
+                        title={t.delete}
+                        aria-label={`${t.delete}: ${p.nazwa}`}
                       >
-                        <Icon name="trash" size={13} />{' '}{t.delete}
+                        <Icon name="trash" size={15} />
                       </button>
                     </div>
                   </td>
@@ -398,18 +386,22 @@ const MailingPola: React.FC<Props> = ({ language }) => {
             </tbody>
           </table>
         ) : (
-          <div className="empty-state">{t.mailingNoFields}</div>
+          <div className="form-empty">
+            <Icon name="sparkles" size={16} />
+            {t.mailingNoFields}
+          </div>
         )}
-      </div>
+      </FormSection>
 
-      <div className="card">
-        <h2 style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Icon name="sparkles" size={18} /> {t.mailingBuiltinFields}
-        </h2>
-        <div style={{ fontSize: '13px', opacity: 0.75, marginBottom: '14px', maxWidth: '80ch' }}>
-          {t.mailingBuiltinFieldsHint}
+      <FormSection icon="sparkles" title={t.mailingBuiltinFields} description={t.mailingBuiltinFieldsHint}>
+        {/* The calendar fields are the one exception to "fills itself in": without
+            a meeting behind the letter they are typed at send time, so say so
+            where the user meets them first. */}
+        <div className="callout callout--muted">
+          <Icon name="calendar" size={16} />
+          <div className="callout__body">{t.mveBuiltinCalendarNote}</div>
         </div>
-        <table>
+        <table className="form-table">
           <thead>
             <tr>
               <th>{t.mailingFieldPlaceholder}</th>
@@ -419,15 +411,24 @@ const MailingPola: React.FC<Props> = ({ language }) => {
           <tbody>
             {BUILTIN_MAILING_FIELDS.map((f) => (
               <tr key={f.nazwa}>
-                <td style={{ fontFamily: 'monospace', fontSize: '12px' }}>
-                  {fieldPlaceholder(f.nazwa)}
+                <td>
+                  <code className="code-chip">{fieldPlaceholder(f.nazwa)}</code>
                 </td>
-                <td>{f.opis}</td>
+                <td>
+                  {f.opis}
+                  {kalendarzFieldOf(f.nazwa) && (
+                    <div className="form-table__sub">
+                      <Icon name="calendar" size={12} /> {t.mveBuiltinCalendarBadge}
+                      {' · '}
+                      {valueTypeLabel(kalendarzFieldOf(f.nazwa)!.typWartosci, t)}
+                    </div>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
+      </FormSection>
 
       {formState && (
         <FieldFormModal

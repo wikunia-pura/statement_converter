@@ -5,7 +5,7 @@ import React from 'react';
  * per month, so the header tells you *which* month you are looking at before
  * you read a single word, and switching months is visibly a switch.
  *
- * Inline SVG in the same hand-drawn spirit as BankIllustration: explicit colors
+ * Inline SVG in a hand-drawn spirit: explicit colors
  * (a season has colors; tokens would wash them out), thick rounded strokes, and
  * one gentle float animation. Each month also names an accent used to tint the
  * bar behind it — see `monthAccent`.

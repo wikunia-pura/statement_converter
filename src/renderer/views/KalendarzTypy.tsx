@@ -3,8 +3,9 @@ import { Spotkanie, SpotkanieTyp } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
+import { FormField, FormSection, RequiredNote } from '../components/FormSection';
 import Icon from '../components/Icon';
-import ModalDismiss from '../components/Modal';
+import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
 import {
   DEFAULT_TYP_COLOR,
   TYP_COLORS,
@@ -90,125 +91,119 @@ const TypFormModal: React.FC<TypFormModalProps> = ({
     });
   };
 
+  const submitOnEnter = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+
   return (
     <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+      <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onCancel} ariaLabel={t.close} />
-        <div className="modal-header">{editing ? t.edit : t.kalTypAdd}</div>
-        <div className="modal-body">
-          <div className="form-group">
-            <label>
-              {t.kalTypName} <span style={{ color: 'red' }}>*</span>
-            </label>
-            <input
-              type="text"
-              value={nazwa}
-              onChange={(e) => {
-                setNazwa(e.target.value);
-                if (localError) setLocalError(null);
-              }}
-              placeholder={t.kalTypNamePlaceholder}
-              autoFocus
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleSubmit();
-                }
-              }}
-            />
-          </div>
-
-          <div className="form-group">
-            <label>{t.kalTypColor}</label>
-            <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
-              {t.kalTypColorHint}
-            </div>
-            <div className="kal-swatches">
-              {TYP_COLORS.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  className={`kal-swatch${kolor === option ? ' is-active' : ''}`}
-                  style={{ ['--swatch' as string]: option }}
-                  onClick={() => setKolor(option)}
-                  aria-pressed={kolor === option}
-                  aria-label={option}
-                  title={option}
-                />
-              ))}
-              {/* The palette covers the common case; the native picker is there
-                  for a team that wants its own colour. */}
+        <ModalHeader
+          icon="calendar"
+          title={editing ? t.kalTypEdit : t.kalTypAdd}
+          subtitle={editing ? editing.nazwa : t.kalTypFormSubtitleAdd}
+        />
+        <div className="modal-body modal-body--sectioned">
+          <FormSection icon="calendar" title={t.kalTypSection} description={t.kalTypSectionDesc}>
+            <FormField label={t.kalTypName} htmlFor="kal-typ-name" required error={localError || error}>
               <input
-                type="color"
-                className="kal-swatch-custom"
-                value={kolor}
-                onChange={(e) => setKolor(e.target.value)}
-                aria-label={t.kalTypColorCustom}
-                title={t.kalTypColorCustom}
+                id="kal-typ-name"
+                type="text"
+                value={nazwa}
+                onChange={(e) => {
+                  setNazwa(e.target.value);
+                  if (localError) setLocalError(null);
+                }}
+                placeholder={t.kalTypNamePlaceholder}
+                autoFocus
+                onKeyDown={submitOnEnter}
               />
-            </div>
-          </div>
+            </FormField>
+            <FormField label={t.kalTypDesc} htmlFor="kal-typ-desc">
+              <input
+                id="kal-typ-desc"
+                type="text"
+                value={opis}
+                onChange={(e) => setOpis(e.target.value)}
+                placeholder={t.kalTypDescPlaceholder}
+              />
+            </FormField>
+          </FormSection>
 
-          {/* The notice period. Left empty for a kind of meeting that has none —
-              and then nothing about deadlines applies to its meetings. */}
-          <div className="form-group">
-            <label>{t.kalTypDays}</label>
-            <input
-              type="number"
-              min={1}
-              max={365}
-              value={dni}
-              placeholder={t.kalTypDaysPlaceholder}
-              onChange={(e) => {
-                setDni(e.target.value);
-                if (localError) setLocalError(null);
-              }}
-              style={{ maxWidth: '140px' }}
-            />
-            <div style={{ fontSize: '12px', opacity: 0.7, marginTop: '4px' }}>
-              {t.kalTypDaysHint}
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label>{t.kalTypDesc}</label>
-            <input
-              type="text"
-              value={opis}
-              onChange={(e) => setOpis(e.target.value)}
-              placeholder={t.kalTypDescPlaceholder}
-            />
-          </div>
-
-          <div style={{ fontSize: '12px', opacity: 0.75, display: 'grid', gap: '6px' }}>
-            <div>{t.kalTypPreview}:</div>
-            <div>
+          <FormSection icon="eye" title={t.kalTypSectionLook} description={t.kalTypSectionLookDesc}>
+            <FormField label={t.kalTypColor}>
+              <div className="kal-swatches">
+                {TYP_COLORS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    className={`kal-swatch${kolor === option ? ' is-active' : ''}`}
+                    style={{ ['--swatch' as string]: option }}
+                    onClick={() => setKolor(option)}
+                    aria-pressed={kolor === option}
+                    aria-label={option}
+                    title={option}
+                  />
+                ))}
+                {/* The palette covers the common case; the native picker is there
+                    for a team that wants its own colour. */}
+                <input
+                  type="color"
+                  className="kal-swatch-custom"
+                  value={kolor}
+                  onChange={(e) => setKolor(e.target.value)}
+                  aria-label={t.kalTypColorCustom}
+                  title={t.kalTypColorCustom}
+                />
+              </div>
+            </FormField>
+            <div className="preview-line">
+              <span className="preview-line__label">{t.kalTypPreview}</span>
               <span className="kal-chip" style={{ ['--chip' as string]: normalizeHexColor(kolor) }}>
                 <span className="kal-chip__dot" />
                 <span className="kal-chip__time">10:00</span>
                 <span className="kal-chip__name">{nazwa.trim() || t.kalTypPreviewMeeting}</span>
               </span>
             </div>
-          </div>
+          </FormSection>
 
-          {(localError || error) && (
-            <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '8px' }}>
-              {localError || error}
-            </div>
-          )}
+          {/* The notice period. Left empty for a kind of meeting that has none —
+              and then nothing about deadlines applies to its meetings. */}
+          <FormSection icon="clock" title={t.kalTypSectionDocs} description={t.kalTypSectionDocsDesc}>
+            <FormField label={t.kalTypDays} htmlFor="kal-typ-days" hint={t.kalTypDaysHint}>
+              <div className="form-inline form-inline--narrow">
+                <input
+                  id="kal-typ-days"
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={dni}
+                  placeholder={t.kalTypDaysPlaceholder}
+                  onChange={(e) => {
+                    setDni(e.target.value);
+                    if (localError) setLocalError(null);
+                  }}
+                  onKeyDown={submitOnEnter}
+                />
+              </div>
+            </FormField>
+          </FormSection>
         </div>
-        <div className="modal-footer">
-          <button className="button button-secondary" onClick={onCancel} disabled={isSaving}>
-            <Icon name="x" size={14} /> {t.cancel}
-          </button>
-          <button
-            className="button button-success"
-            onClick={handleSubmit}
-            disabled={isSaving || !nazwa.trim()}
-          >
-            <Icon name="save" size={14} /> {editing ? t.update : t.add}
-          </button>
-        </div>
+        <ModalFooter
+          note={<RequiredNote label={t.formRequiredNote} />}
+          onCancel={onCancel}
+          cancelLabel={t.cancel}
+          onSubmit={handleSubmit}
+          submitLabel={editing ? t.save : t.kalTypAdd}
+          submitIcon={editing ? 'save' : 'plus'}
+          submitDisabled={!nazwa.trim()}
+          submitTitle={t.kalTypNameRequired}
+          busy={isSaving}
+        />
       </div>
     </div>
   );
@@ -327,22 +322,11 @@ const KalendarzTypy: React.FC<Props> = ({ language }) => {
 
   return (
     <div className="content-body">
-      <div className="card">
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            gap: '12px',
-            marginBottom: '15px',
-          }}
-        >
-          <div>
-            <h2 style={{ margin: '0 0 8px' }}>{t.kalTypyTitle}</h2>
-            <div style={{ fontSize: '13px', opacity: 0.75, maxWidth: '80ch' }}>
-              {t.kalTypyHint}
-            </div>
-          </div>
+      <FormSection
+        icon="clipboard"
+        title={t.kalTypyTitle}
+        description={t.kalTypyHint}
+        aside={
           <button
             className="button button-primary"
             onClick={() => {
@@ -350,27 +334,27 @@ const KalendarzTypy: React.FC<Props> = ({ language }) => {
               setFormState({ editing: null });
             }}
             disabled={isSaving}
-            style={{ whiteSpace: 'nowrap' }}
           >
             <Icon name="plus" size={14} /> {t.kalTypAdd}
           </button>
-        </div>
-
+        }
+      >
         {error && !formState && (
-          <div style={{ fontSize: '12px', color: 'var(--danger)', marginBottom: '10px' }}>
-            {error}
+          <div className="callout callout--danger" role="alert">
+            <Icon name="alert-triangle" size={16} />
+            <div className="callout__body">{error}</div>
           </div>
         )}
 
         {typy.length > 0 ? (
-          <table>
+          <table className="data-table">
             <thead>
               <tr>
                 <th>{t.kalTypName}</th>
                 <th>{t.kalTypDesc}</th>
                 <th>{t.kalTypDaysColumn}</th>
                 <th>{t.kalTypUsage}</th>
-                <th>{t.actions}</th>
+                <th className="data-table__actions">{t.actions}</th>
               </tr>
             </thead>
             <tbody>
@@ -385,7 +369,7 @@ const KalendarzTypy: React.FC<Props> = ({ language }) => {
                       <span className="kal-chip__name">{typ.nazwa}</span>
                     </span>
                   </td>
-                  <td>{typ.opis || '—'}</td>
+                  <td>{typ.opis || <span className="cell-empty">—</span>}</td>
                   <td>
                     {typ.dniNaDokumenty != null ? (
                       <span className="kal-days">
@@ -393,14 +377,15 @@ const KalendarzTypy: React.FC<Props> = ({ language }) => {
                         {t.kalTypDaysValue.replace('{days}', String(typ.dniNaDokumenty))}
                       </span>
                     ) : (
-                      <span style={{ opacity: 0.6 }}>{t.kalTypDaysNone}</span>
+                      <span className="cell-empty">{t.kalTypDaysNone}</span>
                     )}
                   </td>
                   <td>{usageByTyp.get(typ.id) ?? 0}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                  <td className="data-table__actions">
+                    <div className="row-actions">
                       <button
-                        className="button button-small button-primary"
+                        type="button"
+                        className="button button-small button-secondary"
                         onClick={() => {
                           setError(null);
                           setFormState({ editing: typ });
@@ -410,11 +395,14 @@ const KalendarzTypy: React.FC<Props> = ({ language }) => {
                         <Icon name="edit" size={13} /> {t.edit}
                       </button>
                       <button
-                        className="button button-small button-danger"
+                        type="button"
+                        className="button button-ghost button-icon icon-danger"
                         onClick={() => handleDelete(typ)}
                         disabled={isSaving}
+                        title={t.delete}
+                        aria-label={`${t.delete}: ${typ.nazwa}`}
                       >
-                        <Icon name="trash" size={13} /> {t.delete}
+                        <Icon name="trash" size={15} />
                       </button>
                     </div>
                   </td>
@@ -423,9 +411,12 @@ const KalendarzTypy: React.FC<Props> = ({ language }) => {
             </tbody>
           </table>
         ) : (
-          <div className="empty-state">{t.kalNoTypy}</div>
+          <div className="form-empty">
+            <Icon name="clipboard" size={16} />
+            {t.kalNoTypy}
+          </div>
         )}
-      </div>
+      </FormSection>
 
       {formState && (
         <TypFormModal

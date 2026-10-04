@@ -9,6 +9,7 @@ import {
 } from '../../shared/app-users';
 import { translations, Language } from '../translations';
 import { useNotify } from './Notifications';
+import { FormSection } from './FormSection';
 import Icon from './Icon';
 import Loader from './Loader';
 
@@ -186,29 +187,26 @@ const UsersCard: React.FC<Props> = ({ language, currentEmail, onNamesChanged }) 
   };
 
   return (
-    <div className="card">
-      <h2 style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <Icon name="users" size={20} /> {t.usersTitle}
-      </h2>
-      <p style={{ color: 'var(--text-tertiary)', fontSize: '14px', marginBottom: '16px' }}>
-        {t.usersHint}
-      </p>
+    <FormSection icon="users" title={t.usersTitle} description={t.usersHint}>
 
       {isLoading ? (
         <Loader label={t.loading} />
       ) : users.length === 0 ? (
-        <div style={{ color: 'var(--text-tertiary)', fontSize: '14px' }}>{t.usersEmpty}</div>
+        <div className="form-empty">
+          <Icon name="users" size={16} />
+          {t.usersEmpty}
+        </div>
       ) : (
         <>
           <div className="users-table">
-            <table>
+            <table className="form-table">
               <thead>
                 <tr>
                   <th>{t.usersColumnPerson}</th>
-                  <th style={{ width: '22%' }}>{t.usersColumnFirstName}</th>
-                  <th style={{ width: '22%' }}>{t.usersColumnLastName}</th>
-                  <th style={{ width: '1%' }}>{t.usersColumnColor}</th>
-                  <th style={{ width: '1%' }} aria-label={t.save} />
+                  <th className="users-table__name">{t.usersColumnFirstName}</th>
+                  <th className="users-table__name">{t.usersColumnLastName}</th>
+                  <th className="users-table__fit">{t.usersColumnColor}</th>
+                  <th className="users-table__fit" aria-label={t.save} />
                 </tr>
               </thead>
               <tbody>
@@ -274,12 +272,12 @@ const UsersCard: React.FC<Props> = ({ language, currentEmail, onNamesChanged }) 
                       <td>
                         <button
                           type="button"
-                          className="button button-primary"
+                          className="button button-small button-secondary"
                           onClick={() => void save(user)}
                           disabled={!dirty || savingId === user.id}
                           title={dirty ? t.save : t.usersNothingToSave}
                         >
-                          <Icon name={savingId === user.id ? 'loader' : 'save'} size={14} />{' '}
+                          <Icon name={savingId === user.id ? 'loader' : 'save'} size={13} className={savingId === user.id ? 'icon-spin' : undefined} />{' '}
                           {t.save}
                         </button>
                       </td>
@@ -289,14 +287,14 @@ const UsersCard: React.FC<Props> = ({ language, currentEmail, onNamesChanged }) 
               </tbody>
             </table>
           </div>
-          <p style={{ color: 'var(--text-tertiary)', fontSize: '13px', marginTop: '12px' }}>
+          <div className="form-field__hint">
             {t.usersNamedCount
               .replace('{named}', String(namedCount))
               .replace('{total}', String(users.length))}
-          </p>
+          </div>
         </>
       )}
-    </div>
+    </FormSection>
   );
 };
 

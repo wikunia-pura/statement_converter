@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon';
+import { ModalFooter, ModalHeader } from './Modal';
 
 /**
  * In-app notification system replacing native window.alert().
@@ -77,6 +78,15 @@ interface NotificationProviderProps {
   okLabel?: string;
   cancelLabel?: string;
   dismissLabel?: string;
+  /** Default heading of a confirm dialog, and of a destructive one. */
+  confirmTitle?: string;
+  confirmDangerTitle?: string;
+  /** Default label of the confirm button. */
+  confirmLabel?: string;
+  /** The header's second line, under the heading. */
+  errorSubtitle?: string;
+  confirmSubtitle?: string;
+  confirmDangerSubtitle?: string;
 }
 
 export const NotificationProvider: React.FC<NotificationProviderProps> = ({
@@ -85,6 +95,12 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
   okLabel = 'OK',
   cancelLabel = 'Anuluj',
   dismissLabel = 'Zamknij',
+  confirmTitle = 'Potwierdź',
+  confirmDangerTitle = 'Na pewno?',
+  confirmLabel = 'Potwierdź',
+  errorSubtitle,
+  confirmSubtitle,
+  confirmDangerSubtitle,
 }) => {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [errors, setErrors] = useState<ErrorDialog[]>([]);
@@ -180,21 +196,18 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
             if (e.target === e.currentTarget) dismissError();
           }}
         >
-          <div className="modal notification-error-modal">
-            <div className="modal-header notification-error-header">
-              <span className="notification-error-icon">
-                <Icon name="alert-circle" size={22} />
-              </span>
-              {currentError.title ?? errorTitle}
+          <div className="modal notification-dialog">
+            <ModalHeader
+              icon="alert-circle"
+              tone="danger"
+              title={currentError.title ?? errorTitle}
+              subtitle={errorSubtitle}
+            />
+            {/* The message is a card on the sunken body, like every other modal's content. */}
+            <div className="modal-body modal-body--sectioned">
+              <p className="notification-dialog__message">{currentError.message}</p>
             </div>
-            <div className="modal-body">
-              <p className="notification-error-message">{currentError.message}</p>
-            </div>
-            <div className="modal-footer">
-              <button type="button" className="button button-primary" autoFocus onClick={dismissError}>
-                <Icon name="check" size={14} />{' '}{okLabel}
-              </button>
-            </div>
+            <ModalFooter onCancel={dismissError} cancelLabel={okLabel} autoFocus="cancel" />
           </div>
         </div>
       )}
@@ -208,31 +221,26 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
             if (e.target === e.currentTarget) resolveConfirm(false);
           }}
         >
-          <div className="modal notification-confirm-modal">
-            {currentConfirm.options.title && (
-              <div className="modal-header">{currentConfirm.options.title}</div>
-            )}
-            <div className="modal-body">
-              <p className="notification-confirm-message">{currentConfirm.message}</p>
+          <div className="modal notification-dialog">
+            <ModalHeader
+              icon={currentConfirm.options.danger ? 'alert-triangle' : 'info'}
+              tone={currentConfirm.options.danger ? 'danger' : 'accent'}
+              title={currentConfirm.options.title ?? (currentConfirm.options.danger ? confirmDangerTitle : confirmTitle)}
+              subtitle={currentConfirm.options.danger ? confirmDangerSubtitle : confirmSubtitle}
+            />
+            <div className="modal-body modal-body--sectioned">
+              <p className="notification-dialog__message">{currentConfirm.message}</p>
             </div>
-            <div className="modal-footer">
-              <button
-                type="button"
-                className="button button-ghost"
-                autoFocus={currentConfirm.options.danger === true}
-                onClick={() => resolveConfirm(false)}
-              ><Icon name="x" size={14} />{' '}
-                {currentConfirm.options.cancelLabel ?? cancelLabel}
-              </button>
-              <button
-                type="button"
-                className={`button ${currentConfirm.options.danger ? 'button-danger' : 'button-primary'}`}
-                autoFocus={currentConfirm.options.danger !== true}
-                onClick={() => resolveConfirm(true)}
-              ><Icon name="check" size={14} />{' '}
-                {currentConfirm.options.confirmLabel ?? okLabel}
-              </button>
-            </div>
+            {/* A destructive question starts on Cancel, so Enter never deletes by reflex. */}
+            <ModalFooter
+              onCancel={() => resolveConfirm(false)}
+              cancelLabel={currentConfirm.options.cancelLabel ?? cancelLabel}
+              onSubmit={() => resolveConfirm(true)}
+              submitLabel={currentConfirm.options.confirmLabel ?? confirmLabel}
+              submitIcon="check"
+              submitTone={currentConfirm.options.danger ? 'danger' : 'success'}
+              autoFocus={currentConfirm.options.danger ? 'cancel' : 'submit'}
+            />
           </div>
         </div>
       )}

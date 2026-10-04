@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Adres, Bank, ApartmentMapping, KontoTyp, ZgnJednostka, ZgnPelnomocnik, ZarzadOsoba } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
-import { normalizeAccount } from '../../shared/account-extractor';
+import { formatAccount, normalizeAccount } from '../../shared/account-extractor';
 import { buildApartmentMapping, mappingTargets } from '../../shared/apartment-mapping';
 import ApartmentTargetsEditor, {
   ApartmentTargetDraft,
@@ -10,11 +10,15 @@ import ApartmentTargetsEditor, {
   apartmentTargetsFromDrafts,
   validateApartmentTargets,
 } from '../components/ApartmentTargetsEditor';
+import CheckList, { CheckListItem } from '../components/CheckList';
+import { FormField, FormRow, FormSection, RequiredNote } from '../components/FormSection';
 import Icon from '../components/Icon';
-import Loader from '../components/Loader';
-import ModalDismiss from '../components/Modal';
+import Loader, { BusyOverlay } from '../components/Loader';
+import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
 import ModuleTabs from '../components/ModuleTabs';
 import Select from '../components/Select';
+import { plural } from '../plural';
+import TagInput from '../components/TagInput';
 
 interface AccountTypeFormModalProps {
   language: Language;
@@ -58,67 +62,86 @@ const AccountTypeFormModal: React.FC<AccountTypeFormModalProps> = ({
     onSubmit({ name: n, bankAccountSymbol: s, apartmentPrefix: p, isDefault });
   };
 
+  const unchanged =
+    !!editing &&
+    name.trim() === editing.name &&
+    bankAccountSymbol.trim() === editing.bankAccountSymbol &&
+    apartmentPrefix.trim() === editing.apartmentPrefix &&
+    isDefault === editing.isDefault;
+  const clearError = () => { if (localError) setLocalError(null); };
+
   return (
     <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); onCancel(); }} style={{ zIndex: 1100 }}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+      <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onCancel} />
-        <div className="modal-header">
-          {editing ? t.edit : t.addAccountType}
-        </div>
-        <div className="modal-body">
-          <div className="form-group">
-            <label>{t.accountTypeName} <span style={{ color: 'red' }}>*</span></label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => { setName(e.target.value); if (localError) setLocalError(null); }}
-              placeholder={t.accountTypeNamePlaceholder}
-              autoFocus
-            />
-          </div>
-          <div className="form-group">
-            <label>{t.accountTypeBankSymbol} <span style={{ color: 'red' }}>*</span></label>
-            <input
-              type="text"
-              value={bankAccountSymbol}
-              onChange={(e) => { setBankAccountSymbol(e.target.value); if (localError) setLocalError(null); }}
-              placeholder={t.accountTypeBankSymbolPlaceholder}
-              style={{ fontFamily: 'monospace' }}
-            />
-          </div>
-          <div className="form-group">
-            <label>{t.accountTypeApartmentPrefix} <span style={{ color: 'red' }}>*</span></label>
-            <input
-              type="text"
-              value={apartmentPrefix}
-              onChange={(e) => { setApartmentPrefix(e.target.value); if (localError) setLocalError(null); }}
-              placeholder={t.accountTypeApartmentPrefixPlaceholder}
-              style={{ fontFamily: 'monospace' }}
-            />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginTop: '8px' }}>
-            <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{t.accountTypeIsDefault}</span>
-            <label className="toggle-switch">
-              <input type="checkbox" checked={isDefault} onChange={(e) => setIsDefault(e.target.checked)} />
-              <span className="toggle-slider"></span>
+        <ModalHeader
+          icon="wallet"
+          title={editing ? t.accountTypeEdit : t.addAccountType}
+          subtitle={editing ? editing.name : t.accountTypeFormSubtitle}
+        />
+        <div className="modal-body modal-body--sectioned">
+          <FormSection icon="wallet" title={t.accountTypeSection} description={t.accountTypeSectionDesc}>
+            <FormField label={t.accountTypeName} htmlFor="konto-typ-name" required>
+              <input
+                id="konto-typ-name"
+                type="text"
+                value={name}
+                onChange={(e) => { setName(e.target.value); clearError(); }}
+                placeholder={t.accountTypeNamePlaceholder}
+                autoFocus
+              />
+            </FormField>
+            <FormRow>
+              <FormField label={t.accountTypeBankSymbol} htmlFor="konto-typ-symbol" required>
+                <input
+                  id="konto-typ-symbol"
+                  type="text"
+                  className="input-mono"
+                  value={bankAccountSymbol}
+                  onChange={(e) => { setBankAccountSymbol(e.target.value); clearError(); }}
+                  placeholder={t.accountTypeBankSymbolPlaceholder}
+                />
+              </FormField>
+              <FormField label={t.accountTypeApartmentPrefix} htmlFor="konto-typ-prefix" required>
+                <input
+                  id="konto-typ-prefix"
+                  type="text"
+                  className="input-mono"
+                  value={apartmentPrefix}
+                  onChange={(e) => { setApartmentPrefix(e.target.value); clearError(); }}
+                  placeholder={t.accountTypeApartmentPrefixPlaceholder}
+                />
+              </FormField>
+            </FormRow>
+            <label className="switch-row">
+              <span className="switch-row__text">
+                <span className="switch-row__label">{t.accountTypeIsDefault}</span>
+                <span className="switch-row__hint">{t.accountTypeIsDefaultHint}</span>
+              </span>
+              <span className="toggle-switch">
+                <input type="checkbox" checked={isDefault} onChange={(e) => setIsDefault(e.target.checked)} />
+                <span className="toggle-slider"></span>
+              </span>
             </label>
-          </div>
-          {(localError || error) && (
-            <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '8px' }}>{localError || error}</div>
-          )}
+            {(localError || error) && (
+              <div className="callout callout--danger" role="alert">
+                <Icon name="alert-triangle" size={16} />
+                <div className="callout__body">{localError || error}</div>
+              </div>
+            )}
+          </FormSection>
         </div>
-        <div className="modal-footer">
-          <button className="button button-secondary" onClick={onCancel} disabled={isSaving}>
-            <Icon name="x" size={14} />{' '}{t.cancel}
-          </button>
-          <button
-            className="button button-success"
-            onClick={handleSubmit}
-            disabled={isSaving || !name.trim() || !bankAccountSymbol.trim() || !apartmentPrefix.trim()}
-          >
-            <Icon name="save" size={14} />{' '}{editing ? t.update : t.add}
-          </button>
-        </div>
+        <ModalFooter
+          note={<RequiredNote label={t.formRequiredNote} />}
+          onCancel={onCancel}
+          cancelLabel={t.cancel}
+          onSubmit={handleSubmit}
+          submitLabel={editing ? t.save : t.addAccountType}
+          submitIcon={editing ? 'save' : 'plus'}
+          submitDisabled={unchanged || !name.trim() || !bankAccountSymbol.trim() || !apartmentPrefix.trim()}
+          submitTitle={unchanged ? t.noChangesToSave : t.fillAllFields}
+          busy={isSaving}
+        />
       </div>
     </div>
   );
@@ -217,26 +240,19 @@ const AccountTypesPanel: React.FC<AccountTypesPanelProps> = ({ language, kontoTy
   };
 
   return (
-    <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '12px' }}>
-        <div>
-          <h2 style={{ margin: '0 0 6px' }}>{t.accountTypesTitle}</h2>
-          <div style={{ fontSize: '12px', opacity: 0.7, maxWidth: '80ch' }}>{t.accountTypesHint}</div>
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            className="button button-import"
-            onClick={handleImport}
-            disabled={isSaving}
-            style={{ whiteSpace: 'nowrap' }}
-          >
+    <FormSection
+      icon="settings"
+      title={t.accountTypesTitle}
+      description={t.accountTypesHint}
+      aside={
+        <div className="form-section__actions">
+          <button className="button button-import" onClick={handleImport} disabled={isSaving}>
             <Icon name="upload" size={14} />{' '}{t.importFromFile}
           </button>
           <button
             className="button button-export"
             onClick={handleExport}
             disabled={isSaving || kontoTypy.length === 0}
-            style={{ whiteSpace: 'nowrap' }}
           >
             <Icon name="download" size={14} />{' '}{t.exportToFile}
           </button>
@@ -244,46 +260,59 @@ const AccountTypesPanel: React.FC<AccountTypesPanelProps> = ({ language, kontoTy
             className="button button-primary"
             onClick={() => { setError(null); setFormState({ editing: null }); }}
             disabled={isSaving}
-            style={{ whiteSpace: 'nowrap' }}
-          ><Icon name="plus" size={14} />{' '}{t.addAccountType}
+          >
+            <Icon name="plus" size={14} />{' '}{t.addAccountType}
           </button>
         </div>
-      </div>
-
-      {error && (
-        <div style={{ fontSize: '12px', color: 'var(--danger)', marginBottom: '8px' }}>{error}</div>
+      }
+    >
+      {error && !formState && (
+        <div className="callout callout--danger" role="alert">
+          <Icon name="alert-triangle" size={16} />
+          <div className="callout__body">{error}</div>
+        </div>
       )}
 
       {kontoTypy.length > 0 ? (
-        <table>
+        <table className="form-table">
           <thead>
             <tr>
               <th>{t.accountTypeName}</th>
               <th>{t.accountTypeBankSymbol}</th>
               <th>{t.accountTypeApartmentPrefix}</th>
-              <th>{t.actions}</th>
+              <th className="data-table__actions">{t.actions}</th>
             </tr>
           </thead>
           <tbody>
             {kontoTypy.map((typ) => (
               <tr key={typ.id}>
                 <td>
-                  {typ.name}
-                  {typ.isDefault && (
-                    <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--accent)' }}>
-                      ({t.accountTypeDefaultBadge})
-                    </span>
-                  )}
+                  <span className="cell-with-badge">
+                    <span className="form-table__label">{typ.name}</span>
+                    {typ.isDefault && <span className="form-section__badge is-accent">{t.accountTypeDefaultBadge}</span>}
+                  </span>
                 </td>
-                <td style={{ fontFamily: 'monospace' }}>{typ.bankAccountSymbol}</td>
-                <td style={{ fontFamily: 'monospace' }}>{typ.apartmentPrefix}</td>
-                <td>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button className="button button-small button-primary" onClick={() => { setError(null); setFormState({ editing: typ }); }} disabled={isSaving}><Icon name="edit" size={13} />{' '}
-                      {t.edit}
+                <td className="cell-mono">{typ.bankAccountSymbol}</td>
+                <td className="cell-mono">{typ.apartmentPrefix}</td>
+                <td className="data-table__actions">
+                  <div className="row-actions">
+                    <button
+                      type="button"
+                      className="button button-small button-secondary"
+                      onClick={() => { setError(null); setFormState({ editing: typ }); }}
+                      disabled={isSaving}
+                    >
+                      <Icon name="edit" size={13} />{' '}{t.edit}
                     </button>
-                    <button className="button button-small button-danger" onClick={() => handleDelete(typ.id)} disabled={isSaving}><Icon name="trash" size={13} />{' '}
-                      {t.delete}
+                    <button
+                      type="button"
+                      className="button button-ghost button-icon icon-danger"
+                      onClick={() => handleDelete(typ.id)}
+                      disabled={isSaving}
+                      title={t.delete}
+                      aria-label={`${t.delete}: ${typ.name}`}
+                    >
+                      <Icon name="trash" size={15} />
                     </button>
                   </div>
                 </td>
@@ -292,7 +321,10 @@ const AccountTypesPanel: React.FC<AccountTypesPanelProps> = ({ language, kontoTy
           </tbody>
         </table>
       ) : (
-        <div className="empty-state">{t.noAccountTypes}</div>
+        <div className="form-empty">
+          <Icon name="wallet" size={16} />
+          {t.noAccountTypes}
+        </div>
       )}
 
       {formState && (
@@ -305,7 +337,7 @@ const AccountTypesPanel: React.FC<AccountTypesPanelProps> = ({ language, kontoTy
           onCancel={() => { setFormState(null); setError(null); }}
         />
       )}
-    </div>
+    </FormSection>
   );
 };
 
@@ -376,62 +408,63 @@ const ApartmentMappingFormModal: React.FC<ApartmentMappingFormModalProps> = ({
 
   return (
     <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); onCancel(); }} style={{ zIndex: 1100 }}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 620 }}>
+      <div className="modal modal--lg" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onCancel} />
-        <div className="modal-header">
-          {editing ? t.edit : t.addApartmentMapping}
-        </div>
-        <div className="modal-body">
-          <div className="form-group">
-            <label>{t.apartmentMappingMatchText} <span style={{ color: 'red' }}>*</span></label>
-            <input
-              type="text"
-              value={matchText}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setMatchText(e.target.value); if (error) setError(null); }}
-              placeholder={t.apartmentMappingMatchTextPlaceholder}
-              autoFocus
-            />
-          </div>
-          <div className="form-group">
-            <label>{t.apartmentMappingApartments} <span style={{ color: 'red' }}>*</span></label>
+        <ModalHeader
+          icon="clipboard"
+          title={editing ? t.apartmentMappingEdit : t.addApartmentMapping}
+          subtitle={editing ? editing.matchText : undefined}
+        />
+        <div className="modal-body modal-body--sectioned">
+          <FormSection icon="search" title={t.apartmentMappingSectionMatch} description={t.apartmentMappingSectionMatchDesc}>
+            <FormField label={t.apartmentMappingMatchText} htmlFor="apt-rule-match" required>
+              <input
+                id="apt-rule-match"
+                type="text"
+                value={matchText}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setMatchText(e.target.value); if (error) setError(null); }}
+                placeholder={t.apartmentMappingMatchTextPlaceholder}
+                autoFocus
+              />
+            </FormField>
+            <FormField label={t.apartmentMappingNote} htmlFor="apt-rule-note">
+              <input
+                id="apt-rule-note"
+                type="text"
+                value={note}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)}
+                placeholder={t.apartmentMappingNotePlaceholder}
+              />
+            </FormField>
+          </FormSection>
+          <FormSection icon="home" title={t.apartmentMappingSectionTargets} description={t.apartmentMappingSectionTargetsDesc}>
             <ApartmentTargetsEditor
               language={language}
               drafts={targets}
               onChange={(next) => { setTargets(next); if (error) setError(null); }}
               accountPlaceholder={t.apartmentMappingAccountPlaceholder}
             />
-            <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '8px' }}>
-              {t.apartmentMappingApartmentsHint}
-            </div>
-            <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '4px' }}>
-              {t.apartmentMappingAccountHint}
-            </div>
-          </div>
-          <div className="form-group">
-            <label>{t.apartmentMappingNote}</label>
-            <input
-              type="text"
-              value={note}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)}
-              placeholder={t.apartmentMappingNotePlaceholder}
-            />
-          </div>
+            <div className="form-field__hint">{t.apartmentMappingApartmentsHint}</div>
+            <div className="form-field__hint">{t.apartmentMappingAccountHint}</div>
+          </FormSection>
           {error && (
-            <div style={{ fontSize: '12px', color: 'var(--danger)', marginBottom: '8px' }}>{error}</div>
+            <div className="callout callout--danger" role="alert">
+              <Icon name="alert-triangle" size={16} />
+              <div className="callout__body">{error}</div>
+            </div>
           )}
         </div>
-        <div className="modal-footer">
-          <button className="button button-secondary" onClick={onCancel} disabled={isSaving}>
-            <Icon name="x" size={14} />{' '}{t.cancel}
-          </button>
-          <button
-            className="button button-success"
-            onClick={handleSubmit}
-            disabled={isSaving || !matchText.trim() || apartmentTargetsFromDrafts(targets).length === 0}
-          >
-            <Icon name="save" size={14} />{' '}{editing ? t.update : t.add}
-          </button>
-        </div>
+        <ModalFooter
+          note={<RequiredNote label={t.formRequiredNote} />}
+          onCancel={onCancel}
+          cancelLabel={t.cancel}
+          onSubmit={handleSubmit}
+          submitLabel={editing ? t.save : t.addApartmentMapping}
+          submitIcon={editing ? 'save' : 'plus'}
+          submitDisabled={!matchText.trim() || apartmentTargetsFromDrafts(targets).length === 0}
+          submitTitle={t.fillAllFields}
+          busy={isSaving}
+        />
       </div>
     </div>
   );
@@ -439,6 +472,8 @@ const ApartmentMappingFormModal: React.FC<ApartmentMappingFormModalProps> = ({
 
 interface ZarzadPersonFormModalProps {
   language: Language;
+  /** The community, named under the title. */
+  adresNazwa: string;
   /** Person being edited, or null when adding one. */
   editing: ZarzadOsoba | null;
   isSaving: boolean;
@@ -449,6 +484,7 @@ interface ZarzadPersonFormModalProps {
 /** Add/edit one board member: a name, and a mailbox if there is one. */
 const ZarzadPersonFormModal: React.FC<ZarzadPersonFormModalProps> = ({
   language,
+  adresNazwa,
   editing,
   isSaving,
   onSubmit,
@@ -480,49 +516,64 @@ const ZarzadPersonFormModal: React.FC<ZarzadPersonFormModalProps> = ({
     }
   };
 
+  const unchanged =
+    !!editing && imieNazwisko.trim() === editing.imieNazwisko && email.trim() === (editing.email || '');
+
   return (
     <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); onCancel(); }} style={{ zIndex: 1100 }}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+      <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onCancel} />
-        <div className="modal-header">{editing ? t.zarzadEdit : t.zarzadAdd}</div>
-        <div className="modal-body">
-          <div className="form-group">
-            <label>{t.zgnProxyName} <span style={{ color: 'red' }}>*</span></label>
-            <input
-              type="text"
-              value={imieNazwisko}
-              onChange={(e) => { setImieNazwisko(e.target.value); if (localError) setLocalError(null); }}
-              placeholder={t.zgnProxyNamePlaceholder}
-              onKeyDown={submitOnEnter}
-              autoFocus
-            />
-          </div>
-          <div className="form-group">
-            <label>{t.zgnUnitEmail}</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => { setEmail(e.target.value); if (localError) setLocalError(null); }}
-              placeholder="np. jan.kowalski@example.pl"
-              onKeyDown={submitOnEnter}
-            />
-          </div>
-          {localError && (
-            <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '8px' }}>{localError}</div>
-          )}
+        <ModalHeader
+          icon={editing ? 'users' : 'user-plus'}
+          title={editing ? t.zarzadEdit : t.zarzadAdd}
+          subtitle={adresNazwa}
+        />
+        <div className="modal-body modal-body--sectioned">
+          <FormSection icon="users" title={t.zarzadSection} description={t.zarzadSectionDesc}>
+            <FormRow>
+              <FormField label={t.zgnProxyName} htmlFor="zarzad-name" required>
+                <input
+                  id="zarzad-name"
+                  type="text"
+                  value={imieNazwisko}
+                  onChange={(e) => { setImieNazwisko(e.target.value); if (localError) setLocalError(null); }}
+                  placeholder={t.zgnProxyNamePlaceholder}
+                  onKeyDown={submitOnEnter}
+                  autoFocus
+                />
+              </FormField>
+              <FormField
+                label={t.zgnUnitEmail}
+                htmlFor="zarzad-email"
+                hint={t.zarzadEmailHint}
+                error={localError}
+              >
+                <div className="input-icon">
+                  <Icon name="mail" size={15} />
+                  <input
+                    id="zarzad-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => { setEmail(e.target.value); if (localError) setLocalError(null); }}
+                    placeholder="np. jan.kowalski@example.pl"
+                    onKeyDown={submitOnEnter}
+                  />
+                </div>
+              </FormField>
+            </FormRow>
+          </FormSection>
         </div>
-        <div className="modal-footer">
-          <button className="button button-secondary" onClick={onCancel} disabled={isSaving}>
-            <Icon name="x" size={14} />{' '}{t.cancel}
-          </button>
-          <button
-            className="button button-success"
-            onClick={handleSubmit}
-            disabled={isSaving || !imieNazwisko.trim()}
-          >
-            <Icon name="save" size={14} />{' '}{editing ? t.update : t.add}
-          </button>
-        </div>
+        <ModalFooter
+          note={<RequiredNote label={t.formRequiredNote} />}
+          onCancel={onCancel}
+          cancelLabel={t.cancel}
+          onSubmit={handleSubmit}
+          submitLabel={editing ? t.save : t.zarzadAdd}
+          submitIcon={editing ? 'save' : 'plus'}
+          submitDisabled={unchanged || !imieNazwisko.trim()}
+          submitTitle={unchanged ? t.noChangesToSave : t.zarzadNameRequired}
+          busy={isSaving}
+        />
       </div>
     </div>
   );
@@ -579,79 +630,81 @@ const ZarzadModal: React.FC<{
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 'min(720px, 94vw)', maxWidth: 720 }}>
+      <div className="modal modal--lg" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onClose} />
-        <div className="modal-header">
-          {t.zarzadTitle} — {adres.nazwa}
-        </div>
-        <div className="modal-body">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '12px' }}>
-            <div style={{ fontSize: '12px', opacity: 0.7 }}>{t.zarzadHint}</div>
+        <ModalHeader icon="users" title={t.zarzadTitle} subtitle={adres.nazwa} />
+        <div className="modal-body modal-body--sectioned">
+          <div className="panel-intro">
+            <p className="panel-intro__text">{t.zarzadHint}</p>
             <button
+              type="button"
               className="button button-primary"
               onClick={() => setFormState({ editing: null })}
               disabled={isSaving}
-              style={{ whiteSpace: 'nowrap' }}
             >
               <Icon name="plus" size={14} />{' '}{t.zarzadAdd}
             </button>
           </div>
 
           {error && (
-            <div style={{ fontSize: '12px', color: 'var(--danger)', marginBottom: '8px' }}>{error}</div>
+            <div className="callout callout--danger" role="alert">
+              <Icon name="alert-triangle" size={16} />
+              <div className="callout__body">{error}</div>
+            </div>
           )}
 
           {members.length > 0 ? (
-            <table>
-              <thead>
-                <tr>
-                  <th>{t.zgnProxyName}</th>
-                  <th>{t.zgnUnitEmail}</th>
-                  <th>{t.actions}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {members.map((m) => (
-                  <tr key={m.id}>
-                    <td style={{ fontWeight: 600 }}>{m.imieNazwisko}</td>
-                    <td style={{ wordBreak: 'break-all', opacity: m.email ? 1 : 0.5 }}>{m.email || '—'}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button
-                          className="button button-small button-primary"
-                          onClick={() => setFormState({ editing: m })}
-                          disabled={isSaving}
-                        >
-                          <Icon name="edit" size={13} />{' '}{t.edit}
-                        </button>
-                        <button
-                          className="button button-small button-danger"
-                          onClick={() => void handleDelete(m)}
-                          disabled={isSaving}
-                        >
-                          <Icon name="trash" size={13} />{' '}{t.delete}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <ul className="record-list">
+              {members.map((m) => (
+                <li key={m.id} className="record-row">
+                  <span className="record-row__icon" aria-hidden="true">
+                    <Icon name="users" size={15} />
+                  </span>
+                  <div className="record-row__main">
+                    <div className="record-row__title">{m.imieNazwisko}</div>
+                    <div className={`record-row__meta${m.email ? '' : ' is-missing'}`}>
+                      <Icon name="mail" size={12} />
+                      {m.email || t.noEmail}
+                    </div>
+                  </div>
+                  <div className="row-actions">
+                    <button
+                      type="button"
+                      className="button button-small button-secondary"
+                      onClick={() => setFormState({ editing: m })}
+                      disabled={isSaving}
+                    >
+                      <Icon name="edit" size={13} />{' '}{t.edit}
+                    </button>
+                    <button
+                      type="button"
+                      className="button button-ghost button-icon icon-danger"
+                      onClick={() => void handleDelete(m)}
+                      disabled={isSaving}
+                      title={t.delete}
+                      aria-label={`${t.delete}: ${m.imieNazwisko}`}
+                    >
+                      <Icon name="trash" size={15} />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
           ) : (
-            <div className="empty-state">{t.zarzadEmpty}</div>
+            <div className="form-empty">
+              <Icon name="users" size={16} />
+              {t.zarzadEmpty}
+            </div>
           )}
         </div>
-        <div className="modal-footer">
-          <button className="button button-secondary" onClick={onClose}>
-            <Icon name="x" size={14} />{' '}{t.close}
-          </button>
-        </div>
+        <ModalFooter onCancel={onClose} cancelLabel={t.close} />
       </div>
 
       {formState && (
         <ZarzadPersonFormModal
           key={formState.editing ? `edit-${formState.editing.id}` : 'new'}
           language={language}
+          adresNazwa={adres.nazwa}
           editing={formState.editing}
           isSaving={isSaving}
           onSubmit={(data) => void handleFormSubmit(data)}
@@ -728,111 +781,83 @@ const ApartmentMappingsModal: React.FC<ApartmentMappingsModalProps> = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      {/* Wider than the usual modal: a match phrase is a whole payer name plus their
-          address, and squeezed into 640px it breaks mid-word into an unreadable column. */}
-      <div
-        className="modal"
-        onClick={(e) => e.stopPropagation()}
-        style={{ width: 'min(1180px, calc(100vw - 48px))', maxWidth: 'none' }}
-      >
+      <div className="modal modal--xl" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onClose} />
-        <div className="modal-header">
-          {t.apartmentMappingsTitle} — {adres.nazwa}
-        </div>
-        <div className="modal-body">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '12px' }}>
-            <div style={{ fontSize: '12px', opacity: 0.7 }}>
-              {t.apartmentMappingsHint}
-            </div>
+        <ModalHeader icon="clipboard" title={t.apartmentMappingsTitle} subtitle={adres.nazwa} />
+        <div className="modal-body modal-body--sectioned">
+          <div className="panel-intro">
+            <p className="panel-intro__text">{t.apartmentMappingsHint}</p>
             <button
+              type="button"
               className="button button-primary"
               onClick={() => setFormState({ editing: null })}
               disabled={isSaving}
-              style={{ whiteSpace: 'nowrap' }}
-            ><Icon name="plus" size={14} />{' '}{t.addApartmentMapping}
+            >
+              <Icon name="plus" size={14} />{' '}{t.addApartmentMapping}
             </button>
           </div>
 
           {error && (
-            <div style={{ fontSize: '12px', color: 'var(--danger)', marginBottom: '8px' }}>{error}</div>
+            <div className="callout callout--danger" role="alert">
+              <Icon name="alert-triangle" size={16} />
+              <div className="callout__body">{error}</div>
+            </div>
           )}
 
           {mappings.length > 0 ? (
-            /* Fixed layout with a budget per column: the short columns keep just what
-               they need and the phrase takes every remaining pixel. Below the table's
-               min width the wrapper scrolls instead of clipping the action buttons. */
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ tableLayout: 'fixed', minWidth: 820 }}>
-                <colgroup>
-                  <col />
-                  <col style={{ width: '96px' }} />
-                  <col style={{ width: '140px' }} />
-                  <col style={{ width: '180px' }} />
-                  <col style={{ width: '200px' }} />
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th>{t.apartmentMappingMatchText}</th>
-                    <th>{t.apartmentMappingApartments}</th>
-                    <th>{t.apartmentMappingAccount}</th>
-                    <th>{t.apartmentMappingNote}</th>
-                    <th>{t.actions}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mappings.map((m) => {
-                    // One line per apartment in both columns, so a rule's apartment
-                    // and its account stay on the same line of the same row.
-                    const targets = mappingTargets(m);
-                    return (
-                    <tr key={m.id}>
-                      <td style={{ overflowWrap: 'anywhere' }}>{m.matchText}</td>
-                      <td style={{ fontWeight: 600 }}>
+            /* One card-row per rule: the phrase (a whole payer name plus address —
+               it needs the width, so it gets the row's main line), then the
+               apartments it points at, each with its account, and the note. */
+            <ul className="record-list">
+              {mappings.map((m) => {
+                const targets = mappingTargets(m);
+                return (
+                  <li key={m.id} className="record-row record-row--top">
+                    <div className="record-row__main">
+                      <div className="record-row__title record-row__title--wrap">{m.matchText}</div>
+                      <div className="record-row__chips">
                         {targets.map((target) => (
-                          <div key={target.apartmentNumber}>{target.apartmentNumber}</div>
+                          <span key={target.apartmentNumber} className="apt-chip">
+                            <Icon name="home" size={12} />
+                            <b>{target.apartmentNumber}</b>
+                            {target.kontoLokalu && <span className="apt-chip__account">{target.kontoLokalu}</span>}
+                          </span>
                         ))}
-                      </td>
-                      <td style={{ fontFamily: 'monospace', overflowWrap: 'anywhere' }}>
-                        {targets.map((target) => (
-                          <div key={target.apartmentNumber}>{target.kontoLokalu || '—'}</div>
-                        ))}
-                      </td>
-                      <td style={{ overflowWrap: 'anywhere', opacity: 0.8 }}>{m.note || '—'}</td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            className="button button-small button-primary"
-                            onClick={() => setFormState({ editing: m })}
-                            disabled={isSaving}
-                            style={{ whiteSpace: 'nowrap' }}
-                          ><Icon name="edit" size={13} />{' '}
-                            {t.edit}
-                          </button>
-                          <button
-                            className="button button-small button-danger"
-                            onClick={() => handleDelete(m.id)}
-                            disabled={isSaving}
-                            style={{ whiteSpace: 'nowrap' }}
-                          ><Icon name="trash" size={13} />{' '}
-                            {t.delete}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                      </div>
+                      {m.note && <div className="record-row__note">{m.note}</div>}
+                    </div>
+                    <div className="row-actions">
+                      <button
+                        type="button"
+                        className="button button-small button-secondary"
+                        onClick={() => setFormState({ editing: m })}
+                        disabled={isSaving}
+                      >
+                        <Icon name="edit" size={13} />{' '}{t.edit}
+                      </button>
+                      <button
+                        type="button"
+                        className="button button-ghost button-icon icon-danger"
+                        onClick={() => handleDelete(m.id)}
+                        disabled={isSaving}
+                        title={t.delete}
+                        aria-label={`${t.delete}: ${m.matchText}`}
+                      >
+                        <Icon name="trash" size={15} />
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           ) : (
-            <div className="empty-state">{t.noApartmentMappings}</div>
+            <div className="form-empty">
+              <Icon name="clipboard" size={16} />
+              {t.noApartmentMappings}
+            </div>
           )}
         </div>
-        <div className="modal-footer">
-          <button className="button button-secondary" onClick={onClose}>
-            <Icon name="x" size={14} />{' '}{t.close}
-          </button>
-        </div>
+        <ModalFooter onCancel={onClose} cancelLabel={t.close} />
       </div>
 
       {formState && (
@@ -853,23 +878,29 @@ interface ZgnUnitFormModalProps {
   language: Language;
   /** Unit being edited, or null when adding a new one. */
   editing: ZgnJednostka | null;
+  /** All communities — the ones this unit serves are ticked in the form. */
+  adresy: Adres[];
+  /** All units, to name the one a community would be taken over from. */
+  jednostki: ZgnJednostka[];
   isSaving: boolean;
   /** Submit-time error surfaced from the parent (e.g. API failure). */
   error: string | null;
   /** Stack above the units modal when the dictionary itself is a modal. */
   zIndex?: number;
-  onSubmit: (data: { nazwa: string; email: string }) => void;
+  onSubmit: (data: { nazwa: string; email: string; adresIds: number[]; assignmentChanged: boolean }) => void;
   onCancel: () => void;
 }
 
 /**
- * Add/edit form for a single city unit, in a modal like the account types — the
- * dictionary stays a plain list, and the form always says which unit it is
- * editing instead of quietly re-filling the inputs above the table.
+ * Add/edit form for a single city unit: its name and mailbox, and the
+ * communities it serves — ticked right here, so a new unit does not send the
+ * user through every address afterwards.
  */
 const ZgnUnitFormModal: React.FC<ZgnUnitFormModalProps> = ({
   language,
   editing,
+  adresy,
+  jednostki,
   isSaving,
   error,
   zIndex = 1100,
@@ -880,6 +911,32 @@ const ZgnUnitFormModal: React.FC<ZgnUnitFormModalProps> = ({
   const [nazwa, setNazwa] = useState(editing?.nazwa || '');
   const [email, setEmail] = useState(editing?.email || '');
   const [localError, setLocalError] = useState<string | null>(null);
+  // What the unit serves when the form opens — the baseline for the change summary.
+  const [initialIds] = useState<number[]>(() =>
+    editing ? adresy.filter((a) => a.zgnJednostkaId === editing.id).map((a) => a.id) : [],
+  );
+  const [adresIds, setAdresIds] = useState<number[]>(initialIds);
+
+  const added = adresIds.filter((id) => !initialIds.includes(id)).length;
+  const removed = initialIds.filter((id) => !adresIds.includes(id)).length;
+  const assignmentChanged = added > 0 || removed > 0;
+  const emailChanged = !!editing && email.trim() !== editing.email;
+  const unchanged = !!editing && nazwa.trim() === editing.nazwa && !emailChanged && !assignmentChanged;
+
+  const items: CheckListItem[] = useMemo(() => {
+    const unitName = (id: number) => jednostki.find((j) => j.id === id)?.nazwa ?? '';
+    return adresy.map((a) => {
+      const on = adresIds.includes(a.id);
+      const other = a.zgnJednostkaId && a.zgnJednostkaId !== editing?.id ? unitName(a.zgnJednostkaId) : '';
+      if (on && other) {
+        return { id: a.id, label: a.nazwa, note: t.zgnPickTakesOver.replace('{name}', other), noteTone: 'warning' };
+      }
+      if (!on && initialIds.includes(a.id)) {
+        return { id: a.id, label: a.nazwa, note: t.zgnPickDetaches, noteTone: 'danger' };
+      }
+      return { id: a.id, label: a.nazwa, note: other || undefined, noteTone: 'muted' };
+    });
+  }, [adresy, jednostki, adresIds, initialIds, editing, t]);
 
   const handleSubmit = () => {
     const n = nazwa.trim();
@@ -894,58 +951,108 @@ const ZgnUnitFormModal: React.FC<ZgnUnitFormModalProps> = ({
       setLocalError(t.zgnEmailInvalid);
       return;
     }
-    onSubmit({ nazwa: n, email: e });
+    onSubmit({ nazwa: n, email: e, adresIds, assignmentChanged });
+  };
+
+  const submitOnEnter = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSubmit();
+    }
   };
 
   return (
     <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); onCancel(); }} style={{ zIndex }}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+      <div className="modal modal--lg" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onCancel} />
-        <div className="modal-header">{editing ? t.edit : t.zgnUnitAdd}</div>
-        <div className="modal-body">
-          <div className="form-group">
-            <label>{t.zgnUnitName} <span style={{ color: 'red' }}>*</span></label>
-            <input
-              type="text"
-              value={nazwa}
-              onChange={(e) => { setNazwa(e.target.value); if (localError) setLocalError(null); }}
-              placeholder={t.zgnUnitNamePlaceholder}
-              autoFocus
-            />
-          </div>
-          <div className="form-group">
-            <label>{t.zgnUnitEmail} <span style={{ color: 'red' }}>*</span></label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => { setEmail(e.target.value); if (localError) setLocalError(null); }}
-              placeholder="np. zgn@um.example.pl"
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleSubmit();
-                }
-              }}
-            />
-          </div>
-          {(localError || error) && (
-            <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '8px' }}>
-              {localError || error}
-            </div>
-          )}
-        </div>
-        <div className="modal-footer">
-          <button className="button button-secondary" onClick={onCancel} disabled={isSaving}>
-            <Icon name="x" size={14} />{' '}{t.cancel}
-          </button>
-          <button
-            className="button button-success"
-            onClick={handleSubmit}
-            disabled={isSaving || !nazwa.trim() || !email.trim()}
+        <ModalHeader
+          icon="building"
+          title={editing ? t.zgnUnitEdit : t.zgnUnitAdd}
+          subtitle={editing ? editing.nazwa : t.zgnUnitFormSubtitle}
+        />
+        <div className="modal-body modal-body--sectioned">
+          <FormSection icon="building" title={t.zgnSectionUnit} description={t.zgnSectionUnitDesc}>
+            <FormRow>
+              <FormField label={t.zgnUnitName} htmlFor="zgn-unit-name" required>
+                <input
+                  id="zgn-unit-name"
+                  type="text"
+                  value={nazwa}
+                  onChange={(e) => { setNazwa(e.target.value); if (localError) setLocalError(null); }}
+                  placeholder={t.zgnUnitNamePlaceholder}
+                  onKeyDown={submitOnEnter}
+                  autoFocus
+                />
+              </FormField>
+              <FormField
+                label={t.zgnUnitEmail}
+                htmlFor="zgn-unit-email"
+                required
+                hint={t.zgnUnitEmailHint}
+                error={localError || error}
+              >
+                <div className="input-icon">
+                  <Icon name="mail" size={15} />
+                  <input
+                    id="zgn-unit-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => { setEmail(e.target.value); if (localError) setLocalError(null); }}
+                    placeholder="np. zgn@um.example.pl"
+                    onKeyDown={submitOnEnter}
+                  />
+                </div>
+              </FormField>
+            </FormRow>
+            {emailChanged && adresIds.length > 0 && (
+              <div className="callout callout--warning" role="status">
+                <Icon name="alert-triangle" size={16} />
+                <div className="callout__body">
+                  {t.zgnUnitEmailChangeImpact.replace(
+                    '{count}',
+                    plural(adresIds.length, language, ['wspólnoty', 'wspólnot', 'wspólnot'], ['community', 'communities']),
+                  )}
+                </div>
+              </div>
+            )}
+          </FormSection>
+
+          <FormSection
+            icon="home"
+            title={t.zgnSectionCommunities}
+            description={t.zgnSectionCommunitiesDesc}
           >
-            <Icon name="save" size={14} />{' '}{editing ? t.update : t.add}
-          </button>
+            <CheckList
+              items={items}
+              selected={adresIds}
+              onChange={setAdresIds}
+              searchPlaceholder={t.zgnPickSearch}
+              onlySelectedLabel={t.pickOnlySelected}
+              emptyLabel={t.zgnPickEmpty}
+            />
+          </FormSection>
         </div>
+        <ModalFooter
+          note={
+            assignmentChanged ? (
+              <span className="change-summary">
+                {t.zgnAssignChanges}:
+                {added > 0 && <span className="change-summary__add">+{added}</span>}
+                {removed > 0 && <span className="change-summary__remove">−{removed}</span>}
+              </span>
+            ) : (
+              <RequiredNote label={t.formRequiredNote} />
+            )
+          }
+          onCancel={onCancel}
+          cancelLabel={t.cancel}
+          onSubmit={handleSubmit}
+          submitLabel={editing ? t.save : t.zgnUnitAdd}
+          submitIcon={editing ? 'save' : 'plus'}
+          submitDisabled={unchanged || !nazwa.trim() || !email.trim()}
+          submitTitle={unchanged ? t.noChangesToSave : t.fillAllFields}
+          busy={isSaving}
+        />
       </div>
     </div>
   );
@@ -978,6 +1085,8 @@ const ZgnProxyFormModal: React.FC<ZgnProxyFormModalProps> = ({
   const t = translations[language];
   const [imieNazwisko, setImieNazwisko] = useState(editing?.imieNazwisko || '');
   const [email, setEmail] = useState(editing?.email || '');
+  const unchanged =
+    !!editing && imieNazwisko.trim() === editing.imieNazwisko && email.trim() === (editing.email || '');
   const [localError, setLocalError] = useState<string | null>(null);
 
   const handleSubmit = () => {
@@ -1004,51 +1113,59 @@ const ZgnProxyFormModal: React.FC<ZgnProxyFormModalProps> = ({
 
   return (
     <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); onCancel(); }} style={{ zIndex }}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+      <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onCancel} />
-        <div className="modal-header">
-          {(editing ? t.zgnProxyEdit : t.zgnProxyAdd)} — {jednostka.nazwa}
+        <ModalHeader
+          icon={editing ? 'users' : 'user-plus'}
+          title={editing ? t.zgnProxyEdit : t.zgnProxyAdd}
+          subtitle={jednostka.nazwa}
+        />
+        <div className="modal-body modal-body--sectioned">
+          <FormSection icon="users" title={t.zgnSectionProxy} description={t.zgnSectionProxyDesc}>
+            <FormRow>
+              <FormField label={t.zgnProxyName} htmlFor="zgn-proxy-name" required>
+                <input
+                  id="zgn-proxy-name"
+                  type="text"
+                  value={imieNazwisko}
+                  onChange={(e) => { setImieNazwisko(e.target.value); if (localError) setLocalError(null); }}
+                  placeholder={t.zgnProxyNamePlaceholder}
+                  onKeyDown={submitOnEnter}
+                  autoFocus
+                />
+              </FormField>
+              <FormField
+                label={t.zgnUnitEmail}
+                htmlFor="zgn-proxy-email"
+                hint={t.zgnProxyEmailHint}
+                error={localError || error}
+              >
+                <div className="input-icon">
+                  <Icon name="mail" size={15} />
+                  <input
+                    id="zgn-proxy-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => { setEmail(e.target.value); if (localError) setLocalError(null); }}
+                    placeholder="np. jan.kowalski@um.example.pl"
+                    onKeyDown={submitOnEnter}
+                  />
+                </div>
+              </FormField>
+            </FormRow>
+          </FormSection>
         </div>
-        <div className="modal-body">
-          <div className="form-group">
-            <label>{t.zgnProxyName} <span style={{ color: 'red' }}>*</span></label>
-            <input
-              type="text"
-              value={imieNazwisko}
-              onChange={(e) => { setImieNazwisko(e.target.value); if (localError) setLocalError(null); }}
-              placeholder={t.zgnProxyNamePlaceholder}
-              onKeyDown={submitOnEnter}
-              autoFocus
-            />
-          </div>
-          <div className="form-group">
-            <label>{t.zgnUnitEmail}</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => { setEmail(e.target.value); if (localError) setLocalError(null); }}
-              placeholder="np. jan.kowalski@um.example.pl"
-              onKeyDown={submitOnEnter}
-            />
-          </div>
-          {(localError || error) && (
-            <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '8px' }}>
-              {localError || error}
-            </div>
-          )}
-        </div>
-        <div className="modal-footer">
-          <button className="button button-secondary" onClick={onCancel} disabled={isSaving}>
-            <Icon name="x" size={14} />{' '}{t.cancel}
-          </button>
-          <button
-            className="button button-success"
-            onClick={handleSubmit}
-            disabled={isSaving || !imieNazwisko.trim()}
-          >
-            <Icon name="save" size={14} />{' '}{editing ? t.update : t.add}
-          </button>
-        </div>
+        <ModalFooter
+          note={<RequiredNote label={t.formRequiredNote} />}
+          onCancel={onCancel}
+          cancelLabel={t.cancel}
+          onSubmit={handleSubmit}
+          submitLabel={editing ? t.save : t.zgnProxyAdd}
+          submitIcon={editing ? 'save' : 'plus'}
+          submitDisabled={unchanged || !imieNazwisko.trim()}
+          submitTitle={unchanged ? t.noChangesToSave : t.zgnProxyNameRequired}
+          busy={isSaving}
+        />
       </div>
     </div>
   );
@@ -1151,15 +1268,25 @@ const ZgnUnitsPanel: React.FC<ZgnUnitsPanelProps> = ({
     }
   };
 
-  const handleFormSubmit = async (data: { nazwa: string; email: string }) => {
+  const handleFormSubmit = async (data: {
+    nazwa: string;
+    email: string;
+    adresIds: number[];
+    assignmentChanged: boolean;
+  }) => {
     setIsSaving(true);
     setError(null);
     try {
       const editing = formState?.editing;
+      let jednostkaId: number;
       if (editing) {
         await window.electronAPI.mailingUpdateZgn(editing.id, data.nazwa, data.email);
+        jednostkaId = editing.id;
       } else {
-        await window.electronAPI.mailingAddZgn(data.nazwa, data.email);
+        jednostkaId = (await window.electronAPI.mailingAddZgn(data.nazwa, data.email)).id;
+      }
+      if (data.assignmentChanged) {
+        await window.electronAPI.setZgnAdresy(jednostkaId, data.adresIds);
       }
       setFormState(null);
       onSaved();
@@ -1194,109 +1321,126 @@ const ZgnUnitsPanel: React.FC<ZgnUnitsPanelProps> = ({
 
   return (
     <>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          gap: '12px',
-          marginBottom: '12px',
-        }}
-      >
-        <div style={{ fontSize: '12px', opacity: 0.7, maxWidth: '80ch' }}>{t.zgnUnitsHint}</div>
+      <div className="panel-intro">
+        <p className="panel-intro__text">{t.zgnUnitsHint}</p>
         <button
           type="button"
           className="button button-primary"
           onClick={() => { setError(null); setFormState({ editing: null }); }}
           disabled={isSaving}
-          style={{ whiteSpace: 'nowrap' }}
         >
           <Icon name="plus" size={14} />{' '}{t.zgnUnitAdd}
         </button>
       </div>
 
-      {error && !formState && (
-        <div style={{ fontSize: '12px', color: 'var(--danger)', marginBottom: '8px' }}>{error}</div>
+      {error && !formState && !proxyForm && (
+        <div className="form-field__error" role="alert">
+          <Icon name="alert-circle" size={13} />
+          {error}
+        </div>
       )}
 
       {jednostki.length > 0 ? (
-        <table>
-          <thead>
-            <tr>
-              <th>{t.zgnUnitName}</th>
-              <th>{t.zgnUnitEmail}</th>
-              <th>{t.zgnUnitUsedBy}</th>
-              <th>{t.zgnProxies}</th>
-              <th>{t.actions}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {jednostki.map((j) => (
-              <tr key={j.id}>
-                <td>{j.nazwa}</td>
-                <td style={{ wordBreak: 'break-all' }}>{j.email}</td>
-                <td>{adresy.filter((a) => a.zgnJednostkaId === j.id).length}</td>
-                <td>
-                  <div className="zgn-proxies">
-                    {proxiesOf(j.id).map((p) => (
-                      <span key={p.id} className="zgn-proxy" title={p.email || undefined}>
-                        <span className="zgn-proxy__name">{p.imieNazwisko}</span>
-                        {p.email && <span className="zgn-proxy__email">{p.email}</span>}
-                        <button
-                          type="button"
-                          onClick={() => { setError(null); setProxyForm({ jednostka: j, editing: p }); }}
-                          disabled={isSaving}
-                          title={t.edit}
-                          aria-label={t.edit}
-                        >
-                          <Icon name="edit" size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          className="is-danger"
-                          onClick={() => void handleProxyDelete(p)}
-                          disabled={isSaving}
-                          title={t.delete}
-                          aria-label={t.delete}
-                        >
-                          <Icon name="trash" size={12} />
-                        </button>
+        <div className="zgn-units">
+          {jednostki.map((j) => {
+            const used = adresy.filter((a) => a.zgnJednostkaId === j.id).length;
+            const proxies = proxiesOf(j.id);
+            return (
+              <article key={j.id} className="zgn-unit">
+                <header className="zgn-unit__header">
+                  <span className="form-section__icon" aria-hidden="true">
+                    <Icon name="building" size={16} />
+                  </span>
+                  <div className="zgn-unit__heading">
+                    <h3 className="zgn-unit__name">{j.nazwa}</h3>
+                    <div className="zgn-unit__meta">
+                      <span className="zgn-unit__meta-item zgn-unit__email" title={t.zgnUnitEmail}>
+                        <Icon name="mail" size={13} />
+                        {j.email}
                       </span>
-                    ))}
+                      <span className="zgn-unit__meta-item">
+                        <Icon name="home" size={13} />
+                        {t.zgnUnitUsedByLabel}: <strong>{used}</strong>
+                      </span>
+                    </div>
+                  </div>
+                  <div className="zgn-unit__actions">
                     <button
                       type="button"
-                      className="link-button zgn-proxies__add"
-                      onClick={() => { setError(null); setProxyForm({ jednostka: j, editing: null }); }}
-                      disabled={isSaving}
-                    >
-                      <Icon name="plus" size={12} /> {t.zgnProxyAdd}
-                    </button>
-                  </div>
-                </td>
-                <td>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      className="button button-small button-primary"
+                      className="button button-small button-secondary"
                       onClick={() => { setError(null); setFormState({ editing: j }); }}
                       disabled={isSaving}
                     >
                       <Icon name="edit" size={13} />{' '}{t.edit}
                     </button>
                     <button
-                      className="button button-small button-danger"
+                      type="button"
+                      className="button button-ghost button-icon icon-danger"
                       onClick={() => handleDelete(j)}
                       disabled={isSaving}
+                      title={t.delete}
+                      aria-label={`${t.delete}: ${j.nazwa}`}
                     >
-                      <Icon name="trash" size={13} />{' '}{t.delete}
+                      <Icon name="trash" size={15} />
                     </button>
                   </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </header>
+                <div className="zgn-unit__proxies">
+                  <div className="zgn-unit__proxies-head">
+                    <div className="zgn-unit__proxies-title">{t.zgnProxies}</div>
+                    <button
+                      type="button"
+                      className="button button-small button-subtle"
+                      onClick={() => { setError(null); setProxyForm({ jednostka: j, editing: null }); }}
+                      disabled={isSaving}
+                    >
+                      <Icon name="plus" size={13} />{' '}{t.zgnProxyAdd}
+                    </button>
+                  </div>
+                  {proxies.length > 0 && (
+                    <ul className="zgn-proxy-list">
+                      {proxies.map((p) => (
+                        <li key={p.id} className="zgn-proxy-row">
+                          <span className="zgn-proxy-row__name">{p.imieNazwisko}</span>
+                          <span className={`zgn-proxy-row__email${p.email ? '' : ' is-missing'}`}>
+                            {p.email || t.zgnProxyNoEmail}
+                          </span>
+                          <span className="zgn-proxy-row__actions">
+                            <button
+                              type="button"
+                              className="button button-ghost button-icon"
+                              onClick={() => { setError(null); setProxyForm({ jednostka: j, editing: p }); }}
+                              disabled={isSaving}
+                              title={t.edit}
+                              aria-label={`${t.edit}: ${p.imieNazwisko}`}
+                            >
+                              <Icon name="edit" size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              className="button button-ghost button-icon icon-danger"
+                              onClick={() => void handleProxyDelete(p)}
+                              disabled={isSaving}
+                              title={t.delete}
+                              aria-label={`${t.delete}: ${p.imieNazwisko}`}
+                            >
+                              <Icon name="trash" size={13} />
+                            </button>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
       ) : (
-        <div className="empty-state">{t.zgnNoUnits}</div>
+        <div className="form-empty">
+          <Icon name="building" size={16} />
+          {t.zgnNoUnits}
+        </div>
       )}
 
       {formState && (
@@ -1306,7 +1450,9 @@ const ZgnUnitsPanel: React.FC<ZgnUnitsPanelProps> = ({
           isSaving={isSaving}
           error={error}
           zIndex={formZIndex}
-          onSubmit={handleFormSubmit}
+          adresy={adresy}
+          jednostki={jednostki}
+          onSubmit={(data) => void handleFormSubmit(data)}
           onCancel={() => { setFormState(null); setError(null); }}
         />
       )}
@@ -1341,18 +1487,14 @@ const ZgnUnitsModal: React.FC<ZgnUnitsModalProps> = ({ onClose, ...panelProps })
   const t = translations[panelProps.language];
   return (
     <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1100 }}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
+      <div className="modal modal--lg" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onClose} />
-        <div className="modal-header">{t.zgnUnitsTitle}</div>
-        <div className="modal-body">
+        <ModalHeader icon="building" title={t.zgnUnitsTitle} subtitle={t.zgnUnitsModalSubtitle} />
+        <div className="modal-body modal-body--sectioned">
           {/* One layer above this modal, which already sits above the address form. */}
           <ZgnUnitsPanel {...panelProps} formZIndex={1200} />
         </div>
-        <div className="modal-footer">
-          <button className="button button-secondary" onClick={onClose}>
-            {t.close}
-          </button>
-        </div>
+        <ModalFooter onCancel={onClose} cancelLabel={t.close} />
       </div>
     </div>
   );
@@ -1382,9 +1524,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
   const [editingAdres, setEditingAdres] = useState<Adres | null>(null);
   const [newNazwa, setNewNazwa] = useState('');
   const [newAlternativeNames, setNewAlternativeNames] = useState<string[]>([]);
-  const [newAlternativeName, setNewAlternativeName] = useState('');
   const [newSwrkIdentifiers, setNewSwrkIdentifiers] = useState<string[]>([]);
-  const [newSwrkIdentifier, setNewSwrkIdentifier] = useState('');
   const [newAccountNumbers, setNewAccountNumbers] = useState<string[]>([]);
   const [newAccountTypes, setNewAccountTypes] = useState<Record<string, number>>({});
   const [newAccountNumber, setNewAccountNumber] = useState('');
@@ -1417,6 +1557,18 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
   useEffect(() => {
     loadData();
   }, []);
+
+  // The units modal opens over this form, and its unit form can re-assign this
+  // very address. Follow such a change, so saving the address does not quietly
+  // put the old unit back.
+  useEffect(() => {
+    if (!editingAdres) return;
+    const fresh = adresy.find((a) => a.id === editingAdres.id);
+    if (fresh && (fresh.zgnJednostkaId ?? null) !== (editingAdres.zgnJednostkaId ?? null)) {
+      setNewZgnJednostkaId(fresh.zgnJednostkaId ?? null);
+      setEditingAdres(fresh);
+    }
+  }, [adresy]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -1524,9 +1676,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
   const resetForm = () => {
     setNewNazwa('');
     setNewAlternativeNames([]);
-    setNewAlternativeName('');
     setNewSwrkIdentifiers([]);
-    setNewSwrkIdentifier('');
     setNewAccountNumbers([]);
     setNewAccountTypes({});
     setNewAccountNumber('');
@@ -1539,9 +1689,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     setEditingAdres(adres);
     setNewNazwa(adres.nazwa);
     setNewAlternativeNames(adres.alternativeNames || []);
-    setNewAlternativeName('');
     setNewSwrkIdentifiers(adres.swrkIdentifiers || []);
-    setNewSwrkIdentifier('');
     setNewAccountNumbers(adres.accountNumbers || []);
     setNewAccountTypes(adres.accountTypes || {});
     setNewAccountNumber('');
@@ -1640,29 +1788,6 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     }
   };
 
-  const handleAddAlternativeName = () => {
-    if (newAlternativeName.trim()) {
-      setNewAlternativeNames([...newAlternativeNames, newAlternativeName.trim()]);
-      setNewAlternativeName('');
-    }
-  };
-
-  const handleRemoveAlternativeName = (index: number) => {
-    setNewAlternativeNames(newAlternativeNames.filter((_, i) => i !== index));
-  };
-
-  const handleAddSwrkIdentifier = () => {
-    const trimmed = newSwrkIdentifier.trim();
-    if (trimmed && !newSwrkIdentifiers.includes(trimmed)) {
-      setNewSwrkIdentifiers([...newSwrkIdentifiers, trimmed]);
-      setNewSwrkIdentifier('');
-    }
-  };
-
-  const handleRemoveSwrkIdentifier = (index: number) => {
-    setNewSwrkIdentifiers(newSwrkIdentifiers.filter((_, i) => i !== index));
-  };
-
   const filteredAdresy = useMemo(() => adresy.filter((a) => {
     const q = searchTerm.toLowerCase().trim();
     if (!q) return true;
@@ -1693,57 +1818,25 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
         onChange={(id) => setTab(id as AdresyTab)}
       />
       <div className="content-body">
-        {isImporting && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 9999,
-          }}>
-            <div style={{
-              width: '60px',
-              height: '60px',
-              border: '6px solid #f3f3f3',
-              borderTop: '6px solid #3498db',
-              borderRadius: '50%',
-              animation: 'spin 1s linear infinite',
-            }} />
-            <div style={{
-              marginTop: '20px',
-              color: 'white',
-              fontSize: '18px',
-              fontWeight: 'bold',
-            }}>
-              {t.importing}
-            </div>
-          </div>
-        )}
+        {isImporting && <BusyOverlay label={t.importing} />}
         {tab === 'lista' && (
-          <div className="card">
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '15px',
-              }}
-            >
-              <h2>{t.adresy}</h2>
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <FormSection
+            icon="map-pin"
+            title={t.adresy}
+            description={t.adresyListDesc}
+            aside={
+              <div className="form-section__actions">
+                {/* Mass delete is demoted: never the loudest button next to everyday actions. */}
                 {adresy.length > 0 && (
-                  <button
-                    className="button button-danger"
-                    onClick={handleDeleteAll}
-                  >
-                    <Icon name="trash" size={14} />{' '}{t.deleteAllAdresy}
-                  </button>
+                  <>
+                    <button
+                      className="button button-ghost icon-danger"
+                      onClick={handleDeleteAll}
+                    >
+                      <Icon name="trash" size={14} />{' '}{t.deleteAllAdresy}
+                    </button>
+                    <span className="toolbar-divider" aria-hidden="true" />
+                  </>
                 )}
                 <button
                   className="button button-import"
@@ -1763,185 +1856,72 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                   className="button button-primary"
                   onClick={() => setShowAddAdres(true)}
                   disabled={showAddAdres || editingAdres !== null}
-                ><Icon name="plus" size={14} />{' '}
-                  {t.addAdres}
+                >
+                  <Icon name="plus" size={14} />{' '}{t.addAdres}
                 </button>
               </div>
-            </div>
+            }
+          >
 
             {(showAddAdres || editingAdres) && (
               <div className="modal-overlay" onClick={handleCancelEdit}>
-                <div className="modal" onClick={(e) => e.stopPropagation()}>
+                <div className="modal modal--lg" onClick={(e) => e.stopPropagation()}>
                   <ModalDismiss onClose={handleCancelEdit} />
-                  <div className="modal-header">
-                    {editingAdres ? t.editAdres : t.addNewAdres}
-                  </div>
-                  <div className="modal-body">
-                    <div className="form-group">
-                      <label>{t.nazwa} <span style={{ color: 'red' }}>*</span></label>
-                      <input
-                        type="text"
-                        value={newNazwa}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewNazwa(e.target.value)}
-                        placeholder="np. Joliot-Curie"
-                        required
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>{t.adresBank}</label>
-                      <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
-                        {t.adresBankHint}
-                      </div>
-                      <Select
-                        value={newBankId ?? ''}
-                        onChange={(v) => setNewBankId(v ? Number(v) : null)}
-                        options={[
-                          { value: '', label: t.adresNoBank },
-                          ...banks.map((bank) => ({ value: String(bank.id), label: bank.name })),
-                        ]}
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>{t.zgnUnit}</label>
-                      <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
-                        {t.zgnUnitHint}
-                      </div>
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <Select
-                          value={newZgnJednostkaId ?? ''}
-                          onChange={(v) => setNewZgnJednostkaId(v ? Number(v) : null)}
-                          options={[
-                            { value: '', label: t.zgnUnitNone },
-                            ...zgnJednostki.map((j) => ({
-                              value: String(j.id),
-                              label: `${j.nazwa} — ${j.email}`,
-                            })),
-                          ]}
-                          style={{ flex: 1 }}
-                        />
-                        <button
-                          type="button"
-                          className="button button-secondary"
-                          onClick={() => setShowZgnUnitsModal(true)}
-                          title={t.zgnUnitsTitle}
-                        >
-                          {t.zgnManageUnits}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="form-group">
-                      <label>{t.alternativeNames}</label>
-                      <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
-                        {t.alternativeNamesHint}
-                      </div>
-                      {newAlternativeNames.length > 0 && (
-                        <div style={{ marginBottom: '8px' }}>
-                          {newAlternativeNames.map((name, index) => (
-                            <div key={index} className="alternative-name-tag">
-                              <span>{name}</span>
-                              <button
-                                onClick={() => handleRemoveAlternativeName(index)}
-                                className="alternative-name-remove"
-                                type="button"
-                              >
-                                ×
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <input
-                          type="text"
-                          value={newAlternativeName}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewAlternativeName(e.target.value)}
-                          onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleAddAlternativeName();
-                            }
-                          }}
-                          placeholder="np. Joliot Curie, ul. Joliot-Curie"
-                          style={{ flex: 1 }}
-                        />
-                        <button
-                          type="button"
-                          className="button button-primary"
-                          onClick={handleAddAlternativeName}
-                          disabled={!newAlternativeName.trim()}
-                        ><Icon name="plus" size={14} />{' '}{t.addAlternativeName}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="form-group">
-                      <label>{t.swrkIdentifiers}</label>
-                      <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
-                        {t.swrkIdentifiersHint}
-                      </div>
-                      {newSwrkIdentifiers.length > 0 && (
-                        <div style={{ marginBottom: '8px' }}>
-                          {newSwrkIdentifiers.map((id, index) => (
-                            <div key={index} className="alternative-name-tag">
-                              <span>{id}</span>
-                              <button
-                                onClick={() => handleRemoveSwrkIdentifier(index)}
-                                className="alternative-name-remove"
-                                type="button"
-                              >
-                                ×
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <input
-                          type="text"
-                          value={newSwrkIdentifier}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                            setNewSwrkIdentifier(e.target.value)
-                          }
-                          onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleAddSwrkIdentifier();
-                            }
-                          }}
-                          placeholder={t.swrkPlaceholder}
-                          style={{ flex: 1 }}
-                        />
-                        <button
-                          type="button"
-                          className="button button-primary"
-                          onClick={handleAddSwrkIdentifier}
-                          disabled={!newSwrkIdentifier.trim()}
-                        ><Icon name="plus" size={14} />{' '}{t.addSwrkIdentifier}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="form-group">
-                      <label>{t.accountNumbers}</label>
-                      <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
-                        {t.accountNumbersHint}
-                      </div>
-                      {newAccountNumbers.length > 0 && (
-                        <div style={{ marginBottom: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <ModalHeader
+                    icon="map-pin"
+                    title={editingAdres ? t.editAdres : t.addNewAdres}
+                    subtitle={editingAdres ? editingAdres.nazwa : t.adresFormSubtitleAdd}
+                  />
+                  <div className="modal-body modal-body--sectioned">
+                    <FormSection
+                      icon="home"
+                      title={t.adresSectionBasic}
+                      description={t.adresSectionBasicDesc}
+                    >
+                      <FormRow>
+                        <FormField label={t.nazwa} htmlFor="adres-nazwa" required>
+                          <input
+                            id="adres-nazwa"
+                            type="text"
+                            value={newNazwa}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewNazwa(e.target.value)}
+                            placeholder={t.adresNamePlaceholder}
+                            autoFocus={!editingAdres}
+                            required
+                          />
+                        </FormField>
+                        <FormField label={t.adresBank} hint={t.adresBankHintShort}>
+                          <Select
+                            overlay
+                            value={newBankId ?? ''}
+                            onChange={(v) => setNewBankId(v ? Number(v) : null)}
+                            options={[
+                              { value: '', label: t.adresNoBank },
+                              ...banks.map((bank) => ({ value: String(bank.id), label: bank.name })),
+                            ]}
+                          />
+                        </FormField>
+                      </FormRow>
+                    </FormSection>
+
+                    <FormSection
+                      icon="wallet"
+                      title={t.adresSectionAccounts}
+                      description={t.adresSectionAccountsDesc}
+                    >
+                      {newAccountNumbers.length > 0 ? (
+                        <div className={`account-list${kontoTypy.length === 0 ? ' account-list--untyped' : ''}`}>
+                          <div className="account-list__head">
+                            <span>{t.adresAccountNumberColumn}</span>
+                            {kontoTypy.length > 0 && <span>{t.accountTypeColumn}</span>}
+                            <span aria-hidden="true" />
+                          </div>
                           {newAccountNumbers.map((acc, index) => (
-                            <div
-                              key={index}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                flexWrap: 'wrap',
-                                padding: '6px 8px',
-                                border: '1px solid var(--border-subtle)',
-                                borderRadius: '6px',
-                              }}
-                            >
-                              <span style={{ fontFamily: 'monospace', flex: '1 1 200px', wordBreak: 'break-all' }}>{acc}</span>
+                            <div key={acc} className="account-list__row">
+                              <span className="account-list__number">{formatAccount(acc)}</span>
                               {kontoTypy.length > 0 && (
                                 <Select
+                                  overlay
                                   size="sm"
                                   value={newAccountTypes[acc] ?? ''}
                                   onChange={(v) => handleAccountTypeChange(acc, Number(v))}
@@ -1949,198 +1929,305 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                                     value: String(typ.id),
                                     label: `${typ.name} (${typ.bankAccountSymbol})`,
                                   }))}
-                                  style={{ flex: '0 1 200px' }}
-                                  title={t.accountTypeForNumber}
+                                  ariaLabel={t.accountTypeColumn}
                                 />
                               )}
                               <button
-                                onClick={() => handleRemoveAccountNumber(index)}
-                                className="alternative-name-remove"
                                 type="button"
+                                className="button button-ghost button-icon icon-danger"
+                                onClick={() => handleRemoveAccountNumber(index)}
+                                aria-label={`${t.remove}: ${formatAccount(acc)}`}
+                                title={t.remove}
                               >
-                                ×
+                                <Icon name="trash" size={14} />
                               </button>
                             </div>
                           ))}
                         </div>
-                      )}
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <input
-                          type="text"
-                          value={newAccountNumber}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                            setNewAccountNumber(e.target.value);
-                            if (accountNumberError) setAccountNumberError(null);
-                          }}
-                          onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleAddAccountNumber();
-                            }
-                          }}
-                          placeholder={t.accountNumberPlaceholder}
-                          style={{ flex: 1, fontFamily: 'monospace' }}
-                        />
-                        <button
-                          type="button"
-                          className="button button-primary"
-                          onClick={handleAddAccountNumber}
-                          disabled={!newAccountNumber.trim()}
-                        ><Icon name="plus" size={14} />{' '}{t.addAccountNumber}
-                        </button>
-                      </div>
-                      {accountNumberError && (
-                        <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '6px' }}>
-                          {accountNumberError}
+                      ) : (
+                        <div className="form-empty">
+                          <Icon name="wallet" size={16} />
+                          {t.adresAccountsEmpty}
                         </div>
                       )}
-                    </div>
-                  </div>
-                  <div className="modal-footer">
-                    <button
-                      className="button button-secondary"
-                      onClick={handleCancelEdit}
-                    >
-                      <Icon name="x" size={14} />{' '}{t.cancel}
-                    </button>
-                    <button
-                      className="button button-success"
-                      onClick={editingAdres ? handleUpdateAdres : handleAddAdres}
-                    >
-                      <Icon name="save" size={14} />{' '}{editingAdres ? t.update : t.add}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+                      <FormField
+                        label={t.adresAccountAddLabel}
+                        htmlFor="adres-account-new"
+                        hint={t.adresAccountHintShort}
+                        error={accountNumberError}
+                      >
+                        <div className="form-inline">
+                          <input
+                            id="adres-account-new"
+                            type="text"
+                            className="input-mono"
+                            value={newAccountNumber}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                              setNewAccountNumber(e.target.value);
+                              if (accountNumberError) setAccountNumberError(null);
+                            }}
+                            onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleAddAccountNumber();
+                              }
+                            }}
+                            placeholder={t.accountNumberPlaceholder}
+                            aria-invalid={accountNumberError ? true : undefined}
+                          />
+                          <button
+                            type="button"
+                            className="button button-primary"
+                            onClick={handleAddAccountNumber}
+                            disabled={!newAccountNumber.trim()}
+                          >
+                            <Icon name="plus" size={14} />{' '}{t.add}
+                          </button>
+                        </div>
+                      </FormField>
+                    </FormSection>
 
-            {adresy.length > 0 && (
-              <div className="form-group" style={{ marginBottom: '15px' }}>
-                <input
-                  type="text"
-                  placeholder={t.searchAdresy}
-                  value={searchTerm}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
-                />
+                    <FormSection
+                      icon="search"
+                      title={t.adresSectionMatching}
+                      description={t.adresSectionMatchingDesc}
+                    >
+                      <FormField
+                        label={t.alternativeNames}
+                        htmlFor="adres-alt-names"
+                        hint={t.adresAltNamesHintShort}
+                      >
+                        <TagInput
+                          id="adres-alt-names"
+                          values={newAlternativeNames}
+                          onChange={setNewAlternativeNames}
+                          placeholder={t.adresAltNamesPlaceholder}
+                          addLabel={t.add}
+                          removeLabel={t.remove}
+                        />
+                      </FormField>
+                      <FormField
+                        label={t.swrkIdentifiers}
+                        htmlFor="adres-swrk"
+                        hint={t.adresSwrkHintShort}
+                      >
+                        <TagInput
+                          id="adres-swrk"
+                          values={newSwrkIdentifiers}
+                          onChange={setNewSwrkIdentifiers}
+                          placeholder={t.swrkPlaceholder}
+                          addLabel={t.add}
+                          removeLabel={t.remove}
+                          monospace
+                        />
+                      </FormField>
+                    </FormSection>
+
+                    <FormSection
+                      icon="mail"
+                      title={t.adresSectionMailing}
+                      description={t.adresSectionMailingDesc}
+                    >
+                      <FormField label={t.zgnUnit}>
+                        <div className="form-inline">
+                          <Select
+                            overlay
+                            value={newZgnJednostkaId ?? ''}
+                            onChange={(v) => setNewZgnJednostkaId(v ? Number(v) : null)}
+                            options={[
+                              { value: '', label: t.zgnUnitNone },
+                              ...zgnJednostki.map((j) => ({
+                                value: String(j.id),
+                                label: `${j.nazwa} — ${j.email}`,
+                              })),
+                            ]}
+                            ariaLabel={t.zgnUnit}
+                            style={{ flex: 1, minWidth: 0 }}
+                          />
+                          <button
+                            type="button"
+                            className="button button-secondary"
+                            onClick={() => setShowZgnUnitsModal(true)}
+                            title={t.zgnUnitsTitle}
+                          >
+                            <Icon name="settings" size={14} />{' '}{t.zgnManageUnits}
+                          </button>
+                        </div>
+                      </FormField>
+                    </FormSection>
+                  </div>
+                  <ModalFooter
+                    note={<RequiredNote label={t.formRequiredNote} />}
+                    onCancel={handleCancelEdit}
+                    cancelLabel={t.cancel}
+                    onSubmit={editingAdres ? handleUpdateAdres : handleAddAdres}
+                    submitLabel={editingAdres ? t.save : t.addAdres}
+                    submitIcon={editingAdres ? 'save' : 'plus'}
+                  />
+                </div>
               </div>
             )}
 
             {adresy.length > 0 ? (
               <>
-                <div style={{ marginBottom: '10px', fontSize: '14px', opacity: 0.7 }}>
-                  {t.totalAdresy}: {filteredAdresy.length} / {adresy.length}
+                <div className="list-filter">
+                  <div className="input-icon">
+                    <Icon name="search" size={15} />
+                    <input
+                      type="text"
+                      placeholder={t.searchAdresy}
+                      value={searchTerm}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+                      aria-label={t.searchAdresy}
+                    />
+                  </div>
+                  <span className="list-filter__count">
+                    {t.totalAdresy}: <strong>{filteredAdresy.length}</strong> / {adresy.length}
+                  </span>
                 </div>
-                <table>
+                <table className="data-table">
                   <thead>
                     <tr>
                       <th>{t.nazwa}</th>
                       <th>{t.adresBank}</th>
-                      <th>{t.swrkIdentifiers}</th>
-                      <th>{t.accountNumbers}</th>
+                      <th>{t.adresAccountsColumn}</th>
+                      <th>{t.adresSwrkColumn}</th>
                       <th>{t.zgnUnit}</th>
                       <th>{t.zarzadTitle}</th>
                       <th>{t.apartmentMappings}</th>
-                      <th>{t.actions}</th>
+                      <th className="data-table__actions">{t.actions}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredAdresy.map((adres) => (
-                      <tr key={adres.id}>
-                        <td>
-                          <div>{adres.nazwa}</div>
-                          {adres.alternativeNames && adres.alternativeNames.length > 0 && (
-                            <div style={{ fontSize: '11px', opacity: 0.6, marginTop: '4px' }}>
-                              {adres.alternativeNames.join(', ')}
-                            </div>
-                          )}
-                        </td>
-                        <td>
-                          {adres.bankId
-                            ? banks.find((b) => b.id === adres.bankId)?.name ?? '—'
-                            : '—'}
-                        </td>
-                        <td style={{ wordBreak: 'break-all' }}>
-                          {adres.swrkIdentifiers && adres.swrkIdentifiers.length > 0
-                            ? adres.swrkIdentifiers.join(', ')
-                            : '—'}
-                        </td>
-                        <td style={{ wordBreak: 'break-all', fontFamily: 'monospace', fontSize: '11px' }}>
-                          {adres.accountNumbers && adres.accountNumbers.length > 0
-                            ? adres.accountNumbers.map((acc) => {
-                                const typeId = adres.accountTypes?.[acc];
-                                const typ = kontoTypy.find((k) => k.id === typeId);
-                                return (
-                                  <div key={acc} style={{ marginBottom: '2px' }}>
-                                    {acc}
-                                    {typ && (
-                                      <span style={{ color: 'var(--accent)', marginLeft: '6px' }}>
-                                        · {typ.name} ({typ.bankAccountSymbol})
+                    {filteredAdresy.map((adres) => {
+                      const altNames = adres.alternativeNames ?? [];
+                      const swrk = adres.swrkIdentifiers ?? [];
+                      const accounts = adres.accountNumbers ?? [];
+                      const bank = adres.bankId ? banks.find((b) => b.id === adres.bankId) : undefined;
+                      const jednostka = zgnJednostki.find((j) => j.id === adres.zgnJednostkaId);
+                      const zarzadCount = adres.zarzad?.length ?? 0;
+                      const mappingsCount = adres.apartmentMappings?.length ?? 0;
+                      return (
+                        <tr key={adres.id}>
+                          <td className="data-table__name">
+                            {/* Spelling variants are for matching, not for reading the list —
+                                on hover only (search still finds them). */}
+                            <span
+                              className="cell-title"
+                              title={altNames.length > 0 ? `${t.alternativeNames}:\n${altNames.join('\n')}` : undefined}
+                            >
+                              {adres.nazwa}
+                            </span>
+                          </td>
+                          <td className="nowrap">
+                            {bank ? bank.name : <span className="cell-empty">—</span>}
+                          </td>
+                          <td>
+                            {accounts.length > 0 ? (
+                              <div className="adres-accounts">
+                                {accounts.map((acc) => {
+                                  const typ = kontoTypy.find((k) => k.id === adres.accountTypes?.[acc]);
+                                  return (
+                                    <React.Fragment key={acc}>
+                                      <span className="adres-account__number">{formatAccount(acc)}</span>
+                                      <span
+                                        className="adres-account__type"
+                                        title={typ ? `${typ.name} (${typ.bankAccountSymbol})` : undefined}
+                                      >
+                                        {typ?.name ?? ''}
                                       </span>
-                                    )}
-                                  </div>
-                                );
-                              })
-                            : '—'}
-                        </td>
-                        <td style={{ fontSize: '12px' }}>
-                          {(() => {
-                            const jednostka = zgnJednostki.find((j) => j.id === adres.zgnJednostkaId);
-                            if (!jednostka) return '—';
-                            return (
-                              <>
-                                <div>{jednostka.nazwa}</div>
-                                <div style={{ opacity: 0.6, wordBreak: 'break-all' }}>{jednostka.email}</div>
-                              </>
-                            );
-                          })()}
-                        </td>
-                        <td>
-                          <button
-                            className="button button-small button-secondary"
-                            onClick={() => setZarzadAdresId(adres.id)}
-                            title={
-                              adres.zarzad && adres.zarzad.length > 0
-                                ? adres.zarzad.map((m) => m.imieNazwisko).join(', ')
-                                : t.zarzadTitle
-                            }
-                          ><Icon name="users" size={13} />{' '}
-                            {t.zarzadTitle} ({adres.zarzad?.length ?? 0})
-                          </button>
-                        </td>
-                        <td>
-                          <button
-                            className="button button-small button-secondary"
-                            onClick={() => setMappingsAdresId(adres.id)}
-                            title={t.apartmentMappingsTitle}
-                          ><Icon name="clipboard" size={13} />{' '}
-                            {t.apartmentMappings} ({adres.apartmentMappings?.length ?? 0})
-                          </button>
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', gap: '8px' }}>
+                                    </React.Fragment>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <span className="cell-warning" title={t.adresNoAccountHint}>
+                                <Icon name="alert-triangle" size={13} />
+                                {t.adresNoAccount}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            {swrk.length > 0 ? (
+                              <span className="adres-swrk">{swrk.join(', ')}</span>
+                            ) : (
+                              <span className="cell-empty">—</span>
+                            )}
+                          </td>
+                          <td>
+                            {jednostka ? (
+                              <span className="adres-zgn" title={jednostka.email}>{jednostka.nazwa}</span>
+                            ) : (
+                              <span className="cell-empty">—</span>
+                            )}
+                          </td>
+                          <td>
                             <button
-                              className="button button-small button-primary"
-                              onClick={() => handleEditAdres(adres)}
-                            ><Icon name="edit" size={13} />{' '}
-                              {t.edit}
+                              type="button"
+                              className={`button button-small button-ghost count-button${zarzadCount === 0 ? ' is-zero' : ''}`}
+                              onClick={() => setZarzadAdresId(adres.id)}
+                              title={
+                                zarzadCount > 0
+                                  ? adres.zarzad!.map((m) => m.imieNazwisko).join(', ')
+                                  : t.zarzadTitle
+                              }
+                              aria-label={`${t.zarzadTitle}: ${zarzadCount}`}
+                            >
+                              {zarzadCount > 0 ? (
+                                <><Icon name="users" size={13} />{zarzadCount}</>
+                              ) : (
+                                <><Icon name="plus" size={13} />{t.add}</>
+                              )}
                             </button>
+                          </td>
+                          <td>
                             <button
-                              className="button button-small button-danger"
-                              onClick={() => handleDeleteAdres(adres.id)}
-                            ><Icon name="trash" size={13} />{' '}
-                              {t.delete}
+                              type="button"
+                              className={`button button-small button-ghost count-button${mappingsCount === 0 ? ' is-zero' : ''}`}
+                              onClick={() => setMappingsAdresId(adres.id)}
+                              title={t.apartmentMappingsTitle}
+                              aria-label={`${t.apartmentMappings}: ${mappingsCount}`}
+                            >
+                              {mappingsCount > 0 ? (
+                                <><Icon name="clipboard" size={13} />{mappingsCount}</>
+                              ) : (
+                                <><Icon name="plus" size={13} />{t.add}</>
+                              )}
                             </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="data-table__actions">
+                            <div className="row-actions">
+                              <button
+                                type="button"
+                                className="button button-small button-secondary"
+                                onClick={() => handleEditAdres(adres)}
+                              >
+                                <Icon name="edit" size={13} />{' '}{t.edit}
+                              </button>
+                              <button
+                                type="button"
+                                className="button button-ghost button-icon icon-danger"
+                                onClick={() => handleDeleteAdres(adres.id)}
+                                title={t.delete}
+                                aria-label={`${t.delete}: ${adres.nazwa}`}
+                              >
+                                <Icon name="trash" size={15} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </>
             ) : (
-              <div className="empty-state">{t.noAdresyConfigured}</div>
+              <div className="form-empty">
+                <Icon name="map-pin" size={16} />
+                {t.noAdresyConfigured}
+              </div>
             )}
-          </div>
+          </FormSection>
         )}
 
         {tab === 'typy' && (
@@ -2148,15 +2235,14 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
         )}
 
         {tab === 'zgn' && (
-          <div className="card">
-            <h2 style={{ margin: '0 0 12px' }}>{t.zgnUnitsTitle}</h2>
+          <FormSection icon="building" title={t.zgnUnitsTitle}>
             <ZgnUnitsPanel
               language={language}
               jednostki={zgnJednostki}
               adresy={adresy}
               onSaved={loadData}
             />
-          </div>
+          </FormSection>
         )}
 
         {zarzadAdres && (

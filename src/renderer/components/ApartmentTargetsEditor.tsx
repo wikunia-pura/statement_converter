@@ -107,7 +107,16 @@ const ApartmentTargetsEditor: React.FC<ApartmentTargetsEditorProps> = ({
 
   return (
     <div className="apt-targets">
-      {drafts.map((draft, index) => {
+      {/* Column titles once, above the rows — not repeated per row. */}
+      <div className="apt-targets__head" aria-hidden="true">
+        <span>
+          {t.apartmentMappingApartment}
+          <span className="form-field__required">*</span>
+        </span>
+        <span>{t.apartmentMappingAccount}</span>
+        <span />
+      </div>
+      {drafts.map((draft) => {
         const apartment = draft.apartmentNumber.trim();
         const account = draft.kontoLokalu.trim();
         const accountMissing = !account && isLetteredApartment(apartment);
@@ -115,68 +124,54 @@ const ApartmentTargetsEditor: React.FC<ApartmentTargetsEditorProps> = ({
 
         return (
           <div className="apt-targets__row" key={draft.key}>
-            <div>
-              {index === 0 && (
-                <label className="apt-targets__label">
-                  {t.apartmentMappingApartment} <span style={{ color: 'var(--danger)' }}>*</span>
-                </label>
-              )}
+            <input
+              type="text"
+              value={draft.apartmentNumber}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                patch(draft.key, { apartmentNumber: e.target.value })
+              }
+              placeholder={t.apartmentMappingApartmentPlaceholder}
+              disabled={disabled}
+              aria-label={t.apartmentMappingApartment}
+              autoFocus={drafts.length === 1 && !draft.apartmentNumber}
+            />
+            <div className="apt-targets__account">
               <input
                 type="text"
-                value={draft.apartmentNumber}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  patch(draft.key, { apartmentNumber: e.target.value })
-                }
-                placeholder={t.apartmentMappingApartmentPlaceholder}
-                disabled={disabled}
-                autoFocus={index === 0 && drafts.length === 1 && !draft.apartmentNumber}
-              />
-            </div>
-            <div>
-              {index === 0 && (
-                <label className="apt-targets__label">{t.apartmentMappingAccount}</label>
-              )}
-              <input
-                type="text"
+                className="input-mono"
                 value={draft.kontoLokalu}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                   patch(draft.key, { kontoLokalu: e.target.value })
                 }
                 placeholder={accountPlaceholder}
                 disabled={disabled}
-                style={{ fontFamily: 'monospace' }}
+                aria-label={t.apartmentMappingAccount}
+                aria-invalid={accountMissing || accountInvalid ? true : undefined}
               />
-              {accountMissing && (
-                <div className="review-card__manual-hint review-card__manual-hint--warning">
-                  <Icon name="alert-triangle" size={12} /> {t.apartmentMappingAccountRequired}
-                </div>
-              )}
-              {accountInvalid && (
-                <div className="review-card__manual-hint review-card__manual-hint--warning">
-                  <Icon name="alert-triangle" size={12} /> {t.apartmentMappingAccountInvalid}
+              {(accountMissing || accountInvalid) && (
+                <div className="form-field__error" role="alert">
+                  <Icon name="alert-circle" size={13} />
+                  {accountMissing ? t.apartmentMappingAccountRequired : t.apartmentMappingAccountInvalid}
                 </div>
               )}
             </div>
-            <div>
-              {index === 0 && <label className="apt-targets__label">&nbsp;</label>}
-              <button
-                type="button"
-                className="button button-small button-danger apt-targets__remove"
-                onClick={() => remove(draft.key)}
-                disabled={disabled || (drafts.length === 1 && !draft.apartmentNumber && !draft.kontoLokalu)}
-                title={t.apartmentMappingRemoveApartment}
-                aria-label={t.apartmentMappingRemoveApartment}
-              >
-                <Icon name="trash" size={13} />
-              </button>
-            </div>
+            <button
+              type="button"
+              className="button button-ghost button-icon icon-danger"
+              onClick={() => remove(draft.key)}
+              disabled={disabled || (drafts.length === 1 && !draft.apartmentNumber && !draft.kontoLokalu)}
+              title={t.apartmentMappingRemoveApartment}
+              aria-label={t.apartmentMappingRemoveApartment}
+            >
+              <Icon name="trash" size={15} />
+            </button>
           </div>
         );
       })}
-      <div>
+      <div className="apt-targets__footer">
         <button
           type="button"
-          className="button button-small button-secondary"
+          className="button button-small button-subtle"
           onClick={() => onChange([...drafts, newApartmentTargetDraft()])}
           disabled={disabled}
         >

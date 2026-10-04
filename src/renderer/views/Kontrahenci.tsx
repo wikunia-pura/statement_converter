@@ -2,16 +2,18 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Kontrahent, KontrahentTyp } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
-import Loader from '../components/Loader';
-import ModalDismiss from '../components/Modal';
+import ChoiceCards from '../components/ChoiceCards';
+import { FormField, FormRow, FormSection, RequiredNote } from '../components/FormSection';
 import Icon from '../components/Icon';
+import Loader, { BusyOverlay } from '../components/Loader';
+import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
+import TagInput from '../components/TagInput';
 
-// Shared color scheme for the contractor-type pills — used both by the toggle
-// pills in the add/edit form and the read-only badges in the table.
-const TYP_COLORS: Record<KontrahentTyp, { bg: string; fg: string }> = {
-  'Kontrahent': { bg: 'rgba(78, 201, 176, 0.15)', fg: 'var(--success)' },
-  'Pozostałe przychody': { bg: 'rgba(91, 155, 213, 0.15)', fg: 'var(--info)' },
-  'Pozostałe koszty': { bg: 'rgba(206, 145, 120, 0.15)', fg: 'var(--warning)' },
+/** Badge modifier per contractor kind — the colours live in styles.css. */
+const TYP_BADGE: Record<KontrahentTyp, string> = {
+  'Kontrahent': 'typ-badge--kontrahent',
+  'Pozostałe przychody': 'typ-badge--przychody',
+  'Pozostałe koszty': 'typ-badge--koszty',
 };
 
 interface KontrahenciProps {
@@ -29,7 +31,6 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
   const [newNip, setNewNip] = useState('');
   const [newTypy, setNewTypy] = useState<KontrahentTyp[]>(['Kontrahent']);
   const [newAlternativeNames, setNewAlternativeNames] = useState<string[]>([]);
-  const [newAlternativeName, setNewAlternativeName] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -72,7 +73,6 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
       setNewNip('');
       setNewTypy(['Kontrahent']);
       setNewAlternativeNames([]);
-      setNewAlternativeName('');
       setShowAddKontrahent(false);
       loadData();
     } catch (error: unknown) {
@@ -103,7 +103,6 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
       setNewNip('');
       setNewTypy(['Kontrahent']);
       setNewAlternativeNames([]);
-      setNewAlternativeName('');
       setEditingKontrahent(null);
       loadData();
     } catch (error: unknown) {
@@ -131,7 +130,6 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
     setNewNip(kontrahent.nip || '');
     setNewTypy(kontrahent.typy && kontrahent.typy.length > 0 ? kontrahent.typy : ['Kontrahent']);
     setNewAlternativeNames(kontrahent.alternativeNames || []);
-    setNewAlternativeName('');
   };
 
   const handleCancelEdit = () => {
@@ -142,7 +140,6 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
     setNewNip('');
     setNewTypy(['Kontrahent']);
     setNewAlternativeNames([]);
-    setNewAlternativeName('');
   };
 
   const handleToggleTyp = (typ: KontrahentTyp) => {
@@ -221,17 +218,6 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
     }
   };
 
-  const handleAddAlternativeName = () => {
-    if (newAlternativeName.trim()) {
-      setNewAlternativeNames([...newAlternativeNames, newAlternativeName.trim()]);
-      setNewAlternativeName('');
-    }
-  };
-
-  const handleRemoveAlternativeName = (index: number) => {
-    setNewAlternativeNames(newAlternativeNames.filter((_, i) => i !== index));
-  };
-
   const filteredKontrahenci = useMemo(() => {
     const q = searchTerm.toLowerCase();
     return kontrahenci.filter(k =>
@@ -249,71 +235,34 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
     );
   }
 
+  const typOptions = [
+    { value: 'Kontrahent' as KontrahentTyp, label: t.typKontrahent, hint: t.kontrahentTypKontrahentHint },
+    { value: 'Pozostałe koszty' as KontrahentTyp, label: t.typPozostaleKoszty, hint: t.kontrahentTypKosztyHint },
+    { value: 'Pozostałe przychody' as KontrahentTyp, label: t.typPozostalePrzychody, hint: t.kontrahentTypPrzychodyHint },
+  ];
+
   return (
     <div className="content-body">
-      {isImporting && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 9999,
-        }}>
-          <div style={{
-            width: '60px',
-            height: '60px',
-            border: '6px solid #f3f3f3',
-            borderTop: '6px solid #3498db',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-          }} />
-          <div style={{
-            marginTop: '20px',
-            color: 'white',
-            fontSize: '18px',
-            fontWeight: 'bold',
-          }}>
-            {t.importing}
-          </div>
-        </div>
-      )}
-      <div className="card">
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '15px',
-          }}
-        >
-          <h2>{t.kontrahenci}</h2>
-          <div style={{ display: 'flex', gap: '10px' }}>
+      {isImporting && <BusyOverlay label={t.importing} />}
+      <FormSection
+        icon="briefcase"
+        title={t.kontrahenci}
+        description={t.kontrahenciListDesc}
+        aside={
+          <div className="form-section__actions">
+            {/* Mass delete is demoted: never the loudest button next to everyday actions. */}
             {kontrahenci.length > 0 && (
-              <button
-                className="button button-danger"
-                onClick={handleDeleteAll}
-              >
-                <Icon name="trash" size={14} />{' '}{t.deleteAllKontrahenci}
-              </button>
+              <>
+                <button className="button button-ghost icon-danger" onClick={handleDeleteAll}>
+                  <Icon name="trash" size={14} />{' '}{t.deleteAllKontrahenci}
+                </button>
+                <span className="toolbar-divider" aria-hidden="true" />
+              </>
             )}
-            <button
-              className="button button-import"
-              onClick={handleImportFromFileFunky}
-              disabled={isImporting}
-            >
+            <button className="button button-import" onClick={handleImportFromFileFunky} disabled={isImporting}>
               <Icon name="upload" size={14} />{' '}{t.importFromFileFunky}
             </button>
-            <button
-              className="button button-import"
-              onClick={handleImportFromDOM}
-              disabled={isImporting}
-            >
+            <button className="button button-import" onClick={handleImportFromDOM} disabled={isImporting}>
               <Icon name="upload" size={14} />{' '}{t.importFromDOM}
             </button>
             <button
@@ -327,226 +276,180 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
               className="button button-primary"
               onClick={() => setShowAddKontrahent(true)}
               disabled={showAddKontrahent || editingKontrahent !== null}
-            ><Icon name="plus" size={14} />{' '}
-              {t.addKontrahent}
+            >
+              <Icon name="plus" size={14} />{' '}{t.addKontrahent}
             </button>
           </div>
-        </div>
-
+        }
+      >
         {(showAddKontrahent || editingKontrahent) && (
           <div className="modal-overlay" onClick={handleCancelEdit}>
-            <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal modal--lg" onClick={(e) => e.stopPropagation()}>
               <ModalDismiss onClose={handleCancelEdit} />
-              <div className="modal-header">
-                {editingKontrahent ? t.editKontrahent : t.addNewKontrahent}
-              </div>
-              <div className="modal-body">
-                <div className="form-group">
-                  <label>{t.nazwa} <span style={{ color: 'red' }}>*</span></label>
-                  <input
-                    type="text"
-                    value={newNazwa}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewNazwa(e.target.value)}
-                    placeholder="np. Miasto Stołeczne Warszawa"
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>{t.kontoKontrahenta} <span style={{ color: 'red' }}>*</span></label>
-                  <input
-                    type="text"
-                    value={newKontoKontrahenta}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewKontoKontrahenta(e.target.value)}
-                    placeholder="np. 201-00001"
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>{t.nip}</label>
-                  <input
-                    type="text"
-                    value={newNip}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewNip(e.target.value)}
-                    placeholder="np. 1234567890"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>{t.typ}</label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                    {([
-                      ['Kontrahent', t.typKontrahent],
-                      ['Pozostałe przychody', t.typPozostalePrzychody],
-                      ['Pozostałe koszty', t.typPozostaleKoszty],
-                    ] as [KontrahentTyp, string][]).map(([value, label]) => {
-                      const selected = newTypy.includes(value);
-                      const colors = TYP_COLORS[value];
-                      return (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => handleToggleTyp(value)}
-                          style={{
-                            padding: '5px 14px',
-                            borderRadius: '14px',
-                            fontSize: '13px',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            transition: 'all 0.15s ease',
-                            border: `1.5px solid ${selected ? colors.fg : 'var(--border)'}`,
-                            backgroundColor: selected ? colors.bg : 'transparent',
-                            color: selected ? colors.fg : 'var(--text-secondary)',
-                            opacity: selected ? 1 : 0.7,
-                          }}
-                        >
-                          {selected ? '✓ ' : ''}{label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label>{t.alternativeNames}</label>
-                  <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
-                    {t.alternativeNamesHint}
-                  </div>
-                  {newAlternativeNames.length > 0 && (
-                    <div style={{ marginBottom: '8px' }}>
-                      {newAlternativeNames.map((name, index) => (
-                        <div key={index} className="alternative-name-tag">
-                          <span>{name}</span>
-                          <button
-                            onClick={() => handleRemoveAlternativeName(index)}
-                            className="alternative-name-remove"
-                            type="button"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', gap: '8px' }}>
+              <ModalHeader
+                icon="briefcase"
+                title={editingKontrahent ? t.editKontrahent : t.addNewKontrahent}
+                subtitle={editingKontrahent ? editingKontrahent.nazwa : t.kontrahentFormSubtitleAdd}
+              />
+              <div className="modal-body modal-body--sectioned">
+                <FormSection icon="briefcase" title={t.kontrahentSectionData} description={t.kontrahentSectionDataDesc}>
+                  <FormField label={t.nazwa} htmlFor="kontrahent-nazwa" required>
                     <input
+                      id="kontrahent-nazwa"
                       type="text"
-                      value={newAlternativeName}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewAlternativeName(e.target.value)}
-                      onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleAddAlternativeName();
-                        }
-                      }}
-                      placeholder="np. Tech-Home, TECH HOME"
-                      style={{ flex: 1 }}
+                      value={newNazwa}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewNazwa(e.target.value)}
+                      placeholder="np. Miasto Stołeczne Warszawa"
+                      autoFocus={!editingKontrahent}
                     />
-                    <button
-                      type="button"
-                      className="button button-primary"
-                      onClick={handleAddAlternativeName}
-                      disabled={!newAlternativeName.trim()}
-                    ><Icon name="plus" size={14} />{' '}{t.addAlternativeName}
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button
-                  className="button button-secondary"
-                  onClick={handleCancelEdit}
-                >
-                  <Icon name="x" size={14} />{' '}{t.cancel}
-                </button>
-                <button
-                  className="button button-success"
-                  onClick={editingKontrahent ? handleUpdateKontrahent : handleAddKontrahent}
-                >
-                  <Icon name="save" size={14} />{' '}{editingKontrahent ? t.update : t.add}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+                  </FormField>
+                  <FormRow>
+                    <FormField label={t.kontoKontrahenta} htmlFor="kontrahent-konto" required>
+                      <input
+                        id="kontrahent-konto"
+                        type="text"
+                        className="input-mono"
+                        value={newKontoKontrahenta}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewKontoKontrahenta(e.target.value)}
+                        placeholder="np. 201-00001"
+                      />
+                    </FormField>
+                    <FormField label={t.nip} htmlFor="kontrahent-nip">
+                      <input
+                        id="kontrahent-nip"
+                        type="text"
+                        className="input-mono"
+                        value={newNip}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewNip(e.target.value)}
+                        placeholder="np. 1234567890"
+                      />
+                    </FormField>
+                  </FormRow>
+                </FormSection>
 
-        {kontrahenci.length > 0 && (
-          <div className="form-group" style={{ marginBottom: '15px' }}>
-            <input
-              type="text"
-              placeholder={t.searchKontrahenci}
-              value={searchTerm}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
-            />
+                <FormSection icon="clipboard" title={t.kontrahentSectionTyp} description={t.kontrahentSectionTypDesc}>
+                  <ChoiceCards options={typOptions} selected={newTypy} onToggle={handleToggleTyp} />
+                </FormSection>
+
+                <FormSection
+                  icon="search"
+                  title={t.kontrahentSectionMatching}
+                  description={t.kontrahentSectionMatchingDesc}
+                >
+                  <FormField label={t.alternativeNames} htmlFor="kontrahent-alt" hint={t.kontrahentAltNamesHint}>
+                    <TagInput
+                      id="kontrahent-alt"
+                      values={newAlternativeNames}
+                      onChange={setNewAlternativeNames}
+                      placeholder="np. Tech-Home, TECH HOME"
+                      addLabel={t.add}
+                      removeLabel={t.remove}
+                    />
+                  </FormField>
+                </FormSection>
+              </div>
+              <ModalFooter
+                note={<RequiredNote label={t.formRequiredNote} />}
+                onCancel={handleCancelEdit}
+                cancelLabel={t.cancel}
+                onSubmit={editingKontrahent ? handleUpdateKontrahent : handleAddKontrahent}
+                submitLabel={editingKontrahent ? t.save : t.addNewKontrahent}
+                submitIcon={editingKontrahent ? 'save' : 'plus'}
+                submitDisabled={!newNazwa.trim() || !newKontoKontrahenta.trim()}
+                submitTitle={t.fillAllFields}
+              />
+            </div>
           </div>
         )}
 
         {kontrahenci.length > 0 ? (
           <>
-            <div style={{ marginBottom: '10px', fontSize: '14px', opacity: 0.7 }}>
-              {t.totalKontrahenci}: {filteredKontrahenci.length} / {kontrahenci.length}
+            <div className="list-filter">
+              <div className="input-icon">
+                <Icon name="search" size={15} />
+                <input
+                  type="text"
+                  placeholder={t.searchKontrahenci}
+                  value={searchTerm}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+                  aria-label={t.searchKontrahenci}
+                />
+              </div>
+              <span className="list-filter__count">
+                {t.totalKontrahenci}: <strong>{filteredKontrahenci.length}</strong> / {kontrahenci.length}
+              </span>
             </div>
-            <table>
+            <table className="data-table">
               <thead>
                 <tr>
                   <th>{t.nazwa}</th>
                   <th>{t.kontoKontrahenta}</th>
                   <th>{t.nip}</th>
                   <th>{t.typ}</th>
-                  <th>{t.actions}</th>
+                  <th className="data-table__actions">{t.actions}</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredKontrahenci.map((kontrahent) => (
-                  <tr key={kontrahent.id}>
-                    <td>
-                      <div>{kontrahent.nazwa}</div>
-                      {kontrahent.alternativeNames && kontrahent.alternativeNames.length > 0 && (
-                        <div style={{ fontSize: '11px', opacity: 0.6, marginTop: '4px' }}>
-                          {kontrahent.alternativeNames.join(', ')}
+                {filteredKontrahenci.map((kontrahent) => {
+                  const altNames = kontrahent.alternativeNames ?? [];
+                  const typy: KontrahentTyp[] =
+                    kontrahent.typy && kontrahent.typy.length > 0 ? kontrahent.typy : ['Kontrahent'];
+                  return (
+                    <tr key={kontrahent.id}>
+                      <td className="data-table__name">
+                        {/* Spelling variants are for matching, not for reading the list —
+                            on hover only (search still finds them by name). */}
+                        <span
+                          className="cell-title"
+                          title={altNames.length > 0 ? `${t.alternativeNames}:\n${altNames.join('\n')}` : undefined}
+                        >
+                          {kontrahent.nazwa}
+                        </span>
+                      </td>
+                      <td className="cell-mono">{kontrahent.kontoKontrahenta}</td>
+                      <td className="cell-mono">
+                        {kontrahent.nip || <span className="cell-empty">—</span>}
+                      </td>
+                      <td>
+                        <div className="badge-row">
+                          {typy.map((typ) => (
+                            <span key={typ} className={`typ-badge ${TYP_BADGE[typ]}`}>{typ}</span>
+                          ))}
                         </div>
-                      )}
-                    </td>
-                    <td>{kontrahent.kontoKontrahenta}</td>
-                    <td>{kontrahent.nip || '-'}</td>
-                    <td>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                        {(kontrahent.typy && kontrahent.typy.length > 0 ? kontrahent.typy : ['Kontrahent'] as KontrahentTyp[]).map((typ) => (
-                          <span key={typ} style={{
-                            padding: '2px 8px',
-                            borderRadius: '10px',
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            backgroundColor: TYP_COLORS[typ].bg,
-                            color: TYP_COLORS[typ].fg,
-                          }}>
-                            {typ}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button
-                          className="button button-small button-primary"
-                          onClick={() => handleEditKontrahent(kontrahent)}
-                        ><Icon name="edit" size={13} />{' '}
-                          {t.edit}
-                        </button>
-                        <button
-                          className="button button-small button-danger"
-                          onClick={() => handleDeleteKontrahent(kontrahent.id)}
-                        ><Icon name="trash" size={13} />{' '}
-                          {t.delete}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="data-table__actions">
+                        <div className="row-actions">
+                          <button
+                            type="button"
+                            className="button button-small button-secondary"
+                            onClick={() => handleEditKontrahent(kontrahent)}
+                          >
+                            <Icon name="edit" size={13} />{' '}{t.edit}
+                          </button>
+                          <button
+                            type="button"
+                            className="button button-ghost button-icon icon-danger"
+                            onClick={() => handleDeleteKontrahent(kontrahent.id)}
+                            title={t.delete}
+                            aria-label={`${t.delete}: ${kontrahent.nazwa}`}
+                          >
+                            <Icon name="trash" size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </>
         ) : (
-          <div className="empty-state">{t.noKontrahenciConfigured}</div>
+          <div className="form-empty">
+            <Icon name="briefcase" size={16} />
+            {t.noKontrahenciConfigured}
+          </div>
         )}
-      </div>
+      </FormSection>
     </div>
   );
 };

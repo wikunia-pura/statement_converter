@@ -14,6 +14,7 @@
  *   - createCsvExporter(): return the format-specific CsvExporter
  */
 
+import { ConversionCancelledError, throwIfCancelled } from './conversion-cancel';
 import * as path from 'path';
 import { AIExtractor } from './ai-extractor';
 import { ExtractionCache } from './extraction-cache';
@@ -209,6 +210,8 @@ export type ConversionProgressCallback = (e: ConversionProgress) => void;
 
 export interface ConvertOptions {
   onProgress?: ConversionProgressCallback;
+  /** Aborted by "Anuluj": the conversion stops between stages and AI batches. */
+  signal?: AbortSignal;
 }
 
 // ============================================================
@@ -249,6 +252,7 @@ export abstract class BaseConverter<TRaw> {
   protected config: BaseConverterConfig;
   protected contractorMatcher?: ContractorMatcher;
   private onProgress?: ConversionProgressCallback;
+  private signal?: AbortSignal;
   private aiBatchesCompleted = 0;
   private aiBatchesStarted = 0;
   private aiBatchesTotal = 0;
@@ -387,6 +391,16 @@ export abstract class BaseConverter<TRaw> {
   // ============================================================
 
   /**
+   * Parse only — no filtering, matching or AI. The folder scan
+   * ("Znajdź pliki księgowe") uses it to learn which days a statement covers;
+   * a file the parser cannot read throws, exactly as a conversion would.
+   */
+  async inspect(content: string): Promise<NormalizedTransaction[]> {
+    const { transactions } = await this.doParse(content);
+    return transactions.map((t) => this.normalize(t));
+  }
+
+  /**
    * Main conversion entry point.
    */
   async convert(
@@ -394,20 +408,34 @@ export abstract class BaseConverter<TRaw> {
     opts: ConvertOptions = {}
   ): Promise<BaseImportResult<TRaw>> {
     this.onProgress = opts.onProgress;
+    this.signal = opts.signal;
     this.aiBatchesCompleted = 0;
     this.aiBatchesStarted = 0;
     this.aiBatchesTotal = 0;
     this.totalTransactionsToPrepare = 0;
     this.transactionsPrepared = 0;
 
+    try {
+      return await this.runConversion(content);
+    } finally {
+      // A cancelled run leaves AI batches in flight; they must not report into
+      // a conversion that is over.
+      this.onProgress = undefined;
+      this.signal = undefined;
+    }
+  }
+
+  private async runConversion(content: string): Promise<BaseImportResult<TRaw>> {
     const name = this.getConverterName();
     console.log(`🔄 Starting ${name} conversion...`);
 
+    throwIfCancelled(this.signal);
     this.emitProgress('parse', 'Parsowanie pliku...');
     const { transactions, logExtra } = await this.doParse(content);
     console.log(`📄 Parsed ${transactions.length} transactions`);
     if (logExtra) console.log(`   ${logExtra}`);
 
+    throwIfCancelled(this.signal);
     this.emitProgress('filter', 'Filtrowanie transakcji...');
     const filtered = this.doFilter(transactions, {
       skipNegative: this.config.skipNegativeAmounts,
@@ -416,8 +444,9 @@ export abstract class BaseConverter<TRaw> {
     const skipped = transactions.length - filtered.length;
     console.log(`✂️  Filtered to ${filtered.length} transactions (skipped ${skipped})`);
 
-    const processed = await this.processTransactions(filtered);
+    const processed = await this.untilCancelled(this.processTransactions(filtered));
 
+    throwIfCancelled(this.signal);
     this.emitProgress('done', 'Generowanie wyników...', 97);
     const result = this.generateResult(processed, transactions.length);
 
@@ -428,9 +457,33 @@ export abstract class BaseConverter<TRaw> {
     console.log(`   Skipped: ${result.summary.skipped}`);
 
     this.emitProgress('done', 'Gotowe', 100);
-    this.onProgress = undefined;
 
     return result;
+  }
+
+  /**
+   * `work`, or the cancel error the moment the signal aborts — whichever comes
+   * first. AI batches already in flight finish in the background; their
+   * results are dropped, and no new batch starts (see `runWithConcurrency`).
+   */
+  private untilCancelled<T>(work: Promise<T>): Promise<T> {
+    const signal = this.signal;
+    if (!signal) return work;
+    return new Promise<T>((resolve, reject) => {
+      const onAbort = () => reject(new ConversionCancelledError());
+      if (signal.aborted) onAbort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+      work.then(
+        (value) => {
+          signal.removeEventListener('abort', onAbort);
+          resolve(value);
+        },
+        (error) => {
+          signal.removeEventListener('abort', onAbort);
+          reject(error);
+        }
+      );
+    });
   }
 
   /**
@@ -853,7 +906,8 @@ export abstract class BaseConverter<TRaw> {
           console.error(`   ❌ Income batch ${batchIdx + 1} failed:`, error);
           throw error;
         }
-      }
+      },
+      this.signal
     );
 
     for (const items of batchResults) {
@@ -894,6 +948,7 @@ export abstract class BaseConverter<TRaw> {
         matchCache: this.config.useCache ? this.matchCache : undefined,
         batchSize: this.config.useBatchProcessing ? DEFAULT_EXPENSE_AI_BATCH_SIZE : 1,
         concurrency: this.config.aiConcurrency ?? 3,
+        signal: this.signal,
         onProgress: (event) => {
           if (event.type === 'planned') {
             this.aiBatchesTotal += event.batches;

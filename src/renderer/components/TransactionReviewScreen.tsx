@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ConversionReviewData, ReviewDecision, TransactionForReview, Kontrahent, KontrahentTyp, ApartmentMapping, ApartmentMappingTarget, ContractorSortOrder, DEFAULT_ACCOUNT_CONFIG } from '../../shared/types';
 import { composeApartmentAccount, isLetteredApartment, resolveApartmentAccount } from '../../shared/apartment-account';
 import { buildApartmentMapping, mappingTargets } from '../../shared/apartment-mapping';
@@ -10,9 +10,11 @@ import ApartmentTargetsEditor, {
 } from './ApartmentTargetsEditor';
 import { translations, Language } from '../translations';
 import { searchTransactionInPdf, PdfSearchMatch } from '../../shared/pdf-search';
-import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
 import { useNotify } from './Notifications';
 import Icon from './Icon';
+import SearchableSelect from './SearchableSelect';
+import { ModalFooter, ModalHeader } from './Modal';
+import { FormField, FormRow, FormSection } from './FormSection';
 
 // Normalize like AddressMatcher (lowercase + strip Polish diacritics) so we can
 // find which apartment-mapping rule produced a match in the acceptance view.
@@ -56,178 +58,57 @@ interface SearchableContractorSelectProps {
   onChange: (contractorId: number | null) => void;
   placeholder: string;
   searchPlaceholder: string;
+  emptyText: string;
   disabled?: boolean;
 }
 
+/**
+ * A contractor (or an "other income / cost" entry) for one row — the app's
+ * SearchableSelect, searchable by name, alternative spellings, NIP and account,
+ * in the order the list was sorted by the user's preference.
+ */
 const SearchableContractorSelect: React.FC<SearchableContractorSelectProps> = ({
   kontrahenci,
   selectedContractorId,
   onChange,
   placeholder,
   searchPlaceholder,
+  emptyText,
   disabled = false,
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const containerRef = useRef<HTMLDivElement>(null);
-  const placement = useDropdownPlacement(containerRef, isOpen);
-
-  // Close dropdown when clicking outside — only attach the document listener while
-  // open, so hundreds of closed row-dropdowns don't each run on every click.
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-        setSearchTerm('');
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
-
-  const selectedContractor = kontrahenci.find(k => k.id === selectedContractorId);
-
-  const filteredKontrahenci = kontrahenci.filter(kontrahent => {
-    if (!searchTerm) return true;
-    const search = searchTerm.toLowerCase();
-    const nameMatch = kontrahent.nazwa.toLowerCase().includes(search);
-    const altNamesMatch = kontrahent.alternativeNames && kontrahent.alternativeNames.some(alt => alt.toLowerCase().includes(search));
-    const nipMatch = kontrahent.nip && kontrahent.nip.includes(searchTerm);
-    const accountMatch = kontrahent.kontoKontrahenta && kontrahent.kontoKontrahenta.toLowerCase().includes(search);
-    return nameMatch || altNamesMatch || nipMatch || accountMatch;
-  });
-
-  const handleSelect = (contractorId: number | null) => {
-    onChange(contractorId);
-    setIsOpen(false);
-    setSearchTerm('');
-  };
-
+  const options = useMemo(
+    () => [
+      { value: '', label: placeholder },
+      ...kontrahenci.map((k) => ({
+        value: String(k.id),
+        label: k.kontoKontrahenta ? `${k.nazwa} (${k.kontoKontrahenta})` : k.nazwa,
+        hint:
+          [k.nip ? `NIP: ${k.nip}` : '', (k.alternativeNames ?? []).join(', ')].filter(Boolean).join(' · ') ||
+          undefined,
+        keywords: [k.nip ?? '', k.kontoKontrahenta ?? '', ...(k.alternativeNames ?? [])].join(' '),
+      })),
+    ],
+    [kontrahenci, placeholder],
+  );
   return (
-    <div ref={containerRef} style={{ position: 'relative', width: '100%', opacity: disabled ? 0.5 : 1 }}>
-      <div
-        onClick={() => !disabled && setIsOpen(!isOpen)}
-        style={{
-          padding: '6px 10px',
-          border: '1px solid var(--border-default)',
-          borderRadius: '4px',
-          cursor: disabled ? 'not-allowed' : 'pointer',
-          backgroundColor: disabled ? 'var(--bg-surface-sunken)' : 'var(--bg-surface)',
-          minHeight: '34px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        }}
-      >
-        <span style={{ color: selectedContractor ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>
-          {selectedContractor ? selectedContractor.nazwa : placeholder}
-          {selectedContractor && selectedContractor.kontoKontrahenta && (
-            <span style={{ color: 'var(--text-tertiary)' }}> ({selectedContractor.kontoKontrahenta})</span>
-          )}
-        </span>
-        <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>▼</span>
-      </div>
-
-      {isOpen && (
-        <div
-          style={{
-            position: 'absolute',
-            top: placement.top,
-            bottom: placement.bottom,
-            marginTop: placement.marginTop,
-            marginBottom: placement.marginBottom,
-            left: 0,
-            right: 0,
-            backgroundColor: 'var(--bg-surface)',
-            border: '1px solid var(--border-default)',
-            borderRadius: '4px',
-            maxHeight: placement.maxHeight,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            zIndex: 1000,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.5)'
-          }}
-        >
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder={searchPlaceholder}
-            autoFocus
-            style={{
-              width: '100%',
-              padding: '8px',
-              border: 'none',
-              borderBottom: '1px solid var(--border-default)',
-              outline: 'none',
-              boxSizing: 'border-box',
-              flex: 'none',
-              backgroundColor: 'var(--bg-surface)',
-              color: 'var(--text-primary)'
-            }}
-          />
-          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-            <div
-              onClick={() => handleSelect(null)}
-              style={{
-                padding: '8px 10px',
-                cursor: 'pointer',
-                backgroundColor: selectedContractorId === null ? 'var(--accent-subtle)' : 'var(--bg-surface)',
-                borderBottom: '1px solid var(--border-default)'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface-sunken)'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = selectedContractorId === null ? 'var(--accent-subtle)' : 'var(--bg-surface)'}
-            >
-              <em style={{ color: 'var(--text-tertiary)' }}>{placeholder}</em>
-            </div>
-            {filteredKontrahenci.map((kontrahent) => (
-              <div
-                key={kontrahent.id}
-                onClick={() => handleSelect(kontrahent.id)}
-                style={{
-                  padding: '8px 10px',
-                  cursor: 'pointer',
-                  backgroundColor: kontrahent.id === selectedContractorId ? 'var(--accent-subtle)' : 'var(--bg-surface)',
-                  borderBottom: '1px solid var(--border-default)'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface-sunken)'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = kontrahent.id === selectedContractorId ? 'var(--accent-subtle)' : 'var(--bg-surface)'}
-              >
-                <div style={{ color: 'var(--text-primary)' }}>
-                  {kontrahent.nazwa}
-                  {kontrahent.kontoKontrahenta && (
-                    <span style={{ color: 'var(--text-tertiary)' }}> ({kontrahent.kontoKontrahenta})</span>
-                  )}
-                </div>
-                {kontrahent.nip && (
-                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
-                    NIP: {kontrahent.nip}
-                  </div>
-                )}
-                {kontrahent.alternativeNames && kontrahent.alternativeNames.length > 0 && (
-                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>
-                    {kontrahent.alternativeNames.join(', ')}
-                  </div>
-                )}
-              </div>
-            ))}
-            {filteredKontrahenci.length === 0 && (
-              <div style={{ padding: '8px 10px', color: 'var(--text-tertiary)', textAlign: 'center' }}>
-                Brak kontrahentów
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+    <SearchableSelect
+      overlay
+      value={selectedContractorId != null ? String(selectedContractorId) : ''}
+      options={options}
+      onChange={(v) => onChange(v ? Number(v) : null)}
+      placeholder={placeholder}
+      searchPlaceholder={searchPlaceholder}
+      emptyText={emptyText}
+      disabled={disabled}
+      ariaLabel={placeholder}
+      menuMinWidth={320}
+    />
   );
 };
 
 // PdfPanel sub-component - shows PDF search result
 interface PdfPanelProps {
+  language: Language;
   searchResult: PdfSearchMatch | null;
   searching: boolean;
   searchField: string; // which field triggered the search
@@ -235,47 +116,43 @@ interface PdfPanelProps {
   highlightTokens: string[];
 }
 
-const PdfPanel: React.FC<PdfPanelProps> = ({ searchResult, searching, searchField, onClose, highlightTokens }) => {
+const PdfPanel: React.FC<PdfPanelProps> = ({ language, searchResult, searching, searchField, onClose, highlightTokens }) => {
+  const t = translations[language];
+  const closeButton = (
+    <button
+      type="button"
+      className="button button-ghost button-icon pdf-panel__close"
+      onClick={onClose}
+      title={t.close}
+      aria-label={t.close}
+    >
+      <Icon name="x" size={14} />
+    </button>
+  );
+
   if (searching) {
     return (
-      <div style={{
-        padding: '15px',
-        backgroundColor: 'var(--info-bg)',
-        border: '1px solid var(--info-border)',
-        borderRadius: '6px',
-        marginTop: '10px',
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-          <span style={{ color: 'var(--info)', fontWeight: 600, fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-            <Icon name="search" size={14} /> Szukam w PDF...
+      <div className="pdf-panel pdf-panel--info" role="status">
+        <div className="pdf-panel__head">
+          <span className="pdf-panel__title">
+            <Icon name="loader" size={14} className="icon-spin" /> {t.revPdfSearching}
           </span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: '2px', display: 'inline-flex' }}>
-            <Icon name="x" size={14} />
-          </button>
+          {closeButton}
         </div>
-        <div style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>Proszę czekać...</div>
       </div>
     );
   }
 
   if (!searchResult) {
     return (
-      <div style={{
-        padding: '15px',
-        backgroundColor: 'var(--danger-bg)',
-        border: '1px solid var(--danger-border)',
-        borderRadius: '6px',
-        marginTop: '10px',
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-          <span style={{ color: 'var(--danger)', fontWeight: 600, fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-            <Icon name="alert-circle" size={14} /> Nie znaleziono w PDF
+      <div className="pdf-panel pdf-panel--danger" role="status">
+        <div className="pdf-panel__head">
+          <span className="pdf-panel__title">
+            <Icon name="alert-circle" size={14} /> {t.revPdfNotFound}
           </span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: '2px', display: 'inline-flex' }}>
-            <Icon name="x" size={14} />
-          </button>
+          {closeButton}
         </div>
-        <div style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>Nie znaleziono pasującej transakcji w dokumencie PDF.</div>
+        <div className="pdf-panel__text">{t.revPdfNotFoundText}</div>
       </div>
     );
   }
@@ -283,17 +160,17 @@ const PdfPanel: React.FC<PdfPanelProps> = ({ searchResult, searching, searchFiel
   // Highlight matching tokens in the text
   const highlightText = (text: string): React.ReactNode => {
     if (highlightTokens.length === 0) return text;
-    
-    const escapedTokens = highlightTokens.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+
+    const escapedTokens = highlightTokens.map(tok => tok.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
     // Split on the tokens (capturing group keeps them). Membership is tested
     // against a Set — NOT regex.test(), whose global-flag lastIndex is stateful
     // across calls and would mis-classify parts.
     const parts = text.split(new RegExp(`(${escapedTokens.join('|')})`, 'gi'));
-    const tokenSet = new Set(highlightTokens.map(t => t.toLowerCase()));
+    const tokenSet = new Set(highlightTokens.map(tok => tok.toLowerCase()));
 
     return parts.map((part, i) => {
       if (part && tokenSet.has(part.toLowerCase())) {
-        return <span key={i} style={{ backgroundColor: 'rgba(255, 213, 79, 0.3)', color: 'var(--warning)', fontWeight: 600, padding: '0 2px', borderRadius: '2px' }}>{part}</span>;
+        return <mark key={i} className="pdf-panel__hit">{part}</mark>;
       }
       return part;
     });
@@ -316,23 +193,17 @@ const PdfPanel: React.FC<PdfPanelProps> = ({ searchResult, searching, searchFiel
   const renderLinesWithSeparators = (
     lineArr: string[],
     prefix: string,
-    style: React.CSSProperties,
+    lineClass: string,
     highlight: boolean,
   ) => {
     const elements: React.ReactNode[] = [];
     lineArr.forEach((line, i) => {
       // Add separator before transaction starts (but not the very first line)
       if (i > 0 && isTransactionStart(line)) {
-        elements.push(
-          <div key={`${prefix}-sep-${i}`} style={{
-            borderTop: '1px solid var(--border-default)',
-            margin: '6px 0',
-            opacity: 0.6,
-          }} />
-        );
+        elements.push(<div key={`${prefix}-sep-${i}`} className="pdf-panel__sep" />);
       }
       elements.push(
-        <div key={`${prefix}-${i}`} style={style}>
+        <div key={`${prefix}-${i}`} className={lineClass}>
           {highlight ? (highlightText(line) || '\u00A0') : (line || '\u00A0')}
         </div>
       );
@@ -340,89 +211,36 @@ const PdfPanel: React.FC<PdfPanelProps> = ({ searchResult, searching, searchFiel
     return elements;
   };
 
-  const contextLineStyle: React.CSSProperties = {
-    color: 'var(--text-tertiary)',
-    fontSize: '12px',
-    lineHeight: '1.5',
-    fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
-  };
+  const strong = searchResult.score >= 60;
 
   return (
-    <div style={{
-      padding: '15px',
-      backgroundColor: 'var(--info-bg)',
-      border: '1px solid var(--info-border)',
-      borderRadius: '6px',
-      marginTop: '10px',
-    }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ color: 'var(--info)', fontWeight: 600, fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-            <Icon name="file-text" size={14} /> Dane z PDF ({searchField})
+    <div className="pdf-panel pdf-panel--info">
+      <div className="pdf-panel__head">
+        <span className="pdf-panel__title">
+          <Icon name="file-text" size={14} /> {t.revPdfData} ({searchField})
+          <span className={`pdf-panel__score${strong ? ' is-strong' : ''}`}>
+            {t.revPdfScore}: {searchResult.score}%
           </span>
-          <span style={{
-            color: searchResult.score >= 60 ? 'var(--success)' : 'var(--warning)',
-            fontSize: '12px',
-            backgroundColor: searchResult.score >= 60 ? 'rgba(78, 201, 176, 0.15)' : 'rgba(220, 220, 170, 0.15)',
-            padding: '2px 8px',
-            borderRadius: '10px',
-          }}>
-            trafność: {searchResult.score}%
-          </span>
-        </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: '2px', display: 'inline-flex' }}>
-          <Icon name="x" size={14} />
-        </button>
+        </span>
+        {closeButton}
       </div>
 
-      <div style={{
-        backgroundColor: 'var(--bg-surface-sunken)',
-        borderRadius: '6px',
-        maxHeight: '300px',
-        overflowY: 'auto',
-        border: '1px solid var(--accent-subtle)',
-      }}>
-        {/* Before context */}
+      <div className="pdf-panel__body">
         {beforeLines.length > 0 && (
-          <div style={{ padding: '8px 12px', borderBottom: '1px dashed var(--border-default)' }}>
-            {renderLinesWithSeparators(beforeLines, 'before', contextLineStyle, false)}
+          <div className="pdf-panel__context">
+            {renderLinesWithSeparators(beforeLines, 'before', 'pdf-panel__line', false)}
           </div>
         )}
 
         {/* Core match — highlighted block */}
-        <div style={{
-          padding: '10px 12px',
-          backgroundColor: 'rgba(91, 155, 213, 0.08)',
-          borderLeft: '3px solid var(--info)',
-          position: 'relative',
-        }}>
-          <div style={{
-            position: 'absolute',
-            top: '4px',
-            right: '8px',
-            fontSize: '10px',
-            color: 'var(--info)',
-            opacity: 0.7,
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px',
-          }}>
-            znaleziony wpis
-          </div>
-          {renderLinesWithSeparators(coreLines, 'core', {
-              fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
-              fontSize: '13px',
-              lineHeight: '1.7',
-              color: 'var(--text-primary)',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-            }, true)}
+        <div className="pdf-panel__core">
+          <div className="pdf-panel__core-label">{t.revPdfFound}</div>
+          {renderLinesWithSeparators(coreLines, 'core', 'pdf-panel__line is-core', true)}
         </div>
 
-        {/* After context */}
         {afterLines.length > 0 && (
-          <div style={{ padding: '8px 12px', borderTop: '1px dashed var(--border-default)' }}>
-            {renderLinesWithSeparators(afterLines, 'after', contextLineStyle, false)}
+          <div className="pdf-panel__context is-after">
+            {renderLinesWithSeparators(afterLines, 'after', 'pdf-panel__line', false)}
           </div>
         )}
       </div>
@@ -512,7 +330,7 @@ const ApartmentChoicePanel: React.FC<ApartmentChoicePanelProps> = ({
         </span>
         {selected && resolved && (
           <>
-            <strong style={{ fontFamily: 'monospace' }}>
+            <strong className="mapping-choice__resolved">
               {t.manualApartmentAccountPreview}: {resolved}
             </strong>
             <button
@@ -785,217 +603,132 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
     }, 50);
   };
 
-  // Determine card colors based on decision
-  const getCardColors = () => {
-    if (!currentDecision) {
-      return { bg: 'var(--bg-surface-hover)', border: 'var(--border-default)' };
-    }
-    
-    switch (currentDecision.action) {
-      case 'accept':
-        return { bg: 'rgba(76, 175, 80, 0.1)', border: 'var(--success)' }; // green
-      case 'reject':
-        return { bg: 'rgba(244, 67, 54, 0.1)', border: 'var(--danger)' }; // red
-      case 'manual':
-        return { bg: 'rgba(156, 39, 176, 0.1)', border: 'var(--accent)' }; // purple
-      default:
-        return { bg: 'var(--bg-surface-hover)', border: 'var(--border-default)' };
-    }
-  };
-  
-  const cardColors = getCardColors();
-  
-  return (
-  <div
-    style={{
-      backgroundColor: cardColors.bg,
-      border: `2px solid ${cardColors.border}`,
-      borderRadius: '4px',
-      padding: '15px',
-      marginBottom: '15px',
-    }}
-  >
-    {/* Transaction Header */}
-    <div style={{ 
-      display: 'flex', 
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: '15px',
-      paddingBottom: '10px',
-      borderBottom: '1px solid var(--border-default)',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <h3 style={{ margin: 0, color: trn.transactionType === 'income' ? 'var(--success)' : 'var(--warning)' }}>
-          Transakcja #{idx + 1} ({trn.transactionType === 'income' ? 'WPŁATA' : 'WYDATEK'})
-        </h3>
-        {(() => {
-          // Get confidence based on transaction type
-          const conf = trn.transactionType === 'income' 
-            ? trn.extracted.confidence 
-            : (trn.matchedContractor?.confidence || 0);
-          
-          const color = conf >= 85 ? 'var(--success)' : conf >= 60 ? 'var(--warning)' : 'var(--danger)';
-          const bgColor = conf >= 85 ? 'rgba(78, 201, 176, 0.15)' : conf >= 60 ? 'rgba(220, 220, 170, 0.15)' : 'rgba(244, 71, 71, 0.15)';
-          const borderColor = conf >= 85 ? 'rgba(78, 201, 176, 0.4)' : conf >= 60 ? 'rgba(220, 220, 170, 0.4)' : 'rgba(244, 71, 71, 0.4)';
-          
-          return (
-            <span style={{
-              color,
-              backgroundColor: bgColor,
-              border: `1px solid ${borderColor}`,
-              borderRadius: '12px',
-              padding: '3px 10px',
-              fontSize: '13px',
-              fontWeight: 600,
-            }}>
-              {trn.transactionType === 'income' ? 'Pewność' : 'Dopasowanie'}: {conf}%
-            </span>
-          );
-        })()}
-      </div>
-    </div>
+  // The card's frame says where the decision stands — undecided, accepted,
+  // rejected / to clarify, or resolved by hand.
+  const decisionTone = !currentDecision
+    ? ''
+    : currentDecision.action === 'accept'
+      ? ' is-accepted'
+      : currentDecision.action === 'reject'
+        ? ' is-rejected'
+        : currentDecision.action === 'clarify'
+          ? ' is-clarify'
+          : ' is-manual';
 
-    {/* Original Data */}
-    <div style={{ marginBottom: '15px' }}>
-      <h4 style={{ margin: '0 0 10px 0', color: 'var(--info)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <Icon name="file-text" size={16} /> Dane z wyciągu:
-        {pdfLines && pdfLines.length > 0 && (
-          <span style={{ fontSize: '11px', color: 'var(--info)', marginLeft: '10px', fontWeight: 400 }}>
-            (kliknij opis lub kontrahenta aby sprawdzić w PDF)
-          </span>
-        )}
-      </h4>
-      <div style={{ fontSize: '14px', lineHeight: '1.6' }}>
-        <div><strong>Data:</strong> {trn.original.date}</div>
-        <div><strong>Kwota:</strong> {trn.original.amount} PLN</div>
-        <div>
-          <strong>Opis:</strong>{' '}
-          {pdfLines && pdfLines.length > 0 ? (
-            <span
-              onClick={() => handlePdfLookup('opis')}
-              style={{
-                cursor: 'pointer',
-                borderBottom: '1px dashed var(--info)',
-                color: pdfVisible && pdfSearchField === 'opis' ? 'var(--info)' : undefined,
-                transition: 'color 0.2s',
-              }}
-              title="Kliknij aby wyszukać w PDF"
-            >
-              {trn.original.description}
-            </span>
-          ) : (
-            trn.original.description
-          )}
-        </div>
-        <div>
-          <strong>Kontrahent:</strong>{' '}
-          {pdfLines && pdfLines.length > 0 ? (
-            <span
-              onClick={() => handlePdfLookup('kontrahent')}
-              style={{
-                cursor: 'pointer',
-                borderBottom: '1px dashed var(--info)',
-                color: pdfVisible && pdfSearchField === 'kontrahent' ? 'var(--info)' : undefined,
-                transition: 'color 0.2s',
-              }}
-              title="Kliknij aby wyszukać w PDF"
-            >
-              {trn.original.counterparty}
-            </span>
-          ) : (
-            trn.original.counterparty
-          )}
-        </div>
-      </div>
-      
-      {/* PDF Search Result Panel */}
-      {pdfVisible && (
-        <PdfPanel
-          searchResult={pdfSearching ? null : pdfResult}
-          searching={pdfSearching}
-          searchField={pdfSearchField}
-          onClose={() => setPdfVisible(false)}
-          highlightTokens={pdfHighlightTokens}
-        />
+  const hasPdf = !!pdfLines && pdfLines.length > 0;
+  const lookup = (field: 'opis' | 'kontrahent', text: string) =>
+    hasPdf ? (
+      <button
+        type="button"
+        className={`pdf-lookup${pdfVisible && pdfSearchField === field ? ' is-active' : ''}`}
+        onClick={() => handlePdfLookup(field)}
+        title={t.revPdfLookupTitle}
+      >
+        {text}
+      </button>
+    ) : (
+      text
+    );
+
+  const conf = trn.transactionType === 'income'
+    ? trn.extracted.confidence
+    : (trn.matchedContractor?.confidence || 0);
+  const confTone = conf >= 85 ? 'is-high' : conf >= 60 ? 'is-mid' : 'is-low';
+
+  return (
+  <article className={`review-card${decisionTone}`}>
+    {/* Transaction Header */}
+    <header className="review-card__head">
+      <h3 className="review-card__title">{t.revTransaction} #{idx + 1}</h3>
+      <span className={`review-badge ${trn.transactionType === 'income' ? 'is-income' : 'is-expense'}`}>
+        <Icon name={trn.transactionType === 'income' ? 'coins' : 'arrow-right'} size={11} />
+        {trn.transactionType === 'income' ? t.revIncomeBadge : t.revExpenseBadge}
+      </span>
+      <span className={`review-badge conf ${confTone}`}>
+        {trn.transactionType === 'income' ? t.revConfidence : t.revMatch}: {conf}%
+      </span>
+    </header>
+
+    <div className="review-card__grid">
+      {/* Original Data */}
+      <section className="review-card__block">
+        <h4 className="review-card__block-title">
+          <Icon name="file-text" size={14} /> {t.revStatementData}
+        </h4>
+        <dl className="facts">
+          <dt>{t.revDate}</dt>
+          <dd>{trn.original.date}</dd>
+          <dt>{t.revAmount}</dt>
+          <dd className="review-card__amount">{trn.original.amount} PLN</dd>
+          <dt>{t.revDescription}</dt>
+          <dd>{lookup('opis', trn.original.description)}</dd>
+          <dt>{t.revCounterparty}</dt>
+          <dd>{lookup('kontrahent', trn.original.counterparty)}</dd>
+        </dl>
+        {hasPdf && <div className="form-field__hint">{t.revPdfLookupHint}</div>}
+      </section>
+
+      {/* Extracted Data */}
+      {trn.transactionType === 'income' && (
+        <section className="review-card__block">
+          <h4 className="review-card__block-title">
+            <Icon name="search" size={14} /> {t.revExtracted}
+            {trn.extracted.matchedByManualMapping && (
+              <span className="form-section__badge is-accent">
+                <Icon name="check-circle" size={11} /> {t.matchedByMapping}
+              </span>
+            )}
+          </h4>
+          <dl className="facts">
+            <dt>{t.revAddress}</dt>
+            <dd>{trn.extracted.fullAddress || <span className="cell-empty">{t.revNotFound}</span>}</dd>
+            <dt>{t.revStreet}</dt>
+            <dd>{trn.extracted.streetName || <span className="cell-empty">—</span>}</dd>
+            <dt>{t.revBuilding}</dt>
+            <dd>{trn.extracted.buildingNumber || <span className="cell-empty">—</span>}</dd>
+            <dt>{t.revApartment}</dt>
+            <dd>{trn.extracted.apartmentNumber || <span className="cell-empty">{t.revNotFound}</span>}</dd>
+            <dt>{t.revTenant}</dt>
+            <dd>{trn.extracted.tenantName || <span className="cell-empty">—</span>}</dd>
+          </dl>
+        </section>
+      )}
+
+      {/* Contractor Data (for expenses) */}
+      {trn.transactionType === 'expense' && trn.matchedContractor && (
+        <section className="review-card__block">
+          <h4 className="review-card__block-title">
+            <Icon name="briefcase" size={14} /> {t.revMatchedContractor}
+          </h4>
+          <dl className="facts">
+            <dt>{t.revContractorName}</dt>
+            <dd>{trn.matchedContractor.contractorName || <span className="cell-empty">{t.revNotFound}</span>}</dd>
+            <dt>{t.revContractorAccount}</dt>
+            <dd className="cell-mono">{trn.matchedContractor.contractorAccount || <span className="cell-empty">—</span>}</dd>
+            <dt>{t.revMatch}</dt>
+            <dd>{trn.matchedContractor.confidence}%</dd>
+          </dl>
+        </section>
       )}
     </div>
 
-    {/* Extracted Data */}
-    {trn.transactionType === 'income' && (
-      <div style={{ marginBottom: '15px' }}>
-        <h4 style={{ margin: '0 0 10px 0', color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Icon name="search" size={16} /> {language === 'pl' ? 'Wyekstrahowane dane' : 'Extracted data'}:
-          {trn.extracted.matchedByManualMapping && (
-            <span style={{
-              fontSize: '11px',
-              fontWeight: 600,
-              color: 'var(--accent)',
-              backgroundColor: 'var(--accent-subtle)',
-              border: '1px solid var(--accent)',
-              borderRadius: '10px',
-              padding: '2px 8px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}>
-              <Icon name="check-circle" size={11} /> {t.matchedByMapping}
-            </span>
-          )}
-        </h4>
-        <div style={{ fontSize: '14px', lineHeight: '1.6', color: 'var(--text-secondary)' }}>
-          <div>{language === 'pl' ? 'Adres' : 'Address'}: {trn.extracted.fullAddress || (language === 'pl' ? 'NIE ZNALEZIONO' : 'NOT FOUND')}</div>
-          <div>{language === 'pl' ? 'Ulica' : 'Street'}: {trn.extracted.streetName || 'N/A'}</div>
-          <div>{language === 'pl' ? 'Numer budynku' : 'Building number'}: {trn.extracted.buildingNumber || 'N/A'}</div>
-          <div>{language === 'pl' ? 'Numer mieszkania' : 'Apartment number'}: {trn.extracted.apartmentNumber || (language === 'pl' ? 'NIE ZNALEZIONO' : 'NOT FOUND')}</div>
-          <div>{language === 'pl' ? 'Najemca' : 'Tenant'}: {trn.extracted.tenantName || 'N/A'}</div>
-          {trn.extracted.reasoning && (
-            <div style={{ 
-              marginTop: '12px',
-              padding: '10px 12px',
-              backgroundColor: 'rgba(220, 220, 170, 0.15)',
-              border: '1px solid rgba(220, 220, 170, 0.3)',
-              borderRadius: '4px',
-              color: 'var(--warning)',
-              fontSize: '13px',
-              fontStyle: 'italic',
-              lineHeight: '1.5',
-            }}>
-              <strong style={{ color: 'var(--warning)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                <Icon name="sparkles" size={12} /> {language === 'pl' ? 'Uzasadnienie AI' : 'AI Reasoning'}:
-              </strong> {trn.extracted.reasoning}
-            </div>
-          )}
-        </div>
-      </div>
+    {/* PDF Search Result Panel */}
+    {pdfVisible && (
+      <PdfPanel
+        language={language}
+        searchResult={pdfSearching ? null : pdfResult}
+        searching={pdfSearching}
+        searchField={pdfSearchField}
+        onClose={() => setPdfVisible(false)}
+        highlightTokens={pdfHighlightTokens}
+      />
     )}
 
-    {/* Contractor Data (for expenses) */}
-    {trn.transactionType === 'expense' && trn.matchedContractor && (
-      <div style={{ marginBottom: '15px' }}>
-        <h4 style={{ margin: '0 0 10px 0', color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Icon name="briefcase" size={16} /> Dopasowany kontrahent:
-        </h4>
-        <div style={{ fontSize: '14px', lineHeight: '1.6', color: 'var(--text-secondary)' }}>
-          <div>Nazwa: {trn.matchedContractor.contractorName || 'NIE ZNALEZIONO'}</div>
-          <div>Konto: {trn.matchedContractor.contractorAccount || 'N/A'}</div>
-          <div>Confidence: {trn.matchedContractor.confidence}%</div>
-          {trn.extracted.reasoning && (
-            <div style={{ 
-              marginTop: '12px',
-              padding: '10px 12px',
-              backgroundColor: 'rgba(220, 220, 170, 0.15)',
-              border: '1px solid rgba(220, 220, 170, 0.3)',
-              borderRadius: '4px',
-              color: 'var(--warning)',
-              fontSize: '13px',
-              fontStyle: 'italic',
-              lineHeight: '1.5',
-            }}>
-              <strong style={{ color: 'var(--warning)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                <Icon name="sparkles" size={12} /> {language === 'pl' ? 'Uzasadnienie AI' : 'AI Reasoning'}:
-              </strong> {trn.extracted.reasoning}
-            </div>
-          )}
+    {trn.extracted.reasoning && (trn.transactionType === 'income' || trn.matchedContractor) && (
+      <div className="callout callout--muted review-card__reasoning">
+        <Icon name="sparkles" size={16} />
+        <div className="callout__body">
+          <span className="callout__title">{t.revAiReasoning}:</span> {trn.extracted.reasoning}
         </div>
       </div>
     )}
@@ -1027,86 +760,32 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
       const awaitingAccount = !isManuallyEdited && trn.extracted.needsAccount === true;
 
       if (displayValue && displayValue.length > 0) {
-        const tone = awaitingAccount
-          ? { color: 'var(--warning)', bg: 'rgba(220, 220, 170, 0.2)', icon: 'alert-triangle' as const }
-          : isManuallyEdited
-            ? { color: 'var(--accent)', bg: 'rgba(197, 134, 192, 0.2)', icon: 'edit' as const }
-            : { color: 'var(--success)', bg: 'rgba(78, 201, 176, 0.2)', icon: 'check-circle' as const };
+        const tone = awaitingAccount ? 'is-warning' : isManuallyEdited ? 'is-manual' : 'is-ok';
+        const icon = awaitingAccount ? 'alert-triangle' : isManuallyEdited ? 'edit' : 'check-circle';
         return (
-          <div style={{ marginBottom: '15px' }}>
-            <div style={{
-              padding: '12px 16px',
-              backgroundColor: tone.bg,
-              border: `2px solid ${tone.color}`,
-              borderRadius: '6px',
-            }}>
-              <div style={{
-                fontSize: '11px',
-                color: tone.color,
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-                marginBottom: '6px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}>
-                <Icon name={tone.icon} size={12} />
-                {awaitingAccount
-                  ? t.apartmentNeedsAccountLabel
-                  : isManuallyEdited
-                    ? (language === 'pl' ? 'Numer lokalu (ręcznie wpisany)' : 'Apartment number (manually entered)')
-                    : (language === 'pl' ? 'Zmatchowany numer lokalu' : 'Matched apartment number')
-                }
-              </div>
-              <div style={{
-                fontSize: '24px',
-                fontWeight: 700,
-                color: tone.color,
-                letterSpacing: '1px',
-              }}>
-                {displayValue}
-              </div>
-              {awaitingAccount && (
-                <div style={{ fontSize: '12px', color: tone.color, marginTop: '6px', lineHeight: 1.4 }}>
-                  {t.apartmentNeedsAccountHint}
-                </div>
-              )}
+          <div className={`apt-result ${tone}`}>
+            <div className="apt-result__label">
+              <Icon name={icon} size={12} />
+              {awaitingAccount
+                ? t.apartmentNeedsAccountLabel
+                : isManuallyEdited
+                  ? t.revApartmentManual
+                  : t.revApartmentMatched}
             </div>
-          </div>
-        );
-      } else {
-        // Show "NOT FOUND" box when no apartment number is available
-        return (
-          <div style={{ marginBottom: '15px' }}>
-            <div style={{ 
-              padding: '12px 16px',
-              backgroundColor: 'rgba(244, 71, 71, 0.2)',
-              border: '2px solid var(--danger)',
-              borderRadius: '6px',
-            }}>
-              <div style={{ 
-                fontSize: '11px', 
-                color: 'var(--danger)',
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-                marginBottom: '6px',
-              }}>
-                <Icon name="alert-triangle" size={12} /> {language === 'pl' ? 'Numer lokalu' : 'Apartment number'}
-              </div>
-              <div style={{ 
-                fontSize: '24px', 
-                fontWeight: 700,
-                color: 'var(--danger)',
-                letterSpacing: '1px',
-              }}>
-                {language === 'pl' ? 'NIE ZNALEZIONO' : 'NOT FOUND'}
-              </div>
-            </div>
+            <div className="apt-result__value">{displayValue}</div>
+            {awaitingAccount && <div className="apt-result__hint">{t.apartmentNeedsAccountHint}</div>}
           </div>
         );
       }
+      // No apartment number is available.
+      return (
+        <div className="apt-result is-missing">
+          <div className="apt-result__label">
+            <Icon name="alert-triangle" size={12} /> {t.revApartment}
+          </div>
+          <div className="apt-result__value">{t.revNotFound}</div>
+        </div>
+      );
     })()}
 
     {/* Action zone — decision + manual input + status */}
@@ -1127,7 +806,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
       return (
         <div className="review-card__actions">
           <h4 className="review-card__actions-title">
-            <Icon name="check-circle" size={12} /> Decyzja
+            <Icon name="check-circle" size={12} /> {t.revDecision}
           </h4>
 
           <div className="review-card__actions-row">
@@ -1137,30 +816,34 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
             {((trn.transactionType === 'expense' && trn.matchedContractor?.contractorName)
               || (trn.transactionType === 'income' && trn.extracted.apartmentNumber && trn.extracted.needsAccount !== true)) && (
               <button
+                type="button"
                 onClick={() => handleDecision(trn.index, 'accept')}
                 disabled={hasManualOverride}
                 className={`button button-success${currentDecision?.action === 'accept' ? ' is-selected' : ''}`}
               >
-                <Icon name="check" size={14} /> Akceptuj
+                <Icon name="check" size={14} /> {t.revAccept}
               </button>
             )}
             <button
+              type="button"
               onClick={() => handleDecision(trn.index, 'reject')}
               disabled={hasManualOverride}
               className={`button button-danger${currentDecision?.action === 'reject' ? ' is-selected' : ''}`}
             >
-              <Icon name="x" size={14} /> Oznacz jako nierozpoznane
+              <Icon name="x" size={14} /> {t.revReject}
             </button>
             <button
+              type="button"
               onClick={() => handleDecision(trn.index, 'clarify')}
               disabled={hasManualOverride}
               className={`button button-warning${currentDecision?.action === 'clarify' ? ' is-selected' : ''}`}
-              title="Przypisz do specjalnego konta wyjaśnień 235-1"
+              title={t.revClarifyHint}
             >
-              <Icon name="info" size={14} /> Do wyjaśnienia (235-1)
+              <Icon name="info" size={14} /> {t.revClarify}
             </button>
             {trn.transactionType === 'income' && (
               <button
+                type="button"
                 onClick={() => (ruleFormOpen ? setRuleFormOpen(false) : openRuleForm())}
                 disabled={adresId == null}
                 className={`button button-info${ruleFormOpen ? ' is-selected' : ''}`}
@@ -1171,6 +854,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
             )}
             {trn.transactionType === 'expense' && (
               <button
+                type="button"
                 onClick={() => (altFormOpen ? setAltFormOpen(false) : openAltForm())}
                 className={`button button-info${altFormOpen ? ' is-selected' : ''}`}
                 title={t.addAlternativeNameTooltip}
@@ -1181,8 +865,8 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
           </div>
 
           {hasManualOverride && (
-            <div style={{ fontSize: '12px', color: 'var(--warning)', marginBottom: 'var(--s-3)', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Icon name="alert-triangle" size={12} /> Wyczyść ręczne przypisanie, aby użyć przycisków akceptuj/odrzuć
+            <div className="review-card__manual-hint review-card__manual-hint--warning">
+              <Icon name="alert-triangle" size={12} /> {t.revClearManualFirst}
             </div>
           )}
 
@@ -1192,13 +876,13 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
               so two of them can never disagree about one transaction. */}
           {trn.transactionType === 'income' && (
             <div className="review-card__manual">
-              <div className="review-card__manual-field" style={{ maxWidth: 220 }}>
+              <div className="review-card__manual-field review-card__manual-field--narrow">
                 <label className="review-card__manual-label">{t.manualApartmentNumber}</label>
                 <input
                   type="text"
                   value={manualInput || ''}
                   onChange={(e) => handleManualInput(trn.index, (e.target as HTMLInputElement).value)}
-                  placeholder="np. 42, ZGN"
+                  placeholder={t.revManualApartmentPlaceholder}
                   disabled={manualRemainingIncomeId !== undefined || hasManualAccount}
                 />
                 {manualNumberIsLettered && (
@@ -1207,7 +891,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
                   </div>
                 )}
               </div>
-              <div className="review-card__manual-field" style={{ maxWidth: 220 }}>
+              <div className="review-card__manual-field review-card__manual-field--narrow">
                 <label className="review-card__manual-label">{t.manualApartmentAccount}</label>
                 <div className="review-card__account-input">
                   <span className="review-card__account-prefix">{apartmentPrefix}-</span>
@@ -1233,16 +917,15 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
                   </div>
                 )}
               </div>
-              <div className="review-card__manual-field" style={{ maxWidth: 350 }}>
-                <label className="review-card__manual-label">
-                  {language === 'pl' ? 'Pozostałe przychody' : 'Remaining income'}
-                </label>
+              <div className="review-card__manual-field review-card__manual-field--wide">
+                <label className="review-card__manual-label">{t.revOtherIncome}</label>
                 <SearchableContractorSelect
                   kontrahenci={remainingIncomeEntries}
                   selectedContractorId={manualRemainingIncomeId !== undefined ? manualRemainingIncomeId : null}
                   onChange={(entryId) => handleManualRemainingIncomeSelect(trn.index, entryId)}
-                  placeholder={language === 'pl' ? 'Wybierz pozostały przychód...' : 'Select remaining income...'}
-                  searchPlaceholder={language === 'pl' ? 'Szukaj po nazwie...' : 'Search by name...'}
+                  placeholder={t.revOtherIncomePick}
+                  searchPlaceholder={t.revSearchByName}
+                  emptyText={t.revNoContractors}
                   disabled={hasManualNumber || hasManualAccount}
                 />
               </div>
@@ -1252,69 +935,52 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
           {/* Save apartment-mapping rule (only for income) — remembers this payer
               for future statements under the address this acceptance concerns. */}
           {trn.transactionType === 'income' && ruleFormOpen && (
-            <div style={{ marginTop: 'var(--s-3)' }}>
-              <div style={{
-                border: '1px solid var(--info)',
-                borderRadius: '6px',
-                padding: '12px',
-                backgroundColor: 'var(--info-bg)',
-              }}>
-                <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '8px' }}>
-                  {t.apartmentMappingsHint}
-                </div>
-                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                  <div className="review-card__manual-field" style={{ flex: 2, minWidth: 240 }}>
-                    <label className="review-card__manual-label">{t.apartmentMappingMatchText}</label>
-                    <input
-                      type="text"
-                      value={ruleMatchText}
-                      onChange={(e) => { setRuleMatchText((e.target as HTMLInputElement).value); if (ruleError) setRuleError(null); }}
-                      placeholder={t.apartmentMappingMatchTextPlaceholder}
-                    />
-                  </div>
-                  <div className="review-card__manual-field" style={{ flex: 3, minWidth: 320 }}>
-                    <label className="review-card__manual-label">{t.apartmentMappingApartments}</label>
-                    <ApartmentTargetsEditor
-                      language={language}
-                      drafts={ruleTargetDrafts}
-                      onChange={(next) => { setRuleTargetDrafts(next); if (ruleError) setRuleError(null); }}
-                      accountPlaceholder={`np. ${apartmentPrefix}-00017A`}
-                      disabled={ruleSaving}
-                    />
-                  </div>
-                </div>
-                <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '6px' }}>
-                  {t.apartmentMappingApartmentsHint}
-                </div>
-                <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '4px' }}>
-                  {t.apartmentMappingAccountHint}
-                </div>
-                {ruleError && (
-                  <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '8px' }}>{ruleError}</div>
-                )}
-                <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                  <button
-                    type="button"
-                    className="button button-small button-success"
-                    onClick={submitRule}
-                    disabled={ruleSaving || !ruleMatchText.trim() || apartmentTargetsFromDrafts(ruleTargetDrafts).length === 0}
-                  >
-                    <Icon name="check" size={14} /> {ruleSaving ? '...' : (existingRule ? t.update : t.saveApartmentMappingRule)}
-                  </button>
-                  <button
-                    type="button"
-                    className="button button-small button-secondary"
-                    onClick={() => setRuleFormOpen(false)}
-                    disabled={ruleSaving}
-                  ><Icon name="x" size={13} />{' '}
-                    {t.cancel}
-                  </button>
-                </div>
+            <div className="inline-form">
+              <div className="form-field__hint">{t.apartmentMappingsHint}</div>
+              <FormField label={t.apartmentMappingMatchText}>
+                <input
+                  type="text"
+                  value={ruleMatchText}
+                  onChange={(e) => { setRuleMatchText((e.target as HTMLInputElement).value); if (ruleError) setRuleError(null); }}
+                  placeholder={t.apartmentMappingMatchTextPlaceholder}
+                />
+              </FormField>
+              <FormField
+                label={t.apartmentMappingApartments}
+                hint={<>{t.apartmentMappingApartmentsHint} {t.apartmentMappingAccountHint}</>}
+                error={ruleError}
+              >
+                <ApartmentTargetsEditor
+                  language={language}
+                  drafts={ruleTargetDrafts}
+                  onChange={(next) => { setRuleTargetDrafts(next); if (ruleError) setRuleError(null); }}
+                  accountPlaceholder={`np. ${apartmentPrefix}-00017A`}
+                  disabled={ruleSaving}
+                />
+              </FormField>
+              <div className="inline-form__actions">
+                <button
+                  type="button"
+                  className="button button-small button-secondary"
+                  onClick={() => setRuleFormOpen(false)}
+                  disabled={ruleSaving}
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  type="button"
+                  className="button button-small button-success"
+                  onClick={submitRule}
+                  disabled={ruleSaving || !ruleMatchText.trim() || apartmentTargetsFromDrafts(ruleTargetDrafts).length === 0}
+                >
+                  <Icon name={ruleSaving ? 'loader' : 'check'} size={13} className={ruleSaving ? 'icon-spin' : undefined} />{' '}
+                  {existingRule ? t.save : t.saveApartmentMappingRule}
+                </button>
               </div>
             </div>
           )}
           {trn.transactionType === 'income' && ruleSaved && !ruleFormOpen && (
-            <div style={{ marginTop: 'var(--s-3)', fontSize: '12px', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div className="inline-status is-success">
               <Icon name="check-circle" size={14} /> {t.apartmentMappingSaved}
             </div>
           )}
@@ -1324,27 +990,27 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
             <div className="review-card__manual">
               <div className="review-card__manual-field">
                 <label className="review-card__manual-label">
-                  Wybierz kontrahenta {trn.matchedContractor?.contractorName ? '(możesz zmienić)' : '(wybierz ręcznie)'}
+                  {trn.matchedContractor?.contractorName ? t.revContractorChange : t.revContractorPick}
                 </label>
                 <SearchableContractorSelect
                   kontrahenci={kontrahenci}
                   selectedContractorId={manualContractorId !== undefined ? manualContractorId : null}
                   onChange={(contractorId) => handleManualContractorSelect(trn.index, contractorId)}
-                  placeholder="Brak przypisania"
-                  searchPlaceholder="Szukaj kontrahenta po nazwie, NIP lub koncie..."
+                  placeholder={t.revContractorNone}
+                  searchPlaceholder={t.revContractorSearch}
+                  emptyText={t.revNoContractors}
                   disabled={manualRemainingCostId !== undefined}
                 />
               </div>
               <div className="review-card__manual-field">
-                <label className="review-card__manual-label">
-                  {language === 'pl' ? 'Pozostałe koszty' : 'Remaining costs'}
-                </label>
+                <label className="review-card__manual-label">{t.revOtherCosts}</label>
                 <SearchableContractorSelect
                   kontrahenci={remainingCostEntries}
                   selectedContractorId={manualRemainingCostId !== undefined ? manualRemainingCostId : null}
                   onChange={(entryId) => handleManualRemainingCostSelect(trn.index, entryId)}
-                  placeholder={language === 'pl' ? 'Wybierz pozostały koszt...' : 'Select remaining cost...'}
-                  searchPlaceholder={language === 'pl' ? 'Szukaj po nazwie...' : 'Search by name...'}
+                  placeholder={t.revOtherCostsPick}
+                  searchPlaceholder={t.revSearchByName}
+                  emptyText={t.revNoContractors}
                   disabled={manualContractorId !== undefined}
                 />
               </div>
@@ -1354,88 +1020,75 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
           {/* Teach a contractor this bank's spelling (expense only). Saved onto the
               contractor, so it applies to every future statement, not just this one. */}
           {trn.transactionType === 'expense' && altFormOpen && (
-            <div style={{ marginTop: 'var(--s-3)' }}>
-              <div style={{
-                border: '1px solid var(--info)',
-                borderRadius: '6px',
-                padding: '12px',
-                backgroundColor: 'var(--info-bg)',
-              }}>
-                <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '8px' }}>
-                  {t.addAlternativeNameHint}
-                </div>
-                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                  <div className="review-card__manual-field" style={{ flex: 1, minWidth: 260 }}>
-                    <label className="review-card__manual-label">{t.addAlternativeNameContractor}</label>
-                    <SearchableContractorSelect
-                      kontrahenci={kontrahenci}
-                      selectedContractorId={altContractorId}
-                      onChange={(contractorId) => { setAltContractorId(contractorId); if (altError) setAltError(null); }}
-                      placeholder={t.addAlternativeNameContractorPlaceholder}
-                      searchPlaceholder="Szukaj kontrahenta po nazwie, NIP lub koncie..."
-                    />
-                  </div>
-                  <div className="review-card__manual-field" style={{ flex: 2, minWidth: 260 }}>
-                    <label className="review-card__manual-label">{t.addAlternativeNameLabel}</label>
-                    <input
-                      type="text"
-                      value={altName}
-                      onChange={(e) => { setAltName((e.target as HTMLInputElement).value); if (altError) setAltError(null); }}
-                      placeholder={t.addAlternativeNamePlaceholder}
-                    />
-                  </div>
-                </div>
-                {altError && (
-                  <div style={{ fontSize: '12px', color: 'var(--danger)', marginTop: '8px' }}>{altError}</div>
-                )}
-                <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                  <button
-                    type="button"
-                    className="button button-small button-success"
-                    onClick={submitAltName}
-                    disabled={altSaving || !altContractorId || !altName.trim()}
-                  >
-                    <Icon name="check" size={14} /> {altSaving ? '...' : t.addAlternativeNameSave}
-                  </button>
-                  <button
-                    type="button"
-                    className="button button-small button-secondary"
-                    onClick={() => setAltFormOpen(false)}
-                    disabled={altSaving}
-                  ><Icon name="x" size={13} />{' '}
-                    {t.cancel}
-                  </button>
-                </div>
+            <div className="inline-form">
+              <div className="form-field__hint">{t.addAlternativeNameHint}</div>
+              <FormRow>
+                <FormField label={t.addAlternativeNameContractor}>
+                  <SearchableContractorSelect
+                    kontrahenci={kontrahenci}
+                    selectedContractorId={altContractorId}
+                    onChange={(contractorId) => { setAltContractorId(contractorId); if (altError) setAltError(null); }}
+                    placeholder={t.addAlternativeNameContractorPlaceholder}
+                    searchPlaceholder={t.revContractorSearch}
+                    emptyText={t.revNoContractors}
+                  />
+                </FormField>
+                <FormField label={t.addAlternativeNameLabel} error={altError}>
+                  <input
+                    type="text"
+                    value={altName}
+                    onChange={(e) => { setAltName((e.target as HTMLInputElement).value); if (altError) setAltError(null); }}
+                    placeholder={t.addAlternativeNamePlaceholder}
+                  />
+                </FormField>
+              </FormRow>
+              <div className="inline-form__actions">
+                <button
+                  type="button"
+                  className="button button-small button-secondary"
+                  onClick={() => setAltFormOpen(false)}
+                  disabled={altSaving}
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  type="button"
+                  className="button button-small button-success"
+                  onClick={submitAltName}
+                  disabled={altSaving || !altContractorId || !altName.trim()}
+                >
+                  <Icon name={altSaving ? 'loader' : 'check'} size={13} className={altSaving ? 'icon-spin' : undefined} />{' '}
+                  {t.addAlternativeNameSave}
+                </button>
               </div>
             </div>
           )}
           {trn.transactionType === 'expense' && altSaved && !altFormOpen && (
-            <div style={{ marginTop: 'var(--s-3)', fontSize: '12px', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div className="inline-status is-success">
               <Icon name="check-circle" size={14} /> {t.addAlternativeNameSaved}
             </div>
           )}
 
           {/* Current Decision Status */}
           {currentDecision && (() => {
-            const isReject = currentDecision.action === 'reject';
-            const isClarify = currentDecision.action === 'clarify';
-            const bg = isReject ? 'var(--danger-bg)' : isClarify ? 'var(--warning-bg)' : 'var(--success-bg)';
-            const fg = isReject ? 'var(--danger)' : isClarify ? 'var(--warning)' : 'var(--success)';
-
+            let tone = 'is-success';
             let iconName: React.ComponentProps<typeof Icon>['name'] = 'check-circle';
-            let label: string = 'Zaakceptowano wyekstrahowane dane';
+            let label: string = t.revStatusAccepted;
 
             if (currentDecision.action === 'reject') {
+              tone = 'is-danger';
               iconName = 'x-circle';
-              label = 'Oznaczono jako NIEROZPOZNANE';
+              label = t.revStatusRejected;
             } else if (currentDecision.action === 'clarify') {
+              tone = 'is-warning';
               iconName = 'info';
-              label = 'Przypisano do konta wyjaśnień 235-1';
+              label = t.revStatusClarify;
             } else if (currentDecision.action === 'manual') {
+              tone = 'is-manual';
               iconName = 'edit';
               if (trn.transactionType === 'income' && currentDecision.manualRemainingIncomeId) {
                 const entry = remainingIncomeEntries.find(k => k.id === currentDecision.manualRemainingIncomeId);
-                label = `Pozostały przychód: ${entry?.nazwa || 'Nieznany'} (${entry?.kontoKontrahenta || ''})`;
+                label = `${t.revStatusOtherIncome}: ${entry?.nazwa || t.revUnknown} (${entry?.kontoKontrahenta || ''})`;
               } else if (trn.transactionType === 'income' && mappingChoice) {
                 const account = resolveApartmentAccount(
                   mappingChoice.apartmentNumber,
@@ -1444,20 +1097,20 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
                 );
                 label = `${t.mappingChoiceStatus}: ${mappingChoice.apartmentNumber}${account ? ` → ${account}` : ''}`;
               } else if (trn.transactionType === 'income' && currentDecision.manualApartmentNumber) {
-                label = `Ręcznie wpisano mieszkanie: ${currentDecision.manualApartmentNumber}`;
+                label = `${t.revStatusManualApartment}: ${currentDecision.manualApartmentNumber}`;
               } else if (trn.transactionType === 'expense' && currentDecision.manualRemainingCostId) {
                 const entry = remainingCostEntries.find(k => k.id === currentDecision.manualRemainingCostId);
-                label = `Pozostały koszt: ${entry?.nazwa || 'Nieznany'} (${entry?.kontoKontrahenta || ''})`;
+                label = `${t.revStatusOtherCost}: ${entry?.nazwa || t.revUnknown} (${entry?.kontoKontrahenta || ''})`;
               } else if (trn.transactionType === 'expense' && currentDecision.manualContractorId) {
                 const selectedContractor = kontrahenci.find(k => k.id === currentDecision.manualContractorId);
-                label = `Ręcznie wybrano kontrahenta: ${selectedContractor?.nazwa || 'Nieznany'}`;
+                label = `${t.revStatusManualContractor}: ${selectedContractor?.nazwa || t.revUnknown}`;
               } else {
-                label = 'Ręcznie edytowano';
+                label = t.revStatusManual;
               }
             }
 
             return (
-              <div className="review-card__status" style={{ backgroundColor: bg, color: fg }}>
+              <div className={`review-card__status ${tone}`} role="status">
                 <Icon name={iconName} size={14} />
                 <span>{label}</span>
               </div>
@@ -1466,7 +1119,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
         </div>
       );
     })()}
-  </div>
+  </article>
   );
 };
 
@@ -1526,7 +1179,6 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   const [expenseRerunCount, setExpenseRerunCount] = useState(0);
   const [filter, setFilter] = useState<'all' | 'income' | 'expense' | 'undecided'>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [searchFocused, setSearchFocused] = useState(false);
   const [addressMappings, setAddressMappings] = useState<ApartmentMapping[]>([]);
 
   // Fixed part of every apartment account in this conversion, decided by the
@@ -2125,576 +1777,230 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
 
   const allDecided = decisions.size === reviewData.transactions.length;
 
+  const filterOptions: { key: typeof filter; label: string; count: number; icon?: React.ComponentProps<typeof Icon>['name'] }[] = [
+    { key: 'all', label: t.revFilterAll, count: reviewData.transactions.length },
+    { key: 'income', label: t.revFilterIncome, count: totalIncome, icon: 'coins' },
+    { key: 'expense', label: t.revFilterExpense, count: totalExpense, icon: 'arrow-right' },
+    { key: 'undecided', label: t.revFilterUndecided, count: totalUndecided, icon: 'alert-circle' },
+  ];
+
+  const renderCard = (trn: TransactionForReview) => {
+    const isExpense = trn.transactionType === 'expense';
+    return (
+      <TransactionCard
+        key={trn.index}
+        trn={trn}
+        idx={transactionPosition.get(trn) ?? -1}
+        currentDecision={decisions.get(trn.index)}
+        manualInput={manualInputs.get(trn.index)}
+        manualAccount={manualAccounts.get(trn.index)}
+        apartmentPrefix={apartmentPrefix}
+        manualContractorId={isExpense ? manualContractorIds.get(trn.index) ?? undefined : undefined}
+        manualRemainingIncomeId={isExpense ? undefined : manualRemainingIncomeIds.get(trn.index) ?? undefined}
+        manualRemainingCostId={isExpense ? manualRemainingCostIds.get(trn.index) ?? undefined : undefined}
+        kontrahenci={contractorEntries}
+        remainingIncomeEntries={remainingIncomeEntries}
+        remainingCostEntries={remainingCostEntries}
+        handleDecision={handleDecision}
+        handleManualInput={handleManualInput}
+        handleManualAccountInput={handleManualAccountInput}
+        handleManualContractorSelect={handleManualContractorSelect}
+        handleManualRemainingIncomeSelect={handleManualRemainingIncomeSelect}
+        handleManualRemainingCostSelect={handleManualRemainingCostSelect}
+        language={language}
+        pdfLines={reviewData.pdfLines}
+        adresId={reviewData.adresId}
+        addressMappings={addressMappings}
+        onSaveApartmentMapping={handleSaveApartmentMapping}
+        mappingChoice={mappingChoices.get(trn.index)}
+        onChooseMappingTarget={handleMappingChoice}
+        onSaveAlternativeName={handleSaveAlternativeName}
+      />
+    );
+  };
+
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'var(--bg-surface)',
-      color: 'var(--text-primary)',
-      display: 'flex',
-      flexDirection: 'column',
-      zIndex: 1000,
-      overflow: 'hidden',
-    }}>
-      {/* Header */}
-      <div style={{
-        padding: '12px 20px',
-        borderBottom: '1px solid var(--border-default)',
-        backgroundColor: 'var(--bg-surface-sunken)',
-        flexShrink: 0,
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-      }}>
-        {/* Breadcrumbs */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button
-            onClick={onCancel}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: 500,
-              padding: 0,
-              textDecoration: 'none',
-              transition: 'color 0.2s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = 'var(--text-secondary)';
-              e.currentTarget.style.textDecoration = 'underline';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = 'var(--text-secondary)';
-              e.currentTarget.style.textDecoration = 'none';
-            }}
-          >
-            Konwerter
-          </button>
-          <span style={{ color: 'var(--border-strong)', fontSize: '16px', userSelect: 'none' }}>/</span>
-          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 500, color: 'var(--text-primary)' }}>Przegląd transakcji</h2>
-        </div>
-        
-        {/* Close button */}
-        <button
-          onClick={onCancel}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--text-secondary)',
-            cursor: 'pointer',
-            fontSize: '20px',
-            padding: '4px 8px',
-            transition: 'color 0.2s ease',
-            lineHeight: 1,
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = 'var(--text-primary)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = 'var(--text-secondary)';
-          }}
-          title="Zamknij"
-        >
+    <div className="review-screen" role="dialog" aria-label={t.revTitle}>
+      {/* Header — which community and which file is being reviewed. */}
+      <header className="review-screen__head">
+        <ModalHeader
+          icon="check-circle"
+          title={reviewData.adresName ? `${t.revTitle}: ${reviewData.adresName}` : t.revTitle}
+          subtitle={
+            <span className="modal-header__meta">
+              <span>{t.revFile}: <strong>{reviewData.fileName}</strong></span>
+              <span>{t.revBank}: <strong>{reviewData.bankName}</strong></span>
+              <span className="form-section__badge">
+                {t.revToReview}: {reviewData.transactions.length}
+              </span>
+              {/* The attached statement PDF, opened in the system's PDF viewer —
+                  beside the in-screen lookup, for reading it whole. */}
+              {reviewData.pdfPath && (
+                <button
+                  type="button"
+                  className="button button-small button-secondary review-screen__pdf"
+                  title={reviewData.pdfPath}
+                  onClick={async () => {
+                    const ok = await window.electronAPI.openFile(reviewData.pdfPath!);
+                    if (!ok) notify.error(t.fileNotFound);
+                  }}
+                >
+                  <Icon name="file-text" size={13} /> {t.revOpenPdf}
+                </button>
+              )}
+            </span>
+          }
+        />
+        <button type="button" className="modal-close" onClick={onCancel} title={t.close} aria-label={t.close}>
           <Icon name="x" size={18} />
         </button>
-      </div>
-      
-      {/* Selected address */}
-      {reviewData.adresName && (
-        <div style={{
-          padding: '14px 20px',
-          borderBottom: '1px solid var(--border-strong)',
-          backgroundColor: 'var(--bg-surface-hover)',
-          textAlign: 'center',
-          fontSize: '16px',
-          color: 'var(--text-primary)',
-          fontWeight: 600,
-          letterSpacing: '0.3px',
-          flexShrink: 0,
-        }}>
-          {reviewData.adresName}
-        </div>
-      )}
-      
-      {/* File info */}
-      <div style={{
-        padding: '8px 20px',
-        borderBottom: '1px solid var(--border-default)',
-        backgroundColor: 'var(--bg-surface-sunken)',
-        flexShrink: 0,
-      }}>
-        <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '13px' }}>
-          Plik: <strong>{reviewData.fileName}</strong> | Bank: <strong>{reviewData.bankName}</strong> | <span style={{ color: 'var(--warning)' }}>{reviewData.transactions.length} transakcji do zaakceptowania</span>
-        </p>
-      </div>
+      </header>
 
-      {/* Search bar — full width, highlighted */}
-      <div style={{
-        padding: '12px 20px',
-        borderBottom: '1px solid var(--border-default)',
-        backgroundColor: 'var(--bg-surface)',
-        flexShrink: 0,
-      }}>
-        <div style={{
-          position: 'relative',
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          backgroundColor: 'var(--bg-surface-sunken)',
-          border: `2px solid ${searchFocused ? 'var(--accent)' : 'var(--border-default)'}`,
-          borderRadius: '10px',
-          boxShadow: searchFocused ? '0 0 0 3px var(--accent-subtle)' : 'none',
-          transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
-        }}>
-          <span style={{ paddingLeft: '14px', color: searchFocused ? 'var(--accent)' : 'var(--text-tertiary)', display: 'inline-flex', transition: 'color 0.15s ease' }}>
-            <Icon name="search" size={18} />
-          </span>
+      {/* Search + filters, together — both narrow the same list. */}
+      <div className="review-screen__toolbar">
+        <div className="input-icon review-screen__search">
+          <Icon name="search" size={16} />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm((e.target as HTMLInputElement).value)}
-            onFocus={() => setSearchFocused(true)}
-            onBlur={() => setSearchFocused(false)}
             placeholder={t.searchReviewPlaceholder}
-            style={{
-              flex: 1,
-              padding: '11px 12px',
-              border: 'none',
-              outline: 'none',
-              background: 'transparent',
-              color: 'var(--text-primary)',
-              fontSize: '14px',
-            }}
+            aria-label={t.searchReviewPlaceholder}
           />
           {searchTerm && (
-            <>
-              <span style={{ color: 'var(--text-tertiary)', fontSize: '12px', whiteSpace: 'nowrap', paddingRight: '8px' }}>
-                {filteredTransactions.length} / {reviewData.transactions.length}
-              </span>
+            <span className="review-screen__search-meta">
+              {filteredTransactions.length} / {reviewData.transactions.length}
               <button
+                type="button"
+                className="button button-ghost button-icon"
                 onClick={() => setSearchTerm('')}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'var(--border-default)',
-                  border: 'none',
-                  borderRadius: '50%',
-                  width: '22px',
-                  height: '22px',
-                  marginRight: '10px',
-                  color: 'var(--text-primary)',
-                  cursor: 'pointer',
-                  flexShrink: 0,
-                }}
-                title="Wyczyść"
+                title={t.revSearchClear}
+                aria-label={t.revSearchClear}
               >
                 <Icon name="x" size={14} />
               </button>
-            </>
+            </span>
           )}
+        </div>
+        <div className="zad-seg" role="group" aria-label={t.revFilterLabel}>
+          {filterOptions.map((o) => (
+            <button
+              key={o.key}
+              type="button"
+              className={`zad-seg__btn${filter === o.key ? ' is-active' : ''}${o.count === 0 ? ' is-empty' : ''}`}
+              aria-pressed={filter === o.key}
+              onClick={() => setFilter(o.key)}
+            >
+              {o.icon && <Icon name={o.icon} size={12} />}
+              {o.label}
+              <span className="zad-seg__count">{o.count}</span>
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Transactions list */}
-      <div style={{ 
-        padding: '20px',
-        flex: 1,
-        overflowY: 'auto',
-      }}>
-        {/* Income Section */}
-        {(filter === 'all' || filter === 'income' || filter === 'undecided') && incomeTransactions.length > 0 && (
-          <>
-            <div style={{
-              backgroundColor: 'var(--success-bg)',
-              padding: '12px 16px',
-              marginBottom: '15px',
-              borderRadius: '6px',
-              borderLeft: '4px solid var(--success)',
-            }}>
-              <h3 style={{ margin: 0, color: 'var(--success)', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Icon name="coins" size={18} /> WPŁATY ({incomeTransactions.length})
-              </h3>
-            </div>
-            {incomeTransactions.map((trn) => {
-              const currentDecision = decisions.get(trn.index);
-              const manualInput = manualInputs.get(trn.index);
-              const manualAccount = manualAccounts.get(trn.index);
-              const manualRemainingIncomeId = manualRemainingIncomeIds.get(trn.index) ?? undefined;
-              const idx = transactionPosition.get(trn) ?? -1;
-              
-              return (
-                <TransactionCard
-                  key={trn.index}
-                  trn={trn}
-                  idx={idx}
-                  currentDecision={currentDecision}
-                  manualInput={manualInput}
-                  manualAccount={manualAccount}
-                  apartmentPrefix={apartmentPrefix}
-                  manualContractorId={undefined}
-                  manualRemainingIncomeId={manualRemainingIncomeId}
-                  manualRemainingCostId={undefined}
-                  kontrahenci={contractorEntries}
-                  remainingIncomeEntries={remainingIncomeEntries}
-                  remainingCostEntries={remainingCostEntries}
-                  handleDecision={handleDecision}
-                  handleManualInput={handleManualInput}
-                  handleManualAccountInput={handleManualAccountInput}
-                  handleManualContractorSelect={handleManualContractorSelect}
-                  handleManualRemainingIncomeSelect={handleManualRemainingIncomeSelect}
-                  handleManualRemainingCostSelect={handleManualRemainingCostSelect}
-                  language={language}
-                  pdfLines={reviewData.pdfLines}
-                  adresId={reviewData.adresId}
-                  addressMappings={addressMappings}
-                  onSaveApartmentMapping={handleSaveApartmentMapping}
-                  mappingChoice={mappingChoices.get(trn.index)}
-                  onChooseMappingTarget={handleMappingChoice}
-                  onSaveAlternativeName={handleSaveAlternativeName}
-                />
-              );
-            })}
-          </>
-        )}
+      <div className="review-screen__body">
+        <div className="page-form review-screen__list">
+          {(filter === 'all' || filter === 'income' || filter === 'undecided') && incomeTransactions.length > 0 && (
+            <FormSection icon="coins" title={t.revIncomeTitle} description={t.revIncomeDesc}>
+              {incomeTransactions.map(renderCard)}
+            </FormSection>
+          )}
 
-        {/* Expense Section */}
-        {(filter === 'all' || filter === 'expense' || filter === 'undecided') && expenseTransactions.length > 0 && (
-          <>
-            <div style={{
-              backgroundColor: 'var(--warning-bg)',
-              padding: '12px 16px',
-              marginBottom: '15px',
-              marginTop: (filter === 'all' || filter === 'undecided') && incomeTransactions.length > 0 ? '30px' : '0',
-              borderRadius: '6px',
-              borderLeft: '4px solid var(--warning)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}>
-              <h3 style={{ margin: 0, color: 'var(--warning)', fontSize: '18px' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                  <Icon name="arrow-right" size={18} /> WYDATKI ({expenseTransactions.length})
-                </span>
-              </h3>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <button
-                  onClick={handleRerunExpenseAI}
-                  className="button button-success button-small"
-                  disabled={isRerunningExpenseAI || expenseRerunIndices.length === 0}
-                  title={
-                    expenseRerunIndices.length === 0
-                      ? t.rerunExpenseAINothingToDo
-                      : t.rerunExpenseAITooltip
-                  }
-                >
-                  <Icon name="bot" size={14} />{' '}
-                  {isRerunningExpenseAI
-                    ? t.rerunExpenseAIRunning
-                    : `${t.rerunExpenseAI} (${expenseRerunIndices.length})`}
-                </button>
-                <button
-                  onClick={handleMarkAllExpensesAsUnrecognized}
-                  className="button button-danger button-small"
-                  disabled={isRerunningExpenseAI}
-                >
-                  <Icon name="x" size={14} /> {t.markAllExpensesAsUnrecognized}
-                </button>
-              </div>
-            </div>
-
-            {/* Same loader as the file list on the converter view, so a long
-                re-match reads as "the app is working", not as a frozen screen. */}
-            {isRerunningExpenseAI && (
-              <div
-                className="processing-row"
-                style={{
-                  marginBottom: '15px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-default)',
-                }}
-              >
-                <div className="processing-loader">
-                  <div className="loader-spinner"></div>
-                  <div className="loader-content" style={{ flex: 1 }}>
-                    <span className="loader-text">
-                      {t.rerunExpenseAILoaderTitle}: <strong>{expenseRerunCount}</strong>
-                    </span>
-                    <span className="loader-subtext">
-                      {rerunProgress?.label ?? t.rerunExpenseAIStarting}
-                    </span>
-                    <div className="conversion-progress-bar">
-                      <div
-                        className="conversion-progress-bar-fill"
-                        style={{ width: `${rerunProgress?.percent ?? 0}%` }}
-                      />
-                      <span className="conversion-progress-bar-text">
-                        {rerunProgress?.percent ?? 0}%
+          {(filter === 'all' || filter === 'expense' || filter === 'undecided') && expenseTransactions.length > 0 && (
+            <FormSection
+              icon="arrow-right"
+              title={t.revExpenseTitle}
+              description={t.revExpenseDesc}
+              aside={
+                <div className="form-section__actions">
+                  <button
+                    type="button"
+                    onClick={handleMarkAllExpensesAsUnrecognized}
+                    className="button button-small button-ghost icon-danger"
+                    disabled={isRerunningExpenseAI}
+                  >
+                    <Icon name="x" size={13} /> {t.markAllExpensesAsUnrecognized}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRerunExpenseAI}
+                    className="button button-small button-secondary"
+                    disabled={isRerunningExpenseAI || expenseRerunIndices.length === 0}
+                    title={expenseRerunIndices.length === 0 ? t.rerunExpenseAINothingToDo : t.rerunExpenseAITooltip}
+                  >
+                    <Icon name="bot" size={13} />{' '}
+                    {isRerunningExpenseAI ? t.rerunExpenseAIRunning : `${t.rerunExpenseAI} (${expenseRerunIndices.length})`}
+                  </button>
+                </div>
+              }
+            >
+              {/* Same loader as the file list on the converter view, so a long
+                  re-match reads as "the app is working", not as a frozen screen. */}
+              {isRerunningExpenseAI && (
+                <div className="processing-row review-screen__rerun">
+                  <div className="processing-loader">
+                    <div className="loader-spinner"></div>
+                    <div className="loader-content processing-loader__body">
+                      <span className="loader-text">
+                        {t.rerunExpenseAILoaderTitle}: <strong>{expenseRerunCount}</strong>
                       </span>
+                      <span className="loader-subtext">{rerunProgress?.label ?? t.rerunExpenseAIStarting}</span>
+                      <div className="conversion-progress-bar">
+                        <div
+                          className="conversion-progress-bar-fill"
+                          style={{ width: `${rerunProgress?.percent ?? 0}%` }}
+                        />
+                        <span className="conversion-progress-bar-text">{rerunProgress?.percent ?? 0}%</span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
-            {expenseTransactions.map((trn) => {
-              const currentDecision = decisions.get(trn.index);
-              const manualInput = manualInputs.get(trn.index);
-              const manualAccount = manualAccounts.get(trn.index);
-              const manualContractorId = manualContractorIds.get(trn.index) ?? undefined;
-              const manualRemainingCostId = manualRemainingCostIds.get(trn.index) ?? undefined;
-              const idx = transactionPosition.get(trn) ?? -1;
-              
-              return (
-                <TransactionCard
-                  key={trn.index}
-                  trn={trn}
-                  idx={idx}
-                  currentDecision={currentDecision}
-                  manualInput={manualInput}
-                  manualAccount={manualAccount}
-                  apartmentPrefix={apartmentPrefix}
-                  manualContractorId={manualContractorId}
-                  manualRemainingIncomeId={undefined}
-                  manualRemainingCostId={manualRemainingCostId}
-                  kontrahenci={contractorEntries}
-                  remainingIncomeEntries={remainingIncomeEntries}
-                  remainingCostEntries={remainingCostEntries}
-                  handleDecision={handleDecision}
-                  handleManualInput={handleManualInput}
-                  handleManualAccountInput={handleManualAccountInput}
-                  handleManualContractorSelect={handleManualContractorSelect}
-                  handleManualRemainingIncomeSelect={handleManualRemainingIncomeSelect}
-                  handleManualRemainingCostSelect={handleManualRemainingCostSelect}
-                  language={language}
-                  pdfLines={reviewData.pdfLines}
-                  adresId={reviewData.adresId}
-                  addressMappings={addressMappings}
-                  onSaveApartmentMapping={handleSaveApartmentMapping}
-                  mappingChoice={mappingChoices.get(trn.index)}
-                  onChooseMappingTarget={handleMappingChoice}
-                  onSaveAlternativeName={handleSaveAlternativeName}
-                />
-              );
-            })}
-          </>
-        )}
+              )}
+              {expenseTransactions.map(renderCard)}
+            </FormSection>
+          )}
+        </div>
       </div>
 
-      {/* Footer with filters and actions */}
-      <div style={{
-        padding: '10px 20px',
-        borderTop: '1px solid var(--border-default)',
-        backgroundColor: 'var(--bg-surface-sunken)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexShrink: 0,
-        gap: '16px',
-      }}>
-        {/* Left: Filter buttons */}
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <span style={{ color: 'var(--text-secondary)', fontSize: '12px', marginRight: '4px' }}>Filtruj:</span>
-            <button
-              onClick={() => setFilter('all')}
-              style={{
-                padding: '5px 10px',
-                fontSize: '12px',
-                backgroundColor: filter === 'all' ? 'var(--accent)' : 'var(--border-default)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontWeight: filter === 'all' ? 'bold' : 'normal',
-              }}
-            >
-              Wszystkie ({reviewData.transactions.length})
-            </button>
-            <button
-              onClick={() => setFilter('income')}
-              style={{
-                padding: '5px 10px',
-                fontSize: '12px',
-                backgroundColor: filter === 'income' ? 'var(--success)' : 'var(--border-default)',
-                color: filter === 'income' ? 'var(--bg-surface)' : 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontWeight: filter === 'income' ? 'bold' : 'normal',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-              }}
-            >
-              <Icon name="coins" size={12} /> Wpłaty ({totalIncome})
-            </button>
-            <button
-              onClick={() => setFilter('expense')}
-              style={{
-                padding: '5px 10px',
-                fontSize: '12px',
-                backgroundColor: filter === 'expense' ? 'var(--warning)' : 'var(--border-default)',
-                color: filter === 'expense' ? 'var(--bg-surface)' : 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontWeight: filter === 'expense' ? 'bold' : 'normal',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-              }}
-            >
-              <Icon name="arrow-right" size={12} /> Wydatki ({totalExpense})
-            </button>
-            <button
-              onClick={() => setFilter('undecided')}
-              style={{
-                padding: '5px 10px',
-                fontSize: '12px',
-                backgroundColor: filter === 'undecided' ? 'var(--danger)' : 'var(--border-default)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontWeight: filter === 'undecided' ? 'bold' : 'normal',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-              }}
-            >
-              <Icon name="alert-circle" size={12} /> Niepodjęta decyzja ({totalUndecided})
-            </button>
-          </div>
-        </div>
-        
-        {/* Right: Decision status and action buttons */}
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexShrink: 0 }}>
-          {/* Files remaining badge */}
-          {hasMoreFiles && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              padding: '10px 18px',
-              backgroundColor: 'var(--accent-subtle)',
-              border: '1px solid var(--warning)',
-              borderRadius: '3px',
-              boxSizing: 'border-box',
-            }}>
-              <span style={{
-                color: 'var(--warning)',
-                fontSize: '14px',
-                fontWeight: 600,
-                whiteSpace: 'nowrap',
-                lineHeight: 1,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}>
+      {/* Footer — where the decisions stand, then what to do with the file. */}
+      <ModalFooter
+        className="review-screen__foot"
+        note={
+          <span className="review-screen__progress">
+            <span className={`action-note${allDecided ? ' action-note--success' : ' action-note--warning'}`}>
+              <Icon name={allDecided ? 'check-circle' : 'loader'} size={14} />
+              {allDecided ? t.revAllDecided : t.revDecisions}: {decisions.size}/{reviewData.transactions.length}
+            </span>
+            {hasMoreFiles && (
+              <span className="action-note">
                 <Icon name="folder" size={14} /> {t.filesRemaining}: {remainingCount}
               </span>
-            </div>
-          )}
-          {/* Decision status badge */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            padding: '10px 18px',
-            backgroundColor: allDecided ? 'var(--success-bg)' : 'var(--warning-bg)',
-            border: allDecided ? '1px solid var(--success)' : '1px solid var(--warning)',
-            borderRadius: '3px',
-            minWidth: '150px',
-            boxSizing: 'border-box',
-          }}>
-            <span style={{ lineHeight: 0, color: allDecided ? 'var(--success)' : 'var(--warning)' }}>
-              <Icon name={allDecided ? 'check-circle' : 'loader'} size={16} />
-            </span>
-            <span style={{ 
-              color: 'var(--text-primary)', 
-              fontSize: '14px',
-              fontWeight: 600,
-              whiteSpace: 'nowrap',
-              lineHeight: 1,
-            }}>
-              {allDecided ? 'Gotowe' : 'Decyzje'}: {decisions.size}/{reviewData.transactions.length}
-            </span>
-          </div>
-          
-          {hasMoreFiles ? (
-            <>
-              <button
-                onClick={onSkip}
-                disabled={isProcessing}
-                style={{
-                  padding: '12px 24px',
-                  backgroundColor: 'var(--border-default)',
-                  color: 'var(--text-primary)',
-                  border: 'none',
-                  borderRadius: '3px',
-                  cursor: isProcessing ? 'not-allowed' : 'pointer',
-                  opacity: isProcessing ? 0.5 : 1,
-                }}
-              >
-                {t.skipFile}
-              </button>
-              <button
-                onClick={handleFinalizeAndStop}
-                disabled={!allDecided || isProcessing}
-                style={{
-                  padding: '12px 24px',
-                  backgroundColor: allDecided && !isProcessing ? 'var(--danger)' : 'var(--border-default)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '3px',
-                  cursor: allDecided && !isProcessing ? 'pointer' : 'not-allowed',
-                  opacity: allDecided && !isProcessing ? 1 : 0.5,
-                }}
-              >
-                {isProcessing ? 'Przetwarzanie...' : t.finalizeAndStop}
-              </button>
-              <button
-                onClick={handleFinalizeAndNext}
-                disabled={!allDecided || isProcessing}
-                style={{
-                  padding: '12px 24px',
-                  backgroundColor: allDecided && !isProcessing ? 'var(--accent)' : 'var(--border-default)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '3px',
-                  cursor: allDecided && !isProcessing ? 'pointer' : 'not-allowed',
-                  opacity: allDecided && !isProcessing ? 1 : 0.5,
-                  fontWeight: 'bold',
-                }}
-              >
-                {isProcessing ? 'Przetwarzanie...' : t.finalizeAndNext}
-              </button>
-            </>
-          ) : (
+            )}
+          </span>
+        }
+        onCancel={hasMoreFiles ? onSkip : undefined}
+        cancelLabel={t.skipFile}
+        secondaryAction={
+          hasMoreFiles ? (
             <button
-              onClick={handleFinalizeAndNext}
+              type="button"
+              className="button button-secondary"
+              onClick={handleFinalizeAndStop}
               disabled={!allDecided || isProcessing}
-              style={{
-                padding: '12px 24px',
-                backgroundColor: allDecided && !isProcessing ? 'var(--accent)' : 'var(--border-default)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '3px',
-                cursor: allDecided && !isProcessing ? 'pointer' : 'not-allowed',
-                opacity: allDecided && !isProcessing ? 1 : 0.5,
-                fontWeight: 'bold',
-              }}
             >
-              {isProcessing ? 'Przetwarzanie...' : t.finalizeFile}
+              {isProcessing ? t.revProcessing : t.finalizeAndStop}
             </button>
-          )}
-        </div>
-      </div>
+          ) : undefined
+        }
+        onSubmit={handleFinalizeAndNext}
+        submitLabel={isProcessing ? t.revProcessing : hasMoreFiles ? t.finalizeAndNext : t.finalizeFile}
+        submitIcon={hasMoreFiles ? 'arrow-right' : 'check'}
+        submitDisabled={!allDecided}
+        submitTitle={`${t.revDecisions}: ${decisions.size}/${reviewData.transactions.length}`}
+        busy={isProcessing}
+      />
     </div>
   );
 };

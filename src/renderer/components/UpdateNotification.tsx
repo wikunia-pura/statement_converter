@@ -129,7 +129,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
     <div className="update-notification">
       {showRequiredNotice ? (
         <div className="update-content update-required">
-          <div className="update-icon" style={{ color: 'var(--warning)' }}>
+          <div className="update-icon is-warning">
             <Icon name="alert-triangle" size={24} />
           </div>
           <div className="update-text">
@@ -154,7 +154,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
         </div>
       ) : macReleaseOpened ? (
         <div className="update-content">
-          <div className="update-icon" style={{ color: 'var(--success)' }}><Icon name="sparkles" size={24} /></div>
+          <div className="update-icon is-success"><Icon name="sparkles" size={24} /></div>
           <div className="update-text">
             <strong>{t.macReleasePageOpened}</strong>
             <p>{t.macUpdateInstructions}</p>
@@ -167,7 +167,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
         </div>
       ) : updateDownloaded ? (
         <div className="update-content">
-          <div className="update-icon" style={{ color: 'var(--success)' }}><Icon name="sparkles" size={24} /></div>
+          <div className="update-icon is-success"><Icon name="sparkles" size={24} /></div>
           <div className="update-text">
             <strong>{language === 'pl' ? 'Aktualizacja pobrana!' : 'Update Downloaded!'}</strong>
             {platform === 'win32' ? (
@@ -197,7 +197,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
         </div>
       ) : updateAvailable ? (
         <div className="update-content">
-          <div className="update-icon" style={{ color: 'var(--info)' }}><Icon name="refresh" size={24} /></div>
+          <div className="update-icon is-info"><Icon name="refresh" size={24} /></div>
           <div className="update-text">
             <strong>{t.updateAvailableTitle}</strong>
             <p>
@@ -224,7 +224,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
         </div>
       ) : error ? (
         <div className="update-content update-error">
-          <div className="update-icon" style={{ color: 'var(--danger)' }}><Icon name="alert-triangle" size={24} /></div>
+          <div className="update-icon is-danger"><Icon name="alert-triangle" size={24} /></div>
           <div className="update-text">
             <strong>{t.updateError}</strong>
             <p>{error}</p>

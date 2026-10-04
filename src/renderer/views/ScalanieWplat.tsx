@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { translations, Language } from '../translations';
+import { FormSection } from '../components/FormSection';
 import Icon from '../components/Icon';
+import { ModalFooter } from '../components/Modal';
 import {
   ScalanieAnalyzedFile,
   ScalanieMergeFileInput,
@@ -167,181 +169,154 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
 
   return (
     <div className="content-body">
-      <div className="card">
-        <div style={{ marginBottom: '20px' }}>
-          <h2 style={{ marginBottom: '4px', fontSize: '18px', color: 'var(--accent)' }}>
-            {t.scalanieTitle}
-          </h2>
-          <div style={{ fontSize: '13px', opacity: 0.7 }}>{t.scalanieSubtitle}</div>
-        </div>
-
-        <div
-          className={`drop-zone ${dragOver ? 'drag-over' : ''}`}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onClick={handlePickFiles}
-        >
-          <div className="drop-zone-icon"><Icon name="upload" size={40} /></div>
-          <div className="drop-zone-text">{t.dragDropFiles}</div>
-        </div>
-      </div>
-
-      {!statusIsError && (statusMessage || lastResult) && (
-        <div className="card" style={{ borderTop: '3px solid var(--success, #10b981)' }}>
-          {statusMessage && (
-            <div
-              className="zaliczki-status zaliczki-status-success"
-              style={{ marginBottom: lastResult ? '15px' : 0 }}
-            >
-              <span style={{ flex: 1, wordBreak: 'break-all' }}>{statusMessage}</span>
-            </div>
-          )}
-
-          {lastResult && (
-            <>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '10px',
-                  flexWrap: 'wrap',
-                  gap: '10px',
-                }}
-              >
-                <h2 style={{ margin: 0 }}>{t.outputFilesTitle}</h2>
-                {lastOutputDir && (
-                  <button
-                    className="button button-secondary"
-                    onClick={() => openOutput(lastOutputDir)}
-                    title={lastOutputDir}
-                  >
-                    <Icon name="folder" size={14} /> {t.openOutputFolder}
-                  </button>
-                )}
-              </div>
-              <table>
-                <thead>
-                  <tr>
-                    <th style={{ width: '90px' }}>{t.scalanieFilesPerGroup}</th>
-                    <th>{t.scalanieDate}</th>
-                    <th style={{ textAlign: 'right' }}>{t.actions}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>{lastResult.fileCount}</td>
-                    <td>
-                      {lastResult.startDate && lastResult.endDate
-                        ? lastResult.startDate === lastResult.endDate
-                          ? lastResult.startDate
-                          : `${lastResult.startDate} → ${lastResult.endDate}`
-                        : '—'}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <button
-                        className="button button-small button-primary"
-                        onClick={() => openOutput(lastResult.outputPath)}
-                      ><Icon name="folder" size={13} />{' '}
-                        {t.openFile}
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </>
-          )}
-        </div>
-      )}
-
-      {files.length > 0 ? (
-        <div className="card">
+      <div className="page-form">
+        <FormSection icon="wallet" title={t.scalanieTitle} description={t.scalanieSubtitle}>
           <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '15px',
-              flexWrap: 'wrap',
-              gap: '10px',
-            }}
+            className={`drop-zone ${dragOver ? 'drag-over' : ''}`}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onClick={handlePickFiles}
           >
-            <h2>{t.inputFilesTitle}</h2>
-            <div className="button-group" style={{ margin: 0 }}>
-              <button
-                className="button button-success"
-                onClick={mergeWithResults}
-                disabled={!canMerge}
-                style={!canMerge ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
-              >
-                <Icon name="bar-chart" size={14} />{' '}
-                {isProcessing ? t.scalanieMerging : t.scalanieMergeAll}
-              </button>
-              <button
-                className="button button-danger"
-                onClick={clearAll}
-                disabled={isProcessing}
-              >
-                <Icon name="trash" size={14} /> {t.scalanieClearAll}
-              </button>
-            </div>
+            <div className="drop-zone-icon"><Icon name="upload" size={40} /></div>
+            <div className="drop-zone-text">{t.dragDropFiles}</div>
           </div>
+        </FormSection>
 
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: '40px' }}>#</th>
-                <th>{t.scalanieFile}</th>
-                <th style={{ width: '110px' }}>{t.scalanieDate}</th>
-                <th style={{ width: '70px' }}>{t.scalanieLines}</th>
-                <th style={{ textAlign: 'right' }}>{t.actions}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {files.map((f, idx) => (
-                <tr key={f.filePath}>
-                  <td>{idx + 1}</td>
-                  <td style={{ wordBreak: 'break-all' }}>{f.fileName}</td>
+        <FormSection
+          icon="folder"
+          title={t.inputFilesTitle}
+          aside={
+            files.length > 0 ? (
+              <button className="button button-ghost icon-danger" onClick={clearAll} disabled={isProcessing}>
+                <Icon name="trash" size={14} /> {t.convClear}
+              </button>
+            ) : undefined
+          }
+        >
+          {files.length > 0 ? (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th className="data-table__index">#</th>
+                  <th>{t.scalanieFile}</th>
+                  <th>{t.scalanieDate}</th>
+                  <th>{t.scalanieLines}</th>
+                  <th className="data-table__actions">{t.actions}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {files.map((f, idx) => (
+                  <tr key={f.filePath}>
+                    <td className="data-table__index">{idx + 1}</td>
+                    <td className="data-table__name">
+                      <span className="cell-title cell-wrap">{f.fileName}</span>
+                    </td>
+                    <td className="nowrap">
+                      {f.status === 'analyzing' ? (
+                        <span className="cell-empty">{t.scalanieAnalyzing}</span>
+                      ) : f.status === 'error' ? (
+                        <span className="status-badge status-error">{f.error ?? t.error}</span>
+                      ) : (
+                        f.date ?? <span className="cell-empty">—</span>
+                      )}
+                    </td>
+                    <td>{f.status === 'ready' ? f.lineCount : <span className="cell-empty">—</span>}</td>
+                    <td className="data-table__actions">
+                      <div className="row-actions">
+                        <button
+                          type="button"
+                          className="button button-ghost button-icon icon-danger"
+                          onClick={() => removeFile(f.filePath)}
+                          disabled={isProcessing}
+                          title={t.remove}
+                          aria-label={`${t.remove}: ${f.fileName}`}
+                        >
+                          <Icon name="trash" size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="form-empty">
+              <Icon name="wallet" size={16} />
+              {t.scalanieNoFiles}
+            </div>
+          )}
+        </FormSection>
+
+        {statusMessage && (
+          <div className={`callout callout--${statusIsError ? 'danger' : 'success'}`} role="status">
+            <Icon name={statusIsError ? 'alert-triangle' : 'check-circle'} size={16} />
+            <div className="callout__body callout__body--path">{statusMessage}</div>
+          </div>
+        )}
+
+        {!statusIsError && lastResult && (
+          <FormSection
+            icon="check-circle"
+            title={t.outputFilesTitle}
+            aside={
+              lastOutputDir ? (
+                <button
+                  type="button"
+                  className="button button-small button-subtle"
+                  onClick={() => openOutput(lastOutputDir)}
+                  title={lastOutputDir}
+                >
+                  <Icon name="folder" size={13} /> {t.openOutputFolder}
+                </button>
+              ) : undefined
+            }
+          >
+            <table className="form-table">
+              <thead>
+                <tr>
+                  <th>{t.scalanieFilesPerGroup}</th>
+                  <th>{t.scalanieDate}</th>
+                  <th className="data-table__actions">{t.actions}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>{lastResult.fileCount}</td>
                   <td>
-                    {f.status === 'analyzing' ? (
-                      <span style={{ opacity: 0.6 }}>{t.scalanieAnalyzing}</span>
-                    ) : f.status === 'error' ? (
-                      <span className="status-badge status-error">{f.error ?? t.error}</span>
-                    ) : (
-                      f.date ?? '—'
-                    )}
+                    {lastResult.startDate && lastResult.endDate
+                      ? lastResult.startDate === lastResult.endDate
+                        ? lastResult.startDate
+                        : `${lastResult.startDate} → ${lastResult.endDate}`
+                      : '—'}
                   </td>
-                  <td>{f.status === 'ready' ? f.lineCount : '—'}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    <button
-                      className="button button-small button-danger"
-                      onClick={() => removeFile(f.filePath)}
-                      disabled={isProcessing}
-                    ><Icon name="trash" size={13} />{' '}
-                      {t.remove}
-                    </button>
+                  <td className="data-table__actions">
+                    <div className="row-actions">
+                      <button
+                        type="button"
+                        className="button button-small button-secondary"
+                        onClick={() => openOutput(lastResult.outputPath)}
+                      >
+                        <Icon name="folder" size={13} /> {t.openFile}
+                      </button>
+                    </div>
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </FormSection>
+        )}
 
-          {statusMessage && statusIsError && (
-            <div
-              className="zaliczki-status zaliczki-status-error"
-              style={{ marginTop: '15px', marginBottom: 0 }}
-            >
-              <span style={{ flex: 1, wordBreak: 'break-all' }}>{statusMessage}</span>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="empty-state">
-          <div className="empty-state-icon"><Icon name="wallet" size={48} /></div>
-          <div className="empty-state-text">{t.scalanieNoFiles}</div>
-        </div>
-      )}
+        <ModalFooter
+          className="page-action-bar"
+          onSubmit={mergeWithResults}
+          submitLabel={isProcessing ? t.scalanieMerging : t.scalanieMergeAll}
+          submitIcon="bar-chart"
+          submitDisabled={!canMerge}
+          submitTitle={t.scalanieNothingToMerge}
+          busy={isProcessing}
+        />
+      </div>
     </div>
   );
 };

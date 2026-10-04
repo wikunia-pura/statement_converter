@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { KsiegowanieUwaga } from '../../shared/types';
 import { translations, Language } from '../translations';
 import Icon from './Icon';
-import ModalDismiss from './Modal';
+import { FormSection } from './FormSection';
+import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
 
 /**
  * Pieces of the "Księgowania" notes feature that are shared between the
@@ -126,33 +127,34 @@ export const PostingNoteNotice: React.FC<{
   const t = translations[language];
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal ks-notice" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onClose} ariaLabel={t.close} />
-        <div className="modal-header">
-          <span className="ks-notice__title">
-            <Icon name="message-square" size={20} /> {t.convNoteTitle}
-          </span>
-        </div>
-        <div className="modal-body">
-          <p className="ks-notice__lead">{items.length > 1 ? t.convNoteLeadMany : t.convNoteLead}</p>
+        <ModalHeader
+          icon="message-square"
+          title={t.convNoteTitle}
+          subtitle={items.length > 1 ? t.convNoteLeadMany : t.convNoteLead}
+        />
+        <div className="modal-body modal-body--sectioned">
           {items.map((item) => (
-            <section key={item.adresId} className="ks-notice__community">
-              <h3>{item.adresNazwa}</h3>
-              {item.uwagi.map((u) => (
-                <div key={u.id} className="ks-notice__note">
-                  <p>{u.tresc}</p>
-                  <span>{uwagaMeta(u, language, formatDateTime)}</span>
-                </div>
-              ))}
-            </section>
+            <FormSection key={item.adresId} icon="home" title={item.adresNazwa}>
+              <ul className="record-list">
+                {item.uwagi.map((u) => (
+                  <li key={u.id} className="record-row">
+                    <div className="record-row__main">
+                      <div className="record-row__title record-row__title--wrap record-row__title--text">{u.tresc}</div>
+                      <div className="record-row__meta">{uwagaMeta(u, language, formatDateTime)}</div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </FormSection>
           ))}
-          <p className="ks-notice__hint">{t.convNoteResolveHint}</p>
+          <div className="callout callout--muted">
+            <Icon name="info" size={16} />
+            <div className="callout__body">{t.convNoteResolveHint}</div>
+          </div>
         </div>
-        <div className="modal-footer">
-          <button type="button" className="button button-primary" onClick={onClose} autoFocus>
-            {t.convNoteOk}
-          </button>
-        </div>
+        <ModalFooter onCancel={onClose} cancelLabel={t.convNoteOk} />
       </div>
     </div>
   );

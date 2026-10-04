@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
+import { titleIfTruncated, useMenuInViewport } from '../hooks/useMenuInViewport';
 
 export interface SelectOption {
   /** Option value. Numbers should be pre-stringified by the caller. */
@@ -61,6 +62,7 @@ const Select: React.FC<SelectProps> = ({
     bottom: number;
   } | null>(null);
   const placement = useDropdownPlacement(containerRef, isOpen);
+  const shift = useMenuInViewport(menuRef, isOpen, [anchor, options]);
 
   const valueStr = value == null ? '' : String(value);
   const selected = options.find((o) => o.value === valueStr);
@@ -147,15 +149,18 @@ const Select: React.FC<SelectProps> = ({
     overlay && anchor
       ? {
           position: 'fixed',
-          left: Math.max(8, Math.min(anchor.left, window.innerWidth - anchor.width - 8)),
+          left: anchor.left,
           right: 'auto',
-          width: anchor.width,
+          // As wide as the longest option, never narrower than the field; the
+          // shift below keeps it inside the window.
+          minWidth: anchor.width,
           ...(placement.bottom !== undefined
             ? { bottom: window.innerHeight - anchor.top + 2 }
             : { top: anchor.bottom + 2 }),
           maxHeight: placement.maxHeight,
           // Above the modal overlay (1000) that the field itself may sit in.
           zIndex: 3000,
+          transform: shift ? `translateX(-${shift}px)` : undefined,
         }
       : {
           top: placement.top,
@@ -163,6 +168,7 @@ const Select: React.FC<SelectProps> = ({
           marginTop: placement.marginTop,
           marginBottom: placement.marginBottom,
           maxHeight: placement.maxHeight,
+          transform: shift ? `translateX(-${shift}px)` : undefined,
         };
 
   const menu = (
@@ -178,7 +184,10 @@ const Select: React.FC<SelectProps> = ({
             (i === activeIndex ? ' is-active' : '')
           }
           onClick={() => pick(opt.value)}
-          onMouseEnter={() => setActiveIndex(i)}
+          onMouseEnter={(e) => {
+            setActiveIndex(i);
+            titleIfTruncated(e.currentTarget);
+          }}
         >
           {opt.label}
         </div>
@@ -199,6 +208,8 @@ const Select: React.FC<SelectProps> = ({
         onKeyDown={handleKeyDown}
         disabled={disabled}
         title={title}
+        // A value cut with an ellipsis shows in full on hover.
+        onMouseEnter={title ? undefined : (e) => titleIfTruncated(e.currentTarget)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-label={ariaLabel}

@@ -12,7 +12,8 @@ import {
 import { personLabel } from '../../shared/app-users';
 import { translations, Language } from '../translations';
 import Icon from './Icon';
-import ModalDismiss from './Modal';
+import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
+import { FormSection } from './FormSection';
 
 interface Props {
   language: Language;
@@ -48,111 +49,135 @@ const SpotkaniePreviewModal: React.FC<Props> = ({
     przygotowane: t.kalMatStatePrzygotowane,
     wyslane: t.kalMatStateWyslane,
   };
+  const materialyTone: Record<SpotkanieMaterialyStatus, string> = {
+    brak: 'status-neutral',
+    potrzebne: 'status-neutral',
+    do_przygotowania: 'status-pending',
+    przygotowane: 'status-info',
+    wyslane: 'status-success',
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div
-        className="modal"
-        onClick={(e) => e.stopPropagation()}
-        style={{ width: 'min(620px, 94vw)', maxWidth: 620 }}
-      >
+      <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onClose} ariaLabel={t.close} />
-        <div className="modal-header">{t.kalPreviewTitle}</div>
-        <div className="modal-body">
-          <div className="kal-card kal-card--preview" style={{ ['--chip' as string]: color }}>
-            <div className="kal-card__head">
-              <span className="kal-card__time">
-                <Icon name="calendar" size={13} /> {formatDayLabel(toDayKey(s.startsAt), locale)}
-              </span>
-              <span className="kal-card__time">
-                <Icon name="clock" size={13} /> {formatTimeRange(s, locale)}
-              </span>
-              {isTerminWstepny(s) && (
-                <span className="status-badge kal-badge kal-badge--tentative">
-                  <Icon name="clock" size={11} /> {t.kalTerminTentative}
-                </span>
-              )}
+        {/* The meeting is the subject, its moment the second line. */}
+        <ModalHeader
+          icon="calendar"
+          title={s.nazwa}
+          subtitle={`${formatDayLabel(toDayKey(s.startsAt), locale)} · ${formatTimeRange(s, locale)}`}
+        />
+        <div className="modal-body modal-body--sectioned">
+          {isTerminWstepny(s) && (
+            <div className="callout callout--info">
+              <Icon name="clock" size={16} />
+              <div className="callout__body">
+                <div className="callout__title">{t.kalTerminTentative}</div>
+                {t.kalTerminUnconfirmHint}
+              </div>
             </div>
+          )}
 
-            <h4 className="kal-card__name">{s.nazwa}</h4>
-
-            <div className="kal-card__meta">
-              <span className="kal-chip" style={{ ['--chip' as string]: color }}>
-                <span className="kal-chip__dot" />
-                <span className="kal-chip__name">{typ ? typ.nazwa : t.kalNoType}</span>
-              </span>
-              {s.adresNazwa && (
-                <span className="kal-card__adres">
-                  <Icon name="building" size={13} /> {s.adresNazwa}
+          <FormSection icon="map-pin" title={t.kalSectionWhere}>
+            <dl className="facts">
+              <dt>{t.kalFieldType}</dt>
+              <dd>
+                <span className="kal-chip" style={{ ['--chip' as string]: color }}>
+                  <span className="kal-chip__dot" />
+                  <span className="kal-chip__name">{typ ? typ.nazwa : t.kalNoType}</span>
                 </span>
+              </dd>
+              {s.adresNazwa && (
+                <>
+                  <dt>{t.kalFieldAdres}</dt>
+                  <dd>{s.adresNazwa}</dd>
+                </>
               )}
               {s.lokalizacjaNazwa && (
-                <span className="kal-place">
-                  <Icon name="map-pin" size={13} /> {s.lokalizacjaNazwa}
-                </span>
+                <>
+                  <dt>{t.kalFieldPlace}</dt>
+                  <dd>{s.lokalizacjaNazwa}</dd>
+                </>
               )}
               {s.zgnNazwa && (
-                <span className="kal-place" title={t.kalFieldZgn}>
-                  <Icon name="shield" size={13} /> {s.zgnNazwa}
-                </span>
+                <>
+                  <dt>{t.kalFieldZgn}</dt>
+                  <dd>{s.zgnNazwa}</dd>
+                </>
               )}
-            </div>
+            </dl>
+            {s.opis && <p className="kal-card__desc kal-preview__desc">{s.opis}</p>}
+          </FormSection>
 
-            {s.opis && <p className="kal-card__desc">{s.opis}</p>}
+          {(s.uczestnicy.length > 0 || s.zarzad.length > 0) && (
+            <FormSection icon="users" title={t.kalSectionPeople}>
+              {s.uczestnicy.length > 0 && (
+                <div className="kal-card__group">
+                  <span className="kal-card__label">{t.kalFieldParticipants}</span>
+                  <div className="kal-people">
+                    {s.uczestnicy.map((person) => (
+                      <span key={person.userId} className="kal-person kal-person--static" title={person.email}>
+                        <Icon name="users" size={12} />
+                        <span className="kal-person__label">{personLabel(person)}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {s.zarzad.length > 0 && (
+                <div className="kal-card__group">
+                  <span className="kal-card__label">{t.kalFieldZarzad}</span>
+                  <div className="kal-people">
+                    {s.zarzad.map((m) => (
+                      <span
+                        key={`z-${m.imieNazwisko}`}
+                        className="kal-person kal-person--static kal-person--board"
+                        title={m.email ?? undefined}
+                      >
+                        <Icon name="home" size={12} />
+                        <span className="kal-person__label">{m.imieNazwisko}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </FormSection>
+          )}
 
-            {(s.uczestnicy.length > 0 || s.zarzad.length > 0) && (
-              <div className="kal-people">
-                {s.uczestnicy.map((person) => (
-                  <span key={person.userId} className="kal-person kal-person--static" title={person.email}>
-                    <Icon name="users" size={12} />
-                    <span className="kal-person__label">{personLabel(person)}</span>
-                  </span>
-                ))}
-                {s.zarzad.map((m) => (
-                  <span
-                    key={`z-${m.imieNazwisko}`}
-                    className="kal-person kal-person--static kal-person--board"
-                    title={[t.kalFieldZarzad, m.email].filter(Boolean).join(' · ')}
-                  >
-                    <Icon name="home" size={12} />
-                    <span className="kal-person__label">{m.imieNazwisko}</span>
-                  </span>
-                ))}
-              </div>
-            )}
-
-            <dl className="zad-preview__facts">
+          <FormSection icon="briefcase" title={t.kalSectionWork}>
+            <dl className="facts facts--center">
               <dt>{t.kalMaterialsLabel}</dt>
-              <dd>{materialyLabels[s.materialyStatus]}</dd>
+              <dd>
+                <span className={`status-badge ${materialyTone[s.materialyStatus]}`}>
+                  {materialyLabels[s.materialyStatus]}
+                </span>
+              </dd>
               <dt>{t.kalPreviewDocs}</dt>
               <dd>
-                {s.dokumentyWyslaneAt
-                  ? `${t.kalPreviewDocsSent} · ${formatStamp(s.dokumentyWyslaneAt, locale)}`
-                  : t.kalPreviewDocsNotSent}
+                <span className={`status-badge ${s.dokumentyWyslaneAt ? 'status-success' : 'status-neutral'}`}>
+                  {s.dokumentyWyslaneAt ? t.kalPreviewDocsSent : t.kalPreviewDocsNotSent}
+                </span>
+                {s.dokumentyWyslaneAt && (
+                  <span className="kal-preview__stamp">{formatStamp(s.dokumentyWyslaneAt, locale)}</span>
+                )}
               </dd>
             </dl>
-          </div>
+          </FormSection>
         </div>
-        <div className="modal-footer">
-          {onShowInCalendar && (
-            <button
-              type="button"
-              className="button button-secondary"
-              style={{ marginRight: 'auto' }}
-              onClick={onShowInCalendar}
-            >
-              <Icon name="calendar" size={14} /> {t.zadMeetingOpen}
-            </button>
-          )}
-          <button type="button" className="button button-secondary" onClick={onClose}>
-            <Icon name="x" size={14} /> {t.close}
-          </button>
-          {onEdit && (
-            <button type="button" className="button button-primary" onClick={onEdit}>
-              <Icon name="edit" size={14} /> {t.edit}
-            </button>
-          )}
-        </div>
+        <ModalFooter
+          note={
+            onShowInCalendar ? (
+              <button type="button" className="button button-small button-subtle" onClick={onShowInCalendar}>
+                <Icon name="calendar" size={13} /> {t.zadMeetingOpen}
+              </button>
+            ) : undefined
+          }
+          onCancel={onClose}
+          cancelLabel={t.close}
+          onSubmit={onEdit}
+          submitLabel={t.edit}
+          submitIcon="edit"
+        />
       </div>
     </div>
   );

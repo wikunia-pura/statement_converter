@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Converter from './views/Converter';
 import Settings from './views/Settings';
 import History from './views/History';
-import Ksiegowania from './views/Ksiegowania';
+import Ksiegowania, { bookingTileOrderItems } from './views/Ksiegowania';
 import Kontrahenci from './views/Kontrahenci';
 import Adresy from './views/Adresy';
 import Banki from './views/Banki';
@@ -16,9 +16,11 @@ import Mailing, { MailingDraft, emptyMailingDraft } from './views/Mailing';
 import MailingSzablony from './views/MailingSzablony';
 import MailingPola from './views/MailingPola';
 import MailingHistoria from './views/MailingHistoria';
+import MailingTypy from './views/MailingTypy';
 import Kalendarz from './views/Kalendarz';
 import KalendarzTypy from './views/KalendarzTypy';
 import KalendarzLokalizacje from './views/KalendarzLokalizacje';
+import Zebrania from './views/Zebrania';
 import Zadania from './views/Zadania';
 import ZadaniaPulpit from './components/ZadaniaPulpit';
 import ModuleTabs from './components/ModuleTabs';
@@ -37,7 +39,12 @@ import WhatsNewModal from './components/WhatsNewModal';
 import { NotificationProvider } from './components/Notifications';
 import { translations, Language } from './translations';
 import { AppUser, FileEntry, NotificationTarget } from '../shared/types';
-import { BookingFilter, currentMonthKey } from '../shared/bookings';
+import {
+  BookingFilter,
+  DEFAULT_BOOKING_TILE_ORDER,
+  currentMonthKey,
+  resolveBookingTileOrder,
+} from '../shared/bookings';
 import { SpotkanieStateFilter, monthOfDayKey, toDayKey } from '../shared/calendar';
 import { DEFAULT_ZADANIA_FILTER, ZadaniaFilterSeed } from '../shared/zadania';
 import { releaseForVersion, shouldShowWhatsNew } from '../shared/release-notes';
@@ -53,15 +60,14 @@ interface NavItemProps {
   title?: string;
   /** Unread marker (small dot) — stays visible when the rail is collapsed. */
   badge?: boolean;
-  style?: React.CSSProperties;
+  className?: string;
 }
 
-const NavItem: React.FC<NavItemProps> = ({ icon, label, active, onClick, title, badge, style }) => (
+const NavItem: React.FC<NavItemProps> = ({ icon, label, active, onClick, title, badge, className }) => (
   <div
-    className={`nav-item ${active ? 'active' : ''}`}
+    className={`nav-item ${active ? 'active' : ''}${className ? ` ${className}` : ''}`}
     onClick={onClick}
     title={title ?? label}
-    style={style}
   >
     <Icon name={icon} />
     <span className="nav-label">{label}</span>
@@ -87,6 +93,7 @@ interface SidebarItem {
 const DEFAULT_SIDEBAR_ORDER = [
   'pulpit',
   'kalendarz',
+  'zebrania',
   'zadania',
   'divider',
   'converter',
@@ -156,6 +163,7 @@ type View =
   | 'odczyty'
   | 'mailing'
   | 'kalendarz'
+  | 'zebrania'
   | 'zadania'
   | 'conowego';
 
@@ -203,6 +211,7 @@ const App: React.FC = () => {
   // The dashboard's Księgowania area: folded to its month banner, or open. Kept
   // here (and in settings) so it survives navigating away and restarting.
   const [bookingsCollapsed, setBookingsCollapsed] = useState(false);
+  const [bookingsTileOrder, setBookingsTileOrder] = useState<string[] | null>(null);
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [selectedBank, setSelectedBank] = useState<number | null>(null);
   const [zaliczkiFiles, setZaliczkiFiles] = useState<ZaliczkiFileEntry[]>([]);
@@ -220,7 +229,7 @@ const App: React.FC = () => {
   const [ksiegFilter, setKsiegFilter] = useState<BookingFilter>('all');
   const [historySearchSeed, setHistorySearchSeed] = useState<string>('');
   const [odczytyTab, setOdczytyTab] = useState<'convert' | 'history'>('convert');
-  const [mailingTab, setMailingTab] = useState<'send' | 'templates' | 'fields' | 'history'>('send');
+  const [mailingTab, setMailingTab] = useState<'send' | 'templates' | 'types' | 'fields' | 'history'>('send');
   const [kalendarzTab, setKalendarzTab] = useState<'calendar' | 'types' | 'places'>('calendar');
   // Kalendarz: the month lives here so a detour to "Typy spotkań" — or to any
   // other module — comes back to the month the user was looking at.
@@ -242,6 +251,8 @@ const App: React.FC = () => {
     nonce: number;
     edit?: boolean;
   } | null>(null);
+  // A meeting's materials entry, followed from its calendar card: what Zebrania opens.
+  const [zebraniaOpen, setZebraniaOpen] = useState<{ id: number; nonce: number } | null>(null);
   // The send form lives here so a detour to Adresy (to attach a missing city
   // unit) or to the templates tab doesn't throw away a half-filled mailing.
   const [mailingDraft, setMailingDraft] = useState<MailingDraft>(emptyMailingDraft);
@@ -307,6 +318,12 @@ const App: React.FC = () => {
   const openSpotkanie = (spotkanieId: number, edit = false) => {
     setKalFocus({ spotkanieId, nonce: Date.now(), edit });
     navigate('kalendarz', 'calendar');
+  };
+
+  /** Open Zebrania on one entry — "Otwórz w Zebraniach" on a meeting card. */
+  const openZebranie = (zebranieId: number) => {
+    setZebraniaOpen({ id: zebranieId, nonce: Date.now() });
+    navigate('zebrania');
   };
 
   /** The bell's list sends a click to the same place its desktop toast would. */
@@ -401,6 +418,12 @@ const App: React.FC = () => {
 
   /** Kept as the old name so every existing call site reads unchanged. */
   const setCurrentView = (view: View) => navigate(view);
+
+  /** The Księgowania month, remembered on this machine for the next visit. */
+  const changeKsiegMonth = (monthKey: string) => {
+    setKsiegMonth(monthKey);
+    void window.electronAPI.setBookingsMonth(monthKey);
+  };
 
   /**
    * Move along the history. Pure updater on purpose — the tab is restored by
@@ -519,6 +542,9 @@ const App: React.FC = () => {
       setSidebarCollapsed(settings.sidebarCollapsed);
       setSidebarOrder(settings.sidebarOrder ?? null);
       setBookingsCollapsed(settings.bookingsCollapsed);
+      setBookingsTileOrder(settings.bookingsTileOrder ?? null);
+      // Back on the month the Księgowania view was left on, even after a restart.
+      if (/^\d{4}-\d{2}$/.test(settings.bookingsMonth ?? '')) setKsiegMonth(settings.bookingsMonth);
       setLastSeenVersion(settings.lastSeenVersion ?? '');
       applyDarkMode(settings.darkMode);
     } catch (error) {
@@ -584,6 +610,7 @@ const App: React.FC = () => {
       odczyty: t.odczyty,
       mailing: t.mailing,
       kalendarz: t.kalendarz,
+      zebrania: t.zebrania,
       zadania: t.zadania,
       conowego: t.whatsNew,
     };
@@ -599,7 +626,14 @@ const App: React.FC = () => {
       places: t.kalTabPlaces,
     };
     const base = view[loc.view];
-    const tab = loc.tab ? tabs[loc.tab] : undefined;
+    // Mailing and Kalendarz both have a 'types' tab; the map above names the
+    // Kalendarz one, so the Mailing one is told apart by its view.
+    const tab =
+      loc.view === 'mailing' && loc.tab === 'types'
+        ? t.mailingTypyTab
+        : loc.tab
+          ? tabs[loc.tab]
+          : undefined;
     return tab ? `${base} → ${tab}` : base;
   };
 
@@ -624,6 +658,15 @@ const App: React.FC = () => {
       icon: 'calendar',
       label: t.kalendarz,
       onClick: () => setCurrentView('kalendarz'),
+    },
+    zebrania: {
+      id: 'zebrania',
+      icon: 'file-check',
+      label: t.zebrania,
+      onClick: () => {
+        setZebraniaOpen(null);
+        setCurrentView('zebrania');
+      },
     },
     zadania: {
       id: 'zadania',
@@ -697,6 +740,19 @@ const App: React.FC = () => {
     id === SIDEBAR_DIVIDER ? SIDEBAR_DIVIDER : navConfig[id],
   );
 
+  const [tileOrderOpen, setTileOrderOpen] = useState(false);
+  const [tileOrderSaving, setTileOrderSaving] = useState(false);
+  const saveBookingsTileOrder = async (order: string[] | null) => {
+    setTileOrderSaving(true);
+    try {
+      await window.electronAPI.setBookingsTileOrder(order);
+      setBookingsTileOrder(order);
+      setTileOrderOpen(false);
+    } finally {
+      setTileOrderSaving(false);
+    }
+  };
+
   const saveSidebarOrder = async (order: string[] | null) => {
     setSidebarOrderSaving(true);
     try {
@@ -714,7 +770,7 @@ const App: React.FC = () => {
 
   if (!sessionChecked) {
     return (
-      <NotificationProvider errorTitle={t.error} okLabel="OK" cancelLabel={t.cancel} dismissLabel={t.close}>
+      <NotificationProvider errorTitle={t.error} okLabel={t.errorOk} cancelLabel={t.cancel} dismissLabel={t.close} confirmTitle={t.confirmTitle} confirmDangerTitle={t.confirmDangerTitle} confirmLabel={t.confirmOk} errorSubtitle={t.errorSubtitle} confirmSubtitle={t.confirmSubtitle} confirmDangerSubtitle={t.confirmDangerSubtitle}>
         {splash}
         <div className="app" />
       </NotificationProvider>
@@ -723,7 +779,7 @@ const App: React.FC = () => {
 
   if (!session) {
     return (
-      <NotificationProvider errorTitle={t.error} okLabel="OK" cancelLabel={t.cancel} dismissLabel={t.close}>
+      <NotificationProvider errorTitle={t.error} okLabel={t.errorOk} cancelLabel={t.cancel} dismissLabel={t.close} confirmTitle={t.confirmTitle} confirmDangerTitle={t.confirmDangerTitle} confirmLabel={t.confirmOk} errorSubtitle={t.errorSubtitle} confirmSubtitle={t.confirmSubtitle} confirmDangerSubtitle={t.confirmDangerSubtitle}>
         {splash}
         <div className="app">
           <Login
@@ -736,7 +792,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <NotificationProvider errorTitle={t.error} okLabel="OK" cancelLabel={t.cancel} dismissLabel={t.close}>
+    <NotificationProvider errorTitle={t.error} okLabel={t.errorOk} cancelLabel={t.cancel} dismissLabel={t.close} confirmTitle={t.confirmTitle} confirmDangerTitle={t.confirmDangerTitle} confirmLabel={t.confirmOk} errorSubtitle={t.errorSubtitle} confirmSubtitle={t.confirmSubtitle} confirmDangerSubtitle={t.confirmDangerSubtitle}>
     <NavigationProvider
       canGoBack={canGoBack}
       canGoForward={canGoForward}
@@ -822,7 +878,7 @@ const App: React.FC = () => {
             label={t.signOut}
             title={session.email}
             onClick={handleSignOut}
-            style={{ fontSize: 12, opacity: 0.7 }}
+            className="nav-item--quiet"
           />
         </div>
       </div>
@@ -832,10 +888,11 @@ const App: React.FC = () => {
           <Ksiegowania
             language={language}
             monthKey={ksiegMonth}
-            setMonthKey={setKsiegMonth}
+            setMonthKey={changeKsiegMonth}
             filter={ksiegFilter}
             setFilter={setKsiegFilter}
             userEmail={session.email}
+            tileOrder={bookingsTileOrder}
             bookingsCollapsed={bookingsCollapsed}
             onToggleBookings={toggleBookings}
             tasksArea={
@@ -891,10 +948,11 @@ const App: React.FC = () => {
               <Ksiegowania
                 language={language}
                 monthKey={ksiegMonth}
-                setMonthKey={setKsiegMonth}
+                setMonthKey={changeKsiegMonth}
                 filter={ksiegFilter}
                 setFilter={setKsiegFilter}
                 userEmail={session.email}
+                tileOrder={bookingsTileOrder}
                 showCalendar={false}
                 onShowInHistory={(query) => {
                   setHistorySearchSeed(query);
@@ -979,6 +1037,7 @@ const App: React.FC = () => {
               tabs={[
                 { id: 'send', label: t.mailingTabSend, icon: 'mail' },
                 { id: 'templates', label: t.mailingTabTemplates, icon: 'file-text' },
+                { id: 'types', label: t.mailingTypyTab, icon: 'clipboard' },
                 { id: 'fields', label: t.mailingTabFields, icon: 'sparkles' },
                 { id: 'history', label: t.tabHistory, icon: 'history' },
               ]}
@@ -995,6 +1054,7 @@ const App: React.FC = () => {
               />
             )}
             {mailingTab === 'templates' && <MailingSzablony language={language} />}
+            {mailingTab === 'types' && <MailingTypy language={language} />}
             {mailingTab === 'fields' && <MailingPola language={language} />}
             {mailingTab === 'history' && <MailingHistoria language={language} />}
           </>
@@ -1023,6 +1083,8 @@ const App: React.FC = () => {
                 onFocusHandled={() => setKalFocus(null)}
                 onManageTypes={() => navigate('kalendarz', 'types')}
                 onManagePlaces={() => navigate('kalendarz', 'places')}
+                onOpenZebranie={openZebranie}
+                onOpenSzablony={() => navigate('mailing', 'templates')}
                 onSendDocuments={(ctx) => {
                   // A fresh draft, pre-addressed to the meeting's community and
                   // carrying the meeting so the send records itself against it.
@@ -1039,6 +1101,23 @@ const App: React.FC = () => {
             {kalendarzTab === 'types' && <KalendarzTypy language={language} />}
             {kalendarzTab === 'places' && <KalendarzLokalizacje language={language} />}
           </>
+        )}
+        {currentView === 'zebrania' && (
+          <Zebrania
+            language={language}
+            userEmail={session.email}
+            openRequest={zebraniaOpen}
+            onOpenRequestHandled={() => setZebraniaOpen(null)}
+            onOpenSpotkanie={(s) => {
+              setKalMonth(monthOfDayKey(toDayKey(s.startsAt)));
+              openSpotkanie(s.id);
+            }}
+            onEditSpotkanie={(s) => {
+              setKalMonth(monthOfDayKey(toDayKey(s.startsAt)));
+              openSpotkanie(s.id, true);
+            }}
+            onOpenSzablony={() => navigate('mailing', 'templates')}
+          />
         )}
         {currentView === 'zadania' && <Zadania
             language={language}
@@ -1066,6 +1145,7 @@ const App: React.FC = () => {
             userEmail={session.email}
             onUserNamesChanged={loadProfile}
             onOpenSidebarOrder={() => setSidebarOrderOpen(true)}
+            onOpenTileOrder={() => setTileOrderOpen(true)}
             onSettingsRestored={loadSettings}
           />
         )}
@@ -1083,6 +1163,20 @@ const App: React.FC = () => {
           saving={sidebarOrderSaving}
           onSave={(order) => void saveSidebarOrder(order)}
           onClose={() => setSidebarOrderOpen(false)}
+        />
+      )}
+      {tileOrderOpen && (
+        <SidebarOrderModal
+          items={bookingTileOrderItems(language, resolveBookingTileOrder(bookingsTileOrder))}
+          defaultOrder={[...DEFAULT_BOOKING_TILE_ORDER]}
+          language={language}
+          saving={tileOrderSaving}
+          title={t.ksTileOrderTitle}
+          subtitle={t.ksTileOrderHint}
+          icon="grip"
+          allowDividers={false}
+          onSave={(order) => void saveBookingsTileOrder(order)}
+          onClose={() => setTileOrderOpen(false)}
         />
       )}
       <Footer language={language} appVersion={appVersion} />

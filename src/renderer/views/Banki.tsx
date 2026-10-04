@@ -2,10 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { Bank, Converter } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
+import { FormField, FormRow, FormSection, RequiredNote } from '../components/FormSection';
 import Icon from '../components/Icon';
-import Loader from '../components/Loader';
-import ModalDismiss from '../components/Modal';
+import Loader, { BusyOverlay } from '../components/Loader';
+import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
 import Select from '../components/Select';
+import TagInput from '../components/TagInput';
 
 interface BankiProps {
   language: Language;
@@ -21,7 +23,6 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
   const [name, setName] = useState('');
   const [converterId, setConverterId] = useState('');
   const [accountPrefixes, setAccountPrefixes] = useState<string[]>([]);
-  const [newAccountPrefix, setNewAccountPrefix] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,7 +47,6 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
     setName('');
     setConverterId('');
     setAccountPrefixes([]);
-    setNewAccountPrefix('');
     setEditing(null);
     setShowAdd(false);
   };
@@ -121,19 +121,6 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
     setName(bank.name);
     setConverterId(bank.converterId);
     setAccountPrefixes(bank.accountPrefixes || []);
-    setNewAccountPrefix('');
-  };
-
-  const handleAddAccountPrefix = () => {
-    const trimmed = newAccountPrefix.trim();
-    if (trimmed && !accountPrefixes.includes(trimmed)) {
-      setAccountPrefixes([...accountPrefixes, trimmed]);
-      setNewAccountPrefix('');
-    }
-  };
-
-  const handleRemoveAccountPrefix = (index: number) => {
-    setAccountPrefixes(accountPrefixes.filter((_, i) => i !== index));
   };
 
   const handleImport = async () => {
@@ -185,54 +172,26 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
 
   return (
     <div className="content-body">
-      {isImporting && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex', flexDirection: 'column',
-          justifyContent: 'center', alignItems: 'center',
-          zIndex: 9999,
-        }}>
-          <div style={{
-            width: '60px', height: '60px',
-            border: '6px solid #f3f3f3',
-            borderTop: '6px solid #3498db',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-          }} />
-          <div style={{ marginTop: '20px', color: 'white', fontSize: '18px', fontWeight: 'bold' }}>
-            {t.importing}
-          </div>
-        </div>
-      )}
-      <div className="card">
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '15px',
-          }}
-        >
-          <h2>{t.banki}</h2>
-          <div style={{ display: 'flex', gap: '10px' }}>
+      {isImporting && <BusyOverlay label={t.importing} />}
+      <FormSection
+        icon="building"
+        title={t.banki}
+        description={t.bankiListDesc}
+        aside={
+          <div className="form-section__actions">
+            {/* Mass delete is demoted: never the loudest button next to everyday actions. */}
             {banks.length > 0 && (
-              <button className="button button-danger" onClick={handleDeleteAll}>
-                <Icon name="trash" size={14} />{' '}{t.deleteAllBanks}
-              </button>
+              <>
+                <button className="button button-ghost icon-danger" onClick={handleDeleteAll}>
+                  <Icon name="trash" size={14} />{' '}{t.deleteAllBanks}
+                </button>
+                <span className="toolbar-divider" aria-hidden="true" />
+              </>
             )}
-            <button
-              className="button button-import"
-              onClick={handleImport}
-              disabled={isImporting}
-            >
+            <button className="button button-import" onClick={handleImport} disabled={isImporting}>
               <Icon name="upload" size={14} />{' '}{t.importFromFile}
             </button>
-            <button
-              className="button button-export"
-              onClick={handleExport}
-              disabled={banks.length === 0}
-            >
+            <button className="button button-export" onClick={handleExport} disabled={banks.length === 0}>
               <Icon name="download" size={14} />{' '}{t.exportToFile}
             </button>
             <button
@@ -243,128 +202,100 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
                 setName('');
                 setConverterId('');
                 setAccountPrefixes([]);
-                setNewAccountPrefix('');
               }}
               disabled={showAdd || editing !== null}
-            ><Icon name="plus" size={14} />{' '}
-              {t.addBank}
+            >
+              <Icon name="plus" size={14} />{' '}{t.addBank}
             </button>
           </div>
-        </div>
-
+        }
+      >
         {(showAdd || editing) && (
           <div className="modal-overlay" onClick={resetForm}>
-            <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
               <ModalDismiss onClose={resetForm} />
-              <div className="modal-header">
-                {editing ? t.editBank : t.addNewBankView}
-              </div>
-              <div className="modal-body">
-                <div className="form-group">
-                  <label>{t.bankName} <span style={{ color: 'red' }}>*</span></label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="np. ING Bank"
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>{t.converterType}</label>
-                  <Select
-                    value={converterId}
-                    onChange={(v) => setConverterId(v)}
-                    placeholder={t.chooseConverter}
-                    options={converters.map((c) => ({ value: String(c.id), label: c.name }))}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>{t.accountPrefixes}</label>
-                  <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
-                    {t.accountPrefixesHint}
-                  </div>
-                  {accountPrefixes.length > 0 && (
-                    <div style={{ marginBottom: '8px' }}>
-                      {accountPrefixes.map((p, idx) => (
-                        <div key={idx} className="alternative-name-tag">
-                          <span>{p}</span>
-                          <button
-                            onClick={() => handleRemoveAccountPrefix(idx)}
-                            className="alternative-name-remove"
-                            type="button"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <input
-                      type="text"
-                      value={newAccountPrefix}
-                      onChange={(e) => setNewAccountPrefix(e.target.value)}
-                      onKeyPress={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleAddAccountPrefix();
-                        }
-                      }}
+              <ModalHeader
+                icon="building"
+                title={editing ? t.editBank : t.addNewBankView}
+                subtitle={editing ? editing.name : t.bankFormSubtitleAdd}
+              />
+              <div className="modal-body modal-body--sectioned">
+                <FormSection icon="building" title={t.bankSection} description={t.bankSectionDesc}>
+                  <FormRow>
+                    <FormField label={t.bankName} htmlFor="bank-name" required>
+                      <input
+                        id="bank-name"
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="np. ING Bank"
+                        autoFocus={!editing}
+                      />
+                    </FormField>
+                    <FormField label={t.converterType} hint={t.bankConverterHint}>
+                      <Select
+                        overlay
+                        value={converterId}
+                        onChange={(v) => setConverterId(v)}
+                        placeholder={t.chooseConverter}
+                        options={converters.map((c) => ({ value: String(c.id), label: c.name }))}
+                        ariaLabel={t.converterType}
+                      />
+                    </FormField>
+                  </FormRow>
+                </FormSection>
+                <FormSection icon="search" title={t.bankSectionMatching} description={t.bankSectionMatchingDesc}>
+                  <FormField label={t.accountPrefixes} htmlFor="bank-prefixes" hint={t.accountPrefixesHint}>
+                    <TagInput
+                      id="bank-prefixes"
+                      values={accountPrefixes}
+                      onChange={setAccountPrefixes}
                       placeholder={t.accountPrefixPlaceholder}
-                      style={{ flex: 1 }}
+                      addLabel={t.add}
+                      removeLabel={t.remove}
+                      monospace
                     />
-                    <button
-                      type="button"
-                      className="button button-primary"
-                      onClick={handleAddAccountPrefix}
-                      disabled={!newAccountPrefix.trim()}
-                    ><Icon name="plus" size={14} />{' '}{t.addAccountPrefix}
-                    </button>
-                  </div>
-                </div>
+                  </FormField>
+                </FormSection>
               </div>
-              <div className="modal-footer">
-                <button
-                  className="button button-secondary"
-                  onClick={resetForm}
-                >
-                  <Icon name="x" size={14} />{' '}{t.cancel}
-                </button>
-                <button
-                  className="button button-success"
-                  onClick={editing ? handleUpdate : handleAdd}
-                >
-                  <Icon name="save" size={14} />{' '}{editing ? t.update : t.add}
-                </button>
-              </div>
+              <ModalFooter
+                note={<RequiredNote label={t.formRequiredNote} />}
+                onCancel={resetForm}
+                cancelLabel={t.cancel}
+                onSubmit={editing ? handleUpdate : handleAdd}
+                submitLabel={editing ? t.save : t.addNewBankView}
+                submitIcon={editing ? 'save' : 'plus'}
+                submitDisabled={!name.trim()}
+                submitTitle={t.fillAllFields}
+              />
             </div>
-          </div>
-        )}
-
-        {banks.length > 0 && (
-          <div className="form-group" style={{ marginBottom: '15px' }}>
-            <input
-              type="text"
-              placeholder={t.searchBanks}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
           </div>
         )}
 
         {banks.length > 0 ? (
           <>
-            <div style={{ marginBottom: '10px', fontSize: '14px', opacity: 0.7 }}>
-              {t.totalBanks}: {filteredBanks.length} / {banks.length}
+            <div className="list-filter">
+              <div className="input-icon">
+                <Icon name="search" size={15} />
+                <input
+                  type="text"
+                  placeholder={t.searchBanks}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  aria-label={t.searchBanks}
+                />
+              </div>
+              <span className="list-filter__count">
+                {t.totalBanks}: <strong>{filteredBanks.length}</strong> / {banks.length}
+              </span>
             </div>
-            <table>
+            <table className="data-table">
               <thead>
                 <tr>
                   <th>{t.bankName}</th>
                   <th>{t.converterType}</th>
                   <th>{t.accountPrefixes}</th>
-                  <th>{t.actions}</th>
+                  <th className="data-table__actions">{t.actions}</th>
                 </tr>
               </thead>
               <tbody>
@@ -373,52 +304,44 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
                   // Brak `converterId` jest dozwolony (bank tylko do Homebankingu); wartość przypisana, ale nieznana = błąd konfiguracji.
                   const converterMissing = !!bank.converterId && !converter;
                   return (
-                    <tr
-                      key={bank.id}
-                      style={converterMissing ? { backgroundColor: 'rgba(220, 53, 69, 0.1)' } : {}}
-                    >
+                    <tr key={bank.id}>
+                      <td className="data-table__name">
+                        <span className="cell-title">{bank.name}</span>
+                      </td>
                       <td>
-                        {bank.name}
-                        {converterMissing && (
-                          <span
-                            style={{
-                              color: 'var(--danger)',
-                              marginLeft: '8px',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                            }}
-                            title="Konwerter nie istnieje"
-                          >
-                            <Icon name="alert-triangle" size={14} />
+                        {converter ? (
+                          converter.name
+                        ) : converterMissing ? (
+                          <span className="cell-warning is-danger" title={t.bankConverterMissing}>
+                            <Icon name="alert-triangle" size={13} />
+                            {bank.converterId}
                           </span>
+                        ) : (
+                          <span className="cell-empty">—</span>
                         )}
                       </td>
-                      <td>
-                        {converter?.name ||
-                          (bank.converterId ? (
-                            <span style={{ color: 'var(--danger)' }}>{bank.converterId}</span>
-                          ) : (
-                            '—'
-                          ))}
-                      </td>
-                      <td style={{ wordBreak: 'break-all' }}>
+                      <td className="cell-mono">
                         {bank.accountPrefixes && bank.accountPrefixes.length > 0
                           ? bank.accountPrefixes.join(', ')
-                          : '—'}
+                          : <span className="cell-empty">—</span>}
                       </td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '8px' }}>
+                      <td className="data-table__actions">
+                        <div className="row-actions">
                           <button
-                            className="button button-small button-primary"
+                            type="button"
+                            className="button button-small button-secondary"
                             onClick={() => handleEdit(bank)}
-                          ><Icon name="edit" size={13} />{' '}
-                            {t.edit}
+                          >
+                            <Icon name="edit" size={13} />{' '}{t.edit}
                           </button>
                           <button
-                            className="button button-small button-danger"
+                            type="button"
+                            className="button button-ghost button-icon icon-danger"
                             onClick={() => handleDelete(bank.id)}
-                          ><Icon name="trash" size={13} />{' '}
-                            {t.delete}
+                            title={t.delete}
+                            aria-label={`${t.delete}: ${bank.name}`}
+                          >
+                            <Icon name="trash" size={15} />
                           </button>
                         </div>
                       </td>
@@ -429,12 +352,12 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
             </table>
           </>
         ) : (
-          <div className="empty-state">
-            <div className="empty-state-icon"><Icon name="building" size={48} /></div>
-            <div className="empty-state-text">{t.noBanksConfigured}</div>
+          <div className="form-empty">
+            <Icon name="building" size={16} />
+            {t.noBanksConfigured}
           </div>
         )}
-      </div>
+      </FormSection>
     </div>
   );
 };

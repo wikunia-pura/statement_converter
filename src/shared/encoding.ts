@@ -15,6 +15,7 @@
 
 import * as fs from 'fs';
 import * as iconv from 'iconv-lite';
+import AdmZip from 'adm-zip';
 
 /**
  * Read a file and decode it with the correct encoding.
@@ -26,6 +27,29 @@ import * as iconv from 'iconv-lite';
  */
 export function readFileWithEncoding(filePath: string, forceEncoding?: string): string {
   const buffer = fs.readFileSync(filePath);
+  return decodeBuffer(buffer, forceEncoding);
+}
+
+/**
+ * A statement's text, reading through a ZIP: PKO BP exports a month as
+ * "Raporty_MT940_….zip", one MT940 file per day. Their entries are joined in
+ * name order (the names end in the date), so the converter sees one statement
+ * with every day's transactions. A plain file is read as `readFileWithEncoding`.
+ *
+ * Until this existed the MT940 converter read the archive's raw bytes — which
+ * worked only because PKO stores the entries uncompressed, and dragged bits of
+ * the ZIP headers into the last description of every day.
+ */
+export function readStatementText(filePath: string, forceEncoding?: string): string {
+  const buffer = fs.readFileSync(filePath);
+  if (buffer.length >= 4 && buffer.readUInt32LE(0) === 0x04034b50) {
+    const entries = new AdmZip(buffer)
+      .getEntries()
+      .filter((e) => !e.isDirectory)
+      .sort((a, b) => a.entryName.localeCompare(b.entryName));
+    const joined = Buffer.concat(entries.flatMap((e) => [e.getData(), Buffer.from('\n')]));
+    return decodeBuffer(joined, forceEncoding);
+  }
   return decodeBuffer(buffer, forceEncoding);
 }
 

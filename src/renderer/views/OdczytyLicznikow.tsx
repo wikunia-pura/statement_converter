@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { translations, Language } from '../translations';
+import { FormSection } from '../components/FormSection';
 import Icon from '../components/Icon';
+import { ModalFooter } from '../components/Modal';
 import OdczytySkippedModal, { OdczytySkippedGroup } from '../components/OdczytySkippedModal';
 import OdczytyHistoryTimeline from '../components/OdczytyHistoryTimeline';
 import { OdczytyHistoryEntry } from '../../shared/types';
@@ -238,269 +240,225 @@ const OdczytyLicznikow: React.FC<Props> = ({
           onClose={() => setSkippedModal(null)}
         />
       )}
-      <div className="card">
-        <div style={{ marginBottom: '20px' }}>
-          <h2 style={{ marginBottom: '4px', fontSize: '18px', color: 'var(--accent)' }}>
-            {t.odczytyTitle}
-          </h2>
-          <div style={{ fontSize: '13px', opacity: 0.7 }}>{t.odczytySubtitle}</div>
-        </div>
+      <div className="page-form">
+        <FormSection icon="zap" title={t.odczytyTitle} description={t.odczytySubtitle}>
+          <div
+            className={`drop-zone ${dragOver ? 'drag-over' : ''}`}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onClick={handlePickFiles}
+          >
+            <div className="drop-zone-icon"><Icon name="upload" size={40} /></div>
+            <div className="drop-zone-text">{t.dragDropFiles}</div>
+          </div>
+        </FormSection>
 
-        <div
-          className={`drop-zone ${dragOver ? 'drag-over' : ''}`}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onClick={handlePickFiles}
+        <FormSection
+          icon="folder"
+          title={t.inputFilesTitle}
+          description={files.length > 0 ? t.convFilesDesc : undefined}
+          aside={
+            files.length > 0 ? (
+              <button className="button button-ghost icon-danger" onClick={clearAll} disabled={isProcessing}>
+                <Icon name="trash" size={14} /> {t.convClear}
+              </button>
+            ) : undefined
+          }
         >
-          <div className="drop-zone-icon"><Icon name="upload" size={40} /></div>
-          <div className="drop-zone-text">{t.dragDropFiles}</div>
-        </div>
-      </div>
-
-      {!statusIsError && (statusMessage || lastResult) && (
-        <div className="card" style={{ borderTop: '3px solid var(--success, #10b981)' }}>
-          {statusMessage && (
-            <div
-              className="zaliczki-status zaliczki-status-success"
-              style={{ marginBottom: lastResult ? '15px' : 0 }}
-            >
-              <span style={{ flex: 1, wordBreak: 'break-all' }}>{statusMessage}</span>
+          {files.length > 0 ? (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th className="data-table__index">#</th>
+                  <th>{t.odczytyFile}</th>
+                  <th>{t.odczytySupplier}</th>
+                  <th>{t.odczytyCommunities}</th>
+                  <th>{t.odczytyDate}</th>
+                  <th>{t.odczytyReadings}</th>
+                  <th className="data-table__actions">{t.actions}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {files.map((f, idx) => (
+                  <tr key={f.filePath}>
+                    <td className="data-table__index">{idx + 1}</td>
+                    <td className="data-table__name">
+                      <span className="cell-title cell-wrap">{f.fileName}</span>
+                    </td>
+                    <td>
+                      {f.status === 'analyzing' ? (
+                        <span className="cell-empty">{t.odczytyAnalyzing}</span>
+                      ) : f.status === 'error' ? (
+                        <span className="status-badge status-error">{t.error}</span>
+                      ) : (
+                        <span className="status-badge status-success">{f.supplierLabel}</span>
+                      )}
+                    </td>
+                    <td>
+                      {f.status === 'error' ? (
+                        <span className="cell-warning is-danger cell-wrap">{f.error}</span>
+                      ) : (
+                        f.communities.join(', ') || <span className="cell-empty">—</span>
+                      )}
+                    </td>
+                    <td className="nowrap">{f.latestDate ?? <span className="cell-empty">—</span>}</td>
+                    <td className="nowrap">
+                      {f.status === 'ready' ? (
+                        <>
+                          {f.readingCount}
+                          {f.skippedCount > 0 && (
+                            <button
+                              type="button"
+                              className="button button-small button-subtle cell-inline-action"
+                              onClick={() => showSkipped([f])}
+                              title={`${t.odczytySkipped}: ${f.skippedCount} — ${t.odczytySkippedShowDetails}`}
+                            >
+                              (−{f.skippedCount})
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <span className="cell-empty">—</span>
+                      )}
+                    </td>
+                    <td className="data-table__actions">
+                      <div className="row-actions">
+                        <button
+                          type="button"
+                          className="button button-small button-secondary"
+                          onClick={() => convertOne(f)}
+                          disabled={isProcessing || f.status !== 'ready' || f.readingCount === 0}
+                          title={t.odczytyConvertOne}
+                        >
+                          <Icon name="arrow-right" size={13} />{' '}
+                          {convertingPath === f.filePath ? t.odczytyConverting : t.convert}
+                        </button>
+                        <button
+                          type="button"
+                          className="button button-ghost button-icon icon-danger"
+                          onClick={() => removeFile(f.filePath)}
+                          disabled={isProcessing}
+                          title={t.remove}
+                          aria-label={`${t.remove}: ${f.fileName}`}
+                        >
+                          <Icon name="trash" size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="form-empty">
+              <Icon name="zap" size={16} />
+              {t.odczytyNoFiles}
             </div>
           )}
+        </FormSection>
 
-          {lastResult && (
-            <>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '10px',
-                  flexWrap: 'wrap',
-                  gap: '10px',
-                }}
+        {statusMessage && (
+          <div className={`callout callout--${statusIsError ? 'danger' : 'success'}`} role="status">
+            <Icon name={statusIsError ? 'alert-triangle' : 'check-circle'} size={16} />
+            <div className="callout__body callout__body--path">{statusMessage}</div>
+          </div>
+        )}
+
+        {!statusIsError && lastResult && (
+          <FormSection
+            icon="check-circle"
+            title={t.outputFilesTitle}
+            aside={
+              <button
+                type="button"
+                className="button button-small button-subtle"
+                onClick={() => openOutput(lastResult.outputDir)}
+                title={lastResult.outputDir}
               >
-                <h2 style={{ margin: 0 }}>{t.outputFilesTitle}</h2>
+                <Icon name="folder" size={13} /> {t.openOutputFolder}
+              </button>
+            }
+          >
+            <table className="form-table">
+              <thead>
+                <tr>
+                  <th>{t.odczytyCommunity}</th>
+                  <th>{t.odczytyOutputFile}</th>
+                  <th>{t.odczytyDate}</th>
+                  <th>{t.odczytyReadings}</th>
+                  <th className="data-table__actions">{t.actions}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lastResult.files.map((f) => (
+                  <tr key={f.outputPath}>
+                    <td className="form-table__label">{f.wm}</td>
+                    <td className="cell-wrap">{f.fileName}</td>
+                    <td className="nowrap">{f.date}</td>
+                    <td>{f.readingCount}</td>
+                    <td className="data-table__actions">
+                      <div className="row-actions">
+                        <button
+                          type="button"
+                          className="button button-small button-secondary"
+                          onClick={() => openOutput(f.outputPath)}
+                        >
+                          <Icon name="folder" size={13} /> {t.openFile}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {lastResult.skippedCount > 0 && (
+              <div className="callout callout--warning" role="status">
+                <Icon name="alert-triangle" size={16} />
+                <div className="callout__body">
+                  {t.odczytySkipped}: {lastResult.skippedCount}
+                </div>
                 <button
-                  className="button button-secondary"
-                  onClick={() => openOutput(lastResult.outputDir)}
-                  title={lastResult.outputDir}
+                  type="button"
+                  className="button button-small button-subtle"
+                  onClick={() =>
+                    setSkippedModal(
+                      lastResult.sources
+                        .filter((src) => src.skipped.length > 0)
+                        .map((src) => ({ fileName: src.fileName, rows: src.skipped })),
+                    )
+                  }
                 >
-                  <Icon name="folder" size={14} /> {t.openOutputFolder}
+                  {t.odczytySkippedShowDetails}
                 </button>
               </div>
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t.odczytyCommunity}</th>
-                    <th>{t.odczytyOutputFile}</th>
-                    <th style={{ width: '110px' }}>{t.odczytyDate}</th>
-                    <th style={{ width: '90px' }}>{t.odczytyReadings}</th>
-                    <th style={{ textAlign: 'right' }}>{t.actions}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lastResult.files.map((f) => (
-                    <tr key={f.outputPath}>
-                      <td>{f.wm}</td>
-                      <td style={{ wordBreak: 'break-all' }}>{f.fileName}</td>
-                      <td>{f.date}</td>
-                      <td>{f.readingCount}</td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button
-                          className="button button-small button-primary"
-                          onClick={() => openOutput(f.outputPath)}
-                        ><Icon name="folder" size={13} />{' '}
-                          {t.openFile}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {lastResult.skippedCount > 0 && (
-                <div style={{ marginTop: '10px', fontSize: '13px' }}>
-                  <Icon name="alert-triangle" size={14} />{' '}
-                  <button
-                    type="button"
-                    className="link-button"
-                    onClick={() =>
-                      setSkippedModal(
-                        lastResult.sources
-                          .filter((s) => s.skipped.length > 0)
-                          .map((s) => ({ fileName: s.fileName, rows: s.skipped })),
-                      )
-                    }
-                  >
-                    {t.odczytySkipped}: {lastResult.skippedCount} — {t.odczytySkippedShowDetails}
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
+            )}
+          </FormSection>
+        )}
 
-      {files.length > 0 ? (
-        <div className="card">
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '15px',
-              flexWrap: 'wrap',
-              gap: '10px',
-            }}
-          >
-            <h2>{t.inputFilesTitle}</h2>
-            <div className="button-group" style={{ margin: 0 }}>
-              <button
-                className="button button-success"
-                onClick={convertAll}
-                disabled={!canConvert}
-                style={!canConvert ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
-              >
-                <Icon name="arrow-right" size={14} />{' '}
-                {isProcessing ? t.odczytyConverting : t.odczytyConvertAll}
-              </button>
-              <button
-                className="button button-danger"
-                onClick={clearAll}
-                disabled={isProcessing}
-              >
-                <Icon name="trash" size={14} /> {t.odczytyClearAll}
-              </button>
-            </div>
-          </div>
-
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: '40px' }}>#</th>
-                <th>{t.odczytyFile}</th>
-                <th style={{ width: '90px' }}>{t.odczytySupplier}</th>
-                <th>{t.odczytyCommunities}</th>
-                <th style={{ width: '110px' }}>{t.odczytyDate}</th>
-                <th style={{ width: '80px' }}>{t.odczytyReadings}</th>
-                <th style={{ textAlign: 'right' }}>{t.actions}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {files.map((f, idx) => (
-                <tr key={f.filePath}>
-                  <td>{idx + 1}</td>
-                  <td style={{ wordBreak: 'break-all' }}>{f.fileName}</td>
-                  <td>
-                    {f.status === 'analyzing' ? (
-                      <span style={{ opacity: 0.6 }}>{t.odczytyAnalyzing}</span>
-                    ) : f.status === 'error' ? (
-                      <span className="status-badge status-error">{t.error}</span>
-                    ) : (
-                      <span className="status-badge status-success">{f.supplierLabel}</span>
-                    )}
-                  </td>
-                  <td>
-                    {f.status === 'error' ? (
-                      <span style={{ color: 'var(--danger, #ef4444)' }}>{f.error}</span>
-                    ) : (
-                      f.communities.join(', ') || '—'
-                    )}
-                  </td>
-                  <td>{f.latestDate ?? '—'}</td>
-                  <td>
-                    {f.status === 'ready' ? (
-                      <>
-                        {f.readingCount}
-                        {f.skippedCount > 0 && (
-                          <button
-                            type="button"
-                            className="link-button"
-                            onClick={() => showSkipped([f])}
-                            title={`${t.odczytySkipped}: ${f.skippedCount} — ${t.odczytySkippedShowDetails}`}
-                            style={{ marginLeft: 4 }}
-                          >
-                            (−{f.skippedCount})
-                          </button>
-                        )}
-                      </>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <button
-                      className="button button-small button-success"
-                      onClick={() => convertOne(f)}
-                      disabled={isProcessing || f.status !== 'ready' || f.readingCount === 0}
-                      title={t.odczytyConvertOne}
-                      style={{ marginRight: 6 }}
-                    ><Icon name="arrow-right" size={13} />{' '}
-                      {convertingPath === f.filePath ? t.odczytyConverting : t.convert}
-                    </button>
-                    <button
-                      className="button button-small button-danger"
-                      onClick={() => removeFile(f.filePath)}
-                      disabled={isProcessing}
-                    ><Icon name="trash" size={13} />{' '}
-                      {t.remove}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {statusMessage && statusIsError && (
-            <div
-              className="zaliczki-status zaliczki-status-error"
-              style={{ marginTop: '15px', marginBottom: 0 }}
-            >
-              <span style={{ flex: 1, wordBreak: 'break-all' }}>{statusMessage}</span>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="empty-state">
-          <div className="empty-state-icon"><Icon name="zap" size={48} /></div>
-          <div className="empty-state-text">{t.odczytyNoFiles}</div>
-        </div>
-      )}
-
-      {/* Recent activity — last 30 days, same timeline as the Historia tab. */}
-      <div className="card recent-activity-card">
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '15px',
-            gap: '12px',
-          }}
-        >
-          <h2
-            style={{
-              margin: 0,
-              fontSize: '18px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-          >
-            <Icon name="history" size={18} /> {t.odczytyHistoryLast30Days}
-          </h2>
-          {onNavigateToHistory && (
-            <button className="button button-small button-secondary" onClick={onNavigateToHistory}>
-              <Icon name="history" size={13} />{' '}{t.goToFullHistory} →
-            </button>
-          )}
-        </div>
-        <OdczytyHistoryTimeline
-          history={recentHistory}
-          language={language}
-          showSearch={false}
+        <ModalFooter
+          className="page-action-bar"
+          onSubmit={convertAll}
+          submitLabel={isProcessing ? t.odczytyConverting : t.odczytyConvertAll}
+          submitIcon="arrow-right"
+          submitDisabled={!canConvert}
+          busy={isProcessing}
         />
+
+        {/* Recent activity — last 30 days, same timeline as the Historia tab. */}
+        <FormSection
+          icon="history"
+          title={t.odczytyHistoryLast30Days}
+          aside={
+            onNavigateToHistory ? (
+              <button type="button" className="button button-small button-subtle" onClick={onNavigateToHistory}>
+                {t.goToFullHistory} <Icon name="arrow-right" size={13} />
+              </button>
+            ) : undefined
+          }
+        >
+          <OdczytyHistoryTimeline history={recentHistory} language={language} showSearch={false} />
+        </FormSection>
       </div>
     </div>
   );

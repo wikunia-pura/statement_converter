@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Adres,
   ConversionHistory,
+  FileEntry,
+  KontoTyp,
+  KsiegowaniePlik,
   KsiegowaniePriorytet,
   KsiegowanieUwaga,
   Spotkanie,
@@ -26,14 +29,21 @@ import {
 } from '../../shared/calendar';
 import MeetingsIllustration from '../components/MeetingsIllustration';
 import PriorityOrderModal from '../components/PriorityOrderModal';
+import OverflowMenu from '../components/OverflowMenu';
 import { NoteEditor, uwagaMeta, uwagaResolvedMeta } from '../components/PostingNotes';
 import { resolveOutputFilePath } from '../../shared/outputPaths';
+import { joinScanPath } from '../../shared/statement-scan';
+import { generateId } from '../../shared/utils';
+import StatementScanModal, { formatPeriod } from '../components/StatementScanModal';
+import ConversionModal from '../components/ConversionModal';
 import {
   AddressBookingGroup,
   BookingFilter,
   BookingRow,
   BookingSort,
   BookingTotals,
+  PlikStatus,
+  attributeToStatementMonths,
   currentMonthKey,
   groupByAddress,
   matchesBookingFilter,
@@ -41,10 +51,12 @@ import {
   monthLabel,
   monthsWithData,
   pinPriorities,
+  resolveBookingTileOrder,
   shiftMonthKey,
   sortGroups,
   toBookingRows,
 } from '../../shared/bookings';
+import { plural } from '../plural';
 
 interface Props {
   language: Language;
@@ -70,18 +82,8 @@ interface Props {
    */
   bookingsCollapsed?: boolean;
   onToggleBookings?: () => void;
-}
-
-/** Polish plural: [one, few (2-4), many]. English: [singular, plural]. */
-function plural(n: number, language: Language, pl: [string, string, string], en: [string, string]): string {
-  if (language === 'en') return `${n} ${n === 1 ? en[0] : en[1]}`;
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  let word: string;
-  if (n === 1) word = pl[0];
-  else if (mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14)) word = pl[1];
-  else word = pl[2];
-  return `${n} ${word}`;
+  /** The filter tiles' saved order (filter ids, set in Ustawienia); null = the default. */
+  tileOrder?: string[] | null;
 }
 
 /** Last path segment, both separators — what the user recognises as "the file". */
@@ -268,6 +270,7 @@ const Ksiegowania: React.FC<Props> = ({
   tasksArea,
   bookingsCollapsed = false,
   onToggleBookings,
+  tileOrder = null,
 }) => {
   const t = translations[language];
   // Folding needs a host that can remember it; without one the area never folds.
@@ -285,8 +288,18 @@ const Ksiegowania: React.FC<Props> = ({
   // The month's queue and the notes on communities — see `groupByAddress`.
   const [priorities, setPriorities] = useState<KsiegowaniePriorytet[]>([]);
   const [uwagi, setUwagi] = useState<KsiegowanieUwaga[]>([]);
+  // Files pinned by "Znajdź pliki księgowe", and what is needed to open them:
+  // this machine's statements folder and the account types (for the Converter).
+  const [pliki, setPliki] = useState<KsiegowaniePlik[]>([]);
+  const [kontoTypy, setKontoTypy] = useState<KontoTyp[]>([]);
+  const [statementsFolder, setStatementsFolder] = useState('');
+  const [showScan, setShowScan] = useState(false);
+  // The conversion dialog's files, and the communities ticked for converting together.
+  const [conversion, setConversion] = useState<{ title: string; entries: FileEntry[] } | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showOrder, setShowOrder] = useState(false);
   const [orderSaving, setOrderSaving] = useState(false);
+  const tiles = resolveBookingTileOrder(tileOrder);
   // Rows (by group key) with a priority / note write in flight.
   const [noteBusy, setNoteBusy] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
@@ -309,9 +322,20 @@ const Ksiegowania: React.FC<Props> = ({
     if (silent) setIsRefreshing(true);
     else setIsLoading(true);
     try {
-      const [historyData, adresyData, spotkaniaData, typyData, mailingiData, priorityData, uwagiData] =
-        await Promise.all([
-          window.electronAPI.getHistory(),
+      const [
+        historyData,
+        adresyData,
+        spotkaniaData,
+        typyData,
+        mailingiData,
+        priorityData,
+        uwagiData,
+        plikiData,
+        kontoTypyData,
+        settings,
+      ] = await Promise.all([
+          // The dashboard's own records — the history log may be cleared.
+          window.electronAPI.getKsiegowaniaKonwersje(),
           window.electronAPI.getAdresy(),
           window.electronAPI.getSpotkania(),
           window.electronAPI.getSpotkaniaTypy(),
@@ -320,6 +344,9 @@ const Ksiegowania: React.FC<Props> = ({
           // migration not run) must not take the whole dashboard down with it.
           window.electronAPI.getKsiegowaniaPriorytety().catch(() => [] as KsiegowaniePriorytet[]),
           window.electronAPI.getKsiegowaniaUwagi().catch(() => [] as KsiegowanieUwaga[]),
+          window.electronAPI.getKsiegowaniaPliki().catch(() => [] as KsiegowaniePlik[]),
+          window.electronAPI.getKontoTypy().catch(() => [] as KontoTyp[]),
+          window.electronAPI.getSettings().catch(() => null),
         ]);
       setHistory(historyData);
       setAdresy(adresyData);
@@ -328,6 +355,12 @@ const Ksiegowania: React.FC<Props> = ({
       setSpotkaniaMailingi(mailingiData);
       setPriorities(priorityData);
       setUwagi(uwagiData);
+      setPliki(plikiData);
+      setKontoTypy(kontoTypyData);
+      setStatementsFolder(settings?.statementsFolder ?? '');
+    } catch (err: unknown) {
+      // Said out loud: a dashboard quietly showing stale numbers is worse than none.
+      notify.error(`${t.ksLoadError}\n${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -362,11 +395,16 @@ const Ksiegowania: React.FC<Props> = ({
   const kalUpcoming = useMemo(() => upcomingSpotkania(spotkania, 5), [spotkania]);
   const kalNext = kalUpcoming[0] ?? null;
 
-  const rows = useMemo(() => toBookingRows(history, adresy), [history, adresy]);
+  // A conversion of a statement the folder scan pinned counts in that
+  // statement's month, not in the month it happened to be converted in.
+  const rows = useMemo(
+    () => attributeToStatementMonths(toBookingRows(history, adresy), pliki),
+    [history, adresy, pliki],
+  );
   const months = useMemo(() => monthsWithData(rows), [rows]);
   const { groups, totals } = useMemo(
-    () => groupByAddress(rows, adresy, monthKey, priorities, uwagi),
-    [rows, adresy, monthKey, priorities, uwagi],
+    () => groupByAddress(rows, adresy, monthKey, priorities, uwagi, pliki),
+    [rows, adresy, monthKey, priorities, uwagi, pliki],
   );
   /** The month's flagged communities, in queue order — the order dialog's list. */
   const priorityGroups = useMemo(
@@ -481,7 +519,7 @@ const Ksiegowania: React.FC<Props> = ({
       ),
     );
     try {
-      const result = await window.electronAPI.setHistoryBookedInDom(ids, booked);
+      const result = await window.electronAPI.setKsiegowanieBookedInDom(ids, booked);
       if (!result.success) {
         notify.error(`${t.ksMarkError}: ${result.error ?? ''}`.trim());
         await load(true);
@@ -633,6 +671,161 @@ const Ksiegowania: React.FC<Props> = ({
   const openFile = async (filePath: string) => {
     const ok = await window.electronAPI.openFile(filePath);
     if (!ok) notify.error(t.fileNotFound);
+  };
+
+  /* -------------------- Files pinned by the folder scan ------------------ */
+
+  const loadPliki = async () => {
+    const [data, settings] = await Promise.all([
+      window.electronAPI.getKsiegowaniaPliki().catch(() => null),
+      window.electronAPI.getSettings().catch(() => null),
+    ]);
+    if (data) setPliki(data);
+    if (settings) setStatementsFolder(settings.statementsFolder ?? '');
+  };
+
+  const plikActions: PlikActions = {
+    open: (plik) => {
+      if (!statementsFolder) {
+        notify.warning(t.ksConvertNoFolder);
+        return;
+      }
+      void openFile(joinScanPath(statementsFolder, plik.relPath));
+    },
+    unpin: async (plik) => {
+      const ok = await notify.confirm(t.ksFileUnpinConfirm.replace('{name}', plik.fileName), {
+        confirmLabel: t.ksFileUnpin,
+        danger: true,
+      });
+      if (!ok) return;
+      try {
+        await window.electronAPI.deleteKsiegowaniePlik(plik.id);
+      } catch {
+        notify.error(t.ksFileUnpinError);
+      }
+      await loadPliki();
+    },
+    // The fallback when a statement went into DOM some other way: a record with
+    // no accounting file, already ticked — the community counts it as posted.
+    markBooked: async ({ plik }) => {
+      const ok = await notify.confirm(t.ksFileMarkBookedConfirm.replace('{name}', plik.fileName), {
+        title: t.ksFileMarkBooked,
+        confirmLabel: t.ksFileMarkBooked,
+      });
+      if (!ok) return;
+      const result = await window.electronAPI.markKsiegowaniePlikBooked(plik.id);
+      if (!result.success) notify.error(`${t.ksFileMarkBookedError}${result.error ? `\n${result.error}` : ''}`);
+      else notify.success(t.ksFileMarkBookedDone);
+      await load(true);
+    },
+    undoManual: async (row) => {
+      const ok = await notify.confirm(t.ksManualUndoConfirm.replace('{name}', row.entry.fileName), {
+        confirmLabel: t.ksManualUndo,
+        danger: true,
+      });
+      if (!ok) return;
+      const result = await window.electronAPI.undoKsiegowanieManual(row.entry.id);
+      if (!result.success) notify.error(`${t.ksManualUndoError}${result.error ? `\n${result.error}` : ''}`);
+      await load(true);
+    },
+  };
+
+  /**
+   * A pinned statement as the Converter's list takes it: the community, bank
+   * and account type already set and its PDF attached — exactly as if it had
+   * been dropped in and recognised.
+   */
+  const entryFor = ({ plik, pdf }: PlikStatus): FileEntry => {
+    const adres = adresy.find((a) => a.id === plik.adresId) ?? null;
+    const defaultTypeId = kontoTypy.find((k) => k.isDefault)?.id ?? kontoTypy[0]?.id ?? null;
+    const account = plik.accountNumber;
+    return {
+      id: generateId(),
+      fileName: plik.fileName,
+      filePath: joinScanPath(statementsFolder, plik.relPath),
+      bankId: plik.bankId,
+      bankName: plik.bankName,
+      adresId: adres?.id ?? plik.adresId,
+      status: 'pending',
+      ...(pdf ? { pdfPath: joinScanPath(statementsFolder, pdf.relPath) } : {}),
+      adresAutoMatched: true,
+      ...(account ? { detectedAccounts: [account] } : {}),
+      accountTypeId: (account ? adres?.accountTypes?.[account] : undefined) ?? defaultTypeId,
+    };
+  };
+
+  /** Open the conversion dialog over the dashboard with these statements. */
+  const openConversion = (statuses: PlikStatus[], title: string) => {
+    if (statuses.length === 0) return;
+    if (!statementsFolder) {
+      notify.warning(t.ksConvertNoFolder);
+      return;
+    }
+    setConversion({ title, entries: statuses.map(entryFor) });
+  };
+
+  const waitingOf = (group: AddressBookingGroup) => group.statements.filter((s) => !s.conversion);
+
+  const convertGroup = (group: AddressBookingGroup) => openConversion(waitingOf(group), group.nazwa);
+
+  const convertOne = (group: AddressBookingGroup, status: PlikStatus) =>
+    openConversion([status], `${group.nazwa} · ${status.plik.fileName}`);
+
+  /** The ticked communities that still have something to convert. */
+  const selectedGroups = groups.filter((g) => selected.has(g.key) && g.ready > 0);
+  const selectedFiles = selectedGroups.reduce((n, g) => n + g.ready, 0);
+
+  // What can be ticked: the communities on screen — under the current filter
+  // and search — that have a statement waiting and a tick of their own.
+  const selectable = visible.filter((g) => g.ready > 0 && !g.unassigned);
+  const selectedVisible = selectable.filter((g) => selected.has(g.key)).length;
+  const allVisibleSelected = selectable.length > 0 && selectedVisible === selectable.length;
+
+  /** The row ticked last — the start of a Shift+click range. */
+  const lastTickedRef = useRef<string | null>(null);
+
+  const toggleSelected = (key: string, range = false) => {
+    const turnOn = !selected.has(key);
+    const from = range && lastTickedRef.current ? selectable.findIndex((g) => g.key === lastTickedRef.current) : -1;
+    const to = selectable.findIndex((g) => g.key === key);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      // Shift+click: every row between the last tick and this one takes this
+      // row's new state, as in any file list.
+      const keys =
+        from >= 0 && to >= 0
+          ? selectable.slice(Math.min(from, to), Math.max(from, to) + 1).map((g) => g.key)
+          : [key];
+      for (const k of keys) {
+        if (turnOn) next.add(k);
+        else next.delete(k);
+      }
+      return next;
+    });
+    lastTickedRef.current = key;
+  };
+
+  /** The head checkbox: all rows on screen, or none of them. */
+  const toggleAllVisible = () => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const g of selectable) {
+        if (allVisibleSelected) next.delete(g.key);
+        else next.add(g.key);
+      }
+      return next;
+    });
+    lastTickedRef.current = null;
+  };
+
+  const convertSelected = () => {
+    if (selectedGroups.length === 0) return;
+    openConversion(
+      selectedGroups.flatMap(waitingOf),
+      selectedGroups.length === 1
+        ? selectedGroups[0].nazwa
+        : t.ksConvModalTitleMany.replace('{n}', String(selectedGroups.length)),
+    );
   };
 
   /* ------------------------------- Rendering ----------------------------- */
@@ -824,6 +1017,15 @@ const Ksiegowania: React.FC<Props> = ({
             </button>
             <button
               type="button"
+              className="ksieg-scan-btn"
+              onClick={() => setShowScan(true)}
+              title={t.ksScanButtonHint}
+            >
+              <Icon name="search" size={15} />
+              <span>{t.ksScanButton}</span>
+            </button>
+            <button
+              type="button"
               className="ksieg-nav-arrow"
               onClick={() => void refresh()}
               disabled={isRefreshing}
@@ -866,7 +1068,7 @@ const Ksiegowania: React.FC<Props> = ({
         {!folded && (
         <div className="ksieg-content">
         {/* ------------------------ Categories / filters -------------------- */}
-        <BookingTiles totals={totals} language={language} filter={filter} onFilter={setFilter} />
+        <BookingTiles totals={totals} language={language} filter={filter} onFilter={setFilter} order={tiles} />
 
         {/* ----------------------------- Toolbar ---------------------------- */}
         <div className="ksieg-toolbar">
@@ -931,6 +1133,37 @@ const Ksiegowania: React.FC<Props> = ({
           </div>
         ) : (
           <div className="ksieg-rows">
+            {/* Ticks every community the filter shows that has something to
+                convert — aligned over the rows' own ticks. */}
+            {selectable.length > 0 && (
+              <div className="ksieg-selall">
+                <span className="ksieg-row__select">
+                  <label
+                    className={`ks-check${allVisibleSelected ? ' is-on' : ''}${
+                      selectedVisible > 0 && !allVisibleSelected ? ' is-mixed' : ''
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="ks-check__input"
+                      checked={allVisibleSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = selectedVisible > 0 && !allVisibleSelected;
+                      }}
+                      onChange={toggleAllVisible}
+                      aria-label={t.ksSelectAll}
+                    />
+                    <span className="ks-check__box" aria-hidden="true">
+                      <Icon name={selectedVisible > 0 && !allVisibleSelected ? 'minus' : 'check'} size={12} strokeWidth={3} />
+                    </span>
+                  </label>
+                </span>
+                <button type="button" className="ksieg-selall__label" onClick={toggleAllVisible}>
+                  {allVisibleSelected ? t.ksSelectNone : t.ksSelectAll}
+                </button>
+                <span className="ksieg-selall__hint">{t.ksSelectRangeHint}</span>
+              </div>
+            )}
             {visible.map((group, index) => (
               <React.Fragment key={group.key}>
                 {/* The queue is set apart from the rest by a heading above it
@@ -960,15 +1193,67 @@ const Ksiegowania: React.FC<Props> = ({
                   onOpenFile={openFile}
                   onShowInHistory={onShowInHistory}
                   notes={noteActionsFor(group)}
+                  plikActions={plikActions}
+                  onConvert={() => convertGroup(group)}
+                  onConvertOne={(status) => convertOne(group, status)}
+                  selected={selected.has(group.key)}
+                  onToggleSelected={(range) => toggleSelected(group.key, range)}
                 />
               </React.Fragment>
             ))}
+          </div>
+        )}
+
+        {/* ------- Ticked communities, converted together: floats at the bottom ------- */}
+        {selectedGroups.length > 0 && (
+          <div className="ksieg-selbar">
+            <Icon name="check-circle" size={16} />
+            <span className="ksieg-selbar__text">
+              {t.ksSelectionBar
+                .replace('{k}', String(selectedGroups.length))
+                .replace('{n}', String(selectedFiles))}
+            </span>
+            <button type="button" className="ksieg-selbar__clear" onClick={() => setSelected(new Set())}>
+              {t.ksSelectClear}
+            </button>
+            <button type="button" className="ksieg-convert" onClick={convertSelected}>
+              <Icon name="zap" size={16} />
+              <span>{t.ksConvertSelected.replace('{n}', String(selectedFiles))}</span>
+            </button>
           </div>
         )}
         </div>
         )}
         </section>
       </div>
+
+      {conversion && (
+        <ConversionModal
+          language={language}
+          title={conversion.title}
+          entries={conversion.entries}
+          onClose={(converted) => {
+            setConversion(null);
+            if (converted) {
+              setSelected(new Set());
+              void load(true);
+            }
+          }}
+        />
+      )}
+
+      {showScan && (
+        <StatementScanModal
+          language={language}
+          monthKey={monthKey}
+          monthLabel={monthLabel(monthKey, locale)}
+          locale={locale}
+          onClose={(changed) => {
+            setShowScan(false);
+            if (changed) void loadPliki();
+          }}
+        />
+      )}
 
       {showOrder && (
         <PriorityOrderModal
@@ -1017,60 +1302,65 @@ const Tile: React.FC<TileProps> = ({ icon, value, label, hint, tone, active, onC
   </button>
 );
 
+/** Each filter tile's icon, tone and words — everything but its count. */
+function bookingTileLooks(
+  t: (typeof translations)[Language],
+): Record<BookingFilter, Pick<TileProps, 'icon' | 'tone' | 'label' | 'hint'>> {
+  return {
+    all: { icon: 'map-pin', tone: 'neutral', label: t.ksTileAll, hint: t.ksTileAllHint },
+    unbooked: { icon: 'file-text', tone: 'accent', label: t.ksTileUnbooked, hint: t.ksTileUnbookedHint },
+    // The files "Znajdź pliki księgowe" pinned — same unit, communities.
+    ready: { icon: 'file-check', tone: 'accent', label: t.ksTileReady, hint: t.ksTileReadyHint },
+    waiting: { icon: 'clipboard', tone: 'warning', label: t.ksTileWaiting, hint: t.ksTileWaitingHint },
+    dom: { icon: 'check-circle', tone: 'success', label: t.ksTileDom, hint: t.ksTileDomHint },
+    nofiles: { icon: 'folder', tone: 'neutral', label: t.ksTileNoFiles, hint: t.ksTileNoFilesHint },
+    nopdf: { icon: 'file-text', tone: 'warning', label: t.ksTileNoPdf, hint: t.ksTileNoPdfHint },
+    errors: { icon: 'alert-triangle', tone: 'danger', label: t.ksTileErrors, hint: t.ksTileErrorsHint },
+  };
+}
+
+/** The tiles as the order dialog (Ustawienia → Kolejność filtrów) lists them. */
+export function bookingTileOrderItems(
+  language: Language,
+  order: BookingFilter[],
+): { id: string; label: string; icon: React.ComponentProps<typeof Icon>['name'] }[] {
+  const looks = bookingTileLooks(translations[language]);
+  return order.map((id) => ({ id, label: looks[id].label, icon: looks[id].icon }));
+}
+
+function tileCount(totals: BookingTotals, id: BookingFilter): number {
+  return {
+    all: totals.rows,
+    unbooked: totals.unbooked,
+    ready: totals.ready,
+    waiting: totals.waiting,
+    dom: totals.dom,
+    nofiles: totals.noFiles,
+    nopdf: totals.noPdf,
+    errors: totals.withErrors,
+  }[id];
+}
+
 const BookingTiles: React.FC<{
   totals: BookingTotals;
   language: Language;
   filter: BookingFilter;
   onFilter: (filter: BookingFilter) => void;
-}> = ({ totals, language, filter, onFilter }) => {
-  const t = translations[language];
+  /** Left to right, as the person arranged them. */
+  order: BookingFilter[];
+}> = ({ totals, language, filter, onFilter, order }) => {
+  const looks = bookingTileLooks(translations[language]);
   return (
     <div className="ksieg-tiles">
-      <Tile
-        icon="map-pin"
-        tone="neutral"
-        value={totals.rows}
-        label={t.ksTileAll}
-        hint={t.ksTileAllHint}
-        active={filter === 'all'}
-        onClick={() => onFilter('all')}
-      />
-      <Tile
-        icon="file-text"
-        tone="accent"
-        value={totals.unbooked}
-        label={t.ksTileUnbooked}
-        hint={t.ksTileUnbookedHint}
-        active={filter === 'unbooked'}
-        onClick={() => onFilter('unbooked')}
-      />
-      <Tile
-        icon="clipboard"
-        tone="warning"
-        value={totals.waiting}
-        label={t.ksTileWaiting}
-        hint={t.ksTileWaitingHint}
-        active={filter === 'waiting'}
-        onClick={() => onFilter('waiting')}
-      />
-      <Tile
-        icon="check-circle"
-        tone="success"
-        value={totals.dom}
-        label={t.ksTileDom}
-        hint={t.ksTileDomHint}
-        active={filter === 'dom'}
-        onClick={() => onFilter('dom')}
-      />
-      <Tile
-        icon="alert-triangle"
-        tone="danger"
-        value={totals.withErrors}
-        label={t.ksTileErrors}
-        hint={t.ksTileErrorsHint}
-        active={filter === 'errors'}
-        onClick={() => onFilter('errors')}
-      />
+      {order.map((id) => (
+        <Tile
+          key={id}
+          {...looks[id]}
+          value={tileCount(totals, id)}
+          active={filter === id}
+          onClick={() => onFilter(id)}
+        />
+      ))}
     </div>
   );
 };
@@ -1119,6 +1409,15 @@ const CommunityRow: React.FC<{
   onOpenFile: (filePath: string) => void;
   onShowInHistory?: (query: string) => void;
   notes: NoteActions;
+  plikActions: PlikActions;
+  /** Convert the community's waiting statements, in the dialog over the dashboard. */
+  onConvert: () => void;
+  /** Convert one of them. */
+  onConvertOne: (status: PlikStatus) => void;
+  /** Ticked for converting together with other communities. */
+  selected: boolean;
+  /** `range`: Shift was held — tick everything since the last tick. */
+  onToggleSelected: (range: boolean) => void;
 }> = ({
   group,
   language,
@@ -1131,6 +1430,11 @@ const CommunityRow: React.FC<{
   onOpenFile,
   onShowInHistory,
   notes,
+  plikActions,
+  onConvert,
+  onConvertOne,
+  selected,
+  onToggleSelected,
 }) => {
   const t = translations[language];
   // Which editor is open on this row. Local on purpose: it is a draft, and the
@@ -1144,7 +1448,9 @@ const CommunityRow: React.FC<{
   const showExtras = canNote && (group.priority !== null || openUwagi.length > 0 || composing);
   const bookings = group.rows.filter((r) => r.isBooking);
   const pendingIds = bookings.filter((r) => !r.bookedInDom).map((r) => r.entry.id);
-  const bookedIds = bookings.filter((r) => r.bookedInDom).map((r) => r.entry.id);
+  // "Cofnij wszystko" unticks real conversions only: a manual mark is taken back
+  // on its own row, where undoing it removes it.
+  const bookedIds = bookings.filter((r) => r.bookedInDom && !r.manual).map((r) => r.entry.id);
   const pct = group.generated === 0 ? 0 : Math.round((group.booked / group.generated) * 100);
   const busy = group.rows.some((r) => saving.has(r.entry.id));
 
@@ -1168,6 +1474,37 @@ const CommunityRow: React.FC<{
         group.priorityRank !== null ? ' ksieg-row--priority' : ''
       }`}
     >
+      {/* The tick for batch conversion sits left of the head — outside it, as
+          the head is a button and cannot hold a control of its own. Rows with
+          nothing to convert keep the slot empty, so the icons line up. The
+          whole head opens the row; there is no chevron to aim at. */}
+      <div className={`ksieg-row__headwrap${canNote ? '' : ' is-plain'}`}>
+      {canNote && (
+        <span className="ksieg-row__select">
+          {group.ready > 0 && (
+            <label
+              className={`ks-check${selected ? ' is-on' : ''}`}
+              title={t.ksSelectForConvert}
+              // Shift+click selects a range; without this it also selects text.
+              onMouseDown={(e) => {
+                if (e.shiftKey) e.preventDefault();
+              }}
+            >
+              <input
+                type="checkbox"
+                className="ks-check__input"
+                checked={selected}
+                // React fires a checkbox's change on its click, so the click's Shift is here.
+                onChange={(e) => onToggleSelected((e.nativeEvent as MouseEvent).shiftKey === true)}
+                aria-label={`${t.ksSelectForConvert}: ${group.nazwa}`}
+              />
+              <span className="ks-check__box" aria-hidden="true">
+                <Icon name="check" size={12} strokeWidth={3} />
+              </span>
+            </label>
+          )}
+        </span>
+      )}
       <button
         type="button"
         className="ksieg-row__head"
@@ -1175,9 +1512,6 @@ const CommunityRow: React.FC<{
         aria-expanded={open}
         title={open ? t.ksCollapseRow : t.ksExpandRow}
       >
-        <span className="ksieg-row__chev">
-          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={16} />
-        </span>
         <span className="ksieg-row__glyph">
           <Icon name={STATE_ICON[group.state]} size={17} />
         </span>
@@ -1198,6 +1532,19 @@ const CommunityRow: React.FC<{
                 {t.ksPrioBadge.replace('{n}', String(group.priorityRank))}
               </span>
             )}
+            {group.statements.length > 0 && (
+              <span
+                className={`ksieg-files-badge${group.noPdf > 0 ? ' is-missing-pdf' : ''}`}
+                title={t.ksFilesBadgeHint
+                  .replace('{n}', String(group.statements.length))
+                  .replace('{pdf}', String(group.statements.length - group.noPdf))
+                  .replace('{ready}', String(group.ready))}
+              >
+                <Icon name="folder" size={11} />
+                {t.ksFilesBadge.replace('{n}', String(group.statements.length))}
+                {group.noPdf > 0 && <b>· {t.ksFileNoPdf}</b>}
+              </span>
+            )}
             {group.openUwagi > 0 && (
               <span className="ksieg-uwaga-badge" title={t.ksUwagaTitle}>
                 <Icon name="message-square" size={11} />
@@ -1211,6 +1558,7 @@ const CommunityRow: React.FC<{
           <Metric value={group.generated} label={t.ksMetricFiles} />
           <Metric value={group.booked} label={t.ksMetricDom} tone="ok" />
           <Metric value={group.todo} label={t.ksMetricWaiting} tone="wait" />
+          {group.ready > 0 && <Metric value={group.ready} label={t.ksMetricReady} tone="wait" />}
           {group.errors > 0 && <Metric value={group.errors} label={t.ksMetricErrors} tone="err" />}
         </span>
         <span className="ksieg-row__gauge" aria-hidden="true">
@@ -1220,6 +1568,7 @@ const CommunityRow: React.FC<{
           <span className="ksieg-row__gauge-val">{group.generated === 0 ? '—' : `${pct}%`}</span>
         </span>
       </button>
+      </div>
 
       {/* The one action this view exists for — same place in every row. */}
       <div className="ksieg-row__cta">
@@ -1252,7 +1601,23 @@ const CommunityRow: React.FC<{
             </button>
           </span>
         )}
-        {pendingIds.length > 0 ? (
+        {/* One thing in the slot, in the order the work is done: convert what the
+            scan pinned first — its file then goes to DOM in the same sitting as
+            the rest — then post, then the "done" state. A row never shows a
+            convert button beside "Zaksięgowane w DOM": that row is not done. */}
+        {group.ready > 0 ? (
+          <button
+            type="button"
+            className="ksieg-convert"
+            onClick={onConvert}
+            title={t.ksConvertReadyHint}
+            aria-label={t.ksConvertReady.replace('{n}', String(group.ready))}
+          >
+            <Icon name="zap" size={16} />
+            <span>{t.ksConvertShort}</span>
+            <span className="ksieg-book__count">{group.ready}</span>
+          </button>
+        ) : pendingIds.length > 0 ? (
           <button
             type="button"
             className="ksieg-book"
@@ -1267,14 +1632,16 @@ const CommunityRow: React.FC<{
             <span className="ksieg-book-done__label">
               <Icon name="check-circle" size={15} /> {t.ksAllInDom}
             </span>
-            <button
-              type="button"
-              className="ksieg-book-undo"
-              disabled={busy}
-              onClick={() => void onSetBooked(bookedIds, false, true)}
-            >
-              {t.ksUnmarkAll}
-            </button>
+            {bookedIds.length > 0 && (
+              <button
+                type="button"
+                className="ksieg-book-undo"
+                disabled={busy}
+                onClick={() => void onSetBooked(bookedIds, false, true)}
+              >
+                {t.ksUnmarkAll}
+              </button>
+            )}
           </div>
         ) : (
           <span className="ksieg-book-none">{t.ksNoFileYet}</span>
@@ -1451,6 +1818,13 @@ const CommunityRow: React.FC<{
               ))}
             </details>
           )}
+          <PlikiSection
+            group={group}
+            language={language}
+            formatDateTime={formatDateTime}
+            actions={plikActions}
+            onConvertOne={onConvertOne}
+          />
           {group.rows.length === 0 ? (
             <div className="ksieg-files-empty">
               <Icon name="calendar" size={16} /> {t.ksNothingThisMonth}
@@ -1467,12 +1841,15 @@ const CommunityRow: React.FC<{
                 <FileRow
                   key={row.entry.id}
                   row={row}
+                  pdf={group.pdfByConversionId.get(row.entry.id) ?? null}
+                  onOpenPlik={plikActions.open}
                   language={language}
                   saving={saving.has(row.entry.id)}
                   formatDateTime={formatDateTime}
                   onSetBooked={onSetBooked}
                   onOpenFile={onOpenFile}
                   onShowInHistory={onShowInHistory}
+                  onUndoManual={(r) => void plikActions.undoManual(r)}
                 />
               ))}
             </div>
@@ -1483,17 +1860,208 @@ const CommunityRow: React.FC<{
   );
 };
 
+/* ---------------------- Files pinned by the folder scan --------------------- */
+
+/** What a row can do with a pinned file; the view owns the IPC. */
+interface PlikActions {
+  open: (plik: KsiegowaniePlik) => void;
+  unpin: (plik: KsiegowaniePlik) => Promise<void>;
+  /** Posted without converting: a DOM-ticked record with no accounting file. */
+  markBooked: (status: PlikStatus) => Promise<void>;
+  /** Take such a mark back — the statement is waiting again. */
+  undoManual: (row: BookingRow) => Promise<void>;
+}
+
+/**
+ * "Pliki z folderu" inside an open row: each pinned statement with its period,
+ * where it stands (waiting / converted / in DOM) and its PDF; then the
+ * unreadable ones, then PDFs that match no statement.
+ */
+const PlikiSection: React.FC<{
+  group: AddressBookingGroup;
+  language: Language;
+  formatDateTime: (iso: string) => string;
+  actions: PlikActions;
+  onConvertOne: (status: PlikStatus) => void;
+}> = ({ group, language, formatDateTime, actions, onConvertOne }) => {
+  const t = translations[language];
+  // PDFs already shown beside a statement or an accounting file are not "alone".
+  const pairedPdfIds = new Set([
+    ...group.statements.map((s) => s.pdf?.id).filter((id): id is number => id != null),
+    ...[...group.pdfByConversionId.values()].map((p) => p.id),
+  ]);
+  const lonePdfs = group.pdfs.filter((p) => !pairedPdfIds.has(p.id));
+  if (group.statements.length === 0 && group.fileErrors.length === 0 && lonePdfs.length === 0) return null;
+
+  const fileButton = (plik: KsiegowaniePlik, icon: React.ComponentProps<typeof Icon>['name'], extraClass = '') => (
+    <button
+      type="button"
+      className={`ksieg-node ${extraClass}`}
+      title={`${t.ksFileOpen}: ${plik.relPath}`}
+      onClick={() => actions.open(plik)}
+    >
+      <Icon name={icon} size={13} />
+      <span className="ksieg-node__label">{plik.fileName}</span>
+    </button>
+  );
+
+  // Said in words: an unlabelled × read as "close", not "unpin from the community".
+  const unpin = (plik: KsiegowaniePlik) => (
+    <button
+      type="button"
+      className="button button-small button-secondary"
+      onClick={() => void actions.unpin(plik)}
+      title={t.ksFileUnpinHint}
+    >
+      <Icon name="x" size={13} /> {t.ksFileUnpin}
+    </button>
+  );
+
+  const statusChip = (s: PlikStatus) => {
+    if (!s.conversion) return <span className="ksieg-plik-chip ksieg-plik-chip--wait">{t.ksFileWaiting}</span>;
+    if (s.conversion.manual) {
+      return (
+        <span className="ksieg-plik-chip ksieg-plik-chip--dom" title={t.ksManualHint}>
+          {t.ksFileInDomManual}
+        </span>
+      );
+    }
+    if (s.conversion.bookedInDom) return <span className="ksieg-plik-chip ksieg-plik-chip--dom">{t.ksFileInDom}</span>;
+    return (
+      <span className="ksieg-plik-chip ksieg-plik-chip--ok">
+        {t.ksFileConverted.replace('{date}', formatDateTime(s.conversion.entry.convertedAt))}
+      </span>
+    );
+  };
+
+  return (
+    <div className="ksieg-pliki">
+      <div className="ksieg-pliki__head">
+        <Icon name="folder" size={14} /> {t.ksFilesHeading}
+      </div>
+      {group.statements.map((s) => (
+        <div key={s.plik.id} className="ksieg-plik">
+          <div className="ksieg-plik__main">
+            {/* The statement and its PDF side by side, read left to right. */}
+            <div className="ksieg-plik__files">
+              {fileButton(s.plik, 'file-text')}
+              <span className="ksieg-plik__plus" aria-hidden="true">+</span>
+              {s.pdf ? (
+                fileButton(s.pdf, 'paperclip', 'ksieg-node--pdf')
+              ) : (
+                <span className="ksieg-plik-chip ksieg-plik-chip--warn">{t.ksFileNoPdf}</span>
+              )}
+              {/* What the file is and where it stands, read with its name. */}
+              {statusChip(s)}
+            </div>
+            <span className="ksieg-plik__meta">
+              {s.plik.accountTypeName && <span>{s.plik.accountTypeName}</span>}
+              <span>{formatPeriod(s.plik.periodFrom, s.plik.periodTo)}</span>
+              {s.plik.bankName && <span>{s.plik.bankName}</span>}
+            </span>
+          </div>
+          <div className="ksieg-plik__actions">
+            {!s.conversion && (
+              // The single-file twin of the row's "Konwertuj pliki", the way a
+              // file has its own "Zaksięguj w DOM".
+              <button
+                type="button"
+                className="ksieg-convert ksieg-convert--sm"
+                onClick={() => onConvertOne(s)}
+                title={t.ksFileConvertHint}
+              >
+                <Icon name="zap" size={13} />
+                <span>{t.ksFileConvert}</span>
+              </button>
+            )}
+            {/* The rare ones behind "⋯": posting without converting (the
+                fallback), taking that back, unpinning. */}
+            <OverflowMenu
+              label={t.convMoreActions}
+              items={[
+                ...(!s.conversion
+                  ? [
+                      {
+                        icon: 'check-circle' as const,
+                        label: t.ksFileMarkBooked,
+                        title: t.ksFileMarkBookedHint,
+                        onClick: () => void actions.markBooked(s),
+                      },
+                    ]
+                  : []),
+                ...(s.conversion?.manual
+                  ? [
+                      {
+                        icon: 'undo' as const,
+                        label: t.ksManualUndo,
+                        onClick: () => void actions.undoManual(s.conversion!),
+                      },
+                    ]
+                  : []),
+                {
+                  icon: 'x' as const,
+                  label: t.ksFileUnpin,
+                  title: t.ksFileUnpinHint,
+                  onClick: () => void actions.unpin(s.plik),
+                  danger: true,
+                },
+              ]}
+            />
+          </div>
+        </div>
+      ))}
+      {group.fileErrors.map((plik) => (
+        <div key={plik.id} className="ksieg-plik ksieg-plik--error">
+          <div className="ksieg-plik__main">
+            <div className="ksieg-plik__files">
+              {fileButton(plik, 'alert-triangle')}
+              <span className="ksieg-plik-chip ksieg-plik-chip--err">{t.ksFileUnreadable}</span>
+            </div>
+            <span className="ksieg-plik__meta">
+              {plik.accountTypeName && <span>{plik.accountTypeName}</span>}
+              <span className="ksieg-plik__error">{plik.errorMessage}</span>
+            </span>
+          </div>
+          <div className="ksieg-plik__actions">{unpin(plik)}</div>
+        </div>
+      ))}
+      {lonePdfs.map((plik) => (
+        <div key={plik.id} className="ksieg-plik">
+          <div className="ksieg-plik__main">
+            <div className="ksieg-plik__files">
+              {fileButton(plik, 'paperclip', 'ksieg-node--pdf')}
+              <span className="ksieg-plik-chip ksieg-plik-chip--warn" title={t.ksFilePdfAloneHint}>
+                {t.ksFilePdfAlone}
+              </span>
+            </div>
+            <span className="ksieg-plik__meta">
+              {plik.accountTypeName && <span>{plik.accountTypeName}</span>}
+              <span>{formatPeriod(plik.periodFrom, plik.periodTo)}</span>
+            </span>
+          </div>
+          <div className="ksieg-plik__actions">{unpin(plik)}</div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 /* ------------------------- One booking (one file) ------------------------- */
 
 const FileRow: React.FC<{
   row: BookingRow;
+  /** The statement's PDF found by the folder scan, when there is one. */
+  pdf: KsiegowaniePlik | null;
+  onOpenPlik: (plik: KsiegowaniePlik) => void;
   language: Language;
   saving: boolean;
   formatDateTime: (iso: string) => string;
   onSetBooked: (ids: number[], booked: boolean, announce: boolean) => Promise<void>;
   onOpenFile: (filePath: string) => void;
   onShowInHistory?: (query: string) => void;
-}> = ({ row, language, saving, formatDateTime, onSetBooked, onOpenFile, onShowInHistory }) => {
+  /** Take back a "posted without converting" mark. */
+  onUndoManual: (row: BookingRow) => void;
+}> = ({ row, pdf, onOpenPlik, language, saving, formatDateTime, onSetBooked, onOpenFile, onShowInHistory, onUndoManual }) => {
   const t = translations[language];
   const { entry } = row;
   const accountingPath = entry.outputPath ? resolveOutputFilePath(entry.outputPath, 'accounting') : '';
@@ -1528,7 +2096,13 @@ const FileRow: React.FC<{
             <span className="ksieg-node__label">{entry.fileName}</span>
           </button>
           <Icon name="arrow-right" size={14} className="ksieg-flow__arrow" />
-          {row.isBooking ? (
+          {row.manual ? (
+            // No accounting file: it was posted without one.
+            <span className="ksieg-node ksieg-node--manual" title={t.ksManualHint}>
+              <Icon name="check-circle" size={13} />
+              <span className="ksieg-node__label">{t.ksManualNode}</span>
+            </span>
+          ) : row.isBooking ? (
             <button
               type="button"
               className="ksieg-node ksieg-node--out"
@@ -1544,6 +2118,17 @@ const FileRow: React.FC<{
               <span className="ksieg-node__label">{t.ksErrorRow}</span>
             </span>
           )}
+          {row.isBooking && pdf && (
+            <button
+              type="button"
+              className="ksieg-node ksieg-node--pdf"
+              title={`${t.ksFileOpen}: ${pdf.relPath}`}
+              onClick={() => onOpenPlik(pdf)}
+            >
+              <Icon name="paperclip" size={13} />
+              <span className="ksieg-node__label">{pdf.fileName}</span>
+            </button>
+          )}
         </div>
         <div className="ksieg-file__meta">
           {entry.bankName && <span>{entry.bankName}</span>}
@@ -1556,7 +2141,7 @@ const FileRow: React.FC<{
       </div>
 
       <div className="ksieg-file__actions">
-        {row.isBooking && (
+        {row.isBooking && !row.manual && (
           <button
             type="button"
             className="button button-small button-secondary"
@@ -1565,7 +2150,8 @@ const FileRow: React.FC<{
             <Icon name="eye" size={13} /> {t.openPreview}
           </button>
         )}
-        {onShowInHistory && (
+        {/* A manual mark is not a conversion, so the history has nothing on it. */}
+        {onShowInHistory && !row.manual && (
           <button
             type="button"
             className="button button-small button-ghost"
@@ -1583,6 +2169,15 @@ const FileRow: React.FC<{
       <div className="ksieg-file__book">
         {!row.isBooking ? (
           <span className="status-badge status-error">{t.error}</span>
+        ) : row.manual ? (
+          <div className="ksieg-book-done ksieg-book-done--sm">
+            <span className="ksieg-book-done__label">
+              <Icon name="check-circle" size={14} /> {t.ksInDom}
+            </span>
+            <button type="button" className="ksieg-book-undo" disabled={saving} onClick={() => onUndoManual(row)}>
+              {t.ksManualUndoShort}
+            </button>
+          </div>
         ) : row.bookedInDom ? (
           <div className="ksieg-book-done ksieg-book-done--sm">
             <span className="ksieg-book-done__label">

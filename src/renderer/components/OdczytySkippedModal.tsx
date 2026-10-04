@@ -1,7 +1,7 @@
 import React from 'react';
 import { translations, Language } from '../translations';
-import Icon from './Icon';
-import ModalDismiss from './Modal';
+import { FormSection } from './FormSection';
+import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
 import { OdczytySkippedRow } from '../../shared/types';
 
 /** Skipped rows of one source file. */
@@ -41,32 +41,18 @@ const OdczytySkippedModal: React.FC<Props> = ({ language, groups, onClose }) => 
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 900 }}>
+      <div className="modal modal--xl" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onClose} />
-        <div className="modal-header">
-          {t.odczytySkippedTitle} ({total})
-        </div>
-        <div className="modal-body">
-          <p style={{ marginTop: 0 }}>{t.odczytySkippedIntro}</p>
+        <ModalHeader icon="alert-triangle" title={`${t.odczytySkippedTitle} (${total})`} subtitle={t.odczytySkippedIntro} />
+        <div className="modal-body modal-body--sectioned">
           {groups.map((group) => (
-            <div key={group.fileName} style={{ marginBottom: 20 }}>
-              <div
-                style={{
-                  fontWeight: 600,
-                  marginBottom: 8,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-              >
-                <Icon name="file-text" size={14} /> {group.fileName}
-              </div>
-              <table>
+            <FormSection key={group.fileName} icon="file-text" title={group.fileName}>
+              <table className="form-table">
                 <thead>
                   <tr>
-                    <th style={{ width: 70 }}>{t.odczytySkippedRow}</th>
-                    <th style={{ width: 100 }}>{t.odczytySkippedSheet}</th>
-                    <th style={{ width: 130 }}>{t.odczytySkippedDevice}</th>
+                    <th>{t.odczytySkippedRow}</th>
+                    <th>{t.odczytySkippedSheet}</th>
+                    <th>{t.odczytySkippedDevice}</th>
                     <th>{t.odczytySkippedWhere}</th>
                     <th>{t.odczytySkippedReason}</th>
                   </tr>
@@ -74,14 +60,12 @@ const OdczytySkippedModal: React.FC<Props> = ({ language, groups, onClose }) => 
                 <tbody>
                   {group.rows.map((s, i) => (
                     <tr key={`${group.fileName}-${s.sheet}-${s.row}-${i}`}>
-                      <td style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
-                        {s.row}
-                      </td>
+                      <td className="form-table__label cell-num">{s.row}</td>
                       <td>{s.sheet}</td>
-                      <td style={{ wordBreak: 'break-all' }}>{s.deviceNumber || '—'}</td>
+                      <td className="cell-wrap">{s.deviceNumber || <span className="cell-empty">—</span>}</td>
                       <td>
                         <div>{s.wm || '—'}</div>
-                        <div style={{ fontSize: 12, opacity: 0.7 }}>
+                        <div className="form-table__sub">
                           {s.context
                             .filter((c) => c.value)
                             .map((c) => `${c.label}: ${c.value}`)
@@ -91,7 +75,7 @@ const OdczytySkippedModal: React.FC<Props> = ({ language, groups, onClose }) => 
                       <td>
                         <div>{reasonText(s)}</div>
                         {s.reason === 'no-value' && (
-                          <div style={{ fontSize: 12, opacity: 0.7, marginTop: 2 }}>
+                          <div className="form-table__sub">
                             {s.fallback
                               ? `${t.odczytyFallbackNote} ${s.fallback.column} = ${s.fallback.value}`
                               : t.odczytyFallbackNone}
@@ -102,14 +86,10 @@ const OdczytySkippedModal: React.FC<Props> = ({ language, groups, onClose }) => 
                   ))}
                 </tbody>
               </table>
-            </div>
+            </FormSection>
           ))}
         </div>
-        <div className="modal-footer">
-          <button className="button button-secondary" onClick={onClose}>
-            <Icon name="x" size={14} />{' '}{t.close}
-          </button>
-        </div>
+        <ModalFooter onCancel={onClose} cancelLabel={t.close} />
       </div>
     </div>
   );

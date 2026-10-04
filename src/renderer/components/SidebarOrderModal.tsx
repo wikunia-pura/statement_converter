@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { translations, Language } from '../translations';
 import Icon from './Icon';
-import ModalDismiss from './Modal';
+import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
 
 /** The id a separator has in a saved order. Views appear once; separators as often as wanted. */
 export const SIDEBAR_DIVIDER = 'divider';
@@ -32,7 +32,13 @@ const SidebarOrderModal: React.FC<{
   /** null = back to the default. */
   onSave: (order: string[] | null) => void;
   onClose: () => void;
-}> = ({ items, defaultOrder, language, saving, onSave, onClose }) => {
+  /** The same dialog for another list (the dashboard's tiles): its own heading. */
+  title?: string;
+  subtitle?: string;
+  icon?: React.ComponentProps<typeof Icon>['name'];
+  /** Separators belong to the menu only. */
+  allowDividers?: boolean;
+}> = ({ items, defaultOrder, language, saving, onSave, onClose, title, subtitle, icon = 'menu', allowDividers = true }) => {
   const t = translations[language];
   const dividerCount = useRef(0);
   const newDivider = (): Row => ({
@@ -79,13 +85,8 @@ const SidebarOrderModal: React.FC<{
     <div className="modal-overlay" onClick={saving ? undefined : onClose}>
       <div className="modal ks-prio-modal" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onClose} ariaLabel={t.close} />
-        <div className="modal-header">
-          <span className="ks-notice__title">
-            <Icon name="menu" size={20} /> {t.sidebarOrderTitle}
-          </span>
-        </div>
+        <ModalHeader icon={icon} title={title ?? t.sidebarOrderTitle} subtitle={subtitle ?? t.sidebarOrderHint} />
         <div className="modal-body">
-          <p className="ks-prio-modal__hint">{t.sidebarOrderHint}</p>
           <ol className="ks-prio-list">
             {order.map((item, index) => (
               <li
@@ -167,37 +168,38 @@ const SidebarOrderModal: React.FC<{
               </li>
             ))}
           </ol>
-          <button
-            type="button"
-            className="button button-secondary button-small"
-            style={{ marginTop: 'var(--s-3)' }}
-            disabled={saving}
-            onClick={() => setOrder((prev) => [...prev, newDivider()])}
-          >
-            <Icon name="plus" size={13} /> {t.sidebarOrderAddDivider}
-          </button>
+          {allowDividers && (
+          <div className="list-after">
+            <button
+              type="button"
+              className="button button-small button-subtle"
+              disabled={saving}
+              onClick={() => setOrder((prev) => [...prev, newDivider()])}
+            >
+              <Icon name="plus" size={13} /> {t.sidebarOrderAddDivider}
+            </button>
+          </div>
+          )}
         </div>
-        <div className="modal-footer">
-          <button
-            type="button"
-            className="button button-secondary"
-            onClick={resetToDefault}
-            disabled={saving || isDefault}
-          >
-            <Icon name="undo" size={14} /> {t.sidebarOrderReset}
-          </button>
-          <button type="button" className="button button-secondary" onClick={onClose} disabled={saving}>
-            {t.cancel}
-          </button>
-          <button
-            type="button"
-            className="button button-primary"
-            disabled={saving || !changed}
-            onClick={() => onSave(isDefault ? null : ids)}
-          >
-            {t.sidebarOrderSave}
-          </button>
-        </div>
+        <ModalFooter
+          note={
+            <button
+              type="button"
+              className="button button-small button-subtle"
+              onClick={resetToDefault}
+              disabled={saving || isDefault}
+            >
+              <Icon name="undo" size={13} /> {t.sidebarOrderReset}
+            </button>
+          }
+          onCancel={onClose}
+          cancelLabel={t.cancel}
+          onSubmit={() => onSave(isDefault ? null : ids)}
+          submitLabel={t.sidebarOrderSave}
+          submitDisabled={!changed}
+          submitTitle={t.noChangesToSave}
+          busy={saving}
+        />
       </div>
     </div>
   );

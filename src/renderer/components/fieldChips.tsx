@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import SearchableSelect, { SearchableOption } from './SearchableSelect';
 import {
   MailingFieldPart,
+  MailingFieldRef,
   escapeHtml,
   fieldPlaceholder,
   htmlToPlainText,
@@ -77,11 +78,47 @@ export interface FieldChipLabels {
   insertFieldNoMatch: string;
 }
 
+/**
+ * What a pill shows in VALUE MODE — the letter-like editor, where a placeholder
+ * reads as the text it will become rather than as the field's name.
+ *
+ * The resolver producing it belongs to the caller, which owns the render context
+ * (community, typed values, the meeting); this module only draws the result. That
+ * keeps the resolution itself in shared/mailing-template — the same code the send
+ * and the PDF run — instead of a second copy here.
+ */
+export interface ChipDisplay {
+  /** What the letter reads at this spot. May be empty when nothing resolves yet. */
+  text: string;
+  /**
+   * Set while the spot still needs a value: drawn after `text` as a dashed
+   * "fill me in" marker (typically the field's name), so a gap is never just an
+   * absence the eye skips over.
+   */
+  missing?: string;
+  /**
+   * Markup instead of text — the `{{Tabela pól}}` table. Must already be safe:
+   * it is produced by shared/mailing-template, which escapes every value.
+   */
+  html?: string;
+  /**
+   * `editable` — a click opens the value editor; `locked` — the context fills it
+   * (community, today's date, the meeting); `unknown` — names no defined field.
+   */
+  tone: 'editable' | 'locked' | 'unknown';
+  /** Tooltip saying what the pill is and why it can or cannot be changed. */
+  title: string;
+}
+
+export type ChipDisplayResolver = (ref: MailingFieldRef) => ChipDisplay;
+
 /** What `decorateChips` and friends need to build a pill. */
 interface ChipContext {
   labels: FieldChipLabels;
   /** Normalized names of the defined fields — anything else is flagged. */
   known: Set<string>;
+  /** Present ⇒ value mode: pills show resolved values instead of field names. */
+  display?: ChipDisplayResolver;
 }
 
 /**
@@ -123,6 +160,7 @@ function readPart(chip: Element): MailingFieldPart {
  * user-typed, and `textContent` cannot be broken by a `<` or a quote in one.
  */
 function buildChip(nazwa: string, part: MailingFieldPart, ctx: ChipContext): HTMLElement {
+  if (ctx.display) return buildValueChip(nazwa, part, ctx.display({ nazwa, part }));
   const builtin = isBuiltinField(nazwa);
   const known = builtin || ctx.known.has(normalizeFieldName(nazwa));
   const el = document.createElement('span');
@@ -147,6 +185,49 @@ function buildChip(nazwa: string, part: MailingFieldPart, ctx: ChipContext): HTM
     badge.textContent = partToken(part, ctx.labels);
     el.appendChild(badge);
   }
+  return el;
+}
+
+/**
+ * A value-mode pill: the same atom as a name pill — same attributes, so
+ * serialization, copy and the formatting guards treat it identically — but its
+ * caption is what the letter will say.
+ *
+ * Text goes in through `textContent`, never as markup: values are typed by users.
+ * The one markup case (`html`, the field table) is produced by the shared renderer
+ * with every value escaped.
+ */
+function buildValueChip(nazwa: string, part: MailingFieldPart, display: ChipDisplay): HTMLElement {
+  const el = document.createElement('span');
+  el.className = [
+    CHIP_CLASS,
+    `${CHIP_CLASS}--value`,
+    `${CHIP_CLASS}--${display.tone}`,
+    display.missing ? `${CHIP_CLASS}--missing` : '',
+    display.html ? `${CHIP_CLASS}--block` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  el.setAttribute(FIELD_ATTR, nazwa);
+  el.setAttribute(PART_ATTR, part);
+  el.contentEditable = 'false';
+  el.title = display.title;
+  if (display.html) {
+    el.innerHTML = display.html;
+    return el;
+  }
+  if (display.text) el.appendChild(document.createTextNode(display.text));
+  if (display.missing) {
+    const marker = document.createElement('span');
+    marker.className = `${CHIP_CLASS}__missing`;
+    marker.textContent = display.missing;
+    // A space between the sentence and the gap, as the letter will have it once
+    // the value is in.
+    if (display.text) el.appendChild(document.createTextNode(' '));
+    el.appendChild(marker);
+  }
+  // Nothing at all would collapse the pill to an unclickable sliver.
+  if (!display.text && !display.missing) el.appendChild(document.createTextNode('…'));
   return el;
 }
 
@@ -277,6 +358,24 @@ export interface PlaceholderChipsOptions {
   fields: MailingFieldOption[];
   labels: FieldChipLabels;
   mode?: ChipEditorMode;
+  /**
+   * Value mode: pills show what each placeholder resolves to. A new resolver
+   * (the context changed — a value typed, another community previewed) redraws
+   * the pills in place without touching the text around them or the caret.
+   */
+  display?: ChipDisplayResolver;
+  /**
+   * Replaces click-to-cycle: called with the clicked pill, e.g. to open a value
+   * editor anchored to it. The stored part is never changed by a click then.
+   */
+  onChipActivate?: (ref: MailingFieldRef, chip: HTMLElement) => void;
+  /**
+   * Publish only real changes. Without it a blur re-publishes the content as is,
+   * and a parent tracking "edited since loaded" would count merely clicking into
+   * the text as an edit — which in a letter whose pills are clicked to fill in
+   * values is every single visit.
+   */
+  skipUnchanged?: boolean;
 }
 
 export interface PlaceholderChips {
@@ -320,8 +419,20 @@ export function usePlaceholderChips({
   fields,
   labels,
   mode = 'html',
+  display,
+  onChipActivate,
+  skipUnchanged = false,
 }: PlaceholderChipsOptions): PlaceholderChips {
   const elementRef = useRef<HTMLDivElement>(null);
+  /**
+   * The content as last published or loaded, in serialized form — what
+   * `skipUnchanged` compares against. The serialized form, not the prop: the
+   * browser normalizes markup on the way in (`<br/>` ⇒ `<br>`, attribute quoting),
+   * so a template that was never touched would otherwise "change" on first blur.
+   */
+  const publishedRef = useRef<string | null>(null);
+  const onChipActivateRef = useRef(onChipActivate);
+  onChipActivateRef.current = onChipActivate;
   /**
    * Last caret position seen inside the editor. Picking a field goes through a
    * dropdown with a search box, which takes the document selection out of the
@@ -346,20 +457,30 @@ export function usePlaceholderChips({
 
   // Read through a ref inside DOM helpers: the pills must follow the current
   // labels and dictionary without those becoming reasons to rewrite the content.
-  const ctxRef = useRef<ChipContext>({ known, labels });
-  ctxRef.current = { known, labels };
+  const ctxRef = useRef<ChipContext>({ known, labels, display });
+  ctxRef.current = { known, labels, display };
+
+  /** The editor's content in its stored form — HTML, or the subject's plain text. */
+  const readValue = useCallback(
+    (el: HTMLElement) => {
+      const html = serializeChips(el);
+      // In text mode the markup is an implementation detail of editing, not part
+      // of the value: a subject is a mail header, and a stray <div> in it would be
+      // sent literally.
+      return mode === 'text' ? htmlToPlainText(html) : html;
+    },
+    [mode],
+  );
 
   const emit = useCallback(() => {
     const el = elementRef.current;
     if (!el) return;
-    const html = serializeChips(el);
-    // In text mode the markup is an implementation detail of editing, not part of
-    // the value: a subject is a mail header, and a stray <div> in it would be sent
-    // literally.
-    const next = mode === 'text' ? htmlToPlainText(html) : html;
+    const next = readValue(el);
+    if (skipUnchanged && next === publishedRef.current) return;
+    publishedRef.current = next;
     lastValueRef.current = next;
     onChange(next);
-  }, [onChange, mode]);
+  }, [onChange, readValue, skipUnchanged]);
 
   useEffect(() => {
     const el = elementRef.current;
@@ -368,14 +489,18 @@ export function usePlaceholderChips({
     el.innerHTML = mode === 'text' ? escapeHtml(value || '') : value || '';
     decorateChips(el, ctxRef.current);
     lastValueRef.current = value;
-  }, [value, mode]);
+    publishedRef.current = readValue(el);
+  }, [value, mode, readValue]);
 
   // The dictionary usually loads before the text, but not always — a template
   // opened while `pola` is still in flight would show every pill as unknown.
+  // In value mode the same redraw follows the context: a value typed, another
+  // community previewed. Pills are swapped one-for-one, so the text around them
+  // and the caret stay where they are, and nothing is published.
   useEffect(() => {
     const el = elementRef.current;
     if (el) refreshChips(el, ctxRef.current);
-  }, [known]);
+  }, [known, display]);
 
   useEffect(() => {
     const onSelectionChange = () => {
@@ -581,6 +706,12 @@ export function usePlaceholderChips({
       const chip = (event.target as HTMLElement | null)?.closest?.(`.${CHIP_CLASS}`);
       if (!el || !chip || !el.contains(chip)) return;
       const nazwa = chip.getAttribute(FIELD_ATTR);
+      // Value mode: a click is about the value, not about which half is placed.
+      const activate = onChipActivateRef.current;
+      if (activate) {
+        if (nazwa) activate({ nazwa, part: readPart(chip) }, chip as HTMLElement);
+        return;
+      }
       // Built-ins have no halves to switch between.
       if (!nazwa || isBuiltinField(nazwa)) return;
       const next = PART_CYCLE[(PART_CYCLE.indexOf(readPart(chip)) + 1) % PART_CYCLE.length];

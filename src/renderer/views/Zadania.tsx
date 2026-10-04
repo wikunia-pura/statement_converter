@@ -32,7 +32,8 @@ import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
 import Icon from '../components/Icon';
-import ModalDismiss from '../components/Modal';
+import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
+import { FormField, FormRow, FormSection, RequiredNote } from '../components/FormSection';
 import Select from '../components/Select';
 import SearchableSelect from '../components/SearchableSelect';
 import ZadanieKomentarze, { CommentText } from '../components/ZadanieKomentarze';
@@ -63,12 +64,6 @@ interface Props {
  */
 type Filter =
   { kind: 'all' } | { kind: 'mine' } | { kind: 'none' } | { kind: 'person'; email: string };
-
-/**
- * How long a single click on a card's title waits before opening the preview —
- * long enough for the second click of a double-click (rename) to arrive first.
- */
-const TITLE_PREVIEW_DELAY_MS = 450;
 
 /** Mailboxes compare case-insensitively; an empty one matches nothing. */
 function sameMailbox(a: string | null | undefined, b: string | null | undefined): boolean {
@@ -294,219 +289,233 @@ export const ZadanieFormModal: React.FC<FormModalProps> = ({
     });
   };
 
+  const errorText = localError || error;
+
   return (
     <div className="modal-overlay" onClick={handleCancel}>
-      <div
-        className="modal"
-        onClick={(e) => e.stopPropagation()}
-        style={{ width: 'min(780px, 94vw)', maxWidth: 780 }}
-      >
+      <div className="modal modal--lg" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={handleCancel} ariaLabel={t.close} />
-        <div className="modal-header">{editing ? t.zadEdit : t.zadAdd}</div>
-        <div className="modal-body">
-          <div className="form-group">
-            <label>
-              {t.zadFieldTitle} <span style={{ color: 'red' }}>*</span>
-            </label>
-            <input
-              type="text"
-              value={tytul}
-              onChange={(e) => {
-                setTytul(e.target.value);
-                if (localError) setLocalError(null);
-              }}
-              placeholder={t.zadFieldTitlePlaceholder}
-              autoFocus
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleSubmit();
-                }
-              }}
-            />
-          </div>
-
-          <div className="form-group">
-            <label>{t.zadFieldDescription}</label>
-            <textarea
-              value={opis}
-              rows={5}
-              onChange={(e) => setOpis(e.target.value)}
-              placeholder={t.zadFieldDescriptionPlaceholder}
-              style={{ resize: 'vertical' }}
-            />
-          </div>
-
-          <div className="zad-form-row">
-            <div className="form-group">
-              <label>{t.zadFieldAssignee}</label>
-              <div className="zad-assignee-input">
-                <div className="zad-assignee-input__select">
-                  <SearchableSelect
-                    value={email}
-                    options={assigneeOptions}
-                    onChange={setEmail}
-                    placeholder={t.zadUnassigned}
-                    searchPlaceholder={t.zadSearchPerson}
-                    emptyText={t.zadNoPersonFound}
-                    ariaLabel={t.zadFieldAssignee}
-                    // On top of the modal, not inside its scrolling body: the list is not
-                    // clipped, and the modal stays only as tall as its content.
-                    overlay
-                  />
-                </div>
-                {!sameMailbox(email, userEmail) && (
-                  <button
-                    type="button"
-                    className="button button-secondary button-small"
-                    title={t.zadAssignToMe}
-                    aria-label={t.zadAssignToMe}
-                    onClick={() => setEmail(userEmail)}
-                  >
-                    <Icon name="user-plus" size={13} /> {t.zadAssignToMeShort}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label>{t.zadFieldDue}</label>
-              <div className="zad-due-input">
-                <input type="date" value={termin} onChange={(e) => setTermin(e.target.value)} />
-                {termin !== dayKey() && (
-                  <button
-                    type="button"
-                    className="button button-secondary button-small"
-                    title={t.zadDueSetToday}
-                    aria-label={t.zadDueSetToday}
-                    onClick={() => setTermin(dayKey())}
-                  >
-                    <Icon name="clock" size={13} /> {t.zadDueTodayShort}
-                  </button>
-                )}
-                {termin && (
-                  <button
-                    type="button"
-                    className="zad-icon-btn"
-                    title={t.zadDueClear}
-                    aria-label={t.zadDueClear}
-                    onClick={() => setTermin('')}
-                  >
-                    <Icon name="x" size={14} />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label>{t.zadFieldStatus}</label>
-              <Select
-                value={status}
-                options={ZADANIE_STATUSES.map((s) => ({ value: s, label: statusLabels[s] }))}
-                onChange={(v) => setStatus(v as ZadanieStatus)}
+        <ModalHeader
+          icon="clipboard"
+          title={editing ? t.zadEdit : t.zadAdd}
+          subtitle={editing ? editing.tytul : t.zadFormSubtitleAdd}
+        />
+        <div className="modal-body modal-body--sectioned">
+          <FormSection icon="clipboard" title={t.zadSectionTask} description={t.zadSectionTaskDesc}>
+            <FormField label={t.zadFieldTitle} htmlFor="zad-title" required>
+              <input
+                id="zad-title"
+                type="text"
+                value={tytul}
+                onChange={(e) => {
+                  setTytul(e.target.value);
+                  if (localError) setLocalError(null);
+                }}
+                placeholder={t.zadFieldTitlePlaceholder}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSubmit();
+                  }
+                }}
               />
-            </div>
-          </div>
+            </FormField>
+            <FormField label={t.zadFieldDescription} htmlFor="zad-desc">
+              <textarea
+                id="zad-desc"
+                value={opis}
+                rows={5}
+                onChange={(e) => setOpis(e.target.value)}
+                placeholder={t.zadFieldDescriptionPlaceholder}
+              />
+            </FormField>
+          </FormSection>
 
-          <div className="form-group">
-            <label>{t.zadFieldPriority}</label>
-            <div className="zad-seg" role="radiogroup" aria-label={t.zadFieldPriority}>
-              {ZADANIE_PRIORYTETY.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  role="radio"
-                  aria-checked={priorytet === p}
-                  className={`zad-seg__btn${priorytet === p ? ' is-active' : ''}`}
-                  onClick={() => setPriorytet(p)}
-                >
-                  <span className={`zad-prio-dot zad-prio-dot--${p}`} aria-hidden="true" />
-                  {priorityLabels(t)[p]}
-                </button>
-              ))}
-            </div>
-          </div>
+          <FormSection icon="users" title={t.zadSectionWho} description={t.zadSectionWhoDesc}>
+            <FormRow>
+              <FormField
+                label={t.zadFieldAssignee}
+                action={
+                  !sameMailbox(email, userEmail) ? (
+                    <button
+                      type="button"
+                      className="button button-small button-subtle"
+                      title={t.zadAssignToMe}
+                      onClick={() => setEmail(userEmail)}
+                    >
+                      <Icon name="user-plus" size={13} /> {t.zadAssignToMeShort}
+                    </button>
+                  ) : undefined
+                }
+              >
+                <SearchableSelect
+                  value={email}
+                  options={assigneeOptions}
+                  onChange={setEmail}
+                  placeholder={t.zadUnassigned}
+                  searchPlaceholder={t.zadSearchPerson}
+                  emptyText={t.zadNoPersonFound}
+                  ariaLabel={t.zadFieldAssignee}
+                  // On top of the modal, not inside its scrolling body: the list is not
+                  // clipped, and the modal stays only as tall as its content.
+                  overlay
+                />
+              </FormField>
+              <FormField
+                label={t.zadFieldDue}
+                htmlFor="zad-due"
+                action={
+                  <>
+                    {termin !== dayKey() && (
+                      <button
+                        type="button"
+                        className="button button-small button-subtle"
+                        title={t.zadDueSetToday}
+                        onClick={() => setTermin(dayKey())}
+                      >
+                        <Icon name="clock" size={13} /> {t.zadDueTodayShort}
+                      </button>
+                    )}
+                    {termin && (
+                      <button
+                        type="button"
+                        className="button button-small button-subtle"
+                        title={t.zadDueClear}
+                        onClick={() => setTermin('')}
+                      >
+                        <Icon name="x" size={13} /> {t.zadDueClear}
+                      </button>
+                    )}
+                  </>
+                }
+              >
+                <input id="zad-due" type="date" value={termin} onChange={(e) => setTermin(e.target.value)} />
+              </FormField>
+            </FormRow>
+            <FormRow>
+              <FormField label={t.zadFieldStatus}>
+                <Select
+                  overlay
+                  value={status}
+                  options={ZADANIE_STATUSES.map((s) => ({ value: s, label: statusLabels[s] }))}
+                  onChange={(v) => setStatus(v as ZadanieStatus)}
+                  ariaLabel={t.zadFieldStatus}
+                />
+              </FormField>
+              <FormField label={t.zadFieldPriority}>
+                <div className="zad-seg" role="radiogroup" aria-label={t.zadFieldPriority}>
+                  {ZADANIE_PRIORYTETY.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      role="radio"
+                      aria-checked={priorytet === p}
+                      className={`zad-seg__btn${priorytet === p ? ' is-active' : ''}`}
+                      onClick={() => setPriorytet(p)}
+                    >
+                      <span className={`zad-prio-dot zad-prio-dot--${p}`} aria-hidden="true" />
+                      {priorityLabels(t)[p]}
+                    </button>
+                  ))}
+                </div>
+              </FormField>
+            </FormRow>
+          </FormSection>
 
-          <div className="form-group">
-            <label>{t.zadFieldAttachments}</label>
-            {zalaczniki.length > 0 && (
-              <ul className="zad-files">
+          <FormSection icon="paperclip" title={t.zadSectionFiles} description={t.zadSectionFilesDesc}>
+            <FormField label={t.zadFieldAttachments} hint={t.zadAttachHint}>
+              {/* The add button lives inside the list's frame, as in every file list. */}
+              <div className={`file-list${zalaczniki.length === 0 ? ' is-empty' : ''}`}>
                 {zalaczniki.map((z) => (
-                  <li key={z.id} className="zad-file">
+                  <div key={z.id} className="file-list__row">
                     <Icon name="paperclip" size={14} />
                     <button
                       type="button"
-                      className={`zad-file__name${busyId === z.id ? ' is-busy' : ''}`}
+                      className={`file-list__name file-list__name--link${busyId === z.id ? ' is-busy' : ''}`}
                       title={t.zadAttachDownload}
                       disabled={busyId !== null}
                       onClick={() => void handleDownload(z)}
                     >
                       {z.nazwa}
                     </button>
-                    <span className="zad-file__size">{formatBytes(z.rozmiar)}</span>
+                    <span className="file-list__size">{formatBytes(z.rozmiar)}</span>
                     <button
                       type="button"
-                      className="zad-icon-btn zad-icon-btn--danger"
+                      className="button button-ghost button-icon icon-danger"
                       title={t.zadAttachRemove}
-                      aria-label={t.zadAttachRemove}
+                      aria-label={`${t.zadAttachRemove}: ${z.nazwa}`}
                       onClick={() => handleRemoveAttachment(z)}
                       disabled={isSaving}
                     >
                       <Icon name="trash" size={14} />
                     </button>
-                  </li>
+                  </div>
                 ))}
-              </ul>
-            )}
-            <div className="zad-upload">
-              <button
-                type="button"
-                className="button button-secondary button-small"
-                onClick={() => void handleAttach()}
-                disabled={uploading || isSaving}
-              >
-                <Icon name="paperclip" size={13} /> {t.zadAttachAdd}
-              </button>
-              {uploading ? (
-                <span className="zad-upload__busy" role="status" aria-live="polite">
-                  <span className="loader-spinner zad-upload__spinner" />
-                  {t.zadAttachUploading}
-                </span>
-              ) : (
-                <span className="zad-upload__hint">{t.zadAttachHint}</span>
-              )}
-            </div>
-          </div>
-
-          {(localError || error) && (
-            <div style={{ fontSize: '12px', color: 'var(--danger)' }}>{localError || error}</div>
-          )}
+                <div className="file-list__footer">
+                  {uploading ? (
+                    <span className="file-list__empty" role="status" aria-live="polite">
+                      <Icon name="loader" size={14} className="icon-spin" />
+                      {t.zadAttachUploading}
+                    </span>
+                  ) : (
+                    zalaczniki.length === 0 && (
+                      <span className="file-list__empty">
+                        <Icon name="paperclip" size={14} />
+                        {t.zadNoFiles}
+                      </span>
+                    )
+                  )}
+                  <button
+                    type="button"
+                    className="button button-small button-subtle"
+                    onClick={() => void handleAttach()}
+                    disabled={uploading || isSaving}
+                  >
+                    <Icon name="plus" size={13} /> {t.zadAttachAdd}
+                  </button>
+                </div>
+              </div>
+            </FormField>
+          </FormSection>
 
           {/* Comments save on their own, not with the form, so they need a card that exists. */}
-          {editing ? (
-            <ZadanieKomentarze
-              language={language}
-              zadanieId={editing.id}
-              users={users}
-              userEmail={userEmail}
-              onChange={onCommentsChange}
-            />
-          ) : (
-            <div className="zad-comments__later">{t.zadCommentsAfterSave}</div>
+          <FormSection icon="message-square" title={t.zadSectionComments} description={t.zadSectionCommentsDesc}>
+            {editing ? (
+              <ZadanieKomentarze
+                language={language}
+                zadanieId={editing.id}
+                users={users}
+                userEmail={userEmail}
+                bare
+                onChange={onCommentsChange}
+              />
+            ) : (
+              <div className="form-empty">
+                <Icon name="message-square" size={16} />
+                {t.zadCommentsAfterSave}
+              </div>
+            )}
+          </FormSection>
+
+          {errorText && (
+            <div className="callout callout--danger" role="alert">
+              <Icon name="alert-triangle" size={16} />
+              <div className="callout__body">{errorText}</div>
+            </div>
           )}
         </div>
-        <div className="modal-footer">
-          <button className="button button-secondary" onClick={handleCancel} disabled={isSaving}>
-            <Icon name="x" size={14} /> {t.cancel}
-          </button>
-          <button
-            className="button button-success"
-            onClick={handleSubmit}
-            disabled={isSaving || uploading || !tytul.trim()}
-          >
-            <Icon name="save" size={14} /> {editing ? t.update : t.add}
-          </button>
-        </div>
+        <ModalFooter
+          note={<RequiredNote label={t.formRequiredNote} />}
+          onCancel={handleCancel}
+          cancelLabel={t.cancel}
+          onSubmit={handleSubmit}
+          submitLabel={editing ? t.save : t.zadAdd}
+          submitIcon={editing ? 'save' : 'plus'}
+          submitDisabled={uploading || !tytul.trim()}
+          submitTitle={t.zadTitleRequired}
+          busy={isSaving}
+        />
       </div>
     </div>
   );
@@ -579,15 +588,10 @@ const ZadanieCommentsModal: React.FC<CommentsModalProps> = ({
   const t = translations[language];
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div
-        className="modal"
-        onClick={(e) => e.stopPropagation()}
-        style={{ width: 'min(560px, 94vw)', maxWidth: 560 }}
-      >
+      <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onClose} ariaLabel={t.close} />
-        <div className="modal-header">{t.zadComments}</div>
+        <ModalHeader icon="message-square" title={t.zadComments} subtitle={zadanie.tytul} />
         <div className="modal-body">
-          <div className="zad-comments-modal__task">{zadanie.tytul}</div>
           <ZadanieKomentarze
             language={language}
             zadanieId={zadanie.id}
@@ -598,11 +602,7 @@ const ZadanieCommentsModal: React.FC<CommentsModalProps> = ({
             onChange={onCommentsChange}
           />
         </div>
-        <div className="modal-footer">
-          <button className="button button-secondary" onClick={onClose}>
-            <Icon name="x" size={14} /> {t.close}
-          </button>
-        </div>
+        <ModalFooter onCancel={onClose} cancelLabel={t.close} />
       </div>
     </div>
   );
@@ -656,94 +656,89 @@ export const ZadaniePreviewModal: React.FC<PreviewModalProps> = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div
-        className="modal"
-        onClick={(e) => e.stopPropagation()}
-        style={{ width: 'min(660px, 94vw)', maxWidth: 660 }}
-      >
+      <div className="modal modal--lg" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onClose} ariaLabel={t.close} />
-        <div className="modal-header">{t.zadPreviewTitle}</div>
-        <div className="modal-body">
-          <div className="zad-preview__title">{z.tytul}</div>
-          <div className="zad-preview__meta">
-            <span className={`zad-prio zad-prio--${z.priorytet}`}>
-              <PriorityMark priorytet={z.priorytet} />
-              {priorityLabels(t)[z.priorytet]}
-            </span>
-            <span className="zad-preview__chip">{statusLabels[z.status]}</span>
-            {z.zarchiwizowane && (
-              <span className="zad-preview__chip">
-                <Icon name="archive" size={12} /> {t.zadArchivedBadge}
+        <ModalHeader
+          icon="clipboard"
+          title={z.tytul}
+          subtitle={
+            <span className="modal-header__meta">
+              <span className={`zad-prio zad-prio--${z.priorytet}`}>
+                <PriorityMark priorytet={z.priorytet} />
+                {priorityLabels(t)[z.priorytet]}
               </span>
-            )}
-          </div>
-          <dl className="zad-preview__facts">
-            <dt>{t.zadFieldAssignee}</dt>
-            <dd>{assigneeText}</dd>
-            <dt>{t.zadFieldDue}</dt>
-            <dd>{z.termin ? formatDayKey(z.termin, locale) : '—'}</dd>
-            {spotkanie && (
-              <>
-                <dt>{t.zadFieldMeeting}</dt>
-                <dd>
-                  <SpotkanieLink
-                    spotkanie={spotkanie}
-                    t={t}
-                    locale={locale}
-                    onOpen={onOpenSpotkanie}
-                  />
-                </dd>
-              </>
-            )}
-          </dl>
-          <div className="form-group">
-            <label>{t.zadFieldDescription}</label>
-            <div className="zad-preview__desc">{z.opis || t.zadPreviewNoDescription}</div>
-          </div>
+              <span className="form-section__badge is-neutral">{statusLabels[z.status]}</span>
+              {z.zarchiwizowane && (
+                <span className="form-section__badge is-neutral">
+                  <Icon name="archive" size={11} /> {t.zadArchivedBadge}
+                </span>
+              )}
+            </span>
+          }
+        />
+        <div className="modal-body modal-body--sectioned">
+          <FormSection icon="clipboard" title={t.zadSectionDetails}>
+            <dl className="facts">
+              <dt>{t.zadFieldAssignee}</dt>
+              <dd>{assigneeText}</dd>
+              <dt>{t.zadFieldDue}</dt>
+              <dd>{z.termin ? formatDayKey(z.termin, locale) : '—'}</dd>
+              {spotkanie && (
+                <>
+                  <dt>{t.zadFieldMeeting}</dt>
+                  <dd>
+                    <SpotkanieLink spotkanie={spotkanie} t={t} locale={locale} onOpen={onOpenSpotkanie} />
+                  </dd>
+                </>
+              )}
+              <dt>{t.zadFieldDescription}</dt>
+              <dd className="zad-preview__desc">{z.opis || t.zadPreviewNoDescription}</dd>
+            </dl>
+          </FormSection>
           {z.zalaczniki.length > 0 && (
-            <div className="form-group">
-              <label>{t.zadFieldAttachments}</label>
-              <ul className="zad-files">
+            <FormSection icon="paperclip" title={t.zadSectionFiles}>
+              <div className="file-list">
                 {z.zalaczniki.map((a) => (
-                  <li key={a.id} className="zad-file">
+                  <div key={a.id} className="file-list__row">
                     <Icon name="paperclip" size={14} />
                     <button
                       type="button"
-                      className={`zad-file__name${busyId === a.id ? ' is-busy' : ''}`}
+                      className={`file-list__name file-list__name--link${busyId === a.id ? ' is-busy' : ''}`}
                       title={t.zadAttachDownload}
                       disabled={busyId !== null}
                       onClick={() => void download(a)}
                     >
                       {a.nazwa}
                     </button>
-                    <span className="zad-file__size">{formatBytes(a.rozmiar)}</span>
-                  </li>
+                    <span className="file-list__size">{formatBytes(a.rozmiar)}</span>
+                  </div>
                 ))}
-              </ul>
-            </div>
+              </div>
+            </FormSection>
           )}
-          <ZadanieKomentarze
-            language={language}
-            zadanieId={z.id}
-            users={users}
-            userEmail={userEmail}
-            onChange={onCommentsChange}
-          />
+          <FormSection icon="message-square" title={t.zadSectionComments} description={t.zadSectionCommentsDesc}>
+            <ZadanieKomentarze
+              language={language}
+              zadanieId={z.id}
+              users={users}
+              userEmail={userEmail}
+              bare
+              onChange={onCommentsChange}
+            />
+          </FormSection>
         </div>
-        <div className="modal-footer">
-          <button className="button button-secondary" onClick={onClose}>
-            <Icon name="x" size={14} /> {t.close}
-          </button>
-          <button className="button button-primary" onClick={onEdit}>
-            <Icon name="edit" size={14} /> {t.edit}
-          </button>
-        </div>
+        <ModalFooter
+          onCancel={onClose}
+          cancelLabel={t.close}
+          onSubmit={onEdit}
+          submitLabel={t.edit}
+          submitIcon="edit"
+        />
       </div>
     </div>
   );
 };
 
-/** The mark in front of a priority's name: an arrow for high and low, a dot for normal. */
 const PriorityMark: React.FC<{ priorytet: ZadaniePriorytet }> = ({ priorytet }) =>
   priorytet === 'normal' ? (
     <span className="zad-prio-dot zad-prio-dot--normal" aria-hidden="true" />
@@ -967,8 +962,6 @@ const Zadania: React.FC<Props> = ({
   const [renaming, setRenaming] = useState<{ id: number; value: string } | null>(null);
   // Enter and the blur it causes both arrive: only the first one counts.
   const renameSettled = useRef(true);
-  // A click on a title waits a beat: a second click means "rename", not "read".
-  const previewTimer = useRef<number | undefined>(undefined);
   // A card opened to read (a clicked notification), apart from the form that edits.
   const [preview, setPreview] = useState<Zadanie | null>(null);
   // null = closed; otherwise the card being edited (null = add) and the column
@@ -1361,8 +1354,8 @@ const Zadania: React.FC<Props> = ({
     <div className="content-body">
       <div className="zad-head">
         <div>
-          <h2 style={{ margin: '0 0 6px' }}>{t.zadTitle}</h2>
-          <div style={{ fontSize: '13px', opacity: 0.75 }}>{t.zadHint}</div>
+          <h2 className="page-hero__title">{t.zadTitle}</h2>
+          <p className="page-hero__text">{t.zadHint}</p>
         </div>
         <button
           className="button button-primary"
@@ -1370,7 +1363,6 @@ const Zadania: React.FC<Props> = ({
             setError(null);
             setFormState({ editing: null, status: 'todo' });
           }}
-          style={{ whiteSpace: 'nowrap' }}
         >
           <Icon name="plus" size={14} /> {t.zadAdd}
         </button>
@@ -1606,20 +1598,10 @@ const Zadania: React.FC<Props> = ({
                         const target = e.target as HTMLElement;
                         if (!e.currentTarget.contains(target)) return;
                         if (target.closest('button, input, select, textarea, a, .zad-who-select')) return;
-                        window.clearTimeout(previewTimer.current);
+                        // The title is edited where it stands, on one click — the
+                        // rest of the card opens it to read.
                         if (target.closest('.zad-card__title--editable')) {
-                          // The second click of a double-click renames — read from
-                          // the click itself, not from `dblclick`, which arrives only
-                          // after the system's double-click interval, often later
-                          // than a short preview delay (so the preview won).
-                          if (e.detail >= 2) {
-                            startRename(z);
-                            return;
-                          }
-                          previewTimer.current = window.setTimeout(
-                            () => setPreview(z),
-                            TITLE_PREVIEW_DELAY_MS,
-                          );
+                          startRename(z);
                         } else {
                           setPreview(z);
                         }
@@ -1647,6 +1629,9 @@ const Zadania: React.FC<Props> = ({
                       }}
                     >
                       <div className="zad-card__head">
+                        {/* What the task is, read top-down: title, its meeting,
+                            its description — beside the corner, not under it. */}
+                        <div className="zad-card__main">
                         {renaming?.id === z.id ? (
                           <input
                             className="zad-card__title-input"
@@ -1673,11 +1658,20 @@ const Zadania: React.FC<Props> = ({
                           <div
                             className="zad-card__title zad-card__title--editable"
                             title={t.zadRenameTitle}
-                            onDoubleClick={() => window.clearTimeout(previewTimer.current)}
                           >
                             {z.tytul}
                           </div>
                         )}
+                        {z.spotkanieId !== null && (
+                          <SpotkanieLink
+                            spotkanie={spotkaniaById.get(z.spotkanieId)}
+                            t={t}
+                            locale={locale}
+                            onOpen={setMeetingPreview}
+                          />
+                        )}
+                        {z.opis && <div className="zad-card__desc">{z.opis}</div>}
+                        </div>
                         {/* Top right, where the eye goes to ask "when?". Clicking it
                             opens the date picker; on a card with no date there is
                             a faint "add" in the same spot, shown on hover. */}
@@ -1697,15 +1691,6 @@ const Zadania: React.FC<Props> = ({
                           />
                         </div>
                       </div>
-                      {z.spotkanieId !== null && (
-                        <SpotkanieLink
-                          spotkanie={spotkaniaById.get(z.spotkanieId)}
-                          t={t}
-                          locale={locale}
-                          onOpen={setMeetingPreview}
-                        />
-                      )}
-                      {z.opis && <div className="zad-card__desc">{z.opis}</div>}
                       {z.zalaczniki.length > 0 && (
                         <div className="zad-card__files">
                           {z.zalaczniki.slice(0, 3).map((a) => (

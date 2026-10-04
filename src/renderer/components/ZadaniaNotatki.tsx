@@ -171,13 +171,16 @@ const ZadaniaNotatki: React.FC<Props> = ({ language, users, userEmail }) => {
             <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={13} />
           )}
         </button>
+        {/* Rarely used, so a small "+" beside the heading, not a labelled button. */}
         {!adding && (
           <button
             type="button"
-            className="button button-secondary button-small"
+            className="zad-icon-btn zad-notes__add"
             onClick={() => setAdding(true)}
+            title={t.zadNoteAdd}
+            aria-label={t.zadNoteAdd}
           >
-            <Icon name="plus" size={13} /> {t.zadNoteAdd}
+            <Icon name="plus" size={14} />
           </button>
         )}
       </div>
@@ -202,7 +205,6 @@ const ZadaniaNotatki: React.FC<Props> = ({ language, users, userEmail }) => {
                 setDraft('');
               }
             }}
-            style={{ resize: 'vertical' }}
           />
           <div className="zad-notes__form-actions">
             <span className={`zad-upload__hint${tooLong ? ' zad-comments__hint--error' : ''}`}>
@@ -258,8 +260,7 @@ const ZadaniaNotatki: React.FC<Props> = ({ language, users, userEmail }) => {
                           setEditingId(null);
                         }
                       }}
-                      style={{ resize: 'vertical' }}
-                    />
+                              />
                     <div className="zad-notes__form-actions">
                       <span
                         className={`zad-upload__hint${editTooLong ? ' zad-comments__hint--error' : ''}`}

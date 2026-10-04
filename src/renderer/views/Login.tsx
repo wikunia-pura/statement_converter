@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+import { FormField } from '../components/FormSection';
 import Icon from '../components/Icon';
+import Logo from '../components/Logo';
 
 interface LoginProps {
   onSignedIn: () => void;
@@ -32,70 +34,51 @@ const Login: React.FC<LoginProps> = ({ onSignedIn, notice }) => {
   };
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        padding: '32px',
-      }}
-    >
-      <form
-        onSubmit={handleSubmit}
-        style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 16 }}
-      >
-        <h2 style={{ margin: 0 }}>Zaloguj się</h2>
+    <div className="login-screen">
+      <form onSubmit={handleSubmit} className="login-card">
+        <div className="login-card__logo">
+          <Logo />
+        </div>
+        <div className="login-card__head">
+          <h2 className="login-card__title">Zaloguj się</h2>
+          <p className="login-card__text">Użyj adresu e-mail i hasła swojego konta.</p>
+        </div>
         {notice && (
-          <div
-            role="status"
-            style={{
-              display: 'flex',
-              gap: 10,
-              alignItems: 'flex-start',
-              padding: '12px 14px',
-              borderRadius: 8,
-              border: '1px solid var(--warning-border)',
-              background: 'var(--warning-bg)',
-              color: 'var(--warning)',
-              fontSize: 13,
-              lineHeight: 1.5,
-            }}
-          >
-            <span style={{ flexShrink: 0, lineHeight: 0, paddingTop: 2 }}>
-              <Icon name="alert-triangle" size={16} />
-            </span>
-            <span>{notice}</span>
+          <div className="callout callout--warning" role="status">
+            <Icon name="alert-triangle" size={16} />
+            <div className="callout__body">{notice}</div>
           </div>
         )}
-        <div className="form-group">
-          <label htmlFor="login-email">E-mail</label>
-          <input
-            id="login-email"
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            required
-            autoFocus
-            disabled={submitting}
-          />
-        </div>
-        <div className="form-group">
-          <label htmlFor="login-password">Hasło</label>
-          <input
-            id="login-password"
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-            disabled={submitting}
-          />
-        </div>
-        {error && (
-          <div style={{ color: 'var(--danger, #c53030)', fontSize: 14 }}>{error}</div>
-        )}
-        <button type="submit" className="button button-primary" disabled={submitting}>
-          <Icon name="arrow-right" size={14} />{' '}{submitting ? 'Logowanie…' : 'Zaloguj'}
+        <FormField label="E-mail" htmlFor="login-email">
+          <div className="input-icon">
+            <Icon name="mail" size={15} />
+            <input
+              id="login-email"
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+              autoFocus
+              disabled={submitting}
+            />
+          </div>
+        </FormField>
+        <FormField label="Hasło" htmlFor="login-password" error={error}>
+          <div className="input-icon">
+            <Icon name="shield" size={15} />
+            <input
+              id="login-password"
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+              disabled={submitting}
+            />
+          </div>
+        </FormField>
+        <button type="submit" className="button button-success login-card__submit" disabled={submitting}>
+          <Icon name={submitting ? 'loader' : 'arrow-right'} size={14} className={submitting ? 'icon-spin' : undefined} />{' '}
+          {submitting ? 'Logowanie…' : 'Zaloguj'}
         </button>
       </form>
     </div>

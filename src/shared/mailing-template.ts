@@ -16,7 +16,7 @@
  * process. The pills are decoration the editor puts on and takes off again.
  */
 
-import { MailingFieldValue, MailingPole, MailingPoleTyp } from './types';
+import { MailingFieldValue, MailingKalendarzContext, MailingPole, MailingPoleTyp } from './types';
 import {
   LOGO_ACCENT_COLOR,
   LOGO_BAND_COLOR,
@@ -45,6 +45,52 @@ export const FIELD_DATE = 'Data';
  */
 export const FIELD_TABLE = 'Tabela pól';
 
+/** The meeting's date (dd.mm.rrrr) — injected when the letter is made from a meeting. */
+export const FIELD_KAL_DATA = 'Data z kalendarza';
+/** The meeting's start time (gg:mm). */
+export const FIELD_KAL_GODZINA = 'Godzina z kalendarza';
+/** The name of the community the meeting is for. */
+export const FIELD_KAL_ADRES = 'Adres wspólnoty z kalendarza';
+/** The meeting's location ("Lokalizacja zebrania"): its name and street address. */
+export const FIELD_KAL_MIEJSCE = 'Adres zebrania';
+
+/**
+ * The fields a meeting fills in. Each reads one part of `MailingKalendarzContext`;
+ * when the letter is not made from a meeting (or the meeting leaves that part
+ * empty) the value is typed by hand instead, with the picker `typWartosci` names.
+ */
+export const KALENDARZ_FIELDS: {
+  nazwa: string;
+  key: keyof MailingKalendarzContext;
+  typWartosci: MailingPoleTyp;
+  opis: string;
+}[] = [
+  {
+    nazwa: FIELD_KAL_DATA,
+    key: 'dataText',
+    typWartosci: 'data',
+    opis: 'Data spotkania z kalendarza (dd.mm.rrrr). Bez spotkania wpisujesz ją ręcznie.',
+  },
+  {
+    nazwa: FIELD_KAL_GODZINA,
+    key: 'godzinaText',
+    typWartosci: 'godzina',
+    opis: 'Godzina rozpoczęcia spotkania z kalendarza (gg:mm). Bez spotkania wpisujesz ją ręcznie.',
+  },
+  {
+    nazwa: FIELD_KAL_ADRES,
+    key: 'adresWspolnoty',
+    typWartosci: 'tekst',
+    opis: 'Wspólnota wybrana w spotkaniu z kalendarza. Bez spotkania wpisujesz ją ręcznie.',
+  },
+  {
+    nazwa: FIELD_KAL_MIEJSCE,
+    key: 'adresZebrania',
+    typWartosci: 'tekst',
+    opis: 'Lokalizacja zebrania ze spotkania w kalendarzu (nazwa i adres). Bez spotkania wpisujesz ją ręcznie.',
+  },
+];
+
 /**
  * Fields every template can use without defining them. They resolve from the
  * send context rather than from a value the user types, so they carry no `tekst`.
@@ -52,6 +98,7 @@ export const FIELD_TABLE = 'Tabela pól';
 export const BUILTIN_MAILING_FIELDS: { nazwa: string; opis: string }[] = [
   { nazwa: FIELD_ADDRESS, opis: 'Nazwa wybranej wspólnoty' },
   { nazwa: FIELD_DATE, opis: 'Dzisiejsza data (dd.mm.rrrr)' },
+  ...KALENDARZ_FIELDS.map(({ nazwa, opis }) => ({ nazwa, opis })),
   {
     nazwa: FIELD_TABLE,
     opis:
@@ -59,6 +106,16 @@ export const BUILTIN_MAILING_FIELDS: { nazwa: string; opis: string }[] = [
       'wybierasz w szablonie, a wiersze zaznaczasz przy wysyłce.',
   },
 ];
+
+/** The calendar field a name refers to, whatever its spelling. */
+export function kalendarzFieldOf(nazwa: string): (typeof KALENDARZ_FIELDS)[number] | undefined {
+  const key = normalizeFieldName(parseFieldRef(nazwa).nazwa);
+  return KALENDARZ_FIELDS.find((f) => normalizeFieldName(f.nazwa) === key);
+}
+
+export function isKalendarzField(nazwa: string): boolean {
+  return kalendarzFieldOf(nazwa) !== undefined;
+}
 
 /**
  * Which half of a dynamic field a placeholder stands for.
@@ -206,6 +263,80 @@ export interface MailingRenderContext {
    * Empty or absent ⇒ the placeholder renders as nothing at all.
    */
   tableFields?: string[];
+  /**
+   * What the meeting the letter was made from says — fills the "… z kalendarza"
+   * fields and "Adres zebrania". Absent or empty parts fall back to a value typed
+   * into `values` under the field's name.
+   */
+  kalendarz?: MailingKalendarzContext | null;
+}
+
+/**
+ * The value a calendar field resolves to: the meeting's when it has one — so a
+ * moved date reaches a letter prepared earlier — otherwise what was typed by hand,
+ * spelled for its kind. Empty when neither exists.
+ */
+export function resolveKalendarzValue(nazwa: string, ctx: MailingRenderContext): string {
+  const field = kalendarzFieldOf(nazwa);
+  if (!field) return '';
+  const injected = (ctx.kalendarz?.[field.key] ?? '').trim();
+  if (injected) return injected;
+  return formatFieldValue(readFieldValue(ctx.values, field.nazwa), { typWartosci: field.typWartosci });
+}
+
+/** True when the meeting supplies this calendar field — the editor then shows it locked. */
+export function isKalendarzValueInjected(nazwa: string, ctx: MailingRenderContext): boolean {
+  const field = kalendarzFieldOf(nazwa);
+  return !!field && !!(ctx.kalendarz?.[field.key] ?? '').trim();
+}
+
+/**
+ * The letter's values from a meeting (or a Zebranie's own data): its local date
+ * and start time, the community, and the place — the location's name and street
+ * address, whichever of the two exist.
+ */
+export function buildKalendarzContext(source: {
+  startsAt: string | null;
+  adresNazwa: string;
+  lokalizacjaNazwa: string;
+  lokalizacjaAdres?: string;
+}): MailingKalendarzContext {
+  const start = source.startsAt ? new Date(source.startsAt) : null;
+  const valid = !!start && !Number.isNaN(start.getTime());
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return {
+    dataText: valid ? formatPolishDate(start!) : '',
+    godzinaText: valid ? `${pad(start!.getHours())}:${pad(start!.getMinutes())}` : '',
+    adresWspolnoty: (source.adresNazwa ?? '').trim(),
+    adresZebrania: [source.lokalizacjaNazwa, source.lokalizacjaAdres ?? '']
+      .map((part) => (part ?? '').trim())
+      .filter(Boolean)
+      .filter((part, i, all) => all.findIndex((p) => p.toLowerCase() === part.toLowerCase()) === i)
+      .join(', '),
+  };
+}
+
+/**
+ * Fields placed in the texts that still have nothing to say: user fields with no
+ * value typed (a field placed only as its sentence, `|opis`, needs none) and
+ * calendar fields neither the meeting nor the user filled in. A letter with any
+ * of these is not ready to send or download — the gap would go out as a blank.
+ */
+export function missingFieldValues(ctx: MailingRenderContext, ...texts: string[]): string[] {
+  const missing = new Map<string, string>();
+  for (const ref of extractFieldRefs(...texts)) {
+    const key = normalizeFieldName(ref.nazwa);
+    if (missing.has(key)) continue;
+    if (isKalendarzField(ref.nazwa)) {
+      if (!resolveKalendarzValue(ref.nazwa, ctx)) missing.set(key, ref.nazwa);
+      continue;
+    }
+    if (isBuiltinField(ref.nazwa) || ref.part === 'label') continue;
+    const pole = ctx.pola.find((p) => normalizeFieldName(p.nazwa) === key);
+    if (!pole) continue; // an unknown field is flagged separately, as unknown
+    if (!readFieldValue(ctx.values, ref.nazwa)) missing.set(key, ref.nazwa);
+  }
+  return [...missing.values()];
 }
 
 /** Today in the Polish format users expect in a letter. */
@@ -299,6 +430,7 @@ function resolveField(raw: string, ctx: MailingRenderContext): string {
   const key = normalizeFieldName(nazwa);
   if (key === normalizeFieldName(FIELD_ADDRESS)) return ctx.adresNazwa;
   if (key === normalizeFieldName(FIELD_DATE)) return ctx.dateText;
+  if (isKalendarzField(nazwa)) return resolveKalendarzValue(nazwa, ctx);
   // Only reachable from renderPlain — the subject line, where a table cannot go.
   // The rows are still written out rather than dropped, so a placeholder pasted
   // into the subject by mistake is visible instead of silently swallowed.
@@ -441,7 +573,7 @@ export function collectFieldValues(
   ctx: MailingRenderContext,
 ): MailingFieldValue[] {
   const names = [
-    ...usedFields.filter((nazwa) => !isBuiltinField(nazwa)),
+    ...usedFields.filter((nazwa) => !isBuiltinField(nazwa) || isKalendarzField(nazwa)),
     ...(ctx.tableFields ?? []),
   ];
   const seen = new Set<string>();
@@ -450,6 +582,19 @@ export function collectFieldValues(
     const key = normalizeFieldName(nazwa);
     if (!key || seen.has(key)) continue;
     seen.add(key);
+    // A calendar field is recorded with the value it went out with, already
+    // spelled — the meeting may move later, the letter that was sent does not.
+    const kalField = kalendarzFieldOf(nazwa);
+    if (kalField) {
+      values.push({
+        nazwa: kalField.nazwa,
+        tekst: '',
+        wartosc: resolveKalendarzValue(nazwa, ctx),
+        jednostka: '',
+        typWartosci: 'tekst',
+      });
+      continue;
+    }
     const pole = ctx.pola.find((p) => normalizeFieldName(p.nazwa) === key);
     values.push({
       nazwa: pole?.nazwa ?? nazwa,

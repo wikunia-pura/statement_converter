@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { AddressBookingGroup } from '../../shared/bookings';
 import { translations, Language } from '../translations';
 import Icon from './Icon';
-import ModalDismiss from './Modal';
+import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
 
 /**
  * The priority queue, and nothing else: only the communities that already carry
@@ -43,13 +43,8 @@ const PriorityOrderModal: React.FC<{
     <div className="modal-overlay" onClick={saving ? undefined : onClose}>
       <div className="modal ks-prio-modal" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onClose} ariaLabel={t.close} />
-        <div className="modal-header">
-          <span className="ks-notice__title">
-            <Icon name="flag" size={20} /> {t.ksPrioOrderTitle} · {monthLabel}
-          </span>
-        </div>
+        <ModalHeader icon="flag" title={`${t.ksPrioOrderTitle} · ${monthLabel}`} subtitle={t.ksPrioOrderHint} />
         <div className="modal-body">
-          <p className="ks-prio-modal__hint">{t.ksPrioOrderHint}</p>
           {order.length === 0 ? (
             <p>{t.ksPrioOrderEmpty}</p>
           ) : (
@@ -115,19 +110,15 @@ const PriorityOrderModal: React.FC<{
             </ol>
           )}
         </div>
-        <div className="modal-footer">
-          <button type="button" className="button button-secondary" onClick={onClose} disabled={saving}>
-            {t.cancel}
-          </button>
-          <button
-            type="button"
-            className="button button-primary"
-            disabled={saving || !changed}
-            onClick={() => onSave(order.map((g) => g.priority!.id))}
-          >
-            {t.ksPrioOrderSave}
-          </button>
-        </div>
+        <ModalFooter
+          onCancel={onClose}
+          cancelLabel={t.cancel}
+          onSubmit={() => onSave(order.map((g) => g.priority!.id))}
+          submitLabel={t.ksPrioOrderSave}
+          submitDisabled={!changed}
+          submitTitle={t.noChangesToSave}
+          busy={saving}
+        />
       </div>
     </div>
   );

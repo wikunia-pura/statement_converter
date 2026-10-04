@@ -1,3 +1,4 @@
+import { throwIfCancelled } from './conversion-cancel';
 /**
  * AI contractor matching for expenses — the batching/fallback/caching policy in
  * one place.
@@ -47,19 +48,27 @@ export interface ExpenseAiMatchOptions {
   batchSize?: number;
   concurrency?: number;
   onProgress?: (event: ExpenseAiProgressEvent) => void;
+  /** Stops starting new batches once aborted ("Anuluj"). */
+  signal?: AbortSignal;
 }
 
-/** Run `worker` over `items` with at most `limit` in flight, preserving order. */
+/**
+ * Run `worker` over `items` with at most `limit` in flight, preserving order.
+ * With a `signal`, no new item starts once it is aborted — the ones in flight
+ * finish, and the call rejects with the cancel error.
+ */
 export async function runWithConcurrency<T, R>(
   items: T[],
   limit: number,
-  worker: (item: T, index: number) => Promise<R>
+  worker: (item: T, index: number) => Promise<R>,
+  signal?: AbortSignal
 ): Promise<R[]> {
   const results: R[] = new Array(items.length);
   let cursor = 0;
 
   const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
     while (true) {
+      throwIfCancelled(signal);
       const i = cursor++;
       if (i >= items.length) return;
       results[i] = await worker(items[i], i);
@@ -99,6 +108,7 @@ export async function matchExpensesWithAI(
     batchSize = DEFAULT_EXPENSE_AI_BATCH_SIZE,
     concurrency = DEFAULT_EXPENSE_AI_CONCURRENCY,
     onProgress,
+    signal,
   } = options;
 
   if (transactions.length === 0) return [];
@@ -191,7 +201,8 @@ export async function matchExpensesWithAI(
         console.error(`   ❌ Expense batch ${batchIdx + 1} failed:`, error);
         throw error;
       }
-    }
+    },
+    signal
   );
 
   return batchResults.flat();

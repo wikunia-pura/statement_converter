@@ -11,18 +11,31 @@
  */
 
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import log from 'electron-log';
+import MailComposer from 'nodemailer/lib/mail-composer';
 import {
   Adres,
+  DEFAULT_MAILING_ADRESACI,
+  MailingAdresaci,
   MailingAttachment,
+  MailingExportRequest,
+  MailingExportResult,
+  MailingKalendarzContext,
+  MailingOdbiorca,
+  MailingOdbiorcaRodzaj,
   MailingProgressEvent,
   MailingSendResult,
-  MailingSzablon,
   MailingPole,
   MailingTyp,
-  ZgnJednostka,
+  Spotkanie,
 } from '../../shared/types';
+import {
+  formatAddressHeader,
+  resolveOdbiorcy,
+  summarizeOdbiorcy,
+} from '../../shared/mailing-recipients';
 import {
   buildDocumentHtml,
   collectFieldValues,
@@ -73,9 +86,58 @@ export interface MailingSendRequest {
   /**
    * The meeting this send was triggered from, when the user came here from the
    * Kalendarz. Recorded on every history row the send produces, which is what
-   * lets the meeting list what actually went out for it.
+   * lets the meeting list what actually went out for it. Its proxy and board
+   * members are also who the "pełnomocnik" / "zarząd" groups resolve to.
    */
   spotkanieId?: number | null;
+  /**
+   * Recipient groups for this send — the kind's default, possibly changed on
+   * the send screen. Absent (a caller from before kinds had recipients) ⇒ the
+   * kind's stored default.
+   */
+  adresaci?: MailingAdresaci;
+  /** Mailboxes (lower-cased) unticked on the send screen, across every community. */
+  wykluczeni?: string[];
+  /** What the meeting fills the calendar fields with, when sent from one. */
+  kalendarz?: MailingKalendarzContext | null;
+}
+
+/** Why a group the user asked for produced nobody, in Polish — for the history row. */
+const BRAK_ODBIORCY: Record<MailingOdbiorcaRodzaj, string> = {
+  zgn: 'adres nie ma przypisanej jednostki ZGN (Adresy → edycja adresu)',
+  pelnomocnik: 'jednostka ZGN nie ma pełnomocnika z adresem e-mail',
+  zarzad: 'nikt z zarządu nie ma adresu e-mail',
+  wlasne: 'brak własnych adresów',
+};
+
+function noRecipientsMessage(braki: MailingOdbiorcaRodzaj[]): string {
+  const why = braki.map((b) => BRAK_ODBIORCY[b]).join('; ');
+  return why ? `Brak adresatów: ${why}.` : 'Brak adresatów — wybierz, do kogo ma trafić mail.';
+}
+
+/** The kind's stored recipient groups, or "the city unit" when the kind is unknown. */
+async function defaultAdresaci(
+  database: DatabaseService,
+  typ: MailingTyp,
+): Promise<MailingAdresaci> {
+  try {
+    const def = (await database.getMailingTypy()).find((t) => t.klucz === typ);
+    return def?.adresaci ?? DEFAULT_MAILING_ADRESACI;
+  } catch (error: unknown) {
+    log.warn(
+      '[MAILING] kinds read failed, sending to the city unit:',
+      error instanceof Error ? error.message : error,
+    );
+    return DEFAULT_MAILING_ADRESACI;
+  }
+}
+
+async function findSpotkanie(
+  database: DatabaseService,
+  spotkanieId: number | null | undefined,
+): Promise<Spotkanie | null> {
+  if (spotkanieId == null) return null;
+  return (await database.getSpotkania()).find((s) => s.id === spotkanieId) ?? null;
 }
 
 /** Where generated PDFs and archived attachments live, per send day. */
@@ -150,18 +212,20 @@ export async function sendMailing(
   }
   if (request.adresIds.length === 0) return { error: 'Nie wybrano żadnej wspólnoty.' };
 
-  const [szablony, pola, adresy, jednostki] = await Promise.all([
+  const [szablony, pola, adresy, jednostki, pelnomocnicy, spotkanie, adresaci] = await Promise.all([
     database.getMailingSzablony(),
     database.getMailingPola(),
     database.getAllAdresy(),
     database.getZgnJednostki(),
+    database.getZgnPelnomocnicy(),
+    findSpotkanie(database, request.spotkanieId),
+    request.adresaci ? Promise.resolve(request.adresaci) : defaultAdresaci(database, request.typ),
   ]);
 
   const template = szablony.find((s) => s.id === request.templateId);
   if (!template) return { error: 'Wybrany szablon nie istnieje — odśwież listę szablonów.' };
 
   const adresById = new Map<number, Adres>(adresy.map((a) => [a.id, a]));
-  const jednostkaById = new Map<number, ZgnJednostka>(jednostki.map((j) => [j.id, j]));
 
   const dateText = formatPolishDate(new Date());
   const stamp = new Date().toISOString().slice(0, 10);
@@ -172,7 +236,11 @@ export async function sendMailing(
     request.attachments,
     filesDir,
   );
-  if (attachmentErrors.length > 0 && customAttachments.length === 0 && request.attachments.length > 0) {
+  if (
+    attachmentErrors.length > 0 &&
+    customAttachments.length === 0 &&
+    request.attachments.length > 0
+  ) {
     return { error: attachmentErrors.join('\n') };
   }
 
@@ -188,7 +256,16 @@ export async function sendMailing(
       deps.onProgress?.({ done, total: request.adresIds.length, adresNazwa });
       done++;
 
-      const jednostka = adres?.zgnJednostkaId != null ? jednostkaById.get(adres.zgnJednostkaId) : undefined;
+      // The meeting's own proxy and board apply to the meeting's community only;
+      // another community in the same batch keeps its own.
+      const meetingHere = spotkanie && spotkanie.adresId === adresId ? spotkanie : null;
+      const resolved = resolveOdbiorcy(
+        { adres: adres ?? null, spotkanie: meetingHere, jednostki, pelnomocnicy },
+        adresaci,
+        request.wykluczeni ?? [],
+      );
+      const odbiorcy = resolved.odbiorcy;
+      const summary = summarizeOdbiorcy(odbiorcy);
 
       const record = async (
         result: Omit<MailingSendResult, 'adresId' | 'adresNazwa'>,
@@ -216,6 +293,7 @@ export async function sendMailing(
             attachments: result.attachments,
             sentFrom: sender.from,
             spotkanieId: request.spotkanieId ?? null,
+            odbiorcy: result.odbiorcy ?? [],
           });
         } catch (error: unknown) {
           log.error(
@@ -242,15 +320,16 @@ export async function sendMailing(
         continue;
       }
 
-      if (!jednostka) {
+      if (odbiorcy.length === 0) {
         await record(
           {
             status: 'error',
-            errorMessage: 'Adres nie ma przypisanej jednostki ZGN (Adresy → edycja adresu).',
+            errorMessage: noRecipientsMessage(resolved.braki),
             jednostkaNazwa: '',
             jednostkaEmail: '',
             subject: '',
             attachments: [],
+            odbiorcy: [],
           },
           [],
           '',
@@ -265,6 +344,7 @@ export async function sendMailing(
         pola: pola as MailingPole[],
         values: request.values,
         tableFields: request.tableFields ?? [],
+        kalendarz: request.kalendarz ?? null,
       };
       const subject = renderPlain(request.temat, ctx);
       const renderedBody = renderHtml(request.tresc, ctx);
@@ -297,7 +377,7 @@ export async function sendMailing(
         }
 
         await sender.send({
-          to: jednostka.email,
+          to: odbiorcy.map(formatAddressHeader).join(', '),
           subject,
           html: bodyHtml,
           text: bodyText,
@@ -318,10 +398,10 @@ export async function sendMailing(
             // Surfaced even on success: the mail went out, but the user should
             // know one of the files they picked never made it in.
             errorMessage: attachmentErrors.length > 0 ? attachmentErrors.join('\n') : undefined,
-            jednostkaNazwa: jednostka.nazwa,
-            jednostkaEmail: jednostka.email,
+            ...summary,
             subject,
             attachments,
+            odbiorcy,
           },
           fieldValues,
           renderedBody,
@@ -334,10 +414,10 @@ export async function sendMailing(
           {
             status: 'error',
             errorMessage: message,
-            jednostkaNazwa: jednostka.nazwa,
-            jednostkaEmail: jednostka.email,
+            ...summary,
             subject,
             attachments,
+            odbiorcy,
           },
           fieldValues,
           renderedBody,
@@ -355,6 +435,184 @@ export async function sendMailing(
   } finally {
     sender.close();
   }
+}
+
+export interface MailingExportDeps {
+  database: DatabaseService;
+  /** Where the files land — the user's Downloads folder. */
+  downloadsDir: string;
+  /** The configured sender, for the .eml's From header; empty ⇒ none written. */
+  fromAddress: string;
+  fromName: string;
+}
+
+/** `Zawiadomienie-o-zebraniu-Pulawska-116-14.10.2026` — readable in a Downloads list. */
+function exportBaseName(
+  request: MailingExportRequest,
+  adresNazwa: string,
+  typNazwa: string,
+): string {
+  const what = slugifyForFileName(typNazwa || request.templateName || 'mail');
+  const where = adresNazwa ? `-${slugifyForFileName(adresNazwa)}` : '';
+  const when = request.kalendarz?.dataText ? `-${request.kalendarz.dataText}` : '';
+  return `${what}${where}${when}`;
+}
+
+/**
+ * "Pobierz jako e-mail / PDF": render one letter exactly as a send would and
+ * save it to the Downloads folder — a PDF, and/or an .eml the user's mail program
+ * opens as a ready-to-send draft (`X-Unsent: 1`): recipients, subject, the HTML
+ * body with its letterhead, and the PDF attached. Nothing goes over SMTP and
+ * nothing is written to the mailing history — this is a file, not a send.
+ */
+export async function exportMailing(
+  deps: MailingExportDeps,
+  request: MailingExportRequest,
+): Promise<MailingExportResult> {
+  const { database } = deps;
+  if (!request.formats || request.formats.length === 0) {
+    throw new Error('Wybierz, w jakiej postaci pobrać wiadomość.');
+  }
+  const [pola, adresy, jednostki, pelnomocnicy, spotkanie, typy] = await Promise.all([
+    database.getMailingPola(),
+    database.getAllAdresy(),
+    database.getZgnJednostki(),
+    database.getZgnPelnomocnicy(),
+    findSpotkanie(database, request.spotkanieId),
+    database.getMailingTypy().catch(() => []),
+  ]);
+
+  const adres =
+    request.adresId != null ? (adresy.find((a) => a.id === request.adresId) ?? null) : null;
+  const adresNazwa = adres?.nazwa ?? (request.adresNazwa ?? '').trim();
+  const typNazwa = typy.find((t) => t.klucz === request.typ)?.nazwa ?? '';
+
+  const ctx: MailingRenderContext = {
+    adresNazwa,
+    dateText: formatPolishDate(new Date()),
+    pola: pola as MailingPole[],
+    values: request.values ?? {},
+    tableFields: request.tableFields ?? [],
+    kalendarz: request.kalendarz ?? null,
+  };
+  const subject = renderPlain(request.temat, ctx);
+  const renderedBody = renderHtml(request.tresc, ctx);
+  // Same rule as a send: the meeting's own proxy and board apply to its community.
+  const meetingHere =
+    spotkanie && (adres == null || spotkanie.adresId === adres.id) ? spotkanie : null;
+  const odbiorcy: MailingOdbiorca[] = resolveOdbiorcy(
+    { adres, spotkanie: meetingHere, jednostki, pelnomocnicy },
+    request.adresaci ?? DEFAULT_MAILING_ADRESACI,
+    request.wykluczeni ?? [],
+  ).odbiorcy;
+
+  const dir = deps.downloadsDir;
+  fs.mkdirSync(dir, { recursive: true });
+  const base = exportBaseName(request, adresNazwa, typNazwa);
+  const pdfHtml = buildDocumentHtml(renderedBody, {
+    forPdf: true,
+    logoSrc: MAILING_LOGO_SVG_DATA_URI,
+  });
+
+  const files: MailingExportResult['files'] = [];
+  let pdfPath: string | null = null;
+  const ensurePdf = async (): Promise<string> => {
+    if (pdfPath) return pdfPath;
+    if (request.formats.includes('pdf')) {
+      pdfPath = uniquePath(dir, `${base}.pdf`);
+    } else {
+      // Only the .eml was asked for: the PDF it carries is rendered to a temp
+      // folder, so Downloads gets exactly the files the user picked.
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ff-mailing-eml-'));
+      pdfPath = path.join(tempDir, `${base}.pdf`);
+    }
+    await renderHtmlToPdf(pdfHtml, pdfPath);
+    return pdfPath;
+  };
+
+  try {
+    for (const format of request.formats) {
+      if (format === 'pdf') {
+        files.push({ format: 'pdf', filePath: await ensurePdf() });
+        continue;
+      }
+      const attachPdf = request.attachPdf !== false;
+      const pdfForMail = attachPdf ? await ensurePdf() : null;
+      const from = deps.fromAddress.trim()
+        ? deps.fromName.trim()
+          ? `"${deps.fromName.replace(/"/g, '').trim()}" <${deps.fromAddress.trim()}>`
+          : deps.fromAddress.trim()
+        : undefined;
+      const composer = new MailComposer({
+        ...(from ? { from } : {}),
+        to: odbiorcy.map(formatAddressHeader).join(', ') || undefined,
+        subject,
+        text: htmlToPlainText(renderedBody),
+        html: buildDocumentHtml(renderedBody, { logoSrc: `cid:${MAILING_LOGO_CID}` }),
+        // Outlook and Apple Mail open a message carrying this as an unsent draft,
+        // with the Send button — which is the whole point of the file.
+        headers: { 'X-Unsent': '1' },
+        attachments: [
+          ...(pdfForMail ? [{ filename: path.basename(pdfForMail), path: pdfForMail }] : []),
+          {
+            filename: MAILING_LOGO_FILE_NAME,
+            content: Buffer.from(MAILING_LOGO_BASE64, 'base64'),
+            contentType: MAILING_LOGO_MIME,
+            cid: MAILING_LOGO_CID,
+            contentDisposition: 'inline' as const,
+          },
+        ],
+      });
+      const message: Buffer = await new Promise((resolve, reject) =>
+        composer.compile().build((error, built) => (error ? reject(error) : resolve(built))),
+      );
+      const emlPath = uniquePath(dir, `${base}.eml`);
+      fs.writeFileSync(emlPath, message);
+      files.push({ format: 'eml', filePath: emlPath });
+    }
+  } finally {
+    // The temp PDF (eml-only export) has done its job once it is inside the
+    // message — or is worthless when the export failed half-way.
+    if (pdfPath && !request.formats.includes('pdf')) {
+      try {
+        fs.rmSync(path.dirname(pdfPath), { recursive: true, force: true });
+      } catch (error: unknown) {
+        log.warn('[MAILING] temp cleanup failed:', error instanceof Error ? error.message : error);
+      }
+    }
+  }
+
+  return { files, odbiorcy };
+}
+
+/**
+ * The recipients a letter would go to — what the send screen and the notice
+ * editor list before anything is sent. Same resolution as `sendMailing`.
+ */
+export async function previewOdbiorcy(
+  database: DatabaseService,
+  request: {
+    adresId: number | null;
+    spotkanieId?: number | null;
+    adresaci: MailingAdresaci;
+    wykluczeni?: string[];
+  },
+) {
+  const [adresy, jednostki, pelnomocnicy, spotkanie] = await Promise.all([
+    database.getAllAdresy(),
+    database.getZgnJednostki(),
+    database.getZgnPelnomocnicy(),
+    findSpotkanie(database, request.spotkanieId),
+  ]);
+  const adres =
+    request.adresId != null ? (adresy.find((a) => a.id === request.adresId) ?? null) : null;
+  const meetingHere =
+    spotkanie && (adres == null || spotkanie.adresId === adres.id) ? spotkanie : null;
+  return resolveOdbiorcy(
+    { adres, spotkanie: meetingHere, jednostki, pelnomocnicy },
+    request.adresaci,
+    request.wykluczeni ?? [],
+  );
 }
 
 /** Size of the module's file archive, for the "clean up files" affordance. */

@@ -3,7 +3,7 @@ import path from 'path';
 import yaml from 'js-yaml';
 import { app } from 'electron';
 import { Converter, TransactionForReview, ConversionReviewData, CLARIFICATION_ACCOUNT, DEFAULT_ACCOUNT_CONFIG } from '../shared/types';
-import { readFileWithEncoding, writeFileWin1250 } from '../shared/encoding';
+import { readFileWithEncoding, readStatementText, writeFileWin1250 } from '../shared/encoding';
 import { isAccountSymbol, isLetteredApartment, needsExplicitAccount } from '../shared/apartment-account';
 import type { ConversionProgressCallback } from '../shared/base-converter';
 import { SantanderXmlConverter } from '../converters/santander-xml';
@@ -420,7 +420,7 @@ class ConverterRegistry {
         language,
       });
 
-      const mt940Content = readFileWithEncoding(inputPath);
+      const mt940Content = readStatementText(inputPath); // a PKO BP ZIP of daily reports too
       const result = await this.runNonAiMemoized(memoKey, () => converter.convert(mt940Content));
 
       // Count all transactions that will need AI (both income and expenses < 70%)
@@ -1203,7 +1203,9 @@ class ConverterRegistry {
     fileName?: string,
     bankName?: string,
     onProgress?: ConversionProgressCallback,
-    accountConfig?: { bankAccountSymbol: string; apartmentPrefix: string }
+    accountConfig?: { bankAccountSymbol: string; apartmentPrefix: string },
+    /** Aborted by "Anuluj": the converter stops and nothing is written. */
+    signal?: AbortSignal
   ): Promise<ConvertResult> {
     // Persistent extraction cache lives in userData so it survives across runs.
     // Only used by AI-enabled conversions; non-AI flows don't write to it.
@@ -1257,7 +1259,7 @@ class ConverterRegistry {
           });
 
           const xmlContent = readFileWithEncoding(inputPath);
-          const result = await this.convertReusingMemo(memoKey, () => converter.convert(xmlContent, { onProgress }));
+          const result = await this.convertReusingMemo(memoKey, () => converter.convert(xmlContent, { onProgress, signal }));
 
           // Separate transactions into income and expenses
           const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
@@ -1523,8 +1525,8 @@ class ConverterRegistry {
             cachePath,
           });
 
-          const mt940Content = readFileWithEncoding(inputPath);
-          const result = await this.convertReusingMemo(memoKey, () => converter.convert(mt940Content, { onProgress }));
+          const mt940Content = readStatementText(inputPath); // a PKO BP ZIP of daily reports too
+          const result = await this.convertReusingMemo(memoKey, () => converter.convert(mt940Content, { onProgress, signal }));
 
           // Separate transactions into income and expenses
           const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
@@ -1780,7 +1782,7 @@ class ConverterRegistry {
           });
 
           const xmlContent = readFileWithEncoding(inputPath);
-          const result = await this.convertReusingMemo(memoKey, () => converter.convert(xmlContent, { onProgress }));
+          const result = await this.convertReusingMemo(memoKey, () => converter.convert(xmlContent, { onProgress, signal }));
 
           const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
           const expenseTransactions = result.processed.filter(t => t.transactionType === 'expense');
@@ -2016,7 +2018,7 @@ class ConverterRegistry {
           // mis-picks win1250 (it sees 0x80-0x9F bytes), corrupting Polish chars
           // (e.g. ń→ä, ł→�), so force cp852.
           const mt940Content = readFileWithEncoding(inputPath, 'cp852');
-          const result = await this.convertReusingMemo(memoKey, () => converter.convert(mt940Content, { onProgress }));
+          const result = await this.convertReusingMemo(memoKey, () => converter.convert(mt940Content, { onProgress, signal }));
 
           const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
           const expenseTransactions = result.processed.filter(t => t.transactionType === 'expense');
@@ -2253,7 +2255,7 @@ class ConverterRegistry {
           });
 
           const zipBuffer = fs.readFileSync(inputPath);
-          const result = await this.convertReusingMemo(memoKey, () => converter.convert(zipBuffer, { onProgress }));
+          const result = await this.convertReusingMemo(memoKey, () => converter.convert(zipBuffer, { onProgress, signal }));
 
           const incomeTransactions = result.processed.filter((t: any) => t.transactionType === 'income');
           const expenseTransactions = result.processed.filter((t: any) => t.transactionType === 'expense');
@@ -2490,7 +2492,7 @@ class ConverterRegistry {
           });
 
           const expContent = readFileWithEncoding(inputPath);
-          const result = await this.convertReusingMemo(memoKey, () => converter.convert(expContent, { onProgress }));
+          const result = await this.convertReusingMemo(memoKey, () => converter.convert(expContent, { onProgress, signal }));
 
           const incomeTransactions = result.processed.filter((t: any) => t.transactionType === 'income');
           const expenseTransactions = result.processed.filter((t: any) => t.transactionType === 'expense');
@@ -2711,7 +2713,7 @@ class ConverterRegistry {
           });
 
           const mt940Content = readFileWithEncoding(inputPath, 'cp852');
-          const result = await this.convertReusingMemo(memoKey, () => converter.convert(mt940Content, { onProgress }));
+          const result = await this.convertReusingMemo(memoKey, () => converter.convert(mt940Content, { onProgress, signal }));
 
           const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
           const expenseTransactions = result.processed.filter(t => t.transactionType === 'expense');
@@ -2948,7 +2950,7 @@ class ConverterRegistry {
           });
 
           const xmlContent = readFileWithEncoding(inputPath);
-          const result = await this.convertReusingMemo(memoKey, () => converter.convert(xmlContent, { onProgress }));
+          const result = await this.convertReusingMemo(memoKey, () => converter.convert(xmlContent, { onProgress, signal }));
 
           const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
           const expenseTransactions = result.processed.filter(t => t.transactionType === 'expense');
@@ -3177,7 +3179,7 @@ class ConverterRegistry {
           });
 
           const mt940Content = readFileWithEncoding(inputPath, 'win1250');
-          const result = await this.convertReusingMemo(memoKey, () => converter.convert(mt940Content, { onProgress }));
+          const result = await this.convertReusingMemo(memoKey, () => converter.convert(mt940Content, { onProgress, signal }));
 
           const incomeTransactions = result.processed.filter(t => t.transactionType === 'income');
           const expenseTransactions = result.processed.filter(t => t.transactionType === 'expense');

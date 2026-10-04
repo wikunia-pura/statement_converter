@@ -4,6 +4,7 @@ import { translations, Language } from '../translations';
 import { useNotify } from './Notifications';
 import Icon from './Icon';
 import OdczytySkippedModal, { OdczytySkippedGroup } from './OdczytySkippedModal';
+import { plural } from '../plural';
 
 interface Props {
   history: OdczytyHistoryEntry[];
@@ -20,23 +21,6 @@ function dayKeyOf(iso: string | Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
     d.getDate(),
   ).padStart(2, '0')}`;
-}
-
-/** Polish plural: [one, few (2-4), many]. English: [singular, plural]. */
-function plural(
-  n: number,
-  language: Language,
-  pl: [string, string, string],
-  en: [string, string],
-): string {
-  if (language === 'en') return `${n} ${n === 1 ? en[0] : en[1]}`;
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  let word: string;
-  if (n === 1) word = pl[0];
-  else if (mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14)) word = pl[1];
-  else word = pl[2];
-  return `${n} ${word}`;
 }
 
 interface SupplierGroup {
@@ -208,9 +192,9 @@ const OdczytyHistoryTimeline: React.FC<Props> = ({
 
   if (history.length === 0) {
     return (
-      <div className="empty-state">
-        <div className="empty-state-icon"><Icon name="history" size={48} /></div>
-        <div className="empty-state-text">{t.odczytyNoHistory}</div>
+      <div className="form-empty">
+        <Icon name="history" size={16} />
+        {t.odczytyNoHistory}
       </div>
     );
   }
@@ -226,20 +210,24 @@ const OdczytyHistoryTimeline: React.FC<Props> = ({
       )}
 
       {showSearch && (
-        <div className="form-group" style={{ marginBottom: '15px' }}>
-          <input
-            type="text"
-            placeholder={t.odczytySearchHistory}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        <div className="list-filter">
+          <div className="input-icon">
+            <Icon name="search" size={15} />
+            <input
+              type="text"
+              placeholder={t.odczytySearchHistory}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              aria-label={t.odczytySearchHistory}
+            />
+          </div>
         </div>
       )}
 
       {days.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state-icon"><Icon name="search" size={48} /></div>
-          <div className="empty-state-text">{t.noHistoryResults}</div>
+        <div className="form-empty">
+          <Icon name="search" size={16} />
+          {t.noHistoryResults}
         </div>
       ) : (
         days.map((day, dayIndex) => {
@@ -332,7 +320,8 @@ const OdczytyHistoryTimeline: React.FC<Props> = ({
                                   </span>
                                   {entry.outputDir && (
                                     <button
-                                      className="button button-small button-secondary"
+                                      type="button"
+                                      className="button button-small button-subtle"
                                       onClick={() => openPath(entry.outputDir)}
                                       title={entry.outputDir}
                                     >
@@ -367,12 +356,10 @@ const OdczytyHistoryTimeline: React.FC<Props> = ({
                                     <tbody>
                                       {entry.outputs.map((o) => (
                                         <tr key={o.outputPath}>
-                                          <td>{o.wm}</td>
-                                          <td style={{ wordBreak: 'break-all', opacity: 0.75 }}>
-                                            {o.fileName}
-                                          </td>
-                                          <td style={{ whiteSpace: 'nowrap' }}>{o.date}</td>
-                                          <td style={{ whiteSpace: 'nowrap' }}>
+                                          <td className="form-table__label">{o.wm}</td>
+                                          <td className="cell-wrap form-table__sub">{o.fileName}</td>
+                                          <td className="nowrap">{o.date}</td>
+                                          <td className="nowrap">
                                             {plural(
                                               o.readingCount,
                                               language,
@@ -380,14 +367,17 @@ const OdczytyHistoryTimeline: React.FC<Props> = ({
                                               ['reading', 'readings'],
                                             )}
                                           </td>
-                                          <td style={{ textAlign: 'right' }}>
-                                            <button
-                                              className="button button-small button-primary"
-                                              onClick={() => openPath(o.outputPath)}
-                                              title={o.outputPath}
-                                            ><Icon name="folder" size={13} />{' '}
-                                              {t.openFile}
-                                            </button>
+                                          <td className="data-table__actions">
+                                            <div className="row-actions">
+                                              <button
+                                                type="button"
+                                                className="button button-small button-secondary"
+                                                onClick={() => openPath(o.outputPath)}
+                                                title={o.outputPath}
+                                              >
+                                                <Icon name="folder" size={13} /> {t.openFile}
+                                              </button>
+                                            </div>
                                           </td>
                                         </tr>
                                       ))}
@@ -396,14 +386,16 @@ const OdczytyHistoryTimeline: React.FC<Props> = ({
                                 )}
 
                                 {entry.skippedCount > 0 && (
-                                  <div className="odczyty-history-entry-skipped">
-                                    <Icon name="alert-triangle" size={13} />{' '}
+                                  <div className="callout callout--warning">
+                                    <Icon name="alert-triangle" size={16} />
+                                    <div className="callout__body">
+                                      {t.odczytySkipped}: {entry.skippedCount}
+                                    </div>
                                     <button
                                       type="button"
-                                      className="link-button"
+                                      className="button button-small button-subtle"
                                       onClick={() => showSkipped(entry)}
                                     >
-                                      {t.odczytySkipped}: {entry.skippedCount} —{' '}
                                       {t.odczytySkippedShowDetails}
                                     </button>
                                   </div>

@@ -84,6 +84,678 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '9.0.0',
+    date: '2026-10-04',
+    title: 'Nowy wygląd całej aplikacji, Zebrania, materiały na spotkania i pliki księgowe znajdowane same',
+    tagline:
+      'Wszystkie okna, formularze i listy mają nowy, uporządkowany wygląd: sekcje z nagłówkami, podpowiedzi pod polami i jednakowe przyciski. Doszedł moduł „Zebrania” z zawiadomieniem o zebraniu prosto z Kalendarza, materiały na spotkania krok po kroku, zadania, zarząd i pełnomocnicy ZGN przy spotkaniach, typy mailingu z domyślnymi adresatami oraz „Znajdź pliki księgowe”, które samo przypisuje wyciągi i PDF-y do wspólnot. Konwersję da się teraz anulować, a wyciąg zaksięgowany inną drogą — oznaczyć bez konwersji.',
+    stats: [
+      { value: '16', label: 'nowych funkcji' },
+      { value: '9', label: 'ulepszeń' },
+      { value: '1', label: 'poprawka' },
+    ],
+    highlights: [
+      {
+        id: 'nowy-wyglad',
+        kind: 'improved',
+        icon: 'sparkles',
+        title: 'Nowy, uporządkowany wygląd całej aplikacji',
+        summary:
+          'Każde okno, formularz i lista są zbudowane tak samo: dane podzielone na sekcje z nagłówkiem i krótkim opisem, podpowiedź zawsze pod polem, a przyciski zawsze w tym samym miejscu.',
+        details: [
+          'Okna dodawania i edycji (adres, kontrahent, bank, spotkanie, zadanie, pola i szablony mailingu…) mają nagłówek z ikoną i podtytułem, a na dole stały pasek: z lewej „* pole wymagane”, z prawej „Anuluj” i zielony przycisk zapisu. Zapis jest wyszarzony, dopóki niczego nie zmienisz.',
+          'Listy (Adresy, Kontrahenci, Banki, słowniki Kalendarza, Mailing) mają wyszukiwarkę u góry, przy każdym wierszu „Edytuj” i kosz, a „Usuń wszystkie” jest wyciszone i odsunięte od codziennych przycisków.',
+          'W oknach nie ma już ciasnych tabel — dłuższe listy (zarząd, reguły lokali, pliki) to czytelne wiersze. Długie sekcje można zwinąć; aplikacja pamięta, które zwinąłeś.',
+          'Listy rozwijane są tak szerokie jak najdłuższa opcja, więc nazwy nie są ucinane. Bardzo długą nazwę zobaczysz w całości po najechaniu myszką.',
+          'Okno „Czy na pewno usunąć…?” ma czerwony przycisk, a domyślnie zaznaczone jest „Anuluj” — Enter niczego nie usunie przez przypadek.',
+          'Ustawienia są podzielone na sekcje: Wygląd i działanie, Powiadomienia, Foldery, Kopia zapasowa, Aktualizacje… Lista konwerterów i Administracja są domyślnie zwinięte.',
+        ],
+        expect: [
+          'Wszystko działa jak dotąd — zmienił się wygląd i układ, nie sposób pracy.',
+          'Przyciski przy etykietach pól (np. „Mnie” i „Dziś” w zadaniu) są mniejsze i nie zasłaniają pola pod spodem.',
+        ],
+      },
+      {
+        id: 'zebrania-modul',
+        kind: 'new',
+        icon: 'file-check',
+        title: 'Zebrania — materiały na zebranie w jednym miejscu',
+        summary:
+          'Nowa pozycja „Zebrania” w menu, zaraz pod Kalendarzem. Każde zebranie ma swoje materiały (na razie zawiadomienie o zebraniu) i stan: „W przygotowaniu” albo „Przygotowane”.',
+        details: [
+          'Zebranie powiązane ze spotkaniem z Kalendarza bierze termin, wspólnotę i miejsce prosto ze spotkania — gdy przesuniesz spotkanie w Kalendarzu, Zebrania od razu pokazują nowy termin. Takie zebranie ma znaczek „z kalendarza”.',
+          'Możesz też dodać zebranie niezależne, bez spotkania w Kalendarzu — wtedy termin, wspólnotę i miejsce wpisujesz sam. Ma ono znaczek „niezależne”.',
+          'Stan materiałów jest wspólny ze spotkaniem: gdy oznaczysz aktualną wersję jako „Przygotowane”, karta spotkania w Kalendarzu też pokaże „Materiały przygotowane” — i odwrotnie.',
+        ],
+        where: ['Zebrania'],
+        steps: [
+          {
+            do: 'W Kalendarzu dodaj lub edytuj spotkanie i przy „Potrzebne materiały” wybierz „Potrzebne”, po czym zapisz.',
+            then: 'W module Zebrania automatycznie pojawia się wpis dla tego spotkania (wersja 1.0, „W przygotowaniu”) — aplikacja potwierdza to komunikatem.',
+          },
+          {
+            do: 'Kliknij „Nowe zebranie”, żeby dodać zebranie bez spotkania w Kalendarzu.',
+            then: 'Otwiera się formularz: Nazwa, Wspólnota, Data, Godzina i Miejsce (ze słownika lokalizacji albo „Inne miejsce — wpiszę ręcznie”).',
+          },
+          {
+            do: 'Kliknij zebranie na liście.',
+            then: 'Widzisz „Dane zebrania” oraz „Wersje materiałów” — przy każdej wersji jej stan, opis zmian i zawiadomienie.',
+          },
+          {
+            do: 'Przy wersji kliknij „Przygotuj zawiadomienie” (albo „Otwórz zawiadomienie”, jeśli już jest).',
+            then: 'Otwiera się edytor zawiadomienia — opis w „Zawiadomienie o zebraniu ze spotkania”.',
+          },
+          {
+            do: 'Przełącz stan wersji na „Przygotowane”, gdy materiały są gotowe.',
+            then: 'Stan zapisuje się od razu; przy zebraniu z kalendarza zmienia się też stan materiałów na karcie spotkania.',
+          },
+        ],
+        expect: [
+          'Gdy później odznaczysz potrzebne materiały na spotkaniu, wpis w Zebraniach zostaje — może mieć już przygotowane zawiadomienie.',
+          'Listę możesz przeszukiwać (nazwa, wspólnota, miejsce), filtrować po stanie aktualnej wersji i sortować: „Najbliższe najpierw” albo „Od najpóźniejszej daty”.',
+          'Dane zebrania z kalendarza zmieniasz w Kalendarzu — przycisk „Zmień w Kalendarzu” przenosi Cię do spotkania.',
+          'Usunięcie zebrania nie zmienia spotkania w Kalendarzu. Usunięcie spotkania zostawia zebranie z ostatnim terminem i miejscem.',
+        ],
+        note: {
+          type: 'tip',
+          text: 'Jeśli kiedyś ułożyłeś własną kolejność menu, „Zebrania” pojawią się na jego końcu — przeniesiesz je tam, gdzie zwykle układasz pozycje menu.',
+        },
+      },
+      {
+        id: 'zebrania-wersje',
+        kind: 'new',
+        icon: 'copy',
+        title: 'Wersje materiałów: 1.0, 1.1, 1.2…',
+        summary:
+          'Po zebraniu bywają korekty. Zamiast nadpisywać to, co już poszło do ludzi, dodajesz rewizję — kopię najnowszej wersji, którą poprawiasz osobno.',
+        where: ['Zebrania', 'wybrane zebranie', 'Wersje materiałów'],
+        steps: [
+          {
+            do: 'Kliknij „Dodaj rewizję”.',
+            then: 'Powstaje nowa wersja (np. 1.1) z kopią zawiadomienia z wersji 1.0, w stanie „W przygotowaniu”. Staje się wersją „aktualną”.',
+          },
+          {
+            do: 'Wpisz w „Opis zmian”, co poprawiasz, i kliknij „Zapisz opis”.',
+            then: 'Opis zostaje przy tej wersji, żeby było wiadomo, czym różni się od poprzedniej.',
+          },
+          {
+            do: 'Otwórz zawiadomienie nowej wersji i popraw je.',
+            then: 'Wersja 1.0 zostaje taka, jaka była — możesz do niej wrócić i ją pobrać.',
+          },
+        ],
+        expect: [
+          'Każdą wersję, także starszą, można dalej edytować.',
+          'Nowa rewizja zebrania z kalendarza cofa materiały spotkania do kroku „Do przygotowania” — poprawki to materiały, które jeszcze nie są gotowe.',
+        ],
+      },
+      {
+        id: 'zawiadomienie-z-kalendarza',
+        kind: 'new',
+        icon: 'calendar',
+        title: 'Zawiadomienie o zebraniu ze spotkania',
+        summary:
+          'Na karcie spotkania w Kalendarzu są nowe przyciski: „Przygotuj materiały” i „Zawiadomienie o zebraniu”. Zawiadomienie przygotujesz w prostym edytorze i pobierzesz jako PDF albo e-mail.',
+        details: [
+          'Termin, godzina, wspólnota i miejsce zebrania wstawiają się do pisma same, ze spotkania.',
+          'Gotowe zawiadomienie zapisuje się przy aktualnej wersji zebrania, więc możesz do niego wrócić, poprawić je i pobrać jeszcze raz.',
+        ],
+        where: ['Kalendarz', 'karta spotkania', 'Materiały'],
+        steps: [
+          {
+            do: 'Spotkanie z potrzebnymi materiałami ma wpis w Zebraniach od razu po zapisaniu. Dla starszego spotkania, które go jeszcze nie ma, kliknij „Przygotuj materiały” w sekcji „Materiały” (gdy materiały są na kroku „Do przygotowania”).',
+            then: 'Karta spotkania pokazuje „Zebrania: wersja 1.0 — W przygotowaniu” i przycisk „Otwórz w Zebraniach”.',
+          },
+          {
+            do: 'Kliknij „Zawiadomienie o zebraniu” (przycisk jest przy spotkaniu, które ma wybraną wspólnotę).',
+            then: 'Jeśli masz jeden szablon zawiadomienia, aplikacja wybiera go sama; jeśli kilka — wybierasz z listy. Gdy nie ma żadnego, zobaczysz przycisk „Przejdź do Mailing → Szablony”.',
+          },
+          {
+            do: 'Popraw tekst w piśmie i uzupełnij pola oznaczone pomarańczową ramką — kliknij pole i wpisz wartość.',
+            then: 'Wartość od razu pojawia się w piśmie. Z prawej widzisz listę „Do uzupełnienia” i adresatów („Do kogo”).',
+          },
+          {
+            do: 'Kliknij „Zapisz”, a potem „Pobierz PDF” albo „Pobierz e-mail”.',
+            then: 'Plik trafia do folderu Pobrane. Komunikat ma przyciski „Pokaż w folderze” i „Otwórz”.',
+          },
+        ],
+        expect: [
+          'Plik e-mail (.eml) otwiera się w Outlooku lub Poczcie jako gotowy szkic: adresaci, temat, treść z logo i dołączony PDF — wystarczy kliknąć „Wyślij”.',
+          'Pobranie jest zablokowane, dopóki w piśmie są puste pola — aplikacja pokaże, co uzupełnić.',
+          'Pobranie niczego nie wysyła i nie trafia do historii mailingu.',
+        ],
+        note: {
+          type: 'warning',
+          text: 'Najpierw dodaj w Mailing → Szablony szablon typu „Zawiadomienie o zebraniu” — bez niego nie ma z czego przygotować zawiadomienia.',
+        },
+      },
+      {
+        id: 'kalendarz-materialy',
+        kind: 'new',
+        icon: 'briefcase',
+        title: 'Materiały na spotkanie — krok po kroku',
+        summary:
+          'Przy spotkaniu zaznaczasz, czy potrzebne są materiały, a potem prowadzisz je przez trzy kroki: „Do przygotowania” → „Przygotowane” → „Wysłane”. Każdy krok widzi całe biuro.',
+        where: ['Kalendarz', 'karta spotkania', 'Materiały'],
+        steps: [
+          {
+            do: 'W formularzu spotkania, w sekcji „Materiały i zadania”, przy „Potrzebne materiały” wybierz „Potrzebne” (to ustawienie domyślne) i zapisz.',
+            then: 'Na karcie spotkania pojawia się sekcja „Materiały” z trzema krokami.',
+          },
+          {
+            do: 'Kliknij krok, na którym są materiały, np. „Przygotowane”.',
+            then: 'Krok i wszystkie przed nim dostają ptaszek, a obok tytułu sekcji widać stan, np. „Przygotowane”. Pod spodem: kto i kiedy to zmienił.',
+          },
+          {
+            do: 'Pomyłka? Kliknij wcześniejszy krok albo „Cofnij” w nagłówku sekcji.',
+            then: 'Materiały wracają o krok — bez wysyłania powiadomienia.',
+          },
+        ],
+        expect: [
+          'Każdy krok naprzód wysyła powiadomienie wszystkim osobom z biura (poza tym, kto kliknął). Kliknięcie powiadomienia otwiera to spotkanie. Te trzy powiadomienia możesz wyłączyć w Ustawieniach → Powiadomienia.',
+          'W siatce miesiąca spotkanie z materiałami ma ikonę teczki w kolorze stanu.',
+        ],
+      },
+      {
+        id: 'kalendarz-karta',
+        kind: 'improved',
+        icon: 'calendar',
+        title: 'Czytelniejsza karta spotkania',
+        summary:
+          'Karta spotkania w panelu dnia i w widoku listy jest podzielona na wyraźne części z szarym paskiem tytułu: Szczegóły, Uczestnicy, Materiały, Dokumenty i na końcu Zadania.',
+        where: ['Kalendarz', 'wybrany dzień'],
+        steps: [
+          {
+            do: 'Kliknij dzień w kalendarzu.',
+            then: 'Z prawej widzisz karty spotkań tego dnia. W prawym górnym rogu karty są trzy ikony: ołówek (Edytuj), dwie kartki (Klonuj) i kosz (Usuń) — po najechaniu każda mówi, co robi.',
+          },
+          {
+            do: 'Przeczytaj sekcję „Szczegóły”.',
+            then: 'Każda informacja ma podpis: Wspólnota, Miejsce, Jednostka ZGN, Dodał(a) — bez zgadywania, co znaczy ikona.',
+          },
+        ],
+        expect: [
+          'Termin wstępny pokazuje się jako niebieski pasek z przyciskiem „Potwierdź termin”. Termin potwierdzony oznaczysz jako wstępny przyciskiem w nagłówku sekcji „Szczegóły”.',
+          'Uczestnicy są podzieleni na „Z biura” i „Zarząd wspólnoty”.',
+          'Dokumenty mają stan obok tytułu: „Wysłane”, „Niewysłane” albo „Po terminie”.',
+          'Okno szczegółów spotkania otwierane z zadania ma ten sam podział na sekcje.',
+        ],
+      },
+      {
+        id: 'kalendarz-zadania',
+        kind: 'new',
+        icon: 'clipboard',
+        title: 'Zadania przy spotkaniu',
+        summary:
+          'Do spotkania możesz dodać zadania — np. „Wydrukować sprawozdanie” — od razu z karty spotkania albo z jego formularza. Zadania trafiają na wspólną tablicę Zadań, z odnośnikiem do spotkania.',
+        where: ['Kalendarz', 'karta spotkania', 'Zadania'],
+        steps: [
+          {
+            do: 'Na karcie spotkania, w sekcji „Zadania” (na samym dole), kliknij „Dodaj zadanie”.',
+            then: 'Otwiera się zwykły formularz zadania, już powiązany z tym spotkaniem.',
+          },
+          {
+            do: 'Kliknij nazwę zadania na karcie.',
+            then: 'Otwiera się podgląd zadania. Ikony obok pozwalają je edytować, usunąć albo otworzyć na tablicy Zadań.',
+          },
+          {
+            do: 'Na tablicy Zadań kliknij odnośnik spotkania na karcie zadania.',
+            then: 'Otwiera się okno ze szczegółami spotkania, z przyciskami „Edytuj” i „Pokaż spotkanie w Kalendarzu”.',
+          },
+        ],
+        expect: [
+          'Zadania dodane w formularzu nowego spotkania zapisują się razem z nim.',
+        ],
+      },
+      {
+        id: 'kalendarz-zgn-zarzad',
+        kind: 'new',
+        icon: 'users',
+        title: 'Zarząd wspólnoty i pełnomocnicy ZGN — w Adresach i przy spotkaniu',
+        summary:
+          'Przy wspólnocie zapisujesz członków zarządu, a przy jednostce ZGN jej pełnomocników. W spotkaniu wybierasz jednostkę ZGN albo pełnomocnika, a zarząd wspólnoty dodaje się sam.',
+        where: ['Adresy'],
+        steps: [
+          {
+            do: 'W Adresy → Adresy wspólnot kliknij liczbę w kolumnie „Zarząd” przy wspólnocie.',
+            then: 'Otwiera się okno zarządu: dodajesz osoby z imieniem, nazwiskiem i (opcjonalnie) adresem e-mail do zawiadomień.',
+          },
+          {
+            do: 'W Adresy → Jednostki ZGN, przy jednostce kliknij „Dodaj pełnomocnika”.',
+            then: 'Pełnomocnik pojawia się pod jednostką; on też może mieć e-mail do zawiadomień.',
+          },
+          {
+            do: 'W formularzu spotkania wybierz wspólnotę.',
+            then: 'Jej zarząd dodaje się do spotkania. Pojedyncze osoby usuniesz krzyżykiem i dodasz z listy; „Dodaj cały zarząd” przywraca wszystkich.',
+          },
+          {
+            do: 'W polu „Jednostka ZGN / pełnomocnik” wybierz jednostkę albo konkretnego pełnomocnika.',
+            then: 'Wybór widać na karcie spotkania w „Szczegółach”.',
+          },
+        ],
+        expect: [
+          'Osoby z zarządu z adresem e-mail i pełnomocnicy mogą być adresatami mailingu (patrz „Typy mailingu i domyślni adresaci”).',
+          'Usunięcie osoby z zarządu albo pełnomocnika nie zmienia spotkań, do których już ją dodano — zostaje tam jej nazwisko.',
+        ],
+      },
+      {
+        id: 'kalendarz-klon-lista',
+        kind: 'new',
+        icon: 'copy',
+        title: 'Klonowanie spotkań, widok listy i liczniki',
+        summary:
+          'Spotkanie sklonujesz jednym kliknięciem, cały miesiąc obejrzysz jako listę, a przy filtrach typów zobaczysz, ile spotkań przypada na miesiąc i rok.',
+        where: ['Kalendarz'],
+        steps: [
+          {
+            do: 'Na karcie spotkania kliknij ikonę dwóch kartek („Klonuj”).',
+            then: 'Otwiera się nowe spotkanie wypełnione danymi tamtego — zmieniasz datę i zapisujesz.',
+          },
+          {
+            do: 'Nad kalendarzem przełącz „Miesiąc” na „Lista”.',
+            then: 'Widzisz wszystkie spotkania miesiąca dzień po dniu, z pełnymi kartami. Nagłówek dnia zostaje u góry podczas przewijania. Aplikacja pamięta wybrany widok.',
+          },
+          {
+            do: 'Najedź myszką na filtr typu spotkania.',
+            then: 'Pojawia się okienko: ile spotkań tego typu jest w miesiącu i w całym roku.',
+          },
+        ],
+      },
+      {
+        id: 'mailing-typy',
+        kind: 'new',
+        icon: 'mail',
+        title: 'Typy mailingu i domyślni adresaci',
+        summary:
+          'Nowa zakładka „Typy mailingu” w module Mailing. Definiujesz własne rodzaje korespondencji, przypisujesz do nich szablony i ustawiasz, do kogo domyślnie idzie mail.',
+        details: [
+          'Adresatami mogą być: Jednostka ZGN, Pełnomocnik ZGN, Osoby z zarządu (członkowie zarządu wspólnoty z adresem e-mail) i Własne adresy — w dowolnym połączeniu.',
+          'Typ „Zawiadomienie o zebraniu” jest wbudowany: nie da się go usunąć ani zmienić jego nazwy, ale możesz zmienić jego opis i adresatów. Dotychczasowe „Zmiany zaliczek ZGN” to teraz zwykły typ — wszystkie istniejące szablony i historia zostają pod nim.',
+        ],
+        where: ['Mailing', 'Typy mailingu'],
+        steps: [
+          {
+            do: 'Kliknij „Dodaj typ”.',
+            then: 'Otwiera się okno z polami: Nazwa, Opis i Domyślni adresaci.',
+          },
+          {
+            do: 'Zaznacz grupy adresatów, ewentualnie dopisz własne adresy e-mail, i zapisz.',
+            then: 'Typ pojawia się na liście razem z podsumowaniem adresatów i liczbą szablonów.',
+          },
+          {
+            do: 'Przejdź do Mailing → Szablony i przy szablonie wybierz jego typ.',
+            then: 'Listę szablonów możesz filtrować po typie („Pokaż”).',
+          },
+        ],
+        expect: [
+          'Typu, który ma szablony, nie można usunąć — najpierw przenieś szablony do innego typu albo je usuń.',
+        ],
+      },
+      {
+        id: 'mailing-adresaci-wysylka',
+        kind: 'improved',
+        icon: 'users',
+        title: 'Adresaci przy wysyłce',
+        summary:
+          'Na ekranie wysyłki jest nowa sekcja „Adresaci”: widzisz, na jakie adresy poleci mail do każdej wspólnoty, i możesz to zmienić tylko dla tej wysyłki.',
+        where: ['Mailing', 'Wysyłka', 'Adresaci'],
+        steps: [
+          {
+            do: 'Wybierz typ, szablon i wspólnoty jak dotąd.',
+            then: 'Sekcja „Adresaci” pokazuje grupy z typu i konkretne adresy dla wybranej wspólnoty, np. „Mail trafi do: 3 adresatów”.',
+          },
+          {
+            do: 'Odznacz adres, który ma pominąć, albo zmień grupy.',
+            then: 'Pojawia się „Zmieniono dla tej wysyłki” i przycisk „Przywróć domyślnych z typu”.',
+          },
+        ],
+        expect: [
+          'Każda wspólnota dostaje jeden mail na wszystkie swoje adresy.',
+          'Wspólnota, dla której nie ma żadnego adresata, jest oznaczona i blokuje wysyłkę — aplikacja wyjaśnia dlaczego (np. „Wspólnota nie ma przypisanej jednostki ZGN”).',
+          'Historia mailingu pokazuje teraz wszystkich adresatów każdego maila.',
+        ],
+      },
+      {
+        id: 'mailing-edycja-w-podgladzie',
+        kind: 'new',
+        icon: 'edit',
+        title: 'Edycja pisma w podglądzie',
+        summary:
+          'Podgląd wiadomości na ekranie wysyłki jest teraz edytowalny: piszesz i formatujesz tekst bezpośrednio w piśmie, a pola dynamiczne uzupełniasz kliknięciem.',
+        where: ['Mailing', 'Wysyłka', 'Podgląd wiadomości'],
+        steps: [
+          {
+            do: 'Kliknij w tekst pisma i popraw go; użyj przycisków formatowania nad pismem (pogrubienie, listy, wyrównanie, tabela).',
+            then: 'Zmiana dotyczy tylko tej wysyłki — szablon zostaje bez zmian.',
+          },
+          {
+            do: 'Kliknij pole w piśmie, np. datę oznaczoną pomarańczową ramką.',
+            then: 'Otwiera się małe okienko: pole tekstowe, wybór daty albo godziny. Enter lub „Wstaw” — wartość od razu pojawia się w piśmie. Esc anuluje. Kliknij pole jeszcze raz, żeby zmienić wartość.',
+          },
+          {
+            do: 'Kliknij „Zapisz jako szablon”, jeśli poprawiony tekst ma zostać na kolejne wysyłki.',
+            then: 'Wybierasz „Nadpisz szablon „…”” albo „Zapisz jako nowy szablon”.',
+          },
+        ],
+        expect: [
+          'Pola uzupełniane automatycznie (Adres Wspólnoty, Data, pola ze spotkania) pokazują swoją wartość i nie dają się zmienić — po kliknięciu zobaczysz dlaczego.',
+          'Dopóki w piśmie są puste pola, przycisk „Wyślij” jest zablokowany, a pod nim widać, co uzupełnić.',
+        ],
+      },
+      {
+        id: 'mailing-pola-z-kalendarza',
+        kind: 'new',
+        icon: 'calendar',
+        title: 'Pola z kalendarza w szablonach',
+        summary:
+          'Cztery nowe pola wbudowane: „Data z kalendarza”, „Godzina z kalendarza”, „Adres wspólnoty z kalendarza” i „Adres zebrania” (lokalizacja zebrania: nazwa i adres).',
+        where: ['Mailing', 'Szablony', 'Wstaw pole…'],
+        steps: [
+          {
+            do: 'W treści szablonu kliknij wstawianie pola i wybierz jedno z pól „z kalendarza” albo „Adres zebrania”.',
+            then: 'Pole pojawia się w tekście jako pigułka.',
+          },
+        ],
+        expect: [
+          'Gdy pismo powstaje ze spotkania w Kalendarzu, pola wypełniają się same danymi spotkania (data w formacie dd.mm.rrrr, godzina gg:mm).',
+          'Bez spotkania (zwykła wysyłka albo zebranie niezależne) wpisujesz je ręcznie w podglądzie — data i godzina z wyborem w kalendarzyku.',
+        ],
+      },
+      {
+        id: 'ksiegowania-miesiac-wyciagu',
+        kind: 'improved',
+        icon: 'calendar',
+        title: 'Plik księgowy liczy się w miesiącu, za który jest wyciąg',
+        summary:
+          'Wyciąg za wrzesień skonwertowany w październiku pojawia się na Pulpicie we wrześniu — tam, gdzie się go księguje — a nie w miesiącu konwersji.',
+        details: [
+          'Przy każdej konwersji aplikacja odczytuje okres z transakcji wyciągu i zapisuje miesiąc, za który jest wyciąg. Pulpit grupuje pliki księgowe właśnie po nim.',
+          'Starsze konwersje aplikacja uzupełnia sama, gdy plik wyciągu jest jeszcze dostępny na tym komputerze. Pozostałe zostają w miesiącu, w którym je skonwertowano.',
+        ],
+        where: ['Pulpit', 'Księgowania'],
+        expect: [
+          'W październiku przełącz Pulpit na wrzesień — tam są pliki księgowe wyciągów wrześniowych i tam oznaczasz je „Zaksięguj w DOM”.',
+        ],
+      },
+      {
+        id: 'ksiegowania-niezalezne-od-historii',
+        kind: 'fixed',
+        icon: 'shield',
+        title: 'Wyczyszczenie historii nie kasuje już stanu księgowań',
+        summary:
+          'Stan Pulpitu — wygenerowane pliki księgowe i oznaczenia „Zaksięgowane w DOM” — jest teraz zapisywany osobno od historii konwersji. „Wyczyść historię” usuwa już tylko sam dziennik.',
+        details: [
+          'Wcześniej oznaczenia DOM były zapisane w wierszach historii, więc „Konwerter → Historia → Wyczyść historię” kasowało razem z dziennikiem cały stan księgowań na Pulpicie.',
+          'Teraz każda konwersja trafia do historii (dziennik) i do zapisu Pulpitu. Pulpit, ostrzeżenie „Ten plik był już przetworzony” i wyszukiwanie plików korzystają tylko z zapisu Pulpitu.',
+        ],
+        where: ['Konwerter', 'Historia', 'Wyczyść historię'],
+        expect: [
+          'Okno potwierdzenia mówi wprost, że usuwany jest tylko dziennik, a stan księgowań na Pulpicie zostaje bez zmian.',
+          'Kopia zapasowa zawiera stan księgowań osobno („stan księgowań (Pulpit)” w podsumowaniu kopii).',
+        ],
+      },
+      {
+        id: 'ksiegowania-znajdz-pliki',
+        kind: 'new',
+        icon: 'search',
+        title: 'Znajdź pliki księgowe — wyciągi i PDF-y same trafiają do wspólnot',
+        summary:
+          'Na Pulpicie (i w zakładce Konwerter → Księgowania) jeden przycisk przeszukuje folder z wyciągami i przypisuje pliki wybranego miesiąca do wspólnot: wyciągi do konwersji i ich PDF-y. Nie trzeba już szukać plików po folderach i przeciągać ich do Konwertera.',
+        details: [
+          'Wspólnotę i konto (eksploatacja, fundusz remontowy…) aplikacja rozpoznaje po numerze rachunku w pliku — tak samo jak po przeciągnięciu pliku do Konwertera. Bank rozpoznaje sama po formacie pliku. Miesiąc bierze z okresu wyciągu, a nie z daty pobrania pliku.',
+          'Przeszukiwany jest cały folder razem z podfolderami, więc układ folderów (bank → miesiąc albo inny) może się zmieniać.',
+          'PDF-y rozpoznaje po tekście (numer rachunku i „za okres”), bez AI i bez dodatkowych kosztów, i od razu zmienia ich nazwę na adres, typ konta i miesiąc, np. „Puławska_116_Eksploatacja_2026-08.pdf”. PDF za część miesiąca dostaje zakres dat, np. „…_2026-08-01_2026-08-15.pdf”.',
+          'Skan możesz uruchamiać wiele razy. Gdy znajdzie nowszą wersję pliku, który jest już przypisany, a nie został jeszcze zaksięgowany w DOM, zapyta, czy zamienić obecny na nowszy. Sam niczego nie podmienia.',
+        ],
+        where: ['Ustawienia', 'Foldery'],
+        steps: [
+          {
+            do: 'W Ustawieniach, w sekcji „Foldery”, przy polu „Folder nadrzędny przeszukiwany przez „Znajdź pliki księgowe”” kliknij „Zmień” i wskaż folder, w którym leżą wyciągi wszystkich banków.',
+            then: 'Ścieżka zapisuje się tylko na tym komputerze — na każdym komputerze wskazujesz ją raz.',
+          },
+          {
+            do: 'Na Pulpicie wybierz miesiąc w bannerze i kliknij „Znajdź pliki księgowe”.',
+            then: 'Otwiera się okno ze stanem przeszukiwania: najpierw liczba znalezionych plików, potem postęp odczytu.',
+          },
+          {
+            do: 'Jeśli pojawi się „Znaleziono nowsze pliki”, przy każdym wybierz „Zamień na nowszy” albo „Zostaw obecny” i kliknij „Zastosuj”.',
+            then: 'Przy pliku, który jest już skonwertowany, okno ostrzega, że po zamianie jego plik księgowy przestanie być aktualny. Przy „Zostaw obecny” ten sam plik nie wróci przy następnym skanie.',
+          },
+          {
+            do: 'Przeczytaj „Wynik skanowania” i kliknij „Gotowe”.',
+            then: 'Raport pokazuje przypisane pliki, błędy (plik wspólnoty, którego nie da się odczytać) oraz „Nierozpoznane” z powodem przy każdym pliku. Przy każdym pliku jest „Podgląd” (PDF) albo „Otwórz plik” (wyciąg) i ikona folderu „Pokaż w folderze”, a w stopce okna „Otwórz folder” otwiera cały folder z wyciągami.',
+          },
+          {
+            do: 'Kliknij kafelek „Gotowe do zaksięgowania”, a przy wspólnocie przycisk „Konwertuj”.',
+            then: 'Nad Pulpitem otwiera się okno konwersji z wyciągami tej wspólnoty — wspólnota, bank, typ konta i PDF są już ustawione. Konwertujesz jak w Konwerterze; po rozwiązaniu konfliktów wracasz do listy plików w tym samym oknie, a po jego zamknięciu — na Pulpit.',
+          },
+          {
+            do: 'Żeby skonwertować kilka wspólnot naraz, zaznacz pole wyboru na początku ich wierszy, a potem kliknij „Konwertuj zaznaczone” na pasku u dołu okna.',
+            then: 'W jednym oknie otwierają się wyciągi wszystkich zaznaczonych wspólnot. Szczegóły zaznaczania — w „Pulpit: zaznaczanie wielu wspólnot”.',
+          },
+          {
+            do: 'Żeby skonwertować tylko jeden wyciąg, rozwiń wspólnotę i w sekcji „Pliki z folderu” kliknij „Konwertuj” przy tym wyciągu.',
+            then: 'Okno konwersji otwiera się z tym jednym plikiem.',
+          },
+        ],
+        expect: [
+          'Nowe kafelki na Pulpicie: „Gotowe do zaksięgowania” (wyciąg czeka na konwersję), „Brak plików” (nie znaleziono jeszcze wyciągu) i „Bez PDF” (wyciąg nie ma PDF-a).',
+          'Plik wspólnoty w złym formacie albo uszkodzony trafia do kafelka „Błędy”, z opisem, co jest nie tak.',
+          'Po rozwinięciu wspólnoty sekcja „Pliki z folderu” pokazuje każdy wyciąg z okresem, PDF-em i stanem: „Czeka na konwersję”, „Skonwertowany” albo „W DOM”. Plik przypisany przez pomyłkę odepniesz w menu „⋯” przy wyciągu („Odepnij”), a PDF bez wyciągu — przyciskiem „Odepnij”. Plik zostaje w folderze.',
+          'Wyciąg skonwertowany wcześniej przez zwykłe przeciągnięcie do Konwertera też liczy się jako skonwertowany.',
+          'PDF dołącza się też do pliku księgowego, który już istnieje — także gdy wyciąg był skonwertowany z innego folderu. Widać go przy pliku księgowym po rozwinięciu wspólnoty.',
+          'Gdy wspólnota ma dwa konta tego samego typu, nazwa PDF-a zawiera końcówkę numeru konta, np. „Modzelewskiego_52_Eksploatacja_4963_2026-09.pdf”.',
+          'Paczki PKO BP z dziennymi raportami („Raporty_MT940_….zip”) są rozpoznawane jak wyciąg miesięczny i konwertowane jak w Konwerterze — bankiem PKO BP (MT940).',
+        ],
+        note: {
+          type: 'tip',
+          text: 'PDF bez warstwy tekstowej (skan) albo plik, w którym nie da się jednoznacznie ustalić konta lub okresu, trafia do „Nierozpoznanych” — aplikacja niczego nie zgaduje. Taki plik dołączysz ręcznie w Konwerterze, przyciskiem „Dodaj PDF” przy wyciągu.',
+        },
+      },
+      {
+        id: 'pulpit-zaznaczanie',
+        kind: 'improved',
+        icon: 'check-circle',
+        title: 'Pulpit: zaznaczanie wielu wspólnot',
+        summary:
+          'Nad listą wspólnot jest „Zaznacz wszystkie do konwersji”, a Shift + klik zaznacza cały zakres. Pasek „Konwertuj zaznaczone” unosi się u dołu okna — tam, gdzie kończysz zaznaczanie.',
+        where: ['Pulpit', 'Księgowania'],
+        steps: [
+          {
+            do: 'Kliknij „Zaznacz wszystkie do konwersji” nad listą.',
+            then: 'Zaznaczają się wszystkie wspólnoty widoczne na liście, które mają wyciąg do konwersji — z uwzględnieniem wybranego kafelka i wyszukiwania. Drugie kliknięcie („Odznacz wszystkie”) czyści zaznaczenie.',
+          },
+          {
+            do: 'Zaznacz jedną wspólnotę, przytrzymaj Shift i zaznacz inną, niżej.',
+            then: 'Zaznaczają się też wszystkie wspólnoty pomiędzy nimi.',
+          },
+          {
+            do: 'Kliknij „Konwertuj zaznaczone” na pasku u dołu.',
+            then: 'Otwiera się okno konwersji z wyciągami wszystkich zaznaczonych wspólnot.',
+          },
+        ],
+        expect: [
+          'Wiersz wspólnoty rozwijasz kliknięciem w dowolne miejsce — strzałka zniknęła, żeby zrobić miejsce.',
+          'W sekcji „Pliki z folderu” stan pliku („Czeka na konwersję”, „PDF bez wyciągu”…) stoi przy samym pliku, a z prawej są tylko przyciski.',
+        ],
+      },
+      {
+        id: 'pulpit-oznacz-bez-konwersji',
+        kind: 'new',
+        icon: 'check-circle',
+        title: 'Oznacz wyciąg jako zaksięgowany — bez konwersji',
+        summary:
+          'Gdy wyciąg trafił do DOM inną drogą (np. został wpisany ręcznie), oznaczysz go na Pulpicie jako zaksięgowany, bez konwertowania. To rozwiązanie awaryjne — aplikacja nie tworzy wtedy pliku księgowego.',
+        where: ['Pulpit', 'wiersz wspólnoty', 'Pliki z folderu'],
+        steps: [
+          {
+            do: 'Rozwiń wspólnotę i przy wyciągu w „Pliki z folderu” kliknij „⋯”.',
+            then: 'Menu ma pozycje „Oznacz jako zaksięgowane” i „Odepnij”.',
+          },
+          {
+            do: 'Wybierz „Oznacz jako zaksięgowane” i potwierdź.',
+            then: 'Wyciąg ma stan „W DOM · bez konwersji”, a wspólnota liczy go jako zaksięgowany. Na liście plików widać „bez pliku księgowego”.',
+          },
+          {
+            do: 'Żeby to cofnąć, kliknij „Cofnij” przy tym pliku (albo „⋯” → „Cofnij oznaczenie”).',
+            then: 'Wyciąg znów czeka na konwersję.',
+          },
+        ],
+        expect: [
+          'Oznaczenie jest zapisane razem ze stanem księgowań (nie w historii), więc „Wyczyść historię” go nie usunie. Jest też w kopii zapasowej.',
+          'Zbiorcze „Cofnij wszystko” przy wspólnocie nie rusza takich oznaczeń — cofasz je pojedynczo.',
+        ],
+      },
+      {
+        id: 'pulpit-kolejnosc-filtrow',
+        kind: 'new',
+        icon: 'grip',
+        title: 'Własna kolejność kafelków na Pulpicie',
+        summary:
+          'Kafelki filtrów Księgowań ułożysz po swojemu. Domyślnie: Wszystkie, Niezaksięgowane, Gotowe do zaksięgowania, Oczekujące na DOM, Oznaczone w DOM, Brak plików, Bez PDF, Błędy.',
+        where: ['Ustawienia', 'Wygląd i działanie', 'Kolejność filtrów'],
+        steps: [
+          {
+            do: 'Kliknij „Zmień kolejność filtrów”.',
+            then: 'Otwiera się okno z listą kafelków.',
+          },
+          {
+            do: 'Przeciągnij kafelki albo przesuń je strzałkami i kliknij „Zapisz kolejność”.',
+            then: 'Pulpit od razu pokazuje kafelki w nowej kolejności. „Przywróć domyślną” wraca do kolejności fabrycznej.',
+          },
+        ],
+        expect: ['Kolejność zapisuje się na tym komputerze i jest w kopii zapasowej ustawień.'],
+      },
+      {
+        id: 'ksiegowania-po-zawartosci',
+        kind: 'improved',
+        icon: 'file-check',
+        title: 'Wyciąg rozpoznany jako skonwertowany także po zmianie nazwy',
+        summary:
+          'Aplikacja łączy wyciąg z folderu z jego konwersją po zawartości pliku, a nie tylko po nazwie. Wyciąg przeniesiony albo przemianowany po konwersji nie pokazuje się już jako „Czeka na konwersję”.',
+        details: [
+          'Przy każdej konwersji zapisuje się odcisk zawartości pliku. Starsze konwersje aplikacja uzupełnia sama, gdy plik jest jeszcze tam, gdzie go skonwertowano.',
+        ],
+        where: ['Pulpit', 'wiersz wspólnoty', 'Pliki z folderu'],
+      },
+      {
+        id: 'konwerter-karty-plikow',
+        kind: 'improved',
+        icon: 'file-text',
+        title: 'Konwerter: każdy plik na własnej karcie',
+        summary:
+          'Lista plików w Konwerterze (i w oknie konwersji z Pulpitu) to teraz karty: nazwa, stan i przycisk w jednej linii, a pod nimi Bank, Adres, Typ konta i PDF wyciągu — podpisane i obok siebie.',
+        where: ['Konwerter'],
+        steps: [
+          {
+            do: 'Wybierz bank i dodaj pliki.',
+            then: 'Każdy plik ma kartę z polami do uzupełnienia. Pole na pliki zmienia się w wąski pasek, żeby lista była od razu widoczna.',
+          },
+          {
+            do: 'Kliknij „Konwertuj” na karcie albo „Konwertuj wszystkie” na dole.',
+            then: 'Po konwersji karta pokazuje, z czym plik został skonwertowany (bank, adres, typ konta, PDF, liczba transakcji), oraz przyciski „Podgląd” i „Księgowość”. „Konwertuj ponownie” i „Usuń z listy” są pod „⋯”.',
+          },
+        ],
+        expect: [
+          'Błąd konwersji widać na karcie w czerwonej ramce, z przyciskiem „Kopiuj”, i przyciskiem „Spróbuj ponownie” w nagłówku.',
+          'Ekran wyboru banku nie ma już ilustracji świnki-skarbonki.',
+        ],
+      },
+      {
+        id: 'konwersja-anuluj',
+        kind: 'new',
+        icon: 'x',
+        title: 'Anulowanie konwersji',
+        summary:
+          'Trwającą konwersję możesz przerwać przyciskiem „Anuluj” na karcie pliku, obok paska postępu.',
+        where: ['Konwerter', 'karta pliku'],
+        steps: [
+          {
+            do: 'Podczas konwersji kliknij „Anuluj” w nagłówku karty pliku.',
+            then: 'Przycisk zmienia się na „Anulowanie…”, a po chwili plik wraca do stanu „Oczekuje” i pojawia się komunikat „Konwersja anulowana”.',
+          },
+        ],
+        expect: [
+          'Anulowana konwersja niczego nie zapisuje: nie powstaje plik księgowy, nic nie trafia do historii ani na Pulpit.',
+          'Przy „Konwertuj wszystkie” anulowanie zatrzymuje całą kolejkę — pozostałe pliki czekają na ponowne uruchomienie.',
+          'Aplikacja nie wysyła już kolejnych zapytań do AI, więc anulowanie oszczędza też koszt.',
+        ],
+      },
+      {
+        id: 'akceptacja-otworz-pdf',
+        kind: 'improved',
+        icon: 'file-text',
+        title: 'Otwórz PDF wyciągu na ekranie akceptacji',
+        summary:
+          'Gdy do wyciągu jest podpięty PDF, w nagłówku ekranu akceptacji transakcji jest przycisk „Otwórz PDF” — otwiera cały plik w programie do PDF.',
+        where: ['Konwerter', 'Akceptacja transakcji'],
+        expect: [
+          'Wyszukiwanie transakcji w PDF-ie przy każdej karcie działa jak dotąd.',
+          'Ramka „Wybierz lokal” nie nachodzi już na dane transakcji nad nią.',
+        ],
+      },
+      {
+        id: 'zadania-karta',
+        kind: 'improved',
+        icon: 'edit',
+        title: 'Zadania: szybsza zmiana tytułu i porządek na karcie',
+        summary:
+          'Tytuł zadania zmieniasz jednym kliknięciem bezpośrednio na karcie, a opis stoi zaraz pod tytułem.',
+        where: ['Zadania'],
+        steps: [
+          {
+            do: 'Kliknij tytuł zadania na tablicy.',
+            then: 'Tytuł zamienia się w pole. Enter albo kliknięcie obok zapisuje, Esc anuluje. Kliknięcie w resztę karty dalej otwiera podgląd.',
+          },
+        ],
+        expect: [
+          '„Dodaj notatkę” to teraz mały plus obok nagłówka „Przypięte notatki”.',
+        ],
+      },
+      {
+        id: 'powiadomienia-lista',
+        kind: 'new',
+        icon: 'bell',
+        title: 'Lista powiadomień pod dzwonkiem',
+        summary:
+          'Obok powitania w menu bocznym jest dzwonek z liczbą nieprzeczytanych powiadomień. Powiadomienie, które przegapiłeś na pulpicie komputera, przeczytasz i otworzysz tutaj.',
+        where: ['menu boczne', 'dzwonek obok powitania'],
+        steps: [
+          {
+            do: 'Kliknij dzwonek.',
+            then: 'Otwiera się lista ostatnich powiadomień, od najnowszego.',
+          },
+          {
+            do: 'Kliknij powiadomienie.',
+            then: 'Aplikacja przechodzi tam, dokąd prowadzi (zadanie, spotkanie, Pulpit), i oznacza je jako przeczytane.',
+          },
+        ],
+        expect: [
+          'U góry listy są „Oznacz wszystkie jako przeczytane” i „Usuń wszystkie”.',
+          'Lista jest zapisana na tym komputerze i obejmuje do 100 ostatnich powiadomień.',
+        ],
+      },
+      {
+        id: 'menu-kolejnosc',
+        kind: 'new',
+        icon: 'menu',
+        title: 'Własna kolejność menu',
+        summary:
+          'Pozycje menu bocznego ułożysz po swojemu i podzielisz separatorami na sekcje.',
+        where: ['Ustawienia', 'Wygląd i działanie', 'Kolejność menu'],
+        steps: [
+          {
+            do: 'Kliknij „Zmień kolejność menu”.',
+            then: 'Otwiera się okno z pozycjami menu.',
+          },
+          {
+            do: 'Przeciągnij pozycje albo użyj strzałek; „Dodaj separator” dodaje linię między sekcjami. Kliknij „Zapisz kolejność”.',
+            then: 'Menu od razu ma nowy układ. „Przywróć domyślną” wraca do kolejności fabrycznej. „Wyloguj” zawsze zostaje na dole.',
+          },
+        ],
+      },
+    ],
+  },
+  {
     version: '8.0.0',
     date: '2026-10-02',
     title: 'Zadania z komentarzami, priorytetami, filtrami i notatkami; powiadomienia pod Twoją kontrolą',

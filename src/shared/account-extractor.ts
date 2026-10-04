@@ -18,6 +18,11 @@ export function normalizeAccount(raw: string | null | undefined): string | null 
   return digits;
 }
 
+/** Canonical 26 digits → the printed NRB form: `49 1020 1026 0000 1202 0185 2748`. */
+export function formatAccount(account: string): string {
+  return `${account.slice(0, 2)} ${account.slice(2).replace(/(\d{4})(?=\d)/g, '$1 ')}`;
+}
+
 /** True iff the string canonicalizes to a 26-digit Polish bank account number. */
 export function isValidAccountFormat(raw: string): boolean {
   return normalizeAccount(raw) !== null;

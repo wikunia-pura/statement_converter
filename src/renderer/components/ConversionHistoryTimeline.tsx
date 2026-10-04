@@ -5,6 +5,7 @@ import { useNotify } from './Notifications';
 import Icon from './Icon';
 import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
 import { resolveOutputFilePath } from '../../shared/outputPaths';
+import { plural } from '../plural';
 
 interface ConversionHistoryTimelineProps {
   history: ConversionHistory[];
@@ -28,18 +29,6 @@ function dayKeyOf(iso: string | Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
-}
-
-/** Polish plural: [one, few (2-4), many]. English: [singular, plural]. */
-function plural(n: number, language: Language, pl: [string, string, string], en: [string, string]): string {
-  if (language === 'en') return `${n} ${n === 1 ? en[0] : en[1]}`;
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  let word: string;
-  if (n === 1) word = pl[0];
-  else if (mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14)) word = pl[1];
-  else word = pl[2];
-  return `${n} ${word}`;
 }
 
 interface BankGroup {
@@ -72,7 +61,6 @@ const ConversionHistoryTimeline: React.FC<ConversionHistoryTimelineProps> = ({
   // Banks start collapsed; this holds the ids the user has expanded.
   const [expandedBanks, setExpandedBanks] = useState<Set<string>>(new Set());
   const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
-  const [isDarkMode, setIsDarkMode] = useState(document.body.classList.contains('dark-mode'));
   const dropdownRef = useRef<HTMLDivElement>(null);
   const menuPlacement = useDropdownPlacement(dropdownRef, openDropdownId !== null, 120);
 
@@ -83,15 +71,6 @@ const ConversionHistoryTimeline: React.FC<ConversionHistoryTimelineProps> = ({
   useEffect(() => {
     if (searchSeed !== undefined) setSearchTerm(searchSeed);
   }, [searchSeed]);
-
-  // Detect dark mode changes (inline dropdown styling depends on it).
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDarkMode(document.body.classList.contains('dark-mode'));
-    });
-    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
 
   // Close the open-file dropdown when clicking outside it.
   useEffect(() => {
@@ -257,9 +236,9 @@ const ConversionHistoryTimeline: React.FC<ConversionHistoryTimelineProps> = ({
 
   if (history.length === 0) {
     return (
-      <div className="empty-state">
-        <div className="empty-state-icon"><Icon name="history" size={48} /></div>
-        <div className="empty-state-text">{t.noConversionHistory}</div>
+      <div className="form-empty">
+        <Icon name="history" size={16} />
+        {t.noConversionHistory}
       </div>
     );
   }
@@ -267,20 +246,24 @@ const ConversionHistoryTimeline: React.FC<ConversionHistoryTimelineProps> = ({
   return (
     <div className="history-timeline">
       {showSearch && (
-        <div className="form-group" style={{ marginBottom: '15px' }}>
-          <input
-            type="text"
-            placeholder={t.searchHistory}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        <div className="list-filter">
+          <div className="input-icon">
+            <Icon name="search" size={15} />
+            <input
+              type="text"
+              placeholder={t.searchHistory}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              aria-label={t.searchHistory}
+            />
+          </div>
         </div>
       )}
 
       {days.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state-icon"><Icon name="search" size={48} /></div>
-          <div className="empty-state-text">{t.noHistoryResults}</div>
+        <div className="form-empty">
+          <Icon name="search" size={16} />
+          {t.noHistoryResults}
         </div>
       ) : (
         days.map((day, dayIndex) => {
@@ -363,79 +346,47 @@ const ConversionHistoryTimeline: React.FC<ConversionHistoryTimelineProps> = ({
                                 <div className="history-entry-actions">
                                   {entry.status === 'success' && entry.outputPath && (
                                     <div
-                                      style={{ position: 'relative', display: 'inline-block' }}
+                                      className="menu-anchor"
                                       ref={openDropdownId === entry.id ? dropdownRef : undefined}
                                     >
                                       <button
-                                        className="button button-small button-primary"
+                                        type="button"
+                                        className="button button-small button-secondary"
                                         onClick={() =>
                                           setOpenDropdownId(openDropdownId === entry.id ? null : entry.id)
                                         }
-                                      ><Icon name="folder" size={13} />{' '}
-                                        {t.open} ▾
+                                        aria-expanded={openDropdownId === entry.id}
+                                      >
+                                        <Icon name="folder" size={13} /> {t.open}
+                                        <Icon name="chevron-down" size={13} />
                                       </button>
                                       {openDropdownId === entry.id && (
                                         <div
+                                          className="menu-popover"
+                                          role="menu"
+                                          // Flips above the button near the viewport's bottom edge.
                                           style={{
-                                            position: 'absolute',
                                             top: menuPlacement.top,
                                             bottom: menuPlacement.bottom,
                                             marginTop: menuPlacement.marginTop,
                                             marginBottom: menuPlacement.marginBottom,
-                                            right: 0,
-                                            backgroundColor: 'var(--bg-surface)',
-                                            border: '1px solid var(--border-default)',
-                                            borderRadius: '4px',
-                                            boxShadow: isDarkMode
-                                              ? '0 2px 8px rgba(0,0,0,0.4)'
-                                              : '0 2px 8px rgba(0,0,0,0.15)',
-                                            zIndex: 1000,
-                                            minWidth: '150px',
                                           }}
                                         >
                                           <button
-                                            style={{
-                                              display: 'block',
-                                              width: '100%',
-                                              padding: '8px 12px',
-                                              border: 'none',
-                                              background: 'none',
-                                              textAlign: 'left',
-                                              cursor: 'pointer',
-                                              fontSize: '13px',
-                                              color: 'var(--text-primary)',
-                                            }}
+                                            type="button"
+                                            role="menuitem"
+                                            className="menu-popover__item"
                                             onClick={() => handleOpenFile(entry.outputPath, 'preview')}
-                                            onMouseEnter={(e) =>
-                                              (e.currentTarget.style.background = 'var(--bg-surface-sunken)')
-                                            }
-                                            onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
                                           >
-                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                                              <Icon name="file-text" size={13} /> {t.openPreview}
-                                            </span>
+                                            <Icon name="file-text" size={13} /> {t.openPreview}
                                           </button>
                                           <button
-                                            style={{
-                                              display: 'block',
-                                              width: '100%',
-                                              padding: '8px 12px',
-                                              border: 'none',
-                                              background: 'none',
-                                              textAlign: 'left',
-                                              cursor: 'pointer',
-                                              fontSize: '13px',
-                                              color: 'var(--text-primary)',
-                                            }}
+                                            type="button"
+                                            role="menuitem"
+                                            className="menu-popover__item"
                                             onClick={() => handleOpenFile(entry.outputPath, 'accounting')}
-                                            onMouseEnter={(e) =>
-                                              (e.currentTarget.style.background = 'var(--bg-surface-sunken)')
-                                            }
-                                            onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
                                           >
-                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                                              <Icon name="bar-chart" size={13} /> {t.openAccounting}
-                                            </span>
+                                            <Icon name="bar-chart" size={13} /> {t.openAccounting}
                                           </button>
                                         </div>
                                       )}

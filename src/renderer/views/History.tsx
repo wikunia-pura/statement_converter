@@ -4,6 +4,7 @@ import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
 import ConversionHistoryTimeline from '../components/ConversionHistoryTimeline';
+import { FormSection } from '../components/FormSection';
 import Icon from '../components/Icon';
 
 interface HistoryProps {
@@ -83,21 +84,20 @@ const History: React.FC<HistoryProps> = ({ language, searchSeed }) => {
 
   return (
     <div className="content-body">
-      <div className="card">
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '15px',
-          }}
-        >
-          <h2 style={{ margin: 0 }}>{t.recentConversions}</h2>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+      <FormSection
+        icon="history"
+        title={t.recentConversions}
+        description={t.historyDesc}
+        aside={
+          <div className="form-section__actions">
+            {/* Clearing is demoted: never the loudest button next to everyday actions. */}
             {history.length > 0 && (
-              <button className="button button-danger" onClick={handleClearHistory}>
-                <Icon name="trash" size={14} />{' '}{t.clearHistory}
-              </button>
+              <>
+                <button className="button button-ghost icon-danger" onClick={handleClearHistory}>
+                  <Icon name="trash" size={14} />{' '}{t.clearHistory}
+                </button>
+                <span className="toolbar-divider" aria-hidden="true" />
+              </>
             )}
             <button className="button button-import" onClick={handleImportHistory}>
               <Icon name="upload" size={14} />{' '}{t.importFromFile}
@@ -110,14 +110,10 @@ const History: React.FC<HistoryProps> = ({ language, searchSeed }) => {
               <Icon name="download" size={14} />{' '}{t.exportToFile}
             </button>
           </div>
-        </div>
-
-        <ConversionHistoryTimeline
-          history={history}
-          language={language}
-          searchSeed={searchSeed}
-        />
-      </div>
+        }
+      >
+        <ConversionHistoryTimeline history={history} language={language} searchSeed={searchSeed} />
+      </FormSection>
     </div>
   );
 };

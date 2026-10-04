@@ -1,6 +1,8 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { translations, Language } from '../translations';
+import { FormSection } from '../components/FormSection';
 import Icon from '../components/Icon';
+import { ModalFooter } from '../components/Modal';
 
 export interface NotyFileEntry {
   fileName: string;
@@ -153,92 +155,52 @@ const NotySwiadczenia: React.FC<Props> = ({ language, files, setFiles }) => {
     [files],
   );
 
+  const statusLabel = (status: NotyFileEntry['status']) =>
+    status === 'done' ? t.success : status === 'error' ? t.error : status === 'running' ? t.notyStatusConverting : t.pending;
+  const statusClass = (status: NotyFileEntry['status']) =>
+    status === 'done' ? 'status-success' : status === 'error' ? 'status-error' : 'status-pending';
+
   return (
     <div className="content-body">
-      <div className="card">
-        <div style={{ marginBottom: '20px' }}>
-          <h2 style={{ marginBottom: '4px', fontSize: '18px', color: 'var(--accent)' }}>
-            {t.notyTitle}
-          </h2>
-          <div style={{ fontSize: '13px', opacity: 0.7 }}>{t.notySubtitle}</div>
-        </div>
-
-        <div
-          className={`drop-zone ${dragOver ? 'drag-over' : ''}`}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onClick={handlePickPdfs}
-        >
-          <div className="drop-zone-icon"><Icon name="upload" size={40} /></div>
-          <div className="drop-zone-text">{t.dragDropFiles}</div>
-        </div>
-      </div>
-
-      {files.length > 0 ? (
-        <div className="card">
+      <div className="page-form">
+        <FormSection icon="file-text" title={t.notyTitle} description={t.notySubtitle}>
           <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '15px',
-              flexWrap: 'wrap',
-              gap: '10px',
-            }}
+            className={`drop-zone ${dragOver ? 'drag-over' : ''}`}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onClick={handlePickPdfs}
           >
-            <h2>{t.files}</h2>
-            <div className="button-group" style={{ margin: 0 }}>
-              <button
-                className="button button-success"
-                onClick={convertAll}
-                disabled={isProcessing || !anyPending}
-                title={!anyPending ? t.notyNothingToProcess : ''}
-                style={!anyPending || isProcessing ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
-              >
-                <Icon name="bar-chart" size={14} />{' '}
-                {isProcessing ? t.notyConverting : t.notyConvertAll}
-              </button>
-              <button
-                className="button button-danger"
-                onClick={clearAll}
-                disabled={isProcessing}
-              >
-                <Icon name="trash" size={14} /> {t.notyClearAll}
-              </button>
-            </div>
+            <div className="drop-zone-icon"><Icon name="upload" size={40} /></div>
+            <div className="drop-zone-text">{t.dragDropFiles}</div>
           </div>
+        </FormSection>
 
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: '40px' }}>#</th>
-                <th style={{ width: '30%' }}>{t.notyFile}</th>
-                <th style={{ width: '160px' }}>{t.notyStatus}</th>
-                <th style={{ textAlign: 'right' }}>{t.actions}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {files.map((f, idx) => {
-                const badgeClass =
-                  f.status === 'done'
-                    ? 'status-success'
-                    : f.status === 'error'
-                    ? 'status-error'
-                    : 'status-pending';
-                const badgeText =
-                  f.status === 'done'
-                    ? t.success
-                    : f.status === 'error'
-                    ? t.error
-                    : f.status === 'running'
-                    ? t.notyStatusConverting
-                    : t.pending;
-                return (
-                  <tr
-                    key={f.filePath}
-                    className={f.status === 'running' ? 'processing-row' : ''}
-                  >
+        <FormSection
+          icon="folder"
+          title={t.files}
+          description={files.length > 0 ? t.convFilesDesc : undefined}
+          aside={
+            files.length > 0 ? (
+              <button className="button button-ghost icon-danger" onClick={clearAll} disabled={isProcessing}>
+                <Icon name="trash" size={14} /> {t.convClear}
+              </button>
+            ) : undefined
+          }
+        >
+          {files.length > 0 ? (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th className="data-table__index">#</th>
+                  <th>{t.notyFile}</th>
+                  <th>{t.notyStatus}</th>
+                  <th className="data-table__actions">{t.actions}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {files.map((f, idx) => (
+                  <tr key={f.filePath} className={f.status === 'running' ? 'processing-row' : ''}>
                     {f.status === 'running' ? (
                       <td colSpan={4}>
                         <div className="processing-loader">
@@ -252,88 +214,96 @@ const NotySwiadczenia: React.FC<Props> = ({ language, files, setFiles }) => {
                       </td>
                     ) : (
                       <>
-                        <td>{idx + 1}</td>
-                        <td>{f.fileName}</td>
-                        <td>
-                          <span className={`status-badge ${badgeClass}`}>{badgeText}</span>
-                          {f.error && (
-                            <div
-                              style={{
-                                fontSize: '12px',
-                                color: 'var(--text-tertiary)',
-                                marginTop: '6px',
-                                cursor: 'pointer',
-                                wordBreak: 'break-word',
-                              }}
-                              onClick={() => navigator.clipboard.writeText(f.error || '')}
-                              title={f.error}
-                            >
-                              {f.error.slice(0, 120)}
-                            </div>
-                          )}
+                        <td className="data-table__index">{idx + 1}</td>
+                        <td className="data-table__name">
+                          <span className="cell-title">{f.fileName}</span>
                         </td>
                         <td>
-                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
+                          <span className={`status-badge ${statusClass(f.status)}`}>{statusLabel(f.status)}</span>
+                          {f.error && (
+                            <button
+                              type="button"
+                              className="cell-error-detail"
+                              onClick={() => navigator.clipboard.writeText(f.error || '')}
+                              title={`${t.convErrorCopy}\n\n${f.error}`}
+                            >
+                              {f.error.slice(0, 120)}
+                            </button>
+                          )}
+                        </td>
+                        <td className="data-table__actions">
+                          <div className="row-actions">
                             {f.status === 'done' ? (
                               <>
                                 <button
-                                  className="button button-small button-primary"
+                                  type="button"
+                                  className="button button-small button-secondary"
                                   onClick={() => openOutput(f.outputPath)}
-                                  style={{ whiteSpace: 'nowrap' }}
-                                ><Icon name="folder" size={13} />{' '}
-                                  {t.openFile}
+                                >
+                                  <Icon name="folder" size={13} /> {t.openFile}
                                 </button>
                                 <button
-                                  className="button button-small button-secondary"
+                                  type="button"
+                                  className="button button-small button-subtle"
                                   onClick={() => convertOne(f.filePath)}
                                   disabled={isProcessing}
-                                  style={{ whiteSpace: 'nowrap' }}
-                                ><Icon name="refresh" size={13} />{' '}
-                                  {t.notyConvertAgain}
+                                >
+                                  <Icon name="refresh" size={13} /> {t.notyConvertAgain}
                                 </button>
                               </>
                             ) : (
                               <button
-                                className="button button-small button-success"
+                                type="button"
+                                className="button button-small button-secondary"
                                 onClick={() => convertOne(f.filePath)}
                                 disabled={isProcessing}
-                                style={{ whiteSpace: 'nowrap' }}
-                              ><Icon name="arrow-right" size={13} />{' '}
-                                {t.notyConvert}
+                              >
+                                <Icon name="arrow-right" size={13} /> {t.notyConvert}
                               </button>
                             )}
                             <button
-                              className="button button-small button-danger"
+                              type="button"
+                              className="button button-ghost button-icon icon-danger"
                               onClick={() => removeFile(f.filePath)}
                               disabled={isProcessing}
-                            ><Icon name="trash" size={13} />{' '}
-                              {t.remove}
+                              title={t.remove}
+                              aria-label={`${t.remove}: ${f.fileName}`}
+                            >
+                              <Icon name="trash" size={15} />
                             </button>
                           </div>
                         </td>
                       </>
                     )}
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-
-          {statusMessage && (
-            <div
-              className={`zaliczki-status ${statusIsError ? 'zaliczki-status-error' : 'zaliczki-status-success'}`}
-              style={{ marginTop: '15px', marginBottom: 0 }}
-            >
-              <span style={{ flex: 1, wordBreak: 'break-all' }}>{statusMessage}</span>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="form-empty">
+              <Icon name="file-text" size={16} />
+              {t.notyNoFiles}
             </div>
           )}
-        </div>
-      ) : (
-        <div className="empty-state">
-          <div className="empty-state-icon"><Icon name="file-text" size={48} /></div>
-          <div className="empty-state-text">{t.notyNoFiles}</div>
-        </div>
-      )}
+        </FormSection>
+
+        {statusMessage && (
+          <div className={`callout callout--${statusIsError ? 'danger' : 'success'}`} role="status">
+            <Icon name={statusIsError ? 'alert-triangle' : 'check-circle'} size={16} />
+            <div className="callout__body callout__body--path">{statusMessage}</div>
+          </div>
+        )}
+
+        <ModalFooter
+          className="page-action-bar"
+          onSubmit={convertAll}
+          submitLabel={isProcessing ? t.notyConverting : t.notyConvertAll}
+          submitIcon="bar-chart"
+          submitDisabled={!anyPending}
+          submitTitle={t.notyNothingToProcess}
+          busy={isProcessing}
+        />
+      </div>
     </div>
   );
 };

@@ -13,6 +13,7 @@ import Icon from '../components/Icon';
 import Select from '../components/Select';
 import Loader from '../components/Loader';
 import UsersCard from '../components/UsersCard';
+import { FormField, FormRow, FormSection } from '../components/FormSection';
 
 interface SettingsProps {
   darkMode: boolean;
@@ -25,6 +26,8 @@ interface SettingsProps {
   onUserNamesChanged?: () => void;
   /** Opens the dialog that arranges the sidebar menu (it lives in App, which owns the menu). */
   onOpenSidebarOrder?: () => void;
+  /** The Pulpit's filter tiles, in the same order dialog. */
+  onOpenTileOrder?: () => void;
   /** Fired after settings came back from a file or a backup, so App re-reads what it keeps (menu order). */
   onSettingsRestored?: () => void;
 }
@@ -37,6 +40,7 @@ const Settings: React.FC<SettingsProps> = ({
   userEmail,
   onUserNamesChanged,
   onOpenSidebarOrder,
+  onOpenTileOrder,
   onSettingsRestored,
 }) => {
   const t = translations[language];
@@ -45,6 +49,7 @@ const Settings: React.FC<SettingsProps> = ({
   const [outputFolder, setOutputFolder] = useState('');
   const [impexFolder, setImpexFolder] = useState('');
   const [swrkFolder, setSwrkFolder] = useState('');
+  const [statementsFolder, setStatementsFolder] = useState('');
   const [skipUserApproval, setSkipUserApproval] = useState(false);
   const [alwaysUseAI, setAlwaysUseAI] = useState(true);
   const [calendarHoverCard, setCalendarHoverCard] = useState(false);
@@ -70,10 +75,6 @@ const Settings: React.FC<SettingsProps> = ({
     passwordSet: false,
   });
   const [smtpPassword, setSmtpPassword] = useState('');
-  // The ADMIN drawer at the bottom: shut on arrival. What is inside is either
-  // rarely touched (naming the accounts) or must not be touched at all (the
-  // skip-approval switch), so neither belongs in the flow of ordinary settings.
-  const [adminOpen, setAdminOpen] = useState(false);
   const [smtpBusy, setSmtpBusy] = useState(false);
 
   useEffect(() => {
@@ -98,6 +99,7 @@ const Settings: React.FC<SettingsProps> = ({
       setOutputFolder(settings.outputFolder);
       setImpexFolder(settings.impexFolder || '');
       setSwrkFolder(settings.swrkFolder || '');
+      setStatementsFolder(settings.statementsFolder || '');
       setSkipUserApproval(settings.skipUserApproval ?? false);
       setAlwaysUseAI(settings.alwaysUseAI !== false);
       setCalendarHoverCard(settings.calendarHoverCard ?? false);
@@ -123,6 +125,14 @@ const Settings: React.FC<SettingsProps> = ({
     if (folder) {
       await window.electronAPI.setImpexFolder(folder);
       setImpexFolder(folder);
+    }
+  };
+
+  const handleSelectStatementsFolder = async () => {
+    const folder = await window.electronAPI.selectOutputFolder();
+    if (folder) {
+      await window.electronAPI.setStatementsFolder(folder);
+      setStatementsFolder(folder);
     }
   };
 
@@ -299,6 +309,7 @@ const Settings: React.FC<SettingsProps> = ({
           setOutputFolder(settings.outputFolder || '');
           setImpexFolder(settings.impexFolder || '');
           setSwrkFolder(settings.swrkFolder || '');
+          setStatementsFolder(settings.statementsFolder || '');
           setSkipUserApproval(settings.skipUserApproval ?? false);
           setAlwaysUseAI(settings.alwaysUseAI !== false);
           setCalendarHoverCard(settings.calendarHoverCard ?? false);
@@ -380,7 +391,12 @@ const Settings: React.FC<SettingsProps> = ({
       .replace('{notificationPrefs}', String(counts.notificationPrefs))
       .replace('{appUserNames}', String(counts.appUserNames))
       .replace('{ksiegowaniaPriorytety}', String(counts.ksiegowaniaPriorytety))
-      .replace('{ksiegowaniaUwagi}', String(counts.ksiegowaniaUwagi));
+      .replace('{ksiegowaniaUwagi}', String(counts.ksiegowaniaUwagi))
+      .replace('{ksiegowaniaPliki}', String(counts.ksiegowaniaPliki))
+      .replace('{ksiegowaniaKonwersje}', String(counts.ksiegowaniaKonwersje))
+      .replace('{mailingTypy}', String(counts.mailingTypy))
+      .replace('{zebrania}', String(counts.zebrania))
+      .replace('{zebraniaWersje}', String(counts.zebraniaWersje));
   };
 
   const handleCreateBackup = async () => {
@@ -431,362 +447,280 @@ const Settings: React.FC<SettingsProps> = ({
     );
   }
 
+  /** A folder setting: read-only path, "Zmień", and — when optional — clear. */
+  const folderField = (
+    label: string,
+    hint: string | undefined,
+    value: string,
+    placeholder: string | undefined,
+    onChange: () => void,
+    onClear?: () => void,
+    clearTitle?: string,
+  ) => (
+    <FormField label={label} hint={hint}>
+      <div className="form-inline">
+        <div className="input-icon">
+          <Icon name="folder" size={15} />
+          <input type="text" value={value} readOnly placeholder={placeholder} aria-label={label} />
+        </div>
+        <button type="button" className="button button-secondary" onClick={onChange}>
+          {t.change}
+        </button>
+        {onClear && value && (
+          <button
+            type="button"
+            className="button button-ghost button-icon icon-danger"
+            onClick={onClear}
+            title={clearTitle}
+            aria-label={clearTitle}
+          >
+            <Icon name="x" size={15} />
+          </button>
+        )}
+      </div>
+    </FormField>
+  );
+
   return (
     <div className="content-body">
-        {/* Updates */}
-        <div className="card">
-          <h2 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Icon name="refresh" size={20} /> {t.checkForUpdates}
-          </h2>
-          <p style={{ color: 'var(--text-tertiary)', fontSize: '14px', marginBottom: '20px' }}>
-            Sprawdź czy dostępna jest nowa wersja aplikacji.
-          </p>
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-            <button 
-              className="button button-primary" 
-              onClick={async () => {
-                const result = await window.electronAPI.checkForUpdates();
-                if (result.message) {
-                  notify.info(result.message);
-                } else if (result.error) {
-                  notify.error(`Błąd: ${result.error}`);
-                } else if (result.available) {
-                  notify.info('Dostępna nowa wersja! Pojawi się powiadomienie.');
-                } else {
-                  notify.info('Nie znaleziono aktualizacji');
-                }
-              }}
-            ><Icon name="refresh" size={14} />{' '}
-              Sprawdź aktualizacje
-            </button>
-            <button 
-              className="button button-secondary" 
-              onClick={async () => {
-                const result = await window.electronAPI.openLogsFolder();
-                if (result.success && result.logPath) {
-                  console.log('Log file:', result.logPath);
-                }
-              }}
-              title="Otwórz folder z logami aplikacji - pomaga w diagnozowaniu problemów z aktualizacjami"
-            >
-              <Icon name="clipboard" size={14} /> Pokaż logi
-            </button>
-          </div>
-          <p style={{ color: 'var(--text-tertiary)', fontSize: '12px', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Icon name="info" size={12} /> Jeśli aktualizacja nie działa, sprawdź logi aby zobaczyć szczegóły błędu.
-          </p>
-        </div>
-
-        {/* Appearance Settings */}
-        <div className="card">
-          <h2 style={{ marginBottom: '20px' }}>{t.appearance}</h2>
-          
-          <div className="settings-row">
-            <div className="settings-label">
-              <span className="settings-label-main">{t.darkMode}</span>
-              <span className="settings-label-sub">
-                {darkMode ? 'Ciemny motyw jest włączony' : 'Jasny motyw jest włączony'}
-              </span>
+      <div className="page-form">
+        <FormSection icon="settings" title={t.setSectionLook} description={t.setSectionLookDesc}>
+          <div className="settings-list">
+            <div className="settings-row">
+              <div className="settings-label">
+                <span className="settings-label-main">{t.darkMode}</span>
+                <span className="settings-label-sub">{darkMode ? t.setDarkOn : t.setDarkOff}</span>
+              </div>
+              <label className="toggle-switch">
+                <input type="checkbox" checked={darkMode} onChange={handleDarkModeToggle} aria-label={t.darkMode} />
+                <span className="toggle-slider"></span>
+              </label>
             </div>
-            <label className="toggle-switch">
-              <input
-                type="checkbox"
-                checked={darkMode}
-                onChange={handleDarkModeToggle}
+
+            <div className="settings-row">
+              <div className="settings-label">
+                <span className="settings-label-main">{t.language}</span>
+                <span className="settings-label-sub">{t.setLanguageDesc}</span>
+              </div>
+              <Select
+                value={language}
+                onChange={handleLanguageChange}
+                options={[
+                  { value: 'pl', label: t.polish },
+                  { value: 'en', label: t.english },
+                ]}
+                ariaLabel={t.language}
+                className="settings-control"
               />
-              <span className="toggle-slider"></span>
-            </label>
-          </div>
-
-          <div className="settings-row">
-            <div className="settings-label">
-              <span className="settings-label-main">{t.language}</span>
-              <span className="settings-label-sub">Wybierz preferowany język</span>
             </div>
-            <Select
-              value={language}
-              onChange={handleLanguageChange}
-              options={[
-                { value: 'pl', label: t.polish },
-                { value: 'en', label: t.english },
-              ]}
-              style={{ width: 'auto', minWidth: '150px' }}
-            />
-          </div>
 
-          <div className="settings-row">
-            <div className="settings-label">
-              <span
-                className="settings-label-main"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-              >
-                <Icon name="menu" size={14} /> {t.sidebarOrderLabel}
-              </span>
-              <span className="settings-label-sub">{t.sidebarOrderHint}</span>
+            <div className="settings-row">
+              <div className="settings-label">
+                <span className="settings-label-main settings-label-main--icon">
+                  <Icon name="menu" size={14} /> {t.sidebarOrderLabel}
+                </span>
+                <span className="settings-label-sub">{t.sidebarOrderHint}</span>
+              </div>
+              <button type="button" className="button button-secondary" onClick={() => onOpenSidebarOrder?.()}>
+                {t.sidebarOrderOpen}
+              </button>
             </div>
-            <button
-              type="button"
-              className="button button-secondary"
-              onClick={() => onOpenSidebarOrder?.()}
-            >
-              {t.sidebarOrderOpen}
-            </button>
-          </div>
 
-          <div className="settings-row">
-            <div className="settings-label">
-              <span className="settings-label-main">{t.contractorSortOrder}</span>
-              <span className="settings-label-sub">{t.contractorSortOrderDesc}</span>
-            </div>
-            <Select
-              value={contractorSortOrder}
-              onChange={handleContractorSortOrderChange}
-              options={[
-                { value: 'name-asc', label: t.sortNameAsc },
-                { value: 'name-desc', label: t.sortNameDesc },
-                { value: 'account-asc', label: t.sortAccountAsc },
-                { value: 'account-desc', label: t.sortAccountDesc },
-              ]}
-              style={{ width: 'auto', minWidth: '180px' }}
-            />
-          </div>
+            {onOpenTileOrder && (
+              <div className="settings-row">
+                <div className="settings-label">
+                  <span className="settings-label-main settings-label-main--icon">
+                    <Icon name="grip" size={14} /> {t.ksTileOrderTitle}
+                  </span>
+                  <span className="settings-label-sub">{t.ksTileOrderSettingsHint}</span>
+                </div>
+                <button type="button" className="button button-secondary" onClick={onOpenTileOrder}>
+                  {t.ksTileOrderButton}
+                </button>
+              </div>
+            )}
 
-          <div className="settings-row">
-            <div className="settings-label">
-              <span className="settings-label-main" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                <Icon name="bot" size={14} /> {t.alwaysUseAI}
-              </span>
-              <span className="settings-label-sub">{t.alwaysUseAIDesc}</span>
-            </div>
-            <label className="toggle-switch">
-              <input
-                type="checkbox"
-                checked={alwaysUseAI}
-                onChange={handleAlwaysUseAIToggle}
+            <div className="settings-row">
+              <div className="settings-label">
+                <span className="settings-label-main">{t.contractorSortOrder}</span>
+                <span className="settings-label-sub">{t.contractorSortOrderDesc}</span>
+              </div>
+              <Select
+                value={contractorSortOrder}
+                onChange={handleContractorSortOrderChange}
+                options={[
+                  { value: 'name-asc', label: t.sortNameAsc },
+                  { value: 'name-desc', label: t.sortNameDesc },
+                  { value: 'account-asc', label: t.sortAccountAsc },
+                  { value: 'account-desc', label: t.sortAccountDesc },
+                ]}
+                ariaLabel={t.contractorSortOrder}
+                className="settings-control settings-control--wide"
               />
-              <span className="toggle-slider"></span>
-            </label>
-          </div>
-
-          <div className="settings-row">
-            <div className="settings-label">
-              <span
-                className="settings-label-main"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-              >
-                <Icon name="calendar" size={14} /> {t.calendarHoverCard}
-              </span>
-              <span className="settings-label-sub">{t.calendarHoverCardDesc}</span>
             </div>
-            <label className="toggle-switch">
-              <input
-                type="checkbox"
-                checked={calendarHoverCard}
-                onChange={handleCalendarHoverCardToggle}
-              />
-              <span className="toggle-slider"></span>
-            </label>
+
+            <div className="settings-row">
+              <div className="settings-label">
+                <span className="settings-label-main settings-label-main--icon">
+                  <Icon name="bot" size={14} /> {t.alwaysUseAI}
+                </span>
+                <span className="settings-label-sub">{t.alwaysUseAIDesc}</span>
+              </div>
+              <label className="toggle-switch">
+                <input type="checkbox" checked={alwaysUseAI} onChange={handleAlwaysUseAIToggle} aria-label={t.alwaysUseAI} />
+                <span className="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div className="settings-row">
+              <div className="settings-label">
+                <span className="settings-label-main settings-label-main--icon">
+                  <Icon name="calendar" size={14} /> {t.calendarHoverCard}
+                </span>
+                <span className="settings-label-sub">{t.calendarHoverCardDesc}</span>
+              </div>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={calendarHoverCard}
+                  onChange={handleCalendarHoverCardToggle}
+                  aria-label={t.calendarHoverCard}
+                />
+                <span className="toggle-slider"></span>
+              </label>
+            </div>
           </div>
-        </div>
+        </FormSection>
 
         {/* Notifications: what may interrupt, and which of it can be switched off */}
-        <div className="card">
-          <h2 style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Icon name="info" size={20} /> {t.notifTitle}
-          </h2>
-          <p className="settings-label-sub" style={{ marginBottom: '12px' }}>{t.notifIntro}</p>
-          <div className="settings-row">
-            <div className="settings-label">
-              <span className="settings-label-main">{t.notifTestLabel}</span>
-              <span className="settings-label-sub">{t.notifTestDesc}</span>
-            </div>
-            <button
-              type="button"
-              className="button button-secondary"
-              onClick={() => void handleSendTestNotification()}
-            >
-              <Icon name="info" size={14} /> {t.notifTestButton}
+        <FormSection
+          icon="bell"
+          title={t.notifTitle}
+          description={t.notifIntro}
+          aside={
+            <button type="button" className="button button-small button-subtle" onClick={() => void handleSendTestNotification()} title={t.notifTestDesc}>
+              <Icon name="bell" size={13} /> {t.notifTestButton}
             </button>
-          </div>
-          {NOTIFICATION_GROUPS.map((group) => (
-            <div key={group}>
-              <div className="notif-group">
-                {group === 'zadania'
-                  ? t.notifGroupZadania
-                  : group === 'kalendarz'
-                    ? t.notifGroupKalendarz
-                    : t.notifGroupKsiegowania}
-              </div>
-              {NOTIFICATION_DEFS.filter((d) => d.group === group).map((def) => {
-                const [label, desc] = notificationText[def.id];
-                return (
-                  <div className="settings-row" key={def.id}>
-                    <div className="settings-label">
-                      <span className="settings-label-main">{label}</span>
-                      <span className="settings-label-sub">{desc}</span>
+          }
+        >
+          <div className="settings-list">
+            {NOTIFICATION_GROUPS.map((group) => (
+              <React.Fragment key={group}>
+                <div className="notif-group">
+                  {group === 'zadania'
+                    ? t.notifGroupZadania
+                    : group === 'kalendarz'
+                      ? t.notifGroupKalendarz
+                      : t.notifGroupKsiegowania}
+                </div>
+                {NOTIFICATION_DEFS.filter((d) => d.group === group).map((def) => {
+                  const [label, desc] = notificationText[def.id];
+                  return (
+                    <div className="settings-row" key={def.id}>
+                      <div className="settings-label">
+                        <span className="settings-label-main">{label}</span>
+                        <span className="settings-label-sub">{desc}</span>
+                      </div>
+                      <div className="notif-control">
+                        {materialyTestKrok[def.id] && (
+                          <button
+                            type="button"
+                            className="button button-small button-subtle"
+                            title={t.notifTestMaterialyHint}
+                            onClick={() => void handleSendTestMaterialy(materialyTestKrok[def.id]!)}
+                          >
+                            <Icon name="bell" size={13} /> {t.notifTestButton}
+                          </button>
+                        )}
+                        {def.locked && <span className="form-section__badge is-neutral">{t.notifAlwaysOn}</span>}
+                        <label className="toggle-switch" title={def.locked ? t.notifAlwaysOn : undefined}>
+                          <input
+                            type="checkbox"
+                            checked={isNotificationEnabled(notificationPrefs, def.id)}
+                            disabled={def.locked}
+                            onChange={() => void handleNotificationToggle(def.id)}
+                            aria-label={label}
+                          />
+                          <span className="toggle-slider"></span>
+                        </label>
+                      </div>
                     </div>
-                    <div className="notif-control">
-                      {materialyTestKrok[def.id] && (
-                        <button
-                          type="button"
-                          className="button button-small button-secondary"
-                          title={t.notifTestMaterialyHint}
-                          onClick={() => void handleSendTestMaterialy(materialyTestKrok[def.id]!)}
-                        >
-                          <Icon name="info" size={13} /> {t.notifTestButton}
-                        </button>
-                      )}
-                      {def.locked && <span className="notif-locked">{t.notifAlwaysOn}</span>}
-                      <label className="toggle-switch" title={def.locked ? t.notifAlwaysOn : undefined}>
-                        <input
-                          type="checkbox"
-                          checked={isNotificationEnabled(notificationPrefs, def.id)}
-                          disabled={def.locked}
-                          onChange={() => void handleNotificationToggle(def.id)}
-                        />
-                        <span className="toggle-slider"></span>
-                      </label>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-
-        {/* Output Folder Settings */}
-        <div className="card">
-          <h2 style={{ marginBottom: '15px' }}>{t.outputFolder}</h2>
-          <div className="form-group">
-            <label>{t.convertedFilesSaved}</label>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <input type="text" value={outputFolder} readOnly />
-              <button className="button button-primary" onClick={handleSelectOutputFolder}>
-                <Icon name="folder" size={14} />{' '}{t.change}
-              </button>
-            </div>
+                  );
+                })}
+              </React.Fragment>
+            ))}
           </div>
-        </div>
+        </FormSection>
 
-        {/* IMPEX Folder Settings */}
-        <div className="card">
-          <h2 style={{ marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Icon name="folder" size={20} /> Folder IMPEX
-          </h2>
-          <div className="form-group">
-            <label>
-              Opcjonalna ścieżka dla dodatkowej kopii plików accounting
-              <span style={{ display: 'block', fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '5px' }}>
-                Jeśli ustawiona, każdy plik accounting będzie dodatkowo zapisany w tym folderze
-              </span>
-            </label>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <input 
-                type="text" 
-                value={impexFolder} 
-                readOnly 
-                placeholder="Nie ustawiono (opcjonalnie)"
-              />
-              <button className="button button-primary" onClick={handleSelectImpexFolder}>
-                <Icon name="folder" size={14} />{' '}{t.change}
-              </button>
-              {impexFolder && (
-                <button
-                  className="button button-secondary"
-                  onClick={async () => {
-                    await window.electronAPI.setImpexFolder('');
-                    setImpexFolder('');
-                  }}
-                  title="Wyczyść ścieżkę IMPEX"
-                >
-                  <Icon name="x" size={14} />
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* SWRK Folder Settings */}
-        <div className="card">
-          <h2 style={{ marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Icon name="folder" size={20} /> {t.swrkFolderTitle}
-          </h2>
-          <div className="form-group">
-            <label>
-              {t.swrkFolderLabel}
-              <span style={{ display: 'block', fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '5px' }}>
-                {t.swrkFolderHint}
-              </span>
-            </label>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <input
-                type="text"
-                value={swrkFolder}
-                readOnly
-                placeholder={t.swrkFolderPlaceholder}
-              />
-              <button className="button button-primary" onClick={handleSelectSwrkFolder}>
-                <Icon name="folder" size={14} />{' '}{t.change}
-              </button>
-              {swrkFolder && (
-                <button
-                  className="button button-secondary"
-                  onClick={async () => {
-                    await window.electronAPI.setSwrkFolder('');
-                    setSwrkFolder('');
-                  }}
-                  title={t.swrkFolderClearTooltip}
-                >
-                  <Icon name="x" size={14} />
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+        <FormSection icon="folder" title={t.setSectionFolders} description={t.setSectionFoldersDesc}>
+          {folderField(t.outputFolder, t.convertedFilesSaved, outputFolder, undefined, handleSelectOutputFolder)}
+          {folderField(
+            t.statementsFolderLabel,
+            t.statementsFolderHint,
+            statementsFolder,
+            t.statementsFolderPlaceholder,
+            handleSelectStatementsFolder,
+            async () => {
+              await window.electronAPI.setStatementsFolder('');
+              setStatementsFolder('');
+            },
+            t.statementsFolderClear,
+          )}
+          {folderField(
+            t.swrkFolderLabel,
+            t.swrkFolderHint,
+            swrkFolder,
+            t.swrkFolderPlaceholder,
+            handleSelectSwrkFolder,
+            async () => {
+              await window.electronAPI.setSwrkFolder('');
+              setSwrkFolder('');
+            },
+            t.swrkFolderClearTooltip,
+          )}
+          {folderField(
+            t.setImpexLabel,
+            t.setImpexHint,
+            impexFolder,
+            t.setNotSet,
+            handleSelectImpexFolder,
+            async () => {
+              await window.electronAPI.setImpexFolder('');
+              setImpexFolder('');
+            },
+            t.setImpexClear,
+          )}
+        </FormSection>
 
         {/* Mailing — SMTP of the mailbox we send from (machine-local) */}
-        <div className="card">
-          <h2 style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Icon name="mail" size={20} /> {t.smtpTitle}
-          </h2>
-          <p style={{ color: 'var(--text-tertiary)', fontSize: '13px', marginBottom: '18px', maxWidth: '80ch' }}>
-            {t.smtpHint}
-          </p>
-
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <div className="form-group" style={{ flex: '1 1 260px' }}>
-              <label>{t.smtpHost}</label>
+        <FormSection icon="mail" title={t.smtpTitle} description={t.smtpHint}>
+          <FormRow>
+            <FormField label={t.smtpHost} htmlFor="smtp-host">
               <input
+                id="smtp-host"
                 type="text"
                 value={smtp.host}
                 onChange={(e) => setSmtp({ ...smtp, host: e.target.value })}
                 placeholder="poczta.home.pl"
               />
-            </div>
-            <div className="form-group" style={{ flex: '0 1 120px' }}>
-              <label>{t.smtpPort}</label>
-              <input
-                type="number"
-                value={smtp.port}
-                onChange={(e) => setSmtp({ ...smtp, port: Number(e.target.value) })}
-              />
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '12px',
-              marginBottom: '16px',
-            }}
-          >
-            <div>
-              <div style={{ fontSize: '13px' }}>{t.smtpSecure}</div>
-              <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>{t.smtpSecureHint}</div>
-            </div>
-            <label className="toggle-switch">
+            </FormField>
+            <FormField label={t.smtpPort} htmlFor="smtp-port">
+              <div className="form-inline form-inline--narrow">
+                <input
+                  id="smtp-port"
+                  type="number"
+                  value={smtp.port}
+                  onChange={(e) => setSmtp({ ...smtp, port: Number(e.target.value) })}
+                />
+              </div>
+            </FormField>
+          </FormRow>
+          <label className="switch-row">
+            <span className="switch-row__text">
+              <span className="switch-row__label">{t.smtpSecure}</span>
+              <span className="switch-row__hint">{t.smtpSecureHint}</span>
+            </span>
+            <span className="toggle-switch">
               <input
                 type="checkbox"
                 checked={smtp.secure}
@@ -801,80 +735,147 @@ const Settings: React.FC<SettingsProps> = ({
                 }
               />
               <span className="toggle-slider"></span>
-            </label>
-          </div>
-
-          <div className="form-group">
-            <label>{t.smtpUser}</label>
+            </span>
+          </label>
+          <FormRow>
+            <FormField label={t.smtpUser} htmlFor="smtp-user">
+              <div className="input-icon">
+                <Icon name="mail" size={15} />
+                <input
+                  id="smtp-user"
+                  type="email"
+                  value={smtp.user}
+                  onChange={(e) => setSmtp({ ...smtp, user: e.target.value })}
+                  placeholder="np. biuro@twojafirma.pl"
+                />
+              </div>
+            </FormField>
+            <FormField
+              label={t.smtpPassword}
+              htmlFor="smtp-password"
+              hint={smtp.passwordSet ? t.smtpPasswordStored : t.smtpPasswordHint}
+            >
+              <input
+                id="smtp-password"
+                type="password"
+                value={smtpPassword}
+                onChange={(e) => setSmtpPassword(e.target.value)}
+                placeholder={smtp.passwordSet ? t.smtpPasswordPlaceholderStored : t.smtpPasswordPlaceholder}
+                autoComplete="new-password"
+              />
+            </FormField>
+          </FormRow>
+          <FormField label={t.smtpFromName} htmlFor="smtp-from">
             <input
-              type="email"
-              value={smtp.user}
-              onChange={(e) => setSmtp({ ...smtp, user: e.target.value })}
-              placeholder="np. biuro@twojafirma.pl"
-            />
-          </div>
-
-          <div className="form-group">
-            <label>{t.smtpPassword}</label>
-            <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '6px' }}>
-              {smtp.passwordSet ? t.smtpPasswordStored : t.smtpPasswordHint}
-            </div>
-            <input
-              type="password"
-              value={smtpPassword}
-              onChange={(e) => setSmtpPassword(e.target.value)}
-              placeholder={smtp.passwordSet ? t.smtpPasswordPlaceholderStored : t.smtpPasswordPlaceholder}
-              autoComplete="new-password"
-            />
-          </div>
-
-          <div className="form-group">
-            <label>{t.smtpFromName}</label>
-            <input
+              id="smtp-from"
               type="text"
               value={smtp.fromName}
               onChange={(e) => setSmtp({ ...smtp, fromName: e.target.value })}
               placeholder={t.smtpFromNamePlaceholder}
             />
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '12px',
-              marginBottom: '18px',
-            }}
-          >
-            <div>
-              <div style={{ fontSize: '13px' }}>{t.smtpBccSelf}</div>
-              <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>{t.smtpBccSelfHint}</div>
-            </div>
-            <label className="toggle-switch">
+          </FormField>
+          <label className="switch-row">
+            <span className="switch-row__text">
+              <span className="switch-row__label">{t.smtpBccSelf}</span>
+              <span className="switch-row__hint">{t.smtpBccSelfHint}</span>
+            </span>
+            <span className="toggle-switch">
               <input
                 type="checkbox"
                 checked={smtp.bccSelf}
                 onChange={(e) => setSmtp({ ...smtp, bccSelf: e.target.checked })}
               />
               <span className="toggle-slider"></span>
-            </label>
-          </div>
-
-          <div className="button-group" style={{ marginTop: 0 }}>
-            <button className="button button-success" onClick={handleSaveSmtp} disabled={smtpBusy}>
-              <Icon name="save" size={14} /> {t.save}
+            </span>
+          </label>
+          <div className="section-actions">
+            <button type="button" className="button button-secondary" onClick={handleTestSmtp} disabled={smtpBusy}>
+              <Icon name="mail" size={14} /> {t.smtpTest}
             </button>
-            <button className="button button-secondary" onClick={handleTestSmtp} disabled={smtpBusy}>
-              <Icon name="refresh" size={14} /> {t.smtpTest}
+            <button type="button" className="button button-success" onClick={handleSaveSmtp} disabled={smtpBusy}>
+              <Icon name={smtpBusy ? 'loader' : 'save'} size={14} className={smtpBusy ? 'icon-spin' : undefined} /> {t.save}
             </button>
           </div>
-        </div>
+        </FormSection>
 
-        {/* Available Converters Info */}
-        <div className="card">
-          <h2 style={{ marginBottom: '15px' }}>{t.availableConverters}</h2>
-          <table>
+        <FormSection
+          icon="shield"
+          title={t.backupTitle}
+          description={t.backupDesc}
+          aside={
+            <div className="form-section__actions">
+              <button type="button" className="button button-small button-subtle" onClick={() => window.electronAPI.backupOpenFolder()} disabled={backupBusy}>
+                <Icon name="folder" size={13} /> {t.backupOpenFolder}
+              </button>
+            </div>
+          }
+        >
+          <div className="callout callout--muted">
+            <Icon name="clock" size={16} />
+            <div className="callout__body">
+              {t.backupAutoInfo} {t.backupLastAuto}: <strong>{backupStatus?.lastAutoBackup ?? t.backupNever}</strong>
+            </div>
+          </div>
+          <div className="section-actions section-actions--start">
+            <button type="button" className="button button-export" onClick={handleCreateBackup} disabled={backupBusy}>
+              <Icon name="download" size={14} /> {t.backupCreate}
+            </button>
+            <button type="button" className="button button-import" onClick={handleRestoreBackup} disabled={backupBusy}>
+              <Icon name="upload" size={14} /> {t.backupRestore}
+            </button>
+          </div>
+        </FormSection>
+
+        <FormSection icon="settings" title={t.setSectionSettingsIo} description={t.setSectionSettingsIoDesc}>
+          <div className="section-actions section-actions--start">
+            <button type="button" className="button button-export" onClick={handleExportSettings}>
+              <Icon name="download" size={14} /> {t.setExport}
+            </button>
+            <button type="button" className="button button-import" onClick={handleImportSettings}>
+              <Icon name="upload" size={14} /> {t.setImport}
+            </button>
+          </div>
+        </FormSection>
+
+        <FormSection icon="refresh" title={t.setSectionUpdates} description={t.setSectionUpdatesDesc}>
+          <div className="section-actions section-actions--start">
+            <button
+              type="button"
+              className="button button-primary"
+              onClick={async () => {
+                const result = await window.electronAPI.checkForUpdates();
+                if (result.message) {
+                  notify.info(result.message);
+                } else if (result.error) {
+                  notify.error(`${t.setUpdateError}: ${result.error}`);
+                } else if (result.available) {
+                  notify.info(t.setUpdateAvailable);
+                } else {
+                  notify.info(t.setUpdateNone);
+                }
+              }}
+            >
+              <Icon name="refresh" size={14} /> {t.checkForUpdates}
+            </button>
+            <button
+              type="button"
+              className="button button-secondary"
+              onClick={async () => {
+                const result = await window.electronAPI.openLogsFolder();
+                if (result.success && result.logPath) {
+                  console.log('Log file:', result.logPath);
+                }
+              }}
+              title={t.setShowLogsHint}
+            >
+              <Icon name="clipboard" size={14} /> {t.setShowLogs}
+            </button>
+          </div>
+          <div className="form-field__hint">{t.setUpdatesHint}</div>
+        </FormSection>
+
+        <FormSection icon="zap" title={t.availableConverters} description={t.setSectionConvertersDesc} collapsible defaultCollapsed persistKey="settings.converters">
+          <table className="form-table">
             <thead>
               <tr>
                 <th>{t.converterName}</th>
@@ -882,141 +883,47 @@ const Settings: React.FC<SettingsProps> = ({
               </tr>
             </thead>
             <tbody>
-              {converters.filter(c => c && c.id).map((converter) => (
+              {converters.filter((c) => c && c.id).map((converter) => (
                 <tr key={converter.id}>
-                  <td>{converter.name || converter.id}</td>
-                  <td style={{ color: 'var(--text-tertiary)' }}>{converter.description || 'No description'}</td>
+                  <td className="form-table__label">{converter.name || converter.id}</td>
+                  <td className="form-table__sub">{converter.description || t.setNoDescription}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-
-        {/* Export/Import Settings */}
-        <div className="card">
-          <h2 style={{ marginBottom: '20px' }}>📦 Zarządzanie ustawieniami</h2>
-          <p style={{ color: 'var(--text-tertiary)', fontSize: '14px', marginBottom: '20px' }}>
-            Eksportuj lub importuj swoje ustawienia, w tym listę banków i preferencje aplikacji.
-          </p>
-          <div className="button-group" style={{ marginTop: 0 }}>
-            <button className="button button-export" onClick={handleExportSettings}>
-              <Icon name="download" size={14} /> Eksportuj ustawienia
-            </button>
-            <button className="button button-import" onClick={handleImportSettings}>
-              <Icon name="upload" size={14} /> Importuj ustawienia
-            </button>
-          </div>
-        </div>
-
-        {/* Backup */}
-        <div className="card">
-          <h2 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Icon name="shield" size={20} /> {t.backupTitle}
-          </h2>
-          <p style={{ color: 'var(--text-tertiary)', fontSize: '14px', marginBottom: '10px' }}>
-            {t.backupDesc}
-          </p>
-          <p style={{ color: 'var(--text-tertiary)', fontSize: '13px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Icon name="info" size={12} /> {t.backupAutoInfo}{' '}
-            {t.backupLastAuto}: <strong>{backupStatus?.lastAutoBackup ?? t.backupNever}</strong>
-          </p>
-          <div className="button-group" style={{ marginTop: 0 }}>
-            <button className="button button-export" onClick={handleCreateBackup} disabled={backupBusy}>
-              <Icon name="download" size={14} /> {t.backupCreate}
-            </button>
-            <button className="button button-import" onClick={handleRestoreBackup} disabled={backupBusy}>
-              <Icon name="upload" size={14} /> {t.backupRestore}
-            </button>
-            <button
-              className="button button-secondary"
-              onClick={() => window.electronAPI.backupOpenFolder()}
-              disabled={backupBusy}
-            >
-              <Icon name="folder" size={14} /> {t.backupOpenFolder}
-            </button>
-          </div>
-        </div>
+        </FormSection>
 
         {/* ------------------------------ ADMIN -----------------------------
             Last on the page and shut by default. The user list is edited once
             per person, and the switch below it is one nobody should be looking
             for — putting either among the everyday settings invites a stray
             click on the second one. */}
-        <div className="admin-section">
-          <button
-            type="button"
-            className="admin-section__head"
-            onClick={() => setAdminOpen(!adminOpen)}
-            aria-expanded={adminOpen}
-          >
-            <Icon name={adminOpen ? 'chevron-down' : 'chevron-right'} size={16} />
-            <span className="admin-section__title">ADMIN</span>
-            <span className="admin-section__hint">{t.adminSectionHint}</span>
-          </button>
+        <FormSection icon="shield" title={t.setSectionAdmin} description={t.adminSectionHint} collapsible defaultCollapsed>
+          <UsersCard language={language} currentEmail={userEmail} onNamesChanged={onUserNamesChanged} />
 
-          {adminOpen && (
-            <div className="admin-section__body">
-              <UsersCard
-                language={language}
-                currentEmail={userEmail}
-                onNamesChanged={onUserNamesChanged}
-              />
-
-              <div
-                className="card"
-                style={{ borderColor: 'var(--danger)', backgroundColor: 'rgba(220, 53, 69, 0.05)' }}
-              >
-                <h2
-                  style={{
-                    marginBottom: '20px',
-                    color: 'var(--danger)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                  }}
-                >
-                  <Icon name="alert-triangle" size={20} /> {t.doNotUseSkipApproval}
-                </h2>
-                <p
-                  style={{
-                    color: 'var(--danger)',
-                    fontSize: '14px',
-                    marginBottom: '15px',
-                    fontWeight: 'bold',
-                  }}
-                >
-                  {t.skipApprovalWarningMessage}
-                </p>
-                <div className="settings-row">
-                  <div className="settings-label">
-                    <span
-                      className="settings-label-main"
-                      style={{
-                        color: 'var(--danger)',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                      }}
-                    >
-                      <Icon name="alert-circle" size={14} /> {t.skipUserApproval}
-                    </span>
-                    <span className="settings-label-sub" style={{ color: 'var(--text-tertiary)' }}>
-                      {t.skipUserApprovalDesc}
-                    </span>
-                  </div>
-                  <label className="toggle-switch">
-                    <input
-                      type="checkbox"
-                      checked={skipUserApproval}
-                      onChange={handleSkipUserApprovalToggle}
-                    />
-                    <span className="toggle-slider"></span>
-                  </label>
-                </div>
+          <div className="danger-zone">
+            <div className="callout callout--danger" role="alert">
+              <Icon name="alert-triangle" size={16} />
+              <div className="callout__body">
+                <div className="callout__title">{t.doNotUseSkipApproval}</div>
+                <div>{t.skipApprovalWarningMessage}</div>
               </div>
             </div>
-          )}
-        </div>
+            <div className="settings-row">
+              <div className="settings-label">
+                <span className="settings-label-main settings-label-main--icon is-danger">
+                  <Icon name="alert-circle" size={14} /> {t.skipUserApproval}
+                </span>
+                <span className="settings-label-sub">{t.skipUserApprovalDesc}</span>
+              </div>
+              <label className="toggle-switch">
+                <input type="checkbox" checked={skipUserApproval} onChange={handleSkipUserApprovalToggle} aria-label={t.skipUserApproval} />
+                <span className="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </FormSection>
+      </div>
     </div>
   );
 };

@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { translations, Language } from '../translations';
+import { FormSection } from '../components/FormSection';
 import Icon from '../components/Icon';
-import ModalDismiss from '../components/Modal';
+import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
 import Select from '../components/Select';
 import type {
   ZaliczkiCategory,
@@ -371,423 +372,360 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
 
   return (
     <div className="content-body">
-      <div className="card">
-        <div style={{ marginBottom: '20px' }}>
-          <h2 style={{ marginBottom: '4px', fontSize: '18px', color: 'var(--accent)' }}>
-            {t.zaliczkiTitle}
-          </h2>
-          <div style={{ fontSize: '13px', opacity: 0.7 }}>{t.zaliczkiSubtitle}</div>
-        </div>
-
-        <div
-          className={`drop-zone ${dragOver ? 'drag-over' : ''}`}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onClick={handlePickPdfs}
-        >
-          <div className="drop-zone-icon"><Icon name="upload" size={40} /></div>
-          <div className="drop-zone-text">{t.dragDropFiles}</div>
-        </div>
-      </div>
-
-      {files.length > 0 ? (
-        <div className="card">
+      <div className="page-form">
+        <FormSection icon="bar-chart" title={t.zaliczkiTitle} description={t.zaliczkiSubtitle}>
           <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '15px',
-              flexWrap: 'wrap',
-              gap: '10px',
-            }}
+            className={`drop-zone ${dragOver ? 'drag-over' : ''}`}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onClick={handlePickPdfs}
           >
-            <h2>{t.files}</h2>
-            <div className="button-group" style={{ margin: 0 }}>
-              <button
-                className="button button-secondary"
-                onClick={runOcrAll}
-                disabled={isProcessing || !anyPending}
-                title={!anyPending ? t.zaliczkiNothingToProcess : ''}
-                style={!anyPending ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
-              >
-                <Icon name="search" size={14} /> {isProcessing ? t.zaliczkiOcrRunning : t.zaliczkiRunOcrAll}
-              </button>
-              <button
-                className="button button-success"
-                onClick={generateExcel}
-                disabled={!canGenerateExcel || isGenerating}
-                title={
-                  missingMonthCount > 0
-                    ? `${t.zaliczkiMissingMonthTooltip} (${missingMonthCount})`
-                    : ''
-                }
-                style={!canGenerateExcel || isGenerating ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
-              >
-                <Icon name="bar-chart" size={14} /> {isGenerating ? t.zaliczkiGenerating : t.zaliczkiGenerateExcel}
-              </button>
-              <button
-                className="button button-danger"
-                onClick={clearAll}
-                disabled={isProcessing}
-              >
-                <Icon name="trash" size={14} /> {t.zaliczkiClearAll}
-              </button>
-            </div>
+            <div className="drop-zone-icon"><Icon name="upload" size={40} /></div>
+            <div className="drop-zone-text">{t.dragDropFiles}</div>
           </div>
+        </FormSection>
 
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: '40px' }}>#</th>
-                <th>{t.zaliczkiFile}</th>
-                <th style={{ width: '190px' }}>{t.zaliczkiMonth}</th>
-                <th style={{ width: '220px' }}>{t.zaliczkiStatus}</th>
-                <th style={{ textAlign: 'right' }}>{t.actions}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {files.map((f, idx) => {
-                const { month, year: fy } = monthFromFilename(f.fileName);
-                const badgeClass =
-                  f.status === 'done'
-                    ? 'status-success'
-                    : f.status === 'error'
-                    ? 'status-error'
-                    : 'status-pending';
-                const badgeText =
-                  f.status === 'done'
-                    ? t.success
-                    : f.status === 'error'
-                    ? t.error
-                    : f.status === 'running'
-                    ? t.zaliczkiStatusRunning
-                    : t.pending;
-                return (
-                  <tr
-                    key={f.filePath}
-                    className={f.status === 'running' ? 'processing-row' : ''}
-                  >
-                    {f.status === 'running' ? (
-                      <td colSpan={5}>
-                        <div className="processing-loader">
-                          <div className="loader-spinner"></div>
-                          <div className="loader-content">
-                            <span className="loader-text">
-                              {t.zaliczkiStatusRunning}: <strong>{f.fileName}</strong>
-                            </span>
-                            <span className="loader-subtext">
-                              {describeProgress(progress[f.filePath], t)}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
-                    ) : (
-                      <>
-                        <td>{idx + 1}</td>
-                        <td>{f.fileName}</td>
-                        <td>
-                          {f.status === 'done' && f.result ? (
-                            <MonthYearPicker
-                              month={f.result.month}
-                              year={f.result.year}
-                              onMonthChange={(m) => updateFileMonthYear(f.filePath, { month: m })}
-                              onYearChange={(y) => updateFileMonthYear(f.filePath, { year: y })}
-                              missingLabel={t.zaliczkiMissingMonth}
-                            />
-                          ) : month ? (
-                            `${MONTH_SHORT[month - 1]} ${fy}`
-                          ) : (
-                            '—'
-                          )}
-                        </td>
-                        <td>
-                          <span className={`status-badge ${badgeClass}`}>{badgeText}</span>
-                          {f.error && (
-                            <div
-                              style={{
-                                fontSize: '12px',
-                                color: 'var(--text-tertiary)',
-                                marginTop: '6px',
-                                cursor: 'pointer',
-                                wordBreak: 'break-word',
-                              }}
-                              onClick={() => {
-                                navigator.clipboard.writeText(f.error || '');
-                              }}
-                              title={f.error}
-                            >
-                              {f.error.slice(0, 80)}
-                            </div>
-                          )}
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'nowrap', whiteSpace: 'nowrap' }}>
-                            {(f.status === 'pending' || f.status === 'error') && (
-                              <button
-                                className="button button-small button-success"
-                                onClick={() => runOcrOne(f.filePath)}
-                                disabled={isProcessing}
-                                style={{ whiteSpace: 'nowrap' }}
-                              ><Icon name="bot" size={13} />{' '}
-                                {t.zaliczkiRunOcr}
-                              </button>
-                            )}
-                            {f.status === 'done' && (
-                              <button
-                                className="button button-small button-secondary"
-                                onClick={() => runOcrOne(f.filePath, true)}
-                                disabled={isProcessing}
-                                style={{ whiteSpace: 'nowrap' }}
-                              ><Icon name="refresh" size={13} />{' '}
-                                {t.zaliczkiRunOcrAgain}
-                              </button>
-                            )}
-                            <button
-                              className="button button-small button-danger"
-                              onClick={() => removeFile(f.filePath)}
-                              disabled={isProcessing}
-                            ><Icon name="trash" size={13} />{' '}
-                              {t.remove}
-                            </button>
-                          </div>
-                        </td>
-                      </>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-
-          {missingMonthCount > 0 && (
-            <div
-              className="zaliczki-status zaliczki-status-warning"
-              style={{ marginTop: '15px', marginBottom: 0 }}
-            >
-              <span style={{ flex: 1 }}>
-                ⚠ {t.zaliczkiMissingMonthBanner} ({missingMonthCount})
-              </span>
-            </div>
-          )}
-
-          {statusMessage && (
-            <div
-              className={`zaliczki-status ${statusIsError ? 'zaliczki-status-error' : 'zaliczki-status-success'}`}
-              style={{ marginTop: '15px', marginBottom: 0 }}
-            >
-              <span style={{ flex: 1, wordBreak: 'break-all' }}>{statusMessage}</span>
-              {generatedFilePath && !statusIsError && (
-                <button
-                  className="button button-small button-primary"
-                  onClick={openGeneratedFile}
-                  style={{ marginLeft: '12px', flexShrink: 0 }}
-                >
-                  <Icon name="folder" size={13} />{' '}{t.zaliczkiOpenFile}
+        <FormSection
+          icon="folder"
+          title={t.files}
+          aside={
+            files.length > 0 ? (
+              <div className="form-section__actions">
+                <button className="button button-ghost icon-danger" onClick={clearAll} disabled={isProcessing}>
+                  <Icon name="trash" size={14} /> {t.convClear}
                 </button>
-              )}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="empty-state">
-          <div className="empty-state-icon"><Icon name="file-text" size={48} /></div>
-          <div className="empty-state-text">{t.zaliczkiNoFiles}</div>
-        </div>
-      )}
-
-      {files.filter((f) => f.status === 'done' && f.result).map((f) => {
-        const warnings = f.result!.warnings ?? [];
-        const errors = warnings.filter((w) => w.severity === 'error');
-        const notices = warnings.filter((w) => w.severity === 'warning');
-        // Properties the checks flagged, so the reviewer can find them in a
-        // 28-row table instead of re-reading every number.
-        const flagged = new Set(errors.map((w) => w.property));
-        const stats = f.result!.stats;
-        return (
-        <div className="card" key={`edit-${f.filePath}`} style={{ marginTop: '15px' }}>
-          <h3 style={{ marginBottom: '10px' }}>
-            {f.fileName}
-            {f.result?.month ? ` — ${MONTH_SHORT[f.result.month - 1]} ${f.result.year}` : ''}
-          </h3>
-          {stats && (
-            <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '10px' }}>
-              {stats.pages} {t.zaliczkiStatsPages}
-              {stats.fromCache > 0 && ` · ${stats.fromCache} ${t.zaliczkiStatsCached}`}
-              {stats.escalated > 0 && ` · ${stats.escalated} ${t.zaliczkiStatsEscalated}`}
-              {stats.failed > 0 && ` · ${stats.failed} ${t.zaliczkiStatsFailed}`}
-            </div>
-          )}
-          <div
-            className={`zaliczki-status ${errors.length > 0 ? 'zaliczki-status-error' : notices.length > 0 ? 'zaliczki-status-warning' : 'zaliczki-status-success'}`}
-            style={{ marginBottom: '12px', display: 'block' }}
-          >
-            <strong>{t.zaliczkiChecksTitle}</strong>
-            {warnings.length === 0 ? (
-              <div style={{ marginTop: '4px', fontSize: '13px' }}>{t.zaliczkiChecksAllOk}</div>
-            ) : (
-              <ul style={{ margin: '6px 0 0 18px', fontSize: '13px', lineHeight: 1.5 }}>
-                {[...errors, ...notices].map((w, i) => (
-                  <li key={i}>
-                    <strong>{w.property}</strong> — {w.message}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '10px' }}>
-            {t.zaliczkiEditHint}
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="zaliczki-edit-table" style={{ fontSize: '12px', minWidth: '1200px' }}>
+                <span className="toolbar-divider" aria-hidden="true" />
+                <button
+                  className="button button-secondary"
+                  onClick={runOcrAll}
+                  disabled={isProcessing || !anyPending}
+                  title={!anyPending ? t.zaliczkiNothingToProcess : undefined}
+                >
+                  <Icon name={isProcessing ? 'loader' : 'search'} size={14} className={isProcessing ? 'icon-spin' : undefined} />{' '}
+                  {isProcessing ? t.zaliczkiOcrRunning : t.zaliczkiRunOcrAll}
+                </button>
+              </div>
+            ) : undefined
+          }
+        >
+          {files.length > 0 ? (
+            <table className="data-table">
               <thead>
                 <tr>
-                  <th style={{ minWidth: '240px', textAlign: 'left' }}>{t.zaliczkiProperty}</th>
-                  {CATEGORIES.map((c) => (
-                    <th key={c} style={{ minWidth: '95px' }} title={c}>
-                      {shortCat(c)}
-                    </th>
-                  ))}
-                  <th style={{ width: '50px' }}></th>
+                  <th className="data-table__index">#</th>
+                  <th>{t.zaliczkiFile}</th>
+                  <th>{t.zaliczkiMonth}</th>
+                  <th>{t.zaliczkiStatus}</th>
+                  <th className="data-table__actions">{t.actions}</th>
                 </tr>
               </thead>
               <tbody>
-                {f.result!.properties.map((p, idx) => (
-                  <tr key={idx}>
-                    <td>
-                      <input
-                        type="text"
-                        value={p.property}
-                        onChange={(e) => updateProperty(f.filePath, idx, 'property', e.target.value)}
-                        style={{
-                          width: '100%',
-                          ...(flagged.has(p.property)
-                            ? { borderColor: 'var(--danger)', borderWidth: '2px' }
-                            : {}),
-                        }}
-                        title={
-                          flagged.has(p.property)
-                            ? errors.find((w) => w.property === p.property)?.message
-                            : undefined
-                        }
-                      />
-                    </td>
-                    {CATEGORIES.map((c) => (
-                      <td key={c}>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={p.values[c] ?? ''}
-                          onChange={(e) => updateProperty(f.filePath, idx, c, e.target.value)}
-                          style={{ width: '90px' }}
-                        />
-                      </td>
-                    ))}
-                    <td>
-                      <button
-                        className="button button-small button-danger"
-                        onClick={() => deletePropertyRow(f.filePath, idx)}
-                      ><Icon name="x" size={13} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {files.map((f, idx) => {
+                  const { month, year: fy } = monthFromFilename(f.fileName);
+                  const badgeClass =
+                    f.status === 'done' ? 'status-success' : f.status === 'error' ? 'status-error' : 'status-pending';
+                  const badgeText =
+                    f.status === 'done'
+                      ? t.success
+                      : f.status === 'error'
+                        ? t.error
+                        : f.status === 'running'
+                          ? t.zaliczkiStatusRunning
+                          : t.pending;
+                  return (
+                    <tr key={f.filePath} className={f.status === 'running' ? 'processing-row' : ''}>
+                      {f.status === 'running' ? (
+                        <td colSpan={5}>
+                          <div className="processing-loader">
+                            <div className="loader-spinner"></div>
+                            <div className="loader-content">
+                              <span className="loader-text">
+                                {t.zaliczkiStatusRunning}: <strong>{f.fileName}</strong>
+                              </span>
+                              <span className="loader-subtext">{describeProgress(progress[f.filePath], t)}</span>
+                            </div>
+                          </div>
+                        </td>
+                      ) : (
+                        <>
+                          <td className="data-table__index">{idx + 1}</td>
+                          <td className="data-table__name">
+                            <span className="cell-title cell-wrap">{f.fileName}</span>
+                          </td>
+                          <td>
+                            {f.status === 'done' && f.result ? (
+                              <MonthYearPicker
+                                month={f.result.month}
+                                year={f.result.year}
+                                onMonthChange={(m) => updateFileMonthYear(f.filePath, { month: m })}
+                                onYearChange={(y) => updateFileMonthYear(f.filePath, { year: y })}
+                                missingLabel={t.zaliczkiMissingMonth}
+                              />
+                            ) : month ? (
+                              `${MONTH_SHORT[month - 1]} ${fy}`
+                            ) : (
+                              <span className="cell-empty">—</span>
+                            )}
+                          </td>
+                          <td>
+                            <span className={`status-badge ${badgeClass}`}>{badgeText}</span>
+                            {f.error && (
+                              <button
+                                type="button"
+                                className="cell-error-detail"
+                                onClick={() => navigator.clipboard.writeText(f.error || '')}
+                                title={`${t.convErrorCopy}\n\n${f.error}`}
+                              >
+                                {f.error.slice(0, 80)}
+                              </button>
+                            )}
+                          </td>
+                          <td className="data-table__actions">
+                            <div className="row-actions">
+                              {(f.status === 'pending' || f.status === 'error') && (
+                                <button
+                                  type="button"
+                                  className="button button-small button-secondary"
+                                  onClick={() => runOcrOne(f.filePath)}
+                                  disabled={isProcessing}
+                                >
+                                  <Icon name="bot" size={13} /> {t.zaliczkiRunOcr}
+                                </button>
+                              )}
+                              {f.status === 'done' && (
+                                <button
+                                  type="button"
+                                  className="button button-small button-subtle"
+                                  onClick={() => runOcrOne(f.filePath, true)}
+                                  disabled={isProcessing}
+                                >
+                                  <Icon name="refresh" size={13} /> {t.zaliczkiRunOcrAgain}
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                className="button button-ghost button-icon icon-danger"
+                                onClick={() => removeFile(f.filePath)}
+                                disabled={isProcessing}
+                                title={t.remove}
+                                aria-label={`${t.remove}: ${f.fileName}`}
+                              >
+                                <Icon name="trash" size={15} />
+                              </button>
+                            </div>
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
-          </div>
-          <button
-            className="button button-small button-secondary"
-            onClick={() => addPropertyRow(f.filePath)}
-            style={{ marginTop: '10px' }}
-          ><Icon name="plus" size={13} />{' '}{t.zaliczkiAddRow}
-          </button>
-        </div>
-        );
-      })}
-
-      {cacheInfo && cacheInfo.entries > 0 && (
-        <div className="card" style={{ marginTop: '15px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-            <div style={{ flex: 1, minWidth: '260px' }}>
-              <strong style={{ fontSize: '13px' }}>
-                {t.zaliczkiCacheInfo}: {cacheInfo.entries} {t.zaliczkiStatsPages} (
-                {Math.max(1, Math.round(cacheInfo.bytes / 1024))} KB)
-              </strong>
-              <div style={{ fontSize: '12px', opacity: 0.7, marginTop: '4px' }}>
-                {t.zaliczkiCacheHint}
+          ) : (
+            <div className="form-empty">
+              <Icon name="file-text" size={16} />
+              {t.zaliczkiNoFiles}
+            </div>
+          )}
+          {missingMonthCount > 0 && (
+            <div className="callout callout--warning" role="status">
+              <Icon name="alert-triangle" size={16} />
+              <div className="callout__body">
+                {t.zaliczkiMissingMonthBanner} ({missingMonthCount})
               </div>
             </div>
+          )}
+        </FormSection>
+
+        {files.filter((f) => f.status === 'done' && f.result).map((f) => {
+          const warnings = f.result!.warnings ?? [];
+          const errors = warnings.filter((w) => w.severity === 'error');
+          const notices = warnings.filter((w) => w.severity === 'warning');
+          // Properties the checks flagged, so the reviewer can find them in a
+          // 28-row table instead of re-reading every number.
+          const flagged = new Set(errors.map((w) => w.property));
+          const stats = f.result!.stats;
+          const tone = errors.length > 0 ? 'danger' : notices.length > 0 ? 'warning' : 'success';
+          return (
+            <FormSection
+              key={`edit-${f.filePath}`}
+              icon="table"
+              title={`${f.fileName}${f.result?.month ? ` — ${MONTH_SHORT[f.result.month - 1]} ${f.result.year}` : ''}`}
+              description={
+                stats
+                  ? [
+                      `${stats.pages} ${t.zaliczkiStatsPages}`,
+                      stats.fromCache > 0 ? `${stats.fromCache} ${t.zaliczkiStatsCached}` : null,
+                      stats.escalated > 0 ? `${stats.escalated} ${t.zaliczkiStatsEscalated}` : null,
+                      stats.failed > 0 ? `${stats.failed} ${t.zaliczkiStatsFailed}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')
+                  : undefined
+              }
+              collapsible
+              collapsedSummary={warnings.length === 0 ? t.zaliczkiChecksAllOk : `${t.zaliczkiChecksTitle}: ${warnings.length}`}
+            >
+              <div className={`callout callout--${tone}`} role="status">
+                <Icon name={tone === 'success' ? 'check-circle' : 'alert-triangle'} size={16} />
+                <div className="callout__body">
+                  <div className="callout__title">{t.zaliczkiChecksTitle}</div>
+                  {warnings.length === 0 ? (
+                    <div>{t.zaliczkiChecksAllOk}</div>
+                  ) : (
+                    <ul className="callout__list">
+                      {[...errors, ...notices].map((w, i) => (
+                        <li key={i}>
+                          <strong>{w.property}</strong> — {w.message}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+              <div className="form-field__hint">{t.zaliczkiEditHint}</div>
+              <div className="table-scroll">
+                <table className="zaliczki-edit-table">
+                  <thead>
+                    <tr>
+                      <th className="zaliczki-edit-table__property">{t.zaliczkiProperty}</th>
+                      {CATEGORIES.map((c) => (
+                        <th key={c} className="zaliczki-edit-table__value" title={c}>
+                          {shortCat(c)}
+                        </th>
+                      ))}
+                      <th className="zaliczki-edit-table__remove" aria-hidden="true"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {f.result!.properties.map((p, idx) => (
+                      <tr key={idx}>
+                        <td>
+                          <input
+                            type="text"
+                            value={p.property}
+                            onChange={(e) => updateProperty(f.filePath, idx, 'property', e.target.value)}
+                            aria-invalid={flagged.has(p.property) ? true : undefined}
+                            title={
+                              flagged.has(p.property)
+                                ? errors.find((w) => w.property === p.property)?.message
+                                : undefined
+                            }
+                          />
+                        </td>
+                        {CATEGORIES.map((c) => (
+                          <td key={c}>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={p.values[c] ?? ''}
+                              onChange={(e) => updateProperty(f.filePath, idx, c, e.target.value)}
+                              aria-label={`${p.property}: ${shortCat(c)}`}
+                            />
+                          </td>
+                        ))}
+                        <td>
+                          <button
+                            type="button"
+                            className="button button-ghost button-icon icon-danger"
+                            onClick={() => deletePropertyRow(f.filePath, idx)}
+                            title={t.remove}
+                            aria-label={`${t.remove}: ${p.property}`}
+                          >
+                            <Icon name="trash" size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <button
+                  type="button"
+                  className="button button-small button-subtle"
+                  onClick={() => addPropertyRow(f.filePath)}
+                >
+                  <Icon name="plus" size={13} /> {t.zaliczkiAddRow}
+                </button>
+              </div>
+            </FormSection>
+          );
+        })}
+
+        {statusMessage && (
+          <div className={`callout callout--${statusIsError ? 'danger' : 'success'}`} role="status">
+            <Icon name={statusIsError ? 'alert-triangle' : 'check-circle'} size={16} />
+            <div className="callout__body callout__body--path">{statusMessage}</div>
+            {generatedFilePath && !statusIsError && (
+              <button type="button" className="button button-small button-subtle" onClick={openGeneratedFile}>
+                <Icon name="folder" size={13} /> {t.zaliczkiOpenFile}
+              </button>
+            )}
+          </div>
+        )}
+
+        <ModalFooter
+          className="page-action-bar"
+          note={
+            missingMonthCount > 0 ? (
+              <span className="action-note action-note--warning">
+                <Icon name="alert-triangle" size={13} />
+                {t.zaliczkiMissingMonthTooltip} ({missingMonthCount})
+              </span>
+            ) : undefined
+          }
+          onSubmit={generateExcel}
+          submitLabel={isGenerating ? t.zaliczkiGenerating : t.zaliczkiGenerateExcel}
+          submitIcon="bar-chart"
+          submitDisabled={!canGenerateExcel}
+          submitTitle={missingMonthCount > 0 ? `${t.zaliczkiMissingMonthTooltip} (${missingMonthCount})` : undefined}
+          busy={isGenerating}
+        />
+
+        {cacheInfo && cacheInfo.entries > 0 && (
+          <div className="callout callout--muted">
+            <Icon name="archive" size={16} />
+            <div className="callout__body">
+              <div className="callout__title">
+                {t.zaliczkiCacheInfo}: {cacheInfo.entries} {t.zaliczkiStatsPages} (
+                {Math.max(1, Math.round(cacheInfo.bytes / 1024))} KB)
+              </div>
+              <div>{t.zaliczkiCacheHint}</div>
+            </div>
             <button
-              className="button button-small button-secondary"
+              type="button"
+              className="button button-small button-subtle"
               onClick={clearOcrCache}
               disabled={isProcessing}
             >
               <Icon name="trash" size={13} /> {t.zaliczkiCacheClear}
             </button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {showDuplicatesModal && (
         <div className="modal-overlay" onClick={() => setShowDuplicatesModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
             <ModalDismiss onClose={() => setShowDuplicatesModal(false)} />
-            <div className="modal-header">
-              <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Icon name="alert-triangle" size={20} /> {t.zaliczkiDuplicatesTitle}
-              </h2>
-            </div>
-            <div className="modal-body" style={{ padding: '20px' }}>
-              <p style={{ marginBottom: '15px', fontSize: '14px', color: 'var(--text-tertiary)' }}>
-                {t.zaliczkiDuplicatesMessage}
-              </p>
-              <div
-                style={{
-                  background: 'var(--warning-bg)',
-                  border: '1px solid var(--warning-border)',
-                  borderRadius: '8px',
-                  padding: '15px',
-                  maxHeight: '300px',
-                  overflowY: 'auto',
-                }}
-              >
+            <ModalHeader icon="alert-triangle" title={t.zaliczkiDuplicatesTitle} subtitle={t.zaliczkiDuplicatesMessage} />
+            <div className="modal-body modal-body--sectioned">
+              <ul className="record-list">
                 {duplicateFiles.map((fileName, index) => (
-                  <div
-                    key={index}
-                    style={{
-                      padding: '8px 12px',
-                      marginBottom: '8px',
-                      background: 'var(--bg-surface)',
-                      borderRadius: '4px',
-                      fontSize: '13px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                    }}
-                  >
-                    <Icon name="file-text" size={16} />
-                    <span style={{ fontWeight: '500' }}>{fileName}</span>
-                  </div>
+                  <li key={index} className="record-row">
+                    <span className="record-row__icon" aria-hidden="true">
+                      <Icon name="file-text" size={15} />
+                    </span>
+                    <div className="record-row__main">
+                      <div className="record-row__title record-row__title--wrap">{fileName}</div>
+                    </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
-            <div
-              className="modal-footer"
-              style={{
-                padding: '15px 20px',
-                borderTop: '1px solid var(--border-subtle)',
-                display: 'flex',
-                justifyContent: 'flex-end',
-              }}
-            >
-              <button
-                className="button button-primary"
-                onClick={() => setShowDuplicatesModal(false)}
-              ><Icon name="check" size={14} />{' '}
-                {t.zaliczkiDuplicatesOk}
-              </button>
-            </div>
+            <ModalFooter onCancel={() => setShowDuplicatesModal(false)} cancelLabel={t.zaliczkiDuplicatesOk} />
           </div>
         </div>
       )}
@@ -810,8 +748,8 @@ const MonthYearPicker: React.FC<MonthYearPickerProps> = ({
   const thisYear = new Date().getFullYear();
   const yearOptions = [thisYear - 2, thisYear - 1, thisYear, thisYear + 1];
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-      <div style={{ display: 'flex', gap: '4px' }}>
+    <div className="month-year-picker">
+      <div className="month-year-picker__row">
         <Select
           size="sm"
           value={month ?? ''}
@@ -820,7 +758,7 @@ const MonthYearPicker: React.FC<MonthYearPickerProps> = ({
             { value: '', label: '—' },
             ...MONTH_SHORT.map((m, i) => ({ value: String(i + 1), label: m })),
           ]}
-          style={{ flex: 1 }}
+          className="month-year-picker__month"
         />
         <Select
           size="sm"
@@ -830,11 +768,13 @@ const MonthYearPicker: React.FC<MonthYearPickerProps> = ({
             { value: '', label: '—' },
             ...yearOptions.map((y) => ({ value: String(y), label: String(y) })),
           ]}
-          style={{ width: '84px' }}
+          className="month-year-picker__year"
         />
       </div>
       {missing && (
-        <div style={{ fontSize: '11px', color: 'var(--danger)' }}>⚠ {missingLabel}</div>
+        <div className="form-field__error">
+          <Icon name="alert-circle" size={12} /> {missingLabel}
+        </div>
       )}
     </div>
   );

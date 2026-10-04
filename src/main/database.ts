@@ -50,7 +50,29 @@ import {
   ZADANIE_KOMENTARZ_MAX_LENGTH,
   KsiegowaniePriorytet,
   KsiegowanieUwaga,
+  KsiegowaniePlik,
+  MailingAdresaci,
+  MailingOdbiorca,
+  MailingTypDef,
+  MAILING_TYP_ZAWIADOMIENIE,
+  MAILING_TYP_ZAWIADOMIENIE_NAZWA,
+  Zebranie,
+  ZebranieInput,
+  ZebranieStatus,
+  ZebranieWersja,
+  ZebranieWersjaInput,
+  ZEBRANIE_STATUSES,
 } from '../shared/types';
+import {
+  copyMaterialyForRevision,
+  latestWersja,
+  materialyTargetForWersja,
+  nextWersjaNumber,
+  normalizeMaterialy,
+  sortWersje,
+  zebranieStatusFromMaterialy,
+} from '../shared/zebrania';
+import { randomUUID } from 'crypto';
 import { getSupabase } from './supabaseClient';
 import { removeAttachments } from './zadaniaStorage';
 import { ZADANIE_ATTACHMENT_MAX_BYTES, ZADANIE_STORAGE_KEY, isValidDayKey } from '../shared/zadania';
@@ -66,6 +88,7 @@ interface SettingsStoreSchema {
     outputFolder: string;
     impexFolder: string;
     swrkFolder: string;
+    statementsFolder: string;
     darkMode: boolean;
     language: 'pl' | 'en';
     aiConfidenceThreshold: number;
@@ -74,6 +97,7 @@ interface SettingsStoreSchema {
     contractorSortOrder: 'name-asc' | 'name-desc' | 'account-asc' | 'account-desc';
     sidebarCollapsed: boolean;
     bookingsCollapsed: boolean;
+    bookingsMonth: string;
     /** Kalendarz: instant hover card over a meeting in the month grid. */
     calendarHoverCard: boolean;
     /** Release-notes version already shown on this machine ('' = never). */
@@ -110,7 +134,16 @@ const MAILING_POLE_COLS =
 const MAILING_SZABLON_COLS =
   'id, nazwa, typ, temat, tresc, attachPdf:attach_pdf, tableFields:table_fields, createdAt:created_at';
 const MAILING_HISTORY_COLS =
-  'id, typ, templateName:template_name, status, errorMessage:error_message, adresId:adres_id, adresNazwa:adres_nazwa, jednostkaNazwa:jednostka_nazwa, jednostkaEmail:jednostka_email, subject, bodyHtml:body_html, bodyText:body_text, fieldValues:field_values, attachments, sentFrom:sent_from, sentAt:sent_at, spotkanieId:spotkanie_id';
+  'id, typ, templateName:template_name, status, errorMessage:error_message, adresId:adres_id, adresNazwa:adres_nazwa, jednostkaNazwa:jednostka_nazwa, jednostkaEmail:jednostka_email, subject, bodyHtml:body_html, bodyText:body_text, fieldValues:field_values, attachments, sentFrom:sent_from, sentAt:sent_at, spotkanieId:spotkanie_id, odbiorcy';
+const MAILING_TYP_COLS = 'id, klucz, nazwa, opis, systemowy, adresaci, createdAt:created_at';
+const ZEBRANIE_COLS =
+  'id, spotkanieId:spotkanie_id, nazwa, adresId:adres_id, adresNazwa:adres_nazwa, ' +
+  'lokalizacjaId:lokalizacja_id, lokalizacjaNazwa:lokalizacja_nazwa, ' +
+  'lokalizacjaAdres:lokalizacja_adres, startsAt:starts_at, ' +
+  'createdBy:created_by, createdAt:created_at, updatedAt:updated_at';
+const ZEBRANIE_WERSJA_COLS =
+  'id, zebranieId:zebranie_id, major, minor, status, opis, materialy, ' +
+  'createdBy:created_by, createdAt:created_at, updatedAt:updated_at, updatedBy:updated_by';
 const KONTO_TYP_COLS =
   'id, name, bankAccountSymbol:bank_account_symbol, apartmentPrefix:apartment_prefix, isDefault:is_default, createdAt:created_at';
 const HISTORY_COLS =
@@ -143,6 +176,12 @@ const SPOTKANIE_MAILING_COLS =
   'jednostkaEmail:jednostka_email, subject, attachments, sentFrom:sent_from, sentAt:sent_at';
 const KS_PRIORYTET_COLS =
   'id, monthKey:month_key, adresId:adres_id, adresNazwa:adres_nazwa, position, notatka, notatkaBy:notatka_by, createdBy:created_by, createdAt:created_at';
+const KS_PLIK_COLS =
+  'id, monthKey:month_key, kind, status, errorMessage:error_message, adresId:adres_id, adresNazwa:adres_nazwa, ' +
+  'accountNumber:account_number, accountTypeName:account_type_name, bankId:bank_id, bankName:bank_name, ' +
+  'converterId:converter_id, relPath:rel_path, fileName:file_name, originalName:original_name, fileSize:file_size, ' +
+  'fileMtime:file_mtime, fileHash:file_hash, ignoredHashes:ignored_hashes, periodFrom:period_from, periodTo:period_to, scannedAt:scanned_at, ' +
+  'scannedBy:scanned_by';
 const KS_UWAGA_COLS =
   'id, adresId:adres_id, adresNazwa:adres_nazwa, tresc, createdBy:created_by, createdAt:created_at, resolvedAt:resolved_at, resolvedBy:resolved_by';
 const ZADANIE_COLS =
@@ -178,6 +217,24 @@ async function fetchAllPaged<T>(
     if (rows.length < PAGE) break;
   }
   return out;
+}
+
+/**
+ * Columns of `ksiegowania_konwersje` added by later migrations. Until the SQL is
+ * run they do not exist, and a query naming one fails as a whole — the reads
+ * and writes below drop the missing one and retry, so the dashboard keeps its
+ * own records instead of failing over to the history log.
+ */
+const KS_KONWERSJE_OPTIONAL: Record<string, string> = {
+  month_key: 'monthKey:month_key',
+  input_hash: 'inputHash:input_hash',
+  recznie: 'manual:recznie',
+};
+
+/** Which of `names` a PostgREST "no such column" error is about, if any. */
+function missingColumn(message: string, names: string[]): string | null {
+  if (!/does not exist|Could not find the/.test(message)) return null;
+  return names.find((name) => new RegExp(`\\b${name}\\b`).test(message)) ?? null;
 }
 
 interface CacheEntry<T> {
@@ -226,6 +283,7 @@ class DatabaseService {
           outputFolder: path.join(app.getPath('documents'), 'StatementConverter'),
           impexFolder: '',
           swrkFolder: '',
+          statementsFolder: '',
           darkMode: true,
           language: 'pl',
           aiConfidenceThreshold: 95,
@@ -234,6 +292,7 @@ class DatabaseService {
           contractorSortOrder: 'name-asc',
           sidebarCollapsed: true,
           bookingsCollapsed: false,
+          bookingsMonth: '',
           calendarHoverCard: false,
           lastSeenVersion: '',
           // home.pl defaults — the mailbox this is built for. Overridable in Settings.
@@ -792,6 +851,10 @@ class DatabaseService {
     outputPath: string;
     /** Community the file was converted for — powers the "Księgowania" view. */
     adresId?: number | null;
+    /** The month the statement covers (`YYYY-MM`), when it could be read. */
+    monthKey?: string | null;
+    /** SHA-1 of the input file, when it could be read. */
+    inputHash?: string | null;
   }): Promise<void> {
     // The name is stored next to the id on purpose: a restore renumbers the
     // addresses, and the name is what the Księgowania view falls back to.
@@ -803,7 +866,7 @@ class DatabaseService {
         adresNazwa = null; // best-effort label; never fail a conversion over it
       }
     }
-    const { error } = await getSupabase().from('history').insert({
+    const row = {
       file_name: data.fileName,
       bank_name: data.bankName,
       converter_name: data.converterName,
@@ -813,8 +876,22 @@ class DatabaseService {
       output_path: data.outputPath,
       adres_id: data.adresId ?? null,
       adres_nazwa: adresNazwa,
-    });
+    };
+    // Twice, on purpose: `history` is the log (the Historia module, free to
+    // clear); `ksiegowania_konwersje` is the dashboard's own record with the DOM
+    // tick, which clearing the log must never touch.
+    const { error } = await getSupabase().from('history').insert(row);
     if (error) throw new Error(`addConversionHistory: ${error.message}`);
+    const { error: bookingError } = await this.insertKsKonwersja({
+      ...row,
+      month_key: data.monthKey ?? null,
+      input_hash: data.inputHash ?? null,
+    });
+    if (bookingError) {
+      // The conversion itself succeeded and its file exists — do not fail it
+      // over the dashboard's record (e.g. the migration not run yet).
+      log.error(`[KSIEGOWANIA] conversion record not saved: ${bookingError.message}`);
+    }
   }
 
   async getAllHistory(): Promise<ConversionHistory[]> {
@@ -833,21 +910,145 @@ class DatabaseService {
   }
 
   /**
-   * Tick / untick "posted in the DOM program" for whole batches of history rows
-   * at once — the Księgowania view marks a single file, a community's month or
-   * everything shown, and all three land here.
+   * The dashboard's own record of conversions (Pulpit → Księgowania), with the
+   * DOM tick. Same shape as the history, but its own table: clearing the
+   * history log leaves it — and the team's posting state — untouched.
    */
-  async setHistoryBookedInDom(ids: number[], booked: boolean, by?: string | null): Promise<void> {
+  async getKsiegowaniaKonwersje(): Promise<ConversionHistory[]> {
+    const read = (cols: string) =>
+      fetchAllPaged<any>('getKsiegowaniaKonwersje', (from, to) =>
+        getSupabase()
+          .from('ksiegowania_konwersje')
+          .select(cols)
+          .order('converted_at', { ascending: false })
+          .range(from, to),
+      );
+    // A column a migration has not added yet is left out, not the whole read:
+    // the records still load, just without that fact (month, hash, manual mark).
+    const optional = { ...KS_KONWERSJE_OPTIONAL };
+    let rows: any[];
+    for (;;) {
+      try {
+        rows = await read([HISTORY_COLS, ...Object.values(optional)].join(', '));
+        break;
+      } catch (error: unknown) {
+        const missing = missingColumn(error instanceof Error ? error.message : String(error), Object.keys(optional));
+        if (!missing) throw error;
+        log.warn(`[KSIEGOWANIA] column ksiegowania_konwersje.${missing} is missing — run its migration`);
+        delete optional[missing];
+      }
+    }
+    return rows.map(h => ({
+      ...h,
+      errorMessage: h.errorMessage ?? undefined,
+      bookedInDom: h.bookedInDom === true,
+      manual: h.manual === true,
+    })) as ConversionHistory[];
+  }
+
+  /**
+   * "Oznacz jako zaksięgowane": a pinned statement posted without converting it.
+   * Writes a dashboard record tied to the statement (its name and hash, its
+   * month and community) with no output file, already ticked in DOM.
+   */
+  async markKsiegowaniePlikBooked(plikId: number, by: string | null): Promise<void> {
+    const { data, error } = await getSupabase()
+      .from('ksiegowania_pliki')
+      .select(KS_PLIK_COLS)
+      .eq('id', plikId)
+      .maybeSingle();
+    if (error) throw new Error(`markKsiegowaniePlikBooked: ${error.message}`);
+    const plik = data as unknown as KsiegowaniePlik | null;
+    if (!plik) throw new Error('markKsiegowaniePlikBooked: the file is no longer pinned');
+    if (plik.kind !== 'statement' || plik.status !== 'ok') {
+      throw new Error('markKsiegowaniePlikBooked: only a readable statement can be marked');
+    }
+    const now = new Date().toISOString();
+    const { error: insertError } = await this.insertKsKonwersja({
+        file_name: plik.fileName,
+        bank_name: plik.bankName ?? '',
+        converter_name: '',
+        status: 'success',
+        error_message: null,
+        input_path: plik.relPath,
+        output_path: '',
+        converted_at: now,
+        adres_id: plik.adresId,
+        adres_nazwa: plik.adresNazwa,
+        booked_in_dom: true,
+        booked_in_dom_at: now,
+        booked_in_dom_by: by,
+        month_key: plik.monthKey,
+        input_hash: plik.fileHash,
+        recznie: true,
+      }, ['recznie']);
+    if (insertError) throw new Error(`markKsiegowaniePlikBooked: ${insertError.message}`);
+  }
+
+  /**
+   * Insert one dashboard record, leaving out an optional column the database
+   * does not have yet (see `KS_KONWERSJE_OPTIONAL`) — except those in
+   * `required`, without which the record would mean something else.
+   */
+  private async insertKsKonwersja(
+    row: Record<string, unknown>,
+    required: string[] = [],
+  ): Promise<{ error: { message: string } | null }> {
+    const values = { ...row };
+    for (;;) {
+      const { error } = await getSupabase().from('ksiegowania_konwersje').insert(values);
+      if (!error) return { error: null };
+      const droppable = Object.keys(KS_KONWERSJE_OPTIONAL).filter((c) => c in values && !required.includes(c));
+      const missing = missingColumn(error.message, droppable);
+      if (!missing) return { error };
+      log.warn(`[KSIEGOWANIA] column ksiegowania_konwersje.${missing} is missing — run its migration`);
+      delete values[missing];
+    }
+  }
+
+  /** Undo a manual mark. Guarded by the flag: a real conversion is never deleted here. */
+  async undoKsiegowanieManual(id: number): Promise<void> {
+    const { error } = await getSupabase()
+      .from('ksiegowania_konwersje')
+      .delete()
+      .eq('id', id)
+      .eq('recznie', true);
+    if (error) throw new Error(`undoKsiegowanieManual: ${error.message}`);
+  }
+
+  /**
+   * Record what an older conversion did not: the statement month and the input
+   * file's hash, read from its source file afterwards. Only the given fields change.
+   */
+  async setKsiegowanieSourceFacts(
+    id: number,
+    facts: { monthKey?: string; inputHash?: string },
+  ): Promise<void> {
+    const patch: Record<string, string> = {};
+    if (facts.monthKey) patch.month_key = facts.monthKey;
+    if (facts.inputHash) patch.input_hash = facts.inputHash;
+    if (Object.keys(patch).length === 0) return;
+    const { error } = await getSupabase().from('ksiegowania_konwersje').update(patch).eq('id', id);
+    if (error) throw new Error(`setKsiegowanieSourceFacts: ${error.message}`);
+  }
+
+  /**
+   * Tick / untick "posted in the DOM program" for whole batches of the
+   * dashboard's conversion records at once — the Księgowania view marks a
+   * single file, a community's month or everything shown, and all three land here.
+   */
+  async setKsiegowanieBookedInDom(ids: number[], booked: boolean, by?: string | null): Promise<void> {
     if (ids.length === 0) return;
     const patch = booked
       ? { booked_in_dom: true, booked_in_dom_at: new Date().toISOString(), booked_in_dom_by: by ?? null }
       : { booked_in_dom: false, booked_in_dom_at: null, booked_in_dom_by: null };
     for (const slice of DatabaseService.chunk(ids)) {
-      const { error } = await getSupabase().from('history').update(patch).in('id', slice);
-      if (error) throw new Error(`setHistoryBookedInDom: ${error.message}`);
+      const { error } = await getSupabase().from('ksiegowania_konwersje').update(patch).in('id', slice);
+      if (error) throw new Error(`setKsiegowanieBookedInDom: ${error.message}`);
     }
   }
 
+  /** Clears the LOG only. The dashboard's records (`ksiegowania_konwersje`) stay. */
   async clearHistory(): Promise<void> {
     const { error } = await getSupabase().from('history').delete().gt('id', 0);
     if (error) throw new Error(`clearHistory: ${error.message}`);
@@ -983,6 +1184,31 @@ class DatabaseService {
     this.invalidateCache('adresy');
   }
 
+  /**
+   * Make a unit serve exactly `adresIds`: those addresses point at it (taking it
+   * over from whichever unit they had), and the ones that pointed at it but are
+   * no longer listed lose their unit. Lets the unit form assign its communities
+   * in one go instead of editing every address.
+   */
+  async setZgnJednostkaAdresy(jednostkaId: number, adresIds: number[]): Promise<void> {
+    const ids = [...new Set(adresIds.filter((id) => Number.isInteger(id) && id > 0))];
+    let release = getSupabase()
+      .from('adresy')
+      .update({ zgn_jednostka_id: null })
+      .eq('zgn_jednostka_id', jednostkaId);
+    if (ids.length > 0) release = release.not('id', 'in', `(${ids.join(',')})`);
+    const { error: releaseError } = await release;
+    if (releaseError) throw new Error(`setZgnJednostkaAdresy: ${releaseError.message}`);
+    if (ids.length > 0) {
+      const { error } = await getSupabase()
+        .from('adresy')
+        .update({ zgn_jednostka_id: jednostkaId })
+        .in('id', ids);
+      if (error) throw new Error(`setZgnJednostkaAdresy: ${error.message}`);
+    }
+    this.invalidateCache('adresy');
+  }
+
   // ------------------------- Jednostki ZGN — pełnomocnicy -------------------------
 
   async getZgnPelnomocnicy(): Promise<ZgnPelnomocnik[]> {
@@ -1023,6 +1249,163 @@ class DatabaseService {
   async deleteZgnPelnomocnik(id: number): Promise<void> {
     const { error } = await getSupabase().from('zgn_pelnomocnicy').delete().eq('id', id);
     if (error) throw new Error(`deleteZgnPelnomocnik: ${error.message}`);
+  }
+
+  // ------------------------- Mailing — typy mailingu -------------------------
+
+  /** A stored recipient config, made whole: unknown shapes read as "the city unit". */
+  static mailingAdresaci(value: unknown): MailingAdresaci {
+    const a = (value && typeof value === 'object' ? value : {}) as Partial<MailingAdresaci>;
+    const wlasne = Array.isArray(a.wlasne)
+      ? [...new Set(a.wlasne.map(e => String(e ?? '').trim()).filter(Boolean))]
+      : [];
+    if (!value || typeof value !== 'object') {
+      return { zgn: true, pelnomocnik: false, zarzad: false, wlasne: [] };
+    }
+    return {
+      zgn: a.zgn === true,
+      pelnomocnik: a.pelnomocnik === true,
+      zarzad: a.zarzad === true,
+      wlasne,
+    };
+  }
+
+  private static mailingTypRow(r: any): MailingTypDef {
+    return {
+      id: r.id,
+      klucz: r.klucz,
+      nazwa: r.nazwa ?? '',
+      opis: r.opis ?? '',
+      systemowy: r.systemowy === true,
+      adresaci: DatabaseService.mailingAdresaci(r.adresaci),
+      createdAt: r.createdAt,
+    };
+  }
+
+  /**
+   * Every kind, the built-in one first. The built-in row is created here when it
+   * is missing — the Kalendarz flow depends on it, and the SQL that seeds it may
+   * have been run before it existed — so the dictionary can never lack it.
+   */
+  async getMailingTypy(): Promise<MailingTypDef[]> {
+    const read = async () => {
+      const { data, error } = await getSupabase()
+        .from('mailing_typy')
+        .select(MAILING_TYP_COLS)
+        .order('nazwa', { ascending: true });
+      if (error) throw new Error(`getMailingTypy: ${error.message}`);
+      return (data ?? []).map(DatabaseService.mailingTypRow);
+    };
+    let typy = await read();
+    if (!typy.some(t => t.klucz === MAILING_TYP_ZAWIADOMIENIE)) {
+      const { error } = await getSupabase()
+        .from('mailing_typy')
+        .upsert(
+          {
+            klucz: MAILING_TYP_ZAWIADOMIENIE,
+            nazwa: MAILING_TYP_ZAWIADOMIENIE_NAZWA,
+            opis: 'Zawiadomienie o zebraniu wspólnoty — tworzone ze spotkania w Kalendarzu lub z modułu Zebrania.',
+            systemowy: true,
+            adresaci: { zgn: false, pelnomocnik: false, zarzad: true, wlasne: [] },
+          },
+          { onConflict: 'klucz', ignoreDuplicates: true },
+        );
+      if (error) throw new Error(`getMailingTypy (typ wbudowany): ${error.message}`);
+      typy = await read();
+    }
+    return [...typy.filter(t => t.systemowy), ...typy.filter(t => !t.systemowy)];
+  }
+
+  /** A key for a new kind: readable, and unique without a round trip. */
+  private static mailingTypKlucz(nazwa: string): string {
+    const slug = nazwa
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/ł/g, 'l')
+      .replace(/Ł/g, 'L')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40);
+    return `${slug || 'typ'}-${randomUUID().slice(0, 8)}`;
+  }
+
+  async addMailingTyp(nazwa: string, opis: string, adresaci: MailingAdresaci): Promise<MailingTypDef> {
+    const name = (nazwa ?? '').trim();
+    if (!name) throw new Error('Typ mailingu musi mieć nazwę.');
+    const { data, error } = await getSupabase()
+      .from('mailing_typy')
+      .insert({
+        klucz: DatabaseService.mailingTypKlucz(name),
+        nazwa: name,
+        opis: (opis ?? '').trim(),
+        systemowy: false,
+        adresaci: DatabaseService.mailingAdresaci(adresaci),
+      })
+      .select(MAILING_TYP_COLS)
+      .single();
+    return DatabaseService.mailingTypRow(unwrap(data, error, 'addMailingTyp'));
+  }
+
+  /**
+   * Save a kind. The built-in one keeps its name whatever is sent — only its
+   * description and default recipients are the office's to change.
+   */
+  async updateMailingTyp(
+    id: number,
+    nazwa: string,
+    opis: string,
+    adresaci: MailingAdresaci,
+  ): Promise<void> {
+    const { data: before, error: readError } = await getSupabase()
+      .from('mailing_typy')
+      .select('systemowy')
+      .eq('id', id)
+      .maybeSingle();
+    if (readError) throw new Error(`updateMailingTyp (odczyt): ${readError.message}`);
+    const systemowy = (before as { systemowy?: boolean } | null)?.systemowy === true;
+    const name = (nazwa ?? '').trim();
+    if (!systemowy && !name) throw new Error('Typ mailingu musi mieć nazwę.');
+    const { error } = await getSupabase()
+      .from('mailing_typy')
+      .update({
+        ...(systemowy ? {} : { nazwa: name }),
+        opis: (opis ?? '').trim(),
+        adresaci: DatabaseService.mailingAdresaci(adresaci),
+      })
+      .eq('id', id);
+    if (error) throw new Error(`updateMailingTyp: ${error.message}`);
+  }
+
+  /**
+   * Delete a kind. Refused for the built-in one, and while templates still use
+   * it: a template of a kind that no longer exists would vanish from every
+   * picker without anyone having decided to delete it.
+   */
+  async deleteMailingTyp(id: number): Promise<void> {
+    const { data: row, error: readError } = await getSupabase()
+      .from('mailing_typy')
+      .select('klucz, nazwa, systemowy')
+      .eq('id', id)
+      .maybeSingle();
+    if (readError) throw new Error(`deleteMailingTyp (odczyt): ${readError.message}`);
+    if (!row) return;
+    const typ = row as { klucz: string; nazwa: string; systemowy: boolean };
+    if (typ.systemowy) {
+      throw new Error(`Typ „${typ.nazwa}” jest wbudowany i nie może zostać usunięty.`);
+    }
+    const { count, error: countError } = await getSupabase()
+      .from('mailing_szablony')
+      .select('id', { count: 'exact', head: true })
+      .eq('typ', typ.klucz);
+    if (countError) throw new Error(`deleteMailingTyp (szablony): ${countError.message}`);
+    if ((count ?? 0) > 0) {
+      throw new Error(
+        `Typ „${typ.nazwa}” ma przypisane szablony (${count}). Przenieś je do innego typu albo usuń, zanim usuniesz typ.`,
+      );
+    }
+    const { error } = await getSupabase().from('mailing_typy').delete().eq('id', id);
+    if (error) throw new Error(`deleteMailingTyp: ${error.message}`);
   }
 
   // ------------------------ Mailing — pola dynamiczne ------------------------
@@ -1150,6 +1533,7 @@ class DatabaseService {
       attachments: entry.attachments,
       sent_from: entry.sentFrom,
       spotkanie_id: entry.spotkanieId ?? null,
+      odbiorcy: entry.odbiorcy ?? [],
     });
     if (error) throw new Error(`addMailingHistory: ${error.message}`);
   }
@@ -1168,6 +1552,7 @@ class DatabaseService {
       adresId: r.adresId ?? null,
       fieldValues: Array.isArray(r.fieldValues) ? r.fieldValues : [],
       attachments: Array.isArray(r.attachments) ? r.attachments : [],
+      odbiorcy: Array.isArray(r.odbiorcy) ? (r.odbiorcy as MailingOdbiorca[]) : [],
     })) as MailingHistoryEntry[];
   }
 
@@ -2017,8 +2402,40 @@ class DatabaseService {
       : 'brak';
   }
 
-  /** Move the materials status, recording who did it — the notifier reads that. */
+  /**
+   * Move the materials status, recording who did it — the notifier reads that.
+   *
+   * The meeting's Zebranie follows: its newest version takes the status this one
+   * stands for (see `zebranieStatusFromMaterialy`), so the card and the module
+   * can never say two different things.
+   */
   async setSpotkanieMaterialy(
+    id: number,
+    status: SpotkanieMaterialyStatus,
+    who: string,
+  ): Promise<void> {
+    await this.writeSpotkanieMaterialy(id, status, who);
+    const target = zebranieStatusFromMaterialy(status);
+    if (!target) return;
+    // The meeting's own status is already saved — that is what the user clicked.
+    // A failed follow-up must not report the click itself as failed; it is
+    // logged, and the next status change brings the two back in step.
+    try {
+      const zebranie = await this.getZebranieBySpotkanie(id);
+      const latest = zebranie ? latestWersja(zebranie) : null;
+      if (latest && latest.status !== target) {
+        await this.writeZebranieWersjaStatus(latest.id, target, who);
+      }
+    } catch (error: unknown) {
+      log.error(
+        '[ZEBRANIA] status sync from meeting failed:',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  /** The bare write — no Zebranie sync, so the two syncs cannot call each other forever. */
+  private async writeSpotkanieMaterialy(
     id: number,
     status: SpotkanieMaterialyStatus,
     who: string,
@@ -2117,8 +2534,406 @@ class DatabaseService {
   }
 
   async deleteSpotkanie(id: number): Promise<void> {
+    // The meeting's Zebranie outlives it (ON DELETE SET NULL), and until now it
+    // read its date, community and place from the meeting. Write them onto the
+    // entry first, so it still says what it was about once the link is gone.
+    await this.snapshotZebranieFromSpotkanie(id);
     const { error } = await getSupabase().from('spotkania').delete().eq('id', id);
     if (error) throw new Error(`deleteSpotkanie: ${error.message}`);
+  }
+
+  /* ----------------------------- Zebrania ----------------------------- */
+
+  private static zebranieStatus(value: unknown): ZebranieStatus {
+    return ZEBRANIE_STATUSES.includes(value as ZebranieStatus)
+      ? (value as ZebranieStatus)
+      : 'w_przygotowaniu';
+  }
+
+  private static zebranieWersjaRow(r: any): ZebranieWersja {
+    return {
+      id: r.id,
+      zebranieId: r.zebranieId,
+      major: Number(r.major ?? 1),
+      minor: Number(r.minor ?? 0),
+      status: DatabaseService.zebranieStatus(r.status),
+      opis: r.opis ?? '',
+      materialy: normalizeMaterialy(r.materialy),
+      createdBy: r.createdBy ?? '',
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt ?? r.createdAt,
+      updatedBy: r.updatedBy ?? '',
+    };
+  }
+
+  private static zebranieRow(r: any, wersje: ZebranieWersja[]): Zebranie {
+    return {
+      id: r.id,
+      spotkanieId: r.spotkanieId != null ? Number(r.spotkanieId) : null,
+      nazwa: r.nazwa ?? '',
+      adresId: r.adresId != null ? Number(r.adresId) : null,
+      adresNazwa: r.adresNazwa ?? '',
+      lokalizacjaId: r.lokalizacjaId != null ? Number(r.lokalizacjaId) : null,
+      lokalizacjaNazwa: r.lokalizacjaNazwa ?? '',
+      lokalizacjaAdres: r.lokalizacjaAdres ?? '',
+      startsAt: r.startsAt ?? null,
+      createdBy: r.createdBy ?? '',
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt ?? r.createdAt,
+      wersje: sortWersje(wersje.filter(w => w.zebranieId === r.id)),
+    };
+  }
+
+  /** Every entry with its versions, newest entry first. Two queries, joined here. */
+  async getZebrania(): Promise<Zebranie[]> {
+    const [rows, wersje] = await Promise.all([
+      fetchAllPaged<any>('getZebrania', (from, to) =>
+        getSupabase()
+          .from('zebrania')
+          .select(ZEBRANIE_COLS)
+          .order('created_at', { ascending: false })
+          .range(from, to),
+      ),
+      fetchAllPaged<any>('getZebraniaWersje', (from, to) =>
+        getSupabase()
+          .from('zebrania_wersje')
+          .select(ZEBRANIE_WERSJA_COLS)
+          .order('id', { ascending: true })
+          .range(from, to),
+      ),
+    ]);
+    const versions = wersje.map(DatabaseService.zebranieWersjaRow);
+    return rows.map(r => DatabaseService.zebranieRow(r, versions));
+  }
+
+  private async getZebranieWhere(column: 'id' | 'spotkanie_id', value: number): Promise<Zebranie | null> {
+    const { data, error } = await getSupabase()
+      .from('zebrania')
+      .select(ZEBRANIE_COLS)
+      .eq(column, value)
+      .maybeSingle();
+    if (error) throw new Error(`getZebranie: ${error.message}`);
+    if (!data) return null;
+    const row = data as any;
+    const { data: wersje, error: wError } = await getSupabase()
+      .from('zebrania_wersje')
+      .select(ZEBRANIE_WERSJA_COLS)
+      .eq('zebranie_id', row.id)
+      .order('id', { ascending: true });
+    if (wError) throw new Error(`getZebranie (wersje): ${wError.message}`);
+    return DatabaseService.zebranieRow(row, (wersje ?? []).map(DatabaseService.zebranieWersjaRow));
+  }
+
+  async getZebranie(id: number): Promise<Zebranie | null> {
+    return this.getZebranieWhere('id', id);
+  }
+
+  async getZebranieBySpotkanie(spotkanieId: number): Promise<Zebranie | null> {
+    return this.getZebranieWhere('spotkanie_id', spotkanieId);
+  }
+
+  /** The meeting's data as an entry's snapshot columns. */
+  private async spotkanieSnapshot(spotkanieId: number): Promise<Record<string, unknown> | null> {
+    const { data, error } = await getSupabase()
+      .from('spotkania')
+      .select('nazwa, adres_id, adres_nazwa, lokalizacja_id, lokalizacja_nazwa, starts_at, materialy_status')
+      .eq('id', spotkanieId)
+      .maybeSingle();
+    if (error) throw new Error(`spotkanieSnapshot: ${error.message}`);
+    if (!data) return null;
+    const m = data as any;
+    let lokalizacjaAdres = '';
+    if (m.lokalizacja_id != null) {
+      const { data: lok } = await getSupabase()
+        .from('spotkania_lokalizacje')
+        .select('nazwa, adres')
+        .eq('id', m.lokalizacja_id)
+        .maybeSingle();
+      lokalizacjaAdres = ((lok as any)?.adres ?? '').trim();
+    }
+    return {
+      nazwa: m.nazwa ?? '',
+      adres_id: m.adres_id ?? null,
+      adres_nazwa: m.adres_nazwa ?? '',
+      lokalizacja_id: m.lokalizacja_id ?? null,
+      lokalizacja_nazwa: m.lokalizacja_nazwa ?? '',
+      lokalizacja_adres: lokalizacjaAdres,
+      starts_at: m.starts_at ?? null,
+      materialy_status: m.materialy_status ?? 'brak',
+    };
+  }
+
+  private async snapshotZebranieFromSpotkanie(spotkanieId: number): Promise<void> {
+    const snapshot = await this.spotkanieSnapshot(spotkanieId);
+    if (!snapshot) return;
+    const { materialy_status: _ignored, ...columns } = snapshot;
+    const { error } = await getSupabase()
+      .from('zebrania')
+      .update({ ...columns, updated_at: new Date().toISOString() })
+      .eq('spotkanie_id', spotkanieId);
+    if (error) throw new Error(`snapshotZebranieFromSpotkanie: ${error.message}`);
+  }
+
+  private async insertFirstWersja(zebranieId: number, who: string): Promise<void> {
+    const { error } = await getSupabase().from('zebrania_wersje').insert({
+      zebranie_id: zebranieId,
+      major: 1,
+      minor: 0,
+      status: 'w_przygotowaniu',
+      opis: '',
+      materialy: [],
+      created_by: who,
+      updated_by: who,
+    });
+    if (error) throw new Error(`addZebranie (wersja 1.0): ${error.message}`);
+  }
+
+  /**
+   * "Przygotuj materiały" on a meeting: its entry, created on the first click and
+   * opened on every later one — one entry per meeting. Creating it puts the
+   * meeting's materials at "to prepare" when they were needed but not yet asked
+   * for, since preparing them is what just started. A meeting marked "no
+   * materials needed" keeps that (see `materialyTargetForWersja`).
+   */
+  async createZebranieFromSpotkanie(spotkanieId: number, who: string): Promise<Zebranie> {
+    return this.zebranieForSpotkanieOrNew(spotkanieId, who, true);
+  }
+
+  /**
+   * The meeting form saved a meeting that needs materials: make sure it has its
+   * Zebranie, without touching the meeting's materials status. Saving a meeting
+   * is not "start preparing" — moving it to "to prepare" here would announce a
+   * status change to everyone for every meeting typed into the calendar.
+   */
+  async ensureZebranieForSpotkanie(spotkanieId: number, who: string): Promise<Zebranie> {
+    return this.zebranieForSpotkanieOrNew(spotkanieId, who, false);
+  }
+
+  private async zebranieForSpotkanieOrNew(
+    spotkanieId: number,
+    who: string,
+    advanceMaterialy: boolean,
+  ): Promise<Zebranie> {
+    const existing = await this.getZebranieBySpotkanie(spotkanieId);
+    if (existing) return existing;
+    const snapshot = await this.spotkanieSnapshot(spotkanieId);
+    if (!snapshot) throw new Error('Spotkanie nie istnieje — mogło zostać usunięte.');
+    const { materialy_status: materialyStatus, ...columns } = snapshot;
+
+    const { data, error } = await getSupabase()
+      .from('zebrania')
+      .insert({ ...columns, spotkanie_id: spotkanieId, created_by: who })
+      .select('id')
+      .single();
+    if (error) {
+      // Somebody else clicked at the same moment: the unique link means theirs won.
+      if ((error as { code?: string }).code === '23505') {
+        const raced = await this.getZebranieBySpotkanie(spotkanieId);
+        if (raced) return raced;
+      }
+      throw new Error(`createZebranieFromSpotkanie: ${error.message}`);
+    }
+    const id = (data as { id: number }).id;
+    await this.insertFirstWersja(id, who);
+    if (advanceMaterialy && materialyStatus === 'potrzebne') {
+      await this.writeSpotkanieMaterialy(spotkanieId, 'do_przygotowania', who);
+    }
+    const created = await this.getZebranie(id);
+    if (!created) throw new Error('createZebranieFromSpotkanie: no data returned');
+    return created;
+  }
+
+  private static zebraniePayload(input: ZebranieInput): Record<string, unknown> {
+    const nazwa = (input.nazwa ?? '').trim();
+    if (!nazwa) throw new Error('Zebranie musi mieć nazwę.');
+    return {
+      nazwa,
+      adres_id: input.adresId ?? null,
+      adres_nazwa: (input.adresNazwa ?? '').trim(),
+      lokalizacja_id: input.lokalizacjaId ?? null,
+      lokalizacja_nazwa: (input.lokalizacjaNazwa ?? '').trim(),
+      lokalizacja_adres: (input.lokalizacjaAdres ?? '').trim(),
+      starts_at: input.startsAt || null,
+    };
+  }
+
+  /** A standalone entry — not linked to any meeting — starting at version 1.0. */
+  async addZebranie(input: ZebranieInput, who: string): Promise<Zebranie> {
+    const { data, error } = await getSupabase()
+      .from('zebrania')
+      .insert({ ...DatabaseService.zebraniePayload(input), spotkanie_id: null, created_by: who })
+      .select('id')
+      .single();
+    const id = (unwrap(data, error, 'addZebranie') as { id: number }).id;
+    await this.insertFirstWersja(id, who);
+    const created = await this.getZebranie(id);
+    if (!created) throw new Error('addZebranie: no data returned');
+    return created;
+  }
+
+  /**
+   * Edit a standalone entry's own data. A linked entry has none of its own — its
+   * date and place are the meeting's, edited in the Kalendarz — so it is refused
+   * rather than given a second copy that would silently disagree.
+   */
+  async updateZebranie(id: number, input: ZebranieInput): Promise<void> {
+    const { data: before, error: readError } = await getSupabase()
+      .from('zebrania')
+      .select('spotkanie_id')
+      .eq('id', id)
+      .maybeSingle();
+    if (readError) throw new Error(`updateZebranie (odczyt): ${readError.message}`);
+    if ((before as { spotkanie_id?: number | null } | null)?.spotkanie_id != null) {
+      throw new Error('To zebranie jest powiązane ze spotkaniem — termin i miejsce zmienia się w Kalendarzu.');
+    }
+    const { error } = await getSupabase()
+      .from('zebrania')
+      .update({ ...DatabaseService.zebraniePayload(input), updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw new Error(`updateZebranie: ${error.message}`);
+  }
+
+  /** Delete an entry and its versions (ON DELETE CASCADE). The meeting is left as it is. */
+  async deleteZebranie(id: number): Promise<void> {
+    const { error } = await getSupabase().from('zebrania').delete().eq('id', id);
+    if (error) throw new Error(`deleteZebranie: ${error.message}`);
+  }
+
+  private async touchZebranie(zebranieId: number): Promise<void> {
+    const { error } = await getSupabase()
+      .from('zebrania')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('id', zebranieId);
+    if (error) throw new Error(`touchZebranie: ${error.message}`);
+  }
+
+  /**
+   * A new revision (1.0 → 1.1): a copy of the newest version's materials, being
+   * prepared again. It becomes the current version, so a linked meeting goes
+   * back to "to prepare" — corrections are materials not yet ready.
+   */
+  async addZebranieWersja(zebranieId: number, who: string): Promise<ZebranieWersja> {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const zebranie = await this.getZebranie(zebranieId);
+      if (!zebranie) throw new Error('Zebranie nie istnieje — mogło zostać usunięte.');
+      const from = latestWersja(zebranie);
+      const { major, minor } = nextWersjaNumber(zebranie.wersje);
+      const { data, error } = await getSupabase()
+        .from('zebrania_wersje')
+        .insert({
+          zebranie_id: zebranieId,
+          major,
+          minor,
+          status: 'w_przygotowaniu',
+          opis: '',
+          materialy: copyMaterialyForRevision(from?.materialy ?? []),
+          created_by: who,
+          updated_by: who,
+        })
+        .select(ZEBRANIE_WERSJA_COLS)
+        .single();
+      if (error) {
+        // Two people added a revision at once and took the same number: re-read and take the next.
+        if ((error as { code?: string }).code === '23505' && attempt === 0) continue;
+        throw new Error(`addZebranieWersja: ${error.message}`);
+      }
+      await this.touchZebranie(zebranieId);
+      await this.syncSpotkanieFromWersja(zebranie.spotkanieId, 'w_przygotowaniu', who);
+      return DatabaseService.zebranieWersjaRow(data);
+    }
+    throw new Error('addZebranieWersja: nie udało się nadać numeru wersji.');
+  }
+
+  /** Save a version's description and materials. Any version, not only the newest. */
+  async updateZebranieWersja(id: number, input: ZebranieWersjaInput, who: string): Promise<void> {
+    const { data, error } = await getSupabase()
+      .from('zebrania_wersje')
+      .update({
+        opis: (input.opis ?? '').trim(),
+        materialy: normalizeMaterialy(input.materialy),
+        updated_at: new Date().toISOString(),
+        updated_by: who,
+      })
+      .eq('id', id)
+      .select('zebranie_id')
+      .maybeSingle();
+    if (error) throw new Error(`updateZebranieWersja: ${error.message}`);
+    if (data) await this.touchZebranie((data as { zebranie_id: number }).zebranie_id);
+  }
+
+  private async writeZebranieWersjaStatus(id: number, status: ZebranieStatus, who: string): Promise<void> {
+    const { error } = await getSupabase()
+      .from('zebrania_wersje')
+      .update({ status, updated_at: new Date().toISOString(), updated_by: who })
+      .eq('id', id);
+    if (error) throw new Error(`setZebranieWersjaStatus: ${error.message}`);
+  }
+
+  /** Move a linked meeting's materials to what its newest version now says. */
+  private async syncSpotkanieFromWersja(
+    spotkanieId: number | null,
+    status: ZebranieStatus,
+    who: string,
+  ): Promise<void> {
+    if (spotkanieId == null) return;
+    const { data, error } = await getSupabase()
+      .from('spotkania')
+      .select('materialy_status')
+      .eq('id', spotkanieId)
+      .maybeSingle();
+    if (error) throw new Error(`syncSpotkanieFromWersja: ${error.message}`);
+    if (!data) return;
+    const current = DatabaseService.materialyStatus((data as any).materialy_status);
+    const target = materialyTargetForWersja(current, status);
+    if (target) await this.writeSpotkanieMaterialy(spotkanieId, target, who);
+  }
+
+  /**
+   * Mark a version "W przygotowaniu" / "Przygotowane". When it is the newest
+   * version of a linked entry, the meeting's materials status follows.
+   */
+  async setZebranieWersjaStatus(id: number, status: ZebranieStatus, who: string): Promise<void> {
+    if (!ZEBRANIE_STATUSES.includes(status)) throw new Error(`Nieznany status zebrania: ${status}`);
+    const { data, error } = await getSupabase()
+      .from('zebrania_wersje')
+      .select('zebranie_id')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw new Error(`setZebranieWersjaStatus (odczyt): ${error.message}`);
+    if (!data) throw new Error('Wersja nie istnieje — mogła zostać usunięta.');
+    await this.writeZebranieWersjaStatus(id, status, who);
+    const zebranie = await this.getZebranie((data as { zebranie_id: number }).zebranie_id);
+    if (!zebranie) return;
+    await this.touchZebranie(zebranie.id);
+    if (latestWersja(zebranie)?.id === id) {
+      await this.syncSpotkanieFromWersja(zebranie.spotkanieId, status, who);
+    }
+  }
+
+  /** Note a download on the material it was made from — who, when, which files. */
+  async recordZebraniePobranie(
+    wersjaId: number,
+    materialId: string,
+    pliki: string[],
+    who: string,
+  ): Promise<void> {
+    const { data, error } = await getSupabase()
+      .from('zebrania_wersje')
+      .select('materialy')
+      .eq('id', wersjaId)
+      .maybeSingle();
+    if (error) throw new Error(`recordZebraniePobranie (odczyt): ${error.message}`);
+    if (!data) return;
+    const materialy = normalizeMaterialy((data as any).materialy).map(m =>
+      m.id === materialId
+        ? { ...m, pobrania: [...m.pobrania, { at: new Date().toISOString(), by: who, pliki }] }
+        : m,
+    );
+    const { error: writeError } = await getSupabase()
+      .from('zebrania_wersje')
+      .update({ materialy })
+      .eq('id', wersjaId);
+    if (writeError) throw new Error(`recordZebraniePobranie: ${writeError.message}`);
   }
 
   // ------------------ Księgowania: priorities and notes ------------------
@@ -2294,6 +3109,98 @@ class DatabaseService {
     if (error) throw new Error(`deleteKsiegowanieUwaga: ${error.message}`);
   }
 
+  // ------------- Księgowania: files pinned by the folder scan -------------
+
+  private static ksPlik(r: any): KsiegowaniePlik {
+    return {
+      ...r,
+      errorMessage: r.errorMessage ?? null,
+      adresId: r.adresId ?? null,
+      accountNumber: r.accountNumber ?? null,
+      accountTypeName: r.accountTypeName ?? null,
+      bankId: r.bankId ?? null,
+      bankName: r.bankName ?? null,
+      converterId: r.converterId ?? null,
+      originalName: r.originalName ?? null,
+      fileSize: Number(r.fileSize ?? 0),
+      periodFrom: r.periodFrom ?? null,
+      periodTo: r.periodTo ?? null,
+      ignoredHashes: Array.isArray(r.ignoredHashes) ? r.ignoredHashes : [],
+      scannedBy: r.scannedBy ?? null,
+    } as KsiegowaniePlik;
+  }
+
+  /** Every pinned file, or one month's (`YYYY-MM`) when given. */
+  async getKsiegowaniaPliki(monthKey?: string): Promise<KsiegowaniePlik[]> {
+    const rows = await fetchAllPaged<any>('getKsiegowaniaPliki', (from, to) => {
+      let query = getSupabase().from('ksiegowania_pliki').select(KS_PLIK_COLS);
+      if (monthKey) query = query.eq('month_key', monthKey);
+      return query.order('month_key', { ascending: false }).order('id', { ascending: true }).range(from, to);
+    });
+    return rows.map(DatabaseService.ksPlik);
+  }
+
+  private static ksPlikRow(p: Omit<KsiegowaniePlik, 'id' | 'scannedAt'>): Record<string, unknown> {
+    return {
+      month_key: p.monthKey,
+      kind: p.kind,
+      status: p.status,
+      error_message: p.errorMessage,
+      adres_id: p.adresId,
+      adres_nazwa: p.adresNazwa,
+      account_number: p.accountNumber,
+      account_type_name: p.accountTypeName,
+      bank_id: p.bankId,
+      bank_name: p.bankName,
+      converter_id: p.converterId,
+      rel_path: p.relPath,
+      file_name: p.fileName,
+      original_name: p.originalName,
+      file_size: p.fileSize,
+      file_mtime: p.fileMtime,
+      file_hash: p.fileHash,
+      ignored_hashes: p.ignoredHashes,
+      period_from: p.periodFrom,
+      period_to: p.periodTo,
+      scanned_by: p.scannedBy,
+    };
+  }
+
+  async addKsiegowaniePlik(p: Omit<KsiegowaniePlik, 'id' | 'scannedAt'>): Promise<KsiegowaniePlik> {
+    const { data, error } = await getSupabase()
+      .from('ksiegowania_pliki')
+      .insert(DatabaseService.ksPlikRow(p))
+      .select(KS_PLIK_COLS)
+      .single();
+    return DatabaseService.ksPlik(unwrap(data, error, 'addKsiegowaniePlik'));
+  }
+
+  /** Point a pinned row at another file (a newer version, a moved file) — the whole record is rewritten. */
+  async replaceKsiegowaniePlik(id: number, p: Omit<KsiegowaniePlik, 'id' | 'scannedAt'>): Promise<KsiegowaniePlik> {
+    const { data, error } = await getSupabase()
+      .from('ksiegowania_pliki')
+      .update({ ...DatabaseService.ksPlikRow(p), scanned_at: new Date().toISOString() })
+      .eq('id', id)
+      .select(KS_PLIK_COLS)
+      .single();
+    return DatabaseService.ksPlik(unwrap(data, error, 'replaceKsiegowaniePlik'));
+  }
+
+  /** Remember newer files the user chose not to swap in, so the scan stops offering them. */
+  async setKsiegowaniePlikIgnored(id: number, hashes: string[]): Promise<void> {
+    const { error } = await getSupabase()
+      .from('ksiegowania_pliki')
+      .update({ ignored_hashes: hashes })
+      .eq('id', id);
+    if (error) throw new Error(`setKsiegowaniePlikIgnored: ${error.message}`);
+  }
+
+  /** "Odepnij" — the record goes, the file stays where it is. */
+  async deleteKsiegowaniePlik(id: number): Promise<void> {
+    const { error } = await getSupabase().from('ksiegowania_pliki').delete().eq('id', id);
+    if (error) throw new Error(`deleteKsiegowaniePlik: ${error.message}`);
+  }
+
   // ------------------------ Notification switches ------------------------
   // One row per person (mailbox), in the cloud: the choice belongs to the
   // account, so it is the same on every machine the person signs in on.
@@ -2434,7 +3341,11 @@ class DatabaseService {
       appUsers,
       ksiegowaniaPriorytety,
       ksiegowaniaUwagi,
+      ksiegowaniaPliki,
+      ksiegowaniaKonwersje,
       notificationPrefs,
+      mailingTypy,
+      zebrania,
     ] = await Promise.all([
       this.getAllBanks(),
       this.getAllKontrahenci(),
@@ -2456,7 +3367,14 @@ class DatabaseService {
       this.getAppUsers(),
       this.getKsiegowaniaPriorytety(),
       this.getKsiegowaniaUwagi(),
+      // Tables added by a migration that may not have run yet: a missing one is
+      // left out of the backup (its key absent = "leave live rows alone" on
+      // restore) rather than failing every auto-backup.
+      this.getKsiegowaniaPliki().catch(() => undefined),
+      this.getKsiegowaniaKonwersje().catch(() => undefined),
       this.getAllNotificationPrefs(),
+      this.getMailingTypy(),
+      this.getZebrania(),
     ]);
     return {
       format: 'filefunky-backup',
@@ -2483,7 +3401,11 @@ class DatabaseService {
         zadaniaNotatki,
         ksiegowaniaPriorytety,
         ksiegowaniaUwagi,
+        ksiegowaniaPliki,
+        ksiegowaniaKonwersje,
         notificationPrefs,
+        mailingTypy,
+        zebrania,
         // The `app_users` ROWS are deliberately absent: they mirror the Supabase
         // auth accounts, rebuilt by a trigger, not data this app authors — and
         // the participants stored on each meeting carry their own snapshot. The
@@ -2574,7 +3496,11 @@ class DatabaseService {
       appUserNames,
       ksiegowaniaPriorytety,
       ksiegowaniaUwagi,
+      ksiegowaniaPliki,
+      ksiegowaniaKonwersje,
       notificationPrefs,
+      mailingTypy,
+      zebrania,
       settings,
     } = backup.data;
 
@@ -2747,6 +3673,33 @@ class DatabaseService {
       );
     }
 
+    // Mailing kinds. Upserted by key rather than wiped: the built-in kind is
+    // protected by a trigger against deletion, and templates and history point at
+    // kinds by key, which survives this untouched. Kinds the backup does not know
+    // go — except the built-in one, which always exists.
+    if (mailingTypy) {
+      for (const typ of mailingTypy) {
+        const { error } = await getSupabase()
+          .from('mailing_typy')
+          .upsert(
+            {
+              klucz: typ.klucz,
+              // The built-in kind's name is fixed (a trigger refuses any other).
+              nazwa: typ.systemowy ? MAILING_TYP_ZAWIADOMIENIE_NAZWA : typ.nazwa,
+              systemowy: typ.systemowy === true,
+              opis: typ.opis ?? '',
+              adresaci: DatabaseService.mailingAdresaci(typ.adresaci),
+              created_at: typ.createdAt,
+            },
+            { onConflict: 'klucz' },
+          );
+        if (error) throw new Error(`restore mailing_typy: ${error.message}`);
+      }
+      const keep = new Set(mailingTypy.map(t => t.klucz));
+      const stale = (await this.getMailingTypy()).filter(t => !t.systemowy && !keep.has(t.klucz));
+      await this.deleteByIds('mailing_typy', stale.map(t => t.id));
+    }
+
     // Mailing dictionaries and history: each key is absent in backups written
     // before the module existed, so a missing key leaves the live rows alone
     // instead of wiping them.
@@ -2814,6 +3767,8 @@ class DatabaseService {
           attachments: h.attachments,
           sent_from: h.sentFrom,
           sent_at: h.sentAt,
+          // Absent in rows written before kinds had recipients.
+          odbiorcy: Array.isArray(h.odbiorcy) ? h.odbiorcy : [],
         })),
       );
     }
@@ -2823,6 +3778,8 @@ class DatabaseService {
     // backup carries no meetings: the live meetings then keep ids the backup
     // cannot be trusted to know, so a task's link is dropped rather than guessed.
     const spotkanieIdMap = new Map<number, number>();
+    // Same for locations — the Zebrania entries below point at them too.
+    let restoredLokalizacjaIdMap = new Map<number, number>();
 
     // Kalendarz. Gated on the meetings rather than on the types, because the two
     // keys are written together and the types only exist to be pointed at: a
@@ -2928,6 +3885,70 @@ class DatabaseService {
 
       await this.deleteByIds('spotkania_typy', preexistingSpotkanieTypIds);
       await this.deleteByIds('spotkania_lokalizacje', preexistingLokalizacjaIds);
+      restoredLokalizacjaIdMap = lokalizacjaIdMap;
+    }
+
+    // Zebrania, with their versions. Wipe-and-insert (the versions go with the
+    // wipe, ON DELETE CASCADE), re-pointing every link: the meeting through the
+    // meetings restored above, the community through its name, the location
+    // through the fresh dictionary ids, and each version at its entry's new id.
+    // A notice's template id is re-pointed by the template's name — the
+    // templates were re-inserted with fresh ids too. Gated on the key: a backup
+    // written before the module existed leaves the live entries alone.
+    if (zebrania) {
+      const { error: wipeError } = await getSupabase().from('zebrania').delete().gt('id', 0);
+      if (wipeError) throw new Error(`restore zebrania: ${wipeError.message}`);
+      const szablonIdByNazwa = new Map(
+        (await this.getMailingSzablony()).map(t => [t.nazwa.trim().toLowerCase(), t.id] as const),
+      );
+      for (const slice of DatabaseService.chunk(zebrania)) {
+        const idMap = await this.insertRemapped(
+          'zebrania',
+          'id',
+          slice.map(z => z.id),
+          slice.map(z => ({
+            spotkanie_id:
+              z.spotkanieId != null ? spotkanieIdMap.get(z.spotkanieId) ?? null : null,
+            nazwa: z.nazwa ?? '',
+            adres_id: z.adresNazwa
+              ? adresIdByNazwa.get(z.adresNazwa.trim().toLowerCase()) ?? null
+              : null,
+            adres_nazwa: z.adresNazwa ?? '',
+            lokalizacja_id:
+              z.lokalizacjaId != null ? restoredLokalizacjaIdMap.get(z.lokalizacjaId) ?? null : null,
+            lokalizacja_nazwa: z.lokalizacjaNazwa ?? '',
+            lokalizacja_adres: z.lokalizacjaAdres ?? '',
+            starts_at: z.startsAt ?? null,
+            created_by: z.createdBy ?? '',
+            created_at: z.createdAt,
+            updated_at: z.updatedAt ?? z.createdAt,
+          })),
+        );
+        await this.insertChunked(
+          'zebrania_wersje',
+          slice.flatMap(z => {
+            const zebranieId = idMap.get(z.id);
+            if (zebranieId === undefined) return [];
+            return (z.wersje ?? []).map(w => ({
+              zebranie_id: zebranieId,
+              major: w.major ?? 1,
+              minor: w.minor ?? 0,
+              status: DatabaseService.zebranieStatus(w.status),
+              opis: w.opis ?? '',
+              materialy: normalizeMaterialy(w.materialy).map(m => ({
+                ...m,
+                szablonId: m.szablonNazwa
+                  ? szablonIdByNazwa.get(m.szablonNazwa.trim().toLowerCase()) ?? null
+                  : null,
+              })),
+              created_by: w.createdBy ?? '',
+              created_at: w.createdAt,
+              updated_at: w.updatedAt ?? w.createdAt,
+              updated_by: w.updatedBy ?? '',
+            }));
+          }),
+        );
+      }
     }
 
     // Księgowania priorities and notes. Each key is absent in backups written
@@ -2976,6 +3997,82 @@ class DatabaseService {
           created_at: u.createdAt,
           resolved_at: u.resolvedAt ?? null,
           resolved_by: u.resolvedAt ? u.resolvedBy ?? null : null,
+        })),
+      );
+    }
+
+    // The dashboard's conversion records — the posting state with its DOM ticks.
+    // Absent in backups written before it had its own table: then the live
+    // records stay as they are (the history above is only the log).
+    if (ksiegowaniaKonwersje) {
+      const { error: wipeError } = await getSupabase()
+        .from('ksiegowania_konwersje')
+        .delete()
+        .gt('id', 0);
+      if (wipeError) throw new Error(`restore ksiegowania_konwersje: ${wipeError.message}`);
+      await this.insertChunked(
+        'ksiegowania_konwersje',
+        ksiegowaniaKonwersje.map(h => ({
+          file_name: h.fileName,
+          bank_name: h.bankName,
+          converter_name: h.converterName,
+          status: h.status,
+          error_message: h.errorMessage ?? null,
+          input_path: h.inputPath,
+          output_path: h.outputPath,
+          converted_at: h.convertedAt,
+          adres_id: h.adresNazwa
+            ? adresIdByNazwa.get(h.adresNazwa.trim().toLowerCase()) ?? null
+            : null,
+          adres_nazwa: h.adresNazwa ?? null,
+          booked_in_dom: h.bookedInDom === true,
+          booked_in_dom_at: h.bookedInDom ? h.bookedInDomAt ?? null : null,
+          booked_in_dom_by: h.bookedInDom ? h.bookedInDomBy ?? null : null,
+          month_key: h.monthKey ?? null,
+          input_hash: h.inputHash ?? null,
+          // Only on manual marks, so a backup without any restores into a
+          // database that has not had ksiegowania-recznie.sql run yet.
+          ...(h.manual ? { recznie: true } : {}),
+        })),
+      );
+    }
+
+    // Files pinned by the folder scan — records only; the files themselves stay
+    // in the statements folder. The community is re-pointed through its name
+    // and the bank through the id map, both re-inserted above with fresh ids.
+    if (ksiegowaniaPliki) {
+      const { error: wipeError } = await getSupabase()
+        .from('ksiegowania_pliki')
+        .delete()
+        .gt('id', 0);
+      if (wipeError) throw new Error(`restore ksiegowania_pliki: ${wipeError.message}`);
+      await this.insertChunked(
+        'ksiegowania_pliki',
+        ksiegowaniaPliki.map(p => ({
+          month_key: p.monthKey,
+          kind: p.kind,
+          status: p.status,
+          error_message: p.errorMessage ?? null,
+          adres_id: p.adresNazwa
+            ? adresIdByNazwa.get(p.adresNazwa.trim().toLowerCase()) ?? null
+            : null,
+          adres_nazwa: p.adresNazwa,
+          account_number: p.accountNumber ?? null,
+          account_type_name: p.accountTypeName ?? null,
+          bank_id: p.bankId != null ? bankIdMap.get(p.bankId) ?? null : null,
+          bank_name: p.bankName ?? null,
+          converter_id: p.converterId ?? null,
+          rel_path: p.relPath,
+          file_name: p.fileName,
+          original_name: p.originalName ?? null,
+          file_size: p.fileSize ?? 0,
+          file_mtime: p.fileMtime,
+          file_hash: p.fileHash,
+          ignored_hashes: p.ignoredHashes ?? [],
+          period_from: p.periodFrom ?? null,
+          period_to: p.periodTo ?? null,
+          scanned_at: p.scannedAt,
+          scanned_by: p.scannedBy ?? null,
         })),
       );
     }

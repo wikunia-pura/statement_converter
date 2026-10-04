@@ -39,6 +39,7 @@ const IPC_CHANNELS = {
   ANALYZE_FILE: 'files:analyze',
   DETECT_ACCOUNT_NUMBERS: 'files:detect-account-numbers',
   CONVERT_FILE_WITH_AI: 'files:convert-with-ai',
+  CANCEL_CONVERSION: 'files:cancel-conversion',
   FINALIZE_CONVERSION: 'files:finalize-conversion',
   RERUN_EXPENSE_AI: 'files:rerun-expense-ai',
   TOUCH_CONVERSION: 'files:touch-conversion',
@@ -49,6 +50,7 @@ const IPC_CHANNELS = {
   SET_OUTPUT_FOLDER: 'settings:set-output-folder',
   SET_IMPEX_FOLDER: 'settings:set-impex-folder',
   SET_SWRK_FOLDER: 'settings:set-swrk-folder',
+  SET_STATEMENTS_FOLDER: 'settings:set-statements-folder',
   SET_DARK_MODE: 'settings:set-dark-mode',
   SET_LANGUAGE: 'settings:set-language',
   SET_SKIP_USER_APPROVAL: 'settings:set-skip-user-approval',
@@ -57,6 +59,8 @@ const IPC_CHANNELS = {
   SET_SIDEBAR_COLLAPSED: 'settings:set-sidebar-collapsed',
   SET_SIDEBAR_ORDER: 'settings:set-sidebar-order',
   SET_BOOKINGS_COLLAPSED: 'settings:set-bookings-collapsed',
+  SET_BOOKINGS_TILE_ORDER: 'settings:set-bookings-tile-order',
+  SET_BOOKINGS_MONTH: 'settings:set-bookings-month',
   SET_CALENDAR_HOVER_CARD: 'settings:set-calendar-hover-card',
   GET_NOTIFICATION_PREFS: 'notifications:get-prefs',
   SET_NOTIFICATION_PREF: 'notifications:set-pref',
@@ -71,7 +75,10 @@ const IPC_CHANNELS = {
   CLEAR_HISTORY: 'history:clear',
   IMPORT_HISTORY_FROM_FILE: 'history:import-from-file',
   EXPORT_HISTORY_TO_FILE: 'history:export-to-file',
-  SET_HISTORY_BOOKED_IN_DOM: 'history:set-booked-in-dom',
+  SET_KS_BOOKED_IN_DOM: 'ksiegowania:set-booked-in-dom',
+  GET_KS_KONWERSJE: 'ksiegowania:get-konwersje',
+  MARK_KS_PLIK_BOOKED: 'ksiegowania:mark-plik-booked',
+  UNDO_KS_MANUAL: 'ksiegowania:undo-manual',
   BACKUP_EXPORT: 'backup:export',
   BACKUP_RESTORE: 'backup:restore',
   BACKUP_GET_STATUS: 'backup:get-status',
@@ -104,6 +111,7 @@ const IPC_CHANNELS = {
   MAILING_ADD_ZGN: 'mailing:add-zgn',
   MAILING_UPDATE_ZGN: 'mailing:update-zgn',
   MAILING_DELETE_ZGN: 'mailing:delete-zgn',
+  SET_ZGN_ADRESY: 'mailing:set-zgn-adresy',
   GET_ZGN_PELNOMOCNICY: 'zgn:get-pelnomocnicy',
   ADD_ZGN_PELNOMOCNIK: 'zgn:add-pelnomocnik',
   UPDATE_ZGN_PELNOMOCNIK: 'zgn:update-pelnomocnik',
@@ -118,6 +126,23 @@ const IPC_CHANNELS = {
   MAILING_DELETE_SZABLON: 'mailing:delete-szablon',
   MAILING_SELECT_ATTACHMENTS: 'mailing:select-attachments',
   MAILING_SEND: 'mailing:send',
+  MAILING_GET_TYPY: 'mailing:get-typy',
+  MAILING_ADD_TYP: 'mailing:add-typ',
+  MAILING_UPDATE_TYP: 'mailing:update-typ',
+  MAILING_DELETE_TYP: 'mailing:delete-typ',
+  MAILING_EXPORT: 'mailing:export',
+  MAILING_RESOLVE_ODBIORCY: 'mailing:resolve-odbiorcy',
+  MAILING_SHOW_IN_FOLDER: 'mailing:show-in-folder',
+  GET_ZEBRANIA: 'zebrania:get',
+  ZEBRANIE_FROM_SPOTKANIE: 'zebrania:from-spotkanie',
+  ZEBRANIE_ENSURE_FOR_SPOTKANIE: 'zebrania:ensure-for-spotkanie',
+  ADD_ZEBRANIE: 'zebrania:add',
+  UPDATE_ZEBRANIE: 'zebrania:update',
+  DELETE_ZEBRANIE: 'zebrania:delete',
+  ADD_ZEBRANIE_WERSJA: 'zebrania:add-wersja',
+  UPDATE_ZEBRANIE_WERSJA: 'zebrania:update-wersja',
+  SET_ZEBRANIE_WERSJA_STATUS: 'zebrania:set-wersja-status',
+  RECORD_ZEBRANIE_POBRANIE: 'zebrania:record-pobranie',
   MAILING_GET_HISTORY: 'mailing:get-history',
   MAILING_CLEAR_HISTORY: 'mailing:clear-history',
   MAILING_GET_FILES_INFO: 'mailing:get-files-info',
@@ -174,6 +199,11 @@ const IPC_CHANNELS = {
   UPDATE_KS_UWAGA: 'ksiegowania:update-uwaga',
   SET_KS_UWAGA_RESOLVED: 'ksiegowania:set-uwaga-resolved',
   DELETE_KS_UWAGA: 'ksiegowania:delete-uwaga',
+  GET_KS_PLIKI: 'ksiegowania:get-pliki',
+  SCAN_KS_PLIKI: 'ksiegowania:scan-pliki',
+  RESOLVE_KS_SCAN: 'ksiegowania:resolve-scan',
+  DELETE_KS_PLIK: 'ksiegowania:delete-plik',
+  PREVIEW_PDF: 'files:preview-pdf',
   AUTH_SIGN_IN: 'auth:sign-in',
   AUTH_SIGN_OUT: 'auth:sign-out',
   AUTH_GET_SESSION: 'auth:get-session',
@@ -283,6 +313,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.DETECT_ACCOUNT_NUMBERS, inputPath, bankId),
   convertFileWithAI: (inputPath: string, bankId: number, fileName: string, adresId?: number | null, accountTypeId?: number | null) =>
     ipcRenderer.invoke(IPC_CHANNELS.CONVERT_FILE_WITH_AI, inputPath, bankId, fileName, adresId, accountTypeId),
+  cancelConversion: (inputPath: string) => ipcRenderer.invoke(IPC_CHANNELS.CANCEL_CONVERSION, inputPath),
   finalizeConversion: (tempConversionId: string, decisions: any[]) =>
     ipcRenderer.invoke(IPC_CHANNELS.FINALIZE_CONVERSION, tempConversionId, decisions),
   rerunExpenseAI: (tempConversionId: string, indices: number[], fileName: string) =>
@@ -297,6 +328,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.SET_OUTPUT_FOLDER, folderPath),
   setImpexFolder: (folderPath: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_IMPEX_FOLDER, folderPath),
+  setStatementsFolder: (folderPath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_STATEMENTS_FOLDER, folderPath),
   setSwrkFolder: (folderPath: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_SWRK_FOLDER, folderPath),
   setDarkMode: (enabled: boolean) =>
@@ -315,6 +348,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.SET_SIDEBAR_ORDER, order),
   setBookingsCollapsed: (collapsed: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_BOOKINGS_COLLAPSED, collapsed),
+  setBookingsTileOrder: (order: string[] | null) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_BOOKINGS_TILE_ORDER, order),
+  setBookingsMonth: (monthKey: string) => ipcRenderer.invoke(IPC_CHANNELS.SET_BOOKINGS_MONTH, monthKey),
   setCalendarHoverCard: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_CALENDAR_HOVER_CARD, enabled),
   getInbox: () => ipcRenderer.invoke(IPC_CHANNELS.GET_INBOX),
@@ -342,8 +378,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearHistory: () => ipcRenderer.invoke(IPC_CHANNELS.CLEAR_HISTORY),
   importHistoryFromFile: () => ipcRenderer.invoke(IPC_CHANNELS.IMPORT_HISTORY_FROM_FILE),
   exportHistoryToFile: () => ipcRenderer.invoke(IPC_CHANNELS.EXPORT_HISTORY_TO_FILE),
-  setHistoryBookedInDom: (ids: number[], booked: boolean) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SET_HISTORY_BOOKED_IN_DOM, ids, booked),
+  getKsiegowaniaKonwersje: () => ipcRenderer.invoke(IPC_CHANNELS.GET_KS_KONWERSJE),
+  setKsiegowanieBookedInDom: (ids: number[], booked: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_KS_BOOKED_IN_DOM, ids, booked),
+  markKsiegowaniePlikBooked: (plikId: number) => ipcRenderer.invoke(IPC_CHANNELS.MARK_KS_PLIK_BOOKED, plikId),
+  undoKsiegowanieManual: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.UNDO_KS_MANUAL, id),
 
   // Backup
   backupExport: () => ipcRenderer.invoke(IPC_CHANNELS.BACKUP_EXPORT),
@@ -408,6 +447,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   mailingUpdateZgn: (id: number, nazwa: string, email: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.MAILING_UPDATE_ZGN, id, nazwa, email),
   mailingDeleteZgn: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.MAILING_DELETE_ZGN, id),
+  setZgnAdresy: (jednostkaId: number, adresIds: number[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_ZGN_ADRESY, jednostkaId, adresIds),
   getZgnPelnomocnicy: () => ipcRenderer.invoke(IPC_CHANNELS.GET_ZGN_PELNOMOCNICY),
   setAdresZarzad: (id: number, zarzad: unknown[]) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_ADRES_ZARZAD, id, zarzad),
@@ -452,6 +493,38 @@ contextBridge.exposeInMainWorld('electronAPI', {
   mailingGetSmtp: () => ipcRenderer.invoke(IPC_CHANNELS.MAILING_GET_SMTP),
   mailingSetSmtp: (config: unknown) => ipcRenderer.invoke(IPC_CHANNELS.MAILING_SET_SMTP, config),
   mailingTestSmtp: () => ipcRenderer.invoke(IPC_CHANNELS.MAILING_TEST_SMTP),
+  mailingGetTypy: () => ipcRenderer.invoke(IPC_CHANNELS.MAILING_GET_TYPY),
+  mailingAddTyp: (nazwa: string, opis: string, adresaci: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.MAILING_ADD_TYP, nazwa, opis, adresaci),
+  mailingUpdateTyp: (id: number, nazwa: string, opis: string, adresaci: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.MAILING_UPDATE_TYP, id, nazwa, opis, adresaci),
+  mailingDeleteTyp: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.MAILING_DELETE_TYP, id),
+  mailingExport: (request: unknown) => ipcRenderer.invoke(IPC_CHANNELS.MAILING_EXPORT, request),
+  mailingResolveOdbiorcy: (request: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.MAILING_RESOLVE_ODBIORCY, request),
+  mailingShowInFolder: (filePath: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.MAILING_SHOW_IN_FOLDER, filePath),
+  // The same handler, for any file: nothing about it is specific to mailing.
+  showInFolder: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.MAILING_SHOW_IN_FOLDER, filePath),
+
+  // Zebrania
+  getZebrania: () => ipcRenderer.invoke(IPC_CHANNELS.GET_ZEBRANIA),
+  zebranieFromSpotkanie: (spotkanieId: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIE_FROM_SPOTKANIE, spotkanieId),
+  ensureZebranieForSpotkanie: (spotkanieId: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIE_ENSURE_FOR_SPOTKANIE, spotkanieId),
+  addZebranie: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ADD_ZEBRANIE, input),
+  updateZebranie: (id: number, input: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_ZEBRANIE, id, input),
+  deleteZebranie: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ZEBRANIE, id),
+  addZebranieWersja: (zebranieId: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ADD_ZEBRANIE_WERSJA, zebranieId),
+  updateZebranieWersja: (id: number, input: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_ZEBRANIE_WERSJA, id, input),
+  setZebranieWersjaStatus: (id: number, status: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_ZEBRANIE_WERSJA_STATUS, id, status),
+  recordZebraniePobranie: (wersjaId: number, materialId: string, pliki: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.RECORD_ZEBRANIE_POBRANIE, wersjaId, materialId, pliki),
   onMailingProgress: (callback: (progress: any) => void) => {
     const listener = (_event: unknown, progress: any) => callback(progress);
     ipcRenderer.on('mailing:progress', listener);
@@ -577,6 +650,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setKsiegowanieUwagaResolved: (id: number, resolved: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_KS_UWAGA_RESOLVED, id, resolved),
   deleteKsiegowanieUwaga: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_KS_UWAGA, id),
+  getKsiegowaniaPliki: () => ipcRenderer.invoke(IPC_CHANNELS.GET_KS_PLIKI),
+  scanKsiegowaniaPliki: (monthKey: string) => ipcRenderer.invoke(IPC_CHANNELS.SCAN_KS_PLIKI, monthKey),
+  resolveKsiegowaniaScan: (decisions: { id: string; decision: string }[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.RESOLVE_KS_SCAN, decisions),
+  deleteKsiegowaniePlik: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_KS_PLIK, id),
+  previewPdf: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.PREVIEW_PDF, filePath),
   getSpotkaniaLokalizacje: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SPOTKANIA_LOKALIZACJE),
   addSpotkanieLokalizacja: (nazwa: string, adres: string, opis: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.ADD_SPOTKANIE_LOKALIZACJA, nazwa, adres, opis),
@@ -638,6 +717,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const listener = (_event: unknown, progress: any) => callback(progress);
     ipcRenderer.on('conversion:progress', listener);
     return () => ipcRenderer.off('conversion:progress', listener);
+  },
+  onScanProgress: (callback: (progress: any) => void) => {
+    const listener = (_event: unknown, progress: any) => callback(progress);
+    ipcRenderer.on('ksiegowania:scan-progress', listener);
+    return () => ipcRenderer.off('ksiegowania:scan-progress', listener);
   },
   onBackupCreated: (callback: (info: any) => void) => {
     const listener = (_event: unknown, info: any) => callback(info);

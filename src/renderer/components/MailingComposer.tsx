@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { MailingPole } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { FormField } from './FormSection';
 import Icon from './Icon';
 import RichTextEditor from './RichTextEditor';
 import {
@@ -127,10 +128,7 @@ const MailingComposer: React.FC<MailingComposerProps> = ({
 
   return (
     <>
-      <div className="form-group">
-        <label>
-          {t.mailingSubject} <span style={{ color: 'red' }}>*</span>
-        </label>
+      <FormField label={t.mailingSubject} required>
         <ChipTextInput
           value={temat}
           onChange={(next) => onChange({ temat: next })}
@@ -139,13 +137,16 @@ const MailingComposer: React.FC<MailingComposerProps> = ({
           labels={chipLabels}
           placeholder={t.mailingSubjectPlaceholder}
         />
-      </div>
+      </FormField>
 
-      <div className="form-group">
-        <label>{t.mailingBody}</label>
-        <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
-          {bodyNote ?? t.mailingLogoNote}
-        </div>
+      <FormField
+        label={t.mailingBody}
+        hint={
+          <>
+            {bodyNote ?? t.mailingLogoNote} {t.mailingFieldPartsHint}
+          </>
+        }
+      >
         <RichTextEditor
           fields={fields}
           fieldLabels={chipLabels}
@@ -179,20 +180,21 @@ const MailingComposer: React.FC<MailingComposerProps> = ({
             tableDelete: t.rteTableDelete,
           }}
         />
-        <div style={{ fontSize: '12px', opacity: 0.75, marginTop: '8px', maxWidth: '90ch' }}>
-          <Icon name="info" size={13} /> {t.mailingFieldPartsHint}
-        </div>
-      </div>
+      </FormField>
 
       {usesFieldTable && (
-        <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '10px' }}>
-          <Icon name="info" size={13} /> {t.mailingFieldTableInBodyNote}
+        <div className="callout callout--info">
+          <Icon name="info" size={16} />
+          <div className="callout__body">{t.mailingFieldTableInBodyNote}</div>
         </div>
       )}
 
       {unknownFields.length > 0 && (
-        <div style={{ fontSize: '12px', color: 'var(--danger)', marginBottom: '10px' }}>
-          {t.mailingUnknownFields}: {unknownFields.map((f) => fieldPlaceholder(f)).join(', ')}
+        <div className="callout callout--danger" role="alert">
+          <Icon name="alert-triangle" size={16} />
+          <div className="callout__body">
+            {t.mailingUnknownFields}: {unknownFields.map((f) => fieldPlaceholder(f)).join(', ')}
+          </div>
         </div>
       )}
     </>

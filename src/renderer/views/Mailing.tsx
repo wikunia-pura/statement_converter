@@ -1,38 +1,54 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Adres,
+  DEFAULT_MAILING_ADRESACI,
+  MAILING_TYP_ZGN,
+  MailingAdresaci,
   MailingPole,
   MailingSendResult,
   MailingSzablon,
   MailingTyp,
+  MailingTypDef,
+  Spotkanie,
   ZgnJednostka,
+  ZgnPelnomocnik,
 } from '../../shared/types';
+import {
+  MailingRecipientLookup,
+  MailingRecipientsResolved,
+  resolveOdbiorcy,
+} from '../../shared/mailing-recipients';
+import MailingRecipientsEditor, {
+  MailingOdbiorcyList,
+  adresaciSummary,
+} from '../components/MailingRecipientsEditor';
 import { translations, Language } from '../translations';
+import { plural } from '../plural';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
+import CheckList, { CheckListItem } from '../components/CheckList';
+import { FormField, FormRow, FormSection } from '../components/FormSection';
 import Icon from '../components/Icon';
+import { ModalFooter } from '../components/Modal';
 import Select from '../components/Select';
-import MailingComposer from '../components/MailingComposer';
+import MailingVisualEditor from '../components/MailingVisualEditor';
+import MailingSaveTemplateModal from '../components/MailingSaveTemplateModal';
 import SearchableSelect, { SearchableOption } from '../components/SearchableSelect';
-import { MAILING_LOGO_SVG_DATA_URI } from '../../shared/mailing-logo';
+import type { MailingKalendarzContext, SpotkanieLokalizacja } from '../../shared/types';
 import {
-  buildMailShell,
+  MailingRenderContext,
+  buildKalendarzContext,
   extractFieldRefs,
   extractUsedFields,
   fieldPlaceholder,
-  formatPolishDate,
   isBuiltinField,
   isFieldTableField,
+  isKalendarzValueInjected,
+  kalendarzFieldOf,
+  missingFieldValues,
   normalizeFieldName,
   readFieldValue,
-  renderHtml,
-  renderPlain,
 } from '../../shared/mailing-template';
-
-/** Mailing kinds offered in the type dropdown. Only one exists so far. */
-export const MAILING_TYPE_OPTIONS: { value: MailingTyp; label: string }[] = [
-  { value: 'zgn-zaliczki', label: 'Zmiany zaliczek ZGN' },
-];
 
 /**
  * The send form's state. Lifted to App so stepping out to Adresy to attach a
@@ -78,10 +94,18 @@ export interface MailingDraft {
   spotkanieId?: number | null;
   /** The meeting's name, for the banner that says where this draft came from. */
   spotkanieNazwa?: string | null;
+  /**
+   * Recipient groups for this send. null ⇒ follow the kind's default (Mailing →
+   * Typy mailingu), so editing the kind in the other tab still shows up here
+   * until somebody changes the recipients for this one send.
+   */
+  adresaci: MailingAdresaci | null;
+  /** Mailboxes (lower-cased) unticked for this send — across every community. */
+  wykluczeni: string[];
 }
 
 export const emptyMailingDraft: MailingDraft = {
-  typ: 'zgn-zaliczki',
+  typ: MAILING_TYP_ZGN,
   templateId: null,
   adresIds: [],
   values: {},
@@ -94,6 +118,8 @@ export const emptyMailingDraft: MailingDraft = {
   edited: false,
   spotkanieId: null,
   spotkanieNazwa: null,
+  adresaci: null,
+  wykluczeni: [],
 };
 
 interface Props {
@@ -116,6 +142,15 @@ const Mailing: React.FC<Props> = ({
   const notify = useNotify();
   const [adresy, setAdresy] = useState<Adres[]>([]);
   const [jednostki, setJednostki] = useState<ZgnJednostka[]>([]);
+  const [pelnomocnicy, setPelnomocnicy] = useState<ZgnPelnomocnik[]>([]);
+  /** Mailing kinds, the built-in one first — the type picker and the default recipients. */
+  const [typy, setTypy] = useState<MailingTypDef[]>([]);
+  /**
+   * The meeting this draft came from, when it did — its proxy and board members
+   * replace the community's for that community's mail, exactly as the main
+   * process resolves it.
+   */
+  const [spotkanie, setSpotkanie] = useState<Spotkanie | null>(null);
   const [szablony, setSzablony] = useState<MailingSzablon[]>([]);
   const [pola, setPola] = useState<MailingPole[]>([]);
   const [smtpReady, setSmtpReady] = useState<{ ready: boolean; user: string }>({
@@ -138,13 +173,13 @@ const Mailing: React.FC<Props> = ({
   const [previewAdresId, setPreviewAdresId] = useState<number | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
+  /** "Zapisz jako szablon" — the modal keeping this send's text as a template. */
+  const [saveTplOpen, setSaveTplOpen] = useState(false);
   /**
-   * Whether the message-body card is unfolded. Not in the draft either: the
-   * template's wording is the norm, so the card stays folded until someone
-   * actually wants to rewrite this one send. A draft that already carries edits
-   * opens unfolded — that is someone coming back to a rewrite in progress.
+   * Meeting locations — read only for a draft made from a meeting, whose
+   * location's street address goes into "Adres zebrania" next to its name.
    */
-  const [messageOpen, setMessageOpen] = useState(draft.edited);
+  const [lokalizacje, setLokalizacje] = useState<SpotkanieLokalizacja[]>([]);
 
   useEffect(() => {
     void load();
@@ -159,15 +194,20 @@ const Mailing: React.FC<Props> = ({
   const load = async () => {
     setIsLoading(true);
     try {
-      const [adresyData, zgnData, szablonyData, polaData, smtp] = await Promise.all([
-        window.electronAPI.getAdresy(),
-        window.electronAPI.mailingGetZgn(),
-        window.electronAPI.mailingGetSzablony(),
-        window.electronAPI.mailingGetPola(),
-        window.electronAPI.mailingGetSmtp(),
-      ]);
+      const [adresyData, zgnData, szablonyData, polaData, smtp, pelnomocnicyData, typyData] =
+        await Promise.all([
+          window.electronAPI.getAdresy(),
+          window.electronAPI.mailingGetZgn(),
+          window.electronAPI.mailingGetSzablony(),
+          window.electronAPI.mailingGetPola(),
+          window.electronAPI.mailingGetSmtp(),
+          window.electronAPI.getZgnPelnomocnicy(),
+          window.electronAPI.mailingGetTypy(),
+        ]);
       setAdresy(adresyData);
       setJednostki(zgnData);
+      setPelnomocnicy(pelnomocnicyData);
+      setTypy(typyData);
       setSzablony(szablonyData);
       setPola(polaData);
       setSmtpReady({
@@ -180,6 +220,113 @@ const Mailing: React.FC<Props> = ({
       setIsLoading(false);
     }
   };
+
+  /**
+   * The meeting behind the draft, read only when there is one. A meeting that no
+   * longer exists simply drops out: the community's own proxy and board apply,
+   * which is also what the main process falls back to.
+   */
+  useEffect(() => {
+    const id = draft.spotkanieId ?? null;
+    if (id == null) {
+      setSpotkanie(null);
+      return;
+    }
+    let alive = true;
+    window.electronAPI
+      .getSpotkania()
+      .then((all) => {
+        if (alive) setSpotkanie(all.find((s) => s.id === id) ?? null);
+      })
+      .catch(() => {
+        if (alive) setSpotkanie(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [draft.spotkanieId]);
+
+  // The locations dictionary, once a meeting with a location is behind the draft.
+  // A failure only costs the street address: the location's name is on the
+  // meeting itself.
+  const spotkanieLokalizacjaId = spotkanie?.lokalizacjaId ?? null;
+  useEffect(() => {
+    if (spotkanieLokalizacjaId == null) return;
+    let alive = true;
+    window.electronAPI
+      .getSpotkaniaLokalizacje()
+      .then((all) => {
+        if (alive) setLokalizacje(all);
+      })
+      .catch(() => {
+        if (alive) setLokalizacje([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [spotkanieLokalizacjaId]);
+
+  /**
+   * What the meeting fills the calendar fields with — its date, start time,
+   * community and place. Null without a meeting: the calendar fields are then
+   * typed by hand like any other field. Sent with the mail, so the main process
+   * renders exactly what the preview shows.
+   */
+  const kalendarz = useMemo<MailingKalendarzContext | null>(() => {
+    if (!spotkanie) return null;
+    const lokalizacja = lokalizacje.find((l) => l.id === spotkanie.lokalizacjaId);
+    return buildKalendarzContext({
+      startsAt: spotkanie.startsAt,
+      adresNazwa: spotkanie.adresNazwa,
+      lokalizacjaNazwa: lokalizacja?.nazwa ?? spotkanie.lokalizacjaNazwa,
+      lokalizacjaAdres: lokalizacja?.adres,
+    });
+  }, [spotkanie, lokalizacje]);
+
+  /** The chosen kind; undefined while loading or for a kind deleted meanwhile. */
+  const typDef = useMemo(() => typy.find((k) => k.klucz === draft.typ), [typy, draft.typ]);
+
+  /**
+   * Recipient groups this send uses: the draft's own once the user changed them,
+   * the kind's default otherwise. Passed explicitly with the send, so what is
+   * listed here is what the main process resolves.
+   */
+  const effectiveAdresaci = useMemo<MailingAdresaci>(
+    () => draft.adresaci ?? typDef?.adresaci ?? DEFAULT_MAILING_ADRESACI,
+    [draft.adresaci, typDef],
+  );
+
+  /** Kinds as picker options; a kind deleted meanwhile stays, marked, so the picker isn't blank. */
+  const typOptions = useMemo(() => {
+    const options = typy.map((k) => ({ value: k.klucz, label: k.nazwa }));
+    if (!typy.some((k) => k.klucz === draft.typ)) {
+      options.push({ value: draft.typ, label: t.mailingTypyUnknown.replace('{key}', draft.typ) });
+    }
+    return options;
+  }, [typy, draft.typ, t.mailingTypyUnknown]);
+
+  /** What one community's groups resolve against — the meeting only for the meeting's community. */
+  const lookupFor = (adres: Adres): MailingRecipientLookup => ({
+    adres,
+    spotkanie: spotkanie && spotkanie.adresId === adres.id ? spotkanie : null,
+    jednostki,
+    pelnomocnicy,
+  });
+
+  /**
+   * Every community's resolved recipients under the current groups and ticks —
+   * the same `resolveOdbiorcy` the main process sends with, so the list, the
+   * "no recipients" block and the actual To headers cannot disagree.
+   */
+  const resolvedByAdres = useMemo(() => {
+    const map = new Map<number, MailingRecipientsResolved>();
+    for (const adres of adresy) {
+      map.set(adres.id, resolveOdbiorcy(lookupFor(adres), effectiveAdresaci, draft.wykluczeni));
+    }
+    return map;
+    // lookupFor reads only the dependencies listed here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adresy, jednostki, pelnomocnicy, spotkanie, effectiveAdresaci, draft.wykluczeni]);
 
   const templatesForType = useMemo(
     () => szablony.filter((s) => s.typ === draft.typ),
@@ -237,17 +384,29 @@ const Mailing: React.FC<Props> = ({
     }));
   };
 
-  const jednostkaFor = (adres: Adres): ZgnJednostka | undefined =>
-    adres.zgnJednostkaId != null ? jednostki.find((j) => j.id === adres.zgnJednostkaId) : undefined;
+  /** Who one community's mail goes to under the current groups and ticks. */
+  const odbiorcyFor = (adres: Adres) => resolvedByAdres.get(adres.id)?.odbiorcy ?? [];
+
+  /** One line for a picker hint: the first recipient, and how many more. */
+  const odbiorcyHint = (adres: Adres): string => {
+    const odbiorcy = odbiorcyFor(adres);
+    if (odbiorcy.length === 0) return t.mailingAdresaciNoneForAddress;
+    const first = odbiorcy[0].nazwa ? `${odbiorcy[0].nazwa} — ${odbiorcy[0].email}` : odbiorcy[0].email;
+    return odbiorcy.length > 1
+      ? `${first} ${t.mailingAdresaciMoreCount.replace('{count}', String(odbiorcy.length - 1))}`
+      : first;
+  };
 
   /**
-   * Communities that can actually be mailed — a unit with a mailbox. The rest are
-   * left out of the picker rather than offered and then rejected at send time:
-   * the fix for them is in Adresy, not here.
+   * Communities that can actually be mailed — at least one address under the
+   * current recipient groups. The rest are left out of the picker rather than
+   * offered and then rejected at send time: the fix for them is in Adresy (or in
+   * the groups below), not in the picker. Unticked addresses don't count here —
+   * a community whose one address was unticked stays listed, and flagged.
    */
   const mailableAdresy = useMemo(
-    () => adresy.filter((a) => Boolean(jednostkaFor(a)?.email)),
-    [adresy, jednostki],
+    () => adresy.filter((a) => (resolvedByAdres.get(a.id)?.kandydaci.length ?? 0) > 0),
+    [adresy, resolvedByAdres],
   );
 
   const selectedAdresy = useMemo(
@@ -255,27 +414,14 @@ const Mailing: React.FC<Props> = ({
     [draft.adresIds, adresy],
   );
 
-  /** Pickable communities: mailable and not already on the list. */
-  const recipientOptions = useMemo<SearchableOption[]>(
-    () =>
-      mailableAdresy
-        .filter((a) => !draft.adresIds.includes(a.id))
-        .map((a) => {
-          const jednostka = jednostkaFor(a);
-          return {
-            value: String(a.id),
-            label: a.nazwa,
-            hint: jednostka ? `${jednostka.nazwa} — ${jednostka.email}` : undefined,
-            keywords: (a.alternativeNames ?? []).join(' '),
-          };
-        }),
-    [mailableAdresy, draft.adresIds, jednostki],
-  );
-
-  /** Selected communities with no city unit — these cannot be mailed. */
-  const missingUnit = useMemo(
-    () => selectedAdresy.filter((a) => !jednostkaFor(a)),
-    [selectedAdresy, jednostki],
+  /**
+   * Selected communities whose mail would go to nobody — these block the send,
+   * as a community without a city unit always has: the main process would only
+   * record them as failures.
+   */
+  const noRecipients = useMemo(
+    () => selectedAdresy.filter((a) => (resolvedByAdres.get(a.id)?.odbiorcy.length ?? 0) === 0),
+    [selectedAdresy, resolvedByAdres],
   );
 
   /**
@@ -286,22 +432,31 @@ const Mailing: React.FC<Props> = ({
    * a table the user drew by hand) renders its fixed sentence and nothing else, so
    * it gets no input here: an empty box that changes nothing in the letter reads
    * as something forgotten.
+   *
+   * Calendar fields are built-ins that may still need typing: listed when the
+   * text uses them and the meeting does not fill them (no meeting, or a meeting
+   * with no location) — with the date or time picker their kind names.
    */
   const fieldsToFill = useMemo(() => {
     if (!template) return [];
+    const kalCtx: MailingRenderContext = { adresNazwa: '', dateText: '', pola, values: {}, kalendarz };
     // Read from the draft, so a field added while editing this send immediately
     // gets its own value input instead of silently going out unsubstituted.
     const needsValue = new Map<string, string>();
     for (const ref of extractFieldRefs(draft.temat, draft.tresc)) {
-      if (isBuiltinField(ref.nazwa) || ref.part === 'label') continue;
+      const kal = kalendarzFieldOf(ref.nazwa);
+      if (kal ? isKalendarzValueInjected(ref.nazwa, kalCtx) : isBuiltinField(ref.nazwa) || ref.part === 'label') {
+        continue;
+      }
       const key = normalizeFieldName(ref.nazwa);
-      if (!needsValue.has(key)) needsValue.set(key, ref.nazwa);
+      if (!needsValue.has(key)) needsValue.set(key, kal ? kal.nazwa : ref.nazwa);
     }
     return [...needsValue.values()].map((name) => ({
       name,
       pole: pola.find((p) => normalizeFieldName(p.nazwa) === normalizeFieldName(name)),
+      kal: kalendarzFieldOf(name),
     }));
-  }, [template, draft.temat, draft.tresc, pola]);
+  }, [template, draft.temat, draft.tresc, pola, kalendarz]);
 
   /** True once the body asks for the field table, i.e. the picker below matters. */
   const usesFieldTable = useMemo(
@@ -348,7 +503,7 @@ const Mailing: React.FC<Props> = ({
    * the browser's own control cannot be spelled two ways, which is the whole
    * point of giving the field a kind.
    */
-  const valueInputType = (pole?: MailingPole): 'text' | 'date' | 'time' => {
+  const valueInputType = (pole?: Pick<MailingPole, 'typWartosci'>): 'text' | 'date' | 'time' => {
     if (pole?.typWartosci === 'data') return 'date';
     if (pole?.typWartosci === 'godzina') return 'time';
     return 'text';
@@ -407,21 +562,33 @@ const Mailing: React.FC<Props> = ({
   );
 
   const previewIndex = previewAdres ? selectedAdresy.findIndex((a) => a.id === previewAdres.id) : -1;
-  const previewJednostka = previewAdres ? jednostkaFor(previewAdres) : undefined;
+  /** Who the previewed community's mail goes to — shown above the preview. */
+  const previewOdbiorcy = previewAdres ? odbiorcyFor(previewAdres) : [];
+
+  /**
+   * What the "Adresaci" editor resolves against: the previewed community, so the
+   * address list and the preview are always about the same letter. Memoised so
+   * the editor doesn't re-resolve on every keystroke elsewhere in the form.
+   */
+  const previewLookup = useMemo<MailingRecipientLookup | null>(
+    () => (previewAdres ? lookupFor(previewAdres) : null),
+    // lookupFor reads only the dependencies listed here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [previewAdres, spotkanie, jednostki, pelnomocnicy],
+  );
 
   /** The recipients, as the preview picker's options — mailbox on the second line. */
   const previewOptions = useMemo<SearchableOption[]>(
     () =>
-      selectedAdresy.map((a) => {
-        const jednostka = jednostkaFor(a);
-        return {
-          value: String(a.id),
-          label: a.nazwa,
-          hint: jednostka ? `${jednostka.nazwa} — ${jednostka.email}` : t.mailingNoUnitForAddress,
-          keywords: (a.alternativeNames ?? []).join(' '),
-        };
-      }),
-    [selectedAdresy, jednostki, t.mailingNoUnitForAddress],
+      selectedAdresy.map((a) => ({
+        value: String(a.id),
+        label: a.nazwa,
+        hint: odbiorcyHint(a),
+        keywords: (a.alternativeNames ?? []).join(' '),
+      })),
+    // odbiorcyHint reads resolvedByAdres and the translations only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedAdresy, resolvedByAdres, t],
   );
 
   /**
@@ -442,42 +609,44 @@ const Mailing: React.FC<Props> = ({
     previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  /** Preview rendered against the chosen community, exactly as it will be sent. */
-  const preview = useMemo(() => {
-    if (!template) return null;
-    const ctx = {
-      adresNazwa: previewAdres?.nazwa ?? t.mailingPreviewNoAddress,
-      dateText: formatPolishDate(new Date()),
-      pola,
-      values: draft.values,
-      tableFields: tableFieldNames,
-    };
-    return {
-      // The draft's text, not the template's — this is what will be sent.
-      subject: renderPlain(draft.temat, ctx),
-      // The whole mail frame, not just the body: the shell is inline-styled, so
-      // the preview renders the very markup that is sent.
-      html: buildMailShell(renderHtml(draft.tresc, ctx), MAILING_LOGO_SVG_DATA_URI),
-    };
-  }, [
-    template,
-    draft.temat,
-    draft.tresc,
-    previewAdres,
-    pola,
-    draft.values,
-    tableFieldNames,
-    t.mailingPreviewNoAddress,
-  ]);
+  /**
+   * Fields placed in the text that still have no value — user fields left empty,
+   * calendar fields neither the meeting nor the user filled in. The send waits
+   * for them: a gap would go out to every community as a blank. The community
+   * is irrelevant here (it never leaves a gap), so one check covers every letter.
+   */
+  const missingValues = useMemo(
+    () =>
+      template
+        ? missingFieldValues(
+            { adresNazwa: '', dateText: '', pola, values: draft.values, tableFields: tableFieldNames, kalendarz },
+            draft.temat,
+            draft.tresc,
+          )
+        : [],
+    [template, pola, draft.values, tableFieldNames, kalendarz, draft.temat, draft.tresc],
+  );
 
-  const addAdres = (id: number) =>
+  /** "Zapisz jako szablon" done: the draft now matches the template it saved to. */
+  const handleTemplateSaved = (saved: MailingSzablon, mode: 'overwrite' | 'new') => {
+    setSzablony((prev) =>
+      mode === 'overwrite' ? prev.map((s) => (s.id === saved.id ? saved : s)) : [...prev, saved],
+    );
     setDraft((prev) => ({
       ...prev,
-      adresIds: prev.adresIds.includes(id) ? prev.adresIds : [...prev.adresIds, id],
+      templateId: saved.id,
+      loadedFromTemplateId: saved.id,
+      temat: saved.temat,
+      tresc: saved.tresc,
+      edited: false,
     }));
-
-  const removeAdres = (id: number) =>
-    setDraft((prev) => ({ ...prev, adresIds: prev.adresIds.filter((x) => x !== id) }));
+    // The server's own copy, in the background — the list above is already right
+    // for everything this screen shows.
+    window.electronAPI
+      .mailingGetSzablony()
+      .then(setSzablony)
+      .catch(() => undefined);
+  };
 
   const handleSelectAllMailable = () =>
     setDraft((prev) => ({
@@ -506,10 +675,14 @@ const Mailing: React.FC<Props> = ({
       notify.warning(t.mailingPickAddresses);
       return;
     }
-    if (missingUnit.length > 0) {
+    if (noRecipients.length > 0) {
       notify.warning(
-        t.mailingMissingUnits.replace('{names}', missingUnit.map((a) => a.nazwa).join(', ')),
+        t.mailingAdresaciMissingBlock.replace('{names}', noRecipients.map((a) => a.nazwa).join(', ')),
       );
+      return;
+    }
+    if (missingValues.length > 0) {
+      notify.warning(t.mveMissingBlocksSend.replace('{names}', missingValues.join(', ')));
       return;
     }
     if (!smtpReady.ready) {
@@ -541,6 +714,13 @@ const Mailing: React.FC<Props> = ({
         // Set when the draft came from a meeting's "wyślij dokumenty": every
         // history row this send writes points back at the meeting.
         spotkanieId: draft.spotkanieId ?? null,
+        // The meeting's date, time and place for the calendar fields — the same
+        // context the editable preview rendered.
+        kalendarz,
+        // Always explicit, even when it is the kind's default: the list on
+        // screen was resolved from exactly these groups and ticks.
+        adresaci: effectiveAdresaci,
+        wykluczeni: draft.wykluczeni,
       });
       if (response.error) {
         notify.error(`${t.mailingSendError}: ${response.error}`);
@@ -588,664 +768,703 @@ const Mailing: React.FC<Props> = ({
     );
   }
 
+  /** The communities as tickable rows: mailable ones, plus any ticked one that no longer is. */
+  const communityItems: CheckListItem[] = adresy
+    .filter((a) => draft.adresIds.includes(a.id) || mailableAdresy.some((m) => m.id === a.id))
+    .map((a) => {
+      const selected = draft.adresIds.includes(a.id);
+      const none = odbiorcyFor(a).length === 0;
+      return {
+        id: a.id,
+        label: a.nazwa,
+        note: odbiorcyHint(a),
+        noteTone: selected && none ? 'danger' : 'muted',
+        highlighted: !!template && selected && previewAdres?.id === a.id,
+        // Straight from the list to that community's own letter — the picker in
+        // the preview does the same; this is the shortcut for the row in view.
+        action:
+          template && selected ? (
+            <button
+              type="button"
+              className="button button-small button-ghost button-icon"
+              onClick={() => showPreviewFor(a.id)}
+              title={t.mailingPreviewThis}
+              aria-label={`${t.mailingPreviewThis}: ${a.nazwa}`}
+            >
+              <Icon name="eye" size={14} />
+            </button>
+          ) : undefined,
+      };
+    });
+
+  /** Why "Wyślij" is grey — said on hover, and in the bar's note. */
+  const sendBlockedReason = !template
+    ? t.mailingPickTemplate
+    : draft.adresIds.length === 0
+      ? t.mailingPickAddresses
+      : missingValues.length > 0
+        ? t.mveMissingBlocksSend.replace('{names}', missingValues.join(', '))
+        : undefined;
+
+  const sendNote = isSending && progress ? (
+    <span className="action-note">
+      <Icon name="loader" size={13} className="icon-spin" />
+      {t.mailingProgress.replace('{done}', String(progress.done)).replace('{total}', String(progress.total))}
+    </span>
+  ) : missingValues.length > 0 ? (
+    <span className="action-note action-note--warning">
+      <Icon name="alert-triangle" size={13} />
+      {t.mveMissingBlocksSend.replace('{names}', missingValues.join(', '))}
+    </span>
+  ) : noRecipients.length > 0 ? (
+    <span className="action-note action-note--danger">
+      <Icon name="alert-triangle" size={13} />
+      {t.mailingAdresaciMissingBlock.replace('{names}', noRecipients.map((a) => a.nazwa).join(', '))}
+    </span>
+  ) : smtpReady.ready ? (
+    <span className="action-note">
+      <Icon name="mail" size={13} />
+      {t.mailingSendFrom.replace('{from}', smtpReady.user)}
+    </span>
+  ) : null;
+
+  const customized = !!draft.adresaci || draft.wykluczeni.length > 0;
+
+  /** What a folded "Wspólnoty" section says: the ticked names, the first few. */
+  const pickedSummary =
+    selectedAdresy.length === 0
+      ? t.mailingNoCommunitiesPicked
+      : t.formSectionPicked.replace(
+          '{names}',
+          selectedAdresy.slice(0, 4).map((a) => a.nazwa).join(', ') +
+            (selectedAdresy.length > 4 ? ` +${selectedAdresy.length - 4}` : ''),
+        );
+
   return (
     <div className="content-body">
-      {!smtpReady.ready && (
-        <div className="card" style={{ borderColor: 'var(--danger)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+      <div className="page-form">
+        {!smtpReady.ready && (
+          <div className="callout callout--danger" role="alert">
             <Icon name="alert-triangle" size={16} />
-            {t.mailingSmtpNotConfigured}
+            <div className="callout__body">{t.mailingSmtpNotConfigured}</div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Where this draft came from, when it came from a meeting. Says it once,
-          at the top, because the send itself will be recorded against that
-          meeting and the user should know before pressing the button. */}
-      {draft.spotkanieId != null && (
-        <div className="mailing-from-meeting">
-          <Icon name="calendar" size={16} />
-          <span>
-            {t.mailingFromMeeting.replace('{name}', draft.spotkanieNazwa || '—')}
-          </span>
-          <button
-            type="button"
-            className="link-button"
-            onClick={() =>
-              setDraft((prev) => ({ ...prev, spotkanieId: null, spotkanieNazwa: null }))
-            }
-          >
-            {t.mailingFromMeetingClear}
-          </button>
-        </div>
-      )}
-
-      <div className="card">
-        <h2 style={{ marginBottom: '15px' }}>{t.mailingTitle}</h2>
-
-        <div className="form-group">
-          <label>{t.mailingType}</label>
-          <Select
-            value={draft.typ}
-            onChange={(v) =>
-              setDraft((prev) => ({ ...prev, typ: v as MailingTyp, templateId: null }))
-            }
-            options={MAILING_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-          />
-        </div>
-
-        <div className="form-group">
-          <label>{t.mailingTemplate}</label>
-          {templatesForType.length > 0 ? (
-            <Select
-              value={draft.templateId ?? ''}
-              onChange={(v) =>
-                setDraft((prev) => ({
-                  ...prev,
-                  templateId: v ? Number(v) : null,
-                  // A new template brings its own PDF default; drop the override.
-                  attachPdf: null,
-                }))
-              }
-              placeholder={t.mailingPickTemplate}
-              options={[
-                { value: '', label: t.mailingPickTemplate },
-                ...templatesForType.map((s) => ({ value: String(s.id), label: s.nazwa })),
-              ]}
-            />
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '13px', opacity: 0.8 }}>{t.mailingNoTemplatesForType}</span>
-              <button className="button button-primary button-small" onClick={onNavigateToTemplates}>
-                {t.mailingGoToTemplates}
-              </button>
+        {/* Where this draft came from, when it came from a meeting. Says it once,
+            at the top, because the send itself will be recorded against that
+            meeting and the user should know before pressing the button. */}
+        {draft.spotkanieId != null && (
+          <div className="callout callout--info" role="status">
+            <Icon name="calendar" size={16} />
+            <div className="callout__body">
+              {t.mailingFromMeeting.replace('{name}', draft.spotkanieNazwa || '—')}
             </div>
-          )}
-        </div>
-      </div>
-
-      <div className="card">
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '10px',
-          }}
-        >
-          <h2 style={{ margin: 0 }}>{t.mailingRecipientsTitle}</h2>
-          <div style={{ display: 'flex', gap: '8px' }}>
             <button
-              className="button button-small button-secondary"
-              onClick={handleSelectAllMailable}
-              disabled={mailableAdresy.length === 0}
+              type="button"
+              className="button button-small button-subtle"
+              onClick={() => setDraft((prev) => ({ ...prev, spotkanieId: null, spotkanieNazwa: null }))}
             >
-              {t.mailingSelectAll}
-            </button>
-            <button
-              className="button button-small button-secondary"
-              onClick={() => setDraft((prev) => ({ ...prev, adresIds: [] }))}
-              disabled={draft.adresIds.length === 0}
-            >
-              {t.mailingClearSelection}
+              {t.mailingFromMeetingClear}
             </button>
           </div>
-        </div>
-        <div style={{ fontSize: '13px', opacity: 0.75, marginBottom: '12px', maxWidth: '80ch' }}>
-          {t.mailingRecipientsHint}
-        </div>
-
-        {mailableAdresy.length > 0 ? (
-          <div className="form-group" style={{ marginBottom: '12px' }}>
-            <SearchableSelect
-              // Empty on purpose: picking adds to the list below, so the trigger
-              // stays an "add another recipient" action.
-              value=""
-              options={recipientOptions}
-              onChange={(v) => addAdres(Number(v))}
-              placeholder={t.mailingAddRecipient}
-              searchPlaceholder={t.mailingSearchAddresses}
-              emptyText={
-                recipientOptions.length === 0 ? t.mailingAllRecipientsPicked : t.mailingNoMatchingAddress
-              }
-              style={{ maxWidth: '520px' }}
-            />
-          </div>
-        ) : (
-          <div className="empty-state">
-            {adresy.length === 0 ? t.mailingNoAddresses : t.mailingNoMailableAddresses}
-          </div>
         )}
 
-        <div style={{ fontSize: '13px', marginBottom: '10px', opacity: 0.8 }}>
-          {t.mailingSelectedCount
-            .replace('{selected}', String(draft.adresIds.length))
-            .replace('{total}', String(mailableAdresy.length))}
-        </div>
-
-        {adresy.length > mailableAdresy.length && (
-          <div style={{ fontSize: '12px', opacity: 0.75, marginBottom: '10px' }}>
-            <Icon name="info" size={13} />{' '}
-            {t.mailingHiddenNoUnit.replace(
-              '{count}',
-              String(adresy.length - mailableAdresy.length),
-            )}
-          </div>
-        )}
-
-        {missingUnit.length > 0 && (
-          <div
-            style={{
-              fontSize: '12px',
-              color: 'var(--danger)',
-              marginBottom: '10px',
-            }}
-          >
-            {t.mailingMissingUnits.replace('{names}', missingUnit.map((a) => a.nazwa).join(', '))}
-          </div>
-        )}
-
-        {selectedAdresy.length > 0 && (
-          <div>
-            {selectedAdresy.map((adres) => {
-              const jednostka = jednostkaFor(adres);
-              const previewing = previewAdres?.id === adres.id;
-              return (
-                <div
-                  key={adres.id}
-                  className={
-                    'mailing-recipient' +
-                    (!jednostka ? ' mailing-recipient--missing' : '') +
-                    (previewing ? ' mailing-recipient--previewing' : '')
+        <FormSection icon="mail" title={t.mailingSectionMessage} description={t.mailingSectionMessageDesc}>
+          <FormRow>
+            <FormField label={t.mailingType} hint={typDef?.opis || undefined}>
+              <Select
+                value={draft.typ}
+                onChange={(v) =>
+                  setDraft((prev) =>
+                    prev.typ === v
+                      ? prev
+                      : {
+                          ...prev,
+                          typ: v as MailingTyp,
+                          templateId: null,
+                          // Another kind has its own default recipients; changes made
+                          // for the previous one don't carry over.
+                          adresaci: null,
+                          wykluczeni: [],
+                        },
+                  )
+                }
+                options={typOptions}
+                ariaLabel={t.mailingType}
+              />
+            </FormField>
+            <FormField label={t.mailingTemplate}>
+              {templatesForType.length > 0 ? (
+                <Select
+                  value={draft.templateId ?? ''}
+                  onChange={(v) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      templateId: v ? Number(v) : null,
+                      // A new template brings its own PDF default; drop the override.
+                      attachPdf: null,
+                    }))
                   }
-                >
-                  <span className="mailing-recipient__name">{adres.nazwa}</span>
-                  <div className="mailing-recipient__unit">
-                    {jednostka ? (
-                      <>
-                        <div>{jednostka.nazwa}</div>
-                        <div style={{ opacity: 0.8 }}>{jednostka.email}</div>
-                      </>
-                    ) : (
-                      <span style={{ color: 'var(--danger)' }}>{t.mailingNoUnitForAddress}</span>
-                    )}
-                  </div>
-                  {/* Straight from the list to that community's own letter — the
-                      picker in the preview card does the same, this is the shortcut
-                      for the row you are already looking at. */}
-                  {template && (
-                    <button
-                      type="button"
-                      className="button button-small button-ghost button-icon"
-                      onClick={() => showPreviewFor(adres.id)}
-                      title={t.mailingPreviewThis}
-                      aria-label={t.mailingPreviewThis}
-                    >
-                      <Icon name="eye" size={14} />
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="alternative-name-remove"
-                    onClick={() => removeAdres(adres.id)}
-                    title={t.mailingRemoveRecipient}
-                    aria-label={t.mailingRemoveRecipient}
-                  >
-                    ×
+                  placeholder={t.mailingPickTemplate}
+                  options={[
+                    { value: '', label: t.mailingPickTemplate },
+                    ...templatesForType.map((s) => ({ value: String(s.id), label: s.nazwa })),
+                  ]}
+                  ariaLabel={t.mailingTemplate}
+                />
+              ) : (
+                <div className="callout callout--muted">
+                  <Icon name="info" size={16} />
+                  <div className="callout__body">{t.mailingNoTemplatesForType}</div>
+                  <button type="button" className="button button-small button-subtle" onClick={onNavigateToTemplates}>
+                    {t.mailingGoToTemplates}
                   </button>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {fieldsToFill.length > 0 && (
-        <div className="card">
-          <h2 style={{ marginBottom: '8px' }}>{t.mailingValuesTitle}</h2>
-          <div style={{ fontSize: '13px', opacity: 0.75, marginBottom: '16px', maxWidth: '80ch' }}>
-            {t.mailingValuesHint}
-          </div>
-          {fieldsToFill.map(({ name, pole }) => (
-            <div className="form-group" key={name}>
-              <label>{pole?.nazwa ?? name}</label>
-              {pole?.tekst && (
-                <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '6px' }}>
-                  „{pole.tekst}”
-                </div>
               )}
-              {!pole && (
-                <div style={{ fontSize: '12px', color: 'var(--danger)', marginBottom: '6px' }}>
-                  {t.mailingUnknownFieldInTemplate.replace('{field}', fieldPlaceholder(name))}
-                </div>
-              )}
-              {/* The unit sits beside the box rather than in it: it is part of
-                  what the letter will say, but not part of what you type. */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <input
-                  type={valueInputType(pole)}
-                  value={draft.values[name] ?? readFieldValue(draft.values, name)}
-                  onChange={(e) => setFieldValue(name, e.target.value)}
-                  placeholder={t.mailingValuePlaceholder}
-                  // A picker is a fixed-width control; only free text wants the
-                  // full row. `pole` is absent for an unknown field — text.
-                  style={valueInputType(pole) !== 'text' ? { maxWidth: '220px' } : undefined}
-                />
-                {pole?.jednostka && (
-                  <span style={{ fontSize: '13px', opacity: 0.75, whiteSpace: 'nowrap' }}>
-                    {pole.jednostka}
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+            </FormField>
+          </FormRow>
+        </FormSection>
 
-      {usesFieldTable && (
-        <div className="card">
-          <h2 style={{ marginBottom: '8px' }}>{t.mailingFieldTableTitle}</h2>
-          <div style={{ fontSize: '13px', opacity: 0.75, marginBottom: '16px', maxWidth: '80ch' }}>
-            {t.mailingFieldTableHint}
-          </div>
-
-          {tableFieldPool.length > 0 ? (
-            <>
-              <table>
-                <thead>
-                  <tr>
-                    <th style={{ width: '52px' }}>{t.mailingFieldTableInTable}</th>
-                    <th>{t.mailingFieldTableRowLabel}</th>
-                    <th style={{ width: '32%' }}>{t.mailingFieldValue}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tableFieldPool.map((p) => {
-                    const checked = tableFieldNames.some(
-                      (name) => normalizeFieldName(name) === normalizeFieldName(p.nazwa),
-                    );
-                    return (
-                      <tr key={p.id}>
-                        <td>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => toggleTableField(p.nazwa, e.target.checked)}
-                            aria-label={p.nazwa}
-                          />
-                        </td>
-                        <td>
-                          <div>{p.tekst || p.nazwa}</div>
-                          {p.tekst && (
-                            <div style={{ fontSize: '12px', opacity: 0.6 }}>{p.nazwa}</div>
-                          )}
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <input
-                              type={valueInputType(p)}
-                              // Always editable — typing here ticks the box, which is
-                              // one gesture instead of two for the common case.
-                              value={draft.values[p.nazwa] ?? readFieldValue(draft.values, p.nazwa)}
-                              onChange={(e) => setTableFieldValue(p.nazwa, e.target.value)}
-                              placeholder={t.mailingValuePlaceholder}
-                            />
-                            {p.jednostka && (
-                              <span style={{ fontSize: '13px', opacity: 0.75, whiteSpace: 'nowrap' }}>
-                                {p.jednostka}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-
-              <div style={{ fontSize: '13px', opacity: 0.8, marginTop: '12px' }}>
-                {t.mailingFieldTableRowCount
-                  .replace('{count}', String(tableFieldNames.length))
-                  .replace('{total}', String(tableFieldPool.length))}
-              </div>
-              {tableFieldNames.length === 0 && (
-                <div style={{ fontSize: '12px', opacity: 0.75, marginTop: '6px' }}>
-                  <Icon name="info" size={13} /> {t.mailingFieldTableEmptyNote}
-                </div>
-              )}
-              {tableFieldsWithoutValue.length > 0 && (
-                <div style={{ fontSize: '12px', color: 'var(--accent)', marginTop: '6px' }}>
-                  <Icon name="alert-triangle" size={13} />{' '}
-                  {t.mailingFieldTableMissingValues.replace(
-                    '{names}',
-                    tableFieldsWithoutValue.join(', '),
-                  )}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="empty-state">
-              <div>{t.mailingFieldTableNoPool}</div>
+        <FormSection
+          icon="home"
+          title={t.mailingRecipientsTitle}
+          description={t.mailingAdresaciRecipientsHint}
+          collapsible
+          persistKey="mailing.communities"
+          collapsedSummary={pickedSummary}
+          aside={
+            <div className="form-section__actions">
               <button
-                className="button button-primary button-small"
-                style={{ marginTop: '10px' }}
-                onClick={onNavigateToTemplates}
+                type="button"
+                className="button button-small button-subtle"
+                onClick={handleSelectAllMailable}
+                disabled={mailableAdresy.length === 0 || draft.adresIds.length >= mailableAdresy.length}
               >
-                {t.mailingFieldTableGoToTemplate}
+                {t.mailingSelectAll}
+              </button>
+              <button
+                type="button"
+                className="button button-small button-subtle"
+                onClick={() => setDraft((prev) => ({ ...prev, adresIds: [] }))}
+                disabled={draft.adresIds.length === 0}
+              >
+                {t.mailingClearSelection}
               </button>
             </div>
+          }
+        >
+          {communityItems.length > 0 ? (
+            <CheckList
+              items={communityItems}
+              selected={draft.adresIds}
+              onChange={(adresIds) => setDraft((prev) => ({ ...prev, adresIds }))}
+              searchPlaceholder={t.mailingSearchAddresses}
+              onlySelectedLabel={t.pickOnlySelected}
+              emptyLabel={t.mailingNoMatchingAddress}
+            />
+          ) : (
+            <div className="form-empty">
+              <Icon name="home" size={16} />
+              {adresy.length === 0 ? t.mailingNoAddresses : t.mailingAdresaciNoneSelectable}
+            </div>
           )}
-        </div>
-      )}
+          {noRecipients.length > 0 && (
+            <div className="callout callout--danger" role="alert">
+              <Icon name="alert-triangle" size={16} />
+              <div className="callout__body">
+                {t.mailingAdresaciMissingBlock.replace('{names}', noRecipients.map((a) => a.nazwa).join(', '))}
+              </div>
+            </div>
+          )}
+          {adresy.length > mailableAdresy.length && (
+            <div className="callout callout--muted">
+              <Icon name="info" size={16} />
+              <div className="callout__body">
+                {t.mailingAdresaciHiddenNone.replace('{count}', String(adresy.length - mailableAdresy.length))}
+              </div>
+            </div>
+          )}
+        </FormSection>
 
-      {preview && (
-        <div className="card" ref={previewRef}>
-          <h2 style={{ marginBottom: '8px' }}>{t.mailingPreviewTitle}</h2>
-          <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '12px' }}>
-            {t.mailingPreviewHint}
-          </div>
-
-          {selectedAdresy.length > 0 ? (
-            <div className="mailing-preview-picker">
-              <span className="mailing-preview-picker__label">{t.mailingPreviewPickAddress}</span>
+        {/* Who the mail goes to. Starts as the kind's default and can be changed
+            for this one send; the list is the previewed community's, so the
+            addresses and the preview below always describe the same letter. */}
+        <FormSection
+          icon="users"
+          title={t.mailingAdresaciTitle}
+          description={t.mailingAdresaciSendHint.replace('{typ}', typDef?.nazwa ?? draft.typ)}
+          collapsible
+          persistKey="mailing.adresaci"
+          collapsedSummary={t.mailingAdresaciCollapsed.replace('{groups}', adresaciSummary(t, effectiveAdresaci))}
+          badge={customized ? t.mailingAdresaciCustomized : undefined}
+          aside={
+            customized ? (
+              <button
+                type="button"
+                className="button button-small button-subtle"
+                onClick={() => setDraft((prev) => ({ ...prev, adresaci: null, wykluczeni: [] }))}
+                disabled={isSending}
+              >
+                <Icon name="refresh" size={13} /> {t.mailingAdresaciResetDefault}
+              </button>
+            ) : undefined
+          }
+        >
+          {selectedAdresy.length > 1 && previewAdres && (
+            <FormField label={t.mailingAdresaciShowFor}>
               <SearchableSelect
-                value={previewAdres ? String(previewAdres.id) : ''}
+                value={String(previewAdres.id)}
                 options={previewOptions}
                 onChange={(v) => setPreviewAdresId(Number(v))}
                 searchPlaceholder={t.mailingPreviewSearchAddress}
                 emptyText={t.mailingNoMatchingAddress}
-                size="sm"
-                ariaLabel={t.mailingPreviewPickAddress}
-                style={{ flex: '1 1 300px', maxWidth: '420px' }}
+                ariaLabel={t.mailingAdresaciShowFor}
+                style={{ maxWidth: '420px' }}
               />
-              {selectedAdresy.length > 1 && (
-                <div className="mailing-preview-nav">
-                  <button
-                    type="button"
-                    className="button button-small button-secondary button-icon"
-                    onClick={() => stepPreview(-1)}
-                    title={t.mailingPreviewPrev}
-                    aria-label={t.mailingPreviewPrev}
+            </FormField>
+          )}
+          {selectedAdresy.length === 0 && (
+            <div className="callout callout--muted">
+              <Icon name="info" size={16} />
+              <div className="callout__body">{t.mailingAdresaciPickCommunity}</div>
+            </div>
+          )}
+          <MailingRecipientsEditor
+            language={language}
+            adresaci={effectiveAdresaci}
+            onAdresaciChange={(adresaci) => setDraft((prev) => ({ ...prev, adresaci }))}
+            wykluczeni={draft.wykluczeni}
+            onWykluczeniChange={(wykluczeni) => setDraft((prev) => ({ ...prev, wykluczeni }))}
+            lookup={previewLookup}
+            contextLabel={previewAdres?.nazwa}
+            disabled={isSending}
+          />
+        </FormSection>
+
+        {fieldsToFill.length > 0 && (
+          <FormSection
+            icon="edit"
+            title={t.mailingValuesTitle}
+            description={t.mailingValuesHint}
+          >
+            <div className="form-grid">
+              {fieldsToFill.map(({ name, pole, kal }) => {
+                const inputType = valueInputType(pole ?? kal);
+                return (
+                  <FormField
+                    key={name}
+                    label={pole?.nazwa ?? kal?.nazwa ?? name}
+                    htmlFor={`mailing-value-${name}`}
+                    hint={
+                      pole?.tekst ? (
+                        `„${pole.tekst}”`
+                      ) : kal ? (
+                        <><Icon name="calendar" size={12} /> {t.mveCalendarFieldInList}</>
+                      ) : undefined
+                    }
+                    error={
+                      !pole && !kal
+                        ? t.mailingUnknownFieldInTemplate.replace('{field}', fieldPlaceholder(name))
+                        : undefined
+                    }
                   >
-                    <Icon name="chevron-left" size={14} />
+                    {/* The unit sits beside the box rather than in it: it is part of
+                        what the letter will say, but not part of what you type. */}
+                    <div className={`form-inline${inputType !== 'text' ? ' form-inline--narrow' : ''}`}>
+                      <input
+                        id={`mailing-value-${name}`}
+                        type={inputType}
+                        value={draft.values[name] ?? readFieldValue(draft.values, name)}
+                        onChange={(e) => setFieldValue(name, e.target.value)}
+                        placeholder={kal ? '' : t.mailingValuePlaceholder}
+                      />
+                      {pole?.jednostka && <span className="form-inline__unit">{pole.jednostka}</span>}
+                    </div>
+                  </FormField>
+                );
+              })}
+            </div>
+          </FormSection>
+        )}
+
+        {usesFieldTable && (
+          <FormSection
+            icon="table"
+            title={t.mailingFieldTableTitle}
+            description={t.mailingFieldTableHint}
+            collapsible
+            persistKey="mailing.fieldTable"
+            collapsedSummary={t.mailingFieldTableRowCount
+              .replace('{count}', String(tableFieldNames.length))
+              .replace('{total}', String(tableFieldPool.length))}
+          >
+            {tableFieldPool.length > 0 ? (
+              <>
+                <table className="form-table">
+                  <thead>
+                    <tr>
+                      <th className="form-table__check">{t.mailingFieldTableInTable}</th>
+                      <th>{t.mailingFieldTableRowLabel}</th>
+                      <th className="form-table__value">{t.mailingFieldValue}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tableFieldPool.map((p) => {
+                      const checked = tableFieldNames.some(
+                        (name) => normalizeFieldName(name) === normalizeFieldName(p.nazwa),
+                      );
+                      return (
+                        <tr key={p.id}>
+                          <td className="form-table__check">
+                            <label className={`ks-check${checked ? ' is-on' : ''}`}>
+                              <input
+                                type="checkbox"
+                                className="ks-check__input"
+                                checked={checked}
+                                onChange={(e) => toggleTableField(p.nazwa, e.target.checked)}
+                                aria-label={p.nazwa}
+                              />
+                              <span className="ks-check__box" aria-hidden="true">
+                                <Icon name="check" size={12} strokeWidth={3} />
+                              </span>
+                            </label>
+                          </td>
+                          <td>
+                            <div className="form-table__label">{p.tekst || p.nazwa}</div>
+                            {p.tekst && <div className="form-table__sub">{p.nazwa}</div>}
+                          </td>
+                          <td className="form-table__value">
+                            <div className="form-inline">
+                              <input
+                                type={valueInputType(p)}
+                                // Always editable — typing here ticks the box, which is
+                                // one gesture instead of two for the common case.
+                                value={draft.values[p.nazwa] ?? readFieldValue(draft.values, p.nazwa)}
+                                onChange={(e) => setTableFieldValue(p.nazwa, e.target.value)}
+                                placeholder={t.mailingValuePlaceholder}
+                                aria-label={`${t.mailingFieldValue}: ${p.tekst || p.nazwa}`}
+                              />
+                              {p.jednostka && <span className="form-inline__unit">{p.jednostka}</span>}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {tableFieldNames.length === 0 && (
+                  <div className="callout callout--muted">
+                    <Icon name="info" size={16} />
+                    <div className="callout__body">{t.mailingFieldTableEmptyNote}</div>
+                  </div>
+                )}
+                {tableFieldsWithoutValue.length > 0 && (
+                  <div className="callout callout--warning" role="status">
+                    <Icon name="alert-triangle" size={16} />
+                    <div className="callout__body">
+                      {t.mailingFieldTableMissingValues.replace('{names}', tableFieldsWithoutValue.join(', '))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="callout callout--muted">
+                <Icon name="info" size={16} />
+                <div className="callout__body">{t.mailingFieldTableNoPool}</div>
+                <button type="button" className="button button-small button-subtle" onClick={onNavigateToTemplates}>
+                  {t.mailingFieldTableGoToTemplate}
+                </button>
+              </div>
+            )}
+          </FormSection>
+        )}
+
+        {template && (
+          <div ref={previewRef} className="page-form__anchor">
+            <FormSection
+              icon="eye"
+              title={t.mailingPreviewTitle}
+              description={`${t.mailingPreviewHint} ${t.mvePreviewEditHint}`}
+              badge={draft.edited ? <span title={t.mailingEditedNotice}>{t.mailingEditedBadge}</span> : undefined}
+              aside={
+                draft.edited ? (
+                  <button type="button" className="button button-small button-subtle" onClick={resetToTemplate}>
+                    <Icon name="refresh" size={13} /> {t.mailingResetToTemplate}
                   </button>
-                  <span className="mailing-preview-nav__count">
-                    {t.mailingPreviewPosition
-                      .replace('{index}', String(previewIndex + 1))
-                      .replace('{total}', String(selectedAdresy.length))}
-                  </span>
-                  <button
-                    type="button"
-                    className="button button-small button-secondary button-icon"
-                    onClick={() => stepPreview(1)}
-                    title={t.mailingPreviewNext}
-                    aria-label={t.mailingPreviewNext}
-                  >
-                    <Icon name="chevron-right" size={14} />
-                  </button>
+                ) : undefined
+              }
+            >
+              {kalendarz && (
+                <div className="callout callout--info">
+                  <Icon name="calendar" size={16} />
+                  <div className="callout__body">
+                    {t.mveFromMeetingValues.replace('{name}', draft.spotkanieNazwa || spotkanie?.nazwa || '—')}
+                  </div>
                 </div>
               )}
-            </div>
-          ) : (
-            <div style={{ fontSize: '12px', opacity: 0.75, marginBottom: '12px', maxWidth: '80ch' }}>
-              <Icon name="info" size={13} />{' '}
-              {t.mailingPreviewNoAddressNote.replace('{placeholder}', t.mailingPreviewNoAddress)}
-            </div>
-          )}
 
-          {/* The mailbox belongs in the preview: the letter names the community,
-              but it is delivered to that community's city unit — a mismatch there
-              is exactly what proofreading per recipient is for. */}
-          {previewAdres && (
-            <div className="mailing-preview-recipient">
-              {previewJednostka ? (
-                <>
-                  <Icon name="mail" size={13} />{' '}
-                  {t.mailingPreviewRecipient.replace('{email}', previewJednostka.email)}
-                </>
+              {selectedAdresy.length > 0 ? (
+                <div className="preview-bar">
+                  <FormField label={t.mailingPreviewPickAddress}>
+                    <div className="form-inline">
+                      <SearchableSelect
+                        value={previewAdres ? String(previewAdres.id) : ''}
+                        options={previewOptions}
+                        onChange={(v) => setPreviewAdresId(Number(v))}
+                        searchPlaceholder={t.mailingPreviewSearchAddress}
+                        emptyText={t.mailingNoMatchingAddress}
+                        ariaLabel={t.mailingPreviewPickAddress}
+                        style={{ flex: '1 1 300px', maxWidth: '420px' }}
+                      />
+                      {selectedAdresy.length > 1 && (
+                        <div className="mailing-preview-nav">
+                          <button
+                            type="button"
+                            className="button button-secondary button-icon"
+                            onClick={() => stepPreview(-1)}
+                            title={t.mailingPreviewPrev}
+                            aria-label={t.mailingPreviewPrev}
+                          >
+                            <Icon name="chevron-left" size={14} />
+                          </button>
+                          <span className="mailing-preview-nav__count">
+                            {t.mailingPreviewPosition
+                              .replace('{index}', String(previewIndex + 1))
+                              .replace('{total}', String(selectedAdresy.length))}
+                          </span>
+                          <button
+                            type="button"
+                            className="button button-secondary button-icon"
+                            onClick={() => stepPreview(1)}
+                            title={t.mailingPreviewNext}
+                            aria-label={t.mailingPreviewNext}
+                          >
+                            <Icon name="chevron-right" size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </FormField>
+                  {/* The mailbox belongs in the preview: the letter names the
+                      community, but it is delivered to that community's city unit —
+                      a mismatch there is exactly what proofreading per recipient is for. */}
+                  {previewAdres && (
+                    previewOdbiorcy.length > 0 ? (
+                      <div className="preview-bar__to">
+                        <Icon name="mail" size={13} />
+                        {t.mailingPreviewRecipient.replace('{email}', previewOdbiorcy.map((o) => o.email).join(', '))}
+                      </div>
+                    ) : (
+                      <div className="preview-bar__to is-missing">
+                        <Icon name="alert-triangle" size={13} /> {t.mailingAdresaciNoneForAddress}
+                      </div>
+                    )
+                  )}
+                </div>
               ) : (
-                <span style={{ color: 'var(--danger)' }}>
-                  <Icon name="alert-triangle" size={13} /> {t.mailingNoUnitForAddress}
-                </span>
+                <div className="callout callout--muted">
+                  <Icon name="info" size={16} />
+                  <div className="callout__body">
+                    {t.mailingPreviewNoAddressNote.replace('{placeholder}', t.mailingPreviewNoAddress)}
+                  </div>
+                </div>
               )}
-            </div>
-          )}
 
-          <div className="form-group">
-            <label>{t.mailingSubject}</label>
-            <div style={{ fontSize: '14px', fontWeight: 500 }}>{preview.subject || '—'}</div>
-          </div>
-          <div
-            className="mailing-preview"
-            // Content is the user's own template, rendered with escaped field
-            // values — the same string that becomes the mail body and the PDF.
-            dangerouslySetInnerHTML={{ __html: preview.html }}
-          />
-        </div>
-      )}
-
-      {template && (
-        <div className="card">
-          {/* Most sends go out on the template's own wording, so the body starts
-              folded — a one-line reminder instead of a wall of text. */}
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-start',
-              gap: '12px',
-            }}
-          >
-            <h2 style={{ margin: 0 }}>
-              <button
-                type="button"
-                className="card-collapse-toggle"
-                onClick={() => setMessageOpen((open) => !open)}
-                aria-expanded={messageOpen}
-              >
-                <Icon name={messageOpen ? 'chevron-down' : 'chevron-right'} size={16} />
-                {t.mailingMessageTitle}
-              </button>
-            </h2>
-            {draft.edited && (
-              <button className="button button-secondary" onClick={resetToTemplate}>
-                <Icon name="refresh" size={14} /> {t.mailingResetToTemplate}
-              </button>
-            )}
-          </div>
-
-          {/* Visible folded too: knowing this send no longer matches the template
-              is exactly what would make you unfold the card. */}
-          {draft.edited && (
-            <div
-              style={{
-                fontSize: '12px',
-                color: 'var(--accent)',
-                marginTop: '10px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
-            >
-              <Icon name="edit" size={14} /> {t.mailingEditedNotice}
-            </div>
-          )}
-
-          {messageOpen && (
-            <>
-              <div
-                style={{ fontSize: '13px', opacity: 0.75, maxWidth: '80ch', margin: '10px 0 15px' }}
-              >
-                {t.mailingMessageHint}
-              </div>
-
-              <MailingComposer
+              {/* The preview IS the editor: the letter as the previewed community
+                  receives it, editable in place. Text edits are for this send only
+                  (the template changes only through "Zapisz jako szablon"); values
+                  typed into its fields are the same `draft.values` the list above
+                  edits. */}
+              <MailingVisualEditor
                 language={language}
                 temat={draft.temat}
+                onTematChange={(temat) => setDraft((prev) => ({ ...prev, temat, edited: true }))}
                 tresc={draft.tresc}
+                onTrescChange={(tresc) => setDraft((prev) => ({ ...prev, tresc, edited: true }))}
+                values={draft.values}
+                onValuesChange={(values) => setDraft((prev) => ({ ...prev, values }))}
                 pola={pola}
-                bodyNote={t.mailingMessageBodyNote}
-                onChange={(patch) => setDraft((prev) => ({ ...prev, ...patch, edited: true }))}
+                adresNazwa={previewAdres?.nazwa ?? t.mailingPreviewNoAddress}
+                kalendarz={kalendarz}
+                tableFields={tableFieldNames}
+                onSaveAsTemplate={() => setSaveTplOpen(true)}
+                readOnly={isSending}
               />
-            </>
-          )}
-        </div>
-      )}
+            </FormSection>
+          </div>
+        )}
 
-      <div className="card">
-        <h2 style={{ marginBottom: '15px' }}>{t.mailingAttachmentsTitle}</h2>
+        <MailingSaveTemplateModal
+          language={language}
+          open={saveTplOpen}
+          onClose={() => setSaveTplOpen(false)}
+          typ={draft.typ}
+          temat={draft.temat}
+          tresc={draft.tresc}
+          attachPdf={attachPdf}
+          // The template's shortlist for its table, not this send's ticks: which
+          // rows go out is decided per send.
+          tableFields={template?.tableFields ?? []}
+          sourceTemplate={template}
+          onSaved={handleTemplateSaved}
+        />
 
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '12px',
-            marginBottom: '16px',
-          }}
+        <FormSection
+          icon="paperclip"
+          title={t.mailingAttachmentsTitle}
+          description={t.mailingAttachmentsDesc}
         >
-          <div>
-            <div style={{ fontSize: '13px' }}>{t.mailingAttachPdf}</div>
-            <div style={{ fontSize: '12px', opacity: 0.7 }}>{t.mailingAttachPdfHint}</div>
-          </div>
-          <label className="toggle-switch">
-            <input
-              type="checkbox"
-              checked={attachPdf}
-              onChange={(e) => setDraft((prev) => ({ ...prev, attachPdf: e.target.checked }))}
-            />
-            <span className="toggle-slider"></span>
+          <label className="switch-row">
+            <span className="switch-row__text">
+              <span className="switch-row__label">{t.mailingAttachPdf}</span>
+              <span className="switch-row__hint">{t.mailingAttachPdfHint}</span>
+            </span>
+            <span className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={attachPdf}
+                onChange={(e) => setDraft((prev) => ({ ...prev, attachPdf: e.target.checked }))}
+              />
+              <span className="toggle-slider"></span>
+            </span>
           </label>
-        </div>
 
-        <div className="form-group">
-          <label>{t.mailingOwnAttachments}</label>
-          <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '8px' }}>
-            {t.mailingOwnAttachmentsHint}
-          </div>
-          {draft.attachments.length > 0 && (
-            <div style={{ marginBottom: '8px' }}>
+          <FormField label={t.mailingOwnAttachments} hint={t.mailingOwnAttachmentsHint}>
+            {/* The add button lives inside the list's frame: as its last row when
+                there are files, beside "nothing yet" when there are none — never
+                loose under the label. */}
+            <div className={`file-list${draft.attachments.length === 0 ? ' is-empty' : ''}`}>
               {draft.attachments.map((a) => (
-                <div key={a.filePath} className="alternative-name-tag">
-                  <span title={a.filePath}>{a.fileName}</span>
+                <div key={a.filePath} className="file-list__row">
+                  <Icon name="paperclip" size={14} />
+                  <span className="file-list__name" title={a.filePath}>{a.fileName}</span>
                   <button
                     type="button"
-                    className="alternative-name-remove"
+                    className="button button-ghost button-icon icon-danger"
                     onClick={() =>
                       setDraft((prev) => ({
                         ...prev,
                         attachments: prev.attachments.filter((x) => x.filePath !== a.filePath),
                       }))
                     }
+                    title={t.remove}
+                    aria-label={`${t.remove}: ${a.fileName}`}
                   >
-                    ×
+                    <Icon name="trash" size={14} />
                   </button>
                 </div>
               ))}
+              <div className="file-list__footer">
+                {draft.attachments.length === 0 && (
+                  <span className="file-list__empty">
+                    <Icon name="paperclip" size={14} />
+                    {t.mailingNoOwnAttachments}
+                  </span>
+                )}
+                <button type="button" className="button button-small button-subtle" onClick={handleAddAttachments}>
+                  <Icon name="plus" size={13} /> {t.mailingAddAttachment}
+                </button>
+              </div>
             </div>
-          )}
-          <button className="button button-secondary" onClick={handleAddAttachments}>
-            + {t.mailingAddAttachment}
-          </button>
-        </div>
-      </div>
+          </FormField>
+        </FormSection>
 
-      <div className="card">
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <button
-            className="button button-success"
-            onClick={handleSend}
-            disabled={isSending || !template || draft.adresIds.length === 0}
+        {results && (
+          <FormSection
+            icon="check-circle"
+            title={t.mailingResultsTitle}
+            aside={
+              <button type="button" className="button button-small button-subtle" onClick={onNavigateToHistory}>
+                <Icon name="history" size={13} /> {t.mailingGoToHistory}
+              </button>
+            }
           >
-            {isSending ? t.mailingSending : t.mailingSend}
-          </button>
-          {isSending && progress && (
-            <span style={{ fontSize: '13px', opacity: 0.8 }}>
-              {t.mailingProgress
-                .replace('{done}', String(progress.done))
-                .replace('{total}', String(progress.total))}
-            </span>
-          )}
-          {smtpReady.ready && !isSending && (
-            <span style={{ fontSize: '12px', opacity: 0.7 }}>
-              {t.mailingSendFrom.replace('{from}', smtpReady.user)}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {results && (
-        <div className="card">
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '12px',
-            }}
-          >
-            <h2 style={{ margin: 0 }}>{t.mailingResultsTitle}</h2>
-            <button className="button button-small button-secondary" onClick={onNavigateToHistory}>
-              {t.mailingGoToHistory}
-            </button>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>{t.mailingResultAddress}</th>
-                <th>{t.mailingResultRecipient}</th>
-                <th>{t.mailingResultStatus}</th>
-                <th>{t.mailingResultAttachments}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {results.map((r) => (
-                <tr key={`${r.adresId}-${r.subject}`}>
-                  <td>{r.adresNazwa}</td>
-                  <td style={{ fontSize: '12px' }}>
-                    {r.jednostkaNazwa ? (
-                      <>
-                        <div>{r.jednostkaNazwa}</div>
-                        <div style={{ opacity: 0.7 }}>{r.jednostkaEmail}</div>
-                      </>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td>
-                    {r.status === 'success' ? (
-                      <span style={{ color: 'var(--success)' }}>
-                        <Icon name="check-circle" size={14} /> {t.mailingStatusSent}
-                      </span>
-                    ) : (
-                      <span style={{ color: 'var(--danger)' }} title={r.errorMessage}>
-                        <Icon name="x-circle" size={14} /> {r.errorMessage ?? t.mailingStatusError}
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ fontSize: '12px' }}>
-                    {r.attachments.length > 0
-                      ? r.attachments.map((a) => (
-                          <div key={a.filePath}>
+            <table className="form-table">
+              <thead>
+                <tr>
+                  <th>{t.mailingResultAddress}</th>
+                  <th>{t.mailingResultRecipient}</th>
+                  <th>{t.mailingResultStatus}</th>
+                  <th>{t.mailingResultAttachments}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.map((r) => (
+                  <tr key={`${r.adresId}-${r.subject}`}>
+                    <td className="form-table__label">{r.adresNazwa}</td>
+                    <td className="form-table__sub">
+                      {r.odbiorcy && r.odbiorcy.length > 0 ? (
+                        <MailingOdbiorcyList language={language} odbiorcy={r.odbiorcy} />
+                      ) : r.jednostkaNazwa ? (
+                        <>
+                          <div>{r.jednostkaNazwa}</div>
+                          <div>{r.jednostkaEmail}</div>
+                        </>
+                      ) : (
+                        <span className="cell-empty">—</span>
+                      )}
+                    </td>
+                    <td>
+                      {r.status === 'success' ? (
+                        <span className="result-status is-ok">
+                          <Icon name="check-circle" size={14} /> {t.mailingStatusSent}
+                        </span>
+                      ) : (
+                        <span className="result-status is-error" title={r.errorMessage}>
+                          <Icon name="x-circle" size={14} /> {r.errorMessage ?? t.mailingStatusError}
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {r.attachments.length > 0 ? (
+                        <div className="result-files">
+                          {r.attachments.map((a) => (
                             <button
-                              className="button button-small button-secondary"
+                              key={a.filePath}
+                              type="button"
+                              className="button button-small button-subtle"
                               onClick={async () => {
                                 const ok = await window.electronAPI.openFile(a.filePath);
                                 if (!ok) notify.error(t.mailingFileMissing);
                               }}
                             >
-                              {a.fileName}
+                              <Icon name="paperclip" size={13} /> {a.fileName}
                             </button>
-                          </div>
-                        ))
-                      : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="cell-empty">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </FormSection>
+        )}
+
+        {/* The page's one action, closing the form — after the last section, where
+            sending makes sense — with what stops it, or who it sends from, on the left. */}
+        <ModalFooter
+          className="page-action-bar"
+          note={sendNote}
+          onSubmit={handleSend}
+          submitLabel={
+            isSending
+              ? t.mailingSending
+              : draft.adresIds.length > 0
+                ? t.mailingSendTo.replace(
+                    '{count}',
+                    plural(draft.adresIds.length, language, ['wspólnoty', 'wspólnot', 'wspólnot'], ['community', 'communities']),
+                  )
+                : t.mailingSend
+          }
+          submitIcon="mail"
+          submitDisabled={!!sendBlockedReason}
+          submitTitle={sendBlockedReason}
+          busy={isSending}
+        />
+      </div>
     </div>
   );
 };

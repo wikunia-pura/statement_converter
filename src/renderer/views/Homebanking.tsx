@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { translations, Language } from '../translations';
+import { FormSection } from '../components/FormSection';
 import Icon from '../components/Icon';
+import { ModalFooter } from '../components/Modal';
 import {
   HomebankingAnalyzedFile,
   HomebankingBankHit,
@@ -229,279 +231,231 @@ const Homebanking: React.FC<Props> = ({ language, files, setFiles }) => {
 
   return (
     <div className="content-body">
-      <div className="card">
-        <div style={{ marginBottom: '20px' }}>
-          <h2 style={{ marginBottom: '4px', fontSize: '18px', color: 'var(--accent)' }}>
-            {t.homebankingTitle}
-          </h2>
-          <div style={{ fontSize: '13px', opacity: 0.7 }}>{t.homebankingSubtitle}</div>
-        </div>
-
-        <div
-          className={`drop-zone ${dragOver ? 'drag-over' : ''}`}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onClick={handlePickFiles}
-        >
-          <div className="drop-zone-icon"><Icon name="upload" size={40} /></div>
-          <div className="drop-zone-text">{t.dragDropFiles}</div>
-        </div>
-
-        <div style={{ marginTop: '12px', fontSize: '12px', opacity: 0.7 }}>
-          {t.homebankingSplitByAddressHint}
-        </div>
-      </div>
-
-      {!statusIsError && (statusMessage || lastResults.length > 0) && (
-        <div className="card" style={{ borderTop: '3px solid var(--success, #10b981)' }}>
-          {statusMessage && (
-            <div
-              className="zaliczki-status zaliczki-status-success"
-              style={{ marginBottom: lastResults.length > 0 ? '15px' : 0 }}
-            >
-              <span style={{ flex: 1, wordBreak: 'break-all' }}>{statusMessage}</span>
-            </div>
-          )}
-
-          {lastResults.length > 0 && (
-            <>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '10px',
-                  flexWrap: 'wrap',
-                  gap: '10px',
-                }}
-              >
-                <h2 style={{ margin: 0 }}>{t.outputFilesTitle}</h2>
-                {lastOutputDir && (
-                  <button
-                    className="button button-secondary"
-                    onClick={() => openOutput(lastOutputDir)}
-                    title={lastOutputDir}
-                  >
-                    <Icon name="folder" size={14} /> {t.openOutputFolder}
-                  </button>
-                )}
-              </div>
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t.homebankingDetectedBank}</th>
-                    <th>{t.homebankingResultAddress}</th>
-                    <th style={{ width: '90px' }}>{t.homebankingFilesPerBank}</th>
-                    <th style={{ width: '90px' }}>{t.homebankingLines}</th>
-                    <th>{t.homebankingDate}</th>
-                    <th style={{ textAlign: 'right' }}>{t.actions}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lastResults.map((r) => (
-                    <tr key={r.outputPath}>
-                      <td>{r.bankName}</td>
-                      <td>{r.addressLabel ?? '—'}</td>
-                      <td>{r.fileCount}</td>
-                      <td>{r.lineCount}</td>
-                      <td>
-                        {r.startDate && r.endDate
-                          ? r.startDate === r.endDate
-                            ? r.startDate
-                            : `${r.startDate} → ${r.endDate}`
-                          : '—'}
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button
-                          className="button button-small button-primary"
-                          onClick={() => openOutput(r.outputPath)}
-                        ><Icon name="folder" size={13} />{' '}
-                          {t.openFile}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
-          )}
-        </div>
-      )}
-
-      {files.length > 0 ? (
-        <div className="card">
+      <div className="page-form">
+        <FormSection icon="building" title={t.homebankingTitle} description={t.homebankingSubtitle}>
           <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '15px',
-              flexWrap: 'wrap',
-              gap: '10px',
-            }}
+            className={`drop-zone ${dragOver ? 'drag-over' : ''}`}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onClick={handlePickFiles}
           >
-            <h2>{t.inputFilesTitle}</h2>
-            <div className="button-group" style={{ margin: 0 }}>
-              <button
-                className="button button-success"
-                onClick={mergeWithResults}
-                disabled={!canMerge}
-                style={!canMerge ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
-              >
-                <Icon name="bar-chart" size={14} />{' '}
-                {isProcessing ? t.homebankingMerging : t.homebankingMergeAll}
-              </button>
-              <button
-                className="button button-danger"
-                onClick={clearAll}
-                disabled={isProcessing}
-              >
-                <Icon name="trash" size={14} /> {t.homebankingClearAll}
-              </button>
-            </div>
+            <div className="drop-zone-icon"><Icon name="upload" size={40} /></div>
+            <div className="drop-zone-text">{t.dragDropFiles}</div>
           </div>
+          <div className="form-field__hint">{t.homebankingSplitByAddressHint}</div>
+        </FormSection>
 
+        <FormSection
+          icon="folder"
+          title={t.inputFilesTitle}
+          description={
+            bankGroups.size > 0
+              ? `${t.homebankingBanksSummary}: ${Array.from(bankGroups.values())
+                  .map((g) => `${g.bankName} (${g.fileCount} ${t.homebankingFilesPerBank})`)
+                  .join(', ')}`
+              : undefined
+          }
+          aside={
+            files.length > 0 ? (
+              <button className="button button-ghost icon-danger" onClick={clearAll} disabled={isProcessing}>
+                <Icon name="trash" size={14} /> {t.convClear}
+              </button>
+            ) : undefined
+          }
+        >
           {noSelectionCount > 0 && (
-            <div
-              className="zaliczki-status zaliczki-status-error"
-              style={{ marginBottom: '15px' }}
-            >
-              <span style={{ flex: 1 }}>{t.homebankingMissingBankBanner}</span>
+            <div className="callout callout--danger" role="alert">
+              <Icon name="alert-triangle" size={16} />
+              <div className="callout__body">{t.homebankingMissingBankBanner}</div>
             </div>
           )}
 
-          {bankGroups.size > 0 && (
-            <div style={{ marginBottom: '15px', fontSize: '13px', opacity: 0.8 }}>
-              {t.homebankingBanksSummary}: {bankGroups.size}
-              {' — '}
-              {Array.from(bankGroups.values())
-                .map(
-                  (g) =>
-                    `${g.bankName} (${g.fileCount} ${t.homebankingFilesPerBank})`,
-                )
-                .join(', ')}
-            </div>
-          )}
-
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: '40px' }}>#</th>
-                <th>{t.homebankingFile}</th>
-                <th style={{ width: '110px' }}>{t.homebankingDate}</th>
-                <th style={{ width: '18%' }}>{t.homebankingDetectedBank}</th>
-                <th>{t.homebankingAddresses}</th>
-                <th style={{ width: '60px' }}>{t.homebankingLines}</th>
-                <th style={{ width: '120px', textAlign: 'center' }}>
-                  {t.homebankingSplitByAddress}
-                </th>
-                <th style={{ textAlign: 'right' }}>{t.actions}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {files.map((f, idx) => (
-                <tr key={f.filePath}>
-                  <td>{idx + 1}</td>
-                  <td style={{ wordBreak: 'break-all' }}>{f.fileName}</td>
-                  <td>
-                    {f.status === 'analyzing' ? (
-                      <span style={{ opacity: 0.6 }}>{t.homebankingAnalyzing}</span>
-                    ) : (
-                      f.date ?? '—'
-                    )}
-                  </td>
-                  <td>
-                    {f.status === 'analyzing' ? (
-                      <span style={{ opacity: 0.6 }}>{t.homebankingDetectingBank}</span>
-                    ) : f.status === 'error' ? (
-                      <span className="status-badge status-error">{f.error ?? t.error}</span>
-                    ) : f.bankHits.length === 0 ? (
-                      <span className="status-badge status-error">
-                        {t.homebankingUnknownBank}
-                      </span>
-                    ) : f.bankHits.length === 1 ? (
-                      <span>{f.bankHits[0].bankName}</span>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        {f.bankHits.map((hit) => (
-                          <label
-                            key={hit.bankId}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              fontSize: '12px',
-                              cursor: isProcessing ? 'default' : 'pointer',
-                            }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={f.selectedBankIds.includes(hit.bankId)}
-                              onChange={() => toggleBankSelection(f.filePath, hit.bankId)}
-                              disabled={isProcessing}
-                            />
-                            <span>
-                              {hit.bankName}{' '}
-                              <span style={{ opacity: 0.6 }}>({hit.lineCount})</span>
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-                    )}
-                  </td>
-                  <td style={{ fontSize: '12px' }}>
-                    {f.status === 'ready' && f.addressHits.length > 0
-                      ? f.addressHits
-                          .map((h) => `${h.label} (${h.lineCount})`)
-                          .join(', ')
-                      : '—'}
-                  </td>
-                  <td>{f.status === 'ready' ? f.lineCount : '—'}</td>
-                  <td style={{ textAlign: 'center' }}>
-                    <label
-                      className="toggle-switch"
-                      style={{ display: 'inline-flex', verticalAlign: 'middle' }}
-                      title={t.homebankingSplitByAddressHint}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={f.splitByAddress}
-                        onChange={() => toggleSplitByAddress(f.filePath)}
-                        disabled={f.status !== 'ready' || isProcessing}
-                      />
-                      <span className="toggle-slider"></span>
-                    </label>
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <button
-                      className="button button-small button-danger"
-                      onClick={() => removeFile(f.filePath)}
-                      disabled={isProcessing}
-                    ><Icon name="trash" size={13} />{' '}
-                      {t.remove}
-                    </button>
-                  </td>
+          {files.length > 0 ? (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th className="data-table__index">#</th>
+                  <th>{t.homebankingFile}</th>
+                  <th>{t.homebankingDate}</th>
+                  <th>{t.homebankingDetectedBank}</th>
+                  <th>{t.homebankingAddresses}</th>
+                  <th>{t.homebankingLines}</th>
+                  <th className="data-table__center">{t.homebankingSplitByAddress}</th>
+                  <th className="data-table__actions">{t.actions}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {statusMessage && statusIsError && (
-            <div
-              className="zaliczki-status zaliczki-status-error"
-              style={{ marginTop: '15px', marginBottom: 0 }}
-            >
-              <span style={{ flex: 1, wordBreak: 'break-all' }}>{statusMessage}</span>
+              </thead>
+              <tbody>
+                {files.map((f, idx) => (
+                  <tr key={f.filePath}>
+                    <td className="data-table__index">{idx + 1}</td>
+                    <td className="data-table__name">
+                      <span className="cell-title cell-wrap">{f.fileName}</span>
+                    </td>
+                    <td className="nowrap">
+                      {f.status === 'analyzing' ? (
+                        <span className="cell-empty">{t.homebankingAnalyzing}</span>
+                      ) : (
+                        f.date ?? <span className="cell-empty">—</span>
+                      )}
+                    </td>
+                    <td>
+                      {f.status === 'analyzing' ? (
+                        <span className="cell-empty">{t.homebankingDetectingBank}</span>
+                      ) : f.status === 'error' ? (
+                        <span className="status-badge status-error">{f.error ?? t.error}</span>
+                      ) : f.bankHits.length === 0 ? (
+                        <span className="status-badge status-error">{t.homebankingUnknownBank}</span>
+                      ) : f.bankHits.length === 1 ? (
+                        <span>{f.bankHits[0].bankName}</span>
+                      ) : (
+                        <div className="cell-checks">
+                          {f.bankHits.map((hit) => {
+                            const on = f.selectedBankIds.includes(hit.bankId);
+                            return (
+                              <label key={hit.bankId} className={`cell-check${isProcessing ? ' is-disabled' : ''}`}>
+                                <span className={`ks-check ks-check--sm${on ? ' is-on' : ''}`}>
+                                  <input
+                                    type="checkbox"
+                                    className="ks-check__input"
+                                    checked={on}
+                                    onChange={() => toggleBankSelection(f.filePath, hit.bankId)}
+                                    disabled={isProcessing}
+                                  />
+                                  <span className="ks-check__box" aria-hidden="true">
+                                    <Icon name="check" size={10} strokeWidth={3} />
+                                  </span>
+                                </span>
+                                <span>
+                                  {hit.bankName} <span className="cell-empty">({hit.lineCount})</span>
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </td>
+                    <td className="form-table__sub">
+                      {f.status === 'ready' && f.addressHits.length > 0
+                        ? f.addressHits.map((h) => `${h.label} (${h.lineCount})`).join(', ')
+                        : <span className="cell-empty">—</span>}
+                    </td>
+                    <td>{f.status === 'ready' ? f.lineCount : <span className="cell-empty">—</span>}</td>
+                    <td className="data-table__center">
+                      <label className="toggle-switch" title={t.homebankingSplitByAddressHint}>
+                        <input
+                          type="checkbox"
+                          checked={f.splitByAddress}
+                          onChange={() => toggleSplitByAddress(f.filePath)}
+                          disabled={f.status !== 'ready' || isProcessing}
+                          aria-label={`${t.homebankingSplitByAddress}: ${f.fileName}`}
+                        />
+                        <span className="toggle-slider"></span>
+                      </label>
+                    </td>
+                    <td className="data-table__actions">
+                      <div className="row-actions">
+                        <button
+                          type="button"
+                          className="button button-ghost button-icon icon-danger"
+                          onClick={() => removeFile(f.filePath)}
+                          disabled={isProcessing}
+                          title={t.remove}
+                          aria-label={`${t.remove}: ${f.fileName}`}
+                        >
+                          <Icon name="trash" size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="form-empty">
+              <Icon name="building" size={16} />
+              {t.homebankingNoFiles}
             </div>
           )}
-        </div>
-      ) : (
-        <div className="empty-state">
-          <div className="empty-state-icon"><Icon name="building" size={48} /></div>
-          <div className="empty-state-text">{t.homebankingNoFiles}</div>
-        </div>
-      )}
+        </FormSection>
+
+        {statusMessage && (
+          <div className={`callout callout--${statusIsError ? 'danger' : 'success'}`} role="status">
+            <Icon name={statusIsError ? 'alert-triangle' : 'check-circle'} size={16} />
+            <div className="callout__body callout__body--path">{statusMessage}</div>
+          </div>
+        )}
+
+        {!statusIsError && lastResults.length > 0 && (
+          <FormSection
+            icon="check-circle"
+            title={t.outputFilesTitle}
+            aside={
+              lastOutputDir ? (
+                <button
+                  type="button"
+                  className="button button-small button-subtle"
+                  onClick={() => openOutput(lastOutputDir)}
+                  title={lastOutputDir}
+                >
+                  <Icon name="folder" size={13} /> {t.openOutputFolder}
+                </button>
+              ) : undefined
+            }
+          >
+            <table className="form-table">
+              <thead>
+                <tr>
+                  <th>{t.homebankingDetectedBank}</th>
+                  <th>{t.homebankingResultAddress}</th>
+                  <th>{t.homebankingFilesPerBank}</th>
+                  <th>{t.homebankingLines}</th>
+                  <th>{t.homebankingDate}</th>
+                  <th className="data-table__actions">{t.actions}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lastResults.map((r) => (
+                  <tr key={r.outputPath}>
+                    <td className="form-table__label">{r.bankName}</td>
+                    <td>{r.addressLabel ?? <span className="cell-empty">—</span>}</td>
+                    <td>{r.fileCount}</td>
+                    <td>{r.lineCount}</td>
+                    <td className="nowrap">
+                      {r.startDate && r.endDate
+                        ? r.startDate === r.endDate
+                          ? r.startDate
+                          : `${r.startDate} → ${r.endDate}`
+                        : '—'}
+                    </td>
+                    <td className="data-table__actions">
+                      <div className="row-actions">
+                        <button
+                          type="button"
+                          className="button button-small button-secondary"
+                          onClick={() => openOutput(r.outputPath)}
+                        >
+                          <Icon name="folder" size={13} /> {t.openFile}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </FormSection>
+        )}
+
+        <ModalFooter
+          className="page-action-bar"
+          onSubmit={mergeWithResults}
+          submitLabel={isProcessing ? t.homebankingMerging : t.homebankingMergeAll}
+          submitIcon="bar-chart"
+          submitDisabled={!canMerge}
+          submitTitle={t.homebankingNothingToMerge}
+          busy={isProcessing}
+        />
+      </div>
     </div>
   );
 };

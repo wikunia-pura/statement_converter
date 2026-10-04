@@ -4,9 +4,11 @@ import {
   MAIL_TABLE_CELL_STYLE,
   MAIL_TABLE_HEADER_CELL_STYLE,
   MAIL_TABLE_STYLE,
+  MailingFieldRef,
 } from '../../shared/mailing-template';
 import {
   CHIP_CLASS,
+  ChipDisplayResolver,
   FieldChipLabels,
   FieldInsertPicker,
   MailingFieldOption,
@@ -51,6 +53,27 @@ interface RichTextEditorProps {
   fields: MailingFieldOption[];
   /** Labels for the pills and the insert control. */
   fieldLabels: FieldChipLabels;
+
+  // ── Letter mode (MailingVisualEditor). All optional: without them the editor is
+  //    the template editor it always was. ──
+  /** Pills show resolved values — see `usePlaceholderChips`'s `display`. */
+  chipDisplay?: ChipDisplayResolver;
+  /** A click on a pill goes here instead of switching its half. */
+  onChipActivate?: (ref: MailingFieldRef, chip: HTMLElement) => void;
+  /** Publish only real changes, so clicking into the text is not an edit. */
+  skipUnchangedEmits?: boolean;
+  /**
+   * Wraps the editable surface — the letterhead frame around the text. Receives
+   * the contentEditable element and returns what goes in its place.
+   */
+  renderContent?: (content: React.ReactElement) => React.ReactNode;
+  /** Classes added to the editable surface and to the outer frame. */
+  contentClassName?: string;
+  className?: string;
+  /** Extra controls at the end of the toolbar. */
+  toolbarExtra?: React.ReactNode;
+  /** No toolbar, no typing — the text is shown as it stands. */
+  readOnly?: boolean;
 }
 
 /**
@@ -84,6 +107,14 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   labels,
   fields,
   fieldLabels,
+  chipDisplay,
+  onChipActivate,
+  skipUnchangedEmits = false,
+  renderContent,
+  contentClassName,
+  className,
+  toolbarExtra,
+  readOnly = false,
 }) => {
     const {
       elementRef: editorRef,
@@ -92,7 +123,15 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       ensureCaretInside,
       emit,
       withoutChips,
-    } = usePlaceholderChips({ value, onChange, fields, labels: fieldLabels });
+    } = usePlaceholderChips({
+      value,
+      onChange,
+      fields,
+      labels: fieldLabels,
+      display: chipDisplay,
+      onChipActivate,
+      skipUnchanged: skipUnchangedEmits,
+    });
     const tablePanelRef = useRef<HTMLDivElement>(null);
     const [tablePanelOpen, setTablePanelOpen] = useState(false);
     const [newRows, setNewRows] = useState(2);
@@ -354,112 +393,127 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
 
     const isEmpty = !value || value === '<br>' || value === '<p></p>';
 
+    const content = (
+      <div
+        ref={editorRef}
+        className={'rte-content' + (contentClassName ? ` ${contentClassName}` : '')}
+        contentEditable={!readOnly}
+        suppressContentEditableWarning
+        {...handlers}
+        style={{ minHeight }}
+        data-placeholder={isEmpty ? placeholder ?? '' : ''}
+      />
+    );
+
     return (
-      <div className="rte">
-        <div className="rte-toolbar">
-          <button type="button" className="button button-ghost button-icon" title={labels.bold} onClick={() => exec('bold')}>
-            <strong>B</strong>
-          </button>
-          <button type="button" className="button button-ghost button-icon" title={labels.italic} onClick={() => exec('italic')}>
-            <em>I</em>
-          </button>
-          <button type="button" className="button button-ghost button-icon" title={labels.underline} onClick={() => exec('underline')}>
-            <span style={{ textDecoration: 'underline' }}>U</span>
-          </button>
-          <span className="toolbar-divider" />
-          <button type="button" className="button button-ghost button-icon" title={labels.heading} onClick={() => exec('formatBlock', 'H3')}>
-            H
-          </button>
-          <button type="button" className="button button-ghost button-icon" title={labels.bulletList} onClick={() => exec('insertUnorderedList')}>
-            •
-          </button>
-          <button type="button" className="button button-ghost button-icon" title={labels.numberedList} onClick={() => exec('insertOrderedList')}>
-            1.
-          </button>
-          <span className="toolbar-divider" />
-          <button type="button" className="button button-ghost button-icon" title={labels.alignLeft} onClick={() => align('justifyLeft')}>
-            <Icon name="align-left" size={15} />
-          </button>
-          <button type="button" className="button button-ghost button-icon" title={labels.alignCenter} onClick={() => align('justifyCenter')}>
-            <Icon name="align-center" size={15} />
-          </button>
-          <button type="button" className="button button-ghost button-icon" title={labels.alignRight} onClick={() => align('justifyRight')}>
-            <Icon name="align-right" size={15} />
-          </button>
-          <button type="button" className="button button-ghost button-icon" title={labels.alignJustify} onClick={() => align('justifyFull')}>
-            <Icon name="align-justify" size={15} />
-          </button>
-          <span className="toolbar-divider" />
-          <div className="rte-table-menu" ref={tablePanelRef}>
+      <div className={'rte' + (className ? ` ${className}` : '')}>
+        {!readOnly && (
+          <div className="rte-toolbar">
+            <button type="button" className="button button-ghost button-icon" title={labels.bold} onClick={() => exec('bold')}>
+              <strong>B</strong>
+            </button>
+            <button type="button" className="button button-ghost button-icon" title={labels.italic} onClick={() => exec('italic')}>
+              <em>I</em>
+            </button>
+            <button type="button" className="button button-ghost button-icon" title={labels.underline} onClick={() => exec('underline')}>
+              <span style={{ textDecoration: 'underline' }}>U</span>
+            </button>
+            <span className="toolbar-divider" />
+            <button type="button" className="button button-ghost button-icon" title={labels.heading} onClick={() => exec('formatBlock', 'H3')}>
+              H
+            </button>
+            <button type="button" className="button button-ghost button-icon" title={labels.bulletList} onClick={() => exec('insertUnorderedList')}>
+              •
+            </button>
+            <button type="button" className="button button-ghost button-icon" title={labels.numberedList} onClick={() => exec('insertOrderedList')}>
+              1.
+            </button>
+            <span className="toolbar-divider" />
+            <button type="button" className="button button-ghost button-icon" title={labels.alignLeft} onClick={() => align('justifyLeft')}>
+              <Icon name="align-left" size={15} />
+            </button>
+            <button type="button" className="button button-ghost button-icon" title={labels.alignCenter} onClick={() => align('justifyCenter')}>
+              <Icon name="align-center" size={15} />
+            </button>
+            <button type="button" className="button button-ghost button-icon" title={labels.alignRight} onClick={() => align('justifyRight')}>
+              <Icon name="align-right" size={15} />
+            </button>
+            <button type="button" className="button button-ghost button-icon" title={labels.alignJustify} onClick={() => align('justifyFull')}>
+              <Icon name="align-justify" size={15} />
+            </button>
+            <span className="toolbar-divider" />
+            <div className="rte-table-menu" ref={tablePanelRef}>
+              <button
+                type="button"
+                className="button button-ghost button-icon"
+                title={labels.table}
+                onClick={() => setTablePanelOpen((open) => !open)}
+              >
+                <Icon name="table" size={15} />
+              </button>
+              {tablePanelOpen && (
+                <div className="rte-table-panel">
+                  <label className="rte-table-panel__field">
+                    {labels.tableRows}
+                    <input
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={newRows}
+                      onChange={(e) => setNewRows(Number(e.target.value))}
+                    />
+                  </label>
+                  <label className="rte-table-panel__field">
+                    {labels.tableColumns}
+                    <input
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={newCols}
+                      onChange={(e) => setNewCols(Number(e.target.value))}
+                    />
+                  </label>
+                  <label className="rte-table-panel__check">
+                    <input
+                      type="checkbox"
+                      checked={headerRow}
+                      onChange={(e) => setHeaderRow(e.target.checked)}
+                    />
+                    {labels.tableHeaderRow}
+                  </label>
+                  <button type="button" className="button button-primary button-small" onClick={insertTable}>
+                    {labels.tableInsert}
+                  </button>
+                </div>
+              )}
+            </div>
+            <span className="toolbar-divider" />
             <button
               type="button"
               className="button button-ghost button-icon"
-              title={labels.table}
-              onClick={() => setTablePanelOpen((open) => !open)}
+              title={labels.clearFormatting}
+              onClick={clearFormatting}
             >
-              <Icon name="table" size={15} />
+              <Icon name="x" size={14} />
             </button>
-            {tablePanelOpen && (
-              <div className="rte-table-panel">
-                <label className="rte-table-panel__field">
-                  {labels.tableRows}
-                  <input
-                    type="number"
-                    min={1}
-                    max={20}
-                    value={newRows}
-                    onChange={(e) => setNewRows(Number(e.target.value))}
-                  />
-                </label>
-                <label className="rte-table-panel__field">
-                  {labels.tableColumns}
-                  <input
-                    type="number"
-                    min={1}
-                    max={10}
-                    value={newCols}
-                    onChange={(e) => setNewCols(Number(e.target.value))}
-                  />
-                </label>
-                <label className="rte-table-panel__check">
-                  <input
-                    type="checkbox"
-                    checked={headerRow}
-                    onChange={(e) => setHeaderRow(e.target.checked)}
-                  />
-                  {labels.tableHeaderRow}
-                </label>
-                <button type="button" className="button button-primary button-small" onClick={insertTable}>
-                  {labels.tableInsert}
-                </button>
-              </div>
+
+            {fields.length > 0 && (
+              <>
+                <span className="toolbar-divider" />
+                <FieldInsertPicker
+                  fields={fields}
+                  labels={fieldLabels}
+                  onInsert={insertField}
+                  compact
+                  style={{ marginLeft: 'auto' }}
+                />
+              </>
             )}
+            {toolbarExtra}
           </div>
-          <span className="toolbar-divider" />
-          <button
-            type="button"
-            className="button button-ghost button-icon"
-            title={labels.clearFormatting}
-            onClick={clearFormatting}
-          >
-            <Icon name="x" size={14} />
-          </button>
+        )}
 
-          {fields.length > 0 && (
-            <>
-              <span className="toolbar-divider" />
-              <FieldInsertPicker
-                fields={fields}
-                labels={fieldLabels}
-                onInsert={insertField}
-                compact
-                style={{ marginLeft: 'auto' }}
-              />
-            </>
-          )}
-        </div>
-
-        {inTable && (
+        {inTable && !readOnly && (
           <div className="rte-toolbar rte-toolbar--table">
             <span className="rte-toolbar__label">{labels.table}</span>
             <button type="button" className="button button-ghost button-small" onClick={addRow}>
@@ -480,15 +534,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
           </div>
         )}
 
-        <div
-          ref={editorRef}
-          className="rte-content"
-          contentEditable
-          suppressContentEditableWarning
-          {...handlers}
-          style={{ minHeight }}
-          data-placeholder={isEmpty ? placeholder ?? '' : ''}
-        />
+        {renderContent ? renderContent(content) : content}
       </div>
     );
 };

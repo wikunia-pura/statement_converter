@@ -1,7 +1,8 @@
 // Type definitions for Electron API exposed via preload
 
 import type { NotificationPrefs } from '../shared/notifications';
-import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, ZgnPelnomocnik, ZarzadOsoba, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent, AppUser, SpotkanieTyp, SpotkanieLokalizacja, Spotkanie, SpotkanieInput, SpotkanieMailing, SpotkanieTerminStatus, SpotkanieMaterialyStatus, SpotkanieMaterialyKrok, KsiegowaniePriorytet, KsiegowanieUwaga, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik, ZadanieKomentarz, ZadanieKomentarzInput, ZadanieKomentarzPodsumowanie, ZadanieNotatka } from '../shared/types';
+import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, ZgnPelnomocnik, ZarzadOsoba, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent, AppUser, SpotkanieTyp, SpotkanieLokalizacja, Spotkanie, SpotkanieInput, SpotkanieMailing, SpotkanieTerminStatus, SpotkanieMaterialyStatus, SpotkanieMaterialyKrok, KsiegowaniePriorytet, KsiegowanieUwaga, KsiegowaniePlik, ScanDecision, ScanProgress, ScanReport, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik, ZadanieKomentarz, ZadanieKomentarzInput, ZadanieKomentarzPodsumowanie, ZadanieNotatka, MailingAdresaci, MailingTypDef, MailingKalendarzContext, MailingExportRequest, MailingExportResult, Zebranie, ZebranieInput, ZebranieStatus, ZebranieWersja, ZebranieWersjaInput } from '../shared/types';
+import type { MailingRecipientsResolved } from '../shared/mailing-recipients';
 
 // Zaliczki shared types (referenced by the main-process helpers)
 export type ZaliczkiCategory =
@@ -177,6 +178,8 @@ interface ConversionResult {
   duplicateWarning?: boolean;
   error?: string;
   warningMessage?: string;  // Info message (not an error, but user should know)
+  /** Stopped by "Anuluj": nothing was written or recorded. */
+  cancelled?: boolean;
   // Review flow
   needsReview?: boolean;
   reviewData?: ConversionReviewData;
@@ -250,6 +253,8 @@ interface ElectronAPI {
   analyzeFile: (inputPath: string, bankId: number, adresId?: number | null) => Promise<ConversionSummary>;
   detectAccountNumbers: (inputPath: string, bankId?: number | null) => Promise<string[]>;
   convertFileWithAI: (inputPath: string, bankId: number, fileName: string, adresId?: number | null, accountTypeId?: number | null) => Promise<ConversionResult>;
+  /** Stop the conversion of this input file; it resolves with `cancelled: true`. */
+  cancelConversion: (inputPath: string) => Promise<boolean>;
   finalizeConversion: (tempConversionId: string, decisions: ReviewDecision[]) => Promise<ConversionResult>;
   rerunExpenseAI: (
     tempConversionId: string,
@@ -270,6 +275,7 @@ interface ElectronAPI {
   setOutputFolder: (folderPath: string) => Promise<boolean>;
   setImpexFolder: (folderPath: string) => Promise<boolean>;
   setSwrkFolder: (folderPath: string) => Promise<boolean>;
+  setStatementsFolder: (folderPath: string) => Promise<boolean>;
   setDarkMode: (enabled: boolean) => Promise<boolean>;
   setLanguage: (language: string) => Promise<boolean>;
   setSkipUserApproval: (enabled: boolean) => Promise<boolean>;
@@ -279,6 +285,10 @@ interface ElectronAPI {
   /** The menu's order as view ids; null restores the default. */
   setSidebarOrder: (order: string[] | null) => Promise<boolean>;
   setBookingsCollapsed: (collapsed: boolean) => Promise<boolean>;
+  /** The dashboard's filter tiles as filter ids; null restores the default order. */
+  setBookingsTileOrder: (order: string[] | null) => Promise<boolean>;
+  /** Remember the month the Pulpit / Księgowania view is on (`YYYY-MM`). */
+  setBookingsMonth: (monthKey: string) => Promise<boolean>;
   setCalendarHoverCard: (enabled: boolean) => Promise<boolean>;
   /** The signed-in person's own switches (only the flipped ones). */
   /** Raises a real system notification whose click opens a card — to check the whole path. */
@@ -306,11 +316,20 @@ interface ElectronAPI {
   clearHistory: () => Promise<boolean>;
   importHistoryFromFile: () => Promise<{ success: boolean; added?: number; skipped?: number; error?: string }>;
   exportHistoryToFile: () => Promise<{ success: boolean; count?: number; filePath?: string; error?: string }>;
-  /** Tick / untick "posted in DOM" for the given history rows (Księgowania view). */
-  setHistoryBookedInDom: (
+  /**
+   * The dashboard's own conversion records (Pulpit → Księgowania), with the DOM
+   * tick — independent of the history log, which may be cleared.
+   */
+  getKsiegowaniaKonwersje: () => Promise<ConversionHistory[]>;
+  /** Tick / untick "posted in DOM" for the given conversion records (Księgowania view). */
+  setKsiegowanieBookedInDom: (
     ids: number[],
     booked: boolean,
   ) => Promise<{ success: boolean; updated?: number; error?: string }>;
+  /** Mark a pinned statement as posted in DOM without converting it (no accounting file). */
+  markKsiegowaniePlikBooked: (plikId: number) => Promise<{ success: boolean; error?: string }>;
+  /** Undo such a mark: deletes the manual record, never a real conversion. */
+  undoKsiegowanieManual: (id: number) => Promise<{ success: boolean; error?: string }>;
 
   // Backup
   backupExport: () => Promise<{ success: boolean; filePath?: string; counts?: BackupCounts; error?: string }>;
@@ -388,6 +407,8 @@ interface ElectronAPI {
   mailingAddZgn: (nazwa: string, email: string) => Promise<ZgnJednostka>;
   mailingUpdateZgn: (id: number, nazwa: string, email: string) => Promise<boolean>;
   mailingDeleteZgn: (id: number) => Promise<boolean>;
+  /** The unit serves exactly these communities: assigns them, unassigns the rest. */
+  setZgnAdresy: (jednostkaId: number, adresIds: number[]) => Promise<boolean>;
   /** Replace a community's board — the whole list, as the modal holds it. */
   setAdresZarzad: (id: number, zarzad: ZarzadOsoba[]) => Promise<boolean>;
   /** Every proxy of every city unit. */
@@ -438,6 +459,12 @@ interface ElectronAPI {
     attachments: { fileName: string; filePath: string }[];
     /** The meeting this send was triggered from, recorded on every history row. */
     spotkanieId?: number | null;
+    /** Recipient groups for this send; absent ⇒ the kind's stored default. */
+    adresaci?: MailingAdresaci;
+    /** Mailboxes (lower-cased) unticked for this send. */
+    wykluczeni?: string[];
+    /** What the meeting fills the calendar fields with, when sent from one. */
+    kalendarz?: MailingKalendarzContext | null;
   }) => Promise<{ success?: boolean; results?: MailingSendResult[]; error?: string }>;
   mailingGetHistory: () => Promise<MailingHistoryEntry[]>;
   mailingClearHistory: () => Promise<boolean>;
@@ -453,6 +480,54 @@ interface ElectronAPI {
   mailingSetSmtp: (config: MailingSmtpConfig & { pass?: string }) => Promise<boolean>;
   mailingTestSmtp: () => Promise<{ ok: true } | { ok: false; error: string }>;
   onMailingProgress: (callback: (progress: MailingProgressEvent) => void) => () => void;
+
+  // Mailing — typy mailingu (the built-in one first)
+  mailingGetTypy: () => Promise<MailingTypDef[]>;
+  mailingAddTyp: (nazwa: string, opis: string, adresaci: MailingAdresaci) => Promise<MailingTypDef>;
+  /** The built-in kind keeps its name whatever is sent. */
+  mailingUpdateTyp: (
+    id: number,
+    nazwa: string,
+    opis: string,
+    adresaci: MailingAdresaci,
+  ) => Promise<boolean>;
+  /** Refused (with a message to show) for the built-in kind and for a kind templates still use. */
+  mailingDeleteTyp: (id: number) => Promise<{ success?: boolean; error?: string }>;
+  /** "Pobierz jako e-mail / PDF" — files in Downloads, nothing sent or recorded. */
+  mailingExport: (
+    request: MailingExportRequest,
+  ) => Promise<({ success: true } & MailingExportResult) | { success?: undefined; error: string }>;
+  /** Who a letter would go to — same resolution as a send. */
+  mailingResolveOdbiorcy: (request: {
+    adresId: number | null;
+    spotkanieId?: number | null;
+    adresaci: MailingAdresaci;
+    wykluczeni?: string[];
+  }) => Promise<MailingRecipientsResolved>;
+  /** Reveal a file in Finder / Explorer. False when it no longer exists. */
+  mailingShowInFolder: (filePath: string) => Promise<boolean>;
+  /** Reveal a file in Finder / Explorer, selected. False when it is not there. */
+  showInFolder: (filePath: string) => Promise<boolean>;
+
+  // Zebrania — meeting materials, versioned
+  /** Every entry with its versions (oldest first), newest entry first. */
+  getZebrania: () => Promise<Zebranie[]>;
+  /** "Przygotuj materiały": the meeting's entry — created on first use (version 1.0), returned after. */
+  zebranieFromSpotkanie: (spotkanieId: number) => Promise<Zebranie>;
+  /** A meeting saved with materials needed: its entry, created when missing — the meeting's status is left as it is. */
+  ensureZebranieForSpotkanie: (spotkanieId: number) => Promise<Zebranie>;
+  /** A standalone entry, not linked to a meeting. */
+  addZebranie: (input: ZebranieInput) => Promise<Zebranie>;
+  /** Standalone entries only — a linked one is edited in the Kalendarz. */
+  updateZebranie: (id: number, input: ZebranieInput) => Promise<boolean>;
+  deleteZebranie: (id: number) => Promise<boolean>;
+  /** A new revision (1.0 → 1.1), copied from the newest version; the meeting goes back to "to prepare". */
+  addZebranieWersja: (zebranieId: number) => Promise<ZebranieWersja>;
+  updateZebranieWersja: (id: number, input: ZebranieWersjaInput) => Promise<boolean>;
+  /** The newest version of a linked entry moves the meeting's materials status with it. */
+  setZebranieWersjaStatus: (id: number, status: ZebranieStatus) => Promise<boolean>;
+  /** Note a download on the material it came from. */
+  recordZebraniePobranie: (wersjaId: number, materialId: string, pliki: string[]) => Promise<boolean>;
 
   // Kalendarz — spotkania, ich typy i konta do listy uczestników
   /** The application's accounts, offered by the participant picker. */
@@ -567,6 +642,23 @@ interface ElectronAPI {
   updateKsiegowanieUwaga: (id: number, tresc: string) => Promise<boolean>;
   setKsiegowanieUwagaResolved: (id: number, resolved: boolean) => Promise<boolean>;
   deleteKsiegowanieUwaga: (id: number) => Promise<boolean>;
+  /** Every file the folder scan pinned (all months); [] when the table is not there yet. */
+  getKsiegowaniaPliki: () => Promise<KsiegowaniePlik[]>;
+  /** "Znajdź pliki księgowe" for one month (`YYYY-MM`). */
+  scanKsiegowaniaPliki: (
+    monthKey: string,
+  ) => Promise<
+    | { success: true; report: ScanReport }
+    | { success: false; error: 'no-folder' | 'folder-missing' | 'busy' | 'invalid-month' | string; folder?: string }
+  >;
+  /** The user's answers to the last scan's conflicts. */
+  resolveKsiegowaniaScan: (
+    decisions: { id: string; decision: ScanDecision }[],
+  ) => Promise<{ applied: number; failed: { relPath: string; message: string }[] }>;
+  /** "Odepnij" — forget a pinned file; the file itself stays on disk. */
+  deleteKsiegowaniePlik: (id: number) => Promise<boolean>;
+  /** Open a PDF in a preview window over the app (system viewer as a fallback). */
+  previewPdf: (filePath: string) => Promise<boolean>;
   getSpotkaniaLokalizacje: () => Promise<SpotkanieLokalizacja[]>;
   addSpotkanieLokalizacja: (
     nazwa: string,
@@ -614,6 +706,7 @@ interface ElectronAPI {
   onUpdateError: (callback: (error: string) => void) => () => void;
   onDownloadProgress: (callback: (progress: any) => void) => () => void;
   onConversionProgress: (callback: (progress: ConversionProgressEvent) => void) => () => void;
+  onScanProgress: (callback: (progress: ScanProgress) => void) => () => void;
   onBackupCreated: (callback: (info: { filePath: string; date: string; upload: 'uploaded' | 'failed' | 'disabled'; trigger: 'startup' | 'scheduled' | 'quit' }) => void) => () => void;
 }
 

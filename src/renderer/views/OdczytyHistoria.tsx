@@ -4,6 +4,7 @@ import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
 import OdczytyHistoryTimeline from '../components/OdczytyHistoryTimeline';
+import { FormSection } from '../components/FormSection';
 import Icon from '../components/Icon';
 
 interface Props {
@@ -47,25 +48,20 @@ const OdczytyHistoria: React.FC<Props> = ({ language }) => {
 
   return (
     <div className="content-body">
-      <div className="card">
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '15px',
-          }}
-        >
-          <h2 style={{ margin: 0 }}>{t.odczytyTitle}</h2>
-          {history.length > 0 && (
-            <button className="button button-danger" onClick={handleClear}>
+      <FormSection
+        icon="history"
+        title={t.odczytyTitle}
+        description={t.odczytyHistoryDesc}
+        aside={
+          history.length > 0 ? (
+            <button className="button button-ghost icon-danger" onClick={handleClear}>
               <Icon name="trash" size={14} />{' '}{t.odczytyClearHistory}
             </button>
-          )}
-        </div>
-
+          ) : undefined
+        }
+      >
         <OdczytyHistoryTimeline history={history} language={language} />
-      </div>
+      </FormSection>
     </div>
   );
 };

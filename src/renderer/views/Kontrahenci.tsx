@@ -197,7 +197,9 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
     try {
       const result = await window.electronAPI.exportKontrahenciToFile();
       if (result.success) {
-        notify.success(t.exportKontrahenciSuccess.replace('{count}', String(result.count ?? 0)));
+        notify.success(t.exportKontrahenciSuccess.replace('{count}', String(result.count ?? 0)), {
+          file: result.filePath,
+        });
       } else if (result.error) {
         notify.error(`${t.exportKontrahenciError}: ${result.error}`);
       }

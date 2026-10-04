@@ -26,6 +26,16 @@ import {
   ZebranieInput,
   ZebranieStatus,
   ZebranieWersjaInput,
+  PlanGospodarczy,
+  SprawozdanieWstepTekst,
+  AdresUdzialy,
+  ZebraniaUstawienia,
+  ZebranieDokumentRequest,
+  ZebranieDokumentFormat,
+  Sprawozdanie,
+  SprawozdanieExportRequest,
+  PlanWlasnyExportRequest,
+  KalendarzPdfRequest,
   ZadanieInput,
   ZadanieStatus,
   ZadanieZalacznik,
@@ -86,6 +96,15 @@ import {
   previewOdbiorcy,
 } from './mailing/service';
 import { verifySmtp } from './mailing/sender';
+import { uniquePath } from './mailing/service';
+import { parseSprawozdaniaPdf } from './zebrania/sprawozdanieParser';
+import { planPdf, planXlsx, sprawozdaniePdf, sprawozdanieXlsx } from './zebrania/dokumenty';
+import { kalendarzPdf, kalendarzPdfName } from './kalendarz/pdf';
+import { KALENDARZ_PDF_MAX_MIESIECY, kalendarzOkresProblem } from '../shared/calendar';
+import { nazwaNieruchomosci } from '../shared/plan-gospodarczy';
+import { formatData } from '../shared/sprawozdanie';
+import { planWZebraniach, planyZZebran } from '../shared/plany';
+import { wersjaLabel } from '../shared/zebrania';
 
 // Log environment variable for testing
 log.debug('[MAIN] TEST_AI_BILLING_ERROR =', process.env.TEST_AI_BILLING_ERROR);
@@ -3276,6 +3295,255 @@ function setupIpcHandlers() {
     },
   );
 
+  // ---- Statements and budget plans ----
+
+  /** A vDom "RozliczenieWsp" PDF picked by the user, read; null when they cancel. */
+  const pickSprawozdaniaPdf = async (): Promise<{ lista: Sprawozdanie[]; plikNazwa: string } | null> => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: 'Sprawozdania z vDom (RozliczenieWsp)',
+      properties: ['openFile'],
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const filePath = result.filePaths[0];
+    const lista = await parseSprawozdaniaPdf(filePath);
+    if (lista.length === 0) {
+      throw new Error(
+        'W tym pliku nie ma sprawozdań z vDom. Wybierz wydruk „RozliczenieWsp” zapisany jako PDF z tekstem (nie skan).',
+      );
+    }
+    return { lista, plikNazwa: path.basename(filePath) };
+  };
+
+  // "Jadźwingów 5/7" keeps its number as "5-7" rather than losing the slash.
+  const cleanFileName = (text: string) =>
+    text
+      .replace(/\//g, '-')
+      .replace(/[<>:"\\|?*\u0000-\u001f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  /** A statement's PDF or Excel, written to Downloads under a name saying whose and when. */
+  const writeSprawozdanie = async (
+    spr: Sprawozdanie,
+    format: ZebranieDokumentFormat,
+    opts: { adres: string; wstep: boolean; wstepTekst: SprawozdanieWstepTekst | null },
+  ): Promise<string> => {
+    const name = cleanFileName(
+      `Sprawozdanie finansowe - ${nazwaNieruchomosci(spr.nazwa)} - ${formatData(spr.okresOd)}-${formatData(spr.okresDo)}`,
+    );
+    const filePath = uniquePath(app.getPath('downloads'), `${name}.${format}`);
+    if (format === 'pdf') await sprawozdaniePdf(spr, opts, filePath);
+    else await sprawozdanieXlsx(spr, opts.adres, filePath);
+    return filePath;
+  };
+
+  ipcMain.handle(IPC_CHANNELS.ZEBRANIA_SPRAWOZDANIA_IMPORT, async () => {
+    const picked = await pickSprawozdaniaPdf();
+    if (!picked) return null;
+    const { lista, plikNazwa } = picked;
+    const zapisane = await database.importSprawozdania(lista, plikNazwa, await zebraniaWho());
+    log.info(`[ZEBRANIA] imported ${zapisane.length}/${lista.length} statements from ${plikNazwa}`);
+    return { plikNazwa, zapisane };
+  });
+
+  // ---- Sprawozdania: the library on its own, outside any meeting ----
+
+  ipcMain.handle(IPC_CHANNELS.SPRAWOZDANIA_IMPORT_WLASNE, async () => {
+    const picked = await pickSprawozdaniaPdf();
+    if (!picked) return null;
+    const { lista, plikNazwa } = picked;
+    const { zapisane, pominiete } = await database.importSprawozdaniaWlasne(lista, plikNazwa, await zebraniaWho());
+    log.info(
+      `[SPRAWOZDANIA] added ${zapisane.length}/${lista.length} statements from ${plikNazwa}, ${pominiete} already in Zebrania`,
+    );
+    return { plikNazwa, zapisane, pominiete };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SPRAWOZDANIE_DELETE_WLASNE, async (_, id: number) => {
+    await database.deleteSprawozdanieWlasne(id);
+    return true;
+  });
+
+  /** A library statement as PDF or Excel — read from the library, not from the screen. */
+  ipcMain.handle(IPC_CHANNELS.SPRAWOZDANIE_EXPORT, async (_, request: SprawozdanieExportRequest) => {
+    const row = await database.getSprawozdanie(request.sprawozdanieId);
+    const spr = row?.dane;
+    if (!spr) throw new Error('Tego sprawozdania nie ma już w bibliotece — mogło zostać usunięte.');
+    // The letterhead names the community as the app knows it, when its vDom
+    // number has been matched to one; otherwise as vDom printed it.
+    const wspolnota =
+      spr.nrWsp != null
+        ? (await database.getZebraniaWspolnoty().catch(() => [])).find((w) => w.vdomNr === spr.nrWsp)
+        : undefined;
+    const filePath = await writeSprawozdanie(spr, request.format, {
+      adres: wspolnota?.adresNazwa || nazwaNieruchomosci(spr.nazwa),
+      wstep: request.wstep !== false,
+      wstepTekst: null,
+    });
+    return { filePath };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ZEBRANIA_SPRAWOZDANIA_LISTA, async () => database.getSprawozdaniaLista());
+
+  ipcMain.handle(IPC_CHANNELS.ZEBRANIA_SPRAWOZDANIE_GET, async (_, id: number) => database.getSprawozdanie(id));
+
+  ipcMain.handle(
+    IPC_CHANNELS.ZEBRANIE_WERSJA_ATTACH_SPRAWOZDANIE,
+    async (_, wersjaId: number, sprawozdanieId: number) => {
+      await database.attachZebranieSprawozdanie(wersjaId, sprawozdanieId, await zebraniaWho());
+      return true;
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.ZEBRANIE_WERSJA_REMOVE_SPRAWOZDANIE, async (_, wersjaId: number) => {
+    await database.setZebranieWersjaSprawozdanie(wersjaId, null, await zebraniaWho());
+    return true;
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.ZEBRANIE_WERSJA_SET_SPRAWOZDANIE_WSTEP,
+    async (_, wersjaId: number, wstep: SprawozdanieWstepTekst | null) => {
+      await database.setZebranieSprawozdanieWstep(wersjaId, wstep, await zebraniaWho());
+      return true;
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.ZEBRANIE_WERSJA_SET_PLAN, async (_, wersjaId: number, plan: PlanGospodarczy | null) => {
+    await database.setZebranieWersjaPlan(wersjaId, plan, await zebraniaWho());
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ZEBRANIA_WSPOLNOTY_GET, async () => database.getZebraniaWspolnoty());
+
+  ipcMain.handle(
+    IPC_CHANNELS.ZEBRANIA_WSPOLNOTA_SET,
+    async (_, adresNazwa: string, patch: { vdomNr?: number | null; udzialy?: AdresUdzialy | null }) => {
+      await database.setZebraniaWspolnota(adresNazwa, patch, await zebraniaWho());
+      return true;
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.ZEBRANIA_USTAWIENIA_GET, async () => database.getZebraniaUstawienia());
+
+  ipcMain.handle(IPC_CHANNELS.ZEBRANIA_USTAWIENIA_SET, async (_, value: ZebraniaUstawienia) => {
+    await database.setZebraniaUstawienia(value, await zebraniaWho());
+    return true;
+  });
+
+  /**
+   * One document of one version, written to Downloads — read from the stored
+   * version, not from the screen, so the file is exactly what was saved.
+   */
+  ipcMain.handle(IPC_CHANNELS.ZEBRANIA_DOKUMENT_EXPORT, async (_, request: ZebranieDokumentRequest) => {
+    const wersja = await database.getZebranieWersja(request.wersjaId);
+    if (!wersja) throw new Error('Tej wersji już nie ma — mogła zostać usunięta.');
+    const dir = app.getPath('downloads');
+    // The community's address for the letterhead — the entry's own, the
+    // statement's printed name when the entry has none.
+    const zebranie = await database.getZebranie(wersja.zebranieId).catch(() => null);
+    let filePath: string;
+    if (request.dokument === 'sprawozdanie') {
+      const spr = wersja.sprawozdanie?.dane;
+      if (!spr) throw new Error('Ta wersja nie ma jeszcze sprawozdania.');
+      filePath = await writeSprawozdanie(spr, request.format, {
+        adres: zebranie?.adresNazwa || nazwaNieruchomosci(spr.nazwa),
+        wstep: request.wstep !== false,
+        wstepTekst: wersja.sprawozdanie?.wstep ?? null,
+      });
+    } else {
+      const plan = wersja.plan;
+      if (!plan) throw new Error('Ta wersja nie ma jeszcze planu gospodarczego.');
+      const name = cleanFileName(`Plan gospodarczy ${plan.rok} - ${plan.nieruchomosc}`);
+      filePath = uniquePath(dir, `${name}.${request.format}`);
+      const ctx = { dataZebrania: request.dataZebrania, adres: zebranie?.adresNazwa || plan.nieruchomosc };
+      if (request.format === 'pdf') await planPdf(plan, ctx, filePath);
+      else await planXlsx(plan, ctx, filePath);
+    }
+    try {
+      await database.recordZebranieDokumentPobranie(
+        wersja.id,
+        request.dokument,
+        [path.basename(filePath)],
+        await zebraniaWho(),
+      );
+    } catch (error: unknown) {
+      // The file is in Downloads either way; only the record of it is missing.
+      log.warn('[ZEBRANIA] download not recorded:', error instanceof Error ? error.message : error);
+    }
+    return { filePath };
+  });
+
+  // ---- Plany gospodarcze: plans made outside any meeting ----
+
+  /**
+   * Zebrania is the source of truth: a plan of the module may not duplicate a
+   * Zebrania plan of the same community (vDom number) and year.
+   */
+  const assertPlanNieWZebraniach = async (nrWsp: number, rok: number) => {
+    const [zebrania, wspolnoty] = await Promise.all([
+      database.getZebrania(),
+      database.getZebraniaWspolnoty().catch(() => []),
+    ]);
+    const hit = planWZebraniach(planyZZebran(zebrania, wspolnoty), nrWsp, rok);
+    if (hit) {
+      throw new Error(
+        `Zebrania mają już plan gospodarczy tej wspólnoty na ${rok} rok („${hit.zebranie.nazwa || hit.zebranie.adresNazwa}”, wersja ${wersjaLabel(hit.wersja)}) — to on obowiązuje.`,
+      );
+    }
+  };
+
+  ipcMain.handle(IPC_CHANNELS.PLANY_WLASNE_GET, async () => database.getPlanyWlasne());
+
+  ipcMain.handle(
+    IPC_CHANNELS.PLAN_WLASNY_ADD,
+    async (_, nrWsp: number, nazwa: string, plan: PlanGospodarczy) => {
+      await assertPlanNieWZebraniach(nrWsp, plan.rok);
+      return await database.addPlanWlasny(nrWsp, nazwa, plan, await zebraniaWho());
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.PLAN_WLASNY_SET, async (_, id: number, plan: PlanGospodarczy) => {
+    const stored = await database.getPlanWlasny(id);
+    if (!stored) throw new Error('Tego planu już nie ma — mógł zostać usunięty.');
+    await assertPlanNieWZebraniach(stored.nrWsp, plan.rok);
+    await database.setPlanWlasny(id, plan, await zebraniaWho());
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PLAN_WLASNY_DELETE, async (_, id: number) => {
+    await database.deletePlanWlasny(id);
+    return true;
+  });
+
+  /** A module plan as PDF or Excel — read from the stored plan, not from the screen. */
+  ipcMain.handle(IPC_CHANNELS.PLAN_WLASNY_EXPORT, async (_, request: PlanWlasnyExportRequest) => {
+    const row = await database.getPlanWlasny(request.planId);
+    if (!row) throw new Error('Tego planu już nie ma — mógł zostać usunięty.');
+    const plan = row.plan;
+    const wspolnota = (await database.getZebraniaWspolnoty().catch(() => [])).find((w) => w.vdomNr === row.nrWsp);
+    const name = cleanFileName(`Plan gospodarczy ${plan.rok} - ${plan.nieruchomosc}`);
+    const filePath = uniquePath(app.getPath('downloads'), `${name}.${request.format}`);
+    // No meeting: the date under "przyjęto na zebraniu w dniu" stays a blank to fill in.
+    const ctx = { dataZebrania: null, adres: wspolnota?.adresNazwa || plan.nieruchomosc };
+    if (request.format === 'pdf') await planPdf(plan, ctx, filePath);
+    else await planXlsx(plan, ctx, filePath);
+    try {
+      await database.recordPlanWlasnyPobranie(row.id, [path.basename(filePath)], await zebraniaWho());
+    } catch (error: unknown) {
+      log.warn('[PLANY] download not recorded:', error instanceof Error ? error.message : error);
+    }
+    return { filePath };
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.SET_ZEBRANIE_WERSJA_NAZWA,
+    async (_, id: number, nazwa: string) => {
+      await database.setZebranieWersjaNazwa(id, nazwa, await zebraniaWho());
+      return true;
+    },
+  );
+
   ipcMain.handle(
     IPC_CHANNELS.RECORD_ZEBRANIE_POBRANIE,
     async (_, wersjaId: number, materialId: string, pliki: string[]) => {
@@ -3407,7 +3675,7 @@ function setupIpcHandlers() {
       const result = await dialog.showSaveDialog(mainWindow!, {
         defaultPath: path.basename(zalacznik.nazwa || 'zalacznik'),
       });
-      if (result.canceled || !result.filePath) return false;
+      if (result.canceled || !result.filePath) return null;
       try {
         await fs.promises.writeFile(result.filePath, await downloadAttachment(zalacznik.sciezka));
       } catch (error: unknown) {
@@ -3417,7 +3685,7 @@ function setupIpcHandlers() {
         );
         throw error;
       }
-      return true;
+      return result.filePath;
     },
   );
 
@@ -3523,6 +3791,33 @@ function setupIpcHandlers() {
     return await database.getSpotkania();
   });
 
+  /**
+   * The month as a PDF in Downloads. The meetings are read again here rather
+   * than taken from the renderer, so the file shows what is saved; the request
+   * only says which of them the filters on screen let through.
+   */
+  ipcMain.handle(IPC_CHANNELS.KALENDARZ_PDF_EXPORT, async (_, request: KalendarzPdfRequest) => {
+    const problem = kalendarzOkresProblem(request?.okresOd, request?.okresDo);
+    if (problem) {
+      throw new Error(
+        {
+          format: 'Nieprawidłowy okres.',
+          kolejnosc: 'Data końca okresu jest wcześniejsza niż data początku.',
+          'za-dlugi': `Okres może obejmować najwyżej ${KALENDARZ_PDF_MAX_MIESIECY} miesiące.`,
+        }[problem],
+      );
+    }
+    const [spotkania, typy, lokalizacje, session] = await Promise.all([
+      database.getSpotkania(),
+      database.getSpotkaniaTypy(),
+      database.getSpotkaniaLokalizacje(),
+      authService.getSession().catch(() => null),
+    ]);
+    const filePath = uniquePath(app.getPath('downloads'), kalendarzPdfName(request.okresOd, request.okresDo));
+    await kalendarzPdf({ request, spotkania, typy, lokalizacje, autor: session?.email ?? '' }, filePath);
+    return { filePath };
+  });
+
   ipcMain.handle(IPC_CHANNELS.ADD_SPOTKANIE, async (_, input: SpotkanieInput) => {
     // Who created it comes from the session, never from the renderer — it is a
     // record of who did something, not a field anyone gets to fill in.
@@ -3607,6 +3902,23 @@ function setupIpcHandlers() {
   };
 
   ipcMain.handle(IPC_CHANNELS.GET_KS_PRIORYTETY, async () => database.getKsiegowaniaPriorytety());
+
+  // Who posts which community in which month. The read fails soft: until
+  // supabase/ksiegowania-przypisania.sql is run the dashboard simply has none.
+  ipcMain.handle(IPC_CHANNELS.GET_KS_PRZYPISANIA, async () => {
+    try {
+      return await database.getKsiegowaniaPrzypisania();
+    } catch (error: unknown) {
+      log.error('[KSIEGOWANIA] assignments read failed:', getErrorMessage(error));
+      return [];
+    }
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.SET_KS_PRZYPISANIE,
+    async (_, monthKey: string, adresId: number | null, adresNazwa: string, email: string | null) =>
+      database.setKsiegowaniePrzypisanie(monthKey, adresId, adresNazwa, email, await sessionEmail()),
+  );
 
   ipcMain.handle(
     IPC_CHANNELS.ADD_KS_PRIORYTET,

@@ -57,6 +57,9 @@ interface Props {
   onEditSpotkanie?: (spotkanie: Spotkanie) => void;
 }
 
+/** The picker's "Przypisz do mnie" entry — resolved to the signed-in mailbox on pick. */
+const ASSIGN_TO_ME = '__me__';
+
 /**
  * Whose cards the board shows. `mine` and `none` are the two questions people
  * ask most, so they are filters of their own rather than entries buried in a
@@ -123,7 +126,7 @@ function useAttachmentDownload(t: (typeof translations)['pl']) {
         sciezka: z.sciezka,
         nazwa: z.nazwa,
       });
-      if (saved) notify.success(t.zadAttachSaved);
+      if (saved) notify.success(t.zadAttachSaved, { file: saved });
     } catch {
       notify.error(t.zadAttachDownloadError);
     } finally {
@@ -258,6 +261,10 @@ export const ZadanieFormModal: React.FC<FormModalProps> = ({
   // selectable, or opening and saving the card would silently unassign it.
   const assigneeOptions = useMemo(() => {
     const options = [
+      // The most common answer, first — unless it is already the answer.
+      ...(userEmail && !sameMailbox(email, userEmail)
+        ? [{ value: ASSIGN_TO_ME, label: t.zadAssignToMe, hint: '' }]
+        : []),
       { value: '', label: t.zadUnassigned },
       ...[...users].sort(comparePeople).map((u) => ({
         value: u.email,
@@ -269,7 +276,7 @@ export const ZadanieFormModal: React.FC<FormModalProps> = ({
       options.push({ value: email, label: email, hint: '' });
     }
     return options;
-  }, [users, email, t.zadUnassigned]);
+  }, [users, email, userEmail, t.zadUnassigned, t.zadAssignToMe]);
 
   const handleSubmit = () => {
     if (!tytul.trim()) {
@@ -352,7 +359,7 @@ export const ZadanieFormModal: React.FC<FormModalProps> = ({
                 <SearchableSelect
                   value={email}
                   options={assigneeOptions}
-                  onChange={setEmail}
+                  onChange={(v) => setEmail(v === ASSIGN_TO_ME ? userEmail : v)}
                   placeholder={t.zadUnassigned}
                   searchPlaceholder={t.zadSearchPerson}
                   emptyText={t.zadNoPersonFound}
@@ -1137,6 +1144,9 @@ const Zadania: React.FC<Props> = ({
    */
   const assigneeOptionsFor = (current: string | null) => {
     const options = [
+      ...(userEmail && !sameMailbox(current, userEmail)
+        ? [{ value: ASSIGN_TO_ME, label: t.zadAssignToMe, hint: '' }]
+        : []),
       { value: '', label: t.zadUnassigned, hint: '' },
       ...[...users]
         .sort(comparePeople)
@@ -1186,7 +1196,8 @@ const Zadania: React.FC<Props> = ({
     }
   };
 
-  const reassign = (z: Zadanie, email: string) => patchCard(z, { przypisanyEmail: email || null });
+  const reassign = (z: Zadanie, email: string) =>
+    patchCard(z, { przypisanyEmail: (email === ASSIGN_TO_ME ? userEmail : email) || null });
 
   const startRename = (z: Zadanie) => {
     renameSettled.current = false;

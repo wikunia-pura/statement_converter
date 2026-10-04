@@ -27,7 +27,7 @@ import { comparePeople, personLabel, personName } from '../../shared/app-users';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
-import Icon from '../components/Icon';
+import Icon, { type IconName } from '../components/Icon';
 import Select from '../components/Select';
 import SearchableSelect from '../components/SearchableSelect';
 import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
@@ -36,6 +36,7 @@ import MailingDetailsModal from '../components/MailingDetailsModal';
 import { ZadanieFormModal, ZadaniePreviewModal } from './Zadania';
 import { zebranieStatusLabel } from './Zebrania';
 import ZawiadomienieModal from '../components/ZawiadomienieModal';
+import KalendarzPdfModal from '../components/KalendarzPdfModal';
 import { formatDayKey } from '../../shared/zadania';
 import MonthIllustration, { monthAccent } from '../components/MonthIllustration';
 import {
@@ -1353,6 +1354,33 @@ const MeetingCard: React.FC<{
       <Icon name="mail" size={13} /> {t.zebraniaKalNotice}
     </button>
   );
+  // In the materials section, the way into Zebrania and the notice: a tile each — a coloured icon, what
+  // it opens and a line on what is there — so the two read apart at a glance.
+  const zebAction = (
+    tone: 'accent' | 'info',
+    icon: IconName,
+    label: string,
+    sub: string,
+    onClick: () => void,
+    title?: string,
+  ) => (
+    <button
+      type="button"
+      className={`kal-action kal-action--${tone}`}
+      onClick={onClick}
+      disabled={busy}
+      title={title}
+    >
+      <span className="kal-action__icon">
+        <Icon name={icon} size={15} />
+      </span>
+      <span className="kal-action__text">
+        <span className="kal-action__label">{label}</span>
+        <span className="kal-action__sub">{sub}</span>
+      </span>
+      <Icon name="chevron-right" size={14} className="kal-action__chevron" />
+    </button>
+  );
 
   const materialyStep = SPOTKANIE_MATERIALY_KROKI.indexOf(
     spotkanie.materialyStatus as SpotkanieMaterialyKrok,
@@ -1517,12 +1545,6 @@ const MeetingCard: React.FC<{
               <dd>{spotkanie.zgnNazwa}</dd>
             </>
           )}
-          {spotkanie.createdBy && (
-            <>
-              <dt>{t.kalDetAuthor}</dt>
-              <dd className="kal-details__quiet">{spotkanie.createdBy}</dd>
-            </>
-          )}
         </dl>
         {spotkanie.opis && <p className="kal-card__desc">{spotkanie.opis}</p>}
       </section>
@@ -1578,7 +1600,7 @@ const MeetingCard: React.FC<{
             <span className="kal-section__title">
               <Icon name="briefcase" size={13} /> {t.kalMaterialsLabel}
             </span>
-            <span className={`status-badge ${MATERIALY_TONE[spotkanie.materialyStatus]}`}>
+            <span className={`status-badge kal-section__badge ${MATERIALY_TONE[spotkanie.materialyStatus]}`}>
               {materialyStepLabel(t, spotkanie.materialyStatus)}
             </span>
             {materialyPrev && (
@@ -1628,7 +1650,7 @@ const MeetingCard: React.FC<{
           {/* Where the materials themselves are made: the meeting's entry in
               Zebrania (its newest version and that version's state — the same
               state as above, kept in step by the main process) and the notice. */}
-          {(zebranie || canPrzygotuj || zawiadomienieButton) && (
+          {(zebranie || canPrzygotuj || onZawiadomienie) && (
             <div className="kal-zeb">
               {zebranie && (
                 <span className="kal-zeb__state">
@@ -1641,28 +1663,28 @@ const MeetingCard: React.FC<{
                 </span>
               )}
               <div className="kal-zeb__actions">
-                {zawiadomienieButton}
-                {zebranie && onOpenZebranie && (
-                  <button
-                    type="button"
-                    className="button button-small button-secondary"
-                    onClick={onOpenZebranie}
-                    disabled={busy}
-                  >
-                    <Icon name="arrow-right" size={13} /> {t.zebraniaKalOpen}
-                  </button>
-                )}
-                {canPrzygotuj && (
-                  <button
-                    type="button"
-                    className="button button-small button-primary"
-                    onClick={onPrzygotuj}
-                    disabled={busy}
-                    title={t.zebraniaKalPrepareHint}
-                  >
-                    <Icon name="briefcase" size={13} /> {t.zebraniaKalPrepare}
-                  </button>
-                )}
+                {zebranie &&
+                  onOpenZebranie &&
+                  zebAction('accent', 'folder', t.zebraniaKalOpen, t.zebraniaKalOpenSub, onOpenZebranie)}
+                {canPrzygotuj &&
+                  onPrzygotuj &&
+                  zebAction(
+                    'accent',
+                    'briefcase',
+                    t.zebraniaKalPrepare,
+                    t.zebraniaKalPrepareSub,
+                    onPrzygotuj,
+                    t.zebraniaKalPrepareHint,
+                  )}
+                {onZawiadomienie &&
+                  zebAction(
+                    'info',
+                    'mail',
+                    t.zebraniaKalNotice,
+                    t.zebraniaKalNoticeSub,
+                    onZawiadomienie,
+                    t.zebraniaKalNoticeHint,
+                  )}
               </div>
             </div>
           )}
@@ -1899,6 +1921,9 @@ const Kalendarz: React.FC<Props> = ({
   const [typFilter, setTypFilter] = useState<number | null>(null);
   /** Meeting id being written to, so its own buttons disable and nothing else does. */
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  /** The "PDF" window — which month or period goes into the file. */
+  const [pdfOpen, setPdfOpen] = useState(false);
   /**
    * The send being read in full, and the history it came from.
    *
@@ -2152,6 +2177,37 @@ const Kalendarz: React.FC<Props> = ({
   }, [spotkania, monthKey, locale]);
 
   /* -------------------------------- Actions -------------------------------- */
+
+  /**
+   * "PDF": a month or a period, filters and all, as a file in Downloads. Only
+   * which meetings and why travels — main reads them again from the database.
+   */
+  const downloadPdf = async (okresOd: string, okresDo: string) => {
+    setPdfBusy(true);
+    try {
+      const { filePath } = await window.electronAPI.exportKalendarzPdf({
+        okresOd,
+        okresDo,
+        spotkanieIds: filtered
+          .filter((s) => {
+            const day = toDayKey(s.startsAt);
+            return day >= okresOd && day <= okresDo;
+          })
+          .map((s) => s.id),
+        typId: typFilter,
+        stan: stateFilter,
+        szukaj: search,
+      });
+      notify.success(t.kalPdfDone.replace('{file}', filePath.split(/[\\/]/).pop() ?? filePath), {
+        file: filePath,
+      });
+      setPdfOpen(false);
+    } catch (err: unknown) {
+      notify.error(err instanceof Error ? err.message : String(err), t.kalPdfError);
+    } finally {
+      setPdfBusy(false);
+    }
+  };
 
   /**
    * Select a day, following it into a neighbouring month when the user clicks
@@ -2748,6 +2804,16 @@ const Kalendarz: React.FC<Props> = ({
 
           <button
             type="button"
+            className="button button-secondary kal-new"
+            onClick={() => setPdfOpen(true)}
+            disabled={pdfBusy || isLoading}
+            title={t.kalPdfHint}
+          >
+            <Icon name={pdfBusy ? 'loader' : 'download'} size={14} /> {t.kalPdf}
+          </button>
+
+          <button
+            type="button"
             className="button button-primary kal-new"
             onClick={() => openForm(selectedDay)}
           >
@@ -3083,6 +3149,17 @@ const Kalendarz: React.FC<Props> = ({
           {tip.spotkanie.opis && <p className="kal-tip__desc">{tip.spotkanie.opis}</p>}
           <div className="kal-tip__hint">{t.kalChipDoubleClick}</div>
         </div>
+      )}
+
+      {pdfOpen && (
+        <KalendarzPdfModal
+          language={language}
+          monthKey={monthKey}
+          filtersActive={search.trim().length > 0 || typFilter !== null || stateFilter !== 'all'}
+          busy={pdfBusy}
+          onClose={() => setPdfOpen(false)}
+          onSubmit={(od, doDnia) => void downloadPdf(od, doDnia)}
+        />
       )}
 
       {zawiadomienieFor !== null && (

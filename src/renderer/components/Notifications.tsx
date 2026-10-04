@@ -12,6 +12,10 @@ import { ModalFooter, ModalHeader } from './Modal';
  *                                 the alerts they replace.
  *
  * Usage: const notify = useNotify(); notify.error('...'); notify.success('...');
+ *
+ * A toast about a file the app just wrote takes the file along —
+ * `notify.success('Zapisano…', { file })` — and gets an "Otwórz" button, so the
+ * user does not have to go looking for it in Downloads.
  */
 
 type ToastLevel = 'success' | 'info' | 'warning';
@@ -20,6 +24,13 @@ interface Toast {
   id: number;
   level: ToastLevel;
   message: string;
+  /** Absolute path of a file the message is about — shows the "Otwórz" button. */
+  file?: string;
+}
+
+export interface ToastOptions {
+  /** The file just saved; the toast offers to open it. */
+  file?: string | null;
 }
 
 interface ErrorDialog {
@@ -44,9 +55,9 @@ export interface ConfirmOptions {
 }
 
 export interface NotifyApi {
-  success: (message: string) => void;
-  info: (message: string) => void;
-  warning: (message: string) => void;
+  success: (message: string, options?: ToastOptions) => void;
+  info: (message: string, options?: ToastOptions) => void;
+  warning: (message: string, options?: ToastOptions) => void;
   /** Blocking modal. Optional title overrides the default error heading. */
   error: (message: string, title?: string) => void;
   /** Blocking yes/no modal; resolves true on confirm, false on cancel. */
@@ -64,6 +75,8 @@ export const useNotify = (): NotifyApi => {
 };
 
 const TOAST_TTL_MS = 4500;
+/** Long enough to reach for the "Otwórz" button after reading the message. */
+const FILE_TOAST_TTL_MS = 10000;
 
 const TOAST_ICON: Record<ToastLevel, React.ComponentProps<typeof Icon>['name']> = {
   success: 'check-circle',
@@ -78,6 +91,10 @@ interface NotificationProviderProps {
   okLabel?: string;
   cancelLabel?: string;
   dismissLabel?: string;
+  /** The button on a toast that carries a file. */
+  openFileLabel?: string;
+  /** Shown when that file is gone by the time the button is pressed. */
+  fileMissingLabel?: string;
   /** Default heading of a confirm dialog, and of a destructive one. */
   confirmTitle?: string;
   confirmDangerTitle?: string;
@@ -95,6 +112,8 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
   okLabel = 'OK',
   cancelLabel = 'Anuluj',
   dismissLabel = 'Zamknij',
+  openFileLabel = 'Otwórz',
+  fileMissingLabel = 'Nie udało się otworzyć pliku — mógł zostać przeniesiony albo usunięty.',
   confirmTitle = 'Potwierdź',
   confirmDangerTitle = 'Na pewno?',
   confirmLabel = 'Potwierdź',
@@ -112,19 +131,35 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
   }, []);
 
   const pushToast = useCallback(
-    (level: ToastLevel, message: string) => {
+    (level: ToastLevel, message: string, options?: ToastOptions) => {
       const id = ++idRef.current;
-      setToasts((prev) => [...prev, { id, level, message }]);
-      setTimeout(() => removeToast(id), TOAST_TTL_MS);
+      const file = options?.file || undefined;
+      setToasts((prev) => [...prev, { id, level, message, file }]);
+      setTimeout(() => removeToast(id), file ? FILE_TOAST_TTL_MS : TOAST_TTL_MS);
     },
     [removeToast]
   );
 
+  const openToastFile = useCallback(
+    async (toast: Toast) => {
+      if (!toast.file) return;
+      removeToast(toast.id);
+      let ok = false;
+      try {
+        ok = await window.electronAPI.openFile(toast.file);
+      } catch {
+        ok = false;
+      }
+      if (!ok) pushToast('warning', fileMissingLabel);
+    },
+    [removeToast, pushToast, fileMissingLabel]
+  );
+
   const api = useMemo<NotifyApi>(
     () => ({
-      success: (message: string) => pushToast('success', message),
-      info: (message: string) => pushToast('info', message),
-      warning: (message: string) => pushToast('warning', message),
+      success: (message: string, options?: ToastOptions) => pushToast('success', message, options),
+      info: (message: string, options?: ToastOptions) => pushToast('info', message, options),
+      warning: (message: string, options?: ToastOptions) => pushToast('warning', message, options),
       error: (message: string, title?: string) =>
         setErrors((prev) => [...prev, { id: ++idRef.current, title, message }]),
       confirm: (message: string, options: ConfirmOptions = {}) =>
@@ -174,6 +209,16 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
               <Icon name={TOAST_ICON[toast.level]} size={18} />
             </span>
             <span className="toast-message">{toast.message}</span>
+            {toast.file && (
+              <button
+                type="button"
+                className="toast-action"
+                onClick={() => void openToastFile(toast)}
+                title={toast.file}
+              >
+                {openFileLabel}
+              </button>
+            )}
             <button
               type="button"
               className="toast-close"

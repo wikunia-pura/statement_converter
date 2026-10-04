@@ -3411,12 +3411,15 @@ body.dark-mode .modal-overlay {
   border: 1px solid var(--border-default);
   border-left: 3px solid var(--border-strong);
   border-radius: var(--r-lg);
-  background: var(--bg-surface);
+  /* A filled card, not just an outline: sunken against the panel, tinted with
+     the status colour, so the white fields inside stand out from it. */
+  background: color-mix(in srgb, var(--conv-file-tone, var(--text-tertiary)) 5%, var(--bg-surface-sunken));
 }
 
-.conv-file--success { border-left-color: var(--success); }
-.conv-file--error { border-left-color: var(--danger); }
-.conv-file--processing { border-left-color: var(--info); }
+.conv-file--pending { border-left-color: var(--text-primary); }
+.conv-file--success { border-left-color: var(--success); --conv-file-tone: var(--success); }
+.conv-file--error { border-left-color: var(--danger); --conv-file-tone: var(--danger); }
+.conv-file--processing { border-left-color: var(--info); --conv-file-tone: var(--info); }
 .conv-file--success,
 .conv-file--processing { padding-bottom: var(--s-3); }
 
@@ -3435,7 +3438,7 @@ body.dark-mode .modal-overlay {
   width: 32px;
   height: 32px;
   border-radius: var(--r-md);
-  background: var(--bg-surface-sunken);
+  background: var(--bg-surface);
   color: var(--text-tertiary);
 }
 
@@ -4060,6 +4063,25 @@ body.dark-mode .modal-overlay {
 .toast-close:hover {
   background: var(--bg-surface-hover);
   color: var(--text-primary);
+}
+
+/* "Otwórz" on a toast about a file just saved. */
+.toast-action {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--t-fast), border-color var(--t-fast);
+}
+
+.toast-action:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--border-strong);
 }
 
 .toast-success {
@@ -5136,7 +5158,6 @@ body.dark-mode .footer-piggy-svg {
 }
 .kal-details dt { color: var(--text-tertiary); }
 .kal-details dd { margin: 0; color: var(--text-primary); overflow-wrap: anywhere; }
-.kal-details__quiet { color: var(--text-secondary) !important; font-size: var(--fs-sm); }
 
 .kal-section__title {
   display: inline-flex;
@@ -5166,6 +5187,14 @@ body.dark-mode .footer-piggy-svg {
 
 .kal-section__stamp { font-size: var(--fs-xs); color: var(--text-tertiary); }
 
+/* A state badge in a section band: smaller than the band's title, so it reads
+   as a tag on it rather than a second heading. */
+.kal-section__badge {
+  padding: 1px 7px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 /* The section's way forward, right-aligned like every action row. */
 .kal-section__buttons {
   display: flex;
@@ -5192,13 +5221,18 @@ body.dark-mode .footer-piggy-svg {
   list-style: none;
 }
 
+/* Dot above the label: the panel is narrow, and beside the dot a label like
+   "Przygotowane" had no room left and broke mid-word. */
 .kal-step {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 4px;
   width: 100%;
+  height: 100%;
   min-width: 0;
-  padding: 5px 8px;
+  padding: 6px 4px;
   border: 1px solid var(--border-default);
   border-radius: var(--r-md);
   background: var(--bg-surface);
@@ -5206,7 +5240,7 @@ body.dark-mode .footer-piggy-svg {
   font: inherit;
   font-size: var(--fs-xs);
   font-weight: 600;
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   transition: border-color var(--t-fast), background var(--t-fast), color var(--t-fast);
 }
@@ -5232,9 +5266,9 @@ body.dark-mode .footer-piggy-svg {
 
 .kal-step__label {
   min-width: 0;
-  /* Wrapped, never cut: "Do przygotowania" must be read whole in the narrow panel. */
+  /* Wrapped between words, never cut: "Do przygotowania" must be read whole. */
   line-height: 1.25;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .kal-step.is-done .kal-step__dot {
@@ -7178,6 +7212,20 @@ body.dark-mode .month-art {
   width: auto;
   flex: 0 0 auto;
   min-width: 200px;
+}
+
+/* "Kto księguje": a person filter beside the sort, marked while it narrows. */
+.ksieg-toolbar__who {
+  width: auto;
+  flex: 0 0 auto;
+  min-width: 170px;
+  max-width: 240px;
+}
+.ksieg-toolbar__who.is-active .ui-select__trigger {
+  border-color: var(--accent-border);
+  background-color: var(--accent-subtle);
+  color: var(--accent);
+  font-weight: 600;
 }
 
 /* Only shown while the list is out of order on purpose (a tick changed a
@@ -9306,7 +9354,21 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 
 /* Two small icon buttons, left of the row's one big action. */
 .ksieg-row__cta { gap: var(--s-3); }
-.ksieg-row__tools { display: inline-flex; gap: var(--s-1); }
+.ksieg-row__tools { display: inline-flex; align-items: center; gap: var(--s-1); }
+
+/* Who posts the community this month: avatar + name, the name is the picker
+   (the task card's control). Capped, so a long name does not push the row. */
+.ksieg-who {
+  display: inline-flex;
+  align-items: center;
+  /* Centred in its slot, so it sits midway between the gauge and the flag
+     whatever the length of the name. */
+  justify-content: center;
+  gap: 4px;
+  width: 160px;
+  min-width: 0;
+}
+.ksieg-who .ui-select.ksieg-who__select { flex: 0 1 auto; min-width: 0; }
 .ksieg-tool {
   display: inline-flex;
   align-items: center;
@@ -10090,6 +10152,10 @@ body.dark-mode .ks-kal-hero--zad .ks-kal-hero__facts {
   color: var(--text-secondary);
   font-size: var(--fs-sm);
 }
+
+/* Dark mode draws the select's chevron with a more specific rule; the
+   name-as-picker has none in either theme. */
+body.dark-mode .zad-who-select .ui-select__trigger { background-image: none; }
 
 .zad-who-select .ui-select__trigger:hover,
 .zad-who-select .ui-select__trigger[aria-expanded='true'] {
@@ -11658,92 +11724,511 @@ body.dark-mode .mve-subject .ff-chip__missing {
   color: var(--text-tertiary);
 }
 
-.zeb-wersje {
-  list-style: none;
+/* ---- One meeting on its own screen: who and when, then its parts as tabs ---- */
+.zeb-screen-head {
   display: flex;
   flex-direction: column;
-  gap: var(--s-3);
-}
-
-.zeb-wersja {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-3);
-  padding: var(--s-3) var(--s-4);
-  border: 1px solid var(--border-default);
-  border-radius: var(--r-lg);
-  background: var(--bg-surface-sunken);
-}
-
-.zeb-wersja.is-current {
-  border-color: var(--accent-border);
-  background: var(--bg-surface);
-  box-shadow: var(--shadow-sm);
-}
-
-.zeb-wersja__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
   gap: var(--s-2);
+  padding: var(--s-4) var(--s-8) var(--s-3);
+  background: var(--bg-surface);
+  flex-shrink: 0;
 }
 
-.zeb-wersja__label {
-  font-size: var(--fs-lg);
-  font-weight: 650;
+.zeb-screen-head__back { align-self: flex-start; margin-left: calc(-1 * var(--s-2)); }
+
+.zeb-screen-head__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-4);
+}
+
+.zeb-screen-head__id {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.zeb-screen-head__title {
+  margin: 0;
+  font-size: var(--fs-2xl);
+  font-weight: 600;
+  letter-spacing: -0.015em;
   color: var(--text-primary);
 }
 
-.zeb-wersja__status { margin-left: auto; }
-
-.zeb-wersja__stamp { align-self: flex-end; }
-
-.zeb-notice {
+.zeb-screen-head__meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--s-3);
-  padding: var(--s-2) var(--s-3);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--r-md);
-  background: var(--bg-surface);
-}
-
-.zeb-notice__info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1 1 auto;
-  min-width: 0;
+  gap: var(--s-2) var(--s-4);
   font-size: var(--fs-md);
   color: var(--text-secondary);
 }
 
-.zeb-notice__title {
+.zeb-screen-head__meta > span:not(.status-badge) {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+}
+
+/* A tab whose part of the materials does not exist yet. */
+.zeb-tab-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-2);
+  max-width: 520px;
+  margin: var(--s-8) auto;
+  padding: var(--s-8) var(--s-6);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-xl);
+  background: var(--bg-surface);
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.zeb-tab-empty__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+.zeb-tab-empty strong { font-size: var(--fs-lg); color: var(--text-primary); }
+
+.zeb-tab-empty p { margin: 0; }
+
+/* ---- Documents of a version: download buttons and their last download ---- */
+.zeb-doc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+}
+
+.zeb-doc-actions__buttons { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+
+/* ---- Sprawozdania: the statement library as a module of its own ---- */
+/* The left rule says where a statement came from: Zebrania (the source of
+   truth) in the calendar link's blue, one added here in neutral grey. */
+.spr-row--zebrania { border-left-color: var(--info); }
+/* A plan made in Plany gospodarcze that Zebrania has since made too. */
+.spr-row--zastapiony { border-left-color: var(--warning); }
+
+/* The vDom number in the date tile's place — what tells the communities apart. */
+.spr-nr .zeb-date__month { text-transform: none; letter-spacing: 0; }
+
+/* Community and period of the open statement, switched in place. */
+.spr-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-5);
+  padding-top: var(--s-2);
+}
+
+.spr-switch__field {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.spr-switch__field > :last-child { min-width: 220px; }
+
+.spr-switch__label {
+  font-size: var(--fs-sm);
   font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* ---- Financial statement ---- */
+.zfin-empty-state { max-width: 640px; }
+
+.zfin-empty-state__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-2); }
+
+.zfin-matches {
+  align-self: stretch;
+  margin-top: var(--s-2);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border-subtle);
+  text-align: left;
+}
+
+.zfin-matches__title { font-size: var(--fs-sm); font-weight: 600; color: var(--text-secondary); }
+
+.zfin-matches ul { list-style: none; display: flex; flex-direction: column; gap: var(--s-2); margin-top: var(--s-2); }
+
+.zfin-matches li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+}
+
+/* Every tab of a meeting: a page form of a sheet's width, not the window's —
+   at full width the amounts drifted far from their names and the fields
+   stretched across the screen. */
+.zeb-page { max-width: 920px; }
+
+/* The introduction's headline figures: five fit one row. */
+.zfin-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--s-2);
+}
+
+.zfin-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface-sunken);
+}
+
+.zfin-kpi > span {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.zfin-kpi > strong {
+  font-size: var(--fs-lg);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
   color: var(--text-primary);
 }
 
-.zeb-opis {
+.zfin-kpi--zle > strong { color: var(--danger); }
+.zfin-kpi--dobrze > strong { color: var(--success); }
+
+.zfin-lead { margin: 0; font-size: var(--fs-md); line-height: 1.6; color: var(--text-primary); }
+.zfin-notes { margin: 4px 0 0 18px; padding: 0; }
+.zfin-notes li { margin: 2px 0; }
+
+/* Editing the notes: one line each, the add button under the last. */
+.zfin-notes-edit { display: flex; flex-direction: column; gap: 6px; }
+.zfin-notes-edit__add { align-self: flex-start; }
+
+/* Search and the negative filter: one row, the search takes the rest. */
+.zfin-filter { flex-wrap: wrap; gap: var(--s-2) var(--s-3); }
+
+/* vDom's sections inside the items card: a ruled head that folds the table. */
+.zfin-sections { display: flex; flex-direction: column; gap: var(--s-4); }
+
+.zfin-section__head {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: var(--s-2);
+  width: 100%;
+  margin-bottom: var(--s-2);
+  padding: 6px var(--s-2) 6px var(--s-1);
+  border: none;
+  border-bottom: 1px solid var(--border-default);
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.zeb-opis label {
+.zfin-section.is-collapsed .zfin-section__head { margin-bottom: 0; }
+.zfin-section__head:hover:not(:disabled) { background: var(--bg-surface-hover); }
+.zfin-section__head:disabled { cursor: default; }
+
+.zfin-section__chevron {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  transform: rotate(90deg);
+  transition: transform var(--t-fast);
+}
+
+.zfin-section.is-collapsed .zfin-section__chevron { transform: none; }
+
+.zfin-section__title { flex: 1; min-width: 0; font-size: var(--fs-md); font-weight: 650; }
+
+.zfin-section__total {
+  font-size: var(--fs-md);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.zfin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-md);
+}
+
+/* Amount columns as narrow as their figures: the name takes the rest, and
+   the figures of one row stay together. */
+.zfin-table th.zfin-num,
+.zfin-table td.zfin-num {
+  width: 1%;
+  padding-left: var(--s-5);
+}
+
+.zfin-table th {
+  padding: 6px var(--s-3);
+  background: var(--bg-surface-sunken);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-align: left;
+  border-bottom: 1px solid var(--border-default);
+  white-space: nowrap;
+}
+
+.zfin-table td {
+  padding: 5px var(--s-3);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.zfin-table th.zfin-num,
+.zfin-table td.zfin-num,
+.zfin-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.zfin-table tr.is-sum td {
+  font-weight: 650;
+  background: var(--bg-surface-sunken);
+  border-top: 1px solid var(--border-strong);
+}
+
+.zfin-table tr.is-strong td { font-weight: 650; }
+
+.zfin-table .is-negative,
+.zplan-fund.is-negative strong { color: var(--danger); }
+
+.zfin-empty { color: var(--text-tertiary); font-style: italic; }
+
+.zfin-pick-search { margin-bottom: var(--s-3); }
+
+.zfin-pick-list { list-style: none; display: flex; flex-direction: column; gap: 4px; max-height: 52vh; overflow-y: auto; }
+
+.zfin-pick-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.zfin-pick-item:hover:not(:disabled) { border-color: var(--accent-border); background: var(--accent-subtle); }
+
+.zfin-pick-item__nr {
+  min-width: 34px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  color: var(--text-tertiary);
+}
+
+.zfin-pick-item__main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+
+/* ---- Budget plan ---- */
+.zplan-table + .zplan-table,
+.table-scroll + .table-scroll { margin-top: var(--s-4); }
+
+.zplan-table .zplan-lp { width: 40px; color: var(--text-tertiary); }
+
+.zplan-table tr.zplan-sub td:nth-child(2) { padding-left: var(--s-6); }
+
+.zplan-table tr.zplan-src td {
+  padding-top: 2px;
+  padding-bottom: 2px;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  background: var(--bg-surface-sunken);
+}
+
+.zplan-table tr.zplan-src td:nth-child(2) { padding-left: var(--s-8); }
+
+.zplan-label { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px var(--s-2); }
+
+.zplan-src-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+
+.zplan-src-toggle:hover { color: var(--accent); }
+
+.zplan-src__flag {
+  margin-left: var(--s-2);
+  font-size: var(--fs-xs);
+  color: var(--warning);
+}
+
+.zplan-closing {
+  background: var(--accent-subtle);
+  color: var(--accent);
+  border-color: var(--accent-border);
+  font-size: var(--fs-xs);
+}
+
+.zplan-okres,
+.zplan-rate,
+.zplan-repair {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.zplan-repair { display: flex; }
+
+.zplan-repair input { flex: 1; min-width: 0; }
+
+.zplan-warn { margin-left: var(--s-3); }
+
+.zplan-balance { margin-top: var(--s-4); }
+
+.zplan-balance .callout__body { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); }
+
+.zplan-fund { margin: var(--s-3) 0 0; text-align: right; color: var(--text-secondary); }
+
+.zplan-private { margin: var(--s-2) 0 0; }
+
+.zplan-create { display: flex; justify-content: flex-end; margin-top: var(--s-4); }
+
+/* An amount typed in a table cell: narrow, right-aligned, digits lined up. */
+input[type='text'].kwota-input { text-align: right; font-variant-numeric: tabular-nums; }
+
+input[type='text'].kwota-input.is-invalid { border-color: var(--danger); }
+
+input[type='text'].zplan-input { width: 140px; padding-top: 4px; padding-bottom: 4px; }
+
+input[type='text'].zplan-input--months { width: 54px; }
+
+input[type='text'].zplan-input--rate { width: 84px; }
+
+/* ---- Settings: the dictionary ---- */
+.zset-search { margin-bottom: var(--s-3); }
+
+.zset-rules { display: flex; flex-direction: column; gap: 4px; max-height: 46vh; overflow-y: auto; }
+
+.zset-rule {
+  display: grid;
+  grid-template-columns: 32px minmax(160px, 1fr) minmax(220px, 1.4fr) auto;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.zset-rule--head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-bottom: 4px;
+  background: var(--bg-surface);
   font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-secondary);
 }
 
-.zeb-opis textarea { resize: vertical; }
-
-.zeb-opis__actions {
+/* ---- The version bar: one pill per revision, oldest to newest ---- */
+.zeb-vbar {
   display: flex;
-  justify-content: flex-end;
-  gap: var(--s-2);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  padding-top: var(--s-2);
+}
+
+.zeb-vbar__label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.zeb-vtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+}
+
+.zeb-vtab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 280px;
+  padding: 4px var(--s-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-pill);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: border-color var(--t-fast), background-color var(--t-fast), color var(--t-fast);
+}
+
+.zeb-vtab:hover { border-color: var(--border-strong); color: var(--text-primary); }
+
+.zeb-vtab.is-active {
+  border-color: var(--accent-border);
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+.zeb-vtab:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
+
+.zeb-vtab__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.zeb-vtab__dot--w_przygotowaniu { background: var(--warning); }
+.zeb-vtab__dot--przygotowane { background: var(--success); }
+
+.zeb-vtab__num { font-weight: 650; }
+
+.zeb-vtab__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zeb-vtab__current {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  opacity: 0.75;
 }
 
 .zaw-context {
@@ -11999,10 +12484,12 @@ body.dark-mode .mve-subject .ff-chip__missing {
 }
 
 /* ------------------------- On the Kalendarz meeting card ------------------------- */
+/* The entry's state on its own line, then its actions stacked full width —
+   one size for every button, whatever its label. */
 .kal-zeb {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: var(--s-2);
   padding-top: var(--s-2);
   border-top: 1px dashed var(--border-default);
@@ -12011,6 +12498,8 @@ body.dark-mode .mve-subject .ff-chip__missing {
 .kal-zeb__state {
   display: inline-flex;
   align-items: center;
+  min-width: 0;
+  overflow-wrap: anywhere;
   gap: 6px;
   font-size: var(--fs-sm);
   font-weight: 600;
@@ -12020,11 +12509,75 @@ body.dark-mode .mve-subject .ff-chip__missing {
 .kal-zeb__state > svg { color: var(--accent); flex-shrink: 0; }
 
 .kal-zeb__actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--s-2);
-  margin-left: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
+/* An action tile: coloured icon, label over a quiet line, chevron. The way
+   into Zebrania is accented, the notice is info-blue — two doors, not one. */
+.kal-action {
+  --kal-action-tone: var(--accent);
+  --kal-action-tone-bg: var(--accent-subtle);
+  --kal-action-tone-border: var(--accent-border);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px 8px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--t-fast), background var(--t-fast), box-shadow var(--t-fast);
+}
+
+.kal-action--info {
+  --kal-action-tone: var(--info);
+  --kal-action-tone-bg: var(--info-bg);
+  --kal-action-tone-border: var(--info-border);
+}
+
+.kal-action:hover:not(:disabled) {
+  border-color: var(--kal-action-tone-border);
+  background: color-mix(in srgb, var(--kal-action-tone) 6%, var(--bg-surface));
+}
+
+.kal-action:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.kal-action:disabled { opacity: 0.6; cursor: default; }
+
+.kal-action__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--kal-action-tone-border);
+  background: var(--kal-action-tone-bg);
+  color: var(--kal-action-tone);
+}
+
+.kal-action__text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.kal-action__label { font-size: var(--fs-md); font-weight: 600; line-height: 1.3; }
+.kal-action__sub { font-size: var(--fs-xs); color: var(--text-tertiary); line-height: 1.3; }
+
+.kal-action__chevron {
+  color: var(--text-tertiary);
+  transition: transform var(--t-fast), color var(--t-fast);
+}
+
+.kal-action:hover:not(:disabled) .kal-action__chevron {
+  color: var(--kal-action-tone);
+  transform: translateX(2px);
 }
 
 /* ======================================================================
@@ -12560,6 +13113,44 @@ body.dark-mode .ksieg-selbar {
 }
 
 .ksieg-selbar > svg { color: var(--accent); flex-shrink: 0; }
+
+/* "Przypisz zaznaczone…": a picker that acts on pick, dressed as the bar's
+   second button — the convert button's height and radius, an icon, a word in
+   the text colour (not a grey placeholder), and the accent on hover. */
+.ksieg-selbar__assign-wrap {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.ksieg-selbar__assign-icon {
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--accent);
+  pointer-events: none;
+  z-index: 1;
+}
+.ksieg-selbar .ui-select.ksieg-selbar__assign { width: auto; min-width: 0; }
+.ksieg-selbar__assign .ui-select__trigger {
+  height: 40px;
+  padding: 0 34px 0 36px;
+  border: 1px solid var(--accent-border);
+  border-radius: var(--r-lg);
+  background-color: var(--accent-subtle);
+  background-position: right 13px center;
+  color: var(--accent);
+  font-size: var(--fs-md);
+  font-weight: 650;
+  transition: background-color var(--t-fast), border-color var(--t-fast), transform var(--t-fast);
+}
+.ksieg-selbar__assign .ui-select__trigger:hover,
+.ksieg-selbar__assign .ui-select__trigger[aria-expanded='true'] {
+  border-color: var(--accent);
+  background-color: color-mix(in srgb, var(--accent) 22%, var(--bg-surface));
+  transform: translateY(-1px);
+}
+.ksieg-selbar__assign .ui-select__value--placeholder { color: var(--accent); }
 .ksieg-selbar__text { flex: 1; min-width: 0; font-size: var(--fs-md); font-weight: 600; }
 .ksieg-selbar__clear {
   border: none;

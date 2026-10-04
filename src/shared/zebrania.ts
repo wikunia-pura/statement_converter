@@ -23,6 +23,9 @@ import {
 
 /* ------------------------------ Version numbers ----------------------------- */
 
+/** The longest revision name kept — a label on a tab, not a description. */
+export const ZEBRANIE_WERSJA_NAZWA_MAX = 80;
+
 /** "1.0", "1.1" … */
 export function wersjaLabel(wersja: Pick<ZebranieWersja, 'major' | 'minor'>): string {
   return `${wersja.major}.${wersja.minor}`;

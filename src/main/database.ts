@@ -49,6 +49,7 @@ import {
   ZadaniePriorytet,
   ZADANIE_KOMENTARZ_MAX_LENGTH,
   KsiegowaniePriorytet,
+  KsiegowaniePrzypisanie,
   KsiegowanieUwaga,
   KsiegowaniePlik,
   MailingAdresaci,
@@ -62,7 +63,23 @@ import {
   ZebranieWersja,
   ZebranieWersjaInput,
   ZEBRANIE_STATUSES,
+  PlanGospodarczy,
+  PlanWlasny,
+  Sprawozdanie,
+  SprawozdanieWstepTekst,
+  SprawozdanieZapisane,
+  SprawozdanieZrodlo,
+  ZebraniaUstawienia,
+  ZebraniaWspolnota,
+  ZebranieDokument,
+  ZebranieSprawozdanie,
 } from '../shared/types';
+import { normalizePlan, normalizePobrania, normalizeUstawienia } from '../shared/plan-gospodarczy';
+import {
+  normalizeSprawozdanieDane,
+  normalizeWstepTekst,
+  normalizeZebranieSprawozdanie,
+} from '../shared/sprawozdanie';
 import {
   copyMaterialyForRevision,
   latestWersja,
@@ -70,6 +87,7 @@ import {
   nextWersjaNumber,
   normalizeMaterialy,
   sortWersje,
+  ZEBRANIE_WERSJA_NAZWA_MAX,
   zebranieStatusFromMaterialy,
 } from '../shared/zebrania';
 import { randomUUID } from 'crypto';
@@ -142,8 +160,10 @@ const ZEBRANIE_COLS =
   'lokalizacjaAdres:lokalizacja_adres, startsAt:starts_at, ' +
   'createdBy:created_by, createdAt:created_at, updatedAt:updated_at';
 const ZEBRANIE_WERSJA_COLS =
-  'id, zebranieId:zebranie_id, major, minor, status, opis, materialy, ' +
+  'id, zebranieId:zebranie_id, major, minor, nazwa, status, opis, materialy, sprawozdanie, plan, ' +
   'createdBy:created_by, createdAt:created_at, updatedAt:updated_at, updatedBy:updated_by';
+const SPRAWOZDANIE_LISTA_COLS =
+  'id, nr_wsp, nazwa, okres_od, okres_do, plik_nazwa, imported_at, imported_by, zrodlo';
 const KONTO_TYP_COLS =
   'id, name, bankAccountSymbol:bank_account_symbol, apartmentPrefix:apartment_prefix, isDefault:is_default, createdAt:created_at';
 const HISTORY_COLS =
@@ -176,6 +196,8 @@ const SPOTKANIE_MAILING_COLS =
   'jednostkaEmail:jednostka_email, subject, attachments, sentFrom:sent_from, sentAt:sent_at';
 const KS_PRIORYTET_COLS =
   'id, monthKey:month_key, adresId:adres_id, adresNazwa:adres_nazwa, position, notatka, notatkaBy:notatka_by, createdBy:created_by, createdAt:created_at';
+const KS_PRZYPISANIE_COLS =
+  'id, monthKey:month_key, adresId:adres_id, adresNazwa:adres_nazwa, email, assignedBy:assigned_by, assignedAt:assigned_at';
 const KS_PLIK_COLS =
   'id, monthKey:month_key, kind, status, errorMessage:error_message, adresId:adres_id, adresNazwa:adres_nazwa, ' +
   'accountNumber:account_number, accountTypeName:account_type_name, bankId:bank_id, bankName:bank_name, ' +
@@ -2556,6 +2578,7 @@ class DatabaseService {
       zebranieId: r.zebranieId,
       major: Number(r.major ?? 1),
       minor: Number(r.minor ?? 0),
+      nazwa: r.nazwa ?? '',
       status: DatabaseService.zebranieStatus(r.status),
       opis: r.opis ?? '',
       materialy: normalizeMaterialy(r.materialy),
@@ -2563,6 +2586,8 @@ class DatabaseService {
       createdAt: r.createdAt,
       updatedAt: r.updatedAt ?? r.createdAt,
       updatedBy: r.updatedBy ?? '',
+      sprawozdanie: normalizeZebranieSprawozdanie(r.sprawozdanie),
+      plan: normalizePlan(r.plan),
     };
   }
 
@@ -2827,6 +2852,10 @@ class DatabaseService {
           status: 'w_przygotowaniu',
           opis: '',
           materialy: copyMaterialyForRevision(from?.materialy ?? []),
+          // The statement and the plan come along too; their downloads were of
+          // the old version and stay behind with it.
+          sprawozdanie: from?.sprawozdanie ? { ...from.sprawozdanie, pobrania: [] } : null,
+          plan: from?.plan ? { ...from.plan, pobrania: [] } : null,
           created_by: who,
           updated_by: who,
         })
@@ -2859,6 +2888,26 @@ class DatabaseService {
       .maybeSingle();
     if (error) throw new Error(`updateZebranieWersja: ${error.message}`);
     if (data) await this.touchZebranie((data as { zebranie_id: number }).zebranie_id);
+  }
+
+  /**
+   * Rename a revision. Only the name is written, so a rename cannot overwrite a
+   * notice or a note saved meanwhile.
+   */
+  async setZebranieWersjaNazwa(id: number, nazwa: string, who: string): Promise<void> {
+    const { data, error } = await getSupabase()
+      .from('zebrania_wersje')
+      .update({
+        nazwa: (nazwa ?? '').trim().slice(0, ZEBRANIE_WERSJA_NAZWA_MAX),
+        updated_at: new Date().toISOString(),
+        updated_by: who,
+      })
+      .eq('id', id)
+      .select('zebranie_id')
+      .maybeSingle();
+    if (error) throw new Error(`setZebranieWersjaNazwa: ${error.message}`);
+    if (!data) throw new Error('Tej wersji już nie ma — mogła zostać usunięta.');
+    await this.touchZebranie((data as { zebranie_id: number }).zebranie_id);
   }
 
   private async writeZebranieWersjaStatus(id: number, status: ZebranieStatus, who: string): Promise<void> {
@@ -2936,6 +2985,466 @@ class DatabaseService {
     if (writeError) throw new Error(`recordZebraniePobranie: ${writeError.message}`);
   }
 
+  // ---------------- Zebrania: statements, plans, settings ----------------
+
+  async getZebranieWersja(id: number): Promise<ZebranieWersja | null> {
+    const { data, error } = await getSupabase()
+      .from('zebrania_wersje')
+      .select(ZEBRANIE_WERSJA_COLS)
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw new Error(`getZebranieWersja: ${error.message}`);
+    return data ? DatabaseService.zebranieWersjaRow(data) : null;
+  }
+
+  /**
+   * Attach a library statement to a version — as a copy, so a later upload of
+   * the same period never changes what this version presents.
+   */
+  async attachZebranieSprawozdanie(wersjaId: number, sprawozdanieId: number, who: string): Promise<void> {
+    const row = await this.getSprawozdanie(sprawozdanieId);
+    if (!row?.dane) throw new Error('Tego sprawozdania nie ma już w bibliotece — wgraj plik ponownie.');
+    await this.setZebranieWersjaSprawozdanie(
+      wersjaId,
+      {
+        dane: row.dane,
+        plikNazwa: row.plikNazwa,
+        zrodloId: row.id,
+        dodano: new Date().toISOString(),
+        dodal: who,
+        pobrania: [],
+        // A new statement means new figures: an introduction edited for the old one does not carry over.
+        wstep: null,
+      },
+      who,
+    );
+  }
+
+  /** Attach a statement to a version (or take it off with null). */
+  async setZebranieWersjaSprawozdanie(
+    wersjaId: number,
+    value: ZebranieSprawozdanie | null,
+    who: string,
+  ): Promise<void> {
+    const { data, error } = await getSupabase()
+      .from('zebrania_wersje')
+      .update({
+        sprawozdanie: value ? normalizeZebranieSprawozdanie(value) : null,
+        updated_at: new Date().toISOString(),
+        updated_by: who,
+      })
+      .eq('id', wersjaId)
+      .select('zebranie_id')
+      .maybeSingle();
+    if (error) throw new Error(`setZebranieWersjaSprawozdanie: ${error.message}`);
+    if (!data) throw new Error('Tej wersji już nie ma — mogła zostać usunięta.');
+    await this.touchZebranie((data as { zebranie_id: number }).zebranie_id);
+  }
+
+  /**
+   * Save the edited introduction of a version's statement (null = back to the
+   * computed one). Written into the stored statement, so the download record
+   * and the figures are kept as they are.
+   */
+  async setZebranieSprawozdanieWstep(
+    wersjaId: number,
+    wstep: SprawozdanieWstepTekst | null,
+    who: string,
+  ): Promise<void> {
+    const { data, error } = await getSupabase()
+      .from('zebrania_wersje')
+      .select('zebranie_id, sprawozdanie')
+      .eq('id', wersjaId)
+      .maybeSingle();
+    if (error) throw new Error(`setZebranieSprawozdanieWstep (odczyt): ${error.message}`);
+    if (!data) throw new Error('Tej wersji już nie ma — mogła zostać usunięta.');
+    const row = data as { zebranie_id: number; sprawozdanie: unknown };
+    const stored = normalizeZebranieSprawozdanie(row.sprawozdanie);
+    if (!stored) throw new Error('Ta wersja nie ma już sprawozdania.');
+    const { error: writeError } = await getSupabase()
+      .from('zebrania_wersje')
+      .update({
+        sprawozdanie: { ...stored, wstep: normalizeWstepTekst(wstep) },
+        updated_at: new Date().toISOString(),
+        updated_by: who,
+      })
+      .eq('id', wersjaId);
+    if (writeError) throw new Error(`setZebranieSprawozdanieWstep: ${writeError.message}`);
+    await this.touchZebranie(row.zebranie_id);
+  }
+
+  /**
+   * Save a version's plan (or remove it with null). The download record is
+   * kept from the stored row, so saving an edit cannot drop a download noted
+   * meanwhile.
+   */
+  async setZebranieWersjaPlan(wersjaId: number, value: PlanGospodarczy | null, who: string): Promise<void> {
+    let plan: PlanGospodarczy | null = null;
+    if (value) {
+      const { data: stored, error: readError } = await getSupabase()
+        .from('zebrania_wersje')
+        .select('plan')
+        .eq('id', wersjaId)
+        .maybeSingle();
+      if (readError) throw new Error(`setZebranieWersjaPlan (odczyt): ${readError.message}`);
+      const normalized = normalizePlan(value);
+      if (normalized) {
+        plan = {
+          ...normalized,
+          zmieniono: new Date().toISOString(),
+          zmienil: who,
+          pobrania: normalizePlan((stored as { plan?: unknown } | null)?.plan)?.pobrania ?? [],
+        };
+      }
+    }
+    const { data, error } = await getSupabase()
+      .from('zebrania_wersje')
+      .update({ plan, updated_at: new Date().toISOString(), updated_by: who })
+      .eq('id', wersjaId)
+      .select('zebranie_id')
+      .maybeSingle();
+    if (error) throw new Error(`setZebranieWersjaPlan: ${error.message}`);
+    if (!data) throw new Error('Tej wersji już nie ma — mogła zostać usunięta.');
+    await this.touchZebranie((data as { zebranie_id: number }).zebranie_id);
+  }
+
+  /** Note a download of a version's statement or plan. */
+  async recordZebranieDokumentPobranie(
+    wersjaId: number,
+    dokument: ZebranieDokument,
+    pliki: string[],
+    who: string,
+  ): Promise<void> {
+    const { data, error } = await getSupabase()
+      .from('zebrania_wersje')
+      .select(dokument)
+      .eq('id', wersjaId)
+      .maybeSingle();
+    if (error) throw new Error(`recordZebranieDokumentPobranie (odczyt): ${error.message}`);
+    const stored = (data as Record<string, unknown> | null)?.[dokument];
+    if (!stored || typeof stored !== 'object') return;
+    const entry = { at: new Date().toISOString(), by: who, pliki };
+    const doc = stored as Record<string, unknown>;
+    const next = { ...doc, pobrania: [...normalizePobrania(doc.pobrania), entry] };
+    const { error: writeError } = await getSupabase()
+      .from('zebrania_wersje')
+      .update({ [dokument]: next })
+      .eq('id', wersjaId);
+    if (writeError) throw new Error(`recordZebranieDokumentPobranie: ${writeError.message}`);
+  }
+
+  private static sprawozdanieZapisaneRow(r: any): SprawozdanieZapisane {
+    return {
+      id: r.id,
+      nrWsp: r.nr_wsp ?? null,
+      nazwa: r.nazwa ?? '',
+      okresOd: r.okres_od ?? '',
+      okresDo: r.okres_do ?? '',
+      plikNazwa: r.plik_nazwa ?? '',
+      importedAt: r.imported_at ?? '',
+      importedBy: r.imported_by ?? '',
+      zrodlo: r.zrodlo === 'sprawozdania' ? 'sprawozdania' : 'zebrania',
+      ...(r.dane !== undefined ? { dane: normalizeSprawozdanieDane(r.dane) ?? undefined } : {}),
+    };
+  }
+
+  /**
+   * Store every statement of an uploaded file. A statement of a period already
+   * in the library replaces it (a newer print of the same figures). A statement
+   * without a community number or a period cannot be matched and is skipped.
+   *
+   * Zebrania is the source of truth: its upload takes over any row, also one
+   * the Sprawozdania module added. The module's own upload
+   * (`zrodlo: 'sprawozdania'`) leaves out every community and period Zebrania
+   * already has — see `importSprawozdaniaWlasne`.
+   */
+  async importSprawozdania(
+    lista: Sprawozdanie[],
+    plikNazwa: string,
+    who: string,
+    zrodlo: SprawozdanieZrodlo = 'zebrania',
+  ): Promise<SprawozdanieZapisane[]> {
+    const rows = lista
+      .filter((s) => s.nrWsp != null && s.okresOd && s.okresDo)
+      .map((s) => ({
+        nr_wsp: s.nrWsp,
+        nazwa: s.nazwa,
+        okres_od: s.okresOd,
+        okres_do: s.okresDo,
+        dane: s,
+        plik_nazwa: plikNazwa,
+        imported_at: new Date().toISOString(),
+        imported_by: who,
+        zrodlo,
+      }));
+    const out: SprawozdanieZapisane[] = [];
+    for (const slice of DatabaseService.chunk(rows, 100)) {
+      const { data, error } = await getSupabase()
+        .from('zebrania_sprawozdania')
+        .upsert(slice, { onConflict: 'nr_wsp,okres_od,okres_do' })
+        .select(SPRAWOZDANIE_LISTA_COLS);
+      if (error) throw new Error(`importSprawozdania: ${error.message}`);
+      out.push(...(data ?? []).map(DatabaseService.sprawozdanieZapisaneRow));
+    }
+    return out;
+  }
+
+  /**
+   * An upload in the Sprawozdania module: only the statements Zebrania does
+   * not have. A community and period already uploaded in Zebrania is left
+   * out (and counted); one this module added earlier is replaced by the newer
+   * print, like in Zebrania.
+   */
+  async importSprawozdaniaWlasne(
+    lista: Sprawozdanie[],
+    plikNazwa: string,
+    who: string,
+  ): Promise<{ zapisane: SprawozdanieZapisane[]; pominiete: number }> {
+    const key = (nr: number | null, od: string, doDnia: string) => `${nr}|${od}|${doDnia}`;
+    const numery = [...new Set(lista.map((s) => s.nrWsp).filter((n): n is number => n != null))];
+    const zZebran = new Set<string>();
+    for (const slice of DatabaseService.chunk(numery, 200)) {
+      const { data, error } = await getSupabase()
+        .from('zebrania_sprawozdania')
+        .select('nr_wsp, okres_od, okres_do')
+        .eq('zrodlo', 'zebrania')
+        .in('nr_wsp', slice);
+      if (error) throw new Error(`importSprawozdaniaWlasne: ${error.message}`);
+      for (const r of data ?? []) zZebran.add(key(r.nr_wsp, r.okres_od, r.okres_do));
+    }
+    const nowe = lista.filter((s) => !zZebran.has(key(s.nrWsp, s.okresOd, s.okresDo)));
+    const zapisane = await this.importSprawozdania(nowe, plikNazwa, who, 'sprawozdania');
+    return { zapisane, pominiete: lista.length - nowe.length };
+  }
+
+  /**
+   * Remove a statement the Sprawozdania module added. A row from Zebrania is
+   * never removed here: it is the source of truth, and a meeting found it there.
+   */
+  async deleteSprawozdanieWlasne(id: number): Promise<void> {
+    const { data, error } = await getSupabase()
+      .from('zebrania_sprawozdania')
+      .delete()
+      .eq('id', id)
+      .eq('zrodlo', 'sprawozdania')
+      .select('id');
+    if (error) throw new Error(`deleteSprawozdanieWlasne: ${error.message}`);
+    if (!data || data.length === 0) {
+      throw new Error('To sprawozdanie pochodzi z Zebrań albo zostało już usunięte — nie można go usunąć tutaj.');
+    }
+  }
+
+  /** The library, without the statements themselves — newest period first. */
+  async getSprawozdaniaLista(): Promise<SprawozdanieZapisane[]> {
+    const rows = await fetchAllPaged<any>('getSprawozdaniaLista', (from, to) =>
+      getSupabase()
+        .from('zebrania_sprawozdania')
+        .select(SPRAWOZDANIE_LISTA_COLS)
+        .order('okres_do', { ascending: false })
+        .order('nazwa', { ascending: true })
+        .range(from, to),
+    );
+    return rows.map(DatabaseService.sprawozdanieZapisaneRow);
+  }
+
+  async getSprawozdanie(id: number): Promise<SprawozdanieZapisane | null> {
+    const { data, error } = await getSupabase()
+      .from('zebrania_sprawozdania')
+      .select(`${SPRAWOZDANIE_LISTA_COLS}, dane`)
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw new Error(`getSprawozdanie: ${error.message}`);
+    return data ? DatabaseService.sprawozdanieZapisaneRow(data) : null;
+  }
+
+  /* ---------------------- Plany gospodarcze (own plans) ---------------------- */
+
+  private static planWlasnyRow(r: any): PlanWlasny | null {
+    const plan = normalizePlan(r.plan);
+    if (!plan || r.nr_wsp == null) return null;
+    return {
+      id: r.id,
+      nrWsp: r.nr_wsp,
+      nazwa: r.nazwa ?? '',
+      rok: r.rok ?? plan.rok,
+      plan,
+      createdAt: r.created_at ?? '',
+      createdBy: r.created_by ?? '',
+      updatedAt: r.updated_at ?? '',
+      updatedBy: r.updated_by ?? '',
+    };
+  }
+
+  /** A second plan of one community and year — the unique key says no. */
+  private static planWlasnyError(op: string, error: { code?: string; message: string }): Error {
+    return error.code === '23505'
+      ? new Error('Plan tej wspólnoty na ten rok już jest w Planach gospodarczych — otwórz go zamiast tworzyć drugi.')
+      : new Error(`${op}: ${error.message}`);
+  }
+
+  /** Plans made in the Plany gospodarcze module — newest year first. */
+  async getPlanyWlasne(): Promise<PlanWlasny[]> {
+    const rows = await fetchAllPaged<any>('getPlanyWlasne', (from, to) =>
+      getSupabase()
+        .from('plany_gospodarcze')
+        .select('*')
+        .order('rok', { ascending: false })
+        .order('nazwa', { ascending: true })
+        .range(from, to),
+    );
+    return rows.map(DatabaseService.planWlasnyRow).filter((p): p is PlanWlasny => p !== null);
+  }
+
+  async getPlanWlasny(id: number): Promise<PlanWlasny | null> {
+    const { data, error } = await getSupabase().from('plany_gospodarcze').select('*').eq('id', id).maybeSingle();
+    if (error) throw new Error(`getPlanWlasny: ${error.message}`);
+    return data ? DatabaseService.planWlasnyRow(data) : null;
+  }
+
+  async addPlanWlasny(nrWsp: number, nazwa: string, value: PlanGospodarczy, who: string): Promise<PlanWlasny> {
+    const plan = normalizePlan(value);
+    if (!plan) throw new Error('Nie ma czego zapisać — plan jest pusty.');
+    const now = new Date().toISOString();
+    const { data, error } = await getSupabase()
+      .from('plany_gospodarcze')
+      .insert({
+        nr_wsp: nrWsp,
+        nazwa,
+        rok: plan.rok,
+        plan: { ...plan, zmieniono: now, zmienil: who, pobrania: [] },
+        created_at: now,
+        created_by: who,
+        updated_at: now,
+        updated_by: who,
+      })
+      .select('*')
+      .single();
+    if (error) throw DatabaseService.planWlasnyError('addPlanWlasny', error);
+    const row = DatabaseService.planWlasnyRow(data);
+    if (!row) throw new Error('addPlanWlasny: zapisany plan jest nieczytelny.');
+    return row;
+  }
+
+  /**
+   * Save an edited plan. The year follows the plan's own, and the download
+   * record is kept from the stored row, like a version's plan.
+   */
+  async setPlanWlasny(id: number, value: PlanGospodarczy, who: string): Promise<void> {
+    const normalized = normalizePlan(value);
+    if (!normalized) throw new Error('Nie ma czego zapisać — plan jest pusty.');
+    const stored = await this.getPlanWlasny(id);
+    if (!stored) throw new Error('Tego planu już nie ma — mógł zostać usunięty.');
+    const now = new Date().toISOString();
+    const { error } = await getSupabase()
+      .from('plany_gospodarcze')
+      .update({
+        rok: normalized.rok,
+        plan: { ...normalized, zmieniono: now, zmienil: who, pobrania: stored.plan.pobrania },
+        updated_at: now,
+        updated_by: who,
+      })
+      .eq('id', id);
+    if (error) throw DatabaseService.planWlasnyError('setPlanWlasny', error);
+  }
+
+  async deletePlanWlasny(id: number): Promise<void> {
+    const { error } = await getSupabase().from('plany_gospodarcze').delete().eq('id', id);
+    if (error) throw new Error(`deletePlanWlasny: ${error.message}`);
+  }
+
+  /** Note a download of a module plan. */
+  async recordPlanWlasnyPobranie(id: number, pliki: string[], who: string): Promise<void> {
+    const stored = await this.getPlanWlasny(id);
+    if (!stored) return;
+    const entry = { at: new Date().toISOString(), by: who, pliki };
+    const { error } = await getSupabase()
+      .from('plany_gospodarcze')
+      .update({ plan: { ...stored.plan, pobrania: [...stored.plan.pobrania, entry] } })
+      .eq('id', id);
+    if (error) throw new Error(`recordPlanWlasnyPobranie: ${error.message}`);
+  }
+
+  /** Every library row with its statement — for the backup. */
+  private async getSprawozdaniaFull(): Promise<SprawozdanieZapisane[]> {
+    const rows = await fetchAllPaged<any>('getSprawozdaniaFull', (from, to) =>
+      getSupabase()
+        .from('zebrania_sprawozdania')
+        .select(`${SPRAWOZDANIE_LISTA_COLS}, dane`)
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
+    return rows.map(DatabaseService.sprawozdanieZapisaneRow);
+  }
+
+  private static zebraniaWspolnotaRow(r: any): ZebraniaWspolnota {
+    const u = r.udzialy && typeof r.udzialy === 'object' ? r.udzialy : null;
+    return {
+      adresNazwa: r.adres_nazwa ?? '',
+      vdomNr: r.vdom_nr ?? null,
+      udzialy: u ? { miastoM2: Number(u.miastoM2) || 0, pozytkiM2: Number(u.pozytkiM2) || 0 } : null,
+      updatedAt: r.updated_at ?? '',
+      updatedBy: r.updated_by ?? '',
+    };
+  }
+
+  async getZebraniaWspolnoty(): Promise<ZebraniaWspolnota[]> {
+    const rows = await fetchAllPaged<any>('getZebraniaWspolnoty', (from, to) =>
+      getSupabase().from('zebrania_wspolnoty').select('*').order('adres_nazwa').range(from, to),
+    );
+    return rows.map(DatabaseService.zebraniaWspolnotaRow);
+  }
+
+  /**
+   * Remember a community's vDom number and/or ownership split. Only the fields
+   * passed are written, so saving the split never forgets the number.
+   */
+  async setZebraniaWspolnota(
+    adresNazwa: string,
+    patch: { vdomNr?: number | null; udzialy?: ZebraniaWspolnota['udzialy'] },
+    who: string,
+  ): Promise<void> {
+    const nazwa = adresNazwa.trim();
+    if (!nazwa) throw new Error('Zebranie nie ma wybranej wspólnoty.');
+    const row: Record<string, unknown> = { adres_nazwa: nazwa, updated_at: new Date().toISOString(), updated_by: who };
+    if (patch.vdomNr !== undefined) row.vdom_nr = patch.vdomNr;
+    if (patch.udzialy !== undefined) {
+      row.udzialy = patch.udzialy
+        ? { miastoM2: Number(patch.udzialy.miastoM2) || 0, pozytkiM2: Number(patch.udzialy.pozytkiM2) || 0 }
+        : null;
+    }
+    const { error } = await getSupabase().from('zebrania_wspolnoty').upsert(row, { onConflict: 'adres_nazwa' });
+    if (error) throw new Error(`setZebraniaWspolnota: ${error.message}`);
+  }
+
+  /** The stored settings row, or null while the defaults are in use — for the backup. */
+  private async getZebraniaUstawieniaRow(): Promise<ZebraniaUstawienia | null> {
+    const { data, error } = await getSupabase()
+      .from('zebrania_ustawienia')
+      .select('dane')
+      .eq('id', 1)
+      .maybeSingle();
+    if (error) throw new Error(`getZebraniaUstawieniaRow: ${error.message}`);
+    return data ? normalizeUstawienia((data as { dane?: unknown }).dane) : null;
+  }
+
+  /** The module's settings; the built-in defaults until someone saves them. */
+  async getZebraniaUstawienia(): Promise<ZebraniaUstawienia> {
+    const { data, error } = await getSupabase()
+      .from('zebrania_ustawienia')
+      .select('dane')
+      .eq('id', 1)
+      .maybeSingle();
+    if (error) throw new Error(`getZebraniaUstawienia: ${error.message}`);
+    return normalizeUstawienia((data as { dane?: unknown } | null)?.dane ?? null);
+  }
+
+  async setZebraniaUstawienia(value: ZebraniaUstawienia, who: string): Promise<void> {
+    const { error } = await getSupabase()
+      .from('zebrania_ustawienia')
+      .upsert({ id: 1, dane: normalizeUstawienia(value), updated_at: new Date().toISOString(), updated_by: who });
+    if (error) throw new Error(`setZebraniaUstawienia: ${error.message}`);
+  }
+
   // ------------------ Księgowania: priorities and notes ------------------
 
   async getKsiegowaniaPriorytety(): Promise<KsiegowaniePriorytet[]> {
@@ -2955,6 +3464,65 @@ class DatabaseService {
       notatkaBy: r.notatkaBy ?? '',
       createdBy: r.createdBy ?? '',
     })) as KsiegowaniePriorytet[];
+  }
+
+  async getKsiegowaniaPrzypisania(): Promise<KsiegowaniePrzypisanie[]> {
+    const rows = await fetchAllPaged<any>('getKsiegowaniaPrzypisania', (from, to) =>
+      getSupabase()
+        .from('ksiegowania_przypisania')
+        .select(KS_PRZYPISANIE_COLS)
+        .order('month_key', { ascending: false })
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
+    return rows.map(r => ({
+      ...r,
+      adresId: r.adresId ?? null,
+      assignedBy: r.assignedBy ?? '',
+    })) as KsiegowaniePrzypisanie[];
+  }
+
+  /**
+   * Who posts this community in this month. One row per (month, community):
+   * a new person replaces the old one, and `email: null` removes the row —
+   * the community is unassigned again.
+   */
+  async setKsiegowaniePrzypisanie(
+    monthKey: string,
+    adresId: number | null,
+    adresNazwa: string,
+    email: string | null,
+    assignedBy: string,
+  ): Promise<KsiegowaniePrzypisanie | null> {
+    const nazwa = adresNazwa.trim();
+    if (!/^\d{4}-\d{2}$/.test(monthKey)) throw new Error('Nieprawidłowy miesiąc.');
+    if (!nazwa) throw new Error('Przypisanie musi dotyczyć wspólnoty.');
+    const mailbox = email?.trim() ?? '';
+    if (!mailbox) {
+      const { error } = await getSupabase()
+        .from('ksiegowania_przypisania')
+        .delete()
+        .eq('month_key', monthKey)
+        .eq('adres_nazwa', nazwa);
+      if (error) throw new Error(`setKsiegowaniePrzypisanie: ${error.message}`);
+      return null;
+    }
+    const { data, error } = await getSupabase()
+      .from('ksiegowania_przypisania')
+      .upsert(
+        {
+          month_key: monthKey,
+          adres_id: adresId,
+          adres_nazwa: nazwa,
+          email: mailbox,
+          assigned_by: assignedBy,
+          assigned_at: new Date().toISOString(),
+        },
+        { onConflict: 'month_key,adres_nazwa' },
+      )
+      .select(KS_PRZYPISANIE_COLS)
+      .single();
+    return unwrap(data, error, 'setKsiegowaniePrzypisanie') as unknown as KsiegowaniePrzypisanie;
   }
 
   /**
@@ -3346,6 +3914,11 @@ class DatabaseService {
       notificationPrefs,
       mailingTypy,
       zebrania,
+      ksiegowaniaPrzypisania,
+      zebraniaSprawozdania,
+      zebraniaWspolnoty,
+      zebraniaUstawienia,
+      planyGospodarcze,
     ] = await Promise.all([
       this.getAllBanks(),
       this.getAllKontrahenci(),
@@ -3375,6 +3948,11 @@ class DatabaseService {
       this.getAllNotificationPrefs(),
       this.getMailingTypy(),
       this.getZebrania(),
+      this.getKsiegowaniaPrzypisania().catch(() => undefined),
+      this.getSprawozdaniaFull().catch(() => undefined),
+      this.getZebraniaWspolnoty().catch(() => undefined),
+      this.getZebraniaUstawieniaRow().catch(() => undefined),
+      this.getPlanyWlasne().catch(() => undefined),
     ]);
     return {
       format: 'filefunky-backup',
@@ -3401,11 +3979,16 @@ class DatabaseService {
         zadaniaNotatki,
         ksiegowaniaPriorytety,
         ksiegowaniaUwagi,
+        ksiegowaniaPrzypisania,
         ksiegowaniaPliki,
         ksiegowaniaKonwersje,
         notificationPrefs,
         mailingTypy,
         zebrania,
+        zebraniaSprawozdania,
+        zebraniaWspolnoty,
+        zebraniaUstawienia,
+        planyGospodarcze,
         // The `app_users` ROWS are deliberately absent: they mirror the Supabase
         // auth accounts, rebuilt by a trigger, not data this app authors — and
         // the participants stored on each meeting carry their own snapshot. The
@@ -3496,11 +4079,16 @@ class DatabaseService {
       appUserNames,
       ksiegowaniaPriorytety,
       ksiegowaniaUwagi,
+      ksiegowaniaPrzypisania,
       ksiegowaniaPliki,
       ksiegowaniaKonwersje,
       notificationPrefs,
       mailingTypy,
       zebrania,
+      zebraniaSprawozdania,
+      zebraniaWspolnoty,
+      zebraniaUstawienia,
+      planyGospodarcze,
       settings,
     } = backup.data;
 
@@ -3933,6 +4521,7 @@ class DatabaseService {
               zebranie_id: zebranieId,
               major: w.major ?? 1,
               minor: w.minor ?? 0,
+              nazwa: w.nazwa ?? '',
               status: DatabaseService.zebranieStatus(w.status),
               opis: w.opis ?? '',
               materialy: normalizeMaterialy(w.materialy).map(m => ({
@@ -3941,6 +4530,9 @@ class DatabaseService {
                   ? szablonIdByNazwa.get(m.szablonNazwa.trim().toLowerCase()) ?? null
                   : null,
               })),
+              // Absent in backups written before versions carried a statement and a plan.
+              sprawozdanie: normalizeZebranieSprawozdanie(w.sprawozdanie),
+              plan: normalizePlan(w.plan),
               created_by: w.createdBy ?? '',
               created_at: w.createdAt,
               updated_at: w.updatedAt ?? w.createdAt,
@@ -3949,6 +4541,80 @@ class DatabaseService {
           }),
         );
       }
+    }
+
+    // The statement library, the per-community data and the module settings.
+    // Each key is absent in backups written before it existed, so a missing key
+    // leaves the live rows alone. Nothing here points at ids that a restore
+    // renumbers: communities are keyed by name, statements by their vDom number.
+    if (zebraniaSprawozdania) {
+      const { error: wipeError } = await getSupabase().from('zebrania_sprawozdania').delete().gt('id', 0);
+      if (wipeError) throw new Error(`restore zebrania_sprawozdania: ${wipeError.message}`);
+      await this.insertChunked(
+        'zebrania_sprawozdania',
+        zebraniaSprawozdania
+          .filter(s => s.nrWsp != null && s.okresOd && s.okresDo && s.dane)
+          .map(s => ({
+            nr_wsp: s.nrWsp,
+            nazwa: s.nazwa ?? '',
+            okres_od: s.okresOd,
+            okres_do: s.okresDo,
+            dane: normalizeSprawozdanieDane(s.dane),
+            plik_nazwa: s.plikNazwa ?? '',
+            imported_at: s.importedAt,
+            imported_by: s.importedBy ?? '',
+            // Backups written before the column existed held Zebrania's uploads only.
+            zrodlo: s.zrodlo === 'sprawozdania' ? 'sprawozdania' : 'zebrania',
+          })),
+      );
+    }
+    if (zebraniaWspolnoty) {
+      const { error: wipeError } = await getSupabase().from('zebrania_wspolnoty').delete().neq('adres_nazwa', '');
+      if (wipeError) throw new Error(`restore zebrania_wspolnoty: ${wipeError.message}`);
+      await this.insertChunked(
+        'zebrania_wspolnoty',
+        zebraniaWspolnoty
+          .filter(w => w.adresNazwa)
+          .map(w => ({
+            adres_nazwa: w.adresNazwa,
+            vdom_nr: w.vdomNr ?? null,
+            udzialy: w.udzialy ?? null,
+            updated_at: w.updatedAt || new Date().toISOString(),
+            updated_by: w.updatedBy ?? '',
+          })),
+      );
+    }
+    if (zebraniaUstawienia !== undefined) {
+      const { error: wipeError } = await getSupabase().from('zebrania_ustawienia').delete().eq('id', 1);
+      if (wipeError) throw new Error(`restore zebrania_ustawienia: ${wipeError.message}`);
+      if (zebraniaUstawienia) {
+        const { error } = await getSupabase()
+          .from('zebrania_ustawienia')
+          .insert({ id: 1, dane: normalizeUstawienia(zebraniaUstawienia) });
+        if (error) throw new Error(`restore zebrania_ustawienia: ${error.message}`);
+      }
+    }
+    // Plans of the Plany gospodarcze module — keyed by vDom number and year,
+    // nothing a restore renumbers.
+    if (planyGospodarcze) {
+      const { error: wipeError } = await getSupabase().from('plany_gospodarcze').delete().gt('id', 0);
+      if (wipeError) throw new Error(`restore plany_gospodarcze: ${wipeError.message}`);
+      await this.insertChunked(
+        'plany_gospodarcze',
+        planyGospodarcze
+          .map(p => ({ p, plan: normalizePlan(p.plan) }))
+          .filter(({ p, plan }) => p.nrWsp != null && plan)
+          .map(({ p, plan }) => ({
+            nr_wsp: p.nrWsp,
+            nazwa: p.nazwa ?? '',
+            rok: plan!.rok,
+            plan,
+            created_at: p.createdAt || new Date().toISOString(),
+            created_by: p.createdBy ?? '',
+            updated_at: p.updatedAt || new Date().toISOString(),
+            updated_by: p.updatedBy ?? '',
+          })),
+      );
     }
 
     // Księgowania priorities and notes. Each key is absent in backups written
@@ -3975,6 +4641,28 @@ class DatabaseService {
           notatka_by: p.notatkaBy || null,
           created_by: p.createdBy ?? '',
           created_at: p.createdAt,
+        })),
+      );
+    }
+
+    // Who posts which community in which month — re-pointed through the name.
+    if (ksiegowaniaPrzypisania) {
+      const { error: wipeError } = await getSupabase()
+        .from('ksiegowania_przypisania')
+        .delete()
+        .gt('id', 0);
+      if (wipeError) throw new Error(`restore ksiegowania_przypisania: ${wipeError.message}`);
+      await this.insertChunked(
+        'ksiegowania_przypisania',
+        ksiegowaniaPrzypisania.map(p => ({
+          month_key: p.monthKey,
+          adres_id: p.adresNazwa
+            ? adresIdByNazwa.get(p.adresNazwa.trim().toLowerCase()) ?? null
+            : null,
+          adres_nazwa: p.adresNazwa,
+          email: p.email,
+          assigned_by: p.assignedBy || null,
+          assigned_at: p.assignedAt,
         })),
       );
     }

@@ -20,7 +20,9 @@ import MailingTypy from './views/MailingTypy';
 import Kalendarz from './views/Kalendarz';
 import KalendarzTypy from './views/KalendarzTypy';
 import KalendarzLokalizacje from './views/KalendarzLokalizacje';
-import Zebrania from './views/Zebrania';
+import Zebrania, { ZebranieTab } from './views/Zebrania';
+import Sprawozdania from './views/Sprawozdania';
+import PlanyGospodarcze from './views/PlanyGospodarcze';
 import Zadania from './views/Zadania';
 import ZadaniaPulpit from './components/ZadaniaPulpit';
 import ModuleTabs from './components/ModuleTabs';
@@ -94,6 +96,8 @@ const DEFAULT_SIDEBAR_ORDER = [
   'pulpit',
   'kalendarz',
   'zebrania',
+  'sprawozdania',
+  'plany',
   'zadania',
   'divider',
   'converter',
@@ -117,7 +121,9 @@ type MenuView = Exclude<(typeof DEFAULT_SIDEBAR_ORDER)[number], typeof SIDEBAR_D
 /**
  * The saved order made safe to draw: ids this build does not know are dropped,
  * repeats are ignored, and a view the saved order never heard of (added by a
- * later release) joins at the end instead of vanishing from the menu.
+ * later release) joins right after the view it follows in the default order —
+ * Sprawozdania next to Zebrania, not under Ustawienia — or at the end when
+ * that one is not in the menu either.
  */
 function resolveSidebarOrder(saved: string[] | null): (MenuView | typeof SIDEBAR_DIVIDER)[] {
   const known = new Set<string>(DEFAULT_SIDEBAR_ORDER);
@@ -130,8 +136,16 @@ function resolveSidebarOrder(saved: string[] | null): (MenuView | typeof SIDEBAR
       order.push(id as MenuView);
     }
   }
+  let previous: MenuView | null = null;
   for (const id of DEFAULT_SIDEBAR_ORDER) {
-    if (id !== SIDEBAR_DIVIDER && !seen.has(id)) order.push(id);
+    if (id === SIDEBAR_DIVIDER) continue;
+    if (!seen.has(id)) {
+      const at = previous ? order.indexOf(previous) : -1;
+      if (at >= 0) order.splice(at + 1, 0, id);
+      else order.push(id);
+      seen.add(id);
+    }
+    previous = id;
   }
   return order;
 }
@@ -164,6 +178,8 @@ type View =
   | 'mailing'
   | 'kalendarz'
   | 'zebrania'
+  | 'sprawozdania'
+  | 'plany'
   | 'zadania'
   | 'conowego';
 
@@ -252,7 +268,11 @@ const App: React.FC = () => {
     edit?: boolean;
   } | null>(null);
   // A meeting's materials entry, followed from its calendar card: what Zebrania opens.
-  const [zebraniaOpen, setZebraniaOpen] = useState<{ id: number; nonce: number } | null>(null);
+  const [zebraniaOpen, setZebraniaOpen] = useState<{
+    id: number;
+    nonce: number;
+    tab?: ZebranieTab;
+  } | null>(null);
   // The send form lives here so a detour to Adresy (to attach a missing city
   // unit) or to the templates tab doesn't throw away a half-filled mailing.
   const [mailingDraft, setMailingDraft] = useState<MailingDraft>(emptyMailingDraft);
@@ -321,8 +341,8 @@ const App: React.FC = () => {
   };
 
   /** Open Zebrania on one entry — "Otwórz w Zebraniach" on a meeting card. */
-  const openZebranie = (zebranieId: number) => {
-    setZebraniaOpen({ id: zebranieId, nonce: Date.now() });
+  const openZebranie = (zebranieId: number, tab?: ZebranieTab) => {
+    setZebraniaOpen({ id: zebranieId, nonce: Date.now(), tab });
     navigate('zebrania');
   };
 
@@ -611,6 +631,8 @@ const App: React.FC = () => {
       mailing: t.mailing,
       kalendarz: t.kalendarz,
       zebrania: t.zebrania,
+      sprawozdania: t.sprawozdania,
+      plany: t.planyGospodarcze,
       zadania: t.zadania,
       conowego: t.whatsNew,
     };
@@ -667,6 +689,18 @@ const App: React.FC = () => {
         setZebraniaOpen(null);
         setCurrentView('zebrania');
       },
+    },
+    sprawozdania: {
+      id: 'sprawozdania',
+      icon: 'book',
+      label: t.sprawozdania,
+      onClick: () => setCurrentView('sprawozdania'),
+    },
+    plany: {
+      id: 'plany',
+      icon: 'coins',
+      label: t.planyGospodarcze,
+      onClick: () => setCurrentView('plany'),
     },
     zadania: {
       id: 'zadania',
@@ -770,7 +804,7 @@ const App: React.FC = () => {
 
   if (!sessionChecked) {
     return (
-      <NotificationProvider errorTitle={t.error} okLabel={t.errorOk} cancelLabel={t.cancel} dismissLabel={t.close} confirmTitle={t.confirmTitle} confirmDangerTitle={t.confirmDangerTitle} confirmLabel={t.confirmOk} errorSubtitle={t.errorSubtitle} confirmSubtitle={t.confirmSubtitle} confirmDangerSubtitle={t.confirmDangerSubtitle}>
+      <NotificationProvider errorTitle={t.error} okLabel={t.errorOk} cancelLabel={t.cancel} dismissLabel={t.close} openFileLabel={t.toastOpenFile} fileMissingLabel={t.toastFileMissing} confirmTitle={t.confirmTitle} confirmDangerTitle={t.confirmDangerTitle} confirmLabel={t.confirmOk} errorSubtitle={t.errorSubtitle} confirmSubtitle={t.confirmSubtitle} confirmDangerSubtitle={t.confirmDangerSubtitle}>
         {splash}
         <div className="app" />
       </NotificationProvider>
@@ -779,7 +813,7 @@ const App: React.FC = () => {
 
   if (!session) {
     return (
-      <NotificationProvider errorTitle={t.error} okLabel={t.errorOk} cancelLabel={t.cancel} dismissLabel={t.close} confirmTitle={t.confirmTitle} confirmDangerTitle={t.confirmDangerTitle} confirmLabel={t.confirmOk} errorSubtitle={t.errorSubtitle} confirmSubtitle={t.confirmSubtitle} confirmDangerSubtitle={t.confirmDangerSubtitle}>
+      <NotificationProvider errorTitle={t.error} okLabel={t.errorOk} cancelLabel={t.cancel} dismissLabel={t.close} openFileLabel={t.toastOpenFile} fileMissingLabel={t.toastFileMissing} confirmTitle={t.confirmTitle} confirmDangerTitle={t.confirmDangerTitle} confirmLabel={t.confirmOk} errorSubtitle={t.errorSubtitle} confirmSubtitle={t.confirmSubtitle} confirmDangerSubtitle={t.confirmDangerSubtitle}>
         {splash}
         <div className="app">
           <Login
@@ -792,7 +826,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <NotificationProvider errorTitle={t.error} okLabel={t.errorOk} cancelLabel={t.cancel} dismissLabel={t.close} confirmTitle={t.confirmTitle} confirmDangerTitle={t.confirmDangerTitle} confirmLabel={t.confirmOk} errorSubtitle={t.errorSubtitle} confirmSubtitle={t.confirmSubtitle} confirmDangerSubtitle={t.confirmDangerSubtitle}>
+    <NotificationProvider errorTitle={t.error} okLabel={t.errorOk} cancelLabel={t.cancel} dismissLabel={t.close} openFileLabel={t.toastOpenFile} fileMissingLabel={t.toastFileMissing} confirmTitle={t.confirmTitle} confirmDangerTitle={t.confirmDangerTitle} confirmLabel={t.confirmOk} errorSubtitle={t.errorSubtitle} confirmSubtitle={t.confirmSubtitle} confirmDangerSubtitle={t.confirmDangerSubtitle}>
     <NavigationProvider
       canGoBack={canGoBack}
       canGoForward={canGoForward}
@@ -1118,6 +1152,10 @@ const App: React.FC = () => {
             }}
             onOpenSzablony={() => navigate('mailing', 'templates')}
           />
+        )}
+        {currentView === 'sprawozdania' && <Sprawozdania language={language} />}
+        {currentView === 'plany' && (
+          <PlanyGospodarcze language={language} onOpenZebranie={(id) => openZebranie(id, 'plan')} />
         )}
         {currentView === 'zadania' && <Zadania
             language={language}

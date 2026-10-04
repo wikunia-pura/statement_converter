@@ -146,7 +146,7 @@ export function mailingFilesRoot(outputFolder: string): string {
 }
 
 /** Pick a free name in `dir`, appending -1, -2 … when the file already exists. */
-function uniquePath(dir: string, fileName: string): string {
+export function uniquePath(dir: string, fileName: string): string {
   const ext = path.extname(fileName);
   const base = path.basename(fileName, ext);
   let candidate = path.join(dir, fileName);

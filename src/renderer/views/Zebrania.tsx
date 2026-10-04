@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Adres,
+  SprawozdanieZapisane,
   Spotkanie,
   SpotkanieLokalizacja,
+  ZebraniaUstawienia,
+  ZebraniaWspolnota,
   Zebranie,
   ZebranieInput,
   ZebranieStatus,
@@ -16,6 +19,7 @@ import {
   zawiadomienieOf,
   zebranieDane,
   ZebranieDane,
+  ZEBRANIE_WERSJA_NAZWA_MAX,
 } from '../../shared/zebrania';
 import { formatStamp, formatTime, partsToIso, toParts } from '../../shared/calendar';
 import { translations, Language } from '../translations';
@@ -23,11 +27,16 @@ import { useNotify } from '../components/Notifications';
 import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
 import { FormField, FormRow, FormSection, RequiredNote } from '../components/FormSection';
 import Icon from '../components/Icon';
+import ModuleTabs, { ModuleTab } from '../components/ModuleTabs';
 import Loader from '../components/Loader';
 import Select from '../components/Select';
 import SearchableSelect from '../components/SearchableSelect';
 import MeetingsIllustration from '../components/MeetingsIllustration';
 import ZawiadomienieModal from '../components/ZawiadomienieModal';
+import ZebranieSprawozdanie from '../components/ZebranieSprawozdanie';
+import ZebraniePlan from '../components/ZebraniePlan';
+import ZebraniaUstawieniaModal from '../components/ZebraniaUstawieniaModal';
+import { defaultUstawienia, foldText } from '../../shared/plan-gospodarczy';
 
 type T = (typeof translations)['pl'];
 
@@ -38,7 +47,8 @@ interface Props {
    * Open this entry — Kalendarz's "Otwórz w Zebraniach" asked for it. A fresh
    * `nonce` makes the same entry open again.
    */
-  openRequest?: { id: number; nonce: number } | null;
+  /** Open one entry — on its summary, or on the tab named (Plany gospodarcze opens its plan). */
+  openRequest?: { id: number; nonce: number; tab?: ZebranieTab } | null;
   /** The request has landed, so a later visit is not pulled back to it. */
   onOpenRequestHandled?: () => void;
   /** Show a linked entry's meeting in the Kalendarz. */
@@ -97,10 +107,10 @@ const ZebranieFormModal: React.FC<{
         : '';
   const [place, setPlace] = useState(initialPlace);
   const [placeNazwa, setPlaceNazwa] = useState(
-    initialPlace === PLACE_CUSTOM ? editing?.lokalizacjaNazwa ?? '' : '',
+    initialPlace === PLACE_CUSTOM ? (editing?.lokalizacjaNazwa ?? '') : ''
   );
   const [placeAdres, setPlaceAdres] = useState(
-    initialPlace === PLACE_CUSTOM ? editing?.lokalizacjaAdres ?? '' : '',
+    initialPlace === PLACE_CUSTOM ? (editing?.lokalizacjaAdres ?? '') : ''
   );
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -111,7 +121,7 @@ const ZebranieFormModal: React.FC<{
         .sort((a, b) => a.nazwa.localeCompare(b.nazwa, 'pl'))
         .map((a) => ({ value: String(a.id), label: a.nazwa })),
     ],
-    [adresy, t],
+    [adresy, t]
   );
   const placeOptions = useMemo(
     () => [
@@ -123,7 +133,7 @@ const ZebranieFormModal: React.FC<{
       })),
       { value: PLACE_CUSTOM, label: t.zebraniaFieldPlaceCustom },
     ],
-    [lokalizacje, t],
+    [lokalizacje, t]
   );
 
   const handleSubmit = () => {
@@ -132,7 +142,8 @@ const ZebranieFormModal: React.FC<{
       return;
     }
     const adres = adresId ? adresy.find((a) => String(a.id) === adresId) : undefined;
-    const lok = place && place !== PLACE_CUSTOM ? lokalizacje.find((l) => String(l.id) === place) : undefined;
+    const lok =
+      place && place !== PLACE_CUSTOM ? lokalizacje.find((l) => String(l.id) === place) : undefined;
     onSubmit({
       nazwa: nazwa.trim(),
       adresId: adres?.id ?? null,
@@ -157,7 +168,11 @@ const ZebranieFormModal: React.FC<{
           subtitle={editing ? editing.nazwa : t.zebraniaFormHint}
         />
         <div className="modal-body modal-body--sectioned">
-          <FormSection icon="file-check" title={t.zebraniaSectionEntry} description={t.zebraniaSectionEntryDesc}>
+          <FormSection
+            icon="file-check"
+            title={t.zebraniaSectionEntry}
+            description={t.zebraniaSectionEntryDesc}
+          >
             <FormField label={t.zebraniaFieldName} htmlFor="zeb-name" required error={shownError}>
               <input
                 id="zeb-name"
@@ -184,17 +199,37 @@ const ZebranieFormModal: React.FC<{
               />
             </FormField>
           </FormSection>
-          <FormSection icon="clock" title={t.zebraniaSectionWhen} description={t.zebraniaSectionWhenDesc}>
+          <FormSection
+            icon="clock"
+            title={t.zebraniaSectionWhen}
+            description={t.zebraniaSectionWhenDesc}
+          >
             <FormRow>
               <FormField label={t.zebraniaFieldDate} htmlFor="zeb-date">
-                <input id="zeb-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                <input
+                  id="zeb-date"
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                />
               </FormField>
               <FormField label={t.zebraniaFieldTime} htmlFor="zeb-time">
-                <input id="zeb-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+                <input
+                  id="zeb-time"
+                  type="time"
+                  value={time}
+                  onChange={(e) => setTime(e.target.value)}
+                />
               </FormField>
             </FormRow>
             <FormField label={t.zebraniaFieldPlace}>
-              <Select overlay value={place} options={placeOptions} onChange={setPlace} ariaLabel={t.zebraniaFieldPlace} />
+              <Select
+                overlay
+                value={place}
+                options={placeOptions}
+                onChange={setPlace}
+                ariaLabel={t.zebraniaFieldPlace}
+              />
             </FormField>
             {place === PLACE_CUSTOM && (
               <FormRow>
@@ -238,99 +273,134 @@ const ZebranieFormModal: React.FC<{
 
 /* ================================ One version ================================ */
 
-const WersjaCard: React.FC<{
+/** "Wersja 1.1" or "Wersja 1.1 · Po uwagach zarządu". */
+function wersjaTitle(t: T, wersja: ZebranieWersja): string {
+  const base = t.zebraniaVersionTitle.replace('{v}', wersjaLabel(wersja));
+  return wersja.nazwa ? `${base} · ${wersja.nazwa}` : base;
+}
+
+/**
+ * The selected version: its name, its state, its notice and its note. One
+ * version at a time — the bar above the tabs switches between them.
+ */
+const WersjaPanel: React.FC<{
   language: Language;
   locale: string;
   wersja: ZebranieWersja;
   current: boolean;
   busy: boolean;
   onStatus: (status: ZebranieStatus) => void;
+  onSaveNazwa: (nazwa: string) => void;
   onSaveOpis: (opis: string) => void;
   onOpenNotice: () => void;
-}> = ({ language, locale, wersja, current, busy, onStatus, onSaveOpis, onOpenNotice }) => {
+}> = ({
+  language,
+  locale,
+  wersja,
+  current,
+  busy,
+  onStatus,
+  onSaveNazwa,
+  onSaveOpis,
+  onOpenNotice,
+}) => {
   const t = translations[language];
+  const [nazwa, setNazwa] = useState(wersja.nazwa);
   const [opis, setOpis] = useState(wersja.opis);
-  // A reload (someone else's edit, or our own save) resets the box to what is stored.
+  // A reload (someone else's edit, or our own save) resets the boxes to what is stored.
+  useEffect(() => setNazwa(wersja.nazwa), [wersja.nazwa]);
   useEffect(() => setOpis(wersja.opis), [wersja.opis]);
   const notice = zawiadomienieOf(wersja);
-  const lastDownload = notice && notice.pobrania.length > 0 ? notice.pobrania[notice.pobrania.length - 1] : null;
+  const lastDownload =
+    notice && notice.pobrania.length > 0 ? notice.pobrania[notice.pobrania.length - 1] : null;
   const first = wersja.major === 1 && wersja.minor === 0;
+  const nazwaDirty = nazwa.trim() !== wersja.nazwa.trim();
+  const opisDirty = opis.trim() !== wersja.opis.trim();
 
   return (
-    <li className={`zeb-wersja${current ? ' is-current' : ''}`}>
-      <div className="zeb-wersja__head">
-        <span className="zeb-wersja__label">
-          {t.zebraniaVersionTitle.replace('{v}', wersjaLabel(wersja))}
-        </span>
-        {current && <span className="status-badge zeb-current">{t.zebraniaCurrent}</span>}
-        <div className="zad-seg zeb-wersja__status" role="group" aria-label={t.zawStatus}>
-          {(['w_przygotowaniu', 'przygotowane'] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              className={`zad-seg__btn${wersja.status === s ? ' is-active' : ''}`}
-              aria-pressed={wersja.status === s}
-              disabled={busy || wersja.status === s}
-              onClick={() => onStatus(s)}
-            >
-              {s === 'przygotowane' && <Icon name="check" size={12} />}
-              {zebranieStatusLabel(t, s)}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="zeb-notice">
-        <div className="zeb-notice__info">
-          <span className="zeb-notice__title">
-            <Icon name="mail" size={14} /> {t.zebraniaNotice}
-          </span>
-          {notice ? (
-            <>
-              {notice.szablonNazwa && (
-                <span>{t.zebraniaNoticeFrom.replace('{name}', notice.szablonNazwa)}</span>
-              )}
-              {notice.updatedAt && (
-                <span className="zeb-muted">
-                  {t.zebraniaNoticeChanged
-                    .replace('{when}', formatStamp(notice.updatedAt, locale))
-                    .replace('{who}', notice.updatedBy || '—')}
-                </span>
-              )}
-              <span className="zeb-muted">
-                {lastDownload
-                  ? t.zebraniaNoticeLastDownload
-                      .replace('{when}', formatStamp(lastDownload.at, locale))
-                      .replace('{who}', lastDownload.by || '—')
-                  : t.zebraniaNoticeNeverDownloaded}
-              </span>
-            </>
-          ) : (
-            <span className="zeb-muted">{t.zebraniaNoticeNone}</span>
-          )}
-        </div>
-        <button
-          type="button"
-          className={`button button-small ${notice ? 'button-secondary' : 'button-primary'}`}
-          onClick={onOpenNotice}
-          disabled={busy}
-        >
-          <Icon name={notice ? 'edit' : 'plus'} size={13} />{' '}
-          {notice ? t.zebraniaNoticeOpen : t.zebraniaNoticePrepare}
-        </button>
-      </div>
-
-      <div className="zeb-opis">
-        <label>{t.zebraniaOpis}</label>
-        <textarea
-          rows={2}
-          value={opis}
-          placeholder={first ? t.zebraniaOpisFirstPlaceholder : t.zebraniaOpisPlaceholder}
-          onChange={(e) => setOpis(e.target.value)}
-          disabled={busy}
-        />
-        {opis.trim() !== wersja.opis.trim() && (
-          <div className="zeb-opis__actions">
+    <>
+      <FormSection
+        icon="copy"
+        title={wersjaTitle(t, wersja)}
+        description={t.zebraniaVersionsHint}
+        badge={
+          current ? (
+            <span className="status-badge zeb-current">{t.zebraniaCurrent}</span>
+          ) : undefined
+        }
+        aside={
+          <div className="zad-seg" role="group" aria-label={t.zawStatus}>
+            {(['w_przygotowaniu', 'przygotowane'] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                className={`zad-seg__btn${wersja.status === s ? ' is-active' : ''}`}
+                aria-pressed={wersja.status === s}
+                disabled={busy || wersja.status === s}
+                onClick={() => onStatus(s)}
+              >
+                {s === 'przygotowane' && <Icon name="check" size={12} />}
+                {zebranieStatusLabel(t, s)}
+              </button>
+            ))}
+          </div>
+        }
+      >
+        <dl className="facts">
+          <dt>{t.zebraniaVersionCreated}</dt>
+          <dd>
+            {formatStamp(wersja.createdAt, locale)} · {wersja.createdBy || '—'}
+          </dd>
+        </dl>
+        <FormField label={t.zebraniaVersionName} htmlFor={`zeb-nazwa-${wersja.id}`}>
+          <div className="form-inline">
+            <input
+              id={`zeb-nazwa-${wersja.id}`}
+              type="text"
+              value={nazwa}
+              maxLength={ZEBRANIE_WERSJA_NAZWA_MAX}
+              placeholder={t.zebraniaVersionNamePlaceholder}
+              onChange={(e) => setNazwa(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && nazwaDirty) onSaveNazwa(nazwa);
+                if (e.key === 'Escape') setNazwa(wersja.nazwa);
+              }}
+              disabled={busy}
+            />
+            {nazwaDirty && (
+              <>
+                <button
+                  type="button"
+                  className="button button-small button-secondary"
+                  onClick={() => setNazwa(wersja.nazwa)}
+                  disabled={busy}
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  type="button"
+                  className="button button-small button-success"
+                  onClick={() => onSaveNazwa(nazwa)}
+                  disabled={busy}
+                >
+                  <Icon name="save" size={12} /> {t.zebraniaVersionNameSave}
+                </button>
+              </>
+            )}
+          </div>
+        </FormField>
+        <FormField label={t.zebraniaOpis} htmlFor={`zeb-opis-${wersja.id}`}>
+          <textarea
+            id={`zeb-opis-${wersja.id}`}
+            rows={3}
+            value={opis}
+            placeholder={first ? t.zebraniaOpisFirstPlaceholder : t.zebraniaOpisPlaceholder}
+            onChange={(e) => setOpis(e.target.value)}
+            disabled={busy}
+          />
+        </FormField>
+        {opisDirty && (
+          <div className="section-actions">
             <button
               type="button"
               className="button button-small button-secondary"
@@ -349,31 +419,102 @@ const WersjaCard: React.FC<{
             </button>
           </div>
         )}
-      </div>
+      </FormSection>
 
-      <span className="zeb-muted zeb-wersja__stamp">
-        {t.zebraniaCreatedBy
-          .replace('{when}', formatStamp(wersja.createdAt, locale))
-          .replace('{who}', wersja.createdBy || '—')}
-      </span>
-    </li>
+      {/* The version's notice: where it stands, and the way into it. */}
+      <FormSection
+        icon="mail"
+        title={t.zebraniaNotice}
+        description={notice ? undefined : t.zebraniaNoticeNone}
+        aside={
+          <button
+            type="button"
+            className={`button button-small ${notice ? 'button-secondary' : 'button-primary'}`}
+            onClick={onOpenNotice}
+            disabled={busy}
+          >
+            <Icon name={notice ? 'edit' : 'plus'} size={13} />{' '}
+            {notice ? t.zebraniaNoticeOpen : t.zebraniaNoticePrepare}
+          </button>
+        }
+      >
+        {notice && (
+          <dl className="facts">
+            {notice.szablonNazwa && (
+              <>
+                <dt>{t.zebraniaNoticeTemplate}</dt>
+                <dd>{notice.szablonNazwa}</dd>
+              </>
+            )}
+            {notice.updatedAt && (
+              <>
+                <dt>{t.zebraniaNoticeChangedLabel}</dt>
+                <dd>
+                  {formatStamp(notice.updatedAt, locale)} · {notice.updatedBy || '—'}
+                </dd>
+              </>
+            )}
+            <dt>{t.zebraniaNoticeDownloadedLabel}</dt>
+            <dd className={lastDownload ? undefined : 'zeb-muted'}>
+              {lastDownload
+                ? `${formatStamp(lastDownload.at, locale)} · ${lastDownload.by || '—'}`
+                : t.zebraniaNoticeNeverDownloaded}
+            </dd>
+          </dl>
+        )}
+      </FormSection>
+    </>
   );
 };
 
-/* ================================ Entry details ================================ */
+/* ================================ Entry screen ================================ */
 
-const ZebranieDetailModal: React.FC<{
+export type ZebranieTab = 'podsumowanie' | 'zawiadomienie' | 'sprawozdania' | 'plan' | 'uchwaly';
+
+/** A part of the meeting that has no content yet — said plainly, not left blank. */
+const TabPlaceholder: React.FC<{
+  t: T;
+  icon: React.ComponentProps<typeof Icon>['name'];
+  title: string;
+}> = ({ t, icon, title }) => (
+  <div className="page-form zeb-page">
+    <div className="zeb-tab-empty">
+      <span className="zeb-tab-empty__icon">
+        <Icon name={icon} size={22} />
+      </span>
+      <strong>{title}</strong>
+      <p>{t.zebraniaTabEmpty}</p>
+    </div>
+  </div>
+);
+
+/**
+ * One meeting, full screen: who and when at the top, then the version being
+ * looked at, then its parts as tabs — the summary, the notice, the financial
+ * statements, the budget plan and the resolutions. The version bar sits above
+ * the tabs because every part is the material of one version. Only the notice
+ * has content so far; the other tabs are where the next parts will live.
+ */
+const ZebranieScreen: React.FC<{
   language: Language;
   locale: string;
   zebranie: Zebranie;
   dane: ZebranieDane;
   spotkanie: Spotkanie | null;
   busy: boolean;
-  onClose: () => void;
+  tab: ZebranieTab;
+  onTab: (tab: ZebranieTab) => void;
+  lista: SprawozdanieZapisane[];
+  wspolnoty: ZebraniaWspolnota[];
+  ustawienia: ZebraniaUstawienia;
+  onReload: () => Promise<void>;
+  onOpenUstawienia: () => void;
+  onBack: () => void;
   onEditData: () => void;
   onOpenSpotkanie?: () => void;
   onEditSpotkanie?: () => void;
   onStatus: (wersja: ZebranieWersja, status: ZebranieStatus) => void;
+  onSaveNazwa: (wersja: ZebranieWersja, nazwa: string) => void;
   onSaveOpis: (wersja: ZebranieWersja, opis: string) => void;
   onAddRevision: () => void;
   onDelete: () => void;
@@ -385,11 +526,19 @@ const ZebranieDetailModal: React.FC<{
   dane,
   spotkanie,
   busy,
-  onClose,
+  tab,
+  onTab,
+  lista,
+  wspolnoty,
+  ustawienia,
+  onReload,
+  onOpenUstawienia,
+  onBack,
   onEditData,
   onOpenSpotkanie,
   onEditSpotkanie,
   onStatus,
+  onSaveNazwa,
   onSaveOpis,
   onAddRevision,
   onDelete,
@@ -397,126 +546,224 @@ const ZebranieDetailModal: React.FC<{
 }) => {
   const t = translations[language];
   const current = latestWersja(zebranie);
-  // Newest first: the version being worked on is the one the user came for.
-  const wersje = [...sortWersje(zebranie.wersje)].reverse();
+  // Oldest to newest, left to right — the way the revisions were made.
+  const wersje = sortWersje(zebranie.wersje);
   const next = nextWersjaNumber(zebranie.wersje);
   const place = [dane.lokalizacjaNazwa, dane.lokalizacjaAdres].filter(Boolean).join(', ');
 
+  // The current version is the one the user came for; a new revision becomes it,
+  // so adding one moves the selection along.
+  const [wersjaId, setWersjaId] = useState<number | null>(current?.id ?? null);
+  useEffect(() => {
+    if (current) setWersjaId(current.id);
+  }, [current?.id]);
+  const wersja = wersje.find((w) => w.id === wersjaId) ?? current;
+  const wspolnota = dane.adresNazwa
+    ? (wspolnoty.find((w) => foldText(w.adresNazwa) === foldText(dane.adresNazwa)) ?? null)
+    : null;
+
+  const tabs: (ModuleTab & { id: ZebranieTab; icon: NonNullable<ModuleTab['icon']> })[] = [
+    { id: 'podsumowanie', label: t.zebraniaTabSummary, icon: 'clipboard' },
+    { id: 'zawiadomienie', label: t.zebraniaTabNotice, icon: 'mail' },
+    { id: 'sprawozdania', label: t.zebraniaTabReports, icon: 'bar-chart' },
+    { id: 'plan', label: t.zebraniaTabPlan, icon: 'wallet' },
+    { id: 'uchwaly', label: t.zebraniaTabResolutions, icon: 'file-text' },
+  ];
+  const activeTab = tabs.find((x) => x.id === tab) ?? tabs[0];
+
+  const notice = (
+    <div className="page-form zeb-page">
+      <FormSection
+        icon="calendar"
+        title={t.zebraniaDetailData}
+        aside={
+          dane.zKalendarza ? (
+            <div className="form-section__actions">
+              {spotkanie && onOpenSpotkanie && (
+                <button
+                  type="button"
+                  className="button button-small button-subtle"
+                  onClick={onOpenSpotkanie}
+                >
+                  <Icon name="calendar" size={13} /> {t.zebraniaShowInCalendar}
+                </button>
+              )}
+              {spotkanie && onEditSpotkanie && (
+                <button
+                  type="button"
+                  className="button button-small button-secondary"
+                  onClick={onEditSpotkanie}
+                >
+                  <Icon name="edit" size={13} /> {t.zebraniaEditInCalendar}
+                </button>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="button button-small button-secondary"
+              onClick={onEditData}
+              disabled={busy}
+            >
+              <Icon name="edit" size={13} /> {t.zebraniaEditData}
+            </button>
+          )
+        }
+      >
+        <dl className="facts">
+          <dt>{t.zebraniaFieldWhen}</dt>
+          <dd>{dane.startsAt ? formatStamp(dane.startsAt, locale) : t.zebraniaNoDate}</dd>
+          <dt>{t.zebraniaFieldAdres}</dt>
+          <dd>{dane.adresNazwa || t.zebraniaNoAdres}</dd>
+          <dt>{t.zebraniaFieldPlace}</dt>
+          <dd>{place || '—'}</dd>
+        </dl>
+        {dane.zKalendarza && (
+          <div className="callout callout--info">
+            <Icon name="info" size={16} />
+            <div className="callout__body">{t.zebraniaFromCalendarNote}</div>
+          </div>
+        )}
+      </FormSection>
+
+      {wersja && (
+        <WersjaPanel
+          key={wersja.id}
+          language={language}
+          locale={locale}
+          wersja={wersja}
+          current={current?.id === wersja.id}
+          busy={busy}
+          onStatus={(status) => onStatus(wersja, status)}
+          onSaveNazwa={(nazwa) => onSaveNazwa(wersja, nazwa)}
+          onSaveOpis={(opis) => onSaveOpis(wersja, opis)}
+          onOpenNotice={() => onOpenNotice(wersja)}
+        />
+      )}
+    </div>
+  );
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal--xl zeb-detail" onClick={(e) => e.stopPropagation()}>
-        <ModalDismiss onClose={onClose} ariaLabel={t.close} />
-        <ModalHeader
-          icon="file-check"
-          title={dane.nazwa || '—'}
-          subtitle={
-            <span className="modal-header__meta">
+    <>
+      <div className="zeb-screen-head">
+        <button
+          type="button"
+          className="button button-small button-ghost zeb-screen-head__back"
+          onClick={onBack}
+        >
+          <Icon name="chevron-left" size={14} /> {t.zebraniaBack}
+        </button>
+        <div className="zeb-screen-head__row">
+          <div className="zeb-screen-head__id">
+            <h1 className="zeb-screen-head__title">{dane.nazwa || '—'}</h1>
+            <div className="zeb-screen-head__meta">
               {dane.zKalendarza ? (
-                <span className="form-section__badge is-accent">
+                <span className="status-badge zeb-link zeb-link--kal">
                   <Icon name="calendar" size={11} /> {t.zebraniaLinked}
                 </span>
               ) : (
-                <span className="form-section__badge is-neutral">{t.zebraniaStandalone}</span>
+                <span className="status-badge zeb-link" title={t.zebraniaStandaloneHint}>
+                  {t.zebraniaStandalone}
+                </span>
               )}
               <span>
-                {t.zebraniaCreatedBy
-                  .replace('{when}', formatStamp(zebranie.createdAt, locale))
-                  .replace('{who}', zebranie.createdBy || '—')}
+                <Icon name="clock" size={13} />{' '}
+                {dane.startsAt ? formatStamp(dane.startsAt, locale) : t.zebraniaNoDate}
               </span>
-            </span>
-          }
-        />
-        <div className="modal-body modal-body--sectioned">
-          <FormSection
-            icon="calendar"
-            title={t.zebraniaDetailData}
-            aside={
-              dane.zKalendarza ? (
-                <div className="form-section__actions">
-                  {spotkanie && onOpenSpotkanie && (
-                    <button type="button" className="button button-small button-subtle" onClick={onOpenSpotkanie}>
-                      <Icon name="calendar" size={13} /> {t.zebraniaShowInCalendar}
-                    </button>
-                  )}
-                  {spotkanie && onEditSpotkanie && (
-                    <button type="button" className="button button-small button-secondary" onClick={onEditSpotkanie}>
-                      <Icon name="edit" size={13} /> {t.zebraniaEditInCalendar}
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <button type="button" className="button button-small button-secondary" onClick={onEditData} disabled={busy}>
-                  <Icon name="edit" size={13} /> {t.zebraniaEditData}
-                </button>
-              )
-            }
+              <span>
+                <Icon name="building" size={13} /> {dane.adresNazwa || t.zebraniaNoAdres}
+              </span>
+              {place && (
+                <span>
+                  <Icon name="map-pin" size={13} /> {place}
+                </span>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="button button-small button-ghost icon-danger"
+            onClick={onDelete}
+            disabled={busy}
           >
-            <dl className="facts">
-              <dt>{t.zebraniaFieldWhen}</dt>
-              <dd>{dane.startsAt ? formatStamp(dane.startsAt, locale) : t.zebraniaNoDate}</dd>
-              <dt>{t.zebraniaFieldAdres}</dt>
-              <dd>{dane.adresNazwa || t.zebraniaNoAdres}</dd>
-              <dt>{t.zebraniaFieldPlace}</dt>
-              <dd>{place || '—'}</dd>
-            </dl>
-            {dane.zKalendarza && (
-              <div className="callout callout--info">
-                <Icon name="info" size={16} />
-                <div className="callout__body">{t.zebraniaFromCalendarNote}</div>
-              </div>
-            )}
-          </FormSection>
-
-          <FormSection
-            icon="copy"
-            title={t.zebraniaVersions}
-            description={t.zebraniaVersionsHint}
-            aside={
-              <button
-                type="button"
-                className="button button-primary"
-                onClick={onAddRevision}
-                disabled={busy || !current}
-                title={
-                  current
-                    ? t.zebraniaAddRevisionHint
-                        .replace('{v}', `${next.major}.${next.minor}`)
-                        .replace('{from}', wersjaLabel(current))
-                    : undefined
-                }
-              >
-                <Icon name="copy" size={14} /> {t.zebraniaAddRevision}
-              </button>
-            }
-          >
-            <ul className="zeb-wersje">
-              {wersje.map((w) => (
-                <WersjaCard
-                  key={w.id}
-                  language={language}
-                  locale={locale}
-                  wersja={w}
-                  current={current?.id === w.id}
-                  busy={busy}
-                  onStatus={(status) => onStatus(w, status)}
-                  onSaveOpis={(opis) => onSaveOpis(w, opis)}
-                  onOpenNotice={() => onOpenNotice(w)}
-                />
-              ))}
-            </ul>
-          </FormSection>
+            <Icon name="trash" size={13} /> {t.zebraniaDelete}
+          </button>
         </div>
-        <ModalFooter
-          note={
-            <button type="button" className="button button-small button-ghost icon-danger" onClick={onDelete} disabled={busy}>
-              <Icon name="trash" size={13} /> {t.zebraniaDelete}
-            </button>
-          }
-          onCancel={onClose}
-          cancelLabel={t.close}
-        />
+
+        <div className="zeb-vbar">
+          <span className="zeb-vbar__label">{t.zebraniaVersions}</span>
+          <div className="zeb-vtabs" role="tablist" aria-label={t.zebraniaVersions}>
+            {wersje.map((w) => (
+              <button
+                key={w.id}
+                type="button"
+                role="tab"
+                aria-selected={wersja?.id === w.id}
+                className={`zeb-vtab${wersja?.id === w.id ? ' is-active' : ''}`}
+                title={`${wersjaTitle(t, w)} — ${zebranieStatusLabel(t, w.status)}`}
+                onClick={() => setWersjaId(w.id)}
+              >
+                <span className={`zeb-vtab__dot zeb-vtab__dot--${w.status}`} aria-hidden="true" />
+                <span className="zeb-vtab__num">{wersjaLabel(w)}</span>
+                {w.nazwa && <span className="zeb-vtab__name">{w.nazwa}</span>}
+                {current?.id === w.id && (
+                  <span className="zeb-vtab__current">{t.zebraniaCurrent}</span>
+                )}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="button button-small button-secondary"
+            onClick={onAddRevision}
+            disabled={busy || !current}
+            title={
+              current
+                ? t.zebraniaAddRevisionHint
+                    .replace('{v}', `${next.major}.${next.minor}`)
+                    .replace('{from}', wersjaLabel(current))
+                : undefined
+            }
+          >
+            <Icon name="plus" size={13} /> {t.zebraniaAddRevision}
+          </button>
+        </div>
       </div>
-    </div>
+      <ModuleTabs tabs={tabs} active={activeTab.id} onChange={(id) => onTab(id as ZebranieTab)} />
+      <div className="content-body">
+        {activeTab.id === 'zawiadomienie' ? (
+          notice
+        ) : activeTab.id === 'sprawozdania' && wersja ? (
+          <ZebranieSprawozdanie
+            key={wersja.id}
+            language={language}
+            locale={locale}
+            wersja={wersja}
+            adresNazwa={dane.adresNazwa}
+            wspolnota={wspolnota}
+            lista={lista}
+            dataZebrania={dane.startsAt}
+            onChanged={onReload}
+          />
+        ) : activeTab.id === 'plan' && wersja ? (
+          <ZebraniePlan
+            key={wersja.id}
+            language={language}
+            locale={locale}
+            wersja={wersja}
+            adresNazwa={dane.adresNazwa}
+            wspolnota={wspolnota}
+            ustawienia={ustawienia}
+            dataZebrania={dane.startsAt}
+            onChanged={onReload}
+            onGoToSprawozdania={() => onTab('sprawozdania')}
+            onOpenUstawienia={onOpenUstawienia}
+          />
+        ) : (
+          <TabPlaceholder t={t} icon={activeTab.icon} title={activeTab.label} />
+        )}
+      </div>
+    </>
   );
 };
 
@@ -555,32 +802,49 @@ const Zebrania: React.FC<Props> = ({
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [sortMode, setSortMode] = useState<SortMode>('nearest');
-  /** The entry open in the details window — by id, so a reload shows its new state. */
+  /** The entry open on its own screen — by id, so a reload shows its new state. */
   const [detailId, setDetailId] = useState<number | null>(null);
+  const [detailTab, setDetailTab] = useState<ZebranieTab>('podsumowanie');
   const [form, setForm] = useState<{ editing: Zebranie | null } | null>(null);
   const [formSaving, setFormSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ zebranie: Zebranie; wersjaId: number } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [lista, setLista] = useState<SprawozdanieZapisane[]>([]);
+  const [wspolnoty, setWspolnoty] = useState<ZebraniaWspolnota[]>([]);
+  const [ustawienia, setUstawienia] = useState<ZebraniaUstawienia>(() => defaultUstawienia());
+  const [ustawieniaOpen, setUstawieniaOpen] = useState(false);
 
   useEffect(() => {
     void load();
   }, []);
 
+  /** Open an entry's own screen, on its first tab. */
+  const openDetail = (id: number) => {
+    setDetailId(id);
+    setDetailTab('podsumowanie');
+  };
+
   const load = async (silent = false) => {
     if (silent) setIsRefreshing(true);
     else setIsLoading(true);
     try {
-      const [z, s, l, a] = await Promise.all([
+      const [z, s, l, a, sp, w, u] = await Promise.all([
         window.electronAPI.getZebrania(),
         window.electronAPI.getSpotkania(),
         window.electronAPI.getSpotkaniaLokalizacje(),
         window.electronAPI.getAdresy(),
+        window.electronAPI.getSprawozdaniaLista(),
+        window.electronAPI.getZebraniaWspolnoty(),
+        window.electronAPI.getZebraniaUstawienia(),
       ]);
       setZebrania(z);
       setSpotkania(s);
       setLokalizacje(l);
       setAdresy(a);
+      setLista(sp);
+      setWspolnoty(w);
+      setUstawienia(u);
     } catch {
       notify.error(t.zebraniaLoadError);
     } finally {
@@ -592,7 +856,10 @@ const Zebrania: React.FC<Props> = ({
   // "Otwórz w Zebraniach" from a meeting card: open that entry once it is loaded.
   useEffect(() => {
     if (!openRequest || isLoading) return;
-    if (zebrania.some((z) => z.id === openRequest.id)) setDetailId(openRequest.id);
+    if (zebrania.some((z) => z.id === openRequest.id)) {
+      openDetail(openRequest.id);
+      if (openRequest.tab) setDetailTab(openRequest.tab);
+    }
     else notify.warning(t.zebraniaMissing);
     onOpenRequestHandled?.();
     // Only a new request opens an entry; later reloads must not reopen it.
@@ -608,7 +875,7 @@ const Zebrania: React.FC<Props> = ({
         dane: zebranieDane(z, spotkania, lokalizacje),
         wersja: latestWersja(z),
       })),
-    [zebrania, spotkania, lokalizacje],
+    [zebrania, spotkania, lokalizacje]
   );
 
   const counts = useMemo(() => {
@@ -647,9 +914,9 @@ const Zebrania: React.FC<Props> = ({
     });
   }, [rows, search, statusFilter, sortMode]);
 
-  const detail = detailId != null ? rows.find((r) => r.zebranie.id === detailId) ?? null : null;
+  const detail = detailId != null ? (rows.find((r) => r.zebranie.id === detailId) ?? null) : null;
   const spotkanieOf = (z: Zebranie): Spotkanie | null =>
-    z.spotkanieId != null ? spotkania.find((s) => s.id === z.spotkanieId) ?? null : null;
+    z.spotkanieId != null ? (spotkania.find((s) => s.id === z.spotkanieId) ?? null) : null;
 
   /* -------------------------------- Actions -------------------------------- */
 
@@ -663,7 +930,7 @@ const Zebrania: React.FC<Props> = ({
         notify.success(t.zebraniaSaved);
       } else {
         const created = await window.electronAPI.addZebranie(input);
-        setDetailId(created.id);
+        openDetail(created.id);
         notify.success(t.zebraniaCreated);
       }
       setForm(null);
@@ -692,6 +959,12 @@ const Zebrania: React.FC<Props> = ({
   const handleStatus = (wersja: ZebranieWersja, status: ZebranieStatus) =>
     run(() => window.electronAPI.setZebranieWersjaStatus(wersja.id, status), t.zebraniaStatusSaved);
 
+  const handleSaveNazwa = (wersja: ZebranieWersja, nazwa: string) =>
+    run(
+      () => window.electronAPI.setZebranieWersjaNazwa(wersja.id, nazwa),
+      t.zebraniaVersionNameSaved
+    );
+
   /**
    * Save a version's note. The materials are re-read and written back as stored,
    * so the note cannot overwrite a notice edited (or downloaded) meanwhile.
@@ -701,7 +974,10 @@ const Zebrania: React.FC<Props> = ({
       const fresh = (await window.electronAPI.getZebrania()).find((z) => z.id === zebranie.id);
       const freshWersja = fresh?.wersje.find((w) => w.id === wersja.id);
       if (!freshWersja) throw new Error(t.zawVersionGone);
-      await window.electronAPI.updateZebranieWersja(wersja.id, { opis, materialy: freshWersja.materialy });
+      await window.electronAPI.updateZebranieWersja(wersja.id, {
+        opis,
+        materialy: freshWersja.materialy,
+      });
     }, t.zebraniaOpisSaved);
 
   const handleAddRevision = async (zebranie: Zebranie) => {
@@ -713,10 +989,13 @@ const Zebrania: React.FC<Props> = ({
       t.zebraniaAddRevisionConfirm.replace('{v}', v).replace('{from}', wersjaLabel(current)) +
       (zebranie.spotkanieId != null ? t.zebraniaAddRevisionLinkedNote : '');
     if (!(await notify.confirm(message, { confirmLabel: t.zebraniaAddRevision }))) return;
-    await run(async () => {
-      const created = await window.electronAPI.addZebranieWersja(zebranie.id);
-      return created;
-    }, t.zebraniaRevisionAdded.replace('{v}', v));
+    await run(
+      async () => {
+        const created = await window.electronAPI.addZebranieWersja(zebranie.id);
+        return created;
+      },
+      t.zebraniaRevisionAdded.replace('{v}', v)
+    );
   };
 
   const handleDelete = async (zebranie: Zebranie, dane: ZebranieDane) => {
@@ -743,7 +1022,7 @@ const Zebrania: React.FC<Props> = ({
     const validStart = !!start && !Number.isNaN(start.getTime());
     const spotkanie = spotkanieOf(zebranie);
     const place = [dane.lokalizacjaNazwa, dane.lokalizacjaAdres].filter(Boolean).join(', ');
-    const open = () => setDetailId(zebranie.id);
+    const open = () => openDetail(zebranie.id);
     return (
       <li key={zebranie.id}>
         <div
@@ -833,6 +1112,104 @@ const Zebrania: React.FC<Props> = ({
     { key: 'latest', label: t.zebraniaSortLatest },
   ];
 
+  /** Edit forms and the notice open over either screen — the list or one entry's. */
+  const modals = (
+    <>
+      {form && (
+        <ZebranieFormModal
+          key={form.editing ? `edit-${form.editing.id}` : 'new'}
+          language={language}
+          editing={form.editing}
+          adresy={adresy}
+          lokalizacje={lokalizacje}
+          isSaving={formSaving}
+          error={formError}
+          onSubmit={(input) => void handleFormSubmit(input)}
+          onCancel={() => {
+            setForm(null);
+            setFormError(null);
+          }}
+        />
+      )}
+
+      {notice && (
+        <ZawiadomienieModal
+          key={`${notice.zebranie.id}-${notice.wersjaId}`}
+          language={language}
+          userEmail={userEmail}
+          zebranie={notice.zebranie}
+          wersjaId={notice.wersjaId}
+          onClose={() => setNotice(null)}
+          onChanged={() => void load(true)}
+          onOpenSzablony={onOpenSzablony}
+        />
+      )}
+
+      {ustawieniaOpen && (
+        <ZebraniaUstawieniaModal
+          language={language}
+          value={ustawienia}
+          onSaved={(value) => {
+            setUstawienia(value);
+            setUstawieniaOpen(false);
+          }}
+          onClose={() => setUstawieniaOpen(false)}
+        />
+      )}
+    </>
+  );
+
+  if (detail) {
+    return (
+      <>
+        <ZebranieScreen
+          key={detail.zebranie.id}
+          language={language}
+          locale={locale}
+          zebranie={detail.zebranie}
+          dane={detail.dane}
+          spotkanie={spotkanieOf(detail.zebranie)}
+          busy={busy}
+          tab={detailTab}
+          onTab={setDetailTab}
+          lista={lista}
+          wspolnoty={wspolnoty}
+          ustawienia={ustawienia}
+          onReload={() => load(true)}
+          onOpenUstawienia={() => setUstawieniaOpen(true)}
+          onBack={() => setDetailId(null)}
+          onEditData={() => {
+            setFormError(null);
+            setForm({ editing: detail.zebranie });
+          }}
+          onOpenSpotkanie={
+            onOpenSpotkanie
+              ? () => {
+                  const s = spotkanieOf(detail.zebranie);
+                  if (s) onOpenSpotkanie(s);
+                }
+              : undefined
+          }
+          onEditSpotkanie={
+            onEditSpotkanie
+              ? () => {
+                  const s = spotkanieOf(detail.zebranie);
+                  if (s) onEditSpotkanie(s);
+                }
+              : undefined
+          }
+          onStatus={(w, status) => void handleStatus(w, status)}
+          onSaveNazwa={(w, nazwa) => void handleSaveNazwa(w, nazwa)}
+          onSaveOpis={(w, opis) => void handleSaveOpis(detail.zebranie, w, opis)}
+          onAddRevision={() => void handleAddRevision(detail.zebranie)}
+          onDelete={() => void handleDelete(detail.zebranie, detail.dane)}
+          onOpenNotice={(w) => setNotice({ zebranie: detail.zebranie, wersjaId: w.id })}
+        />
+        {modals}
+      </>
+    );
+  }
+
   return (
     <div className="content-body">
       <div className="zad-head zeb-head">
@@ -853,6 +1230,13 @@ const Zebrania: React.FC<Props> = ({
             aria-label={t.zebraniaRefresh}
           >
             <Icon name="refresh" size={16} />
+          </button>
+          <button
+            type="button"
+            className="button button-secondary"
+            onClick={() => setUstawieniaOpen(true)}
+          >
+            <Icon name="settings" size={14} /> {t.zebraniaSettings}
           </button>
           <button
             className="button button-primary"
@@ -897,7 +1281,12 @@ const Zebrania: React.FC<Props> = ({
                 onChange={(e) => setSearch(e.target.value)}
               />
               {search.trim() && (
-                <button type="button" onClick={() => setSearch('')} title={t.close} aria-label={t.close}>
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  title={t.close}
+                  aria-label={t.close}
+                >
                   <Icon name="x" size={14} />
                 </button>
               )}
@@ -943,72 +1332,7 @@ const Zebrania: React.FC<Props> = ({
         </>
       )}
 
-      {detail && (
-        <ZebranieDetailModal
-          language={language}
-          locale={locale}
-          zebranie={detail.zebranie}
-          dane={detail.dane}
-          spotkanie={spotkanieOf(detail.zebranie)}
-          busy={busy}
-          onClose={() => setDetailId(null)}
-          onEditData={() => {
-            setFormError(null);
-            setForm({ editing: detail.zebranie });
-          }}
-          onOpenSpotkanie={
-            onOpenSpotkanie
-              ? () => {
-                  const s = spotkanieOf(detail.zebranie);
-                  if (s) onOpenSpotkanie(s);
-                }
-              : undefined
-          }
-          onEditSpotkanie={
-            onEditSpotkanie
-              ? () => {
-                  const s = spotkanieOf(detail.zebranie);
-                  if (s) onEditSpotkanie(s);
-                }
-              : undefined
-          }
-          onStatus={(w, status) => void handleStatus(w, status)}
-          onSaveOpis={(w, opis) => void handleSaveOpis(detail.zebranie, w, opis)}
-          onAddRevision={() => void handleAddRevision(detail.zebranie)}
-          onDelete={() => void handleDelete(detail.zebranie, detail.dane)}
-          onOpenNotice={(w) => setNotice({ zebranie: detail.zebranie, wersjaId: w.id })}
-        />
-      )}
-
-      {form && (
-        <ZebranieFormModal
-          key={form.editing ? `edit-${form.editing.id}` : 'new'}
-          language={language}
-          editing={form.editing}
-          adresy={adresy}
-          lokalizacje={lokalizacje}
-          isSaving={formSaving}
-          error={formError}
-          onSubmit={(input) => void handleFormSubmit(input)}
-          onCancel={() => {
-            setForm(null);
-            setFormError(null);
-          }}
-        />
-      )}
-
-      {notice && (
-        <ZawiadomienieModal
-          key={`${notice.zebranie.id}-${notice.wersjaId}`}
-          language={language}
-          userEmail={userEmail}
-          zebranie={notice.zebranie}
-          wersjaId={notice.wersjaId}
-          onClose={() => setNotice(null)}
-          onChanged={() => void load(true)}
-          onOpenSzablony={onOpenSzablony}
-        />
-      )}
+      {modals}
     </div>
   );
 };

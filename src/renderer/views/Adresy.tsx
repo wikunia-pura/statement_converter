@@ -230,7 +230,9 @@ const AccountTypesPanel: React.FC<AccountTypesPanelProps> = ({ language, kontoTy
     try {
       const result = await window.electronAPI.exportKontoTypyToFile();
       if (result.success) {
-        notify.success(t.exportKontoTypySuccess.replace('{count}', String(result.count ?? 0)));
+        notify.success(t.exportKontoTypySuccess.replace('{count}', String(result.count ?? 0)), {
+          file: result.filePath,
+        });
       } else if (result.error) {
         setError(result.error);
       }
@@ -1767,7 +1769,9 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     try {
       const result = await window.electronAPI.exportAdresyToFile();
       if (result.success) {
-        notify.success(t.exportAdresySuccess.replace('{count}', String(result.count ?? 0)));
+        notify.success(t.exportAdresySuccess.replace('{count}', String(result.count ?? 0)), {
+          file: result.filePath,
+        });
       } else if (result.error) {
         notify.error(`${t.exportAdresyError}: ${result.error}`);
       }

@@ -142,6 +142,28 @@ const IPC_CHANNELS = {
   ADD_ZEBRANIE_WERSJA: 'zebrania:add-wersja',
   UPDATE_ZEBRANIE_WERSJA: 'zebrania:update-wersja',
   SET_ZEBRANIE_WERSJA_STATUS: 'zebrania:set-wersja-status',
+  SET_ZEBRANIE_WERSJA_NAZWA: 'zebrania:set-wersja-nazwa',
+  ZEBRANIA_SPRAWOZDANIA_IMPORT: 'zebrania:sprawozdania-import',
+  ZEBRANIA_SPRAWOZDANIA_LISTA: 'zebrania:sprawozdania-lista',
+  ZEBRANIA_SPRAWOZDANIE_GET: 'zebrania:sprawozdanie-get',
+  ZEBRANIE_WERSJA_ATTACH_SPRAWOZDANIE: 'zebrania:wersja-attach-sprawozdanie',
+  ZEBRANIE_WERSJA_REMOVE_SPRAWOZDANIE: 'zebrania:wersja-remove-sprawozdanie',
+  ZEBRANIE_WERSJA_SET_SPRAWOZDANIE_WSTEP: 'zebrania:wersja-set-sprawozdanie-wstep',
+  ZEBRANIE_WERSJA_SET_PLAN: 'zebrania:wersja-set-plan',
+  ZEBRANIA_WSPOLNOTY_GET: 'zebrania:wspolnoty-get',
+  ZEBRANIA_WSPOLNOTA_SET: 'zebrania:wspolnota-set',
+  ZEBRANIA_USTAWIENIA_GET: 'zebrania:ustawienia-get',
+  ZEBRANIA_USTAWIENIA_SET: 'zebrania:ustawienia-set',
+  ZEBRANIA_DOKUMENT_EXPORT: 'zebrania:dokument-export',
+  SPRAWOZDANIA_IMPORT_WLASNE: 'sprawozdania:import-wlasne',
+  SPRAWOZDANIE_DELETE_WLASNE: 'sprawozdania:delete-wlasne',
+  SPRAWOZDANIE_EXPORT: 'sprawozdania:export',
+  PLANY_WLASNE_GET: 'plany:get',
+  PLAN_WLASNY_ADD: 'plany:add',
+  PLAN_WLASNY_SET: 'plany:set',
+  PLAN_WLASNY_DELETE: 'plany:delete',
+  PLAN_WLASNY_EXPORT: 'plany:export',
+  KALENDARZ_PDF_EXPORT: 'kalendarz:pdf-export',
   RECORD_ZEBRANIE_POBRANIE: 'zebrania:record-pobranie',
   MAILING_GET_HISTORY: 'mailing:get-history',
   MAILING_CLEAR_HISTORY: 'mailing:clear-history',
@@ -190,6 +212,8 @@ const IPC_CHANNELS = {
   ADD_ZADANIE_KOMENTARZ: 'zadania:add-komentarz',
   DELETE_ZADANIE_KOMENTARZ: 'zadania:delete-komentarz',
   GET_KS_PRIORYTETY: 'ksiegowania:get-priorytety',
+  GET_KS_PRZYPISANIA: 'ksiegowania:get-przypisania',
+  SET_KS_PRZYPISANIE: 'ksiegowania:set-przypisanie',
   ADD_KS_PRIORYTET: 'ksiegowania:add-priorytet',
   SET_KS_PRIORYTET_NOTATKA: 'ksiegowania:set-priorytet-notatka',
   REMOVE_KS_PRIORYTET: 'ksiegowania:remove-priorytet',
@@ -523,6 +547,36 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.UPDATE_ZEBRANIE_WERSJA, id, input),
   setZebranieWersjaStatus: (id: number, status: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_ZEBRANIE_WERSJA_STATUS, id, status),
+  setZebranieWersjaNazwa: (id: number, nazwa: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_ZEBRANIE_WERSJA_NAZWA, id, nazwa),
+  importSprawozdania: () => ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_SPRAWOZDANIA_IMPORT),
+  getSprawozdaniaLista: () => ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_SPRAWOZDANIA_LISTA),
+  getSprawozdanie: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_SPRAWOZDANIE_GET, id),
+  attachZebranieSprawozdanie: (wersjaId: number, sprawozdanieId: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIE_WERSJA_ATTACH_SPRAWOZDANIE, wersjaId, sprawozdanieId),
+  removeZebranieSprawozdanie: (wersjaId: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIE_WERSJA_REMOVE_SPRAWOZDANIE, wersjaId),
+  setZebranieSprawozdanieWstep: (wersjaId: number, wstep: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIE_WERSJA_SET_SPRAWOZDANIE_WSTEP, wersjaId, wstep),
+  setZebranieWersjaPlan: (wersjaId: number, plan: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIE_WERSJA_SET_PLAN, wersjaId, plan),
+  getZebraniaWspolnoty: () => ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_WSPOLNOTY_GET),
+  setZebraniaWspolnota: (adresNazwa: string, patch: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_WSPOLNOTA_SET, adresNazwa, patch),
+  getZebraniaUstawienia: () => ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_USTAWIENIA_GET),
+  setZebraniaUstawienia: (value: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_USTAWIENIA_SET, value),
+  exportZebranieDokument: (request: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_DOKUMENT_EXPORT, request),
+  // Sprawozdania
+  importSprawozdaniaWlasne: () => ipcRenderer.invoke(IPC_CHANNELS.SPRAWOZDANIA_IMPORT_WLASNE),
+  deleteSprawozdanieWlasne: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.SPRAWOZDANIE_DELETE_WLASNE, id),
+  exportSprawozdanie: (request: unknown) => ipcRenderer.invoke(IPC_CHANNELS.SPRAWOZDANIE_EXPORT, request),
+  // Plany gospodarcze
+  getPlanyWlasne: () => ipcRenderer.invoke(IPC_CHANNELS.PLANY_WLASNE_GET),
+  addPlanWlasny: (nrWsp: number, nazwa: string, plan: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PLAN_WLASNY_ADD, nrWsp, nazwa, plan),
+  setPlanWlasny: (id: number, plan: unknown) => ipcRenderer.invoke(IPC_CHANNELS.PLAN_WLASNY_SET, id, plan),
+  deletePlanWlasny: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.PLAN_WLASNY_DELETE, id),
+  exportPlanWlasny: (request: unknown) => ipcRenderer.invoke(IPC_CHANNELS.PLAN_WLASNY_EXPORT, request),
   recordZebraniePobranie: (wersjaId: number, materialId: string, pliki: string[]) =>
     ipcRenderer.invoke(IPC_CHANNELS.RECORD_ZEBRANIE_POBRANIE, wersjaId, materialId, pliki),
   onMailingProgress: (callback: (progress: any) => void) => {
@@ -563,6 +617,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteSpotkanieTyp: (id: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.DELETE_SPOTKANIE_TYP, id),
   getSpotkania: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SPOTKANIA),
+  exportKalendarzPdf: (request: unknown) => ipcRenderer.invoke(IPC_CHANNELS.KALENDARZ_PDF_EXPORT, request),
   addSpotkanie: (input: import('../shared/types').SpotkanieInput) =>
     ipcRenderer.invoke(IPC_CHANNELS.ADD_SPOTKANIE, input),
   updateSpotkanie: (id: number, input: import('../shared/types').SpotkanieInput) =>
@@ -635,6 +690,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Księgowania: priorities with a note, and notes on a community
   getKsiegowaniaPriorytety: () => ipcRenderer.invoke(IPC_CHANNELS.GET_KS_PRIORYTETY),
+  getKsiegowaniaPrzypisania: () => ipcRenderer.invoke(IPC_CHANNELS.GET_KS_PRZYPISANIA),
+  setKsiegowaniePrzypisanie: (monthKey: string, adresId: number | null, adresNazwa: string, email: string | null) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_KS_PRZYPISANIE, monthKey, adresId, adresNazwa, email),
   addKsiegowaniePriorytet: (monthKey: string, adresId: number | null, adresNazwa: string, notatka: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.ADD_KS_PRIORYTET, monthKey, adresId, adresNazwa, notatka),
   setKsiegowaniePriorytetNotatka: (id: number, notatka: string) =>

@@ -1,7 +1,8 @@
 // Type definitions for Electron API exposed via preload
 
 import type { NotificationPrefs } from '../shared/notifications';
-import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, ZgnPelnomocnik, ZarzadOsoba, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent, AppUser, SpotkanieTyp, SpotkanieLokalizacja, Spotkanie, SpotkanieInput, SpotkanieMailing, SpotkanieTerminStatus, SpotkanieMaterialyStatus, SpotkanieMaterialyKrok, KsiegowaniePriorytet, KsiegowanieUwaga, KsiegowaniePlik, ScanDecision, ScanProgress, ScanReport, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik, ZadanieKomentarz, ZadanieKomentarzInput, ZadanieKomentarzPodsumowanie, ZadanieNotatka, MailingAdresaci, MailingTypDef, MailingKalendarzContext, MailingExportRequest, MailingExportResult, Zebranie, ZebranieInput, ZebranieStatus, ZebranieWersja, ZebranieWersjaInput } from '../shared/types';
+import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, ZgnPelnomocnik, ZarzadOsoba, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent, AppUser, SpotkanieTyp, SpotkanieLokalizacja, Spotkanie, SpotkanieInput, KalendarzPdfRequest, SpotkanieMailing, SpotkanieTerminStatus, SpotkanieMaterialyStatus, SpotkanieMaterialyKrok, KsiegowaniePriorytet,
+  KsiegowaniePrzypisanie, KsiegowanieUwaga, KsiegowaniePlik, ScanDecision, ScanProgress, ScanReport, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik, ZadanieKomentarz, ZadanieKomentarzInput, ZadanieKomentarzPodsumowanie, ZadanieNotatka, MailingAdresaci, MailingTypDef, MailingKalendarzContext, MailingExportRequest, MailingExportResult, Zebranie, ZebranieInput, ZebranieStatus, ZebranieWersja, ZebranieWersjaInput, SprawozdaniaImportResult, SprawozdaniaWlasneImportResult, SprawozdanieExportRequest, PlanWlasny, PlanWlasnyExportRequest, SprawozdanieZapisane, SprawozdanieWstepTekst, PlanGospodarczy, ZebraniaWspolnota, AdresUdzialy, ZebraniaUstawienia, ZebranieDokumentRequest } from '../shared/types';
 import type { MailingRecipientsResolved } from '../shared/mailing-recipients';
 
 // Zaliczki shared types (referenced by the main-process helpers)
@@ -526,6 +527,47 @@ interface ElectronAPI {
   updateZebranieWersja: (id: number, input: ZebranieWersjaInput) => Promise<boolean>;
   /** The newest version of a linked entry moves the meeting's materials status with it. */
   setZebranieWersjaStatus: (id: number, status: ZebranieStatus) => Promise<boolean>;
+  /** Rename a revision; an empty name falls back to its number. */
+  setZebranieWersjaNazwa: (id: number, nazwa: string) => Promise<boolean>;
+  /** Pick a vDom "RozliczenieWsp" PDF and store every community's statement; null when cancelled. */
+  importSprawozdania: () => Promise<SprawozdaniaImportResult | null>;
+  /** The statement library, without the statements themselves. */
+  getSprawozdaniaLista: () => Promise<SprawozdanieZapisane[]>;
+  getSprawozdanie: (id: number) => Promise<SprawozdanieZapisane | null>;
+  /** Attach a library statement to a version, as a copy. */
+  attachZebranieSprawozdanie: (wersjaId: number, sprawozdanieId: number) => Promise<boolean>;
+  removeZebranieSprawozdanie: (wersjaId: number) => Promise<boolean>;
+  /** Save the edited introduction of a version's statement; null goes back to the computed one. */
+  setZebranieSprawozdanieWstep: (wersjaId: number, wstep: SprawozdanieWstepTekst | null) => Promise<boolean>;
+  /** Save (or with null remove) a version's budget plan. */
+  setZebranieWersjaPlan: (wersjaId: number, plan: PlanGospodarczy | null) => Promise<boolean>;
+  getZebraniaWspolnoty: () => Promise<ZebraniaWspolnota[]>;
+  setZebraniaWspolnota: (
+    adresNazwa: string,
+    patch: { vdomNr?: number | null; udzialy?: AdresUdzialy | null },
+  ) => Promise<boolean>;
+  getZebraniaUstawienia: () => Promise<ZebraniaUstawienia>;
+  setZebraniaUstawienia: (value: ZebraniaUstawienia) => Promise<boolean>;
+  /** Write a version's statement or plan to Downloads; the path of the file. */
+  exportZebranieDokument: (request: ZebranieDokumentRequest) => Promise<{ filePath: string }>;
+  /**
+   * Sprawozdania: pick a vDom file and add the statements Zebrania does not
+   * have (those it has are counted in `pominiete`); null when cancelled.
+   */
+  importSprawozdaniaWlasne: () => Promise<SprawozdaniaWlasneImportResult | null>;
+  /** Remove a statement added in Sprawozdania; one from Zebrania is refused. */
+  deleteSprawozdanieWlasne: (id: number) => Promise<boolean>;
+  /** Write a library statement to Downloads as PDF or Excel; the path of the file. */
+  exportSprawozdanie: (request: SprawozdanieExportRequest) => Promise<{ filePath: string }>;
+  /** Plans made in Plany gospodarcze (Zebrania's are read from the versions). */
+  getPlanyWlasne: () => Promise<PlanWlasny[]>;
+  /** Refused when Zebrania has a plan of this community (vDom number) and year. */
+  addPlanWlasny: (nrWsp: number, nazwa: string, plan: PlanGospodarczy) => Promise<PlanWlasny>;
+  /** Refused when the (changed) year is one Zebrania has a plan for. */
+  setPlanWlasny: (id: number, plan: PlanGospodarczy) => Promise<boolean>;
+  deletePlanWlasny: (id: number) => Promise<boolean>;
+  /** Write a module plan to Downloads as PDF or Excel; the path of the file. */
+  exportPlanWlasny: (request: PlanWlasnyExportRequest) => Promise<{ filePath: string }>;
   /** Note a download on the material it came from. */
   recordZebraniePobranie: (wersjaId: number, materialId: string, pliki: string[]) => Promise<boolean>;
 
@@ -553,6 +595,8 @@ interface ElectronAPI {
   ) => Promise<boolean>;
   deleteSpotkanieTyp: (id: number) => Promise<boolean>;
   getSpotkania: () => Promise<Spotkanie[]>;
+  /** The month as a PDF in Downloads — a grid of the meetings, then their details. */
+  exportKalendarzPdf: (request: KalendarzPdfRequest) => Promise<{ filePath: string }>;
   /** `createdBy` is filled in by the main process from the session. */
   addSpotkanie: (input: SpotkanieInput) => Promise<Spotkanie>;
   updateSpotkanie: (id: number, input: SpotkanieInput) => Promise<boolean>;
@@ -595,7 +639,8 @@ interface ElectronAPI {
     | { ok: false; error: 'too_large' | 'not_a_file' | 'unreadable' | 'failed' }
   >;
   /** Save dialog, then the file. false = the user cancelled. */
-  zadaniaDownloadAttachment: (zalacznik: { sciezka: string; nazwa: string }) => Promise<boolean>;
+  /** Where the attachment was saved, or null when the save dialog was cancelled. */
+  zadaniaDownloadAttachment: (zalacznik: { sciezka: string; nazwa: string }) => Promise<string | null>;
   /** Remove uploads that never reached a card (a cancelled form). */
   zadaniaDiscardAttachments: (paths: string[]) => Promise<boolean>;
   onOpenKsiegowania: (callback: () => void) => () => void;
@@ -621,6 +666,15 @@ interface ElectronAPI {
   // (`createdBy`, `resolvedBy`) is filled in by the main process from the session.
   /** Every month's priorities; the view picks the month it shows. */
   getKsiegowaniaPriorytety: () => Promise<KsiegowaniePriorytet[]>;
+  /** Every month's assignments (who posts which community); the view picks its month. */
+  getKsiegowaniaPrzypisania: () => Promise<KsiegowaniePrzypisanie[]>;
+  /** Assign the community's month to a person; `email: null` clears it. */
+  setKsiegowaniePrzypisanie: (
+    monthKey: string,
+    adresId: number | null,
+    adresNazwa: string,
+    email: string | null,
+  ) => Promise<KsiegowaniePrzypisanie | null>;
   /** Flag a community for the month; it goes to the end of that month's queue. */
   addKsiegowaniePriorytet: (
     monthKey: string,

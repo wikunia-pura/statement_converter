@@ -132,6 +132,36 @@ export interface Adres {
   createdAt: string;
 }
 
+/**
+ * Who owns how much of a community — the budget plan's header. Only the city's
+ * and the leased ("pożytki") areas are kept: the private part is the rest of
+ * the total, which comes from the statement.
+ */
+export interface AdresUdzialy {
+  /** m² owned by M.St. Warszawa. */
+  miastoM2: number;
+  /** m² of common property let out ("pożytki"). */
+  pozytkiM2: number;
+}
+
+/**
+ * What the Zebrania module remembers about a community, keyed by its NAME (like
+ * the dashboard tables) so it survives a backup restore that renumbers `adresy`.
+ */
+export interface ZebraniaWspolnota {
+  adresNazwa: string;
+  /**
+   * The community's number in vDom ("Nr wsp." on its statement) — how a
+   * statement file is matched to it. Set the first time a statement is picked
+   * by hand, then used for every later file.
+   */
+  vdomNr: number | null;
+  /** Ownership split the budget plan needs and the statement does not carry. */
+  udzialy: AdresUdzialy | null;
+  updatedAt: string;
+  updatedBy: string;
+}
+
 /** One member of a community's board (Adresy → Zarząd). */
 export interface ZarzadOsoba {
   /** Stable within the list, so an edit or a delete hits the right person. */
@@ -362,6 +392,22 @@ export interface KsiegowaniePriorytet {
   notatkaBy?: string;
   createdBy: string;
   createdAt: string;
+}
+
+/**
+ * Who posts one community in one month — the dashboard's person picker and its
+ * "Kto" filter. No row for a month = unassigned that month.
+ */
+export interface KsiegowaniePrzypisanie {
+  id: number;
+  /** `YYYY-MM`, the dashboard's month key. */
+  monthKey: string;
+  adresId: number | null;
+  adresNazwa: string;
+  /** The assignee's mailbox. */
+  email: string;
+  assignedBy: string;
+  assignedAt: string;
 }
 
 /**
@@ -1193,6 +1239,8 @@ export interface ZebranieWersja {
   zebranieId: number;
   major: number;
   minor: number;
+  /** The revision's own name ("Po uwagach zarządu"); empty means just "Wersja 1.1". */
+  nazwa: string;
   status: ZebranieStatus;
   /** What changed in this revision, in the author's words. */
   opis: string;
@@ -1201,6 +1249,10 @@ export interface ZebranieWersja {
   createdAt: string;
   updatedAt: string;
   updatedBy: string;
+  /** The financial statement this version presents. */
+  sprawozdanie: ZebranieSprawozdanie | null;
+  /** The budget plan drafted from it. */
+  plan: PlanGospodarczy | null;
 }
 
 /**
@@ -1247,6 +1299,266 @@ export type ZebranieInput = Pick<
 export interface ZebranieWersjaInput {
   opis: string;
   materialy: ZebranieMaterial[];
+}
+
+/* ---------------------- Sprawozdania i plany gospodarcze ---------------------- */
+
+/**
+ * One row of a statement section: its label and one amount per column (null
+ * where the column is empty). `podsumowanie` marks the rows under the section's
+ * closing rule — "Razem", "Stan na dzień …", "Wynik finansowy …".
+ */
+export interface SprawozdanieWiersz {
+  nazwa: string;
+  kwoty: (number | null)[];
+  podsumowanie: boolean;
+  /** Printed in bold in vDom — the figures the section ends on. */
+  wyroznienie: boolean;
+}
+
+/** One numbered section of a statement ("1. Fundusz remontowy", "Informacja o kredytach" …). */
+export interface SprawozdanieSekcja {
+  tytul: string;
+  /** Column headings, left to right ("Przychód", "Koszty"). */
+  kolumny: string[];
+  wiersze: SprawozdanieWiersz[];
+  /** An amount printed on the heading line itself ("4. Środki pieniężne 98.472,96"). */
+  kwotaNaglowka: number | null;
+}
+
+/**
+ * A community's financial statement, read from a vDom "RozliczenieWsp" PDF.
+ * Kept as the sections vDom printed rather than a fixed schema: the content
+ * changes between communities and years, the layout does not.
+ */
+export interface Sprawozdanie {
+  nrWsp: number | null;
+  /** The title as printed: "Wspólnota Mieszkaniowa Kolberga 8". */
+  nazwa: string;
+  /** ISO dates (YYYY-MM-DD). */
+  okresOd: string;
+  okresDo: string;
+  powierzchnia: number | null;
+  powierzchniaCo: number | null;
+  sredniaLiczbaOsob: number | null;
+  sekcje: SprawozdanieSekcja[];
+  /** vDom's print stamp ("2026.10.02 10:43"). */
+  wydruk: string;
+}
+
+/** A statement in the shared library — every community of every uploaded file. */
+export interface SprawozdanieZapisane {
+  id: number;
+  nrWsp: number | null;
+  nazwa: string;
+  okresOd: string;
+  okresDo: string;
+  plikNazwa: string;
+  importedAt: string;
+  importedBy: string;
+  /** Where the row came from — see `SprawozdanieZrodlo`. */
+  zrodlo: SprawozdanieZrodlo;
+  /** Left out of the list; read one by id. */
+  dane?: Sprawozdanie;
+}
+
+/**
+ * Who put a statement in the library. A file uploaded in Zebrania is the source
+ * of truth; the Sprawozdania module only adds what Zebrania does not have, and
+ * a Zebrania upload of the same community and period takes such a row over.
+ */
+export type SprawozdanieZrodlo = 'zebrania' | 'sprawozdania';
+
+/** What one upload did: how many communities it held, and the library rows they became. */
+export interface SprawozdaniaImportResult {
+  plikNazwa: string;
+  zapisane: SprawozdanieZapisane[];
+}
+
+/** An upload in the Sprawozdania module: what it added, and what Zebrania already had. */
+export interface SprawozdaniaWlasneImportResult extends SprawozdaniaImportResult {
+  /** Statements of the file left out because Zebrania has that community and period. */
+  pominiete: number;
+}
+
+/** "Pobierz PDF" / "Pobierz Excel" of a library statement, outside any meeting. */
+export interface SprawozdanieExportRequest {
+  sprawozdanieId: number;
+  format: ZebranieDokumentFormat;
+  /** The PDF opens with its introduction unless this is false. */
+  wstep?: boolean;
+}
+
+/** A download made from a document — who, when, which files. */
+export interface DokumentPobranie {
+  at: string;
+  by: string;
+  pliki: string[];
+}
+
+/** The statement attached to one version of a meeting — a snapshot of the library row. */
+export interface ZebranieSprawozdanie {
+  dane: Sprawozdanie;
+  plikNazwa: string;
+  /** The library row it was taken from (informational — the row may be replaced later). */
+  zrodloId: number | null;
+  dodano: string;
+  dodal: string;
+  pobrania: DokumentPobranie[];
+  /** The introduction as edited for this version; null = the one computed from the figures. */
+  wstep: SprawozdanieWstepTekst | null;
+}
+
+/** The words of a statement's introduction, as someone edited them. The headline figures stay computed. */
+export interface SprawozdanieWstepTekst {
+  akapit: string;
+  uwagi: string[];
+}
+
+/** Where a statement row goes in the budget plan. */
+export type PlanKategoriaKosztu =
+  | 'remonty'
+  | 'energia'
+  | 'porzadek'
+  | 'zarzadzanie'
+  | 'zarzad'
+  | 'ubezpieczenie'
+  | 'pozostale';
+export type PlanKategoriaPrzychodu = 'reklamy' | 'pozytki' | 'inne';
+/** `zaliczkaA` marks the advance-payment income the current rate is read from; `pomin` leaves a row out. */
+export type PlanKategoria = PlanKategoriaKosztu | PlanKategoriaPrzychodu | 'zaliczkaA' | 'pomin';
+
+/** "A statement row whose name contains `wzorzec` goes to `kategoria`." First match wins. */
+export interface PlanSlownikRegula {
+  id: string;
+  wzorzec: string;
+  kategoria: PlanKategoria;
+}
+
+/** Settings of the Zebrania module, shared by everyone. */
+export interface ZebraniaUstawienia {
+  slownik: PlanSlownikRegula[];
+  /** Default number of the resolution adopting the plan; `{rok}` is the plan's year. */
+  uchwalaPlanNr: string;
+  /** Planned costs are rounded up to this (zł). */
+  zaokraglenie: number;
+}
+
+/** One stretch of the year at one advance rate: "I–III at 2,50 zł/m²". */
+export interface PlanOkresZaliczki {
+  miesiace: number;
+  stawka: number;
+}
+
+/** A repair paid from the repair fund, typed in by hand. */
+export interface PlanRemontFR {
+  id: string;
+  opis: string;
+  kwota: number;
+}
+
+/** One statement row that fed a plan category — shown so the number can be checked. */
+export interface PlanZrodlo {
+  kategoria: PlanKategoria;
+  nazwa: string;
+  /** The amount for a full year (scaled up when the statement covers less). */
+  kwotaRoczna: number;
+  /** True when no dictionary rule matched and the row fell to the default category. */
+  bezReguly: boolean;
+}
+
+/**
+ * The budget plan of one meeting version — generated from its statement, then
+ * edited. Holds the inputs only; every total and per-m² figure is derived
+ * (`planSumy` in shared/plan-gospodarczy), so an edit can never leave a stale sum.
+ */
+export interface PlanGospodarczy {
+  rok: number;
+  /** "ul. Kolberga 8 w Warszawie". */
+  nieruchomosc: string;
+  uchwalaNr: string;
+  /** Date of the balances (the statement's end), ISO. */
+  stanNaDzien: string;
+  powierzchnia: number;
+  miastoM2: number;
+  pozytkiM2: number;
+  /* Część I — zaliczka "A" */
+  saldoA: number;
+  zaliczkaA: PlanOkresZaliczki[];
+  przychody: Record<PlanKategoriaPrzychodu, number>;
+  koszty: Record<PlanKategoriaKosztu, number>;
+  /** Fill "Remonty bieżące" with whatever balances part I — kept on until the user types a value. */
+  remontyDomykaja: boolean;
+  /* Część II — zaliczka "B" (fundusz remontowy) */
+  saldoB: number;
+  zaliczkaB: PlanOkresZaliczki[];
+  inneWplywyB: number;
+  kredyt: number;
+  remontyFR: PlanRemontFR[];
+  /* Provenance */
+  zrodla: PlanZrodlo[];
+  wskaznik: number;
+  sprawozdanieOkres: { od: string; do: string };
+  zmieniono: string;
+  zmienil: string;
+  pobrania: DokumentPobranie[];
+}
+
+/**
+ * A budget plan of the Plany gospodarcze module — made outside any meeting,
+ * from a library statement, for a community and year Zebrania has no plan for.
+ */
+export interface PlanWlasny {
+  id: number;
+  /** The community's vDom number — with `rok`, what tells plans apart. */
+  nrWsp: number;
+  /** The statement's printed name ("Wspólnota Mieszkaniowa Kolberga 8"). */
+  nazwa: string;
+  rok: number;
+  plan: PlanGospodarczy;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+/** "Pobierz PDF" / "Pobierz Excel" of a plan of the Plany gospodarcze module. */
+export interface PlanWlasnyExportRequest {
+  planId: number;
+  format: ZebranieDokumentFormat;
+}
+
+/** Which document to produce, in which format. */
+export type ZebranieDokument = 'sprawozdanie' | 'plan';
+export type ZebranieDokumentFormat = 'xlsx' | 'pdf';
+
+/** Ask the main process for one document of one version. */
+export interface ZebranieDokumentRequest {
+  wersjaId: number;
+  dokument: ZebranieDokument;
+  format: ZebranieDokumentFormat;
+  /** The meeting's date (ISO) — printed under the plan. */
+  dataZebrania: string | null;
+  /** The statement's PDF opens with its introduction unless this is false. */
+  wstep?: boolean;
+}
+
+/**
+ * "Pobierz PDF" in Kalendarz: a month or any period, as the user filtered it.
+ * The meetings themselves are re-read by the main process; the renderer only
+ * says which ones and which filters produced that selection, so the page can
+ * say it is not everything in the period.
+ */
+export interface KalendarzPdfRequest {
+  /** First day, `YYYY-MM-DD` — a whole month is its first to its last day. */
+  okresOd: string;
+  /** Last day, `YYYY-MM-DD`, inclusive. */
+  okresDo: string;
+  /** The period's meetings that pass the filters on screen. */
+  spotkanieIds: number[];
+  typId: number | null;
+  stan: 'all' | 'changed' | 'tentative' | 'nodocs' | 'overdue';
+  szukaj: string;
 }
 
 /* ------------------------- Notification inbox -------------------------- */
@@ -1554,6 +1866,8 @@ export interface BackupData {
     /** Absent in backups written before the dashboard had priorities and notes. */
     ksiegowaniaPriorytety?: KsiegowaniePriorytet[];
     ksiegowaniaUwagi?: KsiegowanieUwaga[];
+    /** Who posts which community in which month. Absent in backups written before it existed. */
+    ksiegowaniaPrzypisania?: KsiegowaniePrzypisanie[];
     /**
      * Files the folder scan pinned to communities. Only the records travel —
      * the files stay in the statements folder. Absent in backups written
@@ -1575,6 +1889,17 @@ export interface BackupData {
      * module existed.
      */
     zebrania?: Zebranie[];
+    /**
+     * The statement library (every community of every uploaded vDom file),
+     * with the statements. Absent in backups written before it existed.
+     */
+    zebraniaSprawozdania?: SprawozdanieZapisane[];
+    /** vDom numbers and ownership splits remembered per community, by name. */
+    zebraniaWspolnoty?: ZebraniaWspolnota[];
+    /** The module's settings; null when nobody has changed the defaults. */
+    zebraniaUstawienia?: ZebraniaUstawienia | null;
+    /** Plans made in Plany gospodarcze (not Zebrania's). Absent in backups written before it existed. */
+    planyGospodarcze?: PlanWlasny[];
     /** Never carries `smtpPass` — the SMTP password stays on the machine. */
     settings: AppSettings;
   };
@@ -1603,11 +1928,16 @@ export interface BackupCounts {
   notificationPrefs: number;
   ksiegowaniaPriorytety: number;
   ksiegowaniaUwagi: number;
+  ksiegowaniaPrzypisania: number;
   ksiegowaniaPliki: number;
   ksiegowaniaKonwersje: number;
   mailingTypy: number;
   zebrania: number;
   zebraniaWersje: number;
+  zebraniaSprawozdania: number;
+  zebraniaWspolnoty: number;
+  zebraniaUstawienia: number;
+  planyGospodarcze: number;
 }
 
 export function countBackup(data: BackupData): BackupCounts {
@@ -1633,11 +1963,16 @@ export function countBackup(data: BackupData): BackupCounts {
     notificationPrefs: data.data.notificationPrefs?.length ?? 0,
     ksiegowaniaPriorytety: data.data.ksiegowaniaPriorytety?.length ?? 0,
     ksiegowaniaUwagi: data.data.ksiegowaniaUwagi?.length ?? 0,
+    ksiegowaniaPrzypisania: data.data.ksiegowaniaPrzypisania?.length ?? 0,
     ksiegowaniaPliki: data.data.ksiegowaniaPliki?.length ?? 0,
     ksiegowaniaKonwersje: data.data.ksiegowaniaKonwersje?.length ?? 0,
     mailingTypy: data.data.mailingTypy?.length ?? 0,
     zebrania: data.data.zebrania?.length ?? 0,
     zebraniaWersje: (data.data.zebrania ?? []).reduce((n, z) => n + (z.wersje?.length ?? 0), 0),
+    zebraniaSprawozdania: data.data.zebraniaSprawozdania?.length ?? 0,
+    zebraniaWspolnoty: data.data.zebraniaWspolnoty?.length ?? 0,
+    zebraniaUstawienia: data.data.zebraniaUstawienia ? 1 : 0,
+    planyGospodarcze: data.data.planyGospodarcze?.length ?? 0,
   };
 }
 
@@ -1819,6 +2154,28 @@ export const IPC_CHANNELS = {
   ADD_ZEBRANIE_WERSJA: 'zebrania:add-wersja',
   UPDATE_ZEBRANIE_WERSJA: 'zebrania:update-wersja',
   SET_ZEBRANIE_WERSJA_STATUS: 'zebrania:set-wersja-status',
+  SET_ZEBRANIE_WERSJA_NAZWA: 'zebrania:set-wersja-nazwa',
+  ZEBRANIA_SPRAWOZDANIA_IMPORT: 'zebrania:sprawozdania-import',
+  ZEBRANIA_SPRAWOZDANIA_LISTA: 'zebrania:sprawozdania-lista',
+  ZEBRANIA_SPRAWOZDANIE_GET: 'zebrania:sprawozdanie-get',
+  ZEBRANIE_WERSJA_ATTACH_SPRAWOZDANIE: 'zebrania:wersja-attach-sprawozdanie',
+  ZEBRANIE_WERSJA_REMOVE_SPRAWOZDANIE: 'zebrania:wersja-remove-sprawozdanie',
+  ZEBRANIE_WERSJA_SET_SPRAWOZDANIE_WSTEP: 'zebrania:wersja-set-sprawozdanie-wstep',
+  ZEBRANIE_WERSJA_SET_PLAN: 'zebrania:wersja-set-plan',
+  ZEBRANIA_WSPOLNOTY_GET: 'zebrania:wspolnoty-get',
+  ZEBRANIA_WSPOLNOTA_SET: 'zebrania:wspolnota-set',
+  ZEBRANIA_USTAWIENIA_GET: 'zebrania:ustawienia-get',
+  ZEBRANIA_USTAWIENIA_SET: 'zebrania:ustawienia-set',
+  ZEBRANIA_DOKUMENT_EXPORT: 'zebrania:dokument-export',
+  SPRAWOZDANIA_IMPORT_WLASNE: 'sprawozdania:import-wlasne',
+  SPRAWOZDANIE_DELETE_WLASNE: 'sprawozdania:delete-wlasne',
+  SPRAWOZDANIE_EXPORT: 'sprawozdania:export',
+  PLANY_WLASNE_GET: 'plany:get',
+  PLAN_WLASNY_ADD: 'plany:add',
+  PLAN_WLASNY_SET: 'plany:set',
+  PLAN_WLASNY_DELETE: 'plany:delete',
+  PLAN_WLASNY_EXPORT: 'plany:export',
+  KALENDARZ_PDF_EXPORT: 'kalendarz:pdf-export',
   RECORD_ZEBRANIE_POBRANIE: 'zebrania:record-pobranie',
 
   // Kalendarz (meetings, their user-defined types, and the account list the
@@ -1867,6 +2224,8 @@ export const IPC_CHANNELS = {
 
   // Księgowania: priorities with a note, and notes on a community
   GET_KS_PRIORYTETY: 'ksiegowania:get-priorytety',
+  GET_KS_PRZYPISANIA: 'ksiegowania:get-przypisania',
+  SET_KS_PRZYPISANIE: 'ksiegowania:set-przypisanie',
   ADD_KS_PRIORYTET: 'ksiegowania:add-priorytet',
   SET_KS_PRIORYTET_NOTATKA: 'ksiegowania:set-priorytet-notatka',
   REMOVE_KS_PRIORYTET: 'ksiegowania:remove-priorytet',

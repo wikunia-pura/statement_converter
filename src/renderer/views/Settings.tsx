@@ -275,7 +275,7 @@ const Settings: React.FC<SettingsProps> = ({
     try {
       const result = await window.electronAPI.exportSettings();
       if (result.success) {
-        notify.success(t.exportSuccess);
+        notify.success(t.exportSuccess, { file: result.filePath });
       }
     } catch (error) {
       notify.error(t.exportError);
@@ -392,11 +392,16 @@ const Settings: React.FC<SettingsProps> = ({
       .replace('{appUserNames}', String(counts.appUserNames))
       .replace('{ksiegowaniaPriorytety}', String(counts.ksiegowaniaPriorytety))
       .replace('{ksiegowaniaUwagi}', String(counts.ksiegowaniaUwagi))
+      .replace('{ksiegowaniaPrzypisania}', String(counts.ksiegowaniaPrzypisania))
       .replace('{ksiegowaniaPliki}', String(counts.ksiegowaniaPliki))
       .replace('{ksiegowaniaKonwersje}', String(counts.ksiegowaniaKonwersje))
       .replace('{mailingTypy}', String(counts.mailingTypy))
       .replace('{zebrania}', String(counts.zebrania))
-      .replace('{zebraniaWersje}', String(counts.zebraniaWersje));
+      .replace('{zebraniaWersje}', String(counts.zebraniaWersje))
+      .replace('{zebraniaSprawozdania}', String(counts.zebraniaSprawozdania))
+      .replace('{zebraniaWspolnoty}', String(counts.zebraniaWspolnoty))
+      .replace('{zebraniaUstawienia}', String(counts.zebraniaUstawienia))
+      .replace('{planyGospodarcze}', String(counts.planyGospodarcze));
   };
 
   const handleCreateBackup = async () => {
@@ -404,7 +409,9 @@ const Settings: React.FC<SettingsProps> = ({
     try {
       const result = await window.electronAPI.backupExport();
       if (result.success) {
-        notify.success(`${t.backupCreated} (${formatBackupCounts(result.counts)})`);
+        notify.success(`${t.backupCreated} (${formatBackupCounts(result.counts)})`, {
+          file: result.filePath,
+        });
       } else if (result.error) {
         notify.error(`${t.backupError}: ${result.error}`);
       }

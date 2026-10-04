@@ -407,7 +407,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
       } catch {
         // The files are in Downloads either way; only the record of it is missing.
       }
-      notify.success(t.zawDownloaded);
+      notify.success(t.zawDownloaded, { file: result.files[0]?.filePath });
     } catch (err: unknown) {
       notify.error(err instanceof Error ? err.message : String(err), t.zawDownloadError);
     } finally {

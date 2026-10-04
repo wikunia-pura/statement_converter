@@ -144,7 +144,9 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
     try {
       const result = await window.electronAPI.exportBanksToFile();
       if (result.success && typeof result.count === 'number') {
-        notify.success(t.exportBanksSuccess.replace('{count}', String(result.count)));
+        notify.success(t.exportBanksSuccess.replace('{count}', String(result.count)), {
+          file: result.filePath,
+        });
       } else if (result.error) {
         notify.error(`${t.exportBanksError}: ${result.error}`);
       }

@@ -65,7 +65,9 @@ const History: React.FC<HistoryProps> = ({ language, searchSeed }) => {
     try {
       const result = await window.electronAPI.exportHistoryToFile();
       if (result.success) {
-        notify.success(t.exportHistorySuccess.replace('{count}', String(result.count ?? 0)));
+        notify.success(t.exportHistorySuccess.replace('{count}', String(result.count ?? 0)), {
+          file: result.filePath,
+        });
       } else if (result.error) {
         notify.error(`${t.exportHistoryError}: ${result.error}`);
       }

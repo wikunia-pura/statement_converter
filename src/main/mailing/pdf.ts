@@ -17,7 +17,7 @@
  * render, and a batch now pays it once.
  */
 
-import { BrowserWindow, app } from 'electron';
+import { BrowserWindow, PrintToPDFOptions, app } from 'electron';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -55,7 +55,22 @@ app.on('will-quit', () => {
   sharedWindow = null;
 });
 
-async function renderNow(html: string, outPath: string): Promise<void> {
+/**
+ * The letter's print settings: edge-to-edge, because the mail's tinted page is
+ * the design. A multi-page document passes its own (margins, a page footer).
+ */
+const LETTER_PRINT: PrintToPDFOptions = {
+  pageSize: 'A4',
+  // Backgrounds are the design here, not decoration: without this the tinted
+  // page and the letterhead band would print as blank white.
+  printBackground: true,
+  // No page margins: the tint has to reach the paper edge, or the letter
+  // would read as a grey box floating in a white frame. The white space
+  // around the card comes from the shell's own padding instead.
+  margins: { marginType: 'custom', top: 0, bottom: 0, left: 0, right: 0 },
+};
+
+async function renderNow(html: string, outPath: string, print: PrintToPDFOptions): Promise<void> {
   // The markup goes to a temp file rather than a `data:` URL: a short letter
   // would fit, but a long one would hit the URL-length limit and fail in a way
   // that is tedious to diagnose.
@@ -66,16 +81,7 @@ async function renderNow(html: string, outPath: string): Promise<void> {
   try {
     const win = getWindow();
     await win.loadFile(tempHtml);
-    const data = await win.webContents.printToPDF({
-      pageSize: 'A4',
-      // Backgrounds are the design here, not decoration: without this the tinted
-      // page and the letterhead band would print as blank white.
-      printBackground: true,
-      // No page margins: the tint has to reach the paper edge, or the letter
-      // would read as a grey box floating in a white frame. The white space
-      // around the card comes from the shell's own padding instead.
-      margins: { marginType: 'custom', top: 0, bottom: 0, left: 0, right: 0 },
-    });
+    const data = await win.webContents.printToPDF(print);
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
     fs.writeFileSync(outPath, data);
   } finally {
@@ -88,13 +94,16 @@ async function renderNow(html: string, outPath: string): Promise<void> {
   }
 }
 
-/** Render a complete HTML document to a PDF file at `outPath`. */
-export function renderHtmlToPdf(html: string, outPath: string): Promise<void> {
+/**
+ * Render a complete HTML document to a PDF file at `outPath` — with the
+ * letter's edge-to-edge settings unless `print` says otherwise.
+ */
+export function renderHtmlToPdf(html: string, outPath: string, print: PrintToPDFOptions = LETTER_PRINT): Promise<void> {
   // Chain onto the queue whether the previous render succeeded or failed, so one
   // bad letter cannot block the rest of the batch.
   const run = queue.then(
-    () => renderNow(html, outPath),
-    () => renderNow(html, outPath),
+    () => renderNow(html, outPath, print),
+    () => renderNow(html, outPath, print),
   );
   queue = run.catch(() => undefined);
   return run;

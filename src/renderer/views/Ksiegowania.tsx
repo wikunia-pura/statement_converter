@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Adres,
+  AppUser,
   ConversionHistory,
   FileEntry,
   KontoTyp,
   KsiegowaniePlik,
   KsiegowaniePriorytet,
+  KsiegowaniePrzypisanie,
   KsiegowanieUwaga,
   Spotkanie,
   SpotkanieMailing,
@@ -16,6 +18,8 @@ import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
 import Icon from '../components/Icon';
 import Select from '../components/Select';
+import SearchableSelect from '../components/SearchableSelect';
+import { comparePeople, personColor, personLabel } from '../../shared/app-users';
 import MonthIllustration, { monthAccent } from '../components/MonthIllustration';
 import {
   countAlerts,
@@ -57,6 +61,29 @@ import {
   toBookingRows,
 } from '../../shared/bookings';
 import { plural } from '../plural';
+
+/** The "Kto" filter: everyone, the signed-in person, nobody, or one person. */
+type WhoFilter = { kind: 'all' } | { kind: 'mine' } | { kind: 'none' } | { kind: 'person'; email: string };
+
+const WHO_FILTER_KEY = 'ksiegowania.whoFilter';
+
+function whoFilterValue(f: WhoFilter): string {
+  return f.kind === 'person' ? `p:${f.email}` : f.kind;
+}
+
+function parseWhoFilter(value: string): WhoFilter {
+  if (value.startsWith('p:')) return { kind: 'person', email: value.slice(2) };
+  if (value === 'mine' || value === 'none') return { kind: value };
+  return { kind: 'all' };
+}
+
+/** The pickers' "Przypisz do mnie" entry — resolved to the signed-in mailbox on pick. */
+const ASSIGN_TO_ME = '__me__';
+/** The batch picker's "Nieprzypisane" entry. */
+const UNASSIGN = '__none__';
+
+const sameMailbox = (a: string | null | undefined, b: string | null | undefined): boolean =>
+  !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
 
 interface Props {
   language: Language;
@@ -302,6 +329,25 @@ const Ksiegowania: React.FC<Props> = ({
   const tiles = resolveBookingTileOrder(tileOrder);
   // Rows (by group key) with a priority / note write in flight.
   const [noteBusy, setNoteBusy] = useState<Set<string>>(new Set());
+  // Who posts which community, every month; the view picks its own month.
+  const [przypisania, setPrzypisania] = useState<KsiegowaniePrzypisanie[]>([]);
+  const [users, setUsers] = useState<AppUser[]>([]);
+  // Remembered on this computer — the filter one person uses every day.
+  const [whoFilter, setWhoFilterState] = useState<WhoFilter>(() => {
+    try {
+      return parseWhoFilter(localStorage.getItem(WHO_FILTER_KEY) ?? 'all');
+    } catch {
+      return { kind: 'all' };
+    }
+  });
+  const setWhoFilter = (f: WhoFilter) => {
+    setWhoFilterState(f);
+    try {
+      localStorage.setItem(WHO_FILTER_KEY, whoFilterValue(f));
+    } catch {
+      // a convenience only
+    }
+  };
   const [isLoading, setIsLoading] = useState(true);
   // A refresh must not blank the dashboard — only the first load shows a loader.
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -333,6 +379,8 @@ const Ksiegowania: React.FC<Props> = ({
         plikiData,
         kontoTypyData,
         settings,
+        przypisaniaData,
+        usersData,
       ] = await Promise.all([
           // The dashboard's own records — the history log may be cleared.
           window.electronAPI.getKsiegowaniaKonwersje(),
@@ -347,6 +395,8 @@ const Ksiegowania: React.FC<Props> = ({
           window.electronAPI.getKsiegowaniaPliki().catch(() => [] as KsiegowaniePlik[]),
           window.electronAPI.getKontoTypy().catch(() => [] as KontoTyp[]),
           window.electronAPI.getSettings().catch(() => null),
+          window.electronAPI.getKsiegowaniaPrzypisania().catch(() => [] as KsiegowaniePrzypisanie[]),
+          window.electronAPI.getAppUsers().catch(() => [] as AppUser[]),
         ]);
       setHistory(historyData);
       setAdresy(adresyData);
@@ -358,6 +408,8 @@ const Ksiegowania: React.FC<Props> = ({
       setPliki(plikiData);
       setKontoTypy(kontoTypyData);
       setStatementsFolder(settings?.statementsFolder ?? '');
+      setPrzypisania(przypisaniaData);
+      setUsers(usersData);
     } catch (err: unknown) {
       // Said out loud: a dashboard quietly showing stale numbers is worse than none.
       notify.error(`${t.ksLoadError}\n${err instanceof Error ? err.message : String(err)}`);
@@ -425,12 +477,30 @@ const Ksiegowania: React.FC<Props> = ({
    * and turns green in place. The list re-settles only when the user asks for
    * it — another filter, another sort, "Przesortuj", or "Odśwież dane".
    */
-  const orderKey = `${monthKey}|${filter}|${sort}|${search.trim().toLowerCase()}|${settleId}`;
+  /** This month's assignee of each community, by its name (as the table keys it). */
+  const assigneeByName = useMemo(() => {
+    const map = new Map<string, KsiegowaniePrzypisanie>();
+    for (const p of przypisania) {
+      if (p.monthKey === monthKey) map.set(p.adresNazwa.trim().toLowerCase(), p);
+    }
+    return map;
+  }, [przypisania, monthKey]);
+  const assigneeOf = (g: AddressBookingGroup): string | null =>
+    g.unassigned ? null : assigneeByName.get(g.nazwa.trim().toLowerCase())?.email ?? null;
+  const matchesWho = (g: AddressBookingGroup): boolean => {
+    if (whoFilter.kind === 'all') return true;
+    const email = assigneeOf(g);
+    if (whoFilter.kind === 'none') return !email && !g.unassigned;
+    if (whoFilter.kind === 'mine') return sameMailbox(email, userEmail);
+    return sameMailbox(email, whoFilter.email);
+  };
+
+  const orderKey = `${monthKey}|${filter}|${sort}|${search.trim().toLowerCase()}|${whoFilterValue(whoFilter)}|${settleId}`;
   const settled = useRef<{ key: string; keys: string[] }>({ key: '', keys: [] });
 
   const { visible, orderStale } = useMemo(() => {
     const matching = groups.filter(
-      (g) => matchesBookingFilter(g, filter) && matchesBookingSearch(g, search),
+      (g) => matchesBookingFilter(g, filter) && matchesBookingSearch(g, search) && matchesWho(g),
     );
     // The chosen sort decides the order; the priority queue is stuck on top of it
     // afterwards (`pinPriorities`) rather than being a sort of its own.
@@ -459,7 +529,8 @@ const Ksiegowania: React.FC<Props> = ({
     const list = pinPriorities(heldOrder);
     const stale = list.length !== sorted.length || list.some((g, i) => g.key !== sorted[i]?.key);
     return { visible: list, orderStale: stale };
-  }, [groups, filter, search, sort, locale, orderKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups, filter, search, sort, locale, orderKey, assigneeByName]);
 
   /** How many of the rows on screen are the queue (they are pinned to the top). */
   const queueLength = visible.filter((g) => g.priorityRank !== null).length;
@@ -772,12 +843,15 @@ const Ksiegowania: React.FC<Props> = ({
     openConversion([status], `${group.nazwa} · ${status.plik.fileName}`);
 
   /** The ticked communities that still have something to convert. */
-  const selectedGroups = groups.filter((g) => selected.has(g.key) && g.ready > 0);
+  /** Every ticked community — what "Przypisz" acts on. */
+  const tickedGroups = groups.filter((g) => selected.has(g.key) && !g.unassigned);
+  /** …of which those with something to convert — what "Konwertuj zaznaczone" acts on. */
+  const selectedGroups = tickedGroups.filter((g) => g.ready > 0);
   const selectedFiles = selectedGroups.reduce((n, g) => n + g.ready, 0);
 
-  // What can be ticked: the communities on screen — under the current filter
-  // and search — that have a statement waiting and a tick of their own.
-  const selectable = visible.filter((g) => g.ready > 0 && !g.unassigned);
+  // What can be ticked: every community on screen — under the current filter and
+  // search. A tick serves both batch actions: converting and assigning.
+  const selectable = visible.filter((g) => !g.unassigned);
   const selectedVisible = selectable.filter((g) => selected.has(g.key)).length;
   const allVisibleSelected = selectable.length > 0 && selectedVisible === selectable.length;
 
@@ -827,6 +901,83 @@ const Ksiegowania: React.FC<Props> = ({
         : t.ksConvModalTitleMany.replace('{n}', String(selectedGroups.length)),
     );
   };
+
+  /**
+   * Assign the community's month to a person (or nobody). Optimistic, like a
+   * DOM tick: the row changes at once; a failed write reloads what is stored.
+   */
+  const assign = async (group: AddressBookingGroup, email: string | null) => {
+    const nazwa = group.nazwa.trim();
+    const key = nazwa.toLowerCase();
+    setPrzypisania((prev) => {
+      const rest = prev.filter((p) => !(p.monthKey === monthKey && p.adresNazwa.trim().toLowerCase() === key));
+      if (!email) return rest;
+      return [
+        ...rest,
+        {
+          id: -Date.now(),
+          monthKey,
+          adresId: group.adresId,
+          adresNazwa: nazwa,
+          email,
+          assignedBy: userEmail ?? '',
+          assignedAt: new Date().toISOString(),
+        },
+      ];
+    });
+    try {
+      await window.electronAPI.setKsiegowaniePrzypisanie(monthKey, group.adresId, nazwa, email);
+    } catch (err: unknown) {
+      notify.error(`${t.ksAssignError}\n${err instanceof Error ? err.message : String(err)}`);
+    }
+    try {
+      setPrzypisania(await window.electronAPI.getKsiegowaniaPrzypisania());
+    } catch {
+      // the optimistic state stays; the next load corrects it
+    }
+  };
+
+  /** "Przypisz" on the batch bar: one person (or nobody) for every ticked community. */
+  const assignTicked = async (email: string | null) => {
+    const targets = tickedGroups;
+    if (targets.length === 0) return;
+    const keys = new Set(targets.map((g) => g.nazwa.trim().toLowerCase()));
+    setPrzypisania((prev) => {
+      const rest = prev.filter((p) => !(p.monthKey === monthKey && keys.has(p.adresNazwa.trim().toLowerCase())));
+      if (!email) return rest;
+      const stamp = new Date().toISOString();
+      return [
+        ...rest,
+        ...targets.map((g, i) => ({
+          id: -Date.now() - i,
+          monthKey,
+          adresId: g.adresId,
+          adresNazwa: g.nazwa.trim(),
+          email,
+          assignedBy: userEmail ?? '',
+          assignedAt: stamp,
+        })),
+      ];
+    });
+    const results = await Promise.allSettled(
+      targets.map((g) => window.electronAPI.setKsiegowaniePrzypisanie(monthKey, g.adresId, g.nazwa.trim(), email)),
+    );
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    if (failed > 0) notify.error(t.ksAssignManyError.replace('{n}', String(failed)));
+    else
+      notify.success(
+        (email ? t.ksAssignManyDone : t.ksUnassignManyDone).replace('{n}', String(targets.length)),
+      );
+    try {
+      setPrzypisania(await window.electronAPI.getKsiegowaniaPrzypisania());
+    } catch {
+      // the optimistic state stays; the next load corrects it
+    }
+  };
+
+  const peopleOptions = [...users]
+    .sort(comparePeople)
+    .map((u) => ({ value: u.email, label: personLabel(u), hint: u.email }));
 
   /* ------------------------------- Rendering ----------------------------- */
 
@@ -1100,6 +1251,25 @@ const Ksiegowania: React.FC<Props> = ({
             onChange={(value) => setSort(value as BookingSort)}
             className="ksieg-toolbar__sort"
           />
+          {/* Kto: whose communities this month — like the Zadania board's filter. */}
+          <SearchableSelect
+            size="sm"
+            overlay
+            className={`ksieg-toolbar__who${whoFilter.kind === 'all' ? '' : ' is-active'}`}
+            menuMinWidth={240}
+            value={whoFilterValue(whoFilter)}
+            options={[
+              { value: 'all', label: t.ksWhoAll },
+              { value: 'mine', label: t.ksWhoMine },
+              { value: 'none', label: t.ksWhoNone },
+              ...peopleOptions.map((o) => ({ ...o, value: `p:${o.value}` })),
+            ]}
+            onChange={(value) => setWhoFilter(parseWhoFilter(value))}
+            searchPlaceholder={t.zadSearchPerson}
+            emptyText={t.zadNoPersonFound}
+            ariaLabel={t.ksWhoLabel}
+            title={t.ksWhoLabel}
+          />
           {priorityGroups.length > 0 && (
             <button
               type="button"
@@ -1198,6 +1368,11 @@ const Ksiegowania: React.FC<Props> = ({
                   onConvertOne={(status) => convertOne(group, status)}
                   selected={selected.has(group.key)}
                   onToggleSelected={(range) => toggleSelected(group.key, range)}
+                  assignee={assigneeOf(group)}
+                  users={users}
+                  peopleOptions={peopleOptions}
+                  onAssign={(email) => void assign(group, email)}
+                  userEmail={userEmail}
                 />
               </React.Fragment>
             ))}
@@ -1205,21 +1380,47 @@ const Ksiegowania: React.FC<Props> = ({
         )}
 
         {/* ------- Ticked communities, converted together: floats at the bottom ------- */}
-        {selectedGroups.length > 0 && (
+        {tickedGroups.length > 0 && (
           <div className="ksieg-selbar">
             <Icon name="check-circle" size={16} />
             <span className="ksieg-selbar__text">
               {t.ksSelectionBar
-                .replace('{k}', String(selectedGroups.length))
+                .replace('{k}', String(tickedGroups.length))
                 .replace('{n}', String(selectedFiles))}
             </span>
             <button type="button" className="ksieg-selbar__clear" onClick={() => setSelected(new Set())}>
               {t.ksSelectClear}
             </button>
-            <button type="button" className="ksieg-convert" onClick={convertSelected}>
-              <Icon name="zap" size={16} />
-              <span>{t.ksConvertSelected.replace('{n}', String(selectedFiles))}</span>
-            </button>
+            {/* Assign every ticked community to one person — a picker that acts on
+                pick, dressed as a button beside "Konwertuj zaznaczone". */}
+            <span className="ksieg-selbar__assign-wrap">
+            <Icon name="user-plus" size={15} className="ksieg-selbar__assign-icon" />
+            <SearchableSelect
+              className="ksieg-selbar__assign"
+              overlay
+              menuMinWidth={260}
+              value=""
+              options={[
+                ...(userEmail ? [{ value: ASSIGN_TO_ME, label: t.ksAssignToMe, hint: '' }] : []),
+                // Not '': the picker's own value is empty, so that would show as chosen.
+                { value: UNASSIGN, label: t.ksAssignNobody, hint: '' },
+                ...peopleOptions,
+              ]}
+              onChange={(v) =>
+                void assignTicked(v === ASSIGN_TO_ME ? userEmail ?? null : v === UNASSIGN ? null : v || null)
+              }
+              placeholder={t.ksAssignTicked}
+              searchPlaceholder={t.zadSearchPerson}
+              emptyText={t.zadNoPersonFound}
+              ariaLabel={t.ksAssignTicked}
+            />
+            </span>
+            {selectedFiles > 0 && (
+              <button type="button" className="ksieg-convert" onClick={convertSelected}>
+                <Icon name="zap" size={16} />
+                <span>{t.ksConvertSelected.replace('{n}', String(selectedFiles))}</span>
+              </button>
+            )}
           </div>
         )}
         </div>
@@ -1418,6 +1619,13 @@ const CommunityRow: React.FC<{
   selected: boolean;
   /** `range`: Shift was held — tick everything since the last tick. */
   onToggleSelected: (range: boolean) => void;
+  /** Who posts this community this month (a mailbox), or nobody. */
+  assignee: string | null;
+  users: AppUser[];
+  peopleOptions: { value: string; label: string; hint: string }[];
+  onAssign: (email: string | null) => void;
+  /** The signed-in mailbox, for "Przypisz do mnie". */
+  userEmail?: string;
 }> = ({
   group,
   language,
@@ -1435,8 +1643,14 @@ const CommunityRow: React.FC<{
   onConvertOne,
   selected,
   onToggleSelected,
+  assignee,
+  users,
+  peopleOptions,
+  onAssign,
+  userEmail,
 }) => {
   const t = translations[language];
+  const assigneeUser = assignee ? users.find((u) => sameMailbox(u.email, assignee)) : undefined;
   // Which editor is open on this row. Local on purpose: it is a draft, and the
   // row below the one being typed in must not care.
   const [editingPrioNote, setEditingPrioNote] = useState(false);
@@ -1474,35 +1688,32 @@ const CommunityRow: React.FC<{
         group.priorityRank !== null ? ' ksieg-row--priority' : ''
       }`}
     >
-      {/* The tick for batch conversion sits left of the head — outside it, as
-          the head is a button and cannot hold a control of its own. Rows with
-          nothing to convert keep the slot empty, so the icons line up. The
-          whole head opens the row; there is no chevron to aim at. */}
+      {/* The tick for batch actions (convert, assign) sits left of the head —
+          outside it, as the head is a button and cannot hold a control of its
+          own. The whole head opens the row; there is no chevron to aim at. */}
       <div className={`ksieg-row__headwrap${canNote ? '' : ' is-plain'}`}>
       {canNote && (
         <span className="ksieg-row__select">
-          {group.ready > 0 && (
-            <label
-              className={`ks-check${selected ? ' is-on' : ''}`}
-              title={t.ksSelectForConvert}
-              // Shift+click selects a range; without this it also selects text.
-              onMouseDown={(e) => {
-                if (e.shiftKey) e.preventDefault();
-              }}
-            >
-              <input
-                type="checkbox"
-                className="ks-check__input"
-                checked={selected}
-                // React fires a checkbox's change on its click, so the click's Shift is here.
-                onChange={(e) => onToggleSelected((e.nativeEvent as MouseEvent).shiftKey === true)}
-                aria-label={`${t.ksSelectForConvert}: ${group.nazwa}`}
-              />
-              <span className="ks-check__box" aria-hidden="true">
-                <Icon name="check" size={12} strokeWidth={3} />
-              </span>
-            </label>
-          )}
+          <label
+            className={`ks-check${selected ? ' is-on' : ''}`}
+            title={t.ksSelectForConvert}
+            // Shift+click selects a range; without this it also selects text.
+            onMouseDown={(e) => {
+              if (e.shiftKey) e.preventDefault();
+            }}
+          >
+            <input
+              type="checkbox"
+              className="ks-check__input"
+              checked={selected}
+              // React fires a checkbox's change on its click, so the click's Shift is here.
+              onChange={(e) => onToggleSelected((e.nativeEvent as MouseEvent).shiftKey === true)}
+              aria-label={`${t.ksSelectForConvert}: ${group.nazwa}`}
+            />
+            <span className="ks-check__box" aria-hidden="true">
+              <Icon name="check" size={12} strokeWidth={3} />
+            </span>
+        </label>
         </span>
       )}
       <button
@@ -1574,6 +1785,39 @@ const CommunityRow: React.FC<{
       <div className="ksieg-row__cta">
         {canNote && (
           <span className="ksieg-row__tools">
+            {/* Who posts it this month: the person IS the control, as on a task card. */}
+            <span className="ksieg-who" title={assignee ?? t.ksAssignHint}>
+              <span
+                className={`zad-avatar${assignee ? '' : ' zad-avatar--none'}`}
+                style={
+                  assignee
+                    ? { ['--avatar' as string]: personColor(assigneeUser ?? { email: assignee }) }
+                    : undefined
+                }
+                aria-hidden="true"
+              />
+              <SearchableSelect
+                className="zad-who-select ksieg-who__select"
+                size="sm"
+                overlay
+                menuMinWidth={240}
+                value={assignee ?? ''}
+                options={[
+                  ...(userEmail && !sameMailbox(assignee, userEmail)
+                    ? [{ value: ASSIGN_TO_ME, label: t.ksAssignToMe, hint: '' }]
+                    : []),
+                  { value: '', label: t.ksAssignNobody, hint: '' },
+                  ...peopleOptions,
+                  ...(assignee && !assigneeUser ? [{ value: assignee, label: assignee, hint: '' }] : []),
+                ]}
+                onChange={(email) => onAssign(email === ASSIGN_TO_ME ? userEmail ?? null : email || null)}
+                placeholder={t.ksAssignNobody}
+                searchPlaceholder={t.zadSearchPerson}
+                emptyText={t.zadNoPersonFound}
+                ariaLabel={`${t.ksAssignLabel}: ${group.nazwa}`}
+                title={t.ksAssignHint}
+              />
+            </span>
             <button
               type="button"
               className={`ksieg-tool ksieg-tool--flag${group.priority ? ' is-on' : ''}`}

@@ -83,6 +83,48 @@ export function weekdayLabels(locale: string): string[] {
   );
 }
 
+/* ------------------------------ Periods (PDF) ------------------------------ */
+
+/** The longest period one calendar PDF covers — one grid page per month. */
+export const KALENDARZ_PDF_MAX_MIESIECY = 24;
+
+/** Last day of a month, as a day key: `2026-02` → `2026-02-28`. */
+export function lastDayOfMonth(monthKey: string): string {
+  const [y, m] = monthKey.split('-').map(Number);
+  return `${monthKey}-${pad(new Date(y, m, 0).getDate())}`;
+}
+
+/** Every month a period touches, in order: `2026-10-20`…`2026-12-02` → three. */
+export function monthsInRange(od: string, doDnia: string): string[] {
+  const out: string[] = [];
+  let [y, m] = od.slice(0, 7).split('-').map(Number);
+  const end = doDnia.slice(0, 7);
+  for (let guard = 0; guard < 1200; guard++) {
+    const key = `${y}-${pad(m)}`;
+    out.push(key);
+    if (key >= end) break;
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  }
+  return out;
+}
+
+export type KalendarzOkresProblem = 'format' | 'kolejnosc' | 'za-dlugi';
+
+/** What is wrong with a period asked for a PDF, or null when nothing is. */
+export function kalendarzOkresProblem(od: unknown, doDnia: unknown): KalendarzOkresProblem | null {
+  const day = /^\d{4}-\d{2}-\d{2}$/;
+  if (typeof od !== 'string' || typeof doDnia !== 'string' || !day.test(od) || !day.test(doDnia)) {
+    return 'format';
+  }
+  if (doDnia < od) return 'kolejnosc';
+  if (monthsInRange(od, doDnia).length > KALENDARZ_PDF_MAX_MIESIECY) return 'za-dlugi';
+  return null;
+}
+
 /* --------------------------- Grouping and ordering -------------------------- */
 
 /**

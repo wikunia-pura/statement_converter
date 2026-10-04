@@ -84,6 +84,290 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '9.1.0',
+    date: '2026-10-04',
+    title: 'Sprawozdania finansowe i plany gospodarcze — w Zebraniach i w dwóch nowych modułach',
+    tagline:
+      'Zebranie ma teraz własny ekran z zakładkami. Wgrywasz plik „RozliczenieWsp” z vDom, a każda wspólnota dostaje swoje sprawozdanie z akapitem wstępnym. Z niego powstaje plan gospodarczy na następny rok, a oba dokumenty pobierzesz jako PDF i Excel. Nowe moduły „Sprawozdania” i „Plany gospodarcze” pokazują je dla wszystkich wspólnot naraz. Do tego kalendarz w PDF, „Kto księguje” na Pulpicie i przycisk „Otwórz” przy każdym zapisanym pliku.',
+    stats: [
+      { value: '8', label: 'nowych funkcji' },
+      { value: '4', label: 'ulepszenia' },
+    ],
+    highlights: [
+      {
+        id: 'zebranie-ekran',
+        kind: 'improved',
+        icon: 'file-check',
+        title: 'Zebranie na osobnym ekranie, z zakładkami i nazwami wersji',
+        summary:
+          'Kliknięte zebranie otwiera się teraz na całym ekranie. U góry są jego dane i pasek wersji, a pod nimi zakładki z kolejnymi częściami materiałów.',
+        details: [
+          'Pasek „Wersje materiałów” pokazuje wersje 1.0, 1.1… jako zakładki, z kropką stanu i oznaczeniem „aktualna”. Wszystko poniżej dotyczy wersji wybranej na pasku.',
+          'Zakładki: „Podsumowanie”, „Zawiadomienie o zebraniu”, „Sprawozdania finansowe”, „Plan gospodarczy” i „Uchwały”. „Podsumowanie” i „Uchwały” zostaną uzupełnione w kolejnych wersjach.',
+          'Dane zebrania, stan wersji („W przygotowaniu” / „Przygotowane”), opis zmian i samo zawiadomienie są teraz w zakładce „Zawiadomienie o zebraniu”.',
+        ],
+        where: ['Zebrania', 'wybrane zebranie', 'Zawiadomienie o zebraniu'],
+        steps: [
+          {
+            do: 'Kliknij zebranie na liście.',
+            then: 'Otwiera się jego ekran. „Wszystkie zebrania” w lewym górnym rogu wraca do listy.',
+          },
+          {
+            do: 'Kliknij wersję na pasku „Wersje materiałów”.',
+            then: 'Zakładki poniżej pokazują materiały tej wersji.',
+          },
+          {
+            do: 'W zakładce „Zawiadomienie o zebraniu” wpisz „Nazwę wersji”, np. „Po uwagach zarządu”, i kliknij „Zapisz nazwę” (albo naciśnij Enter).',
+            then: 'Nazwa pojawia się na zakładce wersji, obok jej numeru. Esc cofa niezapisaną zmianę.',
+          },
+        ],
+        expect: ['Nazwa wersji jest nieobowiązkowa i ma do 80 znaków. Pusta oznacza zwykłe „Wersja 1.1”.'],
+      },
+      {
+        id: 'zebranie-sprawozdanie',
+        kind: 'new',
+        icon: 'bar-chart',
+        title: 'Sprawozdanie finansowe z vDom przy zebraniu',
+        summary:
+          'Wgrywasz wydruk „RozliczenieWsp” z vDom (PDF). Aplikacja odczytuje z niego sprawozdania wszystkich wspólnot, a zebranie bierze sprawozdanie swojej.',
+        details: [
+          'Jeden plik z vDom zawiera sprawozdania wielu wspólnot. Wystarczy wgrać go raz — kolejne zebrania znajdą w nim swoją wspólnotę bez ponownego wgrywania.',
+          'Na górze jest akapit wstępny wyliczony z kwot: kafelki (przychody i koszty eksploatacji, wynik okresu, fundusz remontowy, kredyt, środki pieniężne), krótkie podsumowanie okresu i „Ważne uwagi”, np. ujemne saldo funduszu remontowego. Tak samo zaczyna się PDF.',
+          'Pod spodem są „Pozycje sprawozdania” w sekcjach, tak jak wydrukował je vDom. Sekcje można zwijać, pozycje wyszukiwać, a przycisk „Tylko ujemne” pokazuje same ujemne kwoty.',
+        ],
+        where: ['Zebrania', 'wybrane zebranie', 'Sprawozdania finansowe'],
+        steps: [
+          {
+            do: 'Kliknij „Wgraj plik z vDom” i wskaż PDF „RozliczenieWsp”.',
+            then: 'Gdy w pliku jest sprawozdanie tej wspólnoty, dołącza się od razu. Gdy aplikacja nie potrafi go dopasować, otwiera okno „Wybierz sprawozdanie” — sprawozdania z wgranego pliku są tam na górze.',
+          },
+          {
+            do: 'W oknie „Wybierz sprawozdanie” wyszukaj wspólnotę po nazwie albo numerze i kliknij ją.',
+            then: 'Sprawozdanie zostaje dołączone, a numer wspólnoty z vDom jest zapamiętany — przy następnych plikach dopasowanie zrobi się samo.',
+          },
+          {
+            do: 'W sekcji „Akapit wstępny” kliknij „Edytuj”, żeby zmienić tekst albo dodać uwagę, i kliknij „Zapisz”.',
+            then: 'Wstęp ma plakietkę „Edytowany”. „Przywróć wyliczony” wraca do tekstu wyliczonego z kwot. Kwoty w kafelkach zawsze pochodzą ze sprawozdania.',
+          },
+          {
+            do: 'W sekcji „Pobierz dokument” kliknij „Pobierz PDF” albo „Pobierz Excel”.',
+            then: 'Plik zapisuje się w folderze Pobrane, a komunikat ma przycisk „Otwórz”. Przełącznik „Akapit wstępny w PDF” decyduje, czy PDF zaczyna się od wstępu.',
+          },
+        ],
+        expect: [
+          'Pliki nazywają się „Sprawozdanie finansowe - {wspólnota} - {okres}”. PDF i Excel pomijają kategorie i pozycje, które mają same zera.',
+          'Każda wersja zebrania trzyma własną kopię sprawozdania — późniejsze wgranie nowszego pliku nie zmienia tego, co zebranie już pokazało. Przy ponownym wgraniu aplikacja zapyta, czy zastąpić dołączone sprawozdanie.',
+          '„Zmień” wybiera inne sprawozdanie, a „Odłącz” je usuwa — plan gospodarczy tej wersji zostaje bez zmian.',
+        ],
+        note: {
+          type: 'warning',
+          text: 'Plik musi być PDF-em z tekstem zapisanym z vDom, nie skanem. Ze skanu aplikacja nie odczyta kwot.',
+        },
+      },
+      {
+        id: 'zebranie-plan',
+        kind: 'new',
+        icon: 'wallet',
+        title: 'Plan gospodarczy liczony ze sprawozdania',
+        summary:
+          'Ze sprawozdania wersji powstaje projekt planu na następny rok. Poprawiasz go w tabeli, zapisujesz i pobierasz jako PDF (załącznik do uchwały) albo Excel.',
+        details: [
+          'Koszty i przychody są rozkładane na linie planu według słownika pozycji. Przy każdej linii „skąd ta kwota” pokazuje pozycje sprawozdania, z których powstała, a „bez reguły” — te, których słownik nie rozpoznał.',
+          '„Remonty bieżące” same domykają część I, czyli wyrównują koszty do wpływów. Gdy wpiszesz kwotę ręcznie, domykanie się wyłącza; „Domknij remontami bieżącymi” włącza je z powrotem.',
+          'Udziały M.St. Warszawa i pożytków (m²) aplikacja zapamiętuje dla wspólnoty i podpowiada przy następnym planie.',
+        ],
+        where: ['Zebrania', 'wybrane zebranie', 'Plan gospodarczy'],
+        steps: [
+          {
+            do: 'Dołącz najpierw sprawozdanie w zakładce „Sprawozdania finansowe”, a potem otwórz „Plan gospodarczy”.',
+            then: 'Widzisz „Utwórz plan gospodarczy na {rok} rok” — na rok następny po okresie sprawozdania.',
+          },
+          {
+            do: 'Wpisz „Wzrost kosztów (%)” i sprawdź udziały m², po czym kliknij „Utwórz plan”.',
+            then: 'Pojawia się plan: nagłówek, część I (zaliczka „A”) i część II (zaliczka „B”, fundusz remontowy). Okres krótszy niż rok jest przeliczany na cały rok.',
+          },
+          {
+            do: 'Popraw kwoty, stawki, okresy zaliczek i remonty z funduszu, po czym kliknij „Zapisz plan” na dole strony.',
+            then: 'Plakietka „Niezapisane zmiany” znika. „Odrzuć zmiany” wraca do zapisanej wersji.',
+          },
+          {
+            do: 'Kliknij „Pobierz PDF” albo „Pobierz Excel”.',
+            then: 'Plik „Plan gospodarczy {rok} - {nieruchomość}” trafia do folderu Pobrane. W Excelu sumy są formułami, więc arkusz liczy dalej po zmianach.',
+          },
+        ],
+        expect: [
+          'PDF i Excel powstają z zapisanego planu — przy niezapisanych zmianach przyciski pobierania czekają na zapis.',
+          '„Przelicz ze sprawozdania” liczy kwoty od nowa i zachowuje nieruchomość, numer uchwały oraz remonty z funduszu. „Usuń plan” jest w menu „⋯”.',
+          '„Dodaj rewizję” kopiuje sprawozdanie i plan do nowej wersji.',
+        ],
+      },
+      {
+        id: 'zebrania-ustawienia',
+        kind: 'new',
+        icon: 'settings',
+        title: 'Ustawienia zebrań: słownik pozycji i numer uchwały',
+        summary:
+          'Jedno miejsce, w którym ustalasz, do której linii planu trafia każda pozycja sprawozdania, jaki numer ma uchwała przyjmująca plan i do ilu złotych zaokrąglać koszty.',
+        where: ['Zebrania', 'Ustawienia'],
+        steps: [
+          {
+            do: 'Kliknij „Ustawienia” nad listą zebrań (albo „Słownik pozycji” przy planie).',
+            then: 'Otwiera się okno „Ustawienia zebrań”.',
+          },
+          {
+            do: 'W „Słowniku pozycji sprawozdania” dodaj regułę: wpisz fragment nazwy pozycji i wybierz linię planu (albo „Pomiń — nie trafia do planu”).',
+            then: 'Reguły są sprawdzane od góry — wygrywa pierwsza pasująca. Strzałkami zmienisz kolejność.',
+          },
+          {
+            do: 'Ustaw „Numer uchwały przyjmującej plan” i zaokrąglenie, po czym kliknij „Zapisz”.',
+            then: 'Nowe plany użyją tych ustawień. Już zapisane plany się nie zmieniają — „Przelicz ze sprawozdania” zastosuje nowy słownik.',
+          },
+        ],
+        expect: [
+          'Ustawienia są wspólne dla wszystkich użytkowników. Wielkość liter i polskie znaki w regułach nie mają znaczenia.',
+          '{rok} w numerze uchwały zamienia się na rok planu, np. „3/{rok}” → „3/2027”. „Przywróć domyślny słownik” wraca do reguł startowych.',
+        ],
+      },
+      {
+        id: 'modul-sprawozdania',
+        kind: 'new',
+        icon: 'book',
+        title: 'Moduł „Sprawozdania” — sprawozdania wszystkich wspólnot',
+        summary:
+          'Nowa pozycja w menu, pod Zebraniami. Pokazuje każde wgrane sprawozdanie, także bez zebrania, z tym samym podglądem i pobieraniem PDF i Excel.',
+        details: [
+          'Źródłem prawdy są pliki wgrane w Zebraniach. Plik możesz wgrać także tutaj, ale dodane zostaną tylko wspólnoty i okresy, których w Zebraniach jeszcze nie ma.',
+          'Gdy później ta sama wspólnota za ten sam okres zostanie wgrana w Zebraniach, jej sprawozdanie zastąpi to dodane tutaj.',
+        ],
+        where: ['Sprawozdania'],
+        steps: [
+          {
+            do: 'Otwórz „Sprawozdania” w menu.',
+            then: 'Widzisz listę sprawozdań z najnowszego okresu. Inny okres wybierzesz z listy obok wyszukiwarki, a „Źródło” pokaże tylko te z Zebrań albo tylko dodane tutaj.',
+          },
+          {
+            do: 'Kliknij sprawozdanie.',
+            then: 'Widzisz dane sprawozdania, akapit wstępny, pobieranie i wszystkie pozycje. Listami „Wspólnota” i „Okres” u góry przełączysz się na inną wspólnotę albo inny okres bez wracania do listy.',
+          },
+          {
+            do: 'Kliknij „Wgraj plik z vDom”, żeby dodać sprawozdania, których nie ma w Zebraniach.',
+            then: 'Komunikat mówi, ile dodano i ile pominięto, bo są już w Zebraniach.',
+          },
+        ],
+        expect: [
+          'Usunąć można tylko sprawozdanie „dodane tutaj”. Zebrania, które je dołączyły, mają własną kopię.',
+          'Akapit wstępny jest tu tylko do odczytu — własny tekst ustawiasz w Zebraniach, przy wersji materiałów.',
+        ],
+        note: {
+          type: 'tip',
+          text: 'Jeśli ułożyłeś własną kolejność menu, „Sprawozdania” i „Plany gospodarcze” pojawią się zaraz pod „Zebraniami”.',
+        },
+      },
+      {
+        id: 'modul-plany',
+        kind: 'new',
+        icon: 'coins',
+        title: 'Moduł „Plany gospodarcze” — plany wszystkich wspólnot',
+        summary:
+          'Nowa pozycja w menu. Zbiera plany ze wszystkich zebrań i pozwala utworzyć plan dla wspólnoty, która nie ma zebrania.',
+        details: [
+          'Źródłem prawdy są plany z Zebrań — tutaj można je oglądać i pobierać, a „Otwórz w Zebraniach” przenosi do zakładki „Plan gospodarczy” zebrania, w którym się je zmienia.',
+          'Nowy plan powstaje ze sprawozdania z biblioteki, tylko dla wspólnoty i roku, dla których Zebrania nie mają planu. Edytujesz go tym samym edytorem co w Zebraniach.',
+          'Gdy później w Zebraniach powstanie plan tej samej wspólnoty na ten sam rok, plan utworzony tutaj dostaje znaczek „zastąpiony” — zostaje do wglądu i można go usunąć.',
+        ],
+        where: ['Plany gospodarcze'],
+        steps: [
+          {
+            do: 'Kliknij „Nowy plan”.',
+            then: 'Otwiera się okno „Nowy plan gospodarczy”.',
+          },
+          {
+            do: 'Wybierz wspólnotę i „Okres sprawozdania”, sprawdź „Założenia” (wzrost kosztów, udziały m²) i kliknij „Utwórz plan”.',
+            then: 'Plan otwiera się w edytorze. Gdy Zebrania mają już plan tej wspólnoty na ten rok, okno to mówi i proponuje „Pokaż plan” zamiast tworzyć drugi.',
+          },
+          {
+            do: 'Popraw plan, kliknij „Zapisz plan”, a potem „Pobierz PDF” albo „Pobierz Excel”.',
+            then: 'Plik trafia do folderu Pobrane. W PDF planu spoza zebrania data zebrania zostaje do wpisania ręcznie.',
+          },
+        ],
+        expect: [
+          'Lista pokazuje plany na najnowszy rok; inny rok i źródło wybierzesz nad listą. Listami „Wspólnota” i „Rok planu” na ekranie planu przełączysz się bez wracania do listy.',
+        ],
+      },
+      {
+        id: 'kalendarz-pdf',
+        kind: 'new',
+        icon: 'calendar',
+        title: 'Kalendarz spotkań w PDF',
+        summary:
+          'Pobierasz kalendarz na miesiąc albo dowolny okres: każdy miesiąc to strona z siatką dni, a po niej tabela ze szczegółami spotkań.',
+        where: ['Kalendarz', 'PDF'],
+        steps: [
+          {
+            do: 'W Kalendarzu kliknij „PDF” obok przycisku nowego spotkania.',
+            then: 'Otwiera się okno „Kalendarz w PDF”.',
+          },
+          {
+            do: 'Wybierz „Miesiąc” albo „Okres” (Od – Do) i kliknij „Pobierz PDF”.',
+            then: 'Plik „Kalendarz spotkań - …” zapisuje się w folderze Pobrane, a komunikat ma przycisk „Otwórz”.',
+          },
+        ],
+        expect: [
+          'Okres może obejmować najwyżej 24 miesiące. Numery spotkań w siatce prowadzą w PDF do ich szczegółów w tabeli.',
+          'Filtry włączone w Kalendarzu zawężają też spotkania w pliku — okno o tym przypomina.',
+        ],
+      },
+      {
+        id: 'kto-ksieguje',
+        kind: 'new',
+        icon: 'users',
+        title: 'Pulpit: kto księguje którą wspólnotę',
+        summary:
+          'Każdą wspólnotę na Pulpicie możesz przypisać do osoby na dany miesiąc i filtrować listę po tym, kto księguje.',
+        where: ['Pulpit'],
+        steps: [
+          {
+            do: 'Kliknij awatar (albo puste kółko) przy wspólnocie.',
+            then: 'Wybierasz „Przypisz do mnie”, „Nieprzypisane” albo osobę z listy. Przypisanie dotyczy wybranego miesiąca.',
+          },
+          {
+            do: 'Zaznacz kilka wspólnot i na pasku zaznaczonych wybierz „Przypisz zaznaczone…”.',
+            then: 'Wszystkie zaznaczone dostają tę samą osobę. Zaznaczyć można teraz każdą wspólnotę, nie tylko te z wyciągami do konwersji.',
+          },
+          {
+            do: 'W filtrze „Kto księguje” wybierz „Moje”, „Nieprzypisane” albo osobę.',
+            then: 'Lista pokazuje tylko te wspólnoty. Aplikacja pamięta wybór na tym komputerze.',
+          },
+        ],
+        expect: ['„Konwertuj zaznaczone” pojawia się tylko wtedy, gdy wśród zaznaczonych jest coś do konwersji.'],
+      },
+      {
+        id: 'otworz-plik',
+        kind: 'improved',
+        icon: 'download',
+        title: 'Przycisk „Otwórz” przy każdym zapisanym pliku',
+        summary:
+          'Komunikat po zapisaniu pliku ma teraz przycisk „Otwórz” i zostaje na ekranie 10 sekund, więc plik otworzysz bez szukania go w folderze.',
+        expect: [
+          'Działa przy eksportach (Banki, Kontrahenci, Adresy, Historia), kopii zapasowej i eksporcie ustawień, załącznikach zadań, zawiadomieniu o zebraniu, kalendarzu w PDF oraz sprawozdaniach i planach.',
+          'Gdy pliku już nie ma (przeniesiony albo usunięty), aplikacja o tym powie.',
+        ],
+      },
+      {
+        id: 'drobne-9-1',
+        kind: 'improved',
+        icon: 'sparkles',
+        title: 'Drobniejsze ulepszenia',
+        summary: 'Kilka zmian, które oszczędzają kliknięcia.',
+        details: [
+          'Karta spotkania w Kalendarzu: przyciski materiałów są kafelkami z opisem — „Otwórz w Zebraniach”, „Przygotuj materiały”, „Zawiadomienie o zebraniu”. Krok „Do przygotowania” nazywa się teraz „Przygotuj”.',
+          'Zadania: na liście „Przypisany” pierwsza pozycja to „Przypisz do mnie”.',
+          'Kopia zapasowa obejmuje też sprawozdania, plany gospodarcze, ustawienia zebrań i przypisania na Pulpicie. Starsze kopie, które tych danych nie mają, przy przywracaniu ich nie kasują.',
+        ],
+      },
+    ],
+  },
+  {
     version: '9.0.0',
     date: '2026-10-04',
     title: 'Nowy wygląd całej aplikacji, Zebrania, materiały na spotkania i pliki księgowe znajdowane same',

@@ -84,6 +84,86 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '9.3.0',
+    date: '2026-10-05',
+    title: 'Konwerter znowu z tabelą plików',
+    tagline:
+      'Lista plików w Konwerterze wraca do tabeli sprzed wersji 9.0: każdy plik to jeden wiersz z bankiem, adresem, typem konta, PDF-em, stanem i przyciskami. W oknie konwersji z Pulpitu bank i adres są zablokowane, bo ustalił je już skan folderu.',
+    stats: [
+      { value: '3', label: 'ulepszenia' },
+    ],
+    highlights: [
+      {
+        id: 'konwerter-tabela-plikow',
+        kind: 'improved',
+        icon: 'table',
+        title: 'Tabela plików w Konwerterze',
+        summary:
+          'Pliki dodane do Konwertera widzisz w tabeli, jeden plik w jednym wierszu — tak jak przed wersją 9.0.',
+        details: [
+          'Kolumny: numer, nazwa pliku, bank, adres (pod nim typ konta), PDF, stan i akcje. „Otwórz folder”, „Konwertuj wszystkie” i „Wyczyść wszystkie” są nad tabelą.',
+          'Gdy na liście są pliki, pole „Przeciągnij i upuść” zmienia się w wąski pasek, żeby tabela była od razu widoczna. Pliki możesz do niego dalej upuszczać.',
+          '„Historia z ostatnich 30 dni” to osobna sekcja pod tabelą, z przyciskiem „Pełna historia”.',
+        ],
+        where: ['Konwerter', 'Pliki'],
+        steps: [
+          {
+            do: 'Wybierz bank i upuść pliki wyciągów na pole „Dodaj pliki”.',
+            then: 'Każdy plik dostaje wiersz w tabeli. Adres i typ konta uzupełniają się same, gdy numer konta z pliku jest przypisany do wspólnoty.',
+          },
+          {
+            do: 'W kolumnie PDF kliknij „Dodaj PDF”, jeśli chcesz dołączyć PDF wyciągu.',
+            then: 'Plik pojawia się jako etykieta z nazwą; „×” na niej odłącza go.',
+          },
+          {
+            do: 'Kliknij „Konwertuj” w wierszu albo „Konwertuj wszystkie” nad tabelą.',
+            then: 'Wiersz pokazuje postęp i przycisk „Anuluj”, który zatrzymuje konwersję bez zapisywania czegokolwiek.',
+          },
+          {
+            do: 'Po konwersji kliknij „Podgląd” albo „Księgowość”.',
+            then: 'Otwiera się odpowiedni plik wynikowy. „Konwertuj ponownie” i „Usuń z listy” są pod „⋯”.',
+          },
+        ],
+        expect: [
+          'Pod stanem „Sukces” widać, ile transakcji miał wyciąg.',
+          'Gdy konwersja się nie uda, treść błędu pojawia się w czerwonej ramce pod wierszem pliku, z przyciskiem „Kopiuj”. Przycisk w wierszu zmienia się na „Spróbuj ponownie”.',
+        ],
+      },
+      {
+        id: 'pulpit-konwersja-blokada',
+        kind: 'improved',
+        icon: 'shield',
+        title: 'Konwersja z Pulpitu: bank i adres zablokowane',
+        summary:
+          'W oknie konwersji otwieranym z Pulpitu pola „Bank” i „Adres” są wyszarzone — ustalił je skan folderu z numeru konta w pliku.',
+        details: [
+          'Zmiana adresu w tym miejscu oznaczałaby zaksięgowanie wyciągu jednej wspólnoty jako innej. Typ konta i PDF możesz dalej zmieniać.',
+          'Okno jest szersze, a tabela mieści się w nim w całości — długa nazwa pliku łamie się w swojej kolumnie.',
+        ],
+        where: ['Pulpit', 'wspólnota', 'Konwertuj'],
+        steps: [
+          {
+            do: 'Kliknij „Konwertuj” przy wspólnocie na Pulpicie.',
+            then: 'Otwiera się okno z tabelą jej wyciągów. Najedź na zablokowany bank albo adres, żeby zobaczyć, skąd się wziął.',
+          },
+        ],
+        note: {
+          type: 'tip',
+          text: 'Jeśli wyciąg trafił do złej wspólnoty, popraw numer konta w „Adresach” i zeskanuj folder ponownie.',
+        },
+      },
+      {
+        id: 'konwerter-wybor-banku',
+        kind: 'improved',
+        icon: 'building',
+        title: 'Spokojniejszy ekran wyboru banku',
+        summary:
+          'Zanim wybierzesz bank, Konwerter pokazuje prosty ekran z listą banków, a pod nim historię z ostatnich 30 dni.',
+        where: ['Konwerter'],
+      },
+    ],
+  },
+  {
     version: '9.2.0',
     date: '2026-10-04',
     title: 'Podsumowanie zebrania i pakiet PDF do wysyłki',

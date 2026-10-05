@@ -4347,6 +4347,70 @@ body.dark-mode .conversion-progress-bar-text {
   font-size: var(--fs-md);
 }
 
+/* The Converter's file list is the pre-9.0 table layout again (users asked for
+   it back), so the rules it was built on are back with it. */
+.bank-selector-inline {
+  background: var(--bg-surface);
+  padding: var(--s-4);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-default);
+}
+
+/* Divider between sections inside a single card (e.g. drop zone ↔ file list). */
+.card-separator {
+  border: none;
+  border-top: 3px solid var(--border-default);
+  margin: var(--s-5) 0;
+}
+
+.button-group {
+  display: flex;
+  gap: var(--s-2);
+  margin-top: var(--s-5);
+  flex-wrap: wrap;
+}
+
+/* The file table. On the page it sizes itself, as before 9.0; inside the
+   dashboard's conversion dialog (--fit) the columns are fixed so it fits the
+   dialog, long file names wrap in place and the row's buttons wrap. */
+.conv-table__actions-cell {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-2);
+  white-space: nowrap;
+}
+.conv-table__name { overflow-wrap: anywhere; }
+/* The file name keeps a share of the width, not all that is left, so the Bank
+   column starts close to the name; the rest goes to the other columns (in the
+   dialog: to the address). */
+.conv-table .conv-table__file { width: 26%; }
+.conv-table .pdf-chip { max-width: 180px; }
+
+.conv-table--fit { table-layout: fixed; }
+.conv-table--fit th,
+.conv-table--fit td { padding-left: 10px; padding-right: 10px; }
+.conv-table--fit th { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv-table--fit .conv-table__index { width: 40px; }
+.conv-table--fit .conv-table__bank { width: 150px; }
+.conv-table--fit .conv-table__pdf { width: 150px; }
+.conv-table--fit .conv-table__status { width: 110px; }
+.conv-table--fit .conv-table__actions { width: 190px; }
+.conv-table--fit .ui-select { min-width: 0; }
+.conv-table--fit .pdf-chip { max-width: 100%; }
+.conv-table--fit .conv-table__actions-cell { flex-wrap: wrap; white-space: normal; }
+
+/* Under the status: how many transactions a converted file had. */
+.conv-table__meta { margin-top: 6px; font-size: var(--fs-sm); color: var(--text-tertiary); white-space: nowrap; }
+
+/* A failed file's error: its own row right under the file, as wide as the table. */
+.conv-table__row--with-detail > td { border-bottom: none; }
+.conv-table__detail-row > td { padding-top: 0; }
+.conv-table tbody tr.conv-table__detail-row:hover { background: transparent; }
+.conv-table__error-text { overflow-wrap: anywhere; white-space: pre-wrap; }
+
+/* The "pick a bank" start, then the recent-activity section under it. */
+.converter-hero + .form-section { margin-top: var(--s-5); }
+
 /* ==========================================================================
    Footer
    ========================================================================== */
@@ -13029,9 +13093,9 @@ input[type='text'].zplan-input--rate { width: 84px; }
 /* ------------------- Conversion dialog over the dashboard ------------------- */
 
 .conv-modal {
-  /* Wide enough for a file card's four fields on one line, as tall as its
-     content — never taller than the window (the body scrolls instead). */
-  width: min(1180px, 96vw);
+  /* Wide enough for the file table's columns with room for the file name, as
+     tall as its content — never taller than the window (the body scrolls instead). */
+  width: min(1480px, 96vw);
   max-width: 96vw;
   height: auto;
   max-height: 92vh;

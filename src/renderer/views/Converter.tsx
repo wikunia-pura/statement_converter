@@ -4,18 +4,19 @@ import { translations, Language } from '../translations';
 import { generateId, formatDate } from '../../shared/utils';
 import { TransactionReviewScreen } from '../components/TransactionReviewScreen';
 import { useNotify } from '../components/Notifications';
-import OverflowMenu from '../components/OverflowMenu';
 import Icon from '../components/Icon';
 import Loader from '../components/Loader';
 import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
-import { FormField, FormSection } from '../components/FormSection';
+import OverflowMenu from '../components/OverflowMenu';
 import Select from '../components/Select';
+import { FormSection } from '../components/FormSection';
 import SearchableSelect from '../components/SearchableSelect';
 import { findAdresByAccountNumbers, normalizeAccount } from '../../shared/account-extractor';
 import { resolveOutputFilePath } from '../../shared/outputPaths';
 import ConversionHistoryTimeline from '../components/ConversionHistoryTimeline';
 import { PostingNoteNotice, PostingNoteNoticeItem, uwagaMeta } from '../components/PostingNotes';
 import { openUwagiByAdresId } from '../../shared/bookings';
+import { plural } from '../plural';
 
 interface SearchableAdresSelectProps {
   adresy: Adres[];
@@ -26,6 +27,7 @@ interface SearchableAdresSelectProps {
   emptyText: string;
   /** When set, only addresses linked to this bankId (or unlinked addresses) are shown. */
   bankFilter?: number | null;
+  disabled?: boolean;
 }
 
 /**
@@ -40,6 +42,7 @@ const SearchableAdresSelect: React.FC<SearchableAdresSelectProps> = ({
   searchPlaceholder,
   emptyText,
   bankFilter,
+  disabled = false,
 }) => {
   // Bank-scoped: if a bank is chosen for the file, only show addresses linked to that bank
   // plus addresses with no bank link (which act as "any bank"). If no bank is chosen, show all.
@@ -66,6 +69,7 @@ const SearchableAdresSelect: React.FC<SearchableAdresSelectProps> = ({
       emptyText={emptyText}
       ariaLabel={placeholder}
       menuMinWidth={280}
+      disabled={disabled}
     />
   );
 };
@@ -1004,33 +1008,11 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     }
   };
 
-  // Recent activity — last 30 days, same timeline as the full History view.
-  // Hidden while the full-screen review is up and in the dashboard's dialog.
-  const recentActivity = !reviewData && !embedded && (
-    <FormSection
-      icon="history"
-      title={t.historyLast30Days}
-      aside={
-        onNavigateToHistory ? (
-          <button type="button" className="button button-small button-subtle" onClick={onNavigateToHistory}>
-            {t.goToFullHistory} <Icon name="arrow-right" size={13} />
-          </button>
-        ) : undefined
-      }
-    >
-      <ConversionHistoryTimeline history={recentHistory} language={language} showSearch={false} />
-    </FormSection>
-  );
-
-  const allConverted = files.length > 0 && files.every((f) => f.status === 'success');
-  const someWithoutAdres = files.some((f) => !f.adresId);
-
   return (
     <div className="content-body">
-      {isLoading ? (
-        <Loader label={t.loading} />
-      ) : !selectedBank && !embedded ? (
-        <div className="page-form">
+        {isLoading ? (
+          <Loader label={t.loading} />
+        ) : !selectedBank && !embedded ? (
           <div className="converter-hero">
             <span className="converter-hero__icon" aria-hidden="true">
               <Icon name="building" size={26} />
@@ -1048,128 +1030,343 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
               />
             </div>
           </div>
-          {recentActivity}
-        </div>
-      ) : (
-        <div className="page-form">
+        ) : (
+          <>
+            <div className="card">
+          {/* In the dashboard's conversion dialog the files arrive already
+              recognised, so the bank picker and the drop zone give way to the list. */}
           {!embedded && (
-            <FormSection icon="folder" title={t.addFiles} description={t.convAddFilesDesc}>
-              <FormField label={t.selectBank}>
-                <Select
-                  value={selectedBank}
-                  onChange={(v) => setSelectedBank(v ? Number(v) : null)}
-                  placeholder={t.chooseBank}
-                  options={banks.map((bank) => ({ value: String(bank.id), label: bank.name }))}
-                  ariaLabel={t.selectBank}
-                  style={{ maxWidth: '420px' }}
-                />
-              </FormField>
-              <div
-                className={`drop-zone${files.length > 0 ? ' drop-zone--compact' : ''}${dragOver ? ' drag-over' : ''}`}
-                onDrop={handleDrop}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onClick={handleFileSelect}
-              >
-                <div className="drop-zone-icon"><Icon name="upload" size={40} /></div>
-                <div className="drop-zone-text">{t.dragDropFiles}</div>
-              </div>
-            </FormSection>
+          <>
+          <div style={{ marginBottom: '20px' }}>
+            <h2 style={{ marginBottom: '15px', fontSize: '18px', color: 'var(--accent)' }}>{t.addFiles}</h2>
+            <div className="bank-selector-inline">
+              <label style={{ fontSize: '14px', fontWeight: '500', marginBottom: '8px', display: 'block' }}>
+                {t.selectBank}
+              </label>
+              <Select
+                size="lg"
+                value={selectedBank}
+                onChange={(v) => setSelectedBank(v ? Number(v) : null)}
+                placeholder={t.chooseBank}
+                options={banks.map((bank) => ({ value: String(bank.id), label: bank.name }))}
+                style={{ width: '100%' }}
+              />
+            </div>
+          </div>
+
+          <div
+            className={`drop-zone${files.length > 0 ? ' drop-zone--compact' : ''}${dragOver ? ' drag-over' : ''}`}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onClick={handleFileSelect}
+          >
+            <div className="drop-zone-icon"><Icon name="upload" size={40} /></div>
+            <div className="drop-zone-text">
+              {t.dragDropFiles}
+            </div>
+          </div>
+          </>
           )}
 
-          <FormSection
-            icon="file-text"
-            title={t.files}
-            aside={
-              files.length > 0 ? (
-                <div className="form-section__actions">
-                  <button className="button button-ghost icon-danger" onClick={handleClearAll}>
-                    <Icon name="trash" size={14} /> {t.convClear}
-                  </button>
-                  <span className="toolbar-divider" aria-hidden="true" />
-                  <button
-                    className="button button-secondary"
-                    onClick={() => outputFolder && window.electronAPI.openFile(outputFolder)}
-                    disabled={!outputFolder}
-                    title={outputFolder || t.convOutputFolderMissing}
-                  >
-                    <Icon name="folder" size={14} /> {t.openOutputFolder}
-                  </button>
-                </div>
-              ) : undefined
-            }
-          >
-            {files.length > 0 ? (
-              <ul className="conv-files">
-                {files.map((file) => {
-                  const processedAt = processedFileDates.get(file.fileName.toLowerCase());
-                  const uwagi = file.adresId ? uwagiByAdres.get(file.adresId) ?? [] : [];
-                  const kontoTyp = kontoTypy.find((typ) => typ.id === file.accountTypeId);
-                  const statusTone =
-                    file.status === 'success'
-                      ? 'status-success'
-                      : file.status === 'error'
-                        ? 'status-error'
-                        : file.status === 'processing'
-                          ? 'status-info'
-                          : 'status-pending';
-                  const statusLabel =
-                    file.status === 'success'
-                      ? t.success
-                      : file.status === 'error'
-                        ? t.error
-                        : file.status === 'processing'
-                          ? t.convProcessingShort
-                          : t.pending;
-                  const editable = file.status === 'pending' || file.status === 'error' || file.status === 'needs-ai';
+          {files.length > 0 && (
+            <>
+              {!embedded && <hr className="card-separator" />}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <h2>{t.files}</h2>
+              <div className="button-group" style={{ margin: 0 }}>
+                <button 
+                  className="button button-secondary"
+                  onClick={() => outputFolder && window.electronAPI.openFile(outputFolder)}
+                  disabled={!outputFolder}
+                  title={outputFolder || t.convOutputFolderMissing}
+                >
+                  <Icon name="folder" size={14} /> {t.openOutputFolder}
+                </button>
+                <button 
+                  className="button button-success" 
+                  onClick={handleConvertAll}
+                  disabled={files.every(f => f.status === 'success') || files.some(f => !f.adresId)}
+                  title={
+                    files.every(f => f.status === 'success')
+                      ? t.convAllConverted
+                      : files.some(f => !f.adresId)
+                      ? t.convSomeWithoutAdres
+                      : undefined
+                  }
+                  style={(files.every(f => f.status === 'success') || files.some(f => !f.adresId)) ? { 
+                    opacity: 0.5, 
+                    cursor: 'not-allowed' 
+                  } : {}}
+                ><Icon name="arrow-right" size={14} />{' '}
+                  {t.convertAll}
+                </button>
+                <button className="button button-danger" onClick={handleClearAll}>
+                  <Icon name="trash" size={14} />{' '}{t.clearAll}
+                </button>
+              </div>
+            </div>
+
+            {/* In the dashboard's dialog the columns are fixed, so the table fits
+                the dialog and the file name wraps instead of pushing it wider. */}
+            <table className={`conv-table${embedded ? ' conv-table--fit' : ''}`}>
+              <colgroup>
+                <col className="conv-table__index" />
+                <col className="conv-table__file" />
+                <col className="conv-table__bank" />
+                <col className="conv-table__adres" />
+                <col className="conv-table__pdf" />
+                <col className="conv-table__status" />
+                <col className="conv-table__actions" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>{t.fileName}</th>
+                  <th>{t.bank}</th>
+                  <th>{t.adres}</th>
+                  <th>PDF</th>
+                  <th>{t.status}</th>
+                  <th style={{ textAlign: 'right' }}>{t.actions}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {files.map((file, index) => {
+                  // From the dashboard the scan has already tied the statement to
+                  // its community (by the account number in the file) and its bank
+                  // (by the format): those stay as they are, only shown.
+                  const lockBank = embedded && file.bankId != null;
+                  const lockAdres = embedded && file.adresId != null;
+                  const showError = file.status === 'error' && !!file.errorMessage;
                   return (
-                    <li key={file.id} className={`conv-file conv-file--${file.status}`}>
-                      {/* The file, where it stands, and what to do with it — on one line. */}
-                      <div className="conv-file__head">
-                        <span className="conv-file__icon" aria-hidden="true">
-                          <Icon
-                            name={
-                              file.status === 'success'
-                                ? 'file-check'
-                                : file.status === 'error'
-                                  ? 'alert-circle'
-                                  : file.status === 'processing'
-                                    ? 'loader'
-                                    : 'file-text'
-                            }
-                            size={16}
-                            className={file.status === 'processing' ? 'icon-spin' : undefined}
-                          />
-                        </span>
-                        <div className="conv-file__title">
-                          <span className="conv-file__name" title={file.filePath}>
-                            {file.fileName}
-                          </span>
-                          {processedAt && file.status !== 'success' && (
-                            <span className="conv-file__flag">
-                              <Icon name="alert-triangle" size={12} />
-                              {t.alreadyProcessedWarning}, {t.alreadyProcessedOn}: {formatDate(processedAt)}
+                  <React.Fragment key={file.id}>
+                  <tr
+                    className={
+                      file.status === 'processing' ? 'processing-row' : showError ? 'conv-table__row--with-detail' : ''
+                    }
+                  >
+                    {file.status === 'processing' ? (
+                      <td colSpan={7}>
+                        <div className="processing-loader">
+                          <div className="loader-spinner"></div>
+                          <div className="loader-content" style={{ flex: 1 }}>
+                            <span className="loader-text">{t.convProcessingFile}: <strong>{file.fileName}</strong></span>
+                            <span className="loader-subtext">
+                              {progressByFile[file.fileName]?.label || t.convPleaseWait}
                             </span>
-                          )}
+                            {progressByFile[file.fileName] && (
+                              <div className="conversion-progress-bar">
+                                <div
+                                  className="conversion-progress-bar-fill"
+                                  style={{ width: `${progressByFile[file.fileName].percent}%` }}
+                                />
+                                <span className="conversion-progress-bar-text">
+                                  {progressByFile[file.fileName].percent}%
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            className="button button-small button-secondary"
+                            onClick={() => void handleCancelConversion(file)}
+                            disabled={cancellingIds.has(file.id)}
+                            title={t.convCancelHint}
+                          >
+                            <Icon name="x" size={13} />{' '}
+                            {cancellingIds.has(file.id) ? t.convCancelling : t.cancel}
+                          </button>
                         </div>
-                        <span className={`status-badge ${statusTone}`}>{statusLabel}</span>
-                        {file.status === 'processing' && (
-                          <div className="row-actions">
+                      </td>
+                    ) : (
+                      <>
+                        <td>{index + 1}</td>
+                        <td>
+                          <div className="conv-table__name" title={file.filePath}>{file.fileName}</div>
+                          {(() => {
+                            const processedAt = processedFileDates.get(file.fileName.toLowerCase());
+                            // Not on a file converted just now: it is the one in the records.
+                            if (!processedAt || file.status === 'success') return null;
+                            return (
+                              <div
+                                style={{
+                                  marginTop: '6px',
+                                  padding: '3px 8px',
+                                  background: 'var(--bg-surface)',
+                                  color: 'var(--danger)',
+                                  border: '1px solid var(--danger-border)',
+                                  borderRadius: '4px',
+                                  fontSize: '12px',
+                                  fontWeight: 600,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  lineHeight: 1.3,
+                                  maxWidth: '100%',
+                                }}
+                              >
+                                <span>
+                                  {t.alreadyProcessedWarning}, {t.alreadyProcessedOn}: {formatDate(processedAt)}
+                                </span>
+                              </div>
+                            );
+                          })()}
+                        </td>
+                        <td title={lockBank ? t.convLockedFromScan : undefined}>
+                          <Select
+                            overlay
+                            disabled={lockBank}
+                            value={file.bankId}
+                            onChange={(v) => handleBankChange(file.id, Number(v))}
+                            placeholder={t.chooseBank}
+                            options={banks.map((bank) => ({ value: String(bank.id), label: bank.name }))}
+                          />
+                        </td>
+                        <td>
+                          <div title={lockAdres ? t.convLockedFromScan : undefined}>
+                          <SearchableAdresSelect
+                            adresy={adresy}
+                            selectedAdresId={file.adresId}
+                            onChange={(adresId) => handleAdresChange(file.id, adresId)}
+                            placeholder={t.chooseAdres}
+                            searchPlaceholder={t.searchAdres}
+                            emptyText={t.convNoResults}
+                            bankFilter={file.bankId}
+                            disabled={lockAdres}
+                          />
+                          </div>
+                          {file.adresId && kontoTypy.length > 0 && (
+                            <div style={{ marginTop: '6px' }}>
+                              <label style={{ fontSize: '11px', color: 'var(--text-tertiary)', display: 'block', marginBottom: '2px' }}>
+                                {t.accountTypeColumn}
+                              </label>
+                              <Select
+                                overlay
+                                value={file.accountTypeId}
+                                onChange={(v) =>
+                                  handleAccountTypeChange(file.id, v ? Number(v) : null)
+                                }
+                                options={kontoTypy.map((typ) => ({
+                                  value: String(typ.id),
+                                  label: `${typ.name} (${typ.bankAccountSymbol})`,
+                                }))}
+                                style={{ width: '100%' }}
+                              />
+                            </div>
+                          )}
+                          {file.adresId && file.adresAutoMatched && (
+                            <div
+                              style={{
+                                fontSize: '11px',
+                                color: 'var(--accent)',
+                                marginTop: '4px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                              }}
+                              title={file.detectedAccounts?.join(', ')}
+                            >
+                              <Icon name="check" size={11} /> {t.autoMatchedFromAccount}
+                            </div>
+                          )}
+                          {file.adresId && (uwagiByAdres.get(file.adresId)?.length ?? 0) > 0 && (
+                            <div className="conv-note">
+                              <span className="conv-note__title">
+                                <Icon name="message-square" size={12} /> {t.convNoteInRow}
+                              </span>
+                              {uwagiByAdres.get(file.adresId)!.map((uwaga) => (
+                                <div key={uwaga.id} className="conv-note__item">
+                                  <p className="conv-note__text" title={uwagaMeta(uwaga, language, formatNoteDate)}>
+                                    {uwaga.tresc}
+                                  </p>
+                                  <button
+                                    type="button"
+                                    className="button button-small button-secondary"
+                                    title={t.ksUwagaResolveTip}
+                                    onClick={() => void resolveUwaga(uwaga.id)}
+                                  >
+                                    <Icon name="check-circle" size={13} /> {t.ksUwagaResolve}
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {!file.adresId &&
+                            file.detectedAccounts &&
+                            file.detectedAccounts.length > 0 &&
+                            onAddAdresWithAccount && (
+                              <div style={{ marginTop: '6px' }}>
+                                <div
+                                  style={{
+                                    fontSize: '11px',
+                                    color: 'var(--text-tertiary)',
+                                    marginBottom: '4px',
+                                  }}
+                                >
+                                  {t.accountDetectedNoMatch}
+                                </div>
+                                <button
+                                  type="button"
+                                  className="button button-small button-secondary"
+                                  onClick={() => onAddAdresWithAccount(file.detectedAccounts![0])}
+                                  style={{ fontSize: '11px', padding: '4px 8px' }}
+                                ><Icon name="plus" size={13} />{' '}
+                                  {t.accountDetectedNoMatchAction}
+                                </button>
+                              </div>
+                            )}
+                        </td>
+                        <td>
+                          {file.pdfPath ? (
+                            <span className="pdf-chip" title={file.pdfPath}>
+                              <Icon name="file-text" size={13} />
+                              <span className="pdf-chip__name">{file.pdfPath.split(/[\\/]/).pop() || 'PDF'}</span>
+                              <button
+                                type="button"
+                                className="pdf-chip__remove"
+                                onClick={() => handlePdfRemove(file.id)}
+                                title={t.convPdfRemove}
+                                aria-label={t.convPdfRemove}
+                              >
+                                <Icon name="x" size={12} />
+                              </button>
+                            </span>
+                          ) : (
                             <button
                               type="button"
                               className="button button-small button-secondary"
-                              onClick={() => void handleCancelConversion(file)}
-                              disabled={cancellingIds.has(file.id)}
-                              title={t.convCancelHint}
+                              onClick={() => handlePdfUpload(file.id)}
+                              title={t.convPdfAdd}
                             >
-                              <Icon name="x" size={13} />{' '}
-                              {cancellingIds.has(file.id) ? t.convCancelling : t.cancel}
+                              <Icon name="plus" size={13} /> {t.convPdfAddShort}
                             </button>
-                          </div>
-                        )}
-                        {file.status !== 'processing' && (
-                          <div className="row-actions">
-                            {file.status === 'success' ? (
+                          )}
+                        </td>
+                        <td>
+                          <span
+                            className={`status-badge status-${
+                              file.status === 'success'
+                                ? 'success'
+                                : file.status === 'error'
+                                ? 'error'
+                                : 'pending'
+                            }`}
+                          >
+                            {file.status === 'success' ? t.success : file.status === 'error' ? t.error : t.pending}
+                          </span>
+                          {file.status === 'success' && file.conversionSummary && (
+                            <div className="conv-table__meta">
+                              {plural(
+                                file.conversionSummary.totalTransactions,
+                                language,
+                                ['transakcja', 'transakcje', 'transakcji'],
+                                ['transaction', 'transactions'],
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          <div className="conv-table__actions-cell">
+                            {file.status === 'success' && (
                               <>
                                 <button
                                   type="button"
@@ -1198,57 +1395,41 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                                   ]}
                                 />
                               </>
-                            ) : (
-                              <>
-                                <button
-                                  type="button"
-                                  className="button button-small button-secondary"
-                                  onClick={() => handleConvert(file.id)}
-                                  disabled={!file.bankId || !file.adresId}
-                                  title={
-                                    !file.bankId ? t.convPickBankFirst : !file.adresId ? t.convPickAdresFirst : undefined
-                                  }
-                                >
-                                  <Icon name={file.status === 'error' ? 'refresh' : 'arrow-right'} size={13} />{' '}
-                                  {file.status === 'error' ? t.convTryAgain : t.convert}
-                                </button>
-                                <button
-                                  type="button"
-                                  className="button button-ghost button-icon icon-danger"
-                                  onClick={() => handleRemoveFile(file.id)}
-                                  title={t.remove}
-                                  aria-label={`${t.remove}: ${file.fileName}`}
-                                >
-                                  <Icon name="trash" size={15} />
-                                </button>
-                              </>
+                            )}
+                            {(file.status === 'pending' || file.status === 'error') && (
+                              <button
+                                className="button button-small button-success"
+                                onClick={() => handleConvert(file.id)}
+                                disabled={!file.bankId || !file.adresId}
+                                title={!file.bankId ? t.convPickBankFirst : !file.adresId ? t.convPickAdresFirst : undefined}
+                                style={(!file.bankId || !file.adresId) ? { 
+                                  opacity: 0.5, 
+                                  cursor: 'not-allowed' 
+                                } : {}}
+                              ><Icon name={file.status === 'error' ? 'refresh' : 'arrow-right'} size={13} />{' '}
+                                {file.status === 'error' ? t.convTryAgain : t.convert}
+                              </button>
+                            )}
+                            {file.status !== 'success' && (
+                              <button
+                                className="button button-small button-danger"
+                                onClick={() => handleRemoveFile(file.id)}
+                              ><Icon name="trash" size={13} />{' '}
+                                {t.remove}
+                              </button>
                             )}
                           </div>
-                        )}
-                      </div>
-
-                      {/* Converting: the step and how far along it is. */}
-                      {file.status === 'processing' && (
-                        <div className="conv-file__progress">
-                          <span className="conv-file__progress-label">
-                            {progressByFile[file.fileName]?.label || t.convPleaseWait}
-                          </span>
-                          <div className="conversion-progress-bar">
-                            <div
-                              className="conversion-progress-bar-fill"
-                              style={{ width: `${progressByFile[file.fileName]?.percent ?? 0}%` }}
-                            />
-                            <span className="conversion-progress-bar-text">
-                              {progressByFile[file.fileName]?.percent ?? 0}%
-                            </span>
-                          </div>
-                        </div>
-                      )}
-
-                      {file.status === 'error' && file.errorMessage && (
-                        <div className="callout callout--danger conv-file__error">
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                  {/* The error, under its file and across the whole row. */}
+                  {showError && (
+                    <tr className="conv-table__detail-row">
+                      <td colSpan={7}>
+                        <div className="callout callout--danger">
                           <Icon name="alert-circle" size={16} />
-                          <div className="callout__body">{file.errorMessage}</div>
+                          <div className="callout__body conv-table__error-text">{file.errorMessage}</div>
                           <button
                             type="button"
                             className="button button-small button-subtle"
@@ -1261,236 +1442,86 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                             <Icon name="copy" size={13} /> {t.convCopy}
                           </button>
                         </div>
-                      )}
-
-                      {/* Before converting: the four choices, labelled, side by side. */}
-                      {editable && (
-                        <div className="conv-file__fields">
-                          <FormField label={t.bank}>
-                            <Select
-                              overlay
-                              value={file.bankId}
-                              onChange={(v) => handleBankChange(file.id, Number(v))}
-                              placeholder={t.chooseBank}
-                              options={banks.map((bank) => ({ value: String(bank.id), label: bank.name }))}
-                              ariaLabel={t.bank}
-                            />
-                          </FormField>
-                          <FormField
-                            label={t.adres}
-                            hint={
-                              file.adresId && file.adresAutoMatched ? (
-                                <span className="conv-file__matched" title={file.detectedAccounts?.join(', ')}>
-                                  <Icon name="check" size={12} /> {t.autoMatchedFromAccount}
-                                </span>
-                              ) : !file.adresId && (file.detectedAccounts?.length ?? 0) > 0 && onAddAdresWithAccount ? (
-                                <span className="cell-hint">
-                                  <span>{t.accountDetectedNoMatch}</span>
-                                  <button
-                                    type="button"
-                                    className="button button-small button-subtle"
-                                    onClick={() => onAddAdresWithAccount(file.detectedAccounts![0])}
-                                  >
-                                    <Icon name="plus" size={13} /> {t.accountDetectedNoMatchAction}
-                                  </button>
-                                </span>
-                              ) : undefined
-                            }
-                          >
-                            <SearchableAdresSelect
-                              adresy={adresy}
-                              selectedAdresId={file.adresId}
-                              onChange={(adresId) => handleAdresChange(file.id, adresId)}
-                              placeholder={t.chooseAdres}
-                              searchPlaceholder={t.searchAdres}
-                              emptyText={t.convNoResults}
-                              bankFilter={file.bankId}
-                            />
-                          </FormField>
-                          {kontoTypy.length > 0 && (
-                            <FormField label={t.accountTypeColumn}>
-                              <Select
-                                overlay
-                                value={file.accountTypeId}
-                                onChange={(v) => handleAccountTypeChange(file.id, v ? Number(v) : null)}
-                                placeholder={t.convPickAdresFirstShort}
-                                disabled={!file.adresId}
-                                options={kontoTypy.map((typ) => ({
-                                  value: String(typ.id),
-                                  label: `${typ.name} (${typ.bankAccountSymbol})`,
-                                }))}
-                                ariaLabel={t.accountTypeColumn}
-                              />
-                            </FormField>
-                          )}
-                          <FormField label={t.convPdfLabel}>
-                            {file.pdfPath ? (
-                              <span className="pdf-chip" title={file.pdfPath}>
-                                <Icon name="file-text" size={13} />
-                                <span className="pdf-chip__name">{file.pdfPath.split(/[\\/]/).pop() || 'PDF'}</span>
-                                <button
-                                  type="button"
-                                  className="pdf-chip__remove"
-                                  onClick={() => handlePdfRemove(file.id)}
-                                  title={t.convPdfRemove}
-                                  aria-label={t.convPdfRemove}
-                                >
-                                  <Icon name="x" size={12} />
-                                </button>
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
-                                className="button button-secondary conv-file__pdf-add"
-                                onClick={() => handlePdfUpload(file.id)}
-                                title={t.convPdfAdd}
-                              >
-                                <Icon name="plus" size={13} /> {t.convPdfAddShort}
-                              </button>
-                            )}
-                          </FormField>
-                        </div>
-                      )}
-
-                      {/* After converting: what it was converted as, read-only. */}
-                      {(file.status === 'success' || file.status === 'processing') && (
-                        <dl className="conv-file__summary">
-                          <div>
-                            <dt>{t.bank}</dt>
-                            <dd>{banks.find((b) => b.id === file.bankId)?.name ?? file.bankName ?? '—'}</dd>
-                          </div>
-                          <div>
-                            <dt>{t.adres}</dt>
-                            <dd>{adresy.find((a) => a.id === file.adresId)?.nazwa ?? '—'}</dd>
-                          </div>
-                          {kontoTyp && (
-                            <div>
-                              <dt>{t.accountTypeColumn}</dt>
-                              <dd>{`${kontoTyp.name} (${kontoTyp.bankAccountSymbol})`}</dd>
-                            </div>
-                          )}
-                          <div>
-                            <dt>{t.convPdfLabel}</dt>
-                            <dd>{file.pdfPath ? file.pdfPath.split(/[\\/]/).pop() : t.convPdfNone}</dd>
-                          </div>
-                          {file.conversionSummary && (
-                            <div>
-                              <dt>{t.convTransactions}</dt>
-                              <dd>{file.conversionSummary.totalTransactions}</dd>
-                            </div>
-                          )}
-                        </dl>
-                      )}
-
-                      {/* Notes left for this community's next posting. */}
-                      {uwagi.length > 0 && (
-                        <div className="conv-note">
-                          <span className="conv-note__title">
-                            <Icon name="message-square" size={12} /> {t.convNoteInRow}
-                          </span>
-                          {uwagi.map((uwaga) => (
-                            <div key={uwaga.id} className="conv-note__item">
-                              <p className="conv-note__text" title={uwagaMeta(uwaga, language, formatNoteDate)}>
-                                {uwaga.tresc}
-                              </p>
-                              <button
-                                type="button"
-                                className="button button-small button-secondary"
-                                title={t.ksUwagaResolveTip}
-                                onClick={() => void resolveUwaga(uwaga.id)}
-                              >
-                                <Icon name="check-circle" size={13} /> {t.ksUwagaResolve}
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </li>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                   );
                 })}
-              </ul>
-            ) : (
-              <div className="form-empty">
-                <Icon name="file-text" size={16} />
-                {t.noFilesAdded}
-              </div>
-            )}
-          </FormSection>
-
-          {files.length > 0 && (
-            <ModalFooter
-              className="page-action-bar"
-              note={
-                allConverted ? (
-                  <span className="action-note action-note--success">
-                    <Icon name="check-circle" size={13} />
-                    {t.convAllDone}
-                  </span>
-                ) : someWithoutAdres ? (
-                  <span className="action-note action-note--warning">
-                    <Icon name="alert-triangle" size={13} />
-                    {t.convSomeWithoutAdres}
-                  </span>
-                ) : undefined
-              }
-              onSubmit={handleConvertAll}
-              submitLabel={t.convertAll}
-              submitIcon="arrow-right"
-              submitDisabled={allConverted || someWithoutAdres}
-              submitTitle={allConverted ? t.convAllConverted : someWithoutAdres ? t.convSomeWithoutAdres : undefined}
-            />
+              </tbody>
+            </table>
+            </>
           )}
 
-          {recentActivity}
         </div>
-      )}
+          </>
+        )}
 
-      {/* Transaction Review Screen */}
-      {reviewData && (
-        <TransactionReviewScreen
-          reviewData={reviewData}
-          language={language}
-          hasMoreFiles={conversionQueue.length > 0}
-          remainingCount={conversionQueue.length}
-          onFinalizeAndNext={handleFinalizeAndNext}
-          onFinalizeAndStop={handleFinalizeAndStop}
-          onSkip={handleSkipFile}
-          onCancel={handleCancelReview}
-        />
-      )}
+        {/* Recent activity — last 30 days, same timeline as the full History view.
+            Hidden while loading and while the full-screen review is up. */}
+        {!isLoading && !reviewData && !embedded && (
+          <FormSection
+            icon="history"
+            title={t.historyLast30Days}
+            aside={
+              onNavigateToHistory ? (
+                <button type="button" className="button button-small button-subtle" onClick={onNavigateToHistory}>
+                  {t.goToFullHistory} <Icon name="arrow-right" size={13} />
+                </button>
+              ) : undefined
+            }
+          >
+            <ConversionHistoryTimeline history={recentHistory} language={language} showSearch={false} />
+          </FormSection>
+        )}
 
-      {noteNotices.length > 0 && (
-        <PostingNoteNotice
-          items={noteNotices}
-          language={language}
-          formatDateTime={formatNoteDate}
-          onClose={() => setNoteNotices([])}
-        />
-      )}
+        {/* Transaction Review Screen */}
+        {reviewData && (
+          <TransactionReviewScreen
+            reviewData={reviewData}
+            language={language}
+            hasMoreFiles={conversionQueue.length > 0}
+            remainingCount={conversionQueue.length}
+            onFinalizeAndNext={handleFinalizeAndNext}
+            onFinalizeAndStop={handleFinalizeAndStop}
+            onSkip={handleSkipFile}
+            onCancel={handleCancelReview}
+          />
+        )}
 
-      {showDuplicatesModal && (
-        <div className="modal-overlay" onClick={() => setShowDuplicatesModal(false)}>
-          <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
-            <ModalDismiss onClose={() => setShowDuplicatesModal(false)} />
-            <ModalHeader icon="alert-triangle" title={t.zaliczkiDuplicatesTitle} subtitle={t.zaliczkiDuplicatesMessage} />
-            <div className="modal-body modal-body--sectioned">
-              <ul className="record-list">
-                {duplicateFiles.map((fileName, index) => (
-                  <li key={index} className="record-row">
-                    <span className="record-row__icon" aria-hidden="true">
-                      <Icon name="file-text" size={15} />
-                    </span>
-                    <div className="record-row__main">
-                      <div className="record-row__title record-row__title--wrap">{fileName}</div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+        {noteNotices.length > 0 && (
+          <PostingNoteNotice
+            items={noteNotices}
+            language={language}
+            formatDateTime={formatNoteDate}
+            onClose={() => setNoteNotices([])}
+          />
+        )}
+
+        {/* Duplicates Modal */}
+        {showDuplicatesModal && (
+          <div className="modal-overlay" onClick={() => setShowDuplicatesModal(false)}>
+            <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
+              <ModalDismiss onClose={() => setShowDuplicatesModal(false)} />
+              <ModalHeader icon="alert-triangle" title={t.zaliczkiDuplicatesTitle} subtitle={t.zaliczkiDuplicatesMessage} />
+              <div className="modal-body modal-body--sectioned">
+                <ul className="record-list">
+                  {duplicateFiles.map((fileName, index) => (
+                    <li key={index} className="record-row">
+                      <span className="record-row__icon" aria-hidden="true">
+                        <Icon name="file-text" size={15} />
+                      </span>
+                      <div className="record-row__main">
+                        <div className="record-row__title record-row__title--wrap">{fileName}</div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <ModalFooter onCancel={() => setShowDuplicatesModal(false)} cancelLabel={t.zaliczkiDuplicatesOk} />
             </div>
-            <ModalFooter onCancel={() => setShowDuplicatesModal(false)} cancelLabel={t.zaliczkiDuplicatesOk} />
           </div>
-        </div>
-      )}
+        )}
     </div>
   );
 };

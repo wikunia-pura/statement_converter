@@ -9,12 +9,16 @@ on:
 jobs:
   release:
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
+    continue-on-error: ${{ startsWith(matrix.os, 'windows') }}
 
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        # windows-2022, not windows-latest: since June 2026 windows-latest carries
+        # Visual Studio 2026 only, which node-gyp 11 (npm's, and electron-builder's
+        # rebuild) cannot find — and pkcs11js, the card-signing module, is compiled
+        # with it on install.
+        os: [macos-latest, windows-2022]
 
     steps:
       - name: Check out Git repository
@@ -38,7 +42,7 @@ jobs:
         run: npm run package:mac
 
       - name: Build and package (Windows)
-        if: matrix.os == 'windows-latest'
+        if: startsWith(matrix.os, 'windows')
         run: npm run package:win
       - name: Remove quarantine attributes (macOS)
         if: matrix.os == 'macos-latest'
@@ -56,7 +60,7 @@ jobs:
             release/latest-mac.yml
 
       - name: Upload artifacts (Windows)
-        if: matrix.os == 'windows-latest'
+        if: startsWith(matrix.os, 'windows')
         uses: actions/upload-artifact@v7
         with:
           name: windows-installer

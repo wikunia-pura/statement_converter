@@ -38,17 +38,33 @@ function pkcs11js(): Pkcs11 {
 // ------------------------------------------------------------------ library
 
 /**
- * The library's file names, as Szafir 2 itself looks them up: Graphite (KIR's
- * cards today) first, then Carbon (older cards). 64-bit only — so is the app.
+ * Where the 64-bit library lands on Windows — read from KIR's installer
+ * (Szafir_Instalator.msi, Szafir 2.0.0.708): Szafir puts its own copy in its
+ * "bin" folder, next to the libgraphite64.dll it needs; the CryptoCard Graphite
+ * Suite it bundles installs another under CryptoTech. The app is 64-bit, so the
+ * 32-bit copies (Program Files (x86), *.x86.dll, CCGraphiteP11.dll) are no use.
  */
-const NAZWY_WIN = ['CCGraphiteP11p.x64.dll', 'CCP1164.dll'];
+const SZAFIR_WIN = ['Krajowa Izba Rozliczeniowa S.A', 'Szafir 2.0', 'bin', 'CCGraphiteP11p.x64.dll'];
+const CRYPTOCARD_WIN = ['CryptoTech', 'CryptoCard'];
+
+/** The 64-bit names, as Szafir and the driver package spell them: Graphite (KIR's cards today), then Carbon. */
+const NAZWY_WIN = ['CCGraphiteP11p.x64.dll', 'CCGraphiteP1164.dll', 'CCP1164.dll'];
 
 function kandydaci(): string[] {
   if (process.platform === 'win32') {
-    const roots = [process.env.ProgramFiles, process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Programs'), process.env.LOCALAPPDATA].filter(
-      (r): r is string => !!r,
-    );
-    const dirs: string[] = [];
+    const programFiles = process.env.ProgramW6432 || process.env.ProgramFiles || 'C:\\Program Files';
+    const known = [
+      path.join(programFiles, ...SZAFIR_WIN),
+      ...NAZWY_WIN.map((name) => path.join(programFiles, ...CRYPTOCARD_WIN, name)),
+    ];
+    // A different install folder or a renamed vendor: look two levels into
+    // anything that sounds like Szafir, KIR or the card's maker, and into its
+    // "bin" and "app" folders.
+    const roots = [
+      programFiles,
+      process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Programs'),
+      process.env.LOCALAPPDATA,
+    ].filter((r): r is string => !!r);
     const subdirs = (dir: string): string[] => {
       try {
         return fs
@@ -59,16 +75,16 @@ function kandydaci(): string[] {
         return [];
       }
     };
-    // Szafir installs as "<Program Files>\Szafir2\app"; the driver package
-    // under a vendor folder. Look one level into anything that sounds like them.
+    const dirs: string[] = [];
+    const withBin = (dir: string) => [dir, path.join(dir, 'bin'), path.join(dir, 'app')];
     for (const root of roots) {
-      for (const dir of subdirs(root).filter((d) => /szafir|kir|crypto/i.test(path.basename(d)))) {
-        dirs.push(dir, path.join(dir, 'app'));
-        for (const sub of subdirs(dir)) dirs.push(sub, path.join(sub, 'app'));
+      for (const dir of subdirs(root).filter((d) => /szafir|kir|krajowa izba|rozliczeniow|crypto/i.test(path.basename(d)))) {
+        dirs.push(...withBin(dir));
+        for (const sub of subdirs(dir)) dirs.push(...withBin(sub));
       }
     }
     dirs.push(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32'));
-    return NAZWY_WIN.flatMap((name) => dirs.map((dir) => path.join(dir, name)));
+    return [...known, ...NAZWY_WIN.flatMap((name) => dirs.map((dir) => path.join(dir, name)))];
   }
   if (process.platform === 'darwin') {
     return [
@@ -79,6 +95,13 @@ function kandydaci(): string[] {
   }
   return ['/usr/lib/libCCGraphiteP11.so', '/usr/local/lib/libCCGraphiteP11.so'];
 }
+
+/** "Not found", naming where Szafir keeps it — the file to pick by hand if it is elsewhere. */
+const brakBiblioteki = (): string =>
+  process.platform === 'win32'
+    ? `Nie znaleziono biblioteki karty. Szafir 2 trzyma ją w „C:\\Program Files\\${SZAFIR_WIN.join('\\')}”. ` +
+      'Zainstaluj Szafir 2 (64-bit) albo wskaż ten plik w Ustawieniach → Podpis kwalifikowany.'
+    : 'Nie znaleziono biblioteki karty. Zainstaluj Szafir 2 albo wskaż plik biblioteki w Ustawieniach → Podpis kwalifikowany.';
 
 /** The library to use: the one picked in Settings if it still exists, else the first one next to Szafir. */
 function biblioteka(wskazana: string): { sciezka: string; wskazana: boolean } | null {
@@ -279,7 +302,7 @@ export async function stanKarty(wskazana: string): Promise<PodpisKartaStan> {
     return {
       reczna: wskazana,
       biblioteka: null,
-      blad: 'Nie znaleziono biblioteki karty. Zainstaluj Szafir 2 albo wskaż plik biblioteki w Ustawieniach.',
+      blad: brakBiblioteki(),
       czytniki: [],
     };
   }
@@ -342,7 +365,7 @@ export function zKartaDoPodpisu<T>(
   praca: (sesja: SesjaPodpisu) => Promise<T>,
 ): Promise<T> {
   const lib = biblioteka(wskazana);
-  if (!lib) return Promise.reject(new Error('Nie znaleziono biblioteki karty. Zainstaluj Szafir 2 albo wskaż plik biblioteki w Ustawieniach.'));
+  if (!lib) return Promise.reject(new Error(brakBiblioteki()));
 
   return zBiblioteka(lib.sciezka, async (p11, k) => {
     const slot = Buffer.from(wybor.slot, 'hex');

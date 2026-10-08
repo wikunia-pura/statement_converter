@@ -84,7 +84,9 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    version: '9.5.0',
+    // Carries everything new since 9.3.0: 9.5.0 reached Windows without a working
+    // card lookup, so this is the first build most users get the features in.
+    version: '9.5.1',
     date: '2026-10-08',
     title: 'Podatek od nieruchomości i podpis kartą Szafir',
     tagline:
@@ -143,7 +145,7 @@ export const RELEASES: Release[] = [
         summary:
           'Deklarację DN-1 podpiszesz kartą Szafir bez otwierania Szafira: wybierasz certyfikat, wpisujesz PIN i dostajesz podpisany PDF.',
         details: [
-          'Aplikacja korzysta z tej samej karty i tego samego sterownika, który instaluje Szafir 2 — Szafir musi być zainstalowany na komputerze.',
+          'Aplikacja korzysta z tej samej karty i tego samego sterownika, który instaluje Szafir 2 — Szafir musi być zainstalowany na komputerze. Na Windows sama znajduje sterownik w folderze Szafira („C:\\Program Files\\Krajowa Izba Rozliczeniowa S.A\\Szafir 2.0\\bin”) albo w folderze sterownika CryptoCard.',
           'PIN trafia prosto do karty. Aplikacja go nie zapisuje i po błędnym PIN-ie nie próbuje ponownie, żeby nie zablokować karty.',
           'Przed podpisem okno sprawdza gotowość: czy z danych da się zrobić PDF, czy osoba w poz. 121–122 to właściciel certyfikatu i czy deklaracja nie była już podpisana. Pusta data wypełnienia (poz. 123) dostaje datę podpisu.',
         ],

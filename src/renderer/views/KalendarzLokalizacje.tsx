@@ -165,7 +165,6 @@ const KalendarzLokalizacje: React.FC<Props> = ({ language }) => {
   }, []);
 
   const load = async () => {
-    setIsLoading(true);
     try {
       // The meetings are read only to count them per location — deleting one
       // leaves those meetings without a link, and the user deserves to know how

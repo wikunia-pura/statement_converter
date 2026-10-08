@@ -231,7 +231,6 @@ const KalendarzTypy: React.FC<Props> = ({ language }) => {
   }, []);
 
   const load = async () => {
-    setIsLoading(true);
     try {
       // The meetings are read only to count them per type — deleting a type
       // untyped the meetings that used it, and the user deserves to know how

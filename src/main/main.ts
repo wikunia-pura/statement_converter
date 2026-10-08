@@ -35,6 +35,13 @@ import {
   Sprawozdanie,
   SprawozdanieExportRequest,
   PlanWlasnyExportRequest,
+  PodatekNieruchomosci,
+  PodatekNieruchomosciDane,
+  PodatkiImportResult,
+  PodatkiPdfWszystkieResult,
+  PodatkiStawkiDane,
+  PodatkiPodpisWieleResult,
+  PodpisWybor,
   ZebraniePakietRequest,
   KalendarzPdfRequest,
   ZadanieInput,
@@ -107,6 +114,12 @@ import { formatData } from '../shared/sprawozdanie';
 import { planWZebraniach, planyZZebran } from '../shared/plany';
 import { eksportujPakiet } from './zebrania/pakiet';
 import { wersjaLabel } from '../shared/zebrania';
+import { dn1Pdf } from './podatki/dn1Pdf';
+import { BladKarty, stanKarty, zamknijKarte, zKartaDoPodpisu } from './podpis/karta';
+import { downloadLatestInstaller } from './installerDownload';
+import { podpiszPdf } from './podpis/pades';
+import { parsePodatkiXlsx } from './podatki/importXlsx';
+import { opisProblemu, problemyDN1, zDataPodpisu } from '../shared/podatki';
 
 // Log environment variable for testing
 log.debug('[MAIN] TEST_AI_BILLING_ERROR =', process.env.TEST_AI_BILLING_ERROR);
@@ -2396,6 +2409,11 @@ function setupIpcHandlers() {
     return true;
   });
 
+  ipcMain.handle(IPC_CHANNELS.SET_PODATKI_FOLDER, async (_, folderPath: string) => {
+    database.setSetting('podatkiFolder', folderPath);
+    return true;
+  });
+
   ipcMain.handle(IPC_CHANNELS.SET_STATEMENTS_FOLDER, async (_, folderPath: string) => {
     database.setSetting('statementsFolder', folderPath);
     return true;
@@ -2943,6 +2961,12 @@ function setupIpcHandlers() {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   });
+
+  ipcMain.handle('download-installer', (event) =>
+    downloadLatestInstaller((percent) => {
+      if (!event.sender.isDestroyed()) event.sender.send('installer-download-progress', percent);
+    }),
+  );
 
   ipcMain.handle('open-downloads-folder', () => {
     const downloadsFolder = app.getPath('downloads');
@@ -3535,6 +3559,309 @@ function setupIpcHandlers() {
       log.warn('[PLANY] download not recorded:', error instanceof Error ? error.message : error);
     }
     return { filePath };
+  });
+
+  // ---- Podatki: nieruchomości (DN-1) ----
+
+  ipcMain.handle(IPC_CHANNELS.PODATKI_NIER_LISTA, async () => database.getPodatkiNieruchomosci());
+
+  ipcMain.handle(
+    IPC_CHANNELS.PODATKI_NIER_ADD,
+    async (_, nip: string, rok: number, dane: PodatekNieruchomosciDane) =>
+      database.addPodatekNieruchomosci(nip, rok, dane, await zebraniaWho()),
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.PODATKI_NIER_SET,
+    async (_, id: number, nip: string, dane: PodatekNieruchomosciDane) =>
+      database.setPodatekNieruchomosci(id, nip, dane, await zebraniaWho()),
+  );
+
+  ipcMain.handle(IPC_CHANNELS.PODATKI_NIER_DELETE, async (_, id: number) => {
+    await database.deletePodatekNieruchomosci(id);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PODATKI_NIER_PRZENIES, async (_, zRoku: number, naRok: number) =>
+    database.przeniesPodatkiNaRok(zRoku, naRok, await zebraniaWho()),
+  );
+
+  ipcMain.handle(IPC_CHANNELS.PODATKI_NIER_IMPORT, async (): Promise<PodatkiImportResult | null> => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: 'Tabela do podatku od nieruchomości',
+      properties: ['openFile'],
+      filters: [{ name: 'Excel', extensions: ['xlsx', 'xls'] }],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const filePath = result.filePaths[0];
+    const { rekordy, pominiete } = parsePodatkiXlsx(fs.readFileSync(filePath));
+    if (rekordy.length === 0) {
+      throw new Error('W tym pliku nie ma żadnej wspólnoty z NIP-em i rokiem — nic nie zaimportowano.');
+    }
+    const { dodane, istniejace } = await database.addPodatkiNieruchomosciBrakujace(rekordy, await zebraniaWho());
+    log.info(`[PODATKI] imported ${dodane}/${rekordy.length} declarations from ${path.basename(filePath)}`);
+    return {
+      plikNazwa: path.basename(filePath),
+      dodane,
+      istniejace,
+      pominiete,
+      lata: [...new Set(rekordy.map((r) => r.rok))].sort(),
+    };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PODATKI_STAWKI_GET, async () => database.getPodatkiStawki());
+
+  ipcMain.handle(IPC_CHANNELS.PODATKI_STAWKI_SET, async (_, rok: number, stawki: PodatkiStawkiDane) =>
+    database.setPodatkiStawki(rok, stawki, await zebraniaWho()),
+  );
+
+  /** A declaration's file name: "DN-1 2027 - Wspólnota Mieszkaniowa Testowa 1.pdf" (+ " (podpisana)"). */
+  const podatekPlik = (rek: PodatekNieruchomosci, dopisek = '') =>
+    `${nazwaPliku(`DN-1 ${rek.rok} - ${rek.dane.nazwaPelna || rek.nip}`)}${dopisek}.pdf`;
+
+  /** The year's rates, as the PDF prints them. */
+  const stawkiRoku = async (rok: number) =>
+    (await database.getPodatkiStawki()).find((s) => s.rok === rok)?.stawki ?? null;
+
+  /**
+   * The year's folder inside the DN-1 folder set in Settings — "<folder>/DN-1
+   * 2027", PDFs and signed PDFs side by side — or null when none is set and
+   * the files go to Downloads. A set folder that is gone (drive not mounted)
+   * is an error: writing elsewhere would scatter the declarations.
+   */
+  const podatkiRokFolder = (rok: number): string | null => {
+    const folder = database.getSettings().podatkiFolder ?? '';
+    if (!folder) return null;
+    if (!fs.existsSync(folder)) {
+      throw new Error(
+        `Folder na deklaracje ustawiony w Ustawieniach nie istnieje: ${folder}. Podłącz dysk albo zmień folder w Ustawieniach.`,
+      );
+    }
+    const rokFolder = path.join(folder, `DN-1 ${rok}`);
+    fs.mkdirSync(rokFolder, { recursive: true });
+    return rokFolder;
+  };
+
+  /** One declaration as PDF — read from the stored data, not from the screen. */
+  ipcMain.handle(IPC_CHANNELS.PODATKI_NIER_PDF, async (_, id: number) => {
+    const rek = await database.getPodatekNieruchomosci(id);
+    if (!rek) throw new Error('Tej deklaracji już nie ma — mogła zostać usunięta.');
+    const bytes = await dn1Pdf({ nip: rek.nip, rok: rek.rok, dane: rek.dane, stawki: await stawkiRoku(rek.rok) });
+    const filePath = uniquePath(podatkiRokFolder(rek.rok) ?? app.getPath('downloads'), podatekPlik(rek));
+    fs.writeFileSync(filePath, bytes);
+    try {
+      await database.recordPodatekPobranie(rek.id, path.basename(filePath), await zebraniaWho());
+    } catch (error: unknown) {
+      log.warn('[PODATKI] download not recorded:', error instanceof Error ? error.message : error);
+    }
+    return { filePath };
+  });
+
+  /** Today on this computer's calendar, as the form keeps dates: "2026-10-08". */
+  const dzisIso = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  /**
+   * One declaration made and signed with the card (PAdES), as "… (podpisana).pdf"
+   * next to its PDF (Settings folder) or in Downloads. An empty poz. 123 gets the signing date. The PIN goes
+   * straight to the card and is never logged.
+   */
+  ipcMain.handle(IPC_CHANNELS.PODATKI_NIER_PODPISZ, async (_, id: number, wybor: PodpisWybor) => {
+    const rek = await database.getPodatekNieruchomosci(id);
+    if (!rek) throw new Error('Tej deklaracji już nie ma — mogła zostać usunięta.');
+    // Before the PIN: a missing folder must not cost a signature.
+    const dir = podatkiRokFolder(rek.rok) ?? app.getPath('downloads');
+    const bytes = await dn1Pdf({
+      nip: rek.nip,
+      rok: rek.rok,
+      dane: zDataPodpisu(rek.dane, dzisIso()),
+      stawki: await stawkiRoku(rek.rok),
+    });
+    const { pdf, podpis } = await zKartaDoPodpisu(database.getSettings().podpisBiblioteka ?? '', wybor, async (sesja) => ({
+      pdf: await podpiszPdf(bytes, { ...sesja, powod: `Deklaracja DN-1 na ${rek.rok} r.` }),
+      podpis: { podmiot: sesja.cert.podmiot, wystawca: sesja.cert.wystawca, numerSeryjny: sesja.cert.numerSeryjny },
+    }));
+    const filePath = uniquePath(dir, podatekPlik(rek, ' (podpisana)'));
+    fs.writeFileSync(filePath, pdf);
+    log.info(`[PODATKI] declaration ${rek.id} signed with certificate ${podpis.numerSeryjny}`);
+    try {
+      await database.recordPodatekPobranie(rek.id, path.basename(filePath), await zebraniaWho(), podpis);
+    } catch (error: unknown) {
+      log.warn('[PODATKI] download not recorded:', error instanceof Error ? error.message : error);
+    }
+    return { filePath, podpis };
+  });
+
+  /** "Przerwij" of a signing run: it stops after the declaration in hand. */
+  let podpisyPrzerwane = false;
+  ipcMain.handle(IPC_CHANNELS.PODATKI_NIER_PODPISZ_PRZERWIJ, () => {
+    podpisyPrzerwane = true;
+    return true;
+  });
+
+  /**
+   * The ticked declarations of a year signed one by one under a single login —
+   * one PIN for all — into the Settings folder's "DN-1 <rok>", else a new
+   * "DN-1 <rok> podpisane" in Downloads. A declaration
+   * the PDF cannot be made of yet is skipped with the reason before the card is
+   * touched. A card failure (wrong PIN, card pulled out) stops the run: with
+   * nothing signed yet it rejects, so the window can ask for the PIN again;
+   * later it returns what got signed and why the rest did not — every ticked
+   * declaration in one of the result's lists, for the summary.
+   */
+  ipcMain.handle(
+    IPC_CHANNELS.PODATKI_NIER_PODPISZ_WIELE,
+    async (event, rok: number, ids: number[], wybor: PodpisWybor): Promise<PodatkiPodpisWieleResult> => {
+      podpisyPrzerwane = false;
+      const only = new Set(ids);
+      const rekordy = (await database.getPodatkiNieruchomosci()).filter((p) => p.rok === rok && only.has(p.id));
+      const stawki = await stawkiRoku(rok);
+      const nazwa = (rek: PodatekNieruchomosci) => rek.dane.nazwaPelna || rek.nip;
+      const pominiete: PodatkiPodpisWieleResult['pominiete'] = [];
+      const gotowe = rekordy.filter((rek) => {
+        const problemy = problemyDN1(rek, stawki);
+        if (problemy.length > 0) {
+          pominiete.push({ id: rek.id, nazwa: nazwa(rek), powod: problemy.map((p) => opisProblemu(p, rok)).join('; ') });
+        }
+        return problemy.length === 0;
+      });
+      if (gotowe.length === 0) {
+        return { folder: '', podpis: null, podpisane: [], pominiete, przerwano: null, niepodpisane: [] };
+      }
+
+      // Before the PIN: a missing folder must not cost a signature.
+      const folder = podatkiRokFolder(rok) ?? uniquePath(app.getPath('downloads'), `DN-1 ${rok} podpisane`);
+      const who = await zebraniaWho();
+      const dzis = dzisIso();
+      const postep = (zrobione: number, teraz: string) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send('podatki:podpis-postep', { zrobione, wszystkie: gotowe.length, nazwa: teraz });
+        }
+      };
+      const podpisane: PodatkiPodpisWieleResult['podpisane'] = [];
+      let przetworzone = 0;
+      let przerwano: string | null = null;
+      let slad: PodatkiPodpisWieleResult['podpis'] = null;
+
+      await zKartaDoPodpisu(database.getSettings().podpisBiblioteka ?? '', wybor, async (sesja) => {
+        const podpis = { podmiot: sesja.cert.podmiot, wystawca: sesja.cert.wystawca, numerSeryjny: sesja.cert.numerSeryjny };
+        slad = podpis;
+        for (const rek of gotowe) {
+          if (podpisyPrzerwane) {
+            przerwano = 'Podpisywanie przerwane na Twoje polecenie.';
+            break;
+          }
+          postep(przetworzone, nazwa(rek));
+          try {
+            const bytes = await dn1Pdf({ nip: rek.nip, rok, dane: zDataPodpisu(rek.dane, dzis), stawki });
+            const pdf = await podpiszPdf(bytes, { ...sesja, powod: `Deklaracja DN-1 na ${rok} r.` });
+            if (podpisane.length === 0) fs.mkdirSync(folder, { recursive: true });
+            const filePath = uniquePath(folder, podatekPlik(rek, ' (podpisana)'));
+            fs.writeFileSync(filePath, pdf);
+            podpisane.push({ id: rek.id, nazwa: nazwa(rek), sciezka: filePath });
+            await database.recordPodatekPobranie(rek.id, path.basename(filePath), who, podpis).catch((error: unknown) => {
+              log.warn('[PODATKI] download not recorded:', error instanceof Error ? error.message : error);
+            });
+          } catch (error: unknown) {
+            if (error instanceof BladKarty) {
+              if (podpisane.length === 0) throw error;
+              przerwano = error.message;
+              break;
+            }
+            pominiete.push({ id: rek.id, nazwa: nazwa(rek), powod: error instanceof Error ? error.message : String(error) });
+          }
+          przetworzone += 1;
+        }
+        postep(przetworzone, '');
+      });
+
+      log.info(
+        `[PODATKI] ${podpisane.length}/${gotowe.length} declarations of ${rok} signed with one login` +
+          (przerwano ? ` — stopped: ${przerwano}` : ''),
+      );
+      return {
+        folder: podpisane.length > 0 ? folder : '',
+        podpis: slad,
+        podpisane,
+        pominiete,
+        przerwano,
+        // The run stopped at `przetworzone`: that one and the rest are left.
+        niepodpisane: gotowe.slice(przetworzone).map((rek) => ({ id: rek.id, nazwa: nazwa(rek) })),
+      };
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.PODATKI_NIER_SET_DOM, async (_, ids: number[], booked: boolean) =>
+    database.setPodatkiDom(ids, booked, await zebraniaWho()),
+  );
+
+  /**
+   * Every declaration of a year — or only the ticked ones — one PDF each, into
+   * the Settings folder's "DN-1 <rok>", else a new "DN-1 <rok>" in Downloads. A community whose declaration cannot be printed
+   * yet is skipped and named with the reason, rather than stopping the rest.
+   */
+  ipcMain.handle(
+    IPC_CHANNELS.PODATKI_NIER_PDF_WSZYSTKIE,
+    async (_, rok: number, ids?: number[]): Promise<PodatkiPdfWszystkieResult> => {
+      const only = ids && ids.length > 0 ? new Set(ids) : null;
+      const rekordy = (await database.getPodatkiNieruchomosci()).filter(
+        (p) => p.rok === rok && (!only || only.has(p.id)),
+      );
+      const stawki = await stawkiRoku(rok);
+      const folder = podatkiRokFolder(rok) ?? uniquePath(app.getPath('downloads'), `DN-1 ${rok}`);
+      const who = await zebraniaWho();
+      const pominiete: PodatkiPdfWszystkieResult['pominiete'] = [];
+      let zapisane = 0;
+      for (const rek of rekordy) {
+        const nazwa = rek.dane.nazwaPelna || rek.nip;
+        const problemy = problemyDN1(rek, stawki);
+        if (problemy.length > 0) {
+          pominiete.push({ nazwa, powod: problemy.map((p) => opisProblemu(p, rok)).join('; ') });
+          continue;
+        }
+        try {
+          const bytes = await dn1Pdf({ nip: rek.nip, rok, dane: rek.dane, stawki });
+          if (zapisane === 0) fs.mkdirSync(folder, { recursive: true });
+          const filePath = uniquePath(folder, podatekPlik(rek));
+          fs.writeFileSync(filePath, bytes);
+          zapisane += 1;
+          await database.recordPodatekPobranie(rek.id, path.basename(filePath), who).catch((error: unknown) => {
+            log.warn('[PODATKI] download not recorded:', error instanceof Error ? error.message : error);
+          });
+        } catch (error: unknown) {
+          pominiete.push({ nazwa, powod: error instanceof Error ? error.message : String(error) });
+        }
+      }
+      log.info(`[PODATKI] ${zapisane}/${rekordy.length} declarations of ${rok} saved to ${folder}`);
+      return { folder: zapisane > 0 ? folder : '', zapisane, pominiete };
+    },
+  );
+
+  // ---- Podpis kwalifikowany (karta Szafir przez PKCS#11) ----
+
+  ipcMain.handle(IPC_CHANNELS.PODPIS_KARTA_STAN, async () => stanKarty(database.getSettings().podpisBiblioteka ?? ''));
+
+  ipcMain.handle(IPC_CHANNELS.PODPIS_BIBLIOTEKA_WSKAZ, async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: 'Biblioteka PKCS#11 karty do podpisu',
+      // Szafir keeps it inside its .app bundle on macOS.
+      properties: ['openFile', 'treatPackageAsDirectory'],
+      filters: [
+        process.platform === 'win32'
+          ? { name: 'Biblioteka (DLL)', extensions: ['dll'] }
+          : { name: 'Biblioteka', extensions: ['dylib', 'so'] },
+      ],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    database.setSetting('podpisBiblioteka', result.filePaths[0]);
+    return stanKarty(result.filePaths[0]);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PODPIS_BIBLIOTEKA_AUTO, async () => {
+    database.setSetting('podpisBiblioteka', '');
+    return stanKarty('');
   });
 
   ipcMain.handle(
@@ -4498,4 +4825,5 @@ app.on('before-quit', (event) => {
 
 app.on('quit', () => {
   database.close();
+  zamknijKarte();
 });

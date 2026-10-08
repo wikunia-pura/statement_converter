@@ -51,6 +51,7 @@ const IPC_CHANNELS = {
   SET_IMPEX_FOLDER: 'settings:set-impex-folder',
   SET_SWRK_FOLDER: 'settings:set-swrk-folder',
   SET_STATEMENTS_FOLDER: 'settings:set-statements-folder',
+  SET_PODATKI_FOLDER: 'settings:set-podatki-folder',
   SET_DARK_MODE: 'settings:set-dark-mode',
   SET_LANGUAGE: 'settings:set-language',
   SET_SKIP_USER_APPROVAL: 'settings:set-skip-user-approval',
@@ -164,6 +165,23 @@ const IPC_CHANNELS = {
   PLAN_WLASNY_SET: 'plany:set',
   PLAN_WLASNY_DELETE: 'plany:delete',
   PLAN_WLASNY_EXPORT: 'plany:export',
+  PODATKI_NIER_LISTA: 'podatki:nieruchomosci-lista',
+  PODATKI_NIER_ADD: 'podatki:nieruchomosci-add',
+  PODATKI_NIER_SET: 'podatki:nieruchomosci-set',
+  PODATKI_NIER_DELETE: 'podatki:nieruchomosci-delete',
+  PODATKI_NIER_PRZENIES: 'podatki:nieruchomosci-przenies',
+  PODATKI_NIER_IMPORT: 'podatki:nieruchomosci-import',
+  PODATKI_NIER_PDF: 'podatki:nieruchomosci-pdf',
+  PODATKI_NIER_PDF_WSZYSTKIE: 'podatki:nieruchomosci-pdf-wszystkie',
+  PODATKI_NIER_SET_DOM: 'podatki:nieruchomosci-set-dom',
+  PODATKI_STAWKI_GET: 'podatki:stawki-get',
+  PODATKI_STAWKI_SET: 'podatki:stawki-set',
+  PODATKI_NIER_PODPISZ: 'podatki:nieruchomosci-podpisz',
+  PODATKI_NIER_PODPISZ_WIELE: 'podatki:nieruchomosci-podpisz-wiele',
+  PODATKI_NIER_PODPISZ_PRZERWIJ: 'podatki:nieruchomosci-podpisz-przerwij',
+  PODPIS_KARTA_STAN: 'podpis:karta-stan',
+  PODPIS_BIBLIOTEKA_WSKAZ: 'podpis:biblioteka-wskaz',
+  PODPIS_BIBLIOTEKA_AUTO: 'podpis:biblioteka-auto',
   KALENDARZ_PDF_EXPORT: 'kalendarz:pdf-export',
   RECORD_ZEBRANIE_POBRANIE: 'zebrania:record-pobranie',
   MAILING_GET_HISTORY: 'mailing:get-history',
@@ -355,6 +373,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.SET_IMPEX_FOLDER, folderPath),
   setStatementsFolder: (folderPath: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_STATEMENTS_FOLDER, folderPath),
+  setPodatkiFolder: (folderPath: string) => ipcRenderer.invoke(IPC_CHANNELS.SET_PODATKI_FOLDER, folderPath),
   setSwrkFolder: (folderPath: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_SWRK_FOLDER, folderPath),
   setDarkMode: (enabled: boolean) =>
@@ -579,6 +598,36 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setPlanWlasny: (id: number, plan: unknown) => ipcRenderer.invoke(IPC_CHANNELS.PLAN_WLASNY_SET, id, plan),
   deletePlanWlasny: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.PLAN_WLASNY_DELETE, id),
   exportPlanWlasny: (request: unknown) => ipcRenderer.invoke(IPC_CHANNELS.PLAN_WLASNY_EXPORT, request),
+  // Podatki — nieruchomości (DN-1)
+  getPodatkiNieruchomosci: () => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_NIER_LISTA),
+  addPodatekNieruchomosci: (nip: string, rok: number, dane: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_NIER_ADD, nip, rok, dane),
+  setPodatekNieruchomosci: (id: number, nip: string, dane: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_NIER_SET, id, nip, dane),
+  deletePodatekNieruchomosci: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_NIER_DELETE, id),
+  przeniesPodatkiNaRok: (zRoku: number, naRok: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_NIER_PRZENIES, zRoku, naRok),
+  importPodatkiXlsx: () => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_NIER_IMPORT),
+  exportPodatekPdf: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_NIER_PDF, id),
+  exportPodatkiPdfWszystkie: (rok: number, ids?: number[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_NIER_PDF_WSZYSTKIE, rok, ids),
+  setPodatkiDom: (ids: number[], booked: boolean) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_NIER_SET_DOM, ids, booked),
+  getPodatkiStawki: () => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_STAWKI_GET),
+  setPodatkiStawki: (rok: number, stawki: unknown) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_STAWKI_SET, rok, stawki),
+  podpiszPodatekPdf: (id: number, wybor: unknown) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_NIER_PODPISZ, id, wybor),
+  podpiszPodatkiPdf: (rok: number, ids: number[], wybor: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_NIER_PODPISZ_WIELE, rok, ids, wybor),
+  przerwijPodpisPodatkow: () => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_NIER_PODPISZ_PRZERWIJ),
+  onPodatkiPodpisPostep: (callback: (postep: any) => void) => {
+    const listener = (_event: unknown, postep: any) => callback(postep);
+    ipcRenderer.on('podatki:podpis-postep', listener);
+    return () => ipcRenderer.off('podatki:podpis-postep', listener);
+  },
+
+  // Podpis kwalifikowany (karta Szafir)
+  getPodpisKarta: () => ipcRenderer.invoke(IPC_CHANNELS.PODPIS_KARTA_STAN),
+  wskazPodpisBiblioteke: () => ipcRenderer.invoke(IPC_CHANNELS.PODPIS_BIBLIOTEKA_WSKAZ),
+  resetPodpisBiblioteke: () => ipcRenderer.invoke(IPC_CHANNELS.PODPIS_BIBLIOTEKA_AUTO),
   recordZebraniePobranie: (wersjaId: number, materialId: string, pliki: string[]) =>
     ipcRenderer.invoke(IPC_CHANNELS.RECORD_ZEBRANIE_POBRANIE, wersjaId, materialId, pliki),
   onMailingProgress: (callback: (progress: any) => void) => {
@@ -751,6 +800,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
   openDownloadsFolder: () => ipcRenderer.invoke('open-downloads-folder'),
+  downloadInstaller: () => ipcRenderer.invoke('download-installer'),
+  onInstallerDownloadProgress: (callback: (percent: number) => void) => {
+    const listener = (_event: unknown, percent: number) => callback(percent);
+    ipcRenderer.on('installer-download-progress', listener);
+    return () => ipcRenderer.off('installer-download-progress', listener);
+  },
   openLogsFolder: () => ipcRenderer.invoke('open-logs-folder'),
   getLogPath: () => ipcRenderer.invoke('get-log-path'),
   onUpdateAvailable: (callback: (info: any) => void) => {

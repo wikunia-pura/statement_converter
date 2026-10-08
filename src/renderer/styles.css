@@ -7672,6 +7672,23 @@ body.dark-mode .ksieg-book__count { background: rgba(11, 26, 18, 0.18); }
 
 body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 
+/* The same action among a toolbar's small buttons (a record's top bar): their
+   size exactly — padding, type, radius — so the row reads as one set. */
+.ksieg-book--btn {
+  height: auto;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: 1;
+  box-shadow: none;
+}
+.ksieg-book--btn:hover:not(:disabled) { box-shadow: none; transform: none; }
+/* Done, in a toolbar: label and "Zdejmij" on one line, not stacked. */
+.ksieg-book-done--inline { flex-direction: row; align-items: center; gap: var(--s-2); }
+
 .ksieg-book-done {
   display: flex;
   flex-direction: column;
@@ -11798,7 +11815,29 @@ body.dark-mode .mve-subject .ff-chip__missing {
   flex-shrink: 0;
 }
 
-.zeb-screen-head__back { align-self: flex-start; margin-left: calc(-1 * var(--s-2)); }
+/* A record's screen: the way back beside its title (components/ScreenTitle) —
+   a square button like the month bars' arrows, and the list's name above the
+   title as a link to it. */
+.screen-title { display: flex; align-items: flex-start; gap: var(--s-3); flex: 1; min-width: 0; }
+.screen-title__back { margin-top: 3px; }
+.screen-title__id { gap: 4px; }
+.screen-title__id > .zeb-screen-head__meta { margin-top: 4px; }
+.screen-title__crumb {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: color var(--t-fast);
+}
+.screen-title__crumb:hover,
+.screen-title__crumb:focus-visible { outline: none; color: var(--accent); }
 
 .zeb-screen-head__row {
   display: flex;
@@ -13116,8 +13155,11 @@ input[type='text'].zplan-input--rate { width: 84px; }
 
 /* ------------------------- Selecting and converting ------------------------- */
 
-/* The head and, left of its chevron, the batch tick. */
+/* The head, and the batch tick hung outside the card on its left: the card
+   stays one block that opens the row, and the tick, centred on the head row
+   (the wrap spans it), stays put when the row opens below. */
 .ksieg-row__headwrap {
+  position: relative;
   display: flex;
   align-items: stretch;
   min-width: 0;
@@ -13131,8 +13173,20 @@ input[type='text'].zplan-input--rate { width: 84px; }
   width: 40px;
   padding-left: var(--s-3);
 }
-/* The head's own left padding gives way to the tick's slot. */
-.ksieg-row__headwrap:not(.is-plain) > .ksieg-row__head { padding-left: var(--s-2); }
+/* The cards — and the queue's heading and divider, which belong to them —
+   leave a gutter for the ticks; the tick hangs in it, past the 4px left border. */
+.ksieg-rows > .ksieg-row,
+.ksieg-rows > .ksieg-queue-head,
+.ksieg-rows > .ksieg-queue-divider { margin-left: 32px; }
+.ksieg-row__headwrap > .ksieg-row__select {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -36px;
+  width: 32px;
+  padding-left: 0;
+  justify-content: flex-start;
+}
 
 /* A styled checkbox: the native input stays (keyboard, screen readers), drawn over. */
 .ks-check { position: relative; display: inline-flex; cursor: pointer; }
@@ -13165,16 +13219,17 @@ body.dark-mode .ks-check.is-on .ks-check__box { color: var(--bg-surface); }
 .ks-check.is-mixed .ks-check__box { background: var(--accent); border-color: var(--accent); color: #ffffff; }
 body.dark-mode .ks-check.is-mixed .ks-check__box { color: var(--bg-surface); }
 
-/* The head of the list: "select all" over the rows' own ticks. The 4px stands
-   in for a row's left border, so the boxes line up. */
+/* The head of the list: "select all" over the rows' own ticks, in the same
+   gutter left of the cards, so the boxes line up. */
 .ksieg-selall {
   display: flex;
   align-items: center;
   gap: var(--s-2);
-  padding-left: 4px;
+  padding-left: 0;
   margin-bottom: calc(-1 * var(--s-1));
   min-height: 28px;
 }
+.ksieg-selall > .ksieg-row__select { width: 32px; padding-left: 0; justify-content: flex-start; }
 .ksieg-selall__label {
   padding: 0;
   border: none;
@@ -13345,3 +13400,243 @@ body.dark-mode .ksieg-selbar .ksieg-convert:hover { color: #0d0e24; }
 /* Under a conflict side's dates, on the text's line (the ghost button's padding
    given back), not centred in the column. */
 .ks-scan-conflict__side .ks-rep-file__actions { align-self: flex-start; margin: 2px 0 0 -10px; }
+
+/* ============================ Podatki — nieruchomości ============================ */
+
+/* The list page: rates card and the communities, one column like a page form. */
+.pod-list-page { max-width: none; }
+
+/* Six-column grid for addresses and plots: fields keep the DN-1's proportions
+   (a house number is narrow, a street wide) and fold to two columns when narrow. */
+.pod-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--s-3) var(--s-4);
+  align-items: start;
+}
+.pod-span-1 { grid-column: span 1; }
+.pod-span-2 { grid-column: span 2; }
+.pod-span-3 { grid-column: span 3; }
+.pod-span-4 { grid-column: span 4; }
+@media (max-width: 900px) {
+  .pod-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pod-span-1 { grid-column: span 1; }
+  .pod-span-2, .pod-span-3, .pod-span-4 { grid-column: span 2; }
+}
+
+/* A number that may be empty, with its unit inside the box at the right. */
+.pod-num { position: relative; display: flex; align-items: center; }
+.pod-num input { width: 100%; text-align: right; padding-right: 54px; font-variant-numeric: tabular-nums; }
+.pod-num input.is-invalid { border-color: var(--danger); }
+.pod-num__unit {
+  position: absolute;
+  right: 10px;
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.pod-note { margin: 0; font-size: var(--fs-sm); color: var(--text-tertiary); }
+
+/* The tax worked out: each line's sum to the right, the liability in bold. */
+.pod-calc { align-items: baseline; }
+.pod-calc dd { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s-2) var(--s-4); }
+.pod-calc__line { color: var(--text-secondary); font-weight: 400; font-variant-numeric: tabular-nums; }
+.pod-calc__sum { margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pod-calc__sum--total { font-size: var(--fs-lg); font-weight: 700; }
+.pod-calc__input { display: flex; flex-direction: column; gap: 4px; width: min(100%, 260px); margin-left: auto; }
+
+.pod-raty { display: flex; flex-direction: column; gap: var(--s-2); }
+.pod-raty__title { font-size: var(--fs-sm); color: var(--text-tertiary); }
+.pod-raty__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: var(--s-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pod-raty__list li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--bg-surface-sunken);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+.pod-raty__list strong { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+
+.pod-problems { margin: 6px 0 0; padding-left: 18px; }
+.pod-pdf-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
+.pod-pdf-history { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-sm); color: var(--text-secondary); }
+.pod-pdf-history__title { color: var(--text-tertiary); }
+.pod-pdf-history ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
+
+/* --- Podpis kwalifikowany (karta Szafir): picking a certificate, the card in Settings --- */
+.podpis-checking { display: flex; align-items: center; gap: var(--s-2); font-size: var(--fs-sm); color: var(--text-secondary); }
+.podpis-certs { display: grid; gap: 8px; }
+.podpis-cert {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--t-fast), background-color var(--t-fast);
+}
+.podpis-cert:hover:not(:disabled) { border-color: var(--text-tertiary); }
+.podpis-cert:disabled { cursor: default; opacity: 0.6; }
+.podpis-cert.is-active {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+.podpis-cert__title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; font-weight: 600; }
+.podpis-cert__line { font-size: var(--fs-sm); color: var(--text-secondary); overflow-wrap: anywhere; }
+.podpis-cert__line.is-danger { color: var(--danger); }
+.podpis-lib { display: grid; gap: 2px; font-size: var(--fs-sm); }
+.podpis-lib__label { color: var(--text-tertiary); }
+.podpis-lib__path { font-family: var(--font-mono); color: var(--text-primary); overflow-wrap: anywhere; }
+.podpis-lib__meta { color: var(--text-secondary); }
+.podpis-reader {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+}
+.podpis-reader__head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; }
+.podpis-reader__name { font-weight: 600; }
+.podpis-reader__card { color: var(--text-secondary); }
+.podpis-reader__cert { display: grid; gap: 2px; padding-left: 22px; }
+.podpis-postep {
+  padding: 14px 16px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+}
+.podpis-gotowosc__count { font-size: 13px; font-weight: 600; }
+.podpis-gotowosc__list { margin: 4px 0 0; padding-left: 18px; }
+.podpis-gotowosc__list li { overflow-wrap: anywhere; }
+/* Summary after a signing run: counts, then the files, the skipped, the unsigned. */
+.podpis-sum__stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.podpis-sum__stat {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+}
+.podpis-sum__stat-value { font-size: 22px; font-weight: 650; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.podpis-sum__stat-label { font-size: var(--fs-sm); color: var(--text-secondary); }
+.podpis-sum__stat.is-success .podpis-sum__stat-value { color: var(--success); }
+.podpis-sum__stat.is-warning .podpis-sum__stat-value { color: var(--warning); }
+.podpis-sum__stat.is-danger .podpis-sum__stat-value { color: var(--danger); }
+.podpis-sum__stat.is-neutral .podpis-sum__stat-value { color: var(--text-tertiary); }
+.podpis-sum__folder { font-size: var(--fs-sm); color: var(--text-secondary); overflow-wrap: anywhere; }
+.podpis-sum__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.podpis-sum__list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; font-size: 13px; }
+.podpis-sum__name { font-weight: 600; }
+.podpis-sum__reason { font-size: var(--fs-sm); color: var(--text-secondary); }
+.podpis-sum__file {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: var(--fs-sm);
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.podpis-sum__file:hover { text-decoration: underline; }
+
+/* List rows: the tick left of the card (the card opens the declaration, so it
+   cannot hold the tick), the card's clickable part, then the DOM slot. */
+.pod-item { display: flex; align-items: center; }
+.pod-item > .zeb-row { flex: 1; min-width: 0; }
+.pod-item > .ksieg-row__select { width: 32px; padding-left: 0; justify-content: flex-start; }
+.pod-selall { margin-bottom: 0; }
+
+.pod-row { padding: 0; cursor: default; }
+.pod-row.is-selected { box-shadow: 0 0 0 1px var(--accent-border); }
+.pod-row__open {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  flex: 1;
+  min-width: 0;
+  padding: var(--s-3) var(--s-4);
+  border-radius: inherit;
+  cursor: pointer;
+}
+.pod-row__open:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
+.pod-row__dom { flex-shrink: 0; display: flex; align-items: center; padding-right: var(--s-4); }
+
+/* The row's state on its left edge — the same tones as its badge. */
+.pod-row--braki { border-left-color: var(--warning); }
+.pod-row--pobrana { border-left-color: var(--info); }
+.pod-row--dom { border-left-color: var(--success); }
+
+/* The tax in the row's box: one line, the figure large and dark, "zł" a quiet
+   suffix — no uppercase labels stacked around it. Longer figures step down a
+   size (set by the view) so they stay on one line in the fixed-width box. */
+.pod-kwota { gap: 3px; }
+.pod-kwota__label { font-size: var(--fs-xs); color: var(--text-tertiary); line-height: 1; }
+.pod-kwota__value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  white-space: nowrap;
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.pod-kwota__value.is-m { font-size: var(--fs-xl); }
+.pod-kwota__value.is-s { font-size: var(--fs-lg); }
+.pod-kwota__value.is-xs { font-size: var(--fs-md); }
+.pod-kwota__value.is-empty { color: var(--text-tertiary); font-weight: 600; }
+.pod-kwota__unit { font-size: var(--fs-sm); font-weight: 600; letter-spacing: 0; color: var(--text-secondary); }
+
+.pod-meta-warning { color: var(--warning); font-weight: 500; }
+.pod-meta-warning > svg { color: var(--warning); }
+
+.pod-head-actions { display: flex; align-items: center; gap: var(--s-3); flex-shrink: 0; }
+/* Import and "Dodaj wspólnotę" close the toolbar on the right. */
+.pod-toolbar-end { display: flex; align-items: center; gap: var(--s-2); margin-left: auto; }
+
+/* The year bar: the Pulpit's month banner, with the module's emblem for art. */
+.pod-hero { margin-bottom: var(--s-5); }
+.pod-hero__art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 84px;
+  height: 72px;
+  border-radius: var(--r-xl);
+  background: var(--accent-subtle);
+  box-shadow: inset 0 0 0 1px var(--accent-border);
+  color: var(--accent);
+}

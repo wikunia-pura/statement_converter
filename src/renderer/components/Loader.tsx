@@ -8,6 +8,10 @@ interface LoaderProps {
 /**
  * Full-view loading indicator shown while a view fetches its data on entry.
  * Reuses the app's `.loader-spinner` and centers itself in the content area.
+ *
+ * Only for that first fetch: a reload after a save must update the content in
+ * place. Showing the loader again swaps out `.content-body`, the element that
+ * scrolls, so the user would land back at the top of a long list.
  */
 const Loader: React.FC<LoaderProps> = ({ label }) => (
   <div className="view-loader" role="status" aria-live="polite">

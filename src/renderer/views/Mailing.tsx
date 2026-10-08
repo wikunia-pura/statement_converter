@@ -192,7 +192,6 @@ const Mailing: React.FC<Props> = ({
   }, []);
 
   const load = async () => {
-    setIsLoading(true);
     try {
       const [adresyData, zgnData, szablonyData, polaData, smtp, pelnomocnicyData, typyData] =
         await Promise.all([

@@ -14,6 +14,7 @@ import Select from '../components/Select';
 import Loader from '../components/Loader';
 import UsersCard from '../components/UsersCard';
 import { FormField, FormRow, FormSection } from '../components/FormSection';
+import { PodpisKartaUstawienia } from '../components/PodpisKarta';
 
 interface SettingsProps {
   darkMode: boolean;
@@ -48,6 +49,7 @@ const Settings: React.FC<SettingsProps> = ({
   const [converters, setConverters] = useState<Converter[]>([]);
   const [outputFolder, setOutputFolder] = useState('');
   const [impexFolder, setImpexFolder] = useState('');
+  const [podatkiFolder, setPodatkiFolder] = useState('');
   const [swrkFolder, setSwrkFolder] = useState('');
   const [statementsFolder, setStatementsFolder] = useState('');
   const [skipUserApproval, setSkipUserApproval] = useState(false);
@@ -62,6 +64,8 @@ const Settings: React.FC<SettingsProps> = ({
     autoBackupCount: number;
   } | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
+  /** Percent of the installer download under way; null when none is running. */
+  const [installerProgress, setInstallerProgress] = useState<number | null>(null);
   // SMTP of the mailbox the Mailing module sends from. The stored password never
   // reaches the renderer, so `passwordSet` stands in for it and the input below
   // stays empty unless the user is deliberately changing it.
@@ -98,6 +102,7 @@ const Settings: React.FC<SettingsProps> = ({
       setSmtpPassword('');
       setOutputFolder(settings.outputFolder);
       setImpexFolder(settings.impexFolder || '');
+      setPodatkiFolder(settings.podatkiFolder || '');
       setSwrkFolder(settings.swrkFolder || '');
       setStatementsFolder(settings.statementsFolder || '');
       setSkipUserApproval(settings.skipUserApproval ?? false);
@@ -125,6 +130,14 @@ const Settings: React.FC<SettingsProps> = ({
     if (folder) {
       await window.electronAPI.setImpexFolder(folder);
       setImpexFolder(folder);
+    }
+  };
+
+  const handleSelectPodatkiFolder = async () => {
+    const folder = await window.electronAPI.selectOutputFolder();
+    if (folder) {
+      await window.electronAPI.setPodatkiFolder(folder);
+      setPodatkiFolder(folder);
     }
   };
 
@@ -308,6 +321,7 @@ const Settings: React.FC<SettingsProps> = ({
           // Explicitly update outputFolder in local state
           setOutputFolder(settings.outputFolder || '');
           setImpexFolder(settings.impexFolder || '');
+          setPodatkiFolder(settings.podatkiFolder || '');
           setSwrkFolder(settings.swrkFolder || '');
           setStatementsFolder(settings.statementsFolder || '');
           setSkipUserApproval(settings.skipUserApproval ?? false);
@@ -401,7 +415,33 @@ const Settings: React.FC<SettingsProps> = ({
       .replace('{zebraniaSprawozdania}', String(counts.zebraniaSprawozdania))
       .replace('{zebraniaWspolnoty}', String(counts.zebraniaWspolnoty))
       .replace('{zebraniaUstawienia}', String(counts.zebraniaUstawienia))
-      .replace('{planyGospodarcze}', String(counts.planyGospodarcze));
+      .replace('{planyGospodarcze}', String(counts.planyGospodarcze))
+      .replace('{podatkiNieruchomosci}', String(counts.podatkiNieruchomosci))
+      .replace('{podatkiStawki}', String(counts.podatkiStawki));
+  };
+
+  const handleDownloadInstaller = async () => {
+    setInstallerProgress(0);
+    // Subscribed inside the try: anything thrown here must still reach the
+    // finally, or the button stays stuck on "0%".
+    let unsubscribe: (() => void) | undefined;
+    try {
+      unsubscribe = window.electronAPI.onInstallerDownloadProgress(setInstallerProgress);
+      const result = await window.electronAPI.downloadInstaller();
+      if (result.success) {
+        const message = result.alreadyDownloaded ? t.setInstallerAlready : t.setInstallerSaved;
+        notify.success(message.replace('{version}', result.version), { file: result.filePath });
+      } else if (result.unsupported) {
+        notify.warning(t.setInstallerUnsupported);
+      } else {
+        notify.error(`${t.setInstallerError}: ${result.error}`);
+      }
+    } catch (error) {
+      notify.error(`${t.setInstallerError}: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      unsubscribe?.();
+      setInstallerProgress(null);
+    }
   };
 
   const handleCreateBackup = async () => {
@@ -697,6 +737,18 @@ const Settings: React.FC<SettingsProps> = ({
             },
             t.setImpexClear,
           )}
+          {folderField(
+            t.setPodatkiFolderLabel,
+            t.setPodatkiFolderHint,
+            podatkiFolder,
+            t.setPodatkiFolderPlaceholder,
+            handleSelectPodatkiFolder,
+            async () => {
+              await window.electronAPI.setPodatkiFolder('');
+              setPodatkiFolder('');
+            },
+            t.setPodatkiFolderClear,
+          )}
         </FormSection>
 
         {/* Mailing — SMTP of the mailbox we send from (machine-local) */}
@@ -805,6 +857,9 @@ const Settings: React.FC<SettingsProps> = ({
           </div>
         </FormSection>
 
+        {/* Podpis kwalifikowany — the card's library on this machine */}
+        <PodpisKartaUstawienia language={language} />
+
         <FormSection
           icon="shield"
           title={t.backupTitle}
@@ -863,6 +918,18 @@ const Settings: React.FC<SettingsProps> = ({
               }}
             >
               <Icon name="refresh" size={14} /> {t.checkForUpdates}
+            </button>
+            <button
+              type="button"
+              className="button button-secondary"
+              onClick={handleDownloadInstaller}
+              disabled={installerProgress !== null}
+              title={t.setDownloadInstallerHint}
+            >
+              <Icon name="download" size={14} />{' '}
+              {installerProgress !== null
+                ? t.setInstallerDownloading.replace('{percent}', String(installerProgress))
+                : t.setDownloadInstaller}
             </button>
             <button
               type="button"

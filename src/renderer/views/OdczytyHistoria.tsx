@@ -23,7 +23,6 @@ const OdczytyHistoria: React.FC<Props> = ({ language }) => {
   }, []);
 
   const loadHistory = async () => {
-    setIsLoading(true);
     try {
       setHistory(await window.electronAPI.odczytyGetHistory());
     } finally {

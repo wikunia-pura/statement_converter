@@ -202,7 +202,6 @@ const MailingTypy: React.FC<Props> = ({ language }) => {
   }, []);
 
   const load = async () => {
-    setIsLoading(true);
     try {
       // Templates are read only to count them per kind — a kind still used by
       // templates cannot be deleted, and the count tells the user why up front.

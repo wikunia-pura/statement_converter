@@ -12,6 +12,8 @@ import Loader, { BusyOverlay } from '../components/Loader';
 import Select from '../components/Select';
 import SearchableSelect from '../components/SearchableSelect';
 import ZebranieDokumentActions from '../components/ZebranieDokumentActions';
+import ScreenTitle from '../components/ScreenTitle';
+import { useNavItem } from '../navigation';
 import {
   SprawozdanieFakty,
   SprawozdaniePodglad,
@@ -140,17 +142,14 @@ const SprawozdanieScreen: React.FC<{
   return (
     <>
       <div className="zeb-screen-head">
-        <button
-          type="button"
-          className="button button-small button-ghost zeb-screen-head__back"
-          onClick={onBack}
-        >
-          <Icon name="chevron-left" size={14} /> {t.sprawBack}
-        </button>
         <div className="zeb-screen-head__row">
-          <div className="zeb-screen-head__id">
-            <h1 className="zeb-screen-head__title">{wspolnotaTytul(wpis.nazwa)}</h1>
-            <div className="zeb-screen-head__meta">
+          <ScreenTitle
+            backLabel={t.sprawBack}
+            crumb={t.sprawozdania}
+            onBack={onBack}
+            title={wspolnotaTytul(wpis.nazwa)}
+            meta={
+              <>
               <ZrodloBadge t={t} zrodlo={wpis.zrodlo} />
               <span>
                 <Icon name="calendar" size={13} /> {okresLabel(wpis.okresOd, wpis.okresDo)}
@@ -163,8 +162,9 @@ const SprawozdanieScreen: React.FC<{
               <span>
                 <Icon name="file-text" size={13} /> {wpis.plikNazwa || '—'}
               </span>
-            </div>
-          </div>
+              </>
+            }
+          />
           {wpis.zrodlo === 'sprawozdania' && (
             <button
               type="button"
@@ -301,7 +301,13 @@ const Sprawozdania: React.FC<{ language: Language }> = ({ language }) => {
   /** A period key, or '' for every period; null = not chosen yet (the newest one). */
   const [okres, setOkres] = useState<string | null>(null);
   const [zrodlo, setZrodlo] = useState<ZrodloFilter>('all');
-  const [detailId, setDetailId] = useState<number | null>(null);
+  /** The statement open on its own screen — a step of the app's history, so Back returns to the list. */
+  const navItem = useNavItem();
+  const detailId = navItem.item && /^\d+$/.test(navItem.item) ? Number(navItem.item) : null;
+  const labelOf = (id: number) => {
+    const s = lista.find((x) => x.id === id);
+    return s ? `${nazwaNieruchomosci(s.nazwa)} · ${okresLabel(s.okresOd, s.okresDo)}` : '';
+  };
 
   const load = async (silent = false) => {
     if (silent) setIsRefreshing(true);
@@ -418,10 +424,11 @@ const Sprawozdania: React.FC<{ language: Language }> = ({ language }) => {
         locale={locale}
         wpis={detail}
         lista={lista}
-        onOpen={setDetailId}
-        onBack={() => setDetailId(null)}
+        // Another community or period, picked in place: the same step, not a new one.
+        onOpen={(id) => navItem.replace(String(id), labelOf(id))}
+        onBack={() => navItem.close()}
         onDeleted={() => {
-          setDetailId(null);
+          navItem.close();
           void load(true);
         }}
       />
@@ -435,7 +442,7 @@ const Sprawozdania: React.FC<{ language: Language }> = ({ language }) => {
   ];
 
   const renderRow = (s: SprawozdanieZapisane) => {
-    const open = () => setDetailId(s.id);
+    const open = () => navItem.open(String(s.id), labelOf(s.id));
     return (
       <li key={s.id}>
         <div

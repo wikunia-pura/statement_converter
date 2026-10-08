@@ -65,6 +65,12 @@ import {
   ZEBRANIE_STATUSES,
   PlanGospodarczy,
   PlanWlasny,
+  PodatekNieruchomosci,
+  PodatekNieruchomosciDane,
+  PodatekPobranie,
+  PodatkiStawki,
+  PodatkiStawkiDane,
+  PodpisSlad,
   Sprawozdanie,
   SprawozdanieWstepTekst,
   SprawozdanieZapisane,
@@ -75,6 +81,7 @@ import {
   ZebranieSprawozdanie,
 } from '../shared/types';
 import { normalizePlan, normalizePobrania, normalizeUstawienia } from '../shared/plan-gospodarczy';
+import { daneNaKolejnyRok, normalizeDane, normalizeStawki, tylkoCyfry } from '../shared/podatki';
 import {
   normalizeSprawozdanieDane,
   normalizeWstepTekst,
@@ -128,6 +135,10 @@ interface SettingsStoreSchema {
     smtpPass: string;
     smtpFromName: string;
     smtpBccSelf: boolean;
+    /** Podatki → Nieruchomości: where DN-1 files go ('' = Downloads). */
+    podatkiFolder: string;
+    /** Podpis kwalifikowany: the card's PKCS#11 library picked by hand ('' = next to Szafir). */
+    podpisBiblioteka: string;
   };
 }
 
@@ -325,6 +336,8 @@ class DatabaseService {
           smtpPass: '',
           smtpFromName: '',
           smtpBccSelf: false,
+          podatkiFolder: '',
+          podpisBiblioteka: '',
         },
       },
     });
@@ -3364,6 +3377,236 @@ class DatabaseService {
     if (error) throw new Error(`recordPlanWlasnyPobranie: ${error.message}`);
   }
 
+  /* ------------------------ Podatki — nieruchomości (DN-1) ------------------------ */
+
+  private static podatekRow(r: any): PodatekNieruchomosci {
+    return {
+      id: r.id,
+      nip: r.nip ?? '',
+      rok: r.rok,
+      dane: normalizeDane(r.dane),
+      createdAt: r.created_at ?? '',
+      createdBy: r.created_by ?? '',
+      updatedAt: r.updated_at ?? '',
+      updatedBy: r.updated_by ?? '',
+    };
+  }
+
+  /** A second declaration of one community and year — the unique key says no. */
+  private static podatekError(op: string, error: { code?: string; message: string }): Error {
+    return error.code === '23505'
+      ? new Error('Ta wspólnota (ten NIP) ma już deklarację na ten rok — otwórz ją zamiast dodawać drugą.')
+      : new Error(`${op}: ${error.message}`);
+  }
+
+  /** Every year's declarations — newest year first, then by name. */
+  async getPodatkiNieruchomosci(): Promise<PodatekNieruchomosci[]> {
+    const rows = await fetchAllPaged<any>('getPodatkiNieruchomosci', (from, to) =>
+      getSupabase()
+        .from('podatki_nieruchomosci')
+        .select('*')
+        .order('rok', { ascending: false })
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
+    return rows.map(DatabaseService.podatekRow);
+  }
+
+  async getPodatekNieruchomosci(id: number): Promise<PodatekNieruchomosci | null> {
+    const { data, error } = await getSupabase().from('podatki_nieruchomosci').select('*').eq('id', id).maybeSingle();
+    if (error) throw new Error(`getPodatekNieruchomosci: ${error.message}`);
+    return data ? DatabaseService.podatekRow(data) : null;
+  }
+
+  async addPodatekNieruchomosci(
+    nip: string,
+    rok: number,
+    value: PodatekNieruchomosciDane,
+    who: string,
+  ): Promise<PodatekNieruchomosci> {
+    const now = new Date().toISOString();
+    const { data, error } = await getSupabase()
+      .from('podatki_nieruchomosci')
+      .insert({
+        nip: tylkoCyfry(nip),
+        rok,
+        dane: { ...normalizeDane(value), pobrania: [], dom: null },
+        created_at: now,
+        created_by: who,
+        updated_at: now,
+        updated_by: who,
+      })
+      .select('*')
+      .single();
+    if (error) throw DatabaseService.podatekError('addPodatekNieruchomosci', error);
+    return DatabaseService.podatekRow(data);
+  }
+
+  /** Save an edited declaration; the download record and the DOM tick are kept from the stored row. */
+  async setPodatekNieruchomosci(
+    id: number,
+    nip: string,
+    value: PodatekNieruchomosciDane,
+    who: string,
+  ): Promise<PodatekNieruchomosci> {
+    const stored = await this.getPodatekNieruchomosci(id);
+    if (!stored) throw new Error('Tej deklaracji już nie ma — mogła zostać usunięta.');
+    const { data, error } = await getSupabase()
+      .from('podatki_nieruchomosci')
+      .update({
+        nip: tylkoCyfry(nip),
+        dane: { ...normalizeDane(value), pobrania: stored.dane.pobrania, dom: stored.dane.dom },
+        updated_at: new Date().toISOString(),
+        updated_by: who,
+      })
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (error) throw DatabaseService.podatekError('setPodatekNieruchomosci', error);
+    return DatabaseService.podatekRow(data);
+  }
+
+  async deletePodatekNieruchomosci(id: number): Promise<void> {
+    const { error } = await getSupabase().from('podatki_nieruchomosci').delete().eq('id', id);
+    if (error) throw new Error(`deletePodatekNieruchomosci: ${error.message}`);
+  }
+
+  /** Note a downloaded PDF of a declaration. */
+  async recordPodatekPobranie(id: number, plik: string, who: string, podpis?: PodpisSlad): Promise<void> {
+    const stored = await this.getPodatekNieruchomosci(id);
+    if (!stored) return;
+    const entry: PodatekPobranie = { at: new Date().toISOString(), by: who, plik, ...(podpis ? { podpis } : {}) };
+    const { error } = await getSupabase()
+      .from('podatki_nieruchomosci')
+      .update({ dane: { ...stored.dane, pobrania: [...stored.dane.pobrania, entry] } })
+      .eq('id', id);
+    if (error) throw new Error(`recordPodatekPobranie: ${error.message}`);
+  }
+
+  /**
+   * Tick declarations as posted in DOM, or take the tick off. A row already
+   * ticked keeps who ticked it and when. Returns the rows as they now are.
+   */
+  async setPodatkiDom(ids: number[], booked: boolean, who: string): Promise<PodatekNieruchomosci[]> {
+    if (ids.length === 0) return [];
+    const { data, error } = await getSupabase().from('podatki_nieruchomosci').select('*').in('id', ids);
+    if (error) throw new Error(`setPodatkiDom: ${error.message}`);
+    const stamp = { at: new Date().toISOString(), by: who };
+    const out: PodatekNieruchomosci[] = [];
+    for (const slice of DatabaseService.chunk((data ?? []).map(DatabaseService.podatekRow), 10)) {
+      out.push(
+        ...(await Promise.all(
+          slice.map(async (rek) => {
+            const dane = { ...rek.dane, dom: booked ? rek.dane.dom ?? stamp : null };
+            const { error: updateError } = await getSupabase()
+              .from('podatki_nieruchomosci')
+              .update({ dane })
+              .eq('id', rek.id);
+            if (updateError) throw new Error(`setPodatkiDom: ${updateError.message}`);
+            return { ...rek, dane };
+          }),
+        )),
+      );
+    }
+    return out;
+  }
+
+  /**
+   * Add declarations a year does not have yet. A community (NIP) the year
+   * already holds is left as it is — never overwritten. Returns how many were
+   * added and how many skipped.
+   */
+  async addPodatkiNieruchomosciBrakujace(
+    rekordy: { nip: string; rok: number; dane: PodatekNieruchomosciDane }[],
+    who: string,
+  ): Promise<{ dodane: number; istniejace: number }> {
+    const existing = new Set((await this.getPodatkiNieruchomosci()).map((p) => `${p.nip}|${p.rok}`));
+    const now = new Date().toISOString();
+    const nowe = rekordy
+      .map((r) => ({ ...r, nip: tylkoCyfry(r.nip) }))
+      .filter((r) => !existing.has(`${r.nip}|${r.rok}`));
+    await this.insertChunked(
+      'podatki_nieruchomosci',
+      nowe.map((r) => ({
+        nip: r.nip,
+        rok: r.rok,
+        dane: { ...normalizeDane(r.dane), pobrania: [], dom: null },
+        created_at: now,
+        created_by: who,
+        updated_at: now,
+        updated_by: who,
+      })),
+    );
+    return { dodane: nowe.length, istniejace: rekordy.length - nowe.length };
+  }
+
+  /**
+   * Start year `naRok` from `zRoku`: every community of `zRoku` the new year
+   * does not have yet gets next year's draft of its declaration. The rates
+   * come along too when the new year has none — marked unconfirmed, as they
+   * are last year's until somebody checks the new resolution.
+   */
+  async przeniesPodatkiNaRok(zRoku: number, naRok: number, who: string): Promise<number> {
+    const all = await this.getPodatkiNieruchomosci();
+    const zrodlo = all.filter((p) => p.rok === zRoku);
+    const { dodane } = await this.addPodatkiNieruchomosciBrakujace(
+      zrodlo.map((p) => ({ nip: p.nip, rok: naRok, dane: daneNaKolejnyRok(p.dane) })),
+      who,
+    );
+    const stawki = await this.getPodatkiStawki();
+    const stare = stawki.find((s) => s.rok === zRoku);
+    if (stare && !stawki.some((s) => s.rok === naRok)) {
+      const { error } = await getSupabase().from('podatki_stawki').insert({
+        rok: naRok,
+        stawki: stare.stawki,
+        potwierdzone: false,
+        updated_at: new Date().toISOString(),
+        updated_by: who,
+      });
+      if (error && error.code !== '23505') throw new Error(`przeniesPodatkiNaRok: ${error.message}`);
+    }
+    return dodane;
+  }
+
+  private static stawkiRow(r: any): PodatkiStawki {
+    return {
+      rok: r.rok,
+      stawki: normalizeStawki(r.stawki),
+      potwierdzone: r.potwierdzone === true,
+      updatedAt: r.updated_at ?? '',
+      updatedBy: r.updated_by ?? '',
+    };
+  }
+
+  async getPodatkiStawki(): Promise<PodatkiStawki[]> {
+    const { data, error } = await getSupabase()
+      .from('podatki_stawki')
+      .select('*')
+      .order('rok', { ascending: false });
+    if (error) throw new Error(`getPodatkiStawki: ${error.message}`);
+    return (data ?? []).map(DatabaseService.stawkiRow);
+  }
+
+  /** Save a year's rates — saving them is what confirms them. */
+  async setPodatkiStawki(rok: number, stawki: PodatkiStawkiDane, who: string): Promise<PodatkiStawki> {
+    const { data, error } = await getSupabase()
+      .from('podatki_stawki')
+      .upsert(
+        {
+          rok,
+          stawki: normalizeStawki(stawki),
+          potwierdzone: true,
+          updated_at: new Date().toISOString(),
+          updated_by: who,
+        },
+        { onConflict: 'rok' },
+      )
+      .select('*')
+      .single();
+    if (error) throw new Error(`setPodatkiStawki: ${error.message}`);
+    return DatabaseService.stawkiRow(data);
+  }
+
   /** Every library row with its statement — for the backup. */
   private async getSprawozdaniaFull(): Promise<SprawozdanieZapisane[]> {
     const rows = await fetchAllPaged<any>('getSprawozdaniaFull', (from, to) =>
@@ -3919,6 +4162,8 @@ class DatabaseService {
       zebraniaWspolnoty,
       zebraniaUstawienia,
       planyGospodarcze,
+      podatkiNieruchomosci,
+      podatkiStawki,
     ] = await Promise.all([
       this.getAllBanks(),
       this.getAllKontrahenci(),
@@ -3953,6 +4198,8 @@ class DatabaseService {
       this.getZebraniaWspolnoty().catch(() => undefined),
       this.getZebraniaUstawieniaRow().catch(() => undefined),
       this.getPlanyWlasne().catch(() => undefined),
+      this.getPodatkiNieruchomosci().catch(() => undefined),
+      this.getPodatkiStawki().catch(() => undefined),
     ]);
     return {
       format: 'filefunky-backup',
@@ -3989,6 +4236,8 @@ class DatabaseService {
         zebraniaWspolnoty,
         zebraniaUstawienia,
         planyGospodarcze,
+        podatkiNieruchomosci,
+        podatkiStawki,
         // The `app_users` ROWS are deliberately absent: they mirror the Supabase
         // auth accounts, rebuilt by a trigger, not data this app authors — and
         // the participants stored on each meeting carry their own snapshot. The
@@ -4089,6 +4338,8 @@ class DatabaseService {
       zebraniaWspolnoty,
       zebraniaUstawienia,
       planyGospodarcze,
+      podatkiNieruchomosci,
+      podatkiStawki,
       settings,
     } = backup.data;
 
@@ -4613,6 +4864,42 @@ class DatabaseService {
             created_by: p.createdBy ?? '',
             updated_at: p.updatedAt || new Date().toISOString(),
             updated_by: p.updatedBy ?? '',
+          })),
+      );
+    }
+    // The Podatki module: declarations keyed by NIP and year, rates by year —
+    // nothing a restore renumbers.
+    if (podatkiNieruchomosci) {
+      const { error: wipeError } = await getSupabase().from('podatki_nieruchomosci').delete().gt('id', 0);
+      if (wipeError) throw new Error(`restore podatki_nieruchomosci: ${wipeError.message}`);
+      await this.insertChunked(
+        'podatki_nieruchomosci',
+        podatkiNieruchomosci
+          .filter(p => p.nip && Number.isInteger(p.rok))
+          .map(p => ({
+            nip: tylkoCyfry(p.nip),
+            rok: p.rok,
+            dane: normalizeDane(p.dane),
+            created_at: p.createdAt || new Date().toISOString(),
+            created_by: p.createdBy ?? '',
+            updated_at: p.updatedAt || new Date().toISOString(),
+            updated_by: p.updatedBy ?? '',
+          })),
+      );
+    }
+    if (podatkiStawki) {
+      const { error: wipeError } = await getSupabase().from('podatki_stawki').delete().gt('rok', 0);
+      if (wipeError) throw new Error(`restore podatki_stawki: ${wipeError.message}`);
+      await this.insertChunked(
+        'podatki_stawki',
+        podatkiStawki
+          .filter(s => Number.isInteger(s.rok))
+          .map(s => ({
+            rok: s.rok,
+            stawki: normalizeStawki(s.stawki),
+            potwierdzone: s.potwierdzone === true,
+            updated_at: s.updatedAt || new Date().toISOString(),
+            updated_by: s.updatedBy ?? '',
           })),
       );
     }

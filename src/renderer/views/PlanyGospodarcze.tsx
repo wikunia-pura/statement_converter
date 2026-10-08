@@ -24,6 +24,8 @@ import Loader from '../components/Loader';
 import Select from '../components/Select';
 import SearchableSelect from '../components/SearchableSelect';
 import ZebraniaUstawieniaModal from '../components/ZebraniaUstawieniaModal';
+import ScreenTitle from '../components/ScreenTitle';
+import { useNavItem } from '../navigation';
 import {
   PlanWorkspace,
   PlanZalozenia,
@@ -360,6 +362,8 @@ const PlanScreen: React.FC<{
     try {
       await window.electronAPI.deletePlanWlasny(wpis.wlasny.id);
       notify.success(t.zplanDeleted);
+      // Gone: back to the list, so the history does not keep a step to nothing.
+      onBack();
       await onReload();
     } catch (err: unknown) {
       notify.error(err instanceof Error ? err.message : String(err));
@@ -373,19 +377,14 @@ const PlanScreen: React.FC<{
   return (
     <>
       <div className="zeb-screen-head">
-        <button
-          type="button"
-          className="button button-small button-ghost zeb-screen-head__back"
-          onClick={onBack}
-        >
-          <Icon name="chevron-left" size={14} /> {t.planyBack}
-        </button>
         <div className="zeb-screen-head__row">
-          <div className="zeb-screen-head__id">
-            <h1 className="zeb-screen-head__title">
-              {t.planyScreenTitle.replace('{rok}', String(wpis.rok)).replace('{name}', wpis.nazwa)}
-            </h1>
-            <div className="zeb-screen-head__meta">
+          <ScreenTitle
+            backLabel={t.planyBack}
+            crumb={t.planyGospodarcze}
+            onBack={onBack}
+            title={t.planyScreenTitle.replace('{rok}', String(wpis.rok)).replace('{name}', wpis.nazwa)}
+            meta={
+              <>
               <ZrodloBadge t={t} wpis={wpis} />
               {wpis.nrWsp != null && (
                 <span>
@@ -407,8 +406,9 @@ const PlanScreen: React.FC<{
                   okresLabel(wpis.plan.sprawozdanieOkres.od, wpis.plan.sprawozdanieOkres.do)
                 )}
               </span>
-            </div>
-          </div>
+              </>
+            }
+          />
           {wpis.kind === 'zebrania' ? (
             <button
               type="button"
@@ -568,7 +568,9 @@ const PlanyGospodarcze: React.FC<{
   /** A year, or '' for every year; null = not chosen yet (the newest one). */
   const [rokFilter, setRokFilter] = useState<string | null>(null);
   const [zrodlo, setZrodlo] = useState<ZrodloFilter>('all');
-  const [detailId, setDetailId] = useState<string | null>(null);
+  /** The plan open on its own screen — a step of the app's history, so Back returns to the list. */
+  const navItem = useNavItem();
+  const detailId = navItem.item;
   const [creating, setCreating] = useState(false);
   const [ustawieniaOpen, setUstawieniaOpen] = useState(false);
 
@@ -667,6 +669,16 @@ const PlanyGospodarcze: React.FC<{
   }, [wRoku, zrodlo, search]);
 
   const detail = detailId ? wpisy.find((w) => w.id === detailId) ?? null : null;
+  const labelOf = (id: string) => {
+    const w = wpisy.find((x) => x.id === id);
+    return w ? t.planyScreenTitle.replace('{rok}', String(w.rok)).replace('{name}', w.nazwa) : '';
+  };
+
+  // A plan opened before the list held it (just created) gets its name here.
+  useEffect(() => {
+    if (detail) navItem.replace(detail.id, labelOf(detail.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail?.id]);
 
   const modals = (
     <>
@@ -679,12 +691,12 @@ const PlanyGospodarcze: React.FC<{
           wpisy={wpisy}
           onOpenWpis={(id) => {
             setCreating(false);
-            setDetailId(id);
+            navItem.open(id, labelOf(id));
           }}
           onOpenUstawienia={() => setUstawieniaOpen(true)}
           onCreated={(plan) => {
             setCreating(false);
-            void load(true).then(() => setDetailId(`w-${plan.id}`));
+            void load(true).then(() => navItem.open(`w-${plan.id}`, ''));
           }}
           onClose={() => setCreating(false)}
         />
@@ -722,8 +734,9 @@ const PlanyGospodarcze: React.FC<{
           lista={lista}
           wspolnoty={wspolnoty}
           ustawienia={ustawienia}
-          onOpen={setDetailId}
-          onBack={() => setDetailId(null)}
+          // Another plan, picked in place: the same step, not a new one.
+          onOpen={(id) => navItem.replace(id, labelOf(id))}
+          onBack={() => navItem.close()}
           onReload={() => load(true)}
           onOpenUstawienia={() => setUstawieniaOpen(true)}
           onOpenZebranie={onOpenZebranie}
@@ -740,7 +753,7 @@ const PlanyGospodarcze: React.FC<{
   ];
 
   const renderRow = (w: Wpis) => {
-    const open = () => setDetailId(w.id);
+    const open = () => navItem.open(w.id, labelOf(w.id));
     const zmieniono = w.plan.zmieniono
       ? t.zplanChanged
           .replace('{when}', formatStamp(w.plan.zmieniono, locale))

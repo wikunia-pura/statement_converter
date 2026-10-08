@@ -2,7 +2,7 @@
 
 import type { NotificationPrefs } from '../shared/notifications';
 import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, ZgnPelnomocnik, ZarzadOsoba, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent, AppUser, SpotkanieTyp, SpotkanieLokalizacja, Spotkanie, SpotkanieInput, KalendarzPdfRequest, SpotkanieMailing, SpotkanieTerminStatus, SpotkanieMaterialyStatus, SpotkanieMaterialyKrok, KsiegowaniePriorytet,
-  KsiegowaniePrzypisanie, KsiegowanieUwaga, KsiegowaniePlik, ScanDecision, ScanProgress, ScanReport, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik, ZadanieKomentarz, ZadanieKomentarzInput, ZadanieKomentarzPodsumowanie, ZadanieNotatka, MailingAdresaci, MailingTypDef, MailingKalendarzContext, MailingExportRequest, MailingExportResult, Zebranie, ZebranieInput, ZebranieStatus, ZebranieWersja, ZebranieWersjaInput, SprawozdaniaImportResult, SprawozdaniaWlasneImportResult, SprawozdanieExportRequest, PlanWlasny, PlanWlasnyExportRequest, ZebraniePakietRequest, SprawozdanieZapisane, SprawozdanieWstepTekst, PlanGospodarczy, ZebraniaWspolnota, AdresUdzialy, ZebraniaUstawienia, ZebranieDokumentRequest } from '../shared/types';
+  KsiegowaniePrzypisanie, KsiegowanieUwaga, KsiegowaniePlik, ScanDecision, ScanProgress, ScanReport, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik, ZadanieKomentarz, ZadanieKomentarzInput, ZadanieKomentarzPodsumowanie, ZadanieNotatka, MailingAdresaci, MailingTypDef, MailingKalendarzContext, MailingExportRequest, MailingExportResult, Zebranie, ZebranieInput, ZebranieStatus, ZebranieWersja, ZebranieWersjaInput, SprawozdaniaImportResult, SprawozdaniaWlasneImportResult, SprawozdanieExportRequest, PlanWlasny, PlanWlasnyExportRequest, PodatekNieruchomosci, PodatekNieruchomosciDane, PodatkiImportResult, PodatkiPdfWszystkieResult, PodatkiPodpisPostep, PodatkiPodpisWieleResult, PodatkiStawki, PodatkiStawkiDane, PodpisKartaStan, PodpisSlad, PodpisWybor, ZebraniePakietRequest, SprawozdanieZapisane, SprawozdanieWstepTekst, PlanGospodarczy, ZebraniaWspolnota, AdresUdzialy, ZebraniaUstawienia, ZebranieDokumentRequest } from '../shared/types';
 import type { MailingRecipientsResolved } from '../shared/mailing-recipients';
 
 // Zaliczki shared types (referenced by the main-process helpers)
@@ -277,6 +277,8 @@ interface ElectronAPI {
   setImpexFolder: (folderPath: string) => Promise<boolean>;
   setSwrkFolder: (folderPath: string) => Promise<boolean>;
   setStatementsFolder: (folderPath: string) => Promise<boolean>;
+  /** Podatki → Nieruchomości: where DN-1 files go ('' = Downloads). */
+  setPodatkiFolder: (folderPath: string) => Promise<boolean>;
   setDarkMode: (enabled: boolean) => Promise<boolean>;
   setLanguage: (language: string) => Promise<boolean>;
   setSkipUserApproval: (enabled: boolean) => Promise<boolean>;
@@ -570,6 +572,48 @@ interface ElectronAPI {
   deletePlanWlasny: (id: number) => Promise<boolean>;
   /** Write a module plan to Downloads as PDF or Excel; the path of the file. */
   exportPlanWlasny: (request: PlanWlasnyExportRequest) => Promise<{ filePath: string }>;
+  /** Every year's DN-1 data of the Podatki module. */
+  getPodatkiNieruchomosci: () => Promise<PodatekNieruchomosci[]>;
+  /** Refused when the community (NIP) already has a declaration that year. */
+  addPodatekNieruchomosci: (nip: string, rok: number, dane: PodatekNieruchomosciDane) => Promise<PodatekNieruchomosci>;
+  setPodatekNieruchomosci: (id: number, nip: string, dane: PodatekNieruchomosciDane) => Promise<PodatekNieruchomosci>;
+  deletePodatekNieruchomosci: (id: number) => Promise<boolean>;
+  /** Draft `naRok` from `zRoku` for the communities it lacks; how many were added. */
+  przeniesPodatkiNaRok: (zRoku: number, naRok: number) => Promise<number>;
+  /** Pick the office's spreadsheet and add the declarations it holds; null when cancelled. */
+  importPodatkiXlsx: () => Promise<PodatkiImportResult | null>;
+  /** Write one declaration as PDF — to the Settings folder's "DN-1 <rok>", else Downloads; the path of the file. */
+  exportPodatekPdf: (id: number) => Promise<{ filePath: string }>;
+  /** Every printable declaration of a year (or only `ids`), one PDF each, into one folder in Downloads. */
+  exportPodatkiPdfWszystkie: (rok: number, ids?: number[]) => Promise<PodatkiPdfWszystkieResult>;
+  /** Tick declarations as posted in DOM (or untick them); the rows as they now are. */
+  setPodatkiDom: (ids: number[], booked: boolean) => Promise<PodatekNieruchomosci[]>;
+  getPodatkiStawki: () => Promise<PodatkiStawki[]>;
+  setPodatkiStawki: (rok: number, stawki: PodatkiStawkiDane) => Promise<PodatkiStawki>;
+  /**
+   * Sign one declaration with the card and write it to Downloads; the file and
+   * who signed. A wrong PIN rejects with the card's message — never retried.
+   */
+  podpiszPodatekPdf: (id: number, wybor: PodpisWybor) => Promise<{ filePath: string; podpis: PodpisSlad }>;
+  /**
+   * Sign the ticked declarations of a year one by one with one PIN — into the
+   * Settings folder's "DN-1 <rok>", else "DN-1 <rok> podpisane" in Downloads.
+   * Rejects only when nothing got signed (wrong PIN, no card); otherwise
+   * resolves with everything the summary shows.
+   */
+  podpiszPodatkiPdf: (rok: number, ids: number[], wybor: PodpisWybor) => Promise<PodatkiPodpisWieleResult>;
+  /** Stop the signing run after the declaration in hand. */
+  przerwijPodpisPodatkow: () => Promise<boolean>;
+  /** Progress of the signing run; returns the unsubscribe. */
+  onPodatkiPodpisPostep: (callback: (postep: PodatkiPodpisPostep) => void) => () => void;
+
+  // Podpis kwalifikowany (karta Szafir)
+  /** The signing library in use and every reader with its card and certificates — read fresh each call. */
+  getPodpisKarta: () => Promise<PodpisKartaStan>;
+  /** Pick the card's PKCS#11 library by hand; null when cancelled. */
+  wskazPodpisBiblioteke: () => Promise<PodpisKartaStan | null>;
+  /** Forget the picked library — look for it next to Szafir again. */
+  resetPodpisBiblioteke: () => Promise<PodpisKartaStan>;
   /** Note a download on the material it came from. */
   recordZebraniePobranie: (wersjaId: number, materialId: string, pliki: string[]) => Promise<boolean>;
 
@@ -755,6 +799,13 @@ interface ElectronAPI {
   checkForUpdates: () => Promise<{ available: boolean; info?: any; error?: string; message?: string }>;
   downloadUpdate: () => Promise<{ success: boolean; downloadPath?: string; message?: string; error?: string; openedRelease?: boolean }>;
   openDownloadsFolder: () => Promise<{ success: boolean }>;
+  /** The newest release's installer (.exe / .dmg) saved to Downloads — never installs it. */
+  downloadInstaller: () => Promise<
+    | { success: true; filePath: string; fileName: string; version: string; alreadyDownloaded: boolean }
+    | { success: false; error: string; unsupported?: boolean }
+  >;
+  /** Whole percents of a running downloadInstaller(). */
+  onInstallerDownloadProgress: (callback: (percent: number) => void) => () => void;
   openLogsFolder: () => Promise<{ success: boolean; logPath?: string }>;
   getLogPath: () => Promise<{ path: string }>;
   onUpdateAvailable: (callback: (info: any) => void) => () => void;

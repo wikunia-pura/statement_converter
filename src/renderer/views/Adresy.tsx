@@ -1573,7 +1573,6 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
   }, [adresy]);
 
   const loadData = async () => {
-    setIsLoading(true);
     try {
       const [adresyData, banksData, kontoTypyData, zgnData] = await Promise.all([
         window.electronAPI.getAdresy(),

@@ -37,6 +37,8 @@ import ZebranieSprawozdanie from '../components/ZebranieSprawozdanie';
 import ZebraniePlan from '../components/ZebraniePlan';
 import ZebraniePodsumowanie from '../components/ZebraniePodsumowanie';
 import ZebraniaUstawieniaModal from '../components/ZebraniaUstawieniaModal';
+import ScreenTitle from '../components/ScreenTitle';
+import { useNavItem } from '../navigation';
 import { defaultUstawienia, foldText } from '../../shared/plan-gospodarczy';
 
 type T = (typeof translations)['pl'];
@@ -647,17 +649,14 @@ const ZebranieScreen: React.FC<{
   return (
     <>
       <div className="zeb-screen-head">
-        <button
-          type="button"
-          className="button button-small button-ghost zeb-screen-head__back"
-          onClick={onBack}
-        >
-          <Icon name="chevron-left" size={14} /> {t.zebraniaBack}
-        </button>
         <div className="zeb-screen-head__row">
-          <div className="zeb-screen-head__id">
-            <h1 className="zeb-screen-head__title">{dane.nazwa || '—'}</h1>
-            <div className="zeb-screen-head__meta">
+          <ScreenTitle
+            backLabel={t.zebraniaBack}
+            crumb={t.zebrania}
+            onBack={onBack}
+            title={dane.nazwa || '—'}
+            meta={
+              <>
               {dane.zKalendarza ? (
                 <span className="status-badge zeb-link zeb-link--kal">
                   <Icon name="calendar" size={11} /> {t.zebraniaLinked}
@@ -679,8 +678,9 @@ const ZebranieScreen: React.FC<{
                   <Icon name="map-pin" size={13} /> {place}
                 </span>
               )}
-            </div>
-          </div>
+              </>
+            }
+          />
           <button
             type="button"
             className="button button-small button-ghost icon-danger"
@@ -812,8 +812,12 @@ const Zebrania: React.FC<Props> = ({
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [sortMode, setSortMode] = useState<SortMode>('nearest');
-  /** The entry open on its own screen — by id, so a reload shows its new state. */
-  const [detailId, setDetailId] = useState<number | null>(null);
+  /**
+   * The entry open on its own screen — by id, so a reload shows its new state —
+   * kept as a step of the app's history, so Back returns to the list.
+   */
+  const navItem = useNavItem();
+  const detailId = navItem.item && /^\d+$/.test(navItem.item) ? Number(navItem.item) : null;
   const [detailTab, setDetailTab] = useState<ZebranieTab>('podsumowanie');
   const [form, setForm] = useState<{ editing: Zebranie | null } | null>(null);
   const [formSaving, setFormSaving] = useState(false);
@@ -829,9 +833,9 @@ const Zebrania: React.FC<Props> = ({
     void load();
   }, []);
 
-  /** Open an entry's own screen, on its first tab. */
+  /** Open an entry's own screen, on its first tab. Its name joins the history entry once it is loaded. */
   const openDetail = (id: number) => {
-    setDetailId(id);
+    navItem.open(String(id), '');
     setDetailTab('podsumowanie');
   };
 
@@ -867,10 +871,12 @@ const Zebrania: React.FC<Props> = ({
   useEffect(() => {
     if (!openRequest || isLoading) return;
     if (zebrania.some((z) => z.id === openRequest.id)) {
-      openDetail(openRequest.id);
-      if (openRequest.tab) setDetailTab(openRequest.tab);
+      // The app has already opened its history entry; this sets the tab asked for.
+      setDetailTab(openRequest.tab ?? 'podsumowanie');
+    } else {
+      notify.warning(t.zebraniaMissing);
+      navItem.close();
     }
-    else notify.warning(t.zebraniaMissing);
     onOpenRequestHandled?.();
     // Only a new request opens an entry; later reloads must not reopen it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -925,6 +931,13 @@ const Zebrania: React.FC<Props> = ({
   }, [rows, search, statusFilter, sortMode]);
 
   const detail = detailId != null ? (rows.find((r) => r.zebranie.id === detailId) ?? null) : null;
+
+  // The history entry names the meeting, for the Back/Forward tooltips — also
+  // when it was opened by id from elsewhere, or just created.
+  useEffect(() => {
+    if (detail) navItem.replace(String(detail.zebranie.id), detail.dane.nazwa || '—');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail?.zebranie.id, detail?.dane.nazwa]);
   const spotkanieOf = (z: Zebranie): Spotkanie | null =>
     z.spotkanieId != null ? (spotkania.find((s) => s.id === z.spotkanieId) ?? null) : null;
 
@@ -1013,7 +1026,7 @@ const Zebrania: React.FC<Props> = ({
       t.zebraniaDeleteConfirm.replace('{name}', dane.nazwa || '—') +
       (zebranie.spotkanieId != null ? t.zebraniaDeleteLinkedNote : '');
     if (!(await notify.confirm(message, { danger: true, confirmLabel: t.delete }))) return;
-    setDetailId(null);
+    navItem.close();
     await run(() => window.electronAPI.deleteZebranie(zebranie.id), t.zebraniaDeleted);
   };
 
@@ -1187,7 +1200,7 @@ const Zebrania: React.FC<Props> = ({
           ustawienia={ustawienia}
           onReload={() => load(true)}
           onOpenUstawienia={() => setUstawieniaOpen(true)}
-          onBack={() => setDetailId(null)}
+          onBack={() => navItem.close()}
           onEditData={() => {
             setFormError(null);
             setForm({ editing: detail.zebranie });

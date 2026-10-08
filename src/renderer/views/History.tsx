@@ -27,7 +27,6 @@ const History: React.FC<HistoryProps> = ({ language, searchSeed }) => {
   }, []);
 
   const loadHistory = async () => {
-    setIsLoading(true);
     try {
       const historyData = await window.electronAPI.getHistory();
       setHistory(historyData);

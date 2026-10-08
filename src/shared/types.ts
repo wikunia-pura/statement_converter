@@ -1528,6 +1528,260 @@ export interface PlanWlasnyExportRequest {
   format: ZebranieDokumentFormat;
 }
 
+/* ============================ Podatki — nieruchomości ============================ */
+
+/**
+ * The kinds of land the DN-1 taxes separately (part D.1, poz. 33–44). Each has
+ * its own rate in the city's resolution; a ZDN-1 row says which one it is.
+ */
+export type GruntRodzaj = 'dzialalnosc' | 'wody' | 'pozostale' | 'rewitalizacja';
+
+/** An address as the DN-1 asks for it (poz. 15–23 seat, 24–32 delivery). */
+export interface PodatekAdres {
+  kraj: string;
+  wojewodztwo: string;
+  powiat: string;
+  gmina: string;
+  ulica: string;
+  nrDomu: string;
+  nrLokalu: string;
+  miejscowosc: string;
+  kodPocztowy: string;
+}
+
+/** One plot of land: a row of the ZDN-1 attachment (part B.1, columns a–g). */
+export interface PodatekGrunt {
+  rodzaj: GruntRodzaj;
+  /** a — "Położenie (adres, w tym dzielnica)". */
+  polozenie: string;
+  /** b — land register number(s), as typed ("WA1M/00012345/6"). */
+  ksiegaWieczysta: string;
+  /** c — precinct (obręb), with the map sheet when plots are numbered per sheet. */
+  obreb: string;
+  /** d — plot number(s). */
+  dzialka: string;
+  /** e — area in m² (in ha for land under water). Null = not known yet. */
+  powierzchnia: number | null;
+  /** g — form of holding: własność, użytkowanie wieczyste, posiadanie zależne… */
+  formaWladania: string;
+}
+
+/** A downloaded DN-1 — who made the file and when. */
+export interface PodatekPobranie {
+  at: string;
+  by: string;
+  plik: string;
+  /** Set when the file was signed in the app with a qualified certificate. */
+  podpis?: PodpisSlad;
+}
+
+/** "Zaksięgowane w DOM" — the declaration's tax is posted in the DOM program; who ticked it and when. */
+export interface PodatekDom {
+  at: string;
+  by: string;
+}
+
+/**
+ * Everything one community's DN-1 for one year says, field by field. The amounts
+ * (D.1 tax, poz. 97–111) are not stored: they follow from the plots and the
+ * year's rates (`PodatkiStawki`), so a corrected rate reaches every declaration.
+ */
+export interface PodatekNieruchomosciDane {
+  /** Poz. 4 — the tax authority's name and address. */
+  organ: string;
+  /** Poz. 5 — 1 złożenie deklaracji, 2 korekta deklaracji. */
+  cel: 1 | 2;
+  /** Poz. 6 — the month (1–12) the declaration applies from. */
+  okresOd: number;
+  /** Poz. 7 — 1 właściciel/użytkownik wieczysty/posiadacz, 2 współwłaściciel… */
+  rodzajPodmiotu: 1 | 2;
+  /** Poz. 8 — 1 osoba fizyczna, 2 osoba prawna, 3 jednostka organizacyjna. */
+  rodzajPodatnika: 1 | 2 | 3;
+  /** Poz. 9 / 10. */
+  nazwaPelna: string;
+  nazwaSkrocona: string;
+  /** Poz. 11 — digits only. */
+  regon: string;
+  /** C.2 — seat (poz. 15–23). */
+  siedziba: PodatekAdres;
+  /** C.3 — delivery address (poz. 24–32), only when different from the seat. */
+  doreczenia: PodatekAdres;
+  /** D.1 and the ZDN-1 rows: the plots, each with its kind of land. */
+  grunty: PodatekGrunt[];
+  /** Poz. 98 — tax for the months a correction does not cover. Korekta only. */
+  kwotaNieobjeta: number | null;
+  /** G — contact (poz. 114–116). */
+  telefon: string;
+  email: string;
+  /** Poz. 116 — "Inne (np. określenie zdarzenia…)". */
+  inne: string;
+  /** H.2 — the person signing for the community (poz. 121–123). */
+  reprezentant: { imie: string; nazwisko: string; dataWypelnienia: string | null };
+  /** Every PDF made of this declaration, oldest first. */
+  pobrania: PodatekPobranie[];
+  /** Ticked as posted in DOM — a statement of the user, set from the list, never from the form. */
+  dom: PodatekDom | null;
+}
+
+/** One community's DN-1 data for one tax year. NIP and year tell rows apart. */
+export interface PodatekNieruchomosci {
+  id: number;
+  /** Poz. 1 — the community's NIP, digits only. */
+  nip: string;
+  /** Poz. 3. */
+  rok: number;
+  dane: PodatekNieruchomosciDane;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+/** Rates of one year, per kind of land: zł per m² (per ha for land under water). */
+export type PodatkiStawkiDane = Record<GruntRodzaj, number | null>;
+
+/**
+ * The year's rates from the city council's resolution — shared by every
+ * declaration of that year. Rates carried over from the previous year stay
+ * `potwierdzone: false` until somebody checks and saves them.
+ */
+export interface PodatkiStawki {
+  rok: number;
+  stawki: PodatkiStawkiDane;
+  potwierdzone: boolean;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+/** What "Importuj z Excela" did with the file. */
+export interface PodatkiImportResult {
+  plikNazwa: string;
+  /** Declarations added, per year. */
+  dodane: number;
+  /** Rows of a community and year that already had a declaration — left alone. */
+  istniejace: number;
+  /** Rows the file could not use (no NIP, no year). */
+  pominiete: number;
+  lata: number[];
+}
+
+/** "Pobierz wszystkie" of one year — one PDF per community into one folder. */
+export interface PodatkiPdfWszystkieResult {
+  folder: string;
+  zapisane: number;
+  /** Communities whose declaration cannot be printed yet, with the reason. */
+  pominiete: { nazwa: string; powod: string }[];
+}
+
+/* ======================= Podpis kwalifikowany (karta Szafir) ======================= */
+
+/**
+ * A certificate on the card. Only the public objects are listed — the private
+ * key behind it shows up after the PIN, so it is looked up at signing time.
+ */
+export interface PodpisCertyfikat {
+  /** CKA_ID, hex — pairs the certificate with its private key. */
+  id: string;
+  /** Who it was issued to: "Jan Kowalski". */
+  podmiot: string;
+  /** The issuer's name: "COPE SZAFIR - Kwalifikowany". */
+  wystawca: string;
+  /** Hex, as the issuer prints it. */
+  numerSeryjny: string;
+  waznyOd: string;
+  waznyDo: string;
+  /** Carries the EU qualified-certificate statement (QcCompliance). */
+  kwalifikowany: boolean;
+  /** Key usage allows signing documents (non-repudiation). */
+  doPodpisu: boolean;
+  klucz: 'rsa' | 'ec' | 'inny';
+}
+
+/** One card reader, with the card in it (if any). */
+export interface PodpisCzytnik {
+  /** The PKCS#11 slot handle, hex — what a signature request names. */
+  slot: string;
+  /** The reader's name as the driver reports it. */
+  nazwa: string;
+  karta: {
+    etykieta: string;
+    producent: string;
+    model: string;
+    numer: string;
+    /** The PIN is typed on the reader's own keypad, not in the app. */
+    pinNaCzytniku: boolean;
+    /** The driver counts failed PIN entries: some failed, last chance, blocked. */
+    pinMaloProb: boolean;
+    pinOstatniaProba: boolean;
+    pinZablokowany: boolean;
+  } | null;
+  certyfikaty: PodpisCertyfikat[];
+  /** The card's signing mechanisms, by name — for diagnosing an unsupported card. */
+  mechanizmy: string[];
+  /** Reading this card failed — the reason; the rest of the readers still list. */
+  blad?: string;
+}
+
+/**
+ * What the app sees of the signing card: which PKCS#11 library it loaded (the
+ * one Szafir installs) and every reader it reaches through it.
+ */
+export interface PodpisKartaStan {
+  /** The library path picked in Settings, '' when none — even one that fails to load, so it can be undone. */
+  reczna: string;
+  biblioteka: {
+    sciezka: string;
+    /** Picked by hand in Settings, rather than found next to Szafir. */
+    wskazana: boolean;
+    producent: string;
+    opis: string;
+    wersja: string;
+  } | null;
+  /** Why no library is in use — not found, or failed to load. */
+  blad?: string;
+  czytniki: PodpisCzytnik[];
+}
+
+/** Which certificate signs, and the PIN (null when the reader takes it on its keypad). */
+export interface PodpisWybor {
+  slot: string;
+  certId: string;
+  pin: string | null;
+}
+
+/**
+ * "Podpisz zaznaczone" — what one PIN signed, and what it did not, for the
+ * summary after the run. Every declaration ticked is in exactly one list.
+ */
+export interface PodatkiPodpisWieleResult {
+  /** Where the signed files are ('' when none got signed). */
+  folder: string;
+  /** The certificate that signed; null when the run never reached the card. */
+  podpis: PodpisSlad | null;
+  podpisane: { id: number; nazwa: string; sciezka: string }[];
+  /** Not signed, with the reason: data missing for the PDF, or the PDF failed. */
+  pominiete: { id: number; nazwa: string; powod: string }[];
+  /** The run stopped early (card pulled out, "Przerwij") — why, as a sentence. */
+  przerwano: string | null;
+  /** Left unsigned because the run stopped. */
+  niepodpisane: { id: number; nazwa: string }[];
+}
+
+/** Progress of "Podpisz zaznaczone", sent before each declaration. */
+export interface PodatkiPodpisPostep {
+  zrobione: number;
+  wszystkie: number;
+  /** The community being signed now. */
+  nazwa: string;
+}
+
+/** A signature's trace kept with the file it signed — who signed, with which certificate. */
+export interface PodpisSlad {
+  podmiot: string;
+  wystawca: string;
+  numerSeryjny: string;
+}
+
 /**
  * "Pakiet PDF" of one version: a cover summing the materials up, then the
  * parts asked for, in one file — what goes to the board, the owners or
@@ -1788,6 +2042,19 @@ export interface AppSettings {
   smtpPass: string;
   smtpFromName: string;
   smtpBccSelf: boolean;
+
+  /**
+   * Podatki → Nieruchomości: where DN-1 PDFs and signed PDFs go, each year in
+   * its own "DN-1 <rok>" folder inside. Empty ⇒ Downloads, as before.
+   */
+  podatkiFolder: string;
+
+  /**
+   * Podpis kwalifikowany: the card's PKCS#11 library, picked by hand. Empty ⇒
+   * look for it next to Szafir. Machine-local like the folders: a path from
+   * another computer that does not exist here is ignored, not used.
+   */
+  podpisBiblioteka: string;
 }
 
 /**
@@ -1914,6 +2181,10 @@ export interface BackupData {
     zebraniaUstawienia?: ZebraniaUstawienia | null;
     /** Plans made in Plany gospodarcze (not Zebrania's). Absent in backups written before it existed. */
     planyGospodarcze?: PlanWlasny[];
+    /** DN-1 data of the Podatki module, per community and year. Absent in backups written before it existed. */
+    podatkiNieruchomosci?: PodatekNieruchomosci[];
+    /** The yearly property-tax rates. Absent in backups written before they existed. */
+    podatkiStawki?: PodatkiStawki[];
     /** Never carries `smtpPass` — the SMTP password stays on the machine. */
     settings: AppSettings;
   };
@@ -1952,6 +2223,8 @@ export interface BackupCounts {
   zebraniaWspolnoty: number;
   zebraniaUstawienia: number;
   planyGospodarcze: number;
+  podatkiNieruchomosci: number;
+  podatkiStawki: number;
 }
 
 export function countBackup(data: BackupData): BackupCounts {
@@ -1987,6 +2260,8 @@ export function countBackup(data: BackupData): BackupCounts {
     zebraniaWspolnoty: data.data.zebraniaWspolnoty?.length ?? 0,
     zebraniaUstawienia: data.data.zebraniaUstawienia ? 1 : 0,
     planyGospodarcze: data.data.planyGospodarcze?.length ?? 0,
+    podatkiNieruchomosci: data.data.podatkiNieruchomosci?.length ?? 0,
+    podatkiStawki: data.data.podatkiStawki?.length ?? 0,
   };
 }
 
@@ -2053,6 +2328,7 @@ export const IPC_CHANNELS = {
   SET_IMPEX_FOLDER: 'settings:set-impex-folder',
   SET_SWRK_FOLDER: 'settings:set-swrk-folder',
   SET_STATEMENTS_FOLDER: 'settings:set-statements-folder',
+  SET_PODATKI_FOLDER: 'settings:set-podatki-folder',
   SET_DARK_MODE: 'settings:set-dark-mode',
   SET_LANGUAGE: 'settings:set-language',
   SET_SKIP_USER_APPROVAL: 'settings:set-skip-user-approval',
@@ -2190,6 +2466,27 @@ export const IPC_CHANNELS = {
   PLAN_WLASNY_SET: 'plany:set',
   PLAN_WLASNY_DELETE: 'plany:delete',
   PLAN_WLASNY_EXPORT: 'plany:export',
+
+  // Podatki — nieruchomości (DN-1)
+  PODATKI_NIER_LISTA: 'podatki:nieruchomosci-lista',
+  PODATKI_NIER_ADD: 'podatki:nieruchomosci-add',
+  PODATKI_NIER_SET: 'podatki:nieruchomosci-set',
+  PODATKI_NIER_DELETE: 'podatki:nieruchomosci-delete',
+  PODATKI_NIER_PRZENIES: 'podatki:nieruchomosci-przenies',
+  PODATKI_NIER_IMPORT: 'podatki:nieruchomosci-import',
+  PODATKI_NIER_PDF: 'podatki:nieruchomosci-pdf',
+  PODATKI_NIER_PDF_WSZYSTKIE: 'podatki:nieruchomosci-pdf-wszystkie',
+  PODATKI_NIER_SET_DOM: 'podatki:nieruchomosci-set-dom',
+  PODATKI_STAWKI_GET: 'podatki:stawki-get',
+  PODATKI_STAWKI_SET: 'podatki:stawki-set',
+  PODATKI_NIER_PODPISZ: 'podatki:nieruchomosci-podpisz',
+  PODATKI_NIER_PODPISZ_WIELE: 'podatki:nieruchomosci-podpisz-wiele',
+  PODATKI_NIER_PODPISZ_PRZERWIJ: 'podatki:nieruchomosci-podpisz-przerwij',
+
+  // Podpis kwalifikowany (karta Szafir przez PKCS#11)
+  PODPIS_KARTA_STAN: 'podpis:karta-stan',
+  PODPIS_BIBLIOTEKA_WSKAZ: 'podpis:biblioteka-wskaz',
+  PODPIS_BIBLIOTEKA_AUTO: 'podpis:biblioteka-auto',
   KALENDARZ_PDF_EXPORT: 'kalendarz:pdf-export',
   RECORD_ZEBRANIE_POBRANIE: 'zebrania:record-pobranie',
 

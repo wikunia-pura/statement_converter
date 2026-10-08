@@ -227,7 +227,6 @@ const MailingPola: React.FC<Props> = ({ language }) => {
   }, []);
 
   const load = async () => {
-    setIsLoading(true);
     try {
       setPola(await window.electronAPI.mailingGetPola());
     } catch (err) {

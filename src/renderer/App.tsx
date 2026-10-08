@@ -23,6 +23,7 @@ import KalendarzLokalizacje from './views/KalendarzLokalizacje';
 import Zebrania, { ZebranieTab } from './views/Zebrania';
 import Sprawozdania from './views/Sprawozdania';
 import PlanyGospodarcze from './views/PlanyGospodarcze';
+import PodatkiNieruchomosci from './views/PodatkiNieruchomosci';
 import Zadania from './views/Zadania';
 import ZadaniaPulpit from './components/ZadaniaPulpit';
 import ModuleTabs from './components/ModuleTabs';
@@ -100,6 +101,7 @@ const DEFAULT_SIDEBAR_ORDER = [
   'zebrania',
   'sprawozdania',
   'plany',
+  'podatki',
   'divider',
   'converter',
   'podsumowanie',
@@ -181,20 +183,31 @@ type View =
   | 'zebrania'
   | 'sprawozdania'
   | 'plany'
+  | 'podatki'
   | 'zadania'
   | 'conowego';
 
 /**
- * One place the app can be: a view, plus which of its tabs was open.
+ * One place the app can be: a view, plus which of its tabs was open, plus the
+ * record open on its own screen (a community's declaration, a meeting).
  *
  * The tab belongs in here because it is navigation — "Pokaż w historii" moves
  * the user as much as clicking Konwerter does, and Back that skipped it would
- * feel like it had missed a step.
+ * feel like it had missed a step. The record likewise: Back from a meeting's
+ * screen goes to the list of meetings, not out of the module.
  */
 interface AppLocation {
   view: View;
   tab?: string;
+  /** The open record, as the view names it (see `useNavItem`); absent on the list. */
+  item?: string;
+  /** The record's name, for the Back/Forward tooltips. */
+  itemLabel?: string;
 }
+
+/** Same place: view, tab and open record — the record's name is only a label. */
+const sameLocation = (a: AppLocation, b: AppLocation) =>
+  a.view === b.view && a.tab === b.tab && (a.item ?? null) === (b.item ?? null);
 
 /** Deep enough for a day's work; old entries fall off the bottom. */
 const NAV_STACK_LIMIT = 50;
@@ -202,6 +215,16 @@ const NAV_STACK_LIMIT = 50;
 interface NavState {
   stack: AppLocation[];
   index: number;
+}
+
+/** A new entry after the current one; whatever was ahead of it is gone, as in a browser. */
+function pushLocation(prev: NavState, next: AppLocation): NavState {
+  const stack = [...prev.stack.slice(0, prev.index + 1), next];
+  if (stack.length > NAV_STACK_LIMIT) {
+    const trimmed = stack.slice(stack.length - NAV_STACK_LIMIT);
+    return { stack: trimmed, index: trimmed.length - 1 };
+  }
+  return { stack, index: stack.length - 1 };
 }
 
 const App: React.FC = () => {
@@ -248,6 +271,7 @@ const App: React.FC = () => {
   const [odczytyTab, setOdczytyTab] = useState<'convert' | 'history'>('convert');
   const [mailingTab, setMailingTab] = useState<'send' | 'templates' | 'types' | 'fields' | 'history'>('send');
   const [kalendarzTab, setKalendarzTab] = useState<'calendar' | 'types' | 'places'>('calendar');
+  const [podatkiTab, setPodatkiTab] = useState<'nieruchomosci'>('nieruchomosci');
   // Kalendarz: the month lives here so a detour to "Typy spotkań" — or to any
   // other module — comes back to the month the user was looking at.
   const [kalMonth, setKalMonth] = useState<string>(() => currentMonthKey());
@@ -344,7 +368,9 @@ const App: React.FC = () => {
   /** Open Zebrania on one entry — "Otwórz w Zebraniach" on a meeting card. */
   const openZebranie = (zebranieId: number, tab?: ZebranieTab) => {
     setZebraniaOpen({ id: zebranieId, nonce: Date.now(), tab });
-    navigate('zebrania');
+    // Straight onto the meeting's screen, one step: Back returns to where the
+    // link was clicked. The view names the entry once the meeting is loaded.
+    navigate('zebrania', undefined, { id: String(zebranieId), label: '' });
   };
 
   /** The bell's list sends a click to the same place its desktop toast would. */
@@ -391,6 +417,7 @@ const App: React.FC = () => {
     if (view === 'odczyty') return odczytyTab;
     if (view === 'mailing') return mailingTab;
     if (view === 'kalendarz') return kalendarzTab;
+    if (view === 'podatki') return podatkiTab;
     return undefined;
   };
 
@@ -401,6 +428,7 @@ const App: React.FC = () => {
     else if (view === 'odczyty') setOdczytyTab(tab as typeof odczytyTab);
     else if (view === 'mailing') setMailingTab(tab as typeof mailingTab);
     else if (view === 'kalendarz') setKalendarzTab(tab as typeof kalendarzTab);
+    else if (view === 'podatki') setPodatkiTab(tab as typeof podatkiTab);
   };
 
   /**
@@ -412,30 +440,55 @@ const App: React.FC = () => {
    * Back rather than as a new entry — that is what lets a view's own "back to
    * the list" button keep the forward history instead of stacking duplicates.
    */
-  const navigate = (view: View, tab?: string) => {
+  const navigate = (view: View, tab?: string, item?: { id: string; label: string }) => {
     applyTab(view, tab);
     setNav((prev) => {
       const here = prev.stack[prev.index];
       // Without an explicit tab, staying in the same view keeps the tab the
       // entry already had; arriving from elsewhere picks up the module's own
-      // remembered tab, which is what the sidebar has always done.
+      // remembered tab, which is what the sidebar has always done. Without a
+      // record, it is the view's list — so the sidebar, clicked on a record's
+      // screen, goes back to the list.
       const next: AppLocation = {
         view,
         tab: tab ?? (view === here.view ? here.tab : tabOf(view)),
+        ...(item ? { item: item.id, itemLabel: item.label } : {}),
       };
-      if (here.view === next.view && here.tab === next.tab) return prev;
+      if (sameLocation(here, next)) return prev;
       const behind = prev.index > 0 ? prev.stack[prev.index - 1] : null;
-      if (behind && behind.view === next.view && behind.tab === next.tab) {
+      if (behind && sameLocation(behind, next)) {
         return { ...prev, index: prev.index - 1 };
       }
-      const stack = [...prev.stack.slice(0, prev.index + 1), next];
-      if (stack.length > NAV_STACK_LIMIT) {
-        const trimmed = stack.slice(stack.length - NAV_STACK_LIMIT);
-        return { stack: trimmed, index: trimmed.length - 1 };
-      }
-      return { stack, index: stack.length - 1 };
+      return pushLocation(prev, next);
     });
   };
+
+  /**
+   * Open a record of the current view on its own screen (`useNavItem`). The
+   * same record again only renames it — its name may arrive after its id.
+   */
+  const openItem = (item: string, label: string, replace: boolean) =>
+    setNav((prev) => {
+      const here = prev.stack[prev.index];
+      const next: AppLocation = { view: here.view, tab: here.tab, item, itemLabel: label };
+      if (replace || sameLocation(here, next)) {
+        const stack = [...prev.stack];
+        stack[prev.index] = next;
+        return { ...prev, stack };
+      }
+      return pushLocation(prev, next);
+    });
+
+  /** Leave a record for its view's list: a step back when the list is right behind. */
+  const closeItem = () =>
+    setNav((prev) => {
+      const here = prev.stack[prev.index];
+      if (here.item === undefined) return prev;
+      const next: AppLocation = { view: here.view, tab: here.tab };
+      const behind = prev.index > 0 ? prev.stack[prev.index - 1] : null;
+      if (behind && sameLocation(behind, next)) return { ...prev, index: prev.index - 1 };
+      return pushLocation(prev, next);
+    });
 
   /** Kept as the old name so every existing call site reads unchanged. */
   const setCurrentView = (view: View) => navigate(view);
@@ -634,6 +687,7 @@ const App: React.FC = () => {
       zebrania: t.zebrania,
       sprawozdania: t.sprawozdania,
       plany: t.planyGospodarcze,
+      podatki: t.podatki,
       zadania: t.zadania,
       conowego: t.whatsNew,
     };
@@ -647,6 +701,7 @@ const App: React.FC = () => {
       calendar: t.kalTabCalendar,
       types: t.kalTabTypes,
       places: t.kalTabPlaces,
+      nieruchomosci: t.podTabNieruchomosci,
     };
     const base = view[loc.view];
     // Mailing and Kalendarz both have a 'types' tab; the map above names the
@@ -657,7 +712,8 @@ const App: React.FC = () => {
         : loc.tab
           ? tabs[loc.tab]
           : undefined;
-    return tab ? `${base} → ${tab}` : base;
+    // View → tab → the open record, by name.
+    return [base, tab, loc.itemLabel].filter(Boolean).join(' → ');
   };
 
   // Release notes for the running build. `unreadRelease` drives both the nav dot
@@ -702,6 +758,12 @@ const App: React.FC = () => {
       icon: 'coins',
       label: t.planyGospodarcze,
       onClick: () => setCurrentView('plany'),
+    },
+    podatki: {
+      id: 'podatki',
+      icon: 'landmark',
+      label: t.podatki,
+      onClick: () => setCurrentView('podatki'),
     },
     zadania: {
       id: 'zadania',
@@ -836,6 +898,9 @@ const App: React.FC = () => {
       backLabel={locationLabel(nav.stack[nav.index - 1])}
       forwardLabel={locationLabel(nav.stack[nav.index + 1])}
       labels={{ back: t.navBack, forward: t.navForward, group: t.navHistory }}
+      item={nav.stack[nav.index].item ?? null}
+      openItem={openItem}
+      closeItem={closeItem}
     >
     {splash}
     <div className="app">
@@ -1157,6 +1222,16 @@ const App: React.FC = () => {
         {currentView === 'sprawozdania' && <Sprawozdania language={language} />}
         {currentView === 'plany' && (
           <PlanyGospodarcze language={language} onOpenZebranie={(id) => openZebranie(id, 'plan')} />
+        )}
+        {currentView === 'podatki' && (
+          <>
+            <ModuleTabs
+              tabs={[{ id: 'nieruchomosci', label: t.podTabNieruchomosci, icon: 'building' }]}
+              active={podatkiTab}
+              onChange={(id) => navigate('podatki', id)}
+            />
+            {podatkiTab === 'nieruchomosci' && <PodatkiNieruchomosci language={language} />}
+          </>
         )}
         {currentView === 'zadania' && <Zadania
             language={language}

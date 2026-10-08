@@ -211,7 +211,6 @@ const MailingSzablony: React.FC<Props> = ({ language }) => {
   }, [editingKey]);
 
   const load = async () => {
-    setIsLoading(true);
     try {
       const [szablonyData, polaData, typyData] = await Promise.all([
         window.electronAPI.mailingGetSzablony(),

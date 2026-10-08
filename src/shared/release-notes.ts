@@ -84,6 +84,173 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '9.5.0',
+    date: '2026-10-08',
+    title: 'Podatek od nieruchomości i podpis kartą Szafir',
+    tagline:
+      'Nowy moduł „Podatki” przygotowuje deklaracje DN-1 wszystkich wspólnot na oficjalnym wzorze. Deklaracje podpiszesz kwalifikowanie kartą Szafir prosto w aplikacji — jedną albo wiele naraz, jednym PIN-em.',
+    stats: [
+      { value: '4', label: 'nowe funkcje' },
+      { value: '3', label: 'ulepszenia' },
+    ],
+    highlights: [
+      {
+        id: 'podatki-nieruchomosci',
+        kind: 'new',
+        icon: 'landmark',
+        title: 'Podatki → Nieruchomości: deklaracje DN-1',
+        summary:
+          'Każda wspólnota ma swoją deklarację DN-1 na dany rok: dane, działki, stawki z uchwały i gotowy PDF na oficjalnym wzorze z załącznikami ZDN-1.',
+        details: [
+          'Kwoty liczą się same z powierzchni działek i stawek roku — w sekcji „Wyliczenie podatku” widać dokładnie to, co wydrukuje PDF.',
+          'Stawki wpisujesz raz na rok w sekcji „Stawki na <rok>” nad listą; obowiązują wszystkie deklaracje tego roku.',
+          'Nowy rok zaczynasz przyciskiem „Przenieś z <poprzedni rok>”: dane, działki i kontakty zostają, a deklaracja zaczyna się od nowa.',
+        ],
+        where: ['Podatki', 'Nieruchomości'],
+        steps: [
+          {
+            do: 'Kliknij „Importuj z Excela” i wybierz tabelę biura (numery pól DN-1 w pierwszym wierszu).',
+            then: 'Na liście pojawiają się wspólnoty z tabeli. Wspólnota, która w danym roku ma już deklarację, zostaje bez zmian.',
+          },
+          {
+            do: 'Wpisz stawki z uchwały w sekcji „Stawki na <rok>” i kliknij „Zapisz stawki”.',
+            then: 'Deklaracje z gruntami danego rodzaju przestają świecić na czerwono.',
+          },
+          {
+            do: 'Kliknij wspólnotę na liście.',
+            then: 'Otwiera się jej deklaracja: wspólnota, adresy, grunty, wyliczenie podatku, kontakt i podpis. Zmiany zapisujesz przyciskiem „Zapisz” na dole.',
+          },
+          {
+            do: 'Kliknij „Pobierz PDF” na górze strony deklaracji.',
+            then: 'Powstaje PDF na wzorze DN-1(1) z załącznikami ZDN-1.',
+          },
+        ],
+        expect: [
+          'Filtr „Status deklaracji” pokazuje deklaracje z błędami, gotowe, z pobranym PDF-em, czekające na DOM i zaksięgowane w DOM.',
+          'Zaznacz wspólnoty ptaszkami po lewej (Shift+klik zaznacza zakres) — na pasku na dole pobierzesz ich PDF-y albo oznaczysz je jako zaksięgowane w DOM.',
+          '„Pobierz wszystkie PDF” zapisuje każdą wspólnotę w osobnym pliku. Deklaracje z brakami są pomijane, a komunikat mówi, czego brakuje.',
+        ],
+        note: {
+          type: 'tip',
+          text: 'Na razie obsługiwane są grunty (część D.1 i załącznik ZDN-1). Budynki, budowle i załącznik ZDN-2 trzeba uzupełnić poza aplikacją.',
+        },
+      },
+      {
+        id: 'podpis-karta-szafir',
+        kind: 'new',
+        icon: 'signature',
+        title: 'Podpis kwalifikowany kartą Szafir w aplikacji',
+        summary:
+          'Deklarację DN-1 podpiszesz kartą Szafir bez otwierania Szafira: wybierasz certyfikat, wpisujesz PIN i dostajesz podpisany PDF.',
+        details: [
+          'Aplikacja korzysta z tej samej karty i tego samego sterownika, który instaluje Szafir 2 — Szafir musi być zainstalowany na komputerze.',
+          'PIN trafia prosto do karty. Aplikacja go nie zapisuje i po błędnym PIN-ie nie próbuje ponownie, żeby nie zablokować karty.',
+          'Przed podpisem okno sprawdza gotowość: czy z danych da się zrobić PDF, czy osoba w poz. 121–122 to właściciel certyfikatu i czy deklaracja nie była już podpisana. Pusta data wypełnienia (poz. 123) dostaje datę podpisu.',
+        ],
+        where: ['Podatki', 'Nieruchomości', 'wspólnota', 'Podpisz i pobierz'],
+        steps: [
+          {
+            do: 'Włóż kartę do czytnika. W Ustawieniach, w sekcji „Podpis kwalifikowany”, kliknij „Sprawdź kartę”.',
+            then: 'Widać czytnik, kartę i jej certyfikaty. Jeśli aplikacja nie znajdzie sterownika, kliknij „Wskaż plik biblioteki…”.',
+          },
+          {
+            do: 'Otwórz deklarację wspólnoty i kliknij „Podpisz i pobierz” na górze strony.',
+            then: 'Otwiera się okno z certyfikatem z karty i polem na PIN.',
+          },
+          {
+            do: 'Wpisz PIN i kliknij „Podpisz”.',
+            then: 'Powstaje plik „… (podpisana).pdf”, a w historii pobrań widać, kto go podpisał.',
+          },
+        ],
+        note: {
+          type: 'warning',
+          text: 'Zanim wyślesz do urzędu pierwszą deklarację podpisaną w aplikacji, otwórz podpisany plik w Szafirze i sprawdź, że podpis jest ważny.',
+        },
+      },
+      {
+        id: 'podpis-wielu-deklaracji',
+        kind: 'new',
+        icon: 'check-circle',
+        title: 'Wiele deklaracji jednym PIN-em, z podsumowaniem',
+        summary:
+          'Zaznacz wspólnoty na liście i podpisz wszystkie naraz — jedna po drugiej, z paskiem postępu, a na końcu z podsumowaniem.',
+        where: ['Podatki', 'Nieruchomości', 'pasek zaznaczenia', 'Podpisz'],
+        steps: [
+          {
+            do: 'Zaznacz wspólnoty ptaszkami po lewej i na pasku na dole kliknij „Podpisz · <liczba>”.',
+            then: 'Okno pokazuje, ile deklaracji jest gotowych, które zostaną pominięte z powodu braków i na co zwrócić uwagę.',
+          },
+          {
+            do: 'Wpisz PIN raz i kliknij „Podpisz <liczba> deklaracji”.',
+            then: 'Pasek postępu pokazuje, która wspólnota jest podpisywana. „Przerwij” zatrzymuje podpisywanie po bieżącej deklaracji.',
+          },
+          {
+            do: 'Przejrzyj podsumowanie.',
+            then: 'Widzisz, co podpisano (kliknij nazwę pliku, żeby go otworzyć), co pominięto i dlaczego, oraz co zostało niepodpisane. „Zaznacz niepodpisane” zaznacza je na liście do kolejnej próby.',
+          },
+        ],
+        expect: [
+          'Deklaracje z brakami w danych nie są podpisywane — pomija je jeszcze przed użyciem karty.',
+          'Gdy karta zostanie wyjęta w trakcie, podpisane pliki zostają, a podsumowanie mówi, które deklaracje zostały niepodpisane.',
+        ],
+      },
+      {
+        id: 'folder-deklaracji-dn1',
+        kind: 'new',
+        icon: 'folder',
+        title: 'Folder na deklaracje DN-1',
+        summary:
+          'Wskaż w Ustawieniach folder, do którego mają trafiać PDF-y i podpisane PDF-y deklaracji.',
+        where: ['Ustawienia', 'Foldery', 'Folder deklaracji podatku od nieruchomości (DN-1)'],
+        steps: [
+          {
+            do: 'Kliknij „Zmień” przy polu „Folder deklaracji podatku od nieruchomości (DN-1)” i wybierz folder.',
+            then: 'Od teraz każdy rok ma w nim swój podfolder, np. „DN-1 2027”, a PDF i podpisany PDF tej samej wspólnoty leżą obok siebie.',
+          },
+        ],
+        expect: [
+          'Bez ustawionego folderu pliki trafiają do Pobranych, jak dotąd.',
+          'Jeśli folder jest na dysku sieciowym, który nie jest podłączony, aplikacja powie o tym przed podpisem i niczego nie zapisze gdzie indziej.',
+        ],
+      },
+      {
+        id: 'wstecz-do-listy',
+        kind: 'improved',
+        icon: 'chevron-left',
+        title: '„Wstecz” wraca do listy',
+        summary:
+          'Otwarte zebranie albo deklaracja to teraz osobny krok w historii: „Wstecz” (przycisk, Alt+← albo przycisk myszy) wraca do listy, a nie wychodzi z modułu.',
+        details: [
+          'Na górze ekranu zebrania i deklaracji jest kwadratowy przycisk powrotu obok tytułu, a nad tytułem nazwa listy, którą też można kliknąć.',
+        ],
+        where: ['Zebrania', 'zebranie'],
+      },
+      {
+        id: 'pobierz-instalator',
+        kind: 'new',
+        icon: 'download',
+        title: 'Pobierz instalator najnowszej wersji',
+        summary:
+          'W Ustawieniach zapiszesz instalator najnowszej wersji (Windows: .exe, macOS: .dmg) w Pobranych — np. żeby zainstalować aplikację na innym komputerze.',
+        where: ['Ustawienia', 'Aktualizacje', 'Pobierz instalator'],
+        steps: [
+          {
+            do: 'Kliknij „Pobierz instalator”.',
+            then: 'Przycisk pokazuje postęp pobierania, a po zakończeniu powiadomienie z nazwą pliku. Nic się nie instaluje samo.',
+          },
+        ],
+      },
+      {
+        id: 'listy-bez-skoku',
+        kind: 'fixed',
+        icon: 'check',
+        title: 'Listy nie przewijają się na górę po zapisie',
+        summary:
+          'Po zapisaniu zmian w Adresach, Kontrahentach, Historii, Mailingu czy Kalendarzu lista zostaje tam, gdzie była, zamiast wracać na początek.',
+      },
+    ],
+  },
+  {
     version: '9.3.0',
     date: '2026-10-05',
     title: 'Konwerter znowu z tabelą plików',

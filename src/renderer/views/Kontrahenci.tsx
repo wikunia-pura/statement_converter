@@ -40,7 +40,6 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
   }, []);
 
   const loadData = async () => {
-    setIsLoading(true);
     try {
       const kontrahenciData = await window.electronAPI.getKontrahenci();
       setKontrahenci(kontrahenciData);

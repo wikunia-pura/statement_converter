@@ -37,7 +37,6 @@ const MailingHistoria: React.FC<Props> = ({ language }) => {
   }, []);
 
   const load = async () => {
-    setIsLoading(true);
     try {
       const [historyData, info, typyData] = await Promise.all([
         window.electronAPI.mailingGetHistory(),

@@ -35,11 +35,14 @@ export type IconName =
   | 'chevron-right'
   | 'download'
   | 'coins'
+  | 'landmark'
   | 'zap'
   | 'info'
   | 'edit'
   | 'save'
   | 'shield'
+  | 'signature'
+  | 'credit-card'
   | 'menu'
   | 'mail'
   | 'paperclip'
@@ -341,6 +344,12 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M14 14.5a5.5 5.5 0 1 0 0-11M6.5 18A5.5 5.5 0 0 0 17 19.5" />
     </>
   ),
+  landmark: (
+    <>
+      <path d="M3 21h18M5 18v-7M9.5 18v-7M14.5 18v-7M19 18v-7" />
+      <path d="M12 3l9 5H3z" />
+    </>
+  ),
   zap: (
     <path d="M13 2L4 13h7l-1 9 9-11h-7z" />
   ),
@@ -364,6 +373,18 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   shield: (
     <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1 1 0 0 1 1.52 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z" />
+  ),
+  signature: (
+    <>
+      <path d="m21 17-2.156-1.868A.5.5 0 0 0 18 15.5v.5a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1c0-2.545-3.991-3.97-8.5-4a1 1 0 0 0 0 5c4.153 0 4.745-11.295 5.708-13.5a2.5 2.5 0 1 1 3.31 3.284" />
+      <path d="M3 21h18" />
+    </>
+  ),
+  'credit-card': (
+    <>
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <path d="M2 10h20" />
+    </>
   ),
   menu: <path d="M4 6h16M4 12h16M4 18h16" />,
   mail: (

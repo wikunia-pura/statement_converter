@@ -1,6 +1,6 @@
 {
   "name": "statement-converter",
-  "version": "9.3.0",
+  "version": "9.5.0",
   "description": "Bank statement converter for housing communities",
   "main": "dist/main/main/main.js",
   "scripts": {
@@ -34,6 +34,9 @@
       "config/**/*",
       "node_modules/**/*",
       "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/pkcs11js/build/Release/*.node"
     ],
     "win": {
       "target": "nsis",
@@ -97,6 +100,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.0",
+    "@pdf-lib/fontkit": "^1.1.1",
     "@supabase/supabase-js": "^2.45.0",
     "@types/adm-zip": "^0.5.7",
     "@types/nodemailer": "^8.0.1",
@@ -111,6 +115,7 @@
     "openai": "^4.77.3",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^1.1.1",
+    "pkcs11js": "^2.1.7",
     "ws": "^8.18.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "xml2js": "^0.6.2"

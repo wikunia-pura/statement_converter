@@ -71,7 +71,7 @@ export const pustyAdres = (): PodatekAdres => ({
   kodPocztowy: '',
 });
 
-function normalizeAdres(raw: unknown): PodatekAdres {
+export function normalizeAdres(raw: unknown): PodatekAdres {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const out = pustyAdres();
   for (const key of Object.keys(out) as (keyof PodatekAdres)[]) out[key] = czysc(r[key]);
@@ -409,7 +409,10 @@ export type UwagaPodpisu =
 const slowa = (s: string): string[] => s.toLocaleLowerCase('pl-PL').split(/[\s-]+/).filter(Boolean);
 
 /** `podpisujacy` — the certificate holder's name, once a certificate is picked. */
-export function uwagiPodpisu(d: PodatekNieruchomosciDane, podpisujacy: string | null): UwagaPodpisu[] {
+export function uwagiPodpisu(
+  d: Pick<PodatekNieruchomosciDane, 'reprezentant' | 'pobrania'>,
+  podpisujacy: string | null,
+): UwagaPodpisu[] {
   const out: UwagaPodpisu[] = [];
   const reprezentant = czysc(`${d.reprezentant.imie} ${d.reprezentant.nazwisko}`);
   if (!reprezentant) {
@@ -426,7 +429,7 @@ export function uwagiPodpisu(d: PodatekNieruchomosciDane, podpisujacy: string | 
 }
 
 /** A declaration signed in the app is filled in on the day it is signed: an empty poz. 123 takes that date. */
-export const zDataPodpisu = (d: PodatekNieruchomosciDane, dzis: string): PodatekNieruchomosciDane =>
+export const zDataPodpisu = <T extends Pick<PodatekNieruchomosciDane, 'reprezentant'>>(d: T, dzis: string): T =>
   d.reprezentant.dataWypelnienia ? d : { ...d, reprezentant: { ...d.reprezentant, dataWypelnienia: dzis } };
 
 /* ================================ Formatting ================================ */

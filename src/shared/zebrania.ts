@@ -10,6 +10,7 @@
 import {
   DEFAULT_MAILING_ADRESACI,
   MailingAdresaci,
+  MailingPole,
   MailingSzablon,
   MailingTyp,
   Spotkanie,
@@ -17,9 +18,19 @@ import {
   SpotkanieMaterialyStatus,
   Zebranie,
   ZebranieMaterial,
+  ZebranieMaterialRodzaj,
+  ZEBRANIE_DOKUMENTY,
+  ZebranieGotowe,
   ZebranieStatus,
   ZebranieWersja,
 } from './types';
+import {
+  MailingRenderContext,
+  buildKalendarzContext,
+  formatPolishDate,
+  missingFieldValues,
+  renderPlain,
+} from './mailing-template';
 
 /* ------------------------------ Version numbers ----------------------------- */
 
@@ -54,6 +65,32 @@ export function nextWersjaNumber(wersje: ZebranieWersja[]): { major: number; min
 }
 
 /* ---------------------- The status a meeting and version share --------------------- */
+
+/** The stored map, cleaned: only known documents, only `true` kept. */
+export function normalizeGotowe(value: unknown): ZebranieGotowe {
+  const out: ZebranieGotowe = {};
+  if (!value || typeof value !== 'object') return out;
+  for (const k of ZEBRANIE_DOKUMENTY) {
+    if ((value as Record<string, unknown>)[k] === true) out[k] = true;
+  }
+  return out;
+}
+
+/** A version is prepared only when every one of its documents is marked ready. */
+export function wersjaStatusFromGotowe(gotowe: ZebranieGotowe): ZebranieStatus {
+  return ZEBRANIE_DOKUMENTY.every((k) => gotowe[k] === true) ? 'przygotowane' : 'w_przygotowaniu';
+}
+
+/**
+ * The map a whole-version status stands for — when the meeting's card in the
+ * Kalendarz says "prepared" every document is, and "back to preparing" none is.
+ */
+export function gotoweForStatus(status: ZebranieStatus): ZebranieGotowe {
+  if (status !== 'przygotowane') return {};
+  const out: ZebranieGotowe = {};
+  for (const k of ZEBRANIE_DOKUMENTY) out[k] = true;
+  return out;
+}
 
 /**
  * The meeting's materials status a version's status stands for. "Prepared" is
@@ -173,17 +210,18 @@ function newMaterialId(): string {
 }
 
 /**
- * A fresh notice, its text copied from the template so that later edits to the
- * template never reach a letter already prepared for a meeting.
+ * A fresh document of `rodzaj`, its text copied from the template so that later
+ * edits to the template never reach a document already prepared for a meeting.
  */
-export function newZawiadomienieMaterial(
+function newMaterialFromSzablon(
+  rodzaj: ZebranieMaterialRodzaj,
   szablon: MailingSzablon,
   adresaci: MailingAdresaci | undefined,
   who: string,
 ): ZebranieMaterial {
   return {
     id: newMaterialId(),
-    rodzaj: 'zawiadomienie',
+    rodzaj,
     typ: szablon.typ as MailingTyp,
     szablonId: szablon.id,
     szablonNazwa: szablon.nazwa,
@@ -196,6 +234,27 @@ export function newZawiadomienieMaterial(
     updatedAt: new Date().toISOString(),
     updatedBy: who,
     pobrania: [],
+  };
+}
+
+/** A fresh notice from a template. */
+export function newZawiadomienieMaterial(
+  szablon: MailingSzablon,
+  adresaci: MailingAdresaci | undefined,
+  who: string,
+): ZebranieMaterial {
+  return newMaterialFromSzablon('zawiadomienie', szablon, adresaci, who);
+}
+
+/**
+ * A fresh resolution from a template. It is never mailed, so it keeps the default
+ * recipients. A `{{Tabela pól}}` in it lists the template's whole shortlist — a
+ * resolution has no send screen on which to tick rows.
+ */
+export function newUchwalaMaterial(szablon: MailingSzablon, who: string): ZebranieMaterial {
+  return {
+    ...newMaterialFromSzablon('uchwala', szablon, undefined, who),
+    tableFields: [...(szablon.tableFields ?? [])],
   };
 }
 
@@ -224,6 +283,99 @@ export function zawiadomienieOf(wersja: ZebranieWersja | null): ZebranieMaterial
   return wersja?.materialy.find((m) => m.rodzaj === 'zawiadomienie');
 }
 
+/* -------------------------------- Resolutions -------------------------------- */
+
+/** The version's resolutions, in the order they are kept (and printed). */
+export function uchwalyOf(wersja: Pick<ZebranieWersja, 'materialy'> | null): ZebranieMaterial[] {
+  return (wersja?.materialy ?? []).filter((m) => m.rodzaj === 'uchwala');
+}
+
+/**
+ * `materialy` with its resolutions replaced by `uchwaly` — the notice and any
+ * other material are left exactly as they are. The one place a resolution list
+ * is written back, so no screen can drop the notice while saving a resolution.
+ */
+export function withUchwaly(
+  materialy: ZebranieMaterial[],
+  uchwaly: ZebranieMaterial[],
+): ZebranieMaterial[] {
+  return [...materialy.filter((m) => m.rodzaj !== 'uchwala'), ...uchwaly];
+}
+
+/** Move one resolution a place up (-1) or down (+1); the list as it was when it cannot move. */
+export function moveUchwala(
+  uchwaly: ZebranieMaterial[],
+  id: string,
+  delta: -1 | 1,
+): ZebranieMaterial[] {
+  const from = uchwaly.findIndex((u) => u.id === id);
+  const to = from + delta;
+  if (from < 0 || to < 0 || to >= uchwaly.length) return uchwaly;
+  const next = [...uchwaly];
+  [next[from], next[to]] = [next[to], next[from]];
+  return next;
+}
+
+/**
+ * Drag and drop: put resolution `id` right before (or after) resolution
+ * `targetId`. Addressed by ids, not positions — the list the drop is applied to
+ * is the one just re-read from the store, which may have changed while dragging.
+ * Unchanged when either is gone or they are the same.
+ */
+export function moveUchwalaNextTo(
+  uchwaly: ZebranieMaterial[],
+  id: string,
+  targetId: string,
+  before: boolean,
+): ZebranieMaterial[] {
+  const moved = uchwaly.find((u) => u.id === id);
+  if (!moved || id === targetId || !uchwaly.some((u) => u.id === targetId)) return uchwaly;
+  const rest = uchwaly.filter((u) => u.id !== id);
+  const at = rest.findIndex((u) => u.id === targetId) + (before ? 0 : 1);
+  return [...rest.slice(0, at), moved, ...rest.slice(at)];
+}
+
+/**
+ * What a resolution's fields resolve against: the meeting's data — read live, so
+ * a moved date or place reaches a resolution prepared earlier — the dictionary of
+ * dynamic fields and the values typed for this document. The same context the
+ * editor, the preview, the PDF and the package use.
+ */
+export function uchwalaContext(
+  uchwala: ZebranieMaterial,
+  dane: ZebranieDane,
+  pola: MailingPole[],
+  today: Date = new Date(),
+): MailingRenderContext {
+  return {
+    adresNazwa: dane.adresNazwa,
+    dateText: formatPolishDate(today),
+    pola,
+    values: uchwala.values,
+    tableFields: uchwala.tableFields,
+    kalendarz: buildKalendarzContext(dane),
+  };
+}
+
+/** Fields the document still has no value for — a download would print them as blanks. */
+export function uchwalaMissing(
+  uchwala: ZebranieMaterial,
+  dane: ZebranieDane,
+  pola: MailingPole[],
+): string[] {
+  return missingFieldValues(uchwalaContext(uchwala, dane, pola), uchwala.temat, uchwala.tresc);
+}
+
+/** The document's title as it reads in the list: its subject, rendered; the template's name when empty. */
+export function uchwalaTytul(
+  uchwala: ZebranieMaterial,
+  dane: ZebranieDane,
+  pola: MailingPole[],
+): string {
+  const rendered = renderPlain(uchwala.temat, uchwalaContext(uchwala, dane, pola)).trim();
+  return rendered || uchwala.szablonNazwa || '—';
+}
+
 /**
  * Coerce whatever a jsonb column holds into materials — rows written by an older
  * build, or a hand-edited backup, must not take the module down.
@@ -236,7 +388,7 @@ export function normalizeMaterialy(value: unknown): ZebranieMaterial[] {
       const adresaci = (m.adresaci ?? {}) as Partial<MailingAdresaci>;
       return {
         id: typeof m.id === 'string' && m.id ? m.id : newMaterialId(),
-        rodzaj: 'zawiadomienie' as const,
+        rodzaj: (m.rodzaj === 'uchwala' ? 'uchwala' : 'zawiadomienie') as ZebranieMaterialRodzaj,
         typ: typeof m.typ === 'string' ? m.typ : '',
         szablonId: typeof m.szablonId === 'number' ? m.szablonId : null,
         szablonNazwa: typeof m.szablonNazwa === 'string' ? m.szablonNazwa : '',

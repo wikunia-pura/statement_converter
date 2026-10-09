@@ -263,6 +263,14 @@ class ConverterRegistry {
     }
   }
 
+  /**
+   * The model picked in Settings, for the Anthropic provider only — a Claude id
+   * would be meaningless to OpenAI, which keeps its own default.
+   */
+  private aiModelFor(provider: string): string | undefined {
+    return provider === 'anthropic' ? dbInstance?.getAiModel() : undefined;
+  }
+
   public getAnthropicApiKey(): string {
     return this.aiConfig?.ai?.anthropic_api_key || '';
   }
@@ -904,6 +912,7 @@ class ConverterRegistry {
     const contractorMatcher = new ContractorMatcher(contractors);
     const aiExtractor = new AIExtractor({
       aiProvider: provider,
+      model: this.aiModelFor(provider),
       apiKey,
       batchSize: 20,
       confidenceThresholds: { autoApprove: 85, needsReview: 70 },
@@ -1246,6 +1255,7 @@ class ConverterRegistry {
           // Use the real Santander XML converter
           const converter = new SantanderXmlConverter({
             aiProvider: provider,
+            model: this.aiModelFor(provider),
             apiKey,
             batchSize: 20,
             confidenceThresholds: {
@@ -1513,6 +1523,7 @@ class ConverterRegistry {
           // Use the PKO BP MT940 converter
           const converter = new PKOBPMT940Converter({
             aiProvider: provider,
+            model: this.aiModelFor(provider),
             apiKey,
             batchSize: 20,
             confidenceThresholds: {
@@ -1772,6 +1783,7 @@ class ConverterRegistry {
 
           const converter = new BnpXmlConverter({
             aiProvider: provider,
+            model: this.aiModelFor(provider),
             apiKey,
             batchSize: 20,
             confidenceThresholds: { autoApprove: 85, needsReview: 70 },
@@ -2005,6 +2017,7 @@ class ConverterRegistry {
 
           const converter = new AliorConverter({
             aiProvider: provider,
+            model: this.aiModelFor(provider),
             apiKey,
             batchSize: 20,
             confidenceThresholds: { autoApprove: 85, needsReview: 70 },
@@ -2245,6 +2258,7 @@ class ConverterRegistry {
 
           const converter = new PKOBiznesConverter({
             aiProvider: provider,
+            model: this.aiModelFor(provider),
             apiKey,
             batchSize: 20,
             confidenceThresholds: { autoApprove: 85, needsReview: 70 },
@@ -2482,6 +2496,7 @@ class ConverterRegistry {
 
           const converter = new PKOSAConverter({
             aiProvider: provider,
+            model: this.aiModelFor(provider),
             apiKey,
             batchSize: 20,
             confidenceThresholds: { autoApprove: 85, needsReview: 70 },
@@ -2703,6 +2718,7 @@ class ConverterRegistry {
 
           const converter = new INGConverter({
             aiProvider: provider,
+            model: this.aiModelFor(provider),
             apiKey,
             batchSize: 20,
             confidenceThresholds: { autoApprove: 85, needsReview: 70 },
@@ -2940,6 +2956,7 @@ class ConverterRegistry {
 
           const converter = new BosXmlConverter({
             aiProvider: provider,
+            model: this.aiModelFor(provider),
             apiKey,
             batchSize: 20,
             confidenceThresholds: { autoApprove: 85, needsReview: 70 },
@@ -3169,6 +3186,7 @@ class ConverterRegistry {
 
           const converter = new PocztowyConverter({
             aiProvider: provider,
+            model: this.aiModelFor(provider),
             apiKey,
             batchSize: 20,
             confidenceThresholds: { autoApprove: 85, needsReview: 70 },

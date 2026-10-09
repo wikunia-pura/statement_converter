@@ -76,7 +76,6 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
   setGeneratedFilePath,
 }) => {
   const t = translations[language];
-  const [model, setModel] = useState<string>('claude-sonnet-4-6');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
@@ -91,12 +90,6 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
   useEffect(() => {
     filesRef.current = files;
   }, [files]);
-
-  useEffect(() => {
-    window.electronAPI.zaliczkiGetModels().then(({ default: def }) => {
-      setModel(def);
-    });
-  }, []);
 
   const refreshCacheInfo = () => {
     window.electronAPI.zaliczkiCacheStats().then(setCacheInfo).catch(() => setCacheInfo(null));
@@ -237,7 +230,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
       setFiles((prev) =>
         prev.map((f) => (f.filePath === entry.filePath ? { ...f, status: 'running' } : f)),
       );
-      const resp = await window.electronAPI.zaliczkiExtractPdf(entry.filePath, model, force);
+      const resp = await window.electronAPI.zaliczkiExtractPdf(entry.filePath, force);
       setFiles((prev) =>
         prev.map((f) => {
           if (f.filePath !== entry.filePath) return f;

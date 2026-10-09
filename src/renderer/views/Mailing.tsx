@@ -508,12 +508,6 @@ const Mailing: React.FC<Props> = ({
     return 'text';
   };
 
-  /** Ticked fields still waiting for a value — a row with an empty cell. */
-  const tableFieldsWithoutValue = useMemo(
-    () => tableFieldNames.filter((name) => !readFieldValue(draft.values, name)),
-    [tableFieldNames, draft.values],
-  );
-
   /**
    * Store a field's value under exactly one spelling. The same field can be named
    * differently by a placeholder and by a table row (`{{zaliczka}}` against the
@@ -530,23 +524,6 @@ const Mailing: React.FC<Props> = ({
       values[nazwa] = wartosc;
       return { ...prev, values };
     });
-
-  const toggleTableField = (nazwa: string, checked: boolean) =>
-    setDraft((prev) => {
-      const key = normalizeFieldName(nazwa);
-      const without = prev.tableFields.filter((name) => normalizeFieldName(name) !== key);
-      return { ...prev, tableFields: checked ? [...without, nazwa] : without };
-    });
-
-  /**
-   * Typing a value into a row of the table is the clearest possible statement
-   * that the row belongs in this mail, so it ticks the box too. The box stays
-   * ticked if the value is cleared again — unticking is the user's call.
-   */
-  const setTableFieldValue = (nazwa: string, wartosc: string) => {
-    setFieldValue(nazwa, wartosc);
-    if (wartosc.trim()) toggleTableField(nazwa, true);
-  };
 
   const attachPdf = draft.attachPdf ?? template?.attachPdf ?? false;
 
@@ -1086,98 +1063,6 @@ const Mailing: React.FC<Props> = ({
           </FormSection>
         )}
 
-        {usesFieldTable && (
-          <FormSection
-            icon="table"
-            title={t.mailingFieldTableTitle}
-            description={t.mailingFieldTableHint}
-            collapsible
-            persistKey="mailing.fieldTable"
-            collapsedSummary={t.mailingFieldTableRowCount
-              .replace('{count}', String(tableFieldNames.length))
-              .replace('{total}', String(tableFieldPool.length))}
-          >
-            {tableFieldPool.length > 0 ? (
-              <>
-                <table className="form-table">
-                  <thead>
-                    <tr>
-                      <th className="form-table__check">{t.mailingFieldTableInTable}</th>
-                      <th>{t.mailingFieldTableRowLabel}</th>
-                      <th className="form-table__value">{t.mailingFieldValue}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tableFieldPool.map((p) => {
-                      const checked = tableFieldNames.some(
-                        (name) => normalizeFieldName(name) === normalizeFieldName(p.nazwa),
-                      );
-                      return (
-                        <tr key={p.id}>
-                          <td className="form-table__check">
-                            <label className={`ks-check${checked ? ' is-on' : ''}`}>
-                              <input
-                                type="checkbox"
-                                className="ks-check__input"
-                                checked={checked}
-                                onChange={(e) => toggleTableField(p.nazwa, e.target.checked)}
-                                aria-label={p.nazwa}
-                              />
-                              <span className="ks-check__box" aria-hidden="true">
-                                <Icon name="check" size={12} strokeWidth={3} />
-                              </span>
-                            </label>
-                          </td>
-                          <td>
-                            <div className="form-table__label">{p.tekst || p.nazwa}</div>
-                            {p.tekst && <div className="form-table__sub">{p.nazwa}</div>}
-                          </td>
-                          <td className="form-table__value">
-                            <div className="form-inline">
-                              <input
-                                type={valueInputType(p)}
-                                // Always editable — typing here ticks the box, which is
-                                // one gesture instead of two for the common case.
-                                value={draft.values[p.nazwa] ?? readFieldValue(draft.values, p.nazwa)}
-                                onChange={(e) => setTableFieldValue(p.nazwa, e.target.value)}
-                                placeholder={t.mailingValuePlaceholder}
-                                aria-label={`${t.mailingFieldValue}: ${p.tekst || p.nazwa}`}
-                              />
-                              {p.jednostka && <span className="form-inline__unit">{p.jednostka}</span>}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                {tableFieldNames.length === 0 && (
-                  <div className="callout callout--muted">
-                    <Icon name="info" size={16} />
-                    <div className="callout__body">{t.mailingFieldTableEmptyNote}</div>
-                  </div>
-                )}
-                {tableFieldsWithoutValue.length > 0 && (
-                  <div className="callout callout--warning" role="status">
-                    <Icon name="alert-triangle" size={16} />
-                    <div className="callout__body">
-                      {t.mailingFieldTableMissingValues.replace('{names}', tableFieldsWithoutValue.join(', '))}
-                    </div>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="callout callout--muted">
-                <Icon name="info" size={16} />
-                <div className="callout__body">{t.mailingFieldTableNoPool}</div>
-                <button type="button" className="button button-small button-subtle" onClick={onNavigateToTemplates}>
-                  {t.mailingFieldTableGoToTemplate}
-                </button>
-              </div>
-            )}
-          </FormSection>
-        )}
-
         {template && (
           <div ref={previewRef} className="page-form__anchor">
             <FormSection
@@ -1286,6 +1171,12 @@ const Mailing: React.FC<Props> = ({
                 adresNazwa={previewAdres?.nazwa ?? t.mailingPreviewNoAddress}
                 kalendarz={kalendarz}
                 tableFields={tableFieldNames}
+                tablePool={usesFieldTable ? tableFieldPool : undefined}
+                onTableFieldsChange={
+                  usesFieldTable
+                    ? (names) => setDraft((prev) => ({ ...prev, tableFields: names }))
+                    : undefined
+                }
                 onSaveAsTemplate={() => setSaveTplOpen(true)}
                 readOnly={isSending}
               />

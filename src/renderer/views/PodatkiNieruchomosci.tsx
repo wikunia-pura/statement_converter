@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Adres,
   GruntRodzaj,
   PodatekAdres,
   PodatekDom,
@@ -30,13 +31,16 @@ import {
   pusteStawki,
   pustyGrunt,
   StanDeklaracji,
+  czyAdresPusty,
   stanDeklaracji,
   tylkoCyfry,
   ulicaZNumerem,
   uwagiPodpisu,
+  UwagaPodpisu,
   zlGr,
 } from '../../shared/podatki';
 import { foldText } from '../../shared/plan-gospodarczy';
+import { WierszDn1, wierszeDn1 } from '../../shared/adres-identyfikacja';
 import { formatStamp } from '../../shared/calendar';
 import { translations, Language } from '../translations';
 import { plural } from '../plural';
@@ -53,7 +57,7 @@ import { parseKwota } from '../components/KwotaInput';
 
 type T = (typeof translations)['pl'];
 
-const baseName = (p: string) => p.split(/[\\/]/).pop() ?? p;
+export const baseName = (p: string) => p.split(/[\\/]/).pop() ?? p;
 
 const rodzajLabel = (t: T, r: GruntRodzaj): string =>
   ({
@@ -67,22 +71,22 @@ const jednostka = (r: GruntRodzaj) => (jednostkaGruntu(r) === 'ha' ? 'ha' : 'm²
 const stawkaJednostka = (t: T, r: GruntRodzaj) => (jednostkaGruntu(r) === 'ha' ? t.podRateUnitHa : t.podRateUnitM2);
 
 /** The list's status filter; the segments overlap, like the Pulpit's tiles. */
-type Filtr = 'all' | 'errors' | 'ready' | 'downloaded' | 'waiting' | 'dom';
-const FILTRY: Filtr[] = ['all', 'errors', 'ready', 'downloaded', 'waiting', 'dom'];
+type Filtr = 'all' | 'errors' | 'ready' | 'downloaded' | 'waiting' | 'dom' | 'none';
+const FILTRY: Filtr[] = ['all', 'errors', 'ready', 'downloaded', 'waiting', 'dom', 'none'];
 
 /**
  * The tax in a row's box: whole złoty joined by no-break spaces, so "1 234"
  * never splits over two lines, and a size that keeps it on one line in the
  * box's fixed width — the more digits, the smaller.
  */
-function kwotaWBoksie(n: number): { text: string; size: string } {
+export function kwotaWBoksie(n: number): { text: string; size: string } {
   const text = formatZl(n).replace(/ /g, '\u00a0');
   const size = text.length <= 4 ? '' : text.length === 5 ? ' is-m' : text.length === 6 ? ' is-s' : ' is-xs';
   return { text, size };
 }
 
 /** An amount as the screen shows it: "1 234,56 zł". */
-const zl2 = (n: number) => {
+export const zl2 = (n: number) => {
   const { zl, gr } = zlGr(n);
   return `${zl},${gr} zł`;
 };
@@ -143,13 +147,15 @@ const Licznik: React.FC<{ value: number; label: string; tone: 'success' | 'warni
  * opening — what was skipped and why, and what a stop left unsigned. Those
  * last two can be ticked in the list in one go, to fix and sign again.
  */
-const PodsumowaniePodpisow: React.FC<{
+export const PodsumowaniePodpisow: React.FC<{
   t: T;
   rok: number;
   wynik: PodatkiPodpisWieleResult;
+  /** Another form's heading line (the CIT-8 names itself); the DN-1's is the default. */
+  subtitle?: string;
   onZaznacz: (ids: number[]) => void;
   onClose: () => void;
-}> = ({ t, rok, wynik, onZaznacz, onClose }) => {
+}> = ({ t, rok, wynik, subtitle, onZaznacz, onClose }) => {
   const notify = useNotify();
   const { folder, podpis, podpisane, pominiete, niepodpisane, przerwano } = wynik;
   const reszta = [...pominiete, ...niepodpisane].map((x) => x.id);
@@ -167,9 +173,10 @@ const PodsumowaniePodpisow: React.FC<{
           tone={podpisane.length === 0 ? 'danger' : 'accent'}
           title={t.podSumTitle}
           subtitle={
-            podpis
+            subtitle ??
+            (podpis
               ? t.podSumSubtitle.replace('{rok}', String(rok)).replace('{kto}', podpis.podmiot)
-              : t.podSumSubtitleNone.replace('{rok}', String(rok))
+              : t.podSumSubtitleNone.replace('{rok}', String(rok)))
           }
         />
         <div className="modal-body modal-body--sectioned">
@@ -277,33 +284,36 @@ const PodsumowaniePodpisow: React.FC<{
   );
 };
 
+/** One return in the signing window: its name, what keeps the PDF from being made, and what a signed file would say differently. */
+export interface WpisGotowosci {
+  nazwa: string;
+  problemy: string[];
+  uwagi: UwagaPodpisu[];
+}
+
 /**
  * "Gotowość do podpisu" in the signing window: which declarations the PDF can
  * be made of (the rest are skipped, never signed), and what a signed file
  * would leave blank or say differently from the certificate picked. Only
  * missing data blocks a declaration; the rest are things to know first.
+ * Shared by the DN-1 and the CIT-8 — each tab hands in its own findings.
  */
-const GotowoscPodpisu: React.FC<{
+export const GotowoscPodpisuWiele: React.FC<{
   t: T;
-  rok: number;
-  rekordy: PodatekNieruchomosci[];
-  stawki: PodatkiStawkiDane | null;
+  wpisy: WpisGotowosci[];
   cert: PodpisCertyfikat | null;
   /** The "Do podpisu: N" line — for a run, not for one declaration. */
   pokazLiczbe: boolean;
-}> = ({ t, rok, rekordy, stawki, cert, pokazLiczbe }) => {
-  const nazwa = (r: PodatekNieruchomosci) => r.dane.nazwaPelna || r.nip;
-  const sprawdzone = rekordy.map((r) => ({ r, problemy: problemyDN1(r, stawki) }));
-  const braki = sprawdzone.filter((x) => x.problemy.length > 0);
-  const gotowe = sprawdzone.filter((x) => x.problemy.length === 0).map((x) => x.r);
-  const uwagi = gotowe.map((r) => ({ r, uwagi: uwagiPodpisu(r.dane, cert?.podmiot ?? null) }));
-  const z = (kod: string) => uwagi.filter((x) => x.uwagi.some((u) => u.kod === kod));
-  const inni = uwagi.flatMap((x) =>
-    x.uwagi.flatMap((u) => (u.kod === 'inny' ? [`${nazwa(x.r)} — ${u.reprezentant}`] : [])),
+}> = ({ t, wpisy, cert, pokazLiczbe }) => {
+  const braki = wpisy.filter((x) => x.problemy.length > 0);
+  const gotowe = wpisy.filter((x) => x.problemy.length === 0);
+  const z = (kod: string) => gotowe.filter((x) => x.uwagi.some((u) => u.kod === kod));
+  const inni = gotowe.flatMap((x) =>
+    x.uwagi.flatMap((u) => (u.kod === 'inny' ? [`${x.nazwa} — ${u.reprezentant}`] : [])),
   );
-  const bezReprezentanta = z('reprezentant').map((x) => nazwa(x.r));
-  const podpisane = z('podpisana').map((x) => nazwa(x.r));
-  const bezDaty = z('data').map((x) => nazwa(x.r));
+  const bezReprezentanta = z('reprezentant').map((x) => x.nazwa);
+  const podpisane = z('podpisana').map((x) => x.nazwa);
+  const bezDaty = z('data').map((x) => x.nazwa);
   const wszystkoGra =
     gotowe.length > 0 && inni.length + bezReprezentanta.length + podpisane.length + bezDaty.length === 0;
 
@@ -323,10 +333,7 @@ const GotowoscPodpisu: React.FC<{
           tone="warning"
           icon="alert-triangle"
           title={t.podSignSkipped.replace('{n}', String(braki.length))}
-          items={krotko(
-            t,
-            braki.map((x) => `${nazwa(x.r)} — ${x.problemy.map((p) => problemText(t, p, rok)).join(' ')}`),
-          )}
+          items={krotko(t, braki.map((x) => `${x.nazwa} — ${x.problemy.join(' ')}`))}
         />
       )}
       {inni.length > 0 && cert && (
@@ -371,6 +378,26 @@ const GotowoscPodpisu: React.FC<{
   );
 };
 
+const GotowoscPodpisu: React.FC<{
+  t: T;
+  rok: number;
+  rekordy: PodatekNieruchomosci[];
+  stawki: PodatkiStawkiDane | null;
+  cert: PodpisCertyfikat | null;
+  pokazLiczbe: boolean;
+}> = ({ t, rok, rekordy, stawki, cert, pokazLiczbe }) => (
+  <GotowoscPodpisuWiele
+    t={t}
+    cert={cert}
+    pokazLiczbe={pokazLiczbe}
+    wpisy={rekordy.map((r) => ({
+      nazwa: r.dane.nazwaPelna || r.nip,
+      problemy: problemyDN1(r, stawki).map((p) => problemText(t, p, rok)),
+      uwagi: uwagiPodpisu(r.dane, cert?.podmiot ?? null),
+    }))}
+  />
+);
+
 /** The month's name for the "from month" picker: "01 — styczeń". */
 const miesiacOptions = (locale: string) =>
   Array.from({ length: 12 }, (_, i) => ({
@@ -384,7 +411,7 @@ const miesiacOptions = (locale: string) =>
  * A decimal typed the Polish way that may be left empty (unknown area, no rate
  * yet) — `null`, never a silent 0. Shows the unit at its right edge.
  */
-const LiczbaInput: React.FC<{
+export const LiczbaInput: React.FC<{
   id?: string;
   value: number | null;
   onChange: (value: number | null) => void;
@@ -433,7 +460,7 @@ const LiczbaInput: React.FC<{
 
 /* ================================== Address ================================== */
 
-const AdresFields: React.FC<{
+export const AdresFields: React.FC<{
   t: T;
   idPrefix: string;
   value: PodatekAdres;
@@ -581,7 +608,7 @@ const StawkiSection: React.FC<{
  * while the tax is not posted, then "Zaksięgowane w DOM" with "Zdejmij" under it.
  * Clicks stop here, so a tick inside a clickable row does not open the row.
  */
-const DomSlot: React.FC<{
+export const DomSlot: React.FC<{
   t: T;
   locale: string;
   dom: PodatekDom | null;
@@ -589,14 +616,18 @@ const DomSlot: React.FC<{
   onSet: (booked: boolean) => void;
   /** 'button': the size of the small buttons beside it, done state on one line — for a toolbar. */
   size?: 'row' | 'button';
-}> = ({ t, locale, dom, busy, onSet, size = 'row' }) =>
+  /** Words for another kind of tick (the CIT-8's "filed"); the DOM's are the default. */
+  labels?: { done: string; mark: string; undo: string; doneBy: string };
+  /** False hides the "mark" button (an undo of a mark already made stays) — the DN-1 is posted only once its PDF is made. */
+  canMark?: boolean;
+}> = ({ t, locale, dom, busy, onSet, size = 'row', labels, canMark = true }) =>
   dom ? (
     <div
       className={`ksieg-book-done ksieg-book-done--sm${size === 'button' ? ' ksieg-book-done--inline' : ''}`}
-      title={t.podDomBookedBy.replace('{when}', formatStamp(dom.at, locale)).replace('{who}', dom.by || '—')}
+      title={(labels?.doneBy ?? t.podDomBookedBy).replace('{when}', formatStamp(dom.at, locale)).replace('{who}', dom.by || '—')}
     >
       <span className="ksieg-book-done__label">
-        <Icon name="check-circle" size={size === 'button' ? 13 : 14} /> {t.ksAllInDom}
+        <Icon name="check-circle" size={size === 'button' ? 13 : 14} /> {labels?.done ?? t.ksAllInDom}
       </span>
       <button
         type="button"
@@ -607,10 +638,10 @@ const DomSlot: React.FC<{
           onSet(false);
         }}
       >
-        {t.ksUnmarkAll}
+        {labels?.undo ?? t.ksUnmarkAll}
       </button>
     </div>
-  ) : (
+  ) : !canMark ? null : (
     <button
       type="button"
       className={`ksieg-book ${size === 'button' ? 'ksieg-book--btn' : 'ksieg-book--sm'}`}
@@ -621,7 +652,7 @@ const DomSlot: React.FC<{
       }}
     >
       <Icon name="check-circle" size={size === 'button' ? 13 : 14} />
-      <span>{t.ksBookInDom}</span>
+      <span>{labels?.mark ?? t.ksBookInDom}</span>
     </button>
   );
 
@@ -641,6 +672,8 @@ const DeklaracjaScreen: React.FC<{
   rok: number;
   rekord: PodatekNieruchomosci | null;
   szablon: PodatekNieruchomosciDane;
+  /** The NIP a new declaration starts with (a community of Adresy that has none yet). */
+  nipStart?: string;
   stawki: PodatkiStawki | undefined;
   onBack: () => void;
   onSaved: (rek: PodatekNieruchomosci) => void;
@@ -648,10 +681,10 @@ const DeklaracjaScreen: React.FC<{
   onDownloaded: () => void;
   onSetDom: (booked: boolean) => void;
   domBusy: boolean;
-}> = ({ language, locale, rok, rekord, szablon, stawki, onBack, onSaved, onDeleted, onDownloaded, onSetDom, domBusy }) => {
+}> = ({ language, locale, rok, rekord, szablon, nipStart, stawki, onBack, onSaved, onDeleted, onDownloaded, onSetDom, domBusy }) => {
   const t = translations[language];
   const notify = useNotify();
-  const [nip, setNip] = useState(rekord?.nip ?? '');
+  const [nip, setNip] = useState(rekord?.nip ?? nipStart ?? '');
   const [dane, setDane] = useState<PodatekNieruchomosciDane>(rekord?.dane ?? szablon);
   const [baseline, setBaseline] = useState(() => (rekord ? snapshot(rekord.nip, rekord.dane) : ''));
   const [busy, setBusy] = useState<null | 'save' | 'pdf' | 'delete'>(null);
@@ -839,7 +872,16 @@ const DeklaracjaScreen: React.FC<{
               >
                 <Icon name="signature" size={13} /> {t.podSignPdf}
               </button>
-              <DomSlot t={t} locale={locale} dom={rekord.dane.dom} busy={domBusy} onSet={onSetDom} size="button" />
+              {/* Judged on the saved declaration, not the form being edited: the PDF is made from what is saved. */}
+              <DomSlot
+                t={t}
+                locale={locale}
+                dom={rekord.dane.dom}
+                busy={domBusy}
+                onSet={onSetDom}
+                size="button"
+                canMark={stanDeklaracji(rekord, stawki?.stawki ?? null) === 'pobrana'}
+              />
             </div>
           )}
         </div>
@@ -1341,8 +1383,8 @@ const DeklaracjaScreen: React.FC<{
 
 /* ================================== The tab ================================== */
 
-/** The highest year anything is kept for, or next year when nothing is. */
-const domyslnyRok = (lata: number[]) => (lata.length > 0 ? Math.max(...lata) : new Date().getFullYear() + 1);
+/** The highest year anything is kept for, or the current year when nothing is. */
+const domyslnyRok = (lata: number[]) => (lata.length > 0 ? Math.max(...lata) : new Date().getFullYear());
 
 /**
  * Podatki → Nieruchomości: every community's DN-1 for the chosen year — the
@@ -1356,6 +1398,8 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
 
   const [lista, setLista] = useState<PodatekNieruchomosci[]>([]);
   const [stawki, setStawki] = useState<PodatkiStawki[]>([]);
+  /** Every community of Adresy — the list shows them all, with or without a declaration. */
+  const [adresy, setAdresy] = useState<Adres[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [busy, setBusy] = useState<null | 'import' | 'carry' | 'all'>(null);
@@ -1364,9 +1408,22 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
   const [filtr, setFiltr] = useState<Filtr>('all');
   /** The declaration open on its own screen — a step of the app's history, so Back returns here. */
   const navItem = useNavItem();
+  /** A community of Adresy opened without a declaration: `nowy:<adres id>`, so the form starts from what Adresy knows. */
+  const nowyAdresId = navItem.item?.startsWith('nowy:') ? Number(navItem.item.slice(5)) : null;
   const detail: number | 'nowy' | null =
-    navItem.item === 'nowy' ? 'nowy' : navItem.item && /^\d+$/.test(navItem.item) ? Number(navItem.item) : null;
-  const openDetail = (rek: PodatekNieruchomosci) => navItem.open(String(rek.id), rek.dane.nazwaPelna || rek.nip);
+    navItem.item === 'nowy' || nowyAdresId !== null
+      ? 'nowy'
+      : navItem.item && /^\d+$/.test(navItem.item)
+        ? Number(navItem.item)
+        : null;
+  const nazwaWiersza = (w: WierszDn1): string =>
+    w.rek ? w.rek.dane.nazwaPelna || w.rek.nip : w.adres?.identyfikacja?.nazwaPelna || w.adres?.nazwa || '';
+  const openDetail = (w: WierszDn1) =>
+    w.rek
+      ? navItem.open(String(w.rek.id), nazwaWiersza(w))
+      : w.adres
+        ? navItem.open(`nowy:${w.adres.id}`, nazwaWiersza(w))
+        : undefined;
   /** Ticked declarations, by id — what the batch bar acts on. */
   const [selected, setSelected] = useState<Set<number>>(new Set());
   /** "Podpisz zaznaczone": the ids being signed, fixed when the window opens; null = closed. */
@@ -1384,12 +1441,14 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
     if (silent) setIsRefreshing(true);
     else setIsLoading(true);
     try {
-      const [rows, rates] = await Promise.all([
+      const [rows, rates, addresses] = await Promise.all([
         window.electronAPI.getPodatkiNieruchomosci(),
         window.electronAPI.getPodatkiStawki(),
+        window.electronAPI.getAdresy(),
       ]);
       setLista(rows);
       setStawki(rates);
+      setAdresy(addresses);
     } catch (err: unknown) {
       notify.error(err instanceof Error ? err.message : String(err), t.podLoadError);
     } finally {
@@ -1437,12 +1496,19 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
     return m;
   }, [wRoku, stawkiRoku]);
 
-  const wFiltrze = (rek: PodatekNieruchomosci, f: Filtr): boolean => {
-    const o = ocena.get(rek.id);
+  /** Every community of Adresy with its declaration of the year (or none), then declarations whose community is not there. */
+  const wiersze = useMemo(() => wierszeDn1(adresy, wRoku), [adresy, wRoku]);
+
+  const wFiltrze = (w: WierszDn1, f: Filtr): boolean => {
+    // A community without a declaration is only "all" and "no information".
+    if (!w.rek) return f === 'all' || f === 'none';
+    const o = ocena.get(w.rek.id);
     if (!o) return false;
     switch (f) {
       case 'all':
         return true;
+      case 'none':
+        return false;
       case 'errors':
         return o.problemy.length > 0;
       case 'ready':
@@ -1457,27 +1523,34 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
   };
 
   const liczniki = useMemo(() => {
-    const c: Record<Filtr, number> = { all: 0, errors: 0, ready: 0, downloaded: 0, waiting: 0, dom: 0 };
-    for (const rek of wRoku) for (const f of FILTRY) if (wFiltrze(rek, f)) c[f] += 1;
+    const c: Record<Filtr, number> = { all: 0, errors: 0, ready: 0, downloaded: 0, waiting: 0, dom: 0, none: 0 };
+    for (const w of wiersze) for (const f of FILTRY) if (wFiltrze(w, f)) c[f] += 1;
     return c;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wRoku, ocena]);
+  }, [wiersze, ocena]);
 
   const visible = useMemo(() => {
     const query = foldText(search.trim());
     const digits = query.replace(/\D/g, '');
-    return wRoku
-      .filter((r) => wFiltrze(r, filtr))
+    return wiersze
+      .filter((w) => wFiltrze(w, filtr))
       .filter(
-        (r) =>
+        (w) =>
           !query ||
-          foldText(r.dane.nazwaPelna).includes(query) ||
-          (digits !== '' && r.nip.includes(digits)) ||
-          foldText(ulicaZNumerem(r.dane.siedziba)).includes(query),
+          foldText(nazwaWiersza(w)).includes(query) ||
+          (!!w.adres &&
+            (foldText(w.adres.nazwa).includes(query) ||
+              (w.adres.alternativeNames ?? []).some((n) => foldText(n).includes(query)) ||
+              (digits !== '' && (w.adres.identyfikacja?.nip ?? '').includes(digits)))) ||
+          (!!w.rek &&
+            ((digits !== '' && w.rek.nip.includes(digits)) ||
+              foldText(ulicaZNumerem(w.rek.dane.siedziba)).includes(query))),
       )
-      .sort((a, b) => a.dane.nazwaPelna.localeCompare(b.dane.nazwaPelna, 'pl', { numeric: true }));
+      .sort((a, b) => nazwaWiersza(a).localeCompare(nazwaWiersza(b), 'pl', { numeric: true }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wRoku, search, filtr, ocena]);
+  }, [wiersze, search, filtr, ocena]);
+  /** The declarations among the visible rows — a community without one has nothing to tick. */
+  const visibleRek = useMemo(() => visible.flatMap((w) => (w.rek ? [w.rek] : [])), [visible]);
 
   /* ----------------------------- Ticking rows ----------------------------- */
 
@@ -1486,19 +1559,19 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
   const zaznaczone = wRoku.filter((r) => selected.has(r.id));
   const doPodpisu = podpisWiele ? wRoku.filter((r) => podpisWiele.includes(r.id)) : [];
   const gotoweDoPodpisu = doPodpisu.filter((r) => problemyDN1(r, stawkiRoku?.stawki ?? null).length === 0);
-  const selectedVisible = visible.filter((r) => selected.has(r.id)).length;
-  const allVisibleSelected = visible.length > 0 && selectedVisible === visible.length;
+  const selectedVisible = visibleRek.filter((r) => selected.has(r.id)).length;
+  const allVisibleSelected = visibleRek.length > 0 && selectedVisible === visibleRek.length;
 
   const toggleSelected = (id: number, range = false) => {
     const turnOn = !selected.has(id);
-    const from = range && lastTickedRef.current !== null ? visible.findIndex((r) => r.id === lastTickedRef.current) : -1;
-    const to = visible.findIndex((r) => r.id === id);
+    const from = range && lastTickedRef.current !== null ? visibleRek.findIndex((r) => r.id === lastTickedRef.current) : -1;
+    const to = visibleRek.findIndex((r) => r.id === id);
     setSelected((prev) => {
       const next = new Set(prev);
       // Shift+click: every row between the last tick and this one takes this
       // row's new state, as on the Pulpit.
       const ids =
-        from >= 0 && to >= 0 ? visible.slice(Math.min(from, to), Math.max(from, to) + 1).map((r) => r.id) : [id];
+        from >= 0 && to >= 0 ? visibleRek.slice(Math.min(from, to), Math.max(from, to) + 1).map((r) => r.id) : [id];
       for (const k of ids) {
         if (turnOn) next.add(k);
         else next.delete(k);
@@ -1511,7 +1584,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
   const toggleAllVisible = () => {
     setSelected((prev) => {
       const next = new Set(prev);
-      for (const r of visible) {
+      for (const r of visibleRek) {
         if (allVisibleSelected) next.delete(r.id);
         else next.add(r.id);
       }
@@ -1591,6 +1664,21 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
       reprezentant: { imie: wzor.reprezentant.imie, nazwisko: wzor.reprezentant.nazwisko, dataWypelnienia: null },
     };
   }, [wRoku]);
+
+  /** A community of Adresy opened without a declaration starts from what Adresy knows of it. */
+  const adresOtwarty = nowyAdresId !== null ? adresy.find((a) => a.id === nowyAdresId) : undefined;
+  const szablonOtwarty = useMemo((): PodatekNieruchomosciDane => {
+    const ident = adresOtwarty?.identyfikacja;
+    if (!adresOtwarty) return szablon;
+    return {
+      ...szablon,
+      nazwaPelna: ident?.nazwaPelna || adresOtwarty.nazwa,
+      regon: ident?.regon || szablon.regon,
+      siedziba: ident && !czyAdresPusty(ident.siedziba) ? { ...ident.siedziba } : szablon.siedziba,
+      telefon: ident?.telefon || szablon.telefon,
+      email: ident?.email || szablon.email,
+    };
+  }, [adresOtwarty, szablon]);
 
   const importXlsx = async () => {
     setBusy('import');
@@ -1694,12 +1782,13 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
     const rekord = rekordOtwarty;
     return (
       <DeklaracjaScreen
-        key={detail}
+        key={navItem.item}
         language={language}
         locale={locale}
         rok={rekord?.rok ?? rok}
         rekord={rekord}
-        szablon={szablon}
+        szablon={szablonOtwarty}
+        nipStart={tylkoCyfry(adresOtwarty?.identyfikacja?.nip)}
         stawki={stawki.find((s) => s.rok === (rekord?.rok ?? rok))}
         onBack={() => navItem.close()}
         onSaved={(saved) => {
@@ -1721,7 +1810,62 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
     );
   }
 
-  const renderRow = (rek: PodatekNieruchomosci) => {
+  /** A community of Adresy with no declaration this year: its row opens one, started from what Adresy knows. */
+  const renderBrak = (w: WierszDn1) => {
+    const open = () => openDetail(w);
+    const ident = w.adres?.identyfikacja;
+    const ulica = ident ? ulicaZNumerem(ident.siedziba) : '';
+    return (
+      <li key={`brak:${w.adres?.id}`} className="pod-item">
+        <span className="ksieg-row__select" aria-hidden="true" />
+        <div className="zeb-row pod-row pod-row--brak">
+          <div
+            className="pod-row__open"
+            role="button"
+            tabIndex={0}
+            onClick={open}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                open();
+              }
+            }}
+          >
+            <div className="zeb-date pod-kwota">
+              <span className="pod-kwota__label">{t.podRowTax}</span>
+              <span className="pod-kwota__value is-empty">—</span>
+            </div>
+            <div className="zeb-row__main">
+              <span className="zeb-row__name">{nazwaWiersza(w)}</span>
+              {(ident?.nip || ulica) && (
+                <span className="zeb-row__meta">
+                  {ident?.nip && (
+                    <span>
+                      <Icon name="file-text" size={13} /> {t.podRowNip.replace('{nip}', ident.nip)}
+                    </span>
+                  )}
+                  {ulica && (
+                    <span>
+                      <Icon name="map-pin" size={13} /> {ulica}
+                    </span>
+                  )}
+                </span>
+              )}
+            </div>
+            <div className="zeb-row__side">
+              <span className="status-badge status-neutral" title={t.podRowNoneHint}>
+                {t.podRowNone}
+              </span>
+            </div>
+          </div>
+        </div>
+      </li>
+    );
+  };
+
+  const renderRow = (w: WierszDn1) => {
+    const rek = w.rek;
+    if (!rek) return renderBrak(w);
     const { stan, problemy } = ocena.get(rek.id) ?? { stan: 'gotowa' as StanDeklaracji, problemy: [] };
     const wynik = obliczDN1(rek.dane, stawkiRoku?.stawki ?? null);
     const ostatnie = rek.dane.pobrania[rek.dane.pobrania.length - 1];
@@ -1735,7 +1879,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
     const ulica = ulicaZNumerem(rek.dane.siedziba);
     const kwota = wynik.kwota99 === null ? null : kwotaWBoksie(wynik.kwota99);
     const isSelected = selected.has(rek.id);
-    const open = () => openDetail(rek);
+    const open = () => openDetail(w);
     return (
       <li key={rek.id} className="pod-item">
         {/* The tick sits left of the card, outside it — the card opens the
@@ -1806,6 +1950,11 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
                     <Icon name="alert-triangle" size={13} /> {t.podRowNoArea}
                   </span>
                 )}
+                {!w.adres && (
+                  <span className="pod-meta-warning" title={t.podOrphanHint}>
+                    <Icon name="alert-triangle" size={13} /> {t.podOrphanBadge}
+                  </span>
+                )}
                 {ostatnie && (
                   <span>
                     <Icon name="download" size={13} />{' '}
@@ -1821,7 +1970,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
               <div className="zeb-row__side">
                 <span
                   className={`status-badge ${
-                    stan === 'braki' ? 'status-pending' : stan === 'pobrana' ? 'status-info' : 'status-neutral'
+                    stan === 'braki' ? 'status-pending' : stan === 'pobrana' ? 'status-info' : 'status-accent'
                   }`}
                   title={problemy.map((p) => problemText(t, p, rok)).join('\n') || undefined}
                 >
@@ -1837,6 +1986,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
               dom={rek.dane.dom}
               busy={domSaving.has(rek.id)}
               onSet={(booked) => void setDom([rek.id], booked, false)}
+              canMark={stan === 'pobrana'}
             />
           </div>
         </div>
@@ -1851,8 +2001,10 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
     downloaded: t.podFilterDownloaded,
     waiting: t.podFilterWaiting,
     dom: t.podFilterDom,
+    none: t.podFilterNone,
   };
-  const doZaksiegowania = zaznaczone.filter((r) => !r.dane.dom);
+  // Posted in DOM only once the PDF is made: a ticked declaration in another state is left out.
+  const doZaksiegowania = zaznaczone.filter((r) => !r.dane.dom && ocena.get(r.id)?.stan === 'pobrana');
   const zaksiegowane = zaznaczone.filter((r) => r.dane.dom);
 
   const minRok = Math.min(...lata);
@@ -1862,10 +2014,10 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
   const wDom = wRoku.filter((r) => r.dane.dom).length;
   const procentDom = wRoku.length > 0 ? Math.round((wDom / wRoku.length) * 100) : 0;
   const fakty =
-    wRoku.length === 0
+    wiersze.length === 0
       ? [t.podHeroEmpty]
       : [
-          t.podHeroCount.replace('{n}', String(wRoku.length)),
+          t.podHeroDeclarations.replace('{n}', String(wRoku.length)).replace('{total}', String(wiersze.length)),
           t.podHeroTax.replace('{kwota}', `${formatZl(podatekRazem)} zł`),
           ...(liczniki.errors > 0 ? [t.podHeroErrors.replace('{n}', String(liczniki.errors))] : []),
         ];
@@ -1973,7 +2125,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
             </button>
           )}
         </div>
-        {wRoku.length > 0 && (
+        {wiersze.length > 0 && (
           <div className="zad-seg" role="group" aria-label={t.podFilterLabel}>
             {FILTRY.map((f) => (
               <button
@@ -2015,7 +2167,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
           onSaved={() => void load(true)}
         />
 
-        {wRoku.length === 0 ? (
+        {wiersze.length === 0 ? (
           <div className="zeb-empty">
             <span className="zeb-tab-empty__icon">
               <Icon name="landmark" size={22} />

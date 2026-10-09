@@ -560,7 +560,24 @@ const MailingSzablony: React.FC<Props> = ({ language }) => {
 
           <ModalFooter
             className="page-action-bar"
-            note={<RequiredNote label={t.formRequiredNote} />}
+            note={
+              <>
+                <RequiredNote label={t.formRequiredNote} />
+                {editing.id !== null && (
+                  <button
+                    type="button"
+                    className="button button-small button-ghost icon-danger"
+                    onClick={() => {
+                      const current = szablony.find((x) => x.id === editing.id);
+                      if (current) void handleDelete(current);
+                    }}
+                    disabled={isSaving}
+                  >
+                    <Icon name="trash" size={13} /> {t.delete}
+                  </button>
+                )}
+              </>
+            }
             onCancel={() => { setEditing(null); setError(null); }}
             cancelLabel={t.cancel}
             onSubmit={handleSave}

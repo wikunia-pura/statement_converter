@@ -15,6 +15,7 @@ import Loader from '../components/Loader';
 import UsersCard from '../components/UsersCard';
 import { FormField, FormRow, FormSection } from '../components/FormSection';
 import { PodpisKartaUstawienia } from '../components/PodpisKarta';
+import { AI_MODELS, DEFAULT_AI_MODEL } from '../../shared/ai-models';
 
 interface SettingsProps {
   darkMode: boolean;
@@ -54,6 +55,7 @@ const Settings: React.FC<SettingsProps> = ({
   const [statementsFolder, setStatementsFolder] = useState('');
   const [skipUserApproval, setSkipUserApproval] = useState(false);
   const [alwaysUseAI, setAlwaysUseAI] = useState(true);
+  const [aiModel, setAiModel] = useState<string>(DEFAULT_AI_MODEL);
   const [calendarHoverCard, setCalendarHoverCard] = useState(false);
   const [notificationPrefs, setNotificationPrefs] = useState<NotificationPrefs>({});
   const [contractorSortOrder, setContractorSortOrder] = useState<ContractorSortOrder>('name-asc');
@@ -107,6 +109,7 @@ const Settings: React.FC<SettingsProps> = ({
       setStatementsFolder(settings.statementsFolder || '');
       setSkipUserApproval(settings.skipUserApproval ?? false);
       setAlwaysUseAI(settings.alwaysUseAI !== false);
+      setAiModel(settings.aiModel);
       setCalendarHoverCard(settings.calendarHoverCard ?? false);
       setNotificationPrefs(notificationData);
       setContractorSortOrder(settings.contractorSortOrder ?? 'name-asc');
@@ -195,6 +198,10 @@ const Settings: React.FC<SettingsProps> = ({
     const newValue = !alwaysUseAI;
     await window.electronAPI.setAlwaysUseAI(newValue);
     setAlwaysUseAI(newValue);
+  };
+
+  const handleAiModelChange = async (model: string) => {
+    if (await window.electronAPI.setAiModel(model)) setAiModel(model);
   };
 
   // Typed over every id, so a notification added to the list without its wording
@@ -326,6 +333,7 @@ const Settings: React.FC<SettingsProps> = ({
           setStatementsFolder(settings.statementsFolder || '');
           setSkipUserApproval(settings.skipUserApproval ?? false);
           setAlwaysUseAI(settings.alwaysUseAI !== false);
+          setAiModel(settings.aiModel);
           setCalendarHoverCard(settings.calendarHoverCard ?? false);
           setContractorSortOrder(settings.contractorSortOrder ?? 'name-asc');
           onSettingsRestored?.();
@@ -417,7 +425,11 @@ const Settings: React.FC<SettingsProps> = ({
       .replace('{zebraniaUstawienia}', String(counts.zebraniaUstawienia))
       .replace('{planyGospodarcze}', String(counts.planyGospodarcze))
       .replace('{podatkiNieruchomosci}', String(counts.podatkiNieruchomosci))
-      .replace('{podatkiStawki}', String(counts.podatkiStawki));
+      .replace('{podatkiStawki}', String(counts.podatkiStawki))
+      .replace('{podpisHistoria}', String(counts.podpisHistoria))
+      .replace('{podatkiCit}', String(counts.podatkiCit))
+      .replace('{podatkiPit}', String(counts.podatkiPit))
+      .replace('{podatkiCitUstawienia}', String(counts.podatkiCitUstawienia));
   };
 
   const handleDownloadInstaller = async () => {
@@ -617,6 +629,22 @@ const Settings: React.FC<SettingsProps> = ({
                 <input type="checkbox" checked={alwaysUseAI} onChange={handleAlwaysUseAIToggle} aria-label={t.alwaysUseAI} />
                 <span className="toggle-slider"></span>
               </label>
+            </div>
+
+            <div className="settings-row">
+              <div className="settings-label">
+                <span className="settings-label-main settings-label-main--icon">
+                  <Icon name="bot" size={14} /> {t.aiModel}
+                </span>
+                <span className="settings-label-sub">{t.aiModelDesc}</span>
+              </div>
+              <Select
+                value={aiModel}
+                onChange={handleAiModelChange}
+                options={AI_MODELS.map((m) => ({ value: m.id, label: m.label }))}
+                ariaLabel={t.aiModel}
+                className="settings-control"
+              />
             </div>
 
             <div className="settings-row">

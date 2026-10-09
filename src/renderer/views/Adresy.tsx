@@ -1,5 +1,19 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Adres, Bank, ApartmentMapping, KontoTyp, ZgnJednostka, ZgnPelnomocnik, ZarzadOsoba } from '../../shared/types';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import {
+  Adres,
+  AdresIdentyfikacja,
+  Bank,
+  ApartmentMapping,
+  KontoTyp,
+  PodatekAdres,
+  ZgnJednostka,
+  ZgnPelnomocnik,
+  ZarzadOsoba,
+} from '../../shared/types';
+import { normalizeIdentyfikacja, pustaIdentyfikacja } from '../../shared/adres-identyfikacja';
+import { nazwaNieruchomosci } from '../../shared/plan-gospodarczy';
+import { nipPoprawny, tylkoCyfry } from '../../shared/podatki';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import { formatAccount, normalizeAccount } from '../../shared/account-extractor';
@@ -13,12 +27,15 @@ import ApartmentTargetsEditor, {
 import CheckList, { CheckListItem } from '../components/CheckList';
 import { FormField, FormRow, FormSection, RequiredNote } from '../components/FormSection';
 import Icon from '../components/Icon';
+import Tip from '../components/Tip';
 import Loader, { BusyOverlay } from '../components/Loader';
 import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
 import ModuleTabs from '../components/ModuleTabs';
 import Select from '../components/Select';
 import { plural } from '../plural';
 import TagInput from '../components/TagInput';
+import AdresyZasilDn1 from './AdresyZasilDn1';
+import { AdresFields } from './PodatkiNieruchomosci';
 
 interface AccountTypeFormModalProps {
   language: Language;
@@ -636,8 +653,7 @@ const ZarzadModal: React.FC<{
         <ModalDismiss onClose={onClose} />
         <ModalHeader icon="users" title={t.zarzadTitle} subtitle={adres.nazwa} />
         <div className="modal-body modal-body--sectioned">
-          <div className="panel-intro">
-            <p className="panel-intro__text">{t.zarzadHint}</p>
+          <div className="panel-intro panel-intro--end">
             <button
               type="button"
               className="button button-primary"
@@ -783,12 +799,11 @@ const ApartmentMappingsModal: React.FC<ApartmentMappingsModalProps> = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal--xl" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal--2xl" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onClose} />
         <ModalHeader icon="clipboard" title={t.apartmentMappingsTitle} subtitle={adres.nazwa} />
         <div className="modal-body modal-body--sectioned">
-          <div className="panel-intro">
-            <p className="panel-intro__text">{t.apartmentMappingsHint}</p>
+          <div className="panel-intro panel-intro--end">
             <button
               type="button"
               className="button button-primary"
@@ -815,17 +830,18 @@ const ApartmentMappingsModal: React.FC<ApartmentMappingsModalProps> = ({
                 const targets = mappingTargets(m);
                 return (
                   <li key={m.id} className="record-row record-row--top">
+                    {/* The apartment leads the row, in a column of its own, so the numbers line up and the long phrase does not push them around. */}
+                    <div className="record-row__lead">
+                      {targets.map((target) => (
+                        <span key={target.apartmentNumber} className="apt-chip">
+                          <Icon name="home" size={12} />
+                          <b>{target.apartmentNumber}</b>
+                          {target.kontoLokalu && <span className="apt-chip__account">{target.kontoLokalu}</span>}
+                        </span>
+                      ))}
+                    </div>
                     <div className="record-row__main">
                       <div className="record-row__title record-row__title--wrap">{m.matchText}</div>
-                      <div className="record-row__chips">
-                        {targets.map((target) => (
-                          <span key={target.apartmentNumber} className="apt-chip">
-                            <Icon name="home" size={12} />
-                            <b>{target.apartmentNumber}</b>
-                            {target.kontoLokalu && <span className="apt-chip__account">{target.kontoLokalu}</span>}
-                          </span>
-                        ))}
-                      </div>
                       {m.note && <div className="record-row__note">{m.note}</div>}
                     </div>
                     <div className="row-actions">
@@ -889,6 +905,10 @@ interface ZgnUnitFormModalProps {
   error: string | null;
   /** Stack above the units modal when the dictionary itself is a modal. */
   zIndex?: number;
+  /** The unit's proxies, kept live by the panel — managed here, in the unit's edit view. */
+  pelnomocnicy: ZgnPelnomocnik[];
+  /** Adding lives here; editing and deleting stay on the units list. */
+  onAddProxy: () => void;
   onSubmit: (data: { nazwa: string; email: string; adresIds: number[]; assignmentChanged: boolean }) => void;
   onCancel: () => void;
 }
@@ -906,6 +926,8 @@ const ZgnUnitFormModal: React.FC<ZgnUnitFormModalProps> = ({
   isSaving,
   error,
   zIndex = 1100,
+  pelnomocnicy,
+  onAddProxy,
   onSubmit,
   onCancel,
 }) => {
@@ -1015,6 +1037,40 @@ const ZgnUnitFormModal: React.FC<ZgnUnitFormModalProps> = ({
                     plural(adresIds.length, language, ['wspólnoty', 'wspólnot', 'wspólnot'], ['community', 'communities']),
                   )}
                 </div>
+              </div>
+            )}
+          </FormSection>
+
+          <FormSection icon="users" title={t.zgnProxies} description={t.zgnSectionProxiesDesc}>
+            {editing ? (
+              <>
+                {pelnomocnicy.length > 0 && (
+                  <ul className="zgn-proxy-list">
+                    {pelnomocnicy.map((p) => (
+                      <li key={p.id} className="zgn-proxy-row">
+                        <span className="zgn-proxy-row__name">{p.imieNazwisko}</span>
+                        <span className={`zgn-proxy-row__email${p.email ? '' : ' is-missing'}`}>
+                          {p.email || t.zgnProxyNoEmail}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div>
+                  <button
+                    type="button"
+                    className="button button-small button-subtle"
+                    onClick={onAddProxy}
+                    disabled={isSaving}
+                  >
+                    <Icon name="plus" size={13} />{' '}{t.zgnProxyAdd}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="form-empty">
+                <Icon name="info" size={16} />
+                {t.zgnProxiesAfterSave}
               </div>
             )}
           </FormSection>
@@ -1343,101 +1399,92 @@ const ZgnUnitsPanel: React.FC<ZgnUnitsPanelProps> = ({
       )}
 
       {jednostki.length > 0 ? (
-        <div className="zgn-units">
-          {jednostki.map((j) => {
-            const used = adresy.filter((a) => a.zgnJednostkaId === j.id).length;
-            const proxies = proxiesOf(j.id);
-            return (
-              <article key={j.id} className="zgn-unit">
-                <header className="zgn-unit__header">
-                  <span className="form-section__icon" aria-hidden="true">
-                    <Icon name="building" size={16} />
-                  </span>
-                  <div className="zgn-unit__heading">
-                    <h3 className="zgn-unit__name">{j.nazwa}</h3>
-                    <div className="zgn-unit__meta">
-                      <span className="zgn-unit__meta-item zgn-unit__email" title={t.zgnUnitEmail}>
-                        <Icon name="mail" size={13} />
-                        {j.email}
-                      </span>
-                      <span className="zgn-unit__meta-item">
-                        <Icon name="home" size={13} />
-                        {t.zgnUnitUsedByLabel}: <strong>{used}</strong>
-                      </span>
+        <table className="data-table zgn-table">
+          <thead>
+            <tr>
+              <th>{t.zgnUnitName}</th>
+              <th>{t.zgnUnitEmail}</th>
+              <th className="data-table__center">{t.zgnUnitUsedByLabel}</th>
+              <th>{t.zgnProxies}</th>
+              <th className="data-table__actions">{t.actions}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {jednostki.map((j) => {
+              const used = adresy.filter((a) => a.zgnJednostkaId === j.id).length;
+              const proxies = proxiesOf(j.id);
+              return (
+                <tr key={j.id}>
+                  <td className="data-table__name">
+                    <span className="cell-title">{j.nazwa}</span>
+                  </td>
+                  <td className="zgn-table__email">{j.email}</td>
+                  <td className="data-table__center">{used}</td>
+                  <td>
+                    {proxies.length > 0 ? (
+                      <ul className="zgn-proxy-list">
+                        {proxies.map((p) => (
+                          <li key={p.id} className="zgn-proxy-row">
+                            <span className="zgn-proxy-row__name">{p.imieNazwisko}</span>
+                            <span className={`zgn-proxy-row__email${p.email ? '' : ' is-missing'}`}>
+                              {p.email || t.zgnProxyNoEmail}
+                            </span>
+                            <span className="zgn-proxy-row__actions">
+                              <button
+                                type="button"
+                                className="button button-ghost button-icon"
+                                onClick={() => { setError(null); setProxyForm({ jednostka: j, editing: p }); }}
+                                disabled={isSaving}
+                                title={t.edit}
+                                aria-label={`${t.edit}: ${p.imieNazwisko}`}
+                              >
+                                <Icon name="edit" size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                className="button button-ghost button-icon icon-danger"
+                                onClick={() => void handleProxyDelete(p)}
+                                disabled={isSaving}
+                                title={t.delete}
+                                aria-label={`${t.delete}: ${p.imieNazwisko}`}
+                              >
+                                <Icon name="trash" size={13} />
+                              </button>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <span className="cell-empty">—</span>
+                    )}
+                  </td>
+                  <td className="data-table__actions">
+                    <div className="row-actions">
+                      <button
+                        type="button"
+                        className="button button-small button-secondary"
+                        onClick={() => { setError(null); setFormState({ editing: j }); }}
+                        disabled={isSaving}
+                      >
+                        <Icon name="edit" size={13} />{' '}{t.edit}
+                      </button>
+                      <button
+                        type="button"
+                        className="button button-ghost button-icon icon-danger"
+                        onClick={() => handleDelete(j)}
+                        disabled={isSaving}
+                        title={t.delete}
+                        aria-label={`${t.delete}: ${j.nazwa}`}
+                      >
+                        <Icon name="trash" size={15} />
+                      </button>
                     </div>
-                  </div>
-                  <div className="zgn-unit__actions">
-                    <button
-                      type="button"
-                      className="button button-small button-secondary"
-                      onClick={() => { setError(null); setFormState({ editing: j }); }}
-                      disabled={isSaving}
-                    >
-                      <Icon name="edit" size={13} />{' '}{t.edit}
-                    </button>
-                    <button
-                      type="button"
-                      className="button button-ghost button-icon icon-danger"
-                      onClick={() => handleDelete(j)}
-                      disabled={isSaving}
-                      title={t.delete}
-                      aria-label={`${t.delete}: ${j.nazwa}`}
-                    >
-                      <Icon name="trash" size={15} />
-                    </button>
-                  </div>
-                </header>
-                <div className="zgn-unit__proxies">
-                  <div className="zgn-unit__proxies-head">
-                    <div className="zgn-unit__proxies-title">{t.zgnProxies}</div>
-                    <button
-                      type="button"
-                      className="button button-small button-subtle"
-                      onClick={() => { setError(null); setProxyForm({ jednostka: j, editing: null }); }}
-                      disabled={isSaving}
-                    >
-                      <Icon name="plus" size={13} />{' '}{t.zgnProxyAdd}
-                    </button>
-                  </div>
-                  {proxies.length > 0 && (
-                    <ul className="zgn-proxy-list">
-                      {proxies.map((p) => (
-                        <li key={p.id} className="zgn-proxy-row">
-                          <span className="zgn-proxy-row__name">{p.imieNazwisko}</span>
-                          <span className={`zgn-proxy-row__email${p.email ? '' : ' is-missing'}`}>
-                            {p.email || t.zgnProxyNoEmail}
-                          </span>
-                          <span className="zgn-proxy-row__actions">
-                            <button
-                              type="button"
-                              className="button button-ghost button-icon"
-                              onClick={() => { setError(null); setProxyForm({ jednostka: j, editing: p }); }}
-                              disabled={isSaving}
-                              title={t.edit}
-                              aria-label={`${t.edit}: ${p.imieNazwisko}`}
-                            >
-                              <Icon name="edit" size={13} />
-                            </button>
-                            <button
-                              type="button"
-                              className="button button-ghost button-icon icon-danger"
-                              onClick={() => void handleProxyDelete(p)}
-                              disabled={isSaving}
-                              title={t.delete}
-                              aria-label={`${t.delete}: ${p.imieNazwisko}`}
-                            >
-                              <Icon name="trash" size={13} />
-                            </button>
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </article>
-            );
-          })}
-        </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       ) : (
         <div className="form-empty">
           <Icon name="building" size={16} />
@@ -1454,6 +1501,12 @@ const ZgnUnitsPanel: React.FC<ZgnUnitsPanelProps> = ({
           zIndex={formZIndex}
           adresy={adresy}
           jednostki={jednostki}
+          pelnomocnicy={formState.editing ? proxiesOf(formState.editing.id) : []}
+          onAddProxy={() => {
+            if (!formState.editing) return;
+            setError(null);
+            setProxyForm({ jednostka: formState.editing, editing: null });
+          }}
           onSubmit={(data) => void handleFormSubmit(data)}
           onCancel={() => { setFormState(null); setError(null); }}
         />
@@ -1509,6 +1562,92 @@ interface AdresyProps {
   onPrefillConsumed?: () => void;
 }
 
+/** Whether anything is filled in — an untouched form is not worth a write. */
+const identyfikacjaPusta = (i: AdresIdentyfikacja) =>
+  JSON.stringify(normalizeIdentyfikacja(i)) === JSON.stringify(pustaIdentyfikacja());
+
+/**
+ * "Dane identyfikacyjne (podatkowe)" of the address form — what the tax modules
+ * read instead of asking again for every return. A wrong NIP checksum is only
+ * pointed out: the data is the office's to keep, never blocked.
+ */
+const IdentyfikacjaSection: React.FC<{
+  t: (typeof translations)['pl'];
+  nazwa: string;
+  value: AdresIdentyfikacja;
+  onChange: (value: AdresIdentyfikacja) => void;
+}> = ({ t, nazwa, value, onChange }) => {
+  const set = <K extends keyof AdresIdentyfikacja>(key: K, v: AdresIdentyfikacja[K]) => onChange({ ...value, [key]: v });
+  const setSiedziba = (key: keyof PodatekAdres, v: string) => set('siedziba', { ...value.siedziba, [key]: v });
+  const sugestia = nazwa.trim() ? `Wspólnota Mieszkaniowa ${nazwaNieruchomosci(nazwa)}` : 'Wspólnota Mieszkaniowa …';
+  return (
+    <FormSection
+      icon="landmark"
+      title={t.adresSectionIdent}
+      description={t.adresSectionIdentDesc}
+      collapsible
+      defaultCollapsed
+      persistKey="adres-identyfikacja"
+      collapsedSummary={value.nip ? `NIP ${value.nip}` : t.adresIdentCollapsedEmpty}
+    >
+      <FormRow>
+        <FormField
+          label={t.adresIdentNip}
+          htmlFor="adres-ident-nip"
+          hint={value.nip.length === 10 && !nipPoprawny(value.nip) ? t.adresIdentNipChecksum : undefined}
+        >
+          <input
+            id="adres-ident-nip"
+            type="text"
+            inputMode="numeric"
+            className="input-mono"
+            value={value.nip}
+            onChange={(e) => set('nip', tylkoCyfry(e.target.value).slice(0, 10))}
+          />
+        </FormField>
+        <FormField label={t.adresIdentRegon} htmlFor="adres-ident-regon">
+          <input
+            id="adres-ident-regon"
+            type="text"
+            inputMode="numeric"
+            className="input-mono"
+            value={value.regon}
+            onChange={(e) => set('regon', tylkoCyfry(e.target.value).slice(0, 14))}
+          />
+        </FormField>
+      </FormRow>
+      <FormField label={t.adresIdentNazwaPelna} htmlFor="adres-ident-nazwa">
+        <input
+          id="adres-ident-nazwa"
+          type="text"
+          value={value.nazwaPelna}
+          placeholder={sugestia}
+          onChange={(e) => set('nazwaPelna', e.target.value)}
+        />
+      </FormField>
+      <FormField label={t.adresIdentSeat}>
+        <AdresFields t={t} idPrefix="adres-ident-siedziba" value={value.siedziba} onChange={setSiedziba} />
+      </FormField>
+      <FormField label={t.adresIdentUrzad} htmlFor="adres-ident-urzad" hint={t.adresIdentUrzadHint}>
+        <input
+          id="adres-ident-urzad"
+          type="text"
+          value={value.urzadSkarbowy}
+          onChange={(e) => set('urzadSkarbowy', e.target.value)}
+        />
+      </FormField>
+      <FormRow>
+        <FormField label={t.adresIdentTelefon} htmlFor="adres-ident-tel">
+          <input id="adres-ident-tel" type="text" value={value.telefon} onChange={(e) => set('telefon', e.target.value)} />
+        </FormField>
+        <FormField label={t.adresIdentEmail} htmlFor="adres-ident-email">
+          <input id="adres-ident-email" type="text" value={value.email} onChange={(e) => set('email', e.target.value)} />
+        </FormField>
+      </FormRow>
+    </FormSection>
+  );
+};
+
 /** Tabs of the Adresy module: the communities themselves plus their dictionaries. */
 type AdresyTab = 'lista' | 'typy' | 'zgn';
 
@@ -1532,9 +1671,11 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
   const [newAccountNumber, setNewAccountNumber] = useState('');
   const [accountNumberError, setAccountNumberError] = useState<string | null>(null);
   const [newBankId, setNewBankId] = useState<number | null>(null);
+  const [newIdentyfikacja, setNewIdentyfikacja] = useState<AdresIdentyfikacja>(pustaIdentyfikacja());
   const [isLoading, setIsLoading] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [onlyIncomplete, setOnlyIncomplete] = useState(false);
   // By id, not the row itself: saving reloads the list (and shows the loader,
   // which remounts the modal), so the modal must pick up the fresh row — a kept
   // copy would reopen showing the list as it was before the save.
@@ -1591,6 +1732,15 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     }
   };
 
+  /** The address itself is already saved by now, so a failure here is reported without keeping the form open. */
+  const saveIdentyfikacja = async (id: number, value: AdresIdentyfikacja) => {
+    try {
+      await window.electronAPI.setAdresIdentyfikacja(id, normalizeIdentyfikacja(value));
+    } catch (error: unknown) {
+      notify.error(error instanceof Error ? error.message : String(error), t.adresIdentSaveError);
+    }
+  };
+
   const handleAddAdres = async () => {
     if (!newNazwa) {
       notify.warning(t.fillAllFields);
@@ -1607,7 +1757,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     }
 
     try {
-      await window.electronAPI.addAdres(
+      const created = await window.electronAPI.addAdres(
         newNazwa,
         newAlternativeNames,
         newSwrkIdentifiers,
@@ -1617,6 +1767,8 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
         newAccountTypes,
         newZgnJednostkaId,
       );
+      // A new address has no id until now, so its identification is saved right after it exists.
+      if (!identyfikacjaPusta(newIdentyfikacja)) await saveIdentyfikacja(created.id, newIdentyfikacja);
       resetForm();
       setShowAddAdres(false);
       loadData();
@@ -1653,6 +1805,10 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
         newAccountTypes,
         newZgnJednostkaId,
       );
+      const ident = normalizeIdentyfikacja(newIdentyfikacja);
+      if (JSON.stringify(ident) !== JSON.stringify(normalizeIdentyfikacja(editingAdres.identyfikacja))) {
+        await saveIdentyfikacja(editingAdres.id, ident);
+      }
       resetForm();
       setEditingAdres(null);
       loadData();
@@ -1684,6 +1840,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     setAccountNumberError(null);
     setNewBankId(null);
     setNewZgnJednostkaId(null);
+    setNewIdentyfikacja(pustaIdentyfikacja());
   };
 
   const handleEditAdres = (adres: Adres) => {
@@ -1697,6 +1854,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     setAccountNumberError(null);
     setNewBankId(adres.bankId ?? null);
     setNewZgnJednostkaId(adres.zgnJednostkaId ?? null);
+    setNewIdentyfikacja(normalizeIdentyfikacja(adres.identyfikacja));
   };
 
   const handleCancelEdit = () => {
@@ -1791,7 +1949,26 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     }
   };
 
+  // What an address is still missing, as the labels the row's tooltip lists.
+  const missingOf = useCallback((a: Adres): string[] => {
+    const id = a.identyfikacja;
+    const missing: string[] = [];
+    if (!id?.nip) missing.push(t.adresMissingNip);
+    if (!id?.nazwaPelna?.trim()) missing.push(t.adresMissingNazwaPelna);
+    if (!id?.siedziba?.miejscowosc?.trim() || !id.siedziba.ulica?.trim()) missing.push(t.adresMissingSiedziba);
+    if (!(a.accountNumbers?.length)) missing.push(t.adresMissingAccount);
+    if (!zgnJednostki.some((j) => j.id === a.zgnJednostkaId)) missing.push(t.adresMissingZgn);
+    if (!(a.zarzad?.length)) missing.push(t.adresMissingZarzad);
+    return missing;
+  }, [t, zgnJednostki]);
+
+  const incompleteCount = useMemo(
+    () => adresy.filter((a) => missingOf(a).length > 0).length,
+    [adresy, missingOf],
+  );
+
   const filteredAdresy = useMemo(() => adresy.filter((a) => {
+    if (onlyIncomplete && missingOf(a).length === 0) return false;
     const q = searchTerm.toLowerCase().trim();
     if (!q) return true;
     if (a.nazwa.toLowerCase().includes(q)) return true;
@@ -1799,7 +1976,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     if (a.swrkIdentifiers?.some((s) => s.toLowerCase().includes(q))) return true;
     if (a.accountNumbers?.some((acc) => acc.includes(q.replace(/\s/g, '')))) return true;
     return false;
-  }), [adresy, searchTerm]);
+  }), [adresy, searchTerm, onlyIncomplete, missingOf]);
 
   if (isLoading) {
     return (
@@ -1841,6 +2018,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                     <span className="toolbar-divider" aria-hidden="true" />
                   </>
                 )}
+                <AdresyZasilDn1 language={language} onDone={loadData} disabled={isImporting} />
                 <button
                   className="button button-import"
                   onClick={handleImportFromFile}
@@ -1866,7 +2044,9 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
             }
           >
 
-            {(showAddAdres || editingAdres) && (
+            {/* In the body, not in the list's card: the overlay must cover the window, and a card around it can pin it to the list. */}
+            {(showAddAdres || editingAdres) &&
+              createPortal(
               <div className="modal-overlay" onClick={handleCancelEdit}>
                 <div className="modal modal--lg" onClick={(e) => e.stopPropagation()}>
                   <ModalDismiss onClose={handleCancelEdit} />
@@ -2058,6 +2238,8 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                         </div>
                       </FormField>
                     </FormSection>
+
+                    <IdentyfikacjaSection t={t} nazwa={newNazwa} value={newIdentyfikacja} onChange={setNewIdentyfikacja} />
                   </div>
                   <ModalFooter
                     note={<RequiredNote label={t.formRequiredNote} />}
@@ -2068,7 +2250,8 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                     submitIcon={editingAdres ? 'save' : 'plus'}
                   />
                 </div>
-              </div>
+              </div>,
+              document.body,
             )}
 
             {adresy.length > 0 ? (
@@ -2084,6 +2267,15 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                       aria-label={t.searchAdresy}
                     />
                   </div>
+                  <button
+                    type="button"
+                    className={`button button-small ${onlyIncomplete ? 'button-secondary' : 'button-ghost'}`}
+                    onClick={() => setOnlyIncomplete((v) => !v)}
+                    aria-pressed={onlyIncomplete}
+                    disabled={incompleteCount === 0 && !onlyIncomplete}
+                  >
+                    <Icon name="alert-triangle" size={13} />{' '}{t.adresMissingFilter} ({incompleteCount})
+                  </button>
                   <span className="list-filter__count">
                     {t.totalAdresy}: <strong>{filteredAdresy.length}</strong> / {adresy.length}
                   </span>
@@ -2110,9 +2302,30 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                       const jednostka = zgnJednostki.find((j) => j.id === adres.zgnJednostkaId);
                       const zarzadCount = adres.zarzad?.length ?? 0;
                       const mappingsCount = adres.apartmentMappings?.length ?? 0;
+                      const missing = missingOf(adres);
                       return (
                         <tr key={adres.id}>
-                          <td className="data-table__name">
+                          <td className="data-table__name nowrap">
+                            <span className="adres-missing-slot">
+                              {missing.length > 0 && (
+                                <Tip
+                                  className="cell-warning"
+                                  ariaLabel={`${t.adresMissingTitle}: ${missing.join(', ')}`}
+                                  content={
+                                    <>
+                                      <div className="tip__title">{t.adresMissingTitle}</div>
+                                      <ul className="tip__list">
+                                        {missing.map((m) => (
+                                          <li key={m}>{m}</li>
+                                        ))}
+                                      </ul>
+                                    </>
+                                  }
+                                >
+                                  <Icon name="alert-triangle" size={14} />
+                                </Tip>
+                              )}
+                            </span>
                             {/* Spelling variants are for matching, not for reading the list —
                                 on hover only (search still finds them). */}
                             <span

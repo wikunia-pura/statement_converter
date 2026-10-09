@@ -21,6 +21,8 @@ const IPC_CHANNELS = {
   ADD_ADRES: 'db:add-adres',
   UPDATE_ADRES: 'db:update-adres',
   SET_ADRES_ZARZAD: 'db:set-adres-zarzad',
+  SET_ADRES_IDENTYFIKACJA: 'db:set-adres-identyfikacja',
+  ADRESY_ZASIL_Z_DN1: 'db:adresy-zasil-z-dn1',
   DELETE_ADRES: 'db:delete-adres',
   DELETE_ALL_ADRESY: 'db:delete-all-adresy',
   IMPORT_ADRESY_FROM_FILE: 'db:import-adresy-from-file',
@@ -56,6 +58,7 @@ const IPC_CHANNELS = {
   SET_LANGUAGE: 'settings:set-language',
   SET_SKIP_USER_APPROVAL: 'settings:set-skip-user-approval',
   SET_ALWAYS_USE_AI: 'settings:set-always-use-ai',
+  SET_AI_MODEL: 'settings:set-ai-model',
   SET_CONTRACTOR_SORT_ORDER: 'settings:set-contractor-sort-order',
   SET_SIDEBAR_COLLAPSED: 'settings:set-sidebar-collapsed',
   SET_SIDEBAR_ORDER: 'settings:set-sidebar-order',
@@ -88,7 +91,6 @@ const IPC_CHANNELS = {
   ZALICZKI_SELECT_PDFS: 'zaliczki:select-pdfs',
   ZALICZKI_EXTRACT_PDF: 'zaliczki:extract-pdf',
   ZALICZKI_GENERATE_XLSX: 'zaliczki:generate-xlsx',
-  ZALICZKI_GET_MODELS: 'zaliczki:get-models',
   ZALICZKI_CACHE_STATS: 'zaliczki:cache-stats',
   ZALICZKI_CLEAR_CACHE: 'zaliczki:clear-cache',
   NOTY_SELECT_PDFS: 'noty:select-pdfs',
@@ -141,8 +143,9 @@ const IPC_CHANNELS = {
   UPDATE_ZEBRANIE: 'zebrania:update',
   DELETE_ZEBRANIE: 'zebrania:delete',
   ADD_ZEBRANIE_WERSJA: 'zebrania:add-wersja',
+  DELETE_ZEBRANIE_WERSJA: 'zebrania:delete-wersja',
   UPDATE_ZEBRANIE_WERSJA: 'zebrania:update-wersja',
-  SET_ZEBRANIE_WERSJA_STATUS: 'zebrania:set-wersja-status',
+  SET_ZEBRANIE_DOKUMENT_GOTOWE: 'zebrania:set-dokument-gotowe',
   SET_ZEBRANIE_WERSJA_NAZWA: 'zebrania:set-wersja-nazwa',
   ZEBRANIA_SPRAWOZDANIA_IMPORT: 'zebrania:sprawozdania-import',
   ZEBRANIA_SPRAWOZDANIA_LISTA: 'zebrania:sprawozdania-lista',
@@ -179,9 +182,41 @@ const IPC_CHANNELS = {
   PODATKI_NIER_PODPISZ: 'podatki:nieruchomosci-podpisz',
   PODATKI_NIER_PODPISZ_WIELE: 'podatki:nieruchomosci-podpisz-wiele',
   PODATKI_NIER_PODPISZ_PRZERWIJ: 'podatki:nieruchomosci-podpisz-przerwij',
+  PODATKI_CIT_LISTA: 'podatki:cit-lista',
+  PODATKI_CIT_ADD: 'podatki:cit-add',
+  PODATKI_CIT_SET: 'podatki:cit-set',
+  PODATKI_CIT_DELETE: 'podatki:cit-delete',
+  PODATKI_CIT_PRZENIES: 'podatki:cit-przenies',
+  PODATKI_CIT_PDF: 'podatki:cit-pdf',
+  PODATKI_CIT_PDF_WSZYSTKIE: 'podatki:cit-pdf-wszystkie',
+  PODATKI_CIT_SET_ZLOZONE: 'podatki:cit-set-zlozone',
+  PODATKI_CIT_PODPISZ: 'podatki:cit-podpisz',
+  PODATKI_CIT_PODPISZ_WIELE: 'podatki:cit-podpisz-wiele',
+  PODATKI_CIT_PODPISZ_PRZERWIJ: 'podatki:cit-podpisz-przerwij',
+  PODATKI_CIT_USTAWIENIA_GET: 'podatki:cit-ustawienia-get',
+  PODATKI_CIT_USTAWIENIA_SET: 'podatki:cit-ustawienia-set',
+  PODATKI_CIT_KLASYFIKUJ_AI: 'podatki:cit-klasyfikuj-ai',
+  PODATKI_PIT_LISTA: 'podatki:pit-lista',
+  PODATKI_PIT_ADD: 'podatki:pit-add',
+  PODATKI_PIT_SET: 'podatki:pit-set',
+  PODATKI_PIT_DELETE: 'podatki:pit-delete',
+  PODATKI_PIT_PRZENIES: 'podatki:pit-przenies',
+  PODATKI_PIT_IMPORT_XML: 'podatki:pit-import-xml',
+  PODATKI_PIT_EXCEL_SZABLON: 'podatki:pit-excel-szablon',
+  PODATKI_PIT_EXCEL_WCZYTAJ: 'podatki:pit-excel-wczytaj',
+  PODATKI_PIT_PLIKI: 'podatki:pit-pliki',
+  PODATKI_PIT_SET_ZLOZONE: 'podatki:pit-set-zlozone',
+  PODATKI_PIT_PODPISZ_WIELE: 'podatki:pit-podpisz-wiele',
+  PODATKI_PIT_PODPISZ_PRZERWIJ: 'podatki:pit-podpisz-przerwij',
   PODPIS_KARTA_STAN: 'podpis:karta-stan',
   PODPIS_BIBLIOTEKA_WSKAZ: 'podpis:biblioteka-wskaz',
   PODPIS_BIBLIOTEKA_AUTO: 'podpis:biblioteka-auto',
+  PODPIS_PDF_WYBIERZ: 'podpis:pdf-wybierz',
+  PODPIS_PDF_ANALIZA: 'podpis:pdf-analiza',
+  PODPIS_PDF_PODPISZ: 'podpis:pdf-podpisz',
+  PODPIS_PDF_PRZERWIJ: 'podpis:pdf-przerwij',
+  PODPIS_HISTORIA_GET: 'podpis:historia-get',
+  PODPIS_HISTORIA_CLEAR: 'podpis:historia-clear',
   KALENDARZ_PDF_EXPORT: 'kalendarz:pdf-export',
   RECORD_ZEBRANIE_POBRANIE: 'zebrania:record-pobranie',
   MAILING_GET_HISTORY: 'mailing:get-history',
@@ -384,6 +419,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.SET_SKIP_USER_APPROVAL, enabled),
   setAlwaysUseAI: (enabled: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_ALWAYS_USE_AI, enabled),
+  setAiModel: (model: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_AI_MODEL, model),
   setContractorSortOrder: (sortOrder: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_CONTRACTOR_SORT_ORDER, sortOrder),
   setSidebarCollapsed: (collapsed: boolean) =>
@@ -435,10 +472,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   backupOpenFolder: () => ipcRenderer.invoke(IPC_CHANNELS.BACKUP_OPEN_FOLDER),
 
   // Zaliczki
-  zaliczkiGetModels: () => ipcRenderer.invoke(IPC_CHANNELS.ZALICZKI_GET_MODELS),
   zaliczkiSelectPdfs: () => ipcRenderer.invoke(IPC_CHANNELS.ZALICZKI_SELECT_PDFS),
-  zaliczkiExtractPdf: (filePath: string, model: string, force?: boolean) =>
-    ipcRenderer.invoke(IPC_CHANNELS.ZALICZKI_EXTRACT_PDF, filePath, model, force),
+  zaliczkiExtractPdf: (filePath: string, force?: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZALICZKI_EXTRACT_PDF, filePath, force),
   zaliczkiGenerateXlsx: (files: unknown[], year: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.ZALICZKI_GENERATE_XLSX, files, year),
   zaliczkiCacheStats: () => ipcRenderer.invoke(IPC_CHANNELS.ZALICZKI_CACHE_STATS),
@@ -496,6 +532,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getZgnPelnomocnicy: () => ipcRenderer.invoke(IPC_CHANNELS.GET_ZGN_PELNOMOCNICY),
   setAdresZarzad: (id: number, zarzad: unknown[]) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_ADRES_ZARZAD, id, zarzad),
+  setAdresIdentyfikacja: (id: number, identyfikacja: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_ADRES_IDENTYFIKACJA, id, identyfikacja),
+  zasilAdresyZDn1: () => ipcRenderer.invoke(IPC_CHANNELS.ADRESY_ZASIL_Z_DN1),
   addZgnPelnomocnik: (jednostkaId: number, imieNazwisko: string, email: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.ADD_ZGN_PELNOMOCNIK, jednostkaId, imieNazwisko, email),
   updateZgnPelnomocnik: (id: number, imieNazwisko: string, email: string) =>
@@ -561,12 +600,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateZebranie: (id: number, input: unknown) =>
     ipcRenderer.invoke(IPC_CHANNELS.UPDATE_ZEBRANIE, id, input),
   deleteZebranie: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ZEBRANIE, id),
+  deleteZebranieWersja: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ZEBRANIE_WERSJA, id),
   addZebranieWersja: (zebranieId: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.ADD_ZEBRANIE_WERSJA, zebranieId),
   updateZebranieWersja: (id: number, input: unknown) =>
     ipcRenderer.invoke(IPC_CHANNELS.UPDATE_ZEBRANIE_WERSJA, id, input),
-  setZebranieWersjaStatus: (id: number, status: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SET_ZEBRANIE_WERSJA_STATUS, id, status),
+  setZebranieDokumentGotowe: (id: number, dokument: string, gotowe: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_ZEBRANIE_DOKUMENT_GOTOWE, id, dokument, gotowe),
   setZebranieWersjaNazwa: (id: number, nazwa: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_ZEBRANIE_WERSJA_NAZWA, id, nazwa),
   importSprawozdania: () => ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_SPRAWOZDANIA_IMPORT),
@@ -624,10 +664,76 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.off('podatki:podpis-postep', listener);
   },
 
+  // Podatki — CIT-8
+  getPodatkiCit: () => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_LISTA),
+  addPodatekCit: (adresNazwa: string, rok: number, dane: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_ADD, adresNazwa, rok, dane),
+  setPodatekCit: (id: number, dane: unknown) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_SET, id, dane),
+  deletePodatekCit: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_DELETE, id),
+  przeniesCitNaRok: (zRoku: number, naRok: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_PRZENIES, zRoku, naRok),
+  exportPodatekCitPdf: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_PDF, id),
+  exportPodatkiCitPdfWszystkie: (rok: number, ids?: number[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_PDF_WSZYSTKIE, rok, ids),
+  setPodatkiCitZlozone: (ids: number[], filed: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_SET_ZLOZONE, ids, filed),
+  podpiszPodatekCitPdf: (id: number, wybor: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_PODPISZ, id, wybor),
+  podpiszPodatkiCitPdf: (rok: number, ids: number[], wybor: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_PODPISZ_WIELE, rok, ids, wybor),
+  przerwijPodpisCit: () => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_PODPISZ_PRZERWIJ),
+  onPodatkiCitPodpisPostep: (callback: (postep: any) => void) => {
+    const listener = (_event: unknown, postep: any) => callback(postep);
+    ipcRenderer.on('podatki:cit-podpis-postep', listener);
+    return () => ipcRenderer.off('podatki:cit-podpis-postep', listener);
+  },
+  getPodatkiCitUstawienia: () => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_USTAWIENIA_GET),
+  setPodatkiCitUstawienia: (ustawienia: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_USTAWIENIA_SET, ustawienia),
+  klasyfikujCitAi: (pozycje: unknown) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_KLASYFIKUJ_AI, pozycje),
+
+  // Podatki — PIT (PIT-11, PIT-4R)
+  getPodatkiPit: () => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_PIT_LISTA),
+  addPodatekPit: (nip: string, rok: number, dane: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_PIT_ADD, nip, rok, dane),
+  setPodatekPit: (id: number, nip: string, dane: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_PIT_SET, id, nip, dane),
+  deletePodatekPit: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_PIT_DELETE, id),
+  przeniesPitNaRok: (zRoku: number, naRok: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_PIT_PRZENIES, zRoku, naRok),
+  importPitXml: (rok: number) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_PIT_IMPORT_XML, rok),
+  pitExcelSzablon: (rok: number) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_PIT_EXCEL_SZABLON, rok),
+  pitExcelWczytaj: (rok: number) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_PIT_EXCEL_WCZYTAJ, rok),
+  pitPliki: (rok: number, ids: string[], tryb: 'xml' | 'pdf' | 'oba') =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_PIT_PLIKI, rok, ids, tryb),
+  setPitZlozone: (ids: string[], zlozone: boolean, numerRef: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_PIT_SET_ZLOZONE, ids, zlozone, numerRef),
+  podpiszPit: (rok: number, ids: string[], wybor: unknown, opcje: { pdfPodpisany: boolean }) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_PIT_PODPISZ_WIELE, rok, ids, wybor, opcje),
+  przerwijPodpisPit: () => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_PIT_PODPISZ_PRZERWIJ),
+  onPodatkiPitPostep: (callback: (postep: any) => void) => {
+    const listener = (_event: unknown, postep: any) => callback(postep);
+    ipcRenderer.on('podatki:pit-podpis-postep', listener);
+    return () => ipcRenderer.off('podatki:pit-podpis-postep', listener);
+  },
+
   // Podpis kwalifikowany (karta Szafir)
   getPodpisKarta: () => ipcRenderer.invoke(IPC_CHANNELS.PODPIS_KARTA_STAN),
   wskazPodpisBiblioteke: () => ipcRenderer.invoke(IPC_CHANNELS.PODPIS_BIBLIOTEKA_WSKAZ),
   resetPodpisBiblioteke: () => ipcRenderer.invoke(IPC_CHANNELS.PODPIS_BIBLIOTEKA_AUTO),
+  // Podpis kwalifikowany — any PDF
+  podpisWybierzPdf: () => ipcRenderer.invoke(IPC_CHANNELS.PODPIS_PDF_WYBIERZ),
+  podpisAnalizujPdf: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.PODPIS_PDF_ANALIZA, filePath),
+  podpisPodpiszPdf: (filePaths: string[], wybor: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODPIS_PDF_PODPISZ, filePaths, wybor),
+  podpisPrzerwijPdf: () => ipcRenderer.invoke(IPC_CHANNELS.PODPIS_PDF_PRZERWIJ),
+  onPodpisPdfPostep: (callback: (postep: any) => void) => {
+    const listener = (_event: unknown, postep: any) => callback(postep);
+    ipcRenderer.on('podpis:pdf-postep', listener);
+    return () => ipcRenderer.off('podpis:pdf-postep', listener);
+  },
+  podpisGetHistoria: () => ipcRenderer.invoke(IPC_CHANNELS.PODPIS_HISTORIA_GET),
+  podpisClearHistoria: () => ipcRenderer.invoke(IPC_CHANNELS.PODPIS_HISTORIA_CLEAR),
   recordZebraniePobranie: (wersjaId: number, materialId: string, pliki: string[]) =>
     ipcRenderer.invoke(IPC_CHANNELS.RECORD_ZEBRANIE_POBRANIE, wersjaId, materialId, pliki),
   onMailingProgress: (callback: (progress: any) => void) => {

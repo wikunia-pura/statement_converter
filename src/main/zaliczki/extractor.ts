@@ -21,16 +21,11 @@ import Anthropic from '@anthropic-ai/sdk';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import logger from '../../shared/logger';
+import { DEFAULT_AI_MODEL, maxTokensFor, modelRequestFields } from '../../shared/ai-models';
 import { parseExtractionResponse } from './jsonExtract';
 import { PROMPT_VERSION, readCachedPage, writeCachedPage } from './extractionCache';
 import { splitPdfPages } from './pdfSplitter';
 import { hasHardError, validateProperties, ZaliczkiWarning } from './validator';
-
-export const ZALICZKI_MODELS = [
-  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
-] as const;
-
-export const DEFAULT_ZALICZKI_MODEL = 'claude-sonnet-4-6';
 
 /**
  * Model used to re-ask a page whose numbers contradict the totals printed on it.
@@ -43,7 +38,8 @@ const ESCALATION_MODEL = 'claude-opus-5';
 /**
  * One page's answer is ~250 tokens, so this is generous headroom for a page that
  * carries many per-lokal lines. Stays well under the limit where a non-streaming
- * request risks an HTTP timeout.
+ * request risks an HTTP timeout. A model that thinks by default gets more on top
+ * (`maxTokensFor`).
  */
 const PAGE_MAX_TOKENS = 8000;
 
@@ -369,7 +365,8 @@ async function askModel(
     () =>
       client.messages.create({
         model,
-        max_tokens: maxTokens,
+        max_tokens: maxTokensFor(model, maxTokens),
+        ...modelRequestFields(model),
         messages: [
           {
             role: 'user',
@@ -603,7 +600,7 @@ async function extractPage(
 export async function extractZaliczkiFromPdf(
   pdfPath: string,
   apiKey: string,
-  model: string = DEFAULT_ZALICZKI_MODEL,
+  model: string = DEFAULT_AI_MODEL,
   options: ExtractOptions = {},
 ): Promise<ExtractionResult> {
   const { force = false, cacheOnly = false, onProgress } = options;

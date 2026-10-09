@@ -258,6 +258,24 @@ export function hasDokumentyOut(spotkanie: Spotkanie, ctx: SpotkaniaDocsContext)
 }
 
 /**
+ * The day a meeting's documents are due by, as its kind's notice period says —
+ * what the meeting form offers before anyone sets a day of their own. Null when
+ * the kind has no notice period or the start is not a date.
+ */
+export function defaultTerminWysylki(
+  startsAt: string | null,
+  typ: SpotkanieTyp | null | undefined,
+): string | null {
+  const days = typ?.dniNaDokumenty ?? null;
+  if (!startsAt || days === null || days <= 0) return null;
+  const start = new Date(startsAt);
+  if (Number.isNaN(start.getTime())) return null;
+  const due = new Date(start.getFullYear(), start.getMonth(), start.getDate() - days);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${due.getFullYear()}-${pad(due.getMonth() + 1)}-${pad(due.getDate())}`;
+}
+
+/**
  * The moment this meeting's documents were due, or null when its kind has no
  * notice period — which is what switches the whole deadline idea off for it.
  */
@@ -265,6 +283,12 @@ export function dokumentyDeadline(
   spotkanie: Spotkanie,
   typy: SpotkanieTyp[],
 ): Date | null {
+  // A day set on the meeting itself wins: due by the end of that day.
+  if (spotkanie.terminWysylki) {
+    const [y, m, d] = spotkanie.terminWysylki.split('-').map(Number);
+    const end = new Date(y, m - 1, d, 23, 59, 59, 999);
+    return Number.isNaN(end.getTime()) ? null : end;
+  }
   const typ = typOf(spotkanie, typy);
   const days = typ?.dniNaDokumenty ?? null;
   if (days === null || days <= 0) return null;

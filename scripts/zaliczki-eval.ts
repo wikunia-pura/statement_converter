@@ -18,7 +18,7 @@
  *
  *   npx tsx scripts/zaliczki-eval.ts test-data/zaliczkisuewiec          # cached only
  *   npx tsx scripts/zaliczki-eval.ts test-data/zaliczkisuewiec --live   # allow API calls
- *   npx tsx scripts/zaliczki-eval.ts <dir> --live --model claude-haiku-4-5
+ *   npx tsx scripts/zaliczki-eval.ts <dir> --live --model claude-sonnet-4-6
  *   npx tsx scripts/zaliczki-eval.ts <dir> --expected fixtures/sluzewiec.json
  *   npx tsx scripts/zaliczki-eval.ts <dir> --json > report.json
  *
@@ -30,8 +30,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
+import { DEFAULT_AI_MODEL } from '../src/shared/ai-models';
 import {
-  DEFAULT_ZALICZKI_MODEL,
   ExtractionResult,
   extractZaliczkiFromPdf,
   ZALICZKI_CATEGORIES,
@@ -60,7 +60,7 @@ function parseArgs(argv: string[]): Args {
   return {
     dir: positional[0],
     live: flag('live'),
-    model: value('model') ?? DEFAULT_ZALICZKI_MODEL,
+    model: value('model') ?? DEFAULT_AI_MODEL,
     expected: value('expected'),
     json: flag('json'),
   };

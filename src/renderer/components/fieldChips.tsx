@@ -861,6 +861,11 @@ export const FieldInsertPicker: React.FC<FieldInsertPickerProps> = ({
         size="sm"
         title={labels.insertField}
         ariaLabel={labels.insertField}
+        // On document.body: an in-place menu hangs below the editor, grows the
+        // scrolling modal body and makes a scrollbar appear — the whole letter
+        // then shifts sideways every time the list opens.
+        overlay
+        menuMaxWidth={380}
         style={{ width: compact ? '210px' : '100%', maxWidth: '260px' }}
       />
     </div>

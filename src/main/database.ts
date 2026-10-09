@@ -13,6 +13,8 @@ import {
   KontoTyp,
   BackupData,
   OdczytyHistoryEntry,
+  PodpisHistoriaEntry,
+  PodpisHistoriaPlik,
   ZgnJednostka,
   ZgnPelnomocnik,
   ZarzadOsoba,
@@ -57,9 +59,14 @@ import {
   MailingTypDef,
   MAILING_TYP_ZAWIADOMIENIE,
   MAILING_TYP_ZAWIADOMIENIE_NAZWA,
+  MAILING_TYP_UCHWALA,
+  MAILING_TYP_UCHWALA_NAZWA,
   Zebranie,
   ZebranieInput,
   ZebranieStatus,
+  ZEBRANIE_DOKUMENTY,
+  ZebranieDokumentKlucz,
+  ZebranieGotowe,
   ZebranieWersja,
   ZebranieWersjaInput,
   ZEBRANIE_STATUSES,
@@ -70,6 +77,10 @@ import {
   PodatekPobranie,
   PodatkiStawki,
   PodatkiStawkiDane,
+  AdresyZasilenieResult,
+  PodatekCit,
+  PodatekCitDane,
+  PodatkiCitUstawienia,
   PodpisSlad,
   Sprawozdanie,
   SprawozdanieWstepTekst,
@@ -82,6 +93,16 @@ import {
 } from '../shared/types';
 import { normalizePlan, normalizePobrania, normalizeUstawienia } from '../shared/plan-gospodarczy';
 import { daneNaKolejnyRok, normalizeDane, normalizeStawki, tylkoCyfry } from '../shared/podatki';
+import { daneCitNaKolejnyRok, normalizeCitUstawienia, normalizeDaneCit } from '../shared/podatki-cit';
+import { normalizeIdentyfikacja, zasilZDn1 } from '../shared/adres-identyfikacja';
+import {
+  PitDane,
+  PitOsoba,
+  PitZlozone,
+  PodatekPit,
+  daneNaKolejnyRok as daneNaKolejnyRokPit,
+  normalizeDanePit,
+} from '../shared/podatki-pit';
 import {
   normalizeSprawozdanieDane,
   normalizeWstepTekst,
@@ -89,11 +110,14 @@ import {
 } from '../shared/sprawozdanie';
 import {
   copyMaterialyForRevision,
+  gotoweForStatus,
   latestWersja,
   materialyTargetForWersja,
   nextWersjaNumber,
+  normalizeGotowe,
   normalizeMaterialy,
   sortWersje,
+  wersjaStatusFromGotowe,
   ZEBRANIE_WERSJA_NAZWA_MAX,
   zebranieStatusFromMaterialy,
 } from '../shared/zebrania';
@@ -105,6 +129,7 @@ import { NOTIFICATION_DEFS } from '../shared/notifications';
 import type { NotificationId, NotificationPrefs } from '../shared/notifications';
 import { normalizeAccount } from '../shared/account-extractor';
 import { buildApartmentMapping, mappingTargets } from '../shared/apartment-mapping';
+import { DEFAULT_AI_MODEL, resolveAiModel } from '../shared/ai-models';
 
 // Settings remain machine-local: dark mode, folder paths, language, etc. are
 // per-user-machine UI prefs that shouldn't sync across installs.
@@ -118,6 +143,8 @@ interface SettingsStoreSchema {
     language: 'pl' | 'en';
     aiConfidenceThreshold: number;
     alwaysUseAI: boolean;
+    /** Claude model for every AI call; see `getAiModel`. */
+    aiModel: string;
     skipUserApproval: boolean;
     contractorSortOrder: 'name-asc' | 'name-desc' | 'account-asc' | 'account-desc';
     sidebarCollapsed: boolean;
@@ -154,7 +181,7 @@ function normalizeTypy(row: { typy?: unknown; typ?: unknown }): KontrahentTyp[] 
   return [((row.typ as KontrahentTyp) || 'Kontrahent')];
 }
 const ADRES_COLS =
-  'id, nazwa, alternativeNames:alternative_names, swrkIdentifiers:swrk_identifiers, accountNumbers:account_numbers, accountTypes:account_types, bankId:bank_id, apartmentMappings:apartment_mappings, zgnJednostkaId:zgn_jednostka_id, zarzad, createdAt:created_at';
+  'id, nazwa, alternativeNames:alternative_names, swrkIdentifiers:swrk_identifiers, accountNumbers:account_numbers, accountTypes:account_types, bankId:bank_id, apartmentMappings:apartment_mappings, zgnJednostkaId:zgn_jednostka_id, zarzad, identyfikacja, createdAt:created_at';
 const ZGN_COLS = 'id, nazwa, email, createdAt:created_at';
 const ZGN_PELNOMOCNIK_COLS =
   'id, jednostkaId:jednostka_id, imieNazwisko:imie_nazwisko, email, createdAt:created_at';
@@ -171,7 +198,7 @@ const ZEBRANIE_COLS =
   'lokalizacjaAdres:lokalizacja_adres, startsAt:starts_at, ' +
   'createdBy:created_by, createdAt:created_at, updatedAt:updated_at';
 const ZEBRANIE_WERSJA_COLS =
-  'id, zebranieId:zebranie_id, major, minor, nazwa, status, opis, materialy, sprawozdanie, plan, ' +
+  'id, zebranieId:zebranie_id, major, minor, nazwa, status, opis, materialy, gotowe, sprawozdanie, plan, ' +
   'createdBy:created_by, createdAt:created_at, updatedAt:updated_at, updatedBy:updated_by';
 const SPRAWOZDANIE_LISTA_COLS =
   'id, nr_wsp, nazwa, okres_od, okres_do, plik_nazwa, imported_at, imported_by, zrodlo';
@@ -189,6 +216,7 @@ const SPOTKANIE_COLS =
   'id, nazwa, typId:typ_id, adresId:adres_id, adresNazwa:adres_nazwa, ' +
   'lokalizacjaId:lokalizacja_id, lokalizacjaNazwa:lokalizacja_nazwa, ' +
   'startsAt:starts_at, endsAt:ends_at, opis, uczestnicy, terminStatus:termin_status, ' +
+  'terminWysylki:termin_wysylki, ' +
   'terminZmienionyAt:termin_zmieniony_at, terminZmienionyZ:termin_zmieniony_z, ' +
   'terminZmienionyBy:termin_zmieniony_by, ' +
   'terminZmianaOdczytanaAt:termin_zmiana_odczytana_at, ' +
@@ -224,6 +252,8 @@ const ZADANIE_COLS =
 const ZADANIE_KOMENTARZ_COLS =
   'id, zadanieId:zadanie_id, autorEmail:autor_email, tresc, mentions, createdAt:created_at';
 const ZADANIE_NOTATKA_COLS = 'id, tresc, autorEmail:autor_email, createdAt:created_at';
+const PODPIS_HISTORIA_COLS =
+  'id, signedAt:signed_at, signedBy:signed_by, podmiot, wystawca, numerSeryjny:numer_seryjny, pliki, podpisanych, przerwano';
 const ODCZYTY_HISTORY_COLS =
   'id, supplier, status, errorMessage:error_message, outputDir:output_dir, sources:source_files, outputs:output_files, readingCount:reading_count, skippedCount:skipped_count, convertedAt:converted_at';
 
@@ -321,6 +351,7 @@ class DatabaseService {
           language: 'pl',
           aiConfidenceThreshold: 95,
           alwaysUseAI: true,
+          aiModel: DEFAULT_AI_MODEL,
           skipUserApproval: false,
           contractorSortOrder: 'name-asc',
           sidebarCollapsed: true,
@@ -563,6 +594,7 @@ class DatabaseService {
       apartmentMappings: a.apartmentMappings ?? [],
       zgnJednostkaId: a.zgnJednostkaId ?? null,
       zarzad: DatabaseService.zarzadList(a.zarzad),
+      identyfikacja: normalizeIdentyfikacja(a.identyfikacja),
     })) as Adres[];
     this.cache.adresy = this.cacheSet(data);
     return data;
@@ -719,6 +751,30 @@ class DatabaseService {
       .eq('id', id);
     if (error) throw new Error(`setAdresZarzad: ${error.message}`);
     this.invalidateCache('adresy');
+  }
+
+  /** Replace a community's tax identification (NIP, full name, seat…) — the whole record, as the form holds it. */
+  async setAdresIdentyfikacja(id: number, identyfikacja: unknown): Promise<void> {
+    const { error } = await getSupabase()
+      .from('adresy')
+      .update({ identyfikacja: normalizeIdentyfikacja(identyfikacja) })
+      .eq('id', id);
+    if (error) throw new Error(`setAdresIdentyfikacja: ${error.message}`);
+    this.invalidateCache('adresy');
+  }
+
+  /**
+   * One-time fill of the tax identification from the DN-1 declarations: only
+   * empty fields, only for communities the DN-1 names match. Afterwards the
+   * data is kept by hand in Adresy.
+   */
+  async zasilAdresyZDn1(): Promise<AdresyZasilenieResult> {
+    const [adresy, dn1] = await Promise.all([this.getAllAdresy(), this.getPodatkiNieruchomosci()]);
+    const { patche, wynik } = zasilZDn1(adresy, dn1);
+    for (const slice of DatabaseService.chunk(patche, 10)) {
+      await Promise.all(slice.map((p) => this.setAdresIdentyfikacja(p.adresId, p.identyfikacja)));
+    }
+    return wynik;
   }
 
   async updateAdres(
@@ -1180,6 +1236,51 @@ class DatabaseService {
     return { added: fresh.length, skipped: rows.length - fresh.length };
   }
 
+  // ------------------- Podpis kwalifikowany — history -------------------
+
+  /** One run of the Podpis module: a single PIN, one certificate, the files it handled. */
+  async addPodpisHistoria(data: {
+    signedBy: string;
+    podpis: PodpisSlad | null;
+    pliki: PodpisHistoriaPlik[];
+    przerwano: string | null;
+  }): Promise<void> {
+    const { error } = await getSupabase().from('podpisy_historia').insert({
+      signed_by: data.signedBy,
+      podmiot: data.podpis?.podmiot ?? '',
+      wystawca: data.podpis?.wystawca ?? '',
+      numer_seryjny: data.podpis?.numerSeryjny ?? '',
+      pliki: data.pliki,
+      podpisanych: data.pliki.filter(p => p.status === 'podpisany').length,
+      przerwano: data.przerwano,
+    });
+    if (error) throw new Error(`addPodpisHistoria: ${error.message}`);
+  }
+
+  async getPodpisHistoria(): Promise<PodpisHistoriaEntry[]> {
+    const rows = await fetchAllPaged<any>('getPodpisHistoria', (from, to) =>
+      getSupabase()
+        .from('podpisy_historia')
+        .select(PODPIS_HISTORIA_COLS)
+        .order('signed_at', { ascending: false })
+        .range(from, to),
+    );
+    return rows.map(r => ({
+      id: r.id,
+      signedAt: r.signedAt,
+      signedBy: r.signedBy ?? '',
+      podpis: r.podmiot ? { podmiot: r.podmiot, wystawca: r.wystawca ?? '', numerSeryjny: r.numerSeryjny ?? '' } : null,
+      pliki: Array.isArray(r.pliki) ? r.pliki : [],
+      podpisanych: r.podpisanych ?? 0,
+      przerwano: r.przerwano ?? null,
+    }));
+  }
+
+  async clearPodpisHistoria(): Promise<void> {
+    const { error } = await getSupabase().from('podpisy_historia').delete().gt('id', 0);
+    if (error) throw new Error(`clearPodpisHistoria: ${error.message}`);
+  }
+
   // ------------------------ Mailing — jednostki ZGN ------------------------
 
   async getZgnJednostki(): Promise<ZgnJednostka[]> {
@@ -1318,9 +1419,38 @@ class DatabaseService {
   }
 
   /**
-   * Every kind, the built-in one first. The built-in row is created here when it
-   * is missing — the Kalendarz flow depends on it, and the SQL that seeds it may
-   * have been run before it existed — so the dictionary can never lack it.
+   * The built-in kinds, as they are created when missing: the Kalendarz and
+   * Zebrania flows look templates up by these keys, so they can never be absent
+   * (the SQL that seeds them may have been run before they existed).
+   */
+  private static readonly BUILTIN_MAILING_TYPY: {
+    klucz: string;
+    nazwa: string;
+    opis: string;
+    adresaci: MailingAdresaci;
+  }[] = [
+    {
+      klucz: MAILING_TYP_ZAWIADOMIENIE,
+      nazwa: MAILING_TYP_ZAWIADOMIENIE_NAZWA,
+      opis: 'Zawiadomienie o zebraniu wspólnoty — tworzone ze spotkania w Kalendarzu lub z modułu Zebrania.',
+      adresaci: { zgn: false, pelnomocnik: false, zarzad: true, wlasne: [] },
+    },
+    {
+      klucz: MAILING_TYP_UCHWALA,
+      nazwa: MAILING_TYP_UCHWALA_NAZWA,
+      opis: 'Uchwały wspólnoty — dodawane do zebrania w zakładce „Uchwały” modułu Zebrania.',
+      adresaci: { zgn: false, pelnomocnik: false, zarzad: false, wlasne: [] },
+    },
+  ];
+
+  /** The fixed name of a built-in kind (a trigger refuses any other); null for an ordinary kind. */
+  private static builtinMailingTypNazwa(klucz: string): string | null {
+    return DatabaseService.BUILTIN_MAILING_TYPY.find(t => t.klucz === klucz)?.nazwa ?? null;
+  }
+
+  /**
+   * Every kind, the built-in ones first. A built-in row that is missing is
+   * created here, so the dictionary can never lack it.
    */
   async getMailingTypy(): Promise<MailingTypDef[]> {
     const read = async () => {
@@ -1332,17 +1462,12 @@ class DatabaseService {
       return (data ?? []).map(DatabaseService.mailingTypRow);
     };
     let typy = await read();
-    if (!typy.some(t => t.klucz === MAILING_TYP_ZAWIADOMIENIE)) {
+    const missing = DatabaseService.BUILTIN_MAILING_TYPY.filter(b => !typy.some(t => t.klucz === b.klucz));
+    if (missing.length > 0) {
       const { error } = await getSupabase()
         .from('mailing_typy')
         .upsert(
-          {
-            klucz: MAILING_TYP_ZAWIADOMIENIE,
-            nazwa: MAILING_TYP_ZAWIADOMIENIE_NAZWA,
-            opis: 'Zawiadomienie o zebraniu wspólnoty — tworzone ze spotkania w Kalendarzu lub z modułu Zebrania.',
-            systemowy: true,
-            adresaci: { zgn: false, pelnomocnik: false, zarzad: true, wlasne: [] },
-          },
+          missing.map(b => ({ klucz: b.klucz, nazwa: b.nazwa, opis: b.opis, systemowy: true, adresaci: b.adresaci })),
           { onConflict: 'klucz', ignoreDuplicates: true },
         );
       if (error) throw new Error(`getMailingTypy (typ wbudowany): ${error.message}`);
@@ -2299,6 +2424,7 @@ class DatabaseService {
       // Rows written before the column existed carry no status; they meant a
       // real date, so that is what they keep meaning.
       terminStatus: (r.terminStatus ?? 'potwierdzony') as SpotkanieTerminStatus,
+      terminWysylki: DatabaseService.dayKeyOrNull(r.terminWysylki),
       terminZmienionyAt: r.terminZmienionyAt ?? null,
       terminZmienionyZ: r.terminZmienionyZ ?? null,
       terminZmienionyBy: r.terminZmienionyBy ?? null,
@@ -2346,6 +2472,7 @@ class DatabaseService {
       opis: input.opis,
       uczestnicy: input.uczestnicy,
       termin_status: input.terminStatus === 'wstepny' ? 'wstepny' : 'potwierdzony',
+      termin_wysylki: DatabaseService.dayKeyOrNull(input.terminWysylki),
       // A proxy always comes with its own unit; no unit means no proxy either.
       zgn_jednostka_id: input.zgnJednostkaId ?? null,
       zgn_pelnomocnik_id: input.zgnJednostkaId != null ? input.zgnPelnomocnikId ?? null : null,
@@ -2459,7 +2586,7 @@ class DatabaseService {
       const zebranie = await this.getZebranieBySpotkanie(id);
       const latest = zebranie ? latestWersja(zebranie) : null;
       if (latest && latest.status !== target) {
-        await this.writeZebranieWersjaStatus(latest.id, target, who);
+        await this.writeZebranieWersjaGotowe(latest.id, gotoweForStatus(target), who);
       }
     } catch (error: unknown) {
       log.error(
@@ -2579,6 +2706,13 @@ class DatabaseService {
 
   /* ----------------------------- Zebrania ----------------------------- */
 
+  /** A `YYYY-MM-DD` day, or null for anything else (absent, empty, malformed). */
+  private static dayKeyOrNull(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const day = value.slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : null;
+  }
+
   private static zebranieStatus(value: unknown): ZebranieStatus {
     return ZEBRANIE_STATUSES.includes(value as ZebranieStatus)
       ? (value as ZebranieStatus)
@@ -2595,6 +2729,7 @@ class DatabaseService {
       status: DatabaseService.zebranieStatus(r.status),
       opis: r.opis ?? '',
       materialy: normalizeMaterialy(r.materialy),
+      gotowe: normalizeGotowe(r.gotowe),
       createdBy: r.createdBy ?? '',
       createdAt: r.createdAt,
       updatedAt: r.updatedAt ?? r.createdAt,
@@ -2837,6 +2972,35 @@ class DatabaseService {
     if (error) throw new Error(`deleteZebranie: ${error.message}`);
   }
 
+  /**
+   * Delete one version. The only version is refused — an entry without one has
+   * nothing to show; delete the whole entry instead. When the newest version
+   * goes, the one before becomes current and a linked meeting follows its status.
+   */
+  async deleteZebranieWersja(id: number, who: string): Promise<void> {
+    const { data, error } = await getSupabase()
+      .from('zebrania_wersje')
+      .select('zebranie_id')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw new Error(`deleteZebranieWersja (odczyt): ${error.message}`);
+    if (!data) return;
+    const zebranieId = (data as { zebranie_id: number }).zebranie_id;
+    const before = await this.getZebranie(zebranieId);
+    if (!before) return;
+    if (before.wersje.length <= 1) {
+      throw new Error('To jedyna wersja tego zebrania — usuń całe zebranie zamiast niej.');
+    }
+    const { error: delError } = await getSupabase().from('zebrania_wersje').delete().eq('id', id);
+    if (delError) throw new Error(`deleteZebranieWersja: ${delError.message}`);
+    await this.touchZebranie(zebranieId);
+    if (latestWersja(before)?.id === id) {
+      const after = await this.getZebranie(zebranieId);
+      const newest = after ? latestWersja(after) : null;
+      if (after && newest) await this.syncSpotkanieFromWersja(after.spotkanieId, newest.status, who);
+    }
+  }
+
   private async touchZebranie(zebranieId: number): Promise<void> {
     const { error } = await getSupabase()
       .from('zebrania')
@@ -2863,6 +3027,8 @@ class DatabaseService {
           major,
           minor,
           status: 'w_przygotowaniu',
+          // A revision is corrections still to make — every document starts not ready.
+          gotowe: {},
           opis: '',
           materialy: copyMaterialyForRevision(from?.materialy ?? []),
           // The statement and the plan come along too; their downloads were of
@@ -2923,12 +3089,16 @@ class DatabaseService {
     await this.touchZebranie((data as { zebranie_id: number }).zebranie_id);
   }
 
-  private async writeZebranieWersjaStatus(id: number, status: ZebranieStatus, who: string): Promise<void> {
+  /** The documents' ready marks and the status they add up to — always written together. */
+  private async writeZebranieWersjaGotowe(id: number, gotowe: ZebranieGotowe, who: string): Promise<ZebranieStatus> {
+    const clean = normalizeGotowe(gotowe);
+    const status = wersjaStatusFromGotowe(clean);
     const { error } = await getSupabase()
       .from('zebrania_wersje')
-      .update({ status, updated_at: new Date().toISOString(), updated_by: who })
+      .update({ gotowe: clean, status, updated_at: new Date().toISOString(), updated_by: who })
       .eq('id', id);
-    if (error) throw new Error(`setZebranieWersjaStatus: ${error.message}`);
+    if (error) throw new Error(`setZebranieDokumentGotowe: ${error.message}`);
+    return status;
   }
 
   /** Move a linked meeting's materials to what its newest version now says. */
@@ -2951,19 +3121,26 @@ class DatabaseService {
   }
 
   /**
-   * Mark a version "W przygotowaniu" / "Przygotowane". When it is the newest
-   * version of a linked entry, the meeting's materials status follows.
+   * Mark one document of a version ready (or not). The version's status follows
+   * — prepared only when every document is — and when it is the newest version
+   * of a linked entry, the meeting's materials status follows that.
    */
-  async setZebranieWersjaStatus(id: number, status: ZebranieStatus, who: string): Promise<void> {
-    if (!ZEBRANIE_STATUSES.includes(status)) throw new Error(`Nieznany status zebrania: ${status}`);
+  async setZebranieDokumentGotowe(
+    id: number,
+    dokument: ZebranieDokumentKlucz,
+    gotowe: boolean,
+    who: string,
+  ): Promise<void> {
+    if (!ZEBRANIE_DOKUMENTY.includes(dokument)) throw new Error(`Nieznany dokument zebrania: ${dokument}`);
     const { data, error } = await getSupabase()
       .from('zebrania_wersje')
-      .select('zebranie_id')
+      .select('zebranie_id, gotowe')
       .eq('id', id)
       .maybeSingle();
-    if (error) throw new Error(`setZebranieWersjaStatus (odczyt): ${error.message}`);
+    if (error) throw new Error(`setZebranieDokumentGotowe (odczyt): ${error.message}`);
     if (!data) throw new Error('Wersja nie istnieje — mogła zostać usunięta.');
-    await this.writeZebranieWersjaStatus(id, status, who);
+    const next = { ...normalizeGotowe((data as any).gotowe), [dokument]: gotowe };
+    const status = await this.writeZebranieWersjaGotowe(id, next, who);
     const zebranie = await this.getZebranie((data as { zebranie_id: number }).zebranie_id);
     if (!zebranie) return;
     await this.touchZebranie(zebranie.id);
@@ -3607,6 +3784,388 @@ class DatabaseService {
     return DatabaseService.stawkiRow(data);
   }
 
+  /* ------------------------------- Podatki — PIT ------------------------------- */
+
+  private static pitRow(r: any): PodatekPit {
+    return {
+      id: r.id,
+      nip: r.nip ?? '',
+      rok: r.rok,
+      dane: normalizeDanePit(r.dane),
+      createdAt: r.created_at ?? '',
+      createdBy: r.created_by ?? '',
+      updatedAt: r.updated_at ?? '',
+      updatedBy: r.updated_by ?? '',
+    };
+  }
+
+  /** A second PIT of one community and year — the unique key says no. */
+  private static pitError(op: string, error: { code?: string; message: string }): Error {
+    return error.code === '23505'
+      ? new Error('Ta wspólnota (ten NIP) ma już PIT na ten rok — otwórz go zamiast dodawać drugi.')
+      : new Error(`${op}: ${error.message}`);
+  }
+
+  /** Every year's PIT rows — newest year first, then in the order they were added. */
+  async getPodatkiPit(): Promise<PodatekPit[]> {
+    const rows = await fetchAllPaged<any>('getPodatkiPit', (from, to) =>
+      getSupabase()
+        .from('podatki_pit')
+        .select('*')
+        .order('rok', { ascending: false })
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
+    return rows.map(DatabaseService.pitRow);
+  }
+
+  async getPodatekPit(id: number): Promise<PodatekPit | null> {
+    const { data, error } = await getSupabase().from('podatki_pit').select('*').eq('id', id).maybeSingle();
+    if (error) throw new Error(`getPodatekPit: ${error.message}`);
+    return data ? DatabaseService.pitRow(data) : null;
+  }
+
+  /** What a save from the screen must not overwrite: what was filed and downloaded, kept per person. */
+  private static pitZachowaj(nowe: PitDane, zapisane: PitDane): PitDane {
+    const stare = new Map(zapisane.osoby.map(o => [o.klucz, o]));
+    const osoby = nowe.osoby.map((o): PitOsoba => {
+      const poprzednia = stare.get(o.klucz);
+      return poprzednia ? { ...o, zlozone: poprzednia.zlozone, pobrania: poprzednia.pobrania } : { ...o, zlozone: null, pobrania: [] };
+    });
+    const pit4r =
+      nowe.pit4r && zapisane.pit4r
+        ? { ...nowe.pit4r, zlozone: zapisane.pit4r.zlozone, pobrania: zapisane.pit4r.pobrania }
+        : nowe.pit4r
+          ? { ...nowe.pit4r, zlozone: null, pobrania: [] }
+          : null;
+    return { ...nowe, osoby, pit4r };
+  }
+
+  async addPodatekPit(nip: string, rok: number, value: PitDane, who: string): Promise<PodatekPit> {
+    const now = new Date().toISOString();
+    const { data, error } = await getSupabase()
+      .from('podatki_pit')
+      .insert({
+        nip: tylkoCyfry(nip),
+        rok,
+        dane: DatabaseService.pitZachowaj(normalizeDanePit(value), normalizeDanePit(null)),
+        created_at: now,
+        created_by: who,
+        updated_at: now,
+        updated_by: who,
+      })
+      .select('*')
+      .single();
+    if (error) throw DatabaseService.pitError('addPodatekPit', error);
+    return DatabaseService.pitRow(data);
+  }
+
+  /** Save an edited community; the filed marks and the download records are kept from the stored row. */
+  async setPodatekPit(id: number, nip: string, value: PitDane, who: string): Promise<PodatekPit> {
+    const stored = await this.getPodatekPit(id);
+    if (!stored) throw new Error('Tego PIT-u już nie ma — mógł zostać usunięty.');
+    const { data, error } = await getSupabase()
+      .from('podatki_pit')
+      .update({
+        nip: tylkoCyfry(nip),
+        dane: DatabaseService.pitZachowaj(normalizeDanePit(value), stored.dane),
+        updated_at: new Date().toISOString(),
+        updated_by: who,
+      })
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (error) throw DatabaseService.pitError('setPodatekPit', error);
+    return DatabaseService.pitRow(data);
+  }
+
+  /** Store data the app itself worked out (Excel read back) — as given, nothing kept from the stored row. */
+  async zapiszDanePit(id: number, dane: PitDane, who: string): Promise<PodatekPit> {
+    const { data, error } = await getSupabase()
+      .from('podatki_pit')
+      .update({ dane: normalizeDanePit(dane), updated_at: new Date().toISOString(), updated_by: who })
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (error) throw DatabaseService.pitError('zapiszDanePit', error);
+    return DatabaseService.pitRow(data);
+  }
+
+  async deletePodatekPit(id: number): Promise<void> {
+    const { error } = await getSupabase().from('podatki_pit').delete().eq('id', id);
+    if (error) throw new Error(`deletePodatekPit: ${error.message}`);
+  }
+
+  /**
+   * Note the files made of documents of one row: the entries go on the person's list (`klucz`) or on the
+   * PIT-4R's (`klucz` null).
+   */
+  async recordPitPliki(
+    id: number,
+    wpisy: { klucz: string | null; entry: PodatekPobranie }[],
+  ): Promise<void> {
+    const stored = await this.getPodatekPit(id);
+    if (!stored || wpisy.length === 0) return;
+    const dane: PitDane = {
+      ...stored.dane,
+      osoby: stored.dane.osoby.map(o => {
+        const moje = wpisy.filter(w => w.klucz === o.klucz).map(w => w.entry);
+        return moje.length > 0 ? { ...o, pobrania: [...o.pobrania, ...moje] } : o;
+      }),
+      pit4r: stored.dane.pit4r
+        ? {
+            ...stored.dane.pit4r,
+            pobrania: [...stored.dane.pit4r.pobrania, ...wpisy.filter(w => w.klucz === null).map(w => w.entry)],
+          }
+        : null,
+    };
+    const { error } = await getSupabase().from('podatki_pit').update({ dane }).eq('id', id);
+    if (error) throw new Error(`recordPitPliki: ${error.message}`);
+  }
+
+  /**
+   * Mark documents as filed with the tax office (`zlozone` set) or take the mark off (null). Documents are
+   * (row, person key | null for the PIT-4R). Returns the rows as they now are.
+   */
+  async setPitZlozone(
+    dokumenty: { wierszId: number; klucz: string | null }[],
+    zlozone: PitZlozone | null,
+  ): Promise<PodatekPit[]> {
+    const ids = [...new Set(dokumenty.map(d => d.wierszId))];
+    if (ids.length === 0) return [];
+    const { data, error } = await getSupabase().from('podatki_pit').select('*').in('id', ids);
+    if (error) throw new Error(`setPitZlozone: ${error.message}`);
+    const out: PodatekPit[] = [];
+    for (const slice of DatabaseService.chunk((data ?? []).map(DatabaseService.pitRow), 10)) {
+      out.push(
+        ...(await Promise.all(
+          slice.map(async rek => {
+            const moje = dokumenty.filter(d => d.wierszId === rek.id);
+            const dane: PitDane = {
+              ...rek.dane,
+              osoby: rek.dane.osoby.map(o =>
+                moje.some(d => d.klucz === o.klucz) ? { ...o, zlozone } : o,
+              ),
+              pit4r:
+                rek.dane.pit4r && moje.some(d => d.klucz === null)
+                  ? { ...rek.dane.pit4r, zlozone }
+                  : rek.dane.pit4r,
+            };
+            const { error: updateError } = await getSupabase().from('podatki_pit').update({ dane }).eq('id', rek.id);
+            if (updateError) throw new Error(`setPitZlozone: ${updateError.message}`);
+            return { ...rek, dane };
+          }),
+        )),
+      );
+    }
+    return out;
+  }
+
+  /**
+   * Add communities a year does not have yet (import). A community (NIP) the year already holds is left
+   * as it is — never overwritten. Returns how many were added and how many skipped.
+   */
+  async addPodatkiPitBrakujace(
+    rekordy: { nip: string; rok: number; dane: PitDane }[],
+    who: string,
+  ): Promise<{ dodane: number; istniejace: number }> {
+    const existing = new Set((await this.getPodatkiPit()).map(p => `${p.nip}|${p.rok}`));
+    const now = new Date().toISOString();
+    const nowe = rekordy.map(r => ({ ...r, nip: tylkoCyfry(r.nip) })).filter(r => !existing.has(`${r.nip}|${r.rok}`));
+    await this.insertChunked(
+      'podatki_pit',
+      nowe.map(r => ({
+        nip: r.nip,
+        rok: r.rok,
+        dane: normalizeDanePit(r.dane),
+        created_at: now,
+        created_by: who,
+        updated_at: now,
+        updated_by: who,
+      })),
+    );
+    return { dodane: nowe.length, istniejace: rekordy.length - nowe.length };
+  }
+
+  /** Start year `naRok` from `zRoku`: every community of `zRoku` the new year lacks gets a draft with the same people. */
+  async przeniesPitNaRok(zRoku: number, naRok: number, who: string): Promise<number> {
+    const zrodlo = (await this.getPodatkiPit()).filter(p => p.rok === zRoku);
+    const { dodane } = await this.addPodatkiPitBrakujace(
+      zrodlo.map(p => ({ nip: p.nip, rok: naRok, dane: daneNaKolejnyRokPit(p.dane) })),
+      who,
+    );
+    return dodane;
+  }
+
+  /* ------------------------------ Podatki — CIT-8 ------------------------------ */
+
+  private static citRow(r: any): PodatekCit {
+    return {
+      id: r.id,
+      adresNazwa: r.adres_nazwa ?? '',
+      rok: r.rok,
+      dane: normalizeDaneCit(r.dane),
+      createdAt: r.created_at ?? '',
+      createdBy: r.created_by ?? '',
+      updatedAt: r.updated_at ?? '',
+      updatedBy: r.updated_by ?? '',
+    };
+  }
+
+  /** A second return of one community and year — the unique key says no. */
+  private static citError(op: string, error: { code?: string; message: string }): Error {
+    return error.code === '23505'
+      ? new Error('Ta wspólnota ma już zeznanie CIT-8 na ten rok — otwórz je zamiast dodawać drugie.')
+      : new Error(`${op}: ${error.message}`);
+  }
+
+  /** Every year's returns — newest year first, then in the order they were added. */
+  async getPodatkiCit(): Promise<PodatekCit[]> {
+    const rows = await fetchAllPaged<any>('getPodatkiCit', (from, to) =>
+      getSupabase()
+        .from('podatki_cit')
+        .select('*')
+        .order('rok', { ascending: false })
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
+    return rows.map(DatabaseService.citRow);
+  }
+
+  async getPodatekCit(id: number): Promise<PodatekCit | null> {
+    const { data, error } = await getSupabase().from('podatki_cit').select('*').eq('id', id).maybeSingle();
+    if (error) throw new Error(`getPodatekCit: ${error.message}`);
+    return data ? DatabaseService.citRow(data) : null;
+  }
+
+  async addPodatekCit(adresNazwa: string, rok: number, value: PodatekCitDane, who: string): Promise<PodatekCit> {
+    const now = new Date().toISOString();
+    const { data, error } = await getSupabase()
+      .from('podatki_cit')
+      .insert({
+        adres_nazwa: adresNazwa,
+        rok,
+        dane: { ...normalizeDaneCit(value), pobrania: [], zlozone: null },
+        created_at: now,
+        created_by: who,
+        updated_at: now,
+        updated_by: who,
+      })
+      .select('*')
+      .single();
+    if (error) throw DatabaseService.citError('addPodatekCit', error);
+    return DatabaseService.citRow(data);
+  }
+
+  /** Save an edited return; the download record and the "filed" tick are kept from the stored row. */
+  async setPodatekCit(id: number, value: PodatekCitDane, who: string): Promise<PodatekCit> {
+    const stored = await this.getPodatekCit(id);
+    if (!stored) throw new Error('Tego zeznania już nie ma — mogło zostać usunięte.');
+    const { data, error } = await getSupabase()
+      .from('podatki_cit')
+      .update({
+        dane: { ...normalizeDaneCit(value), pobrania: stored.dane.pobrania, zlozone: stored.dane.zlozone },
+        updated_at: new Date().toISOString(),
+        updated_by: who,
+      })
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (error) throw DatabaseService.citError('setPodatekCit', error);
+    return DatabaseService.citRow(data);
+  }
+
+  async deletePodatekCit(id: number): Promise<void> {
+    const { error } = await getSupabase().from('podatki_cit').delete().eq('id', id);
+    if (error) throw new Error(`deletePodatekCit: ${error.message}`);
+  }
+
+  /** Note a downloaded PDF of a return. */
+  async recordPodatekCitPobranie(id: number, plik: string, who: string, podpis?: PodpisSlad): Promise<void> {
+    const stored = await this.getPodatekCit(id);
+    if (!stored) return;
+    const entry: PodatekPobranie = { at: new Date().toISOString(), by: who, plik, ...(podpis ? { podpis } : {}) };
+    const { error } = await getSupabase()
+      .from('podatki_cit')
+      .update({ dane: { ...stored.dane, pobrania: [...stored.dane.pobrania, entry] } })
+      .eq('id', id);
+    if (error) throw new Error(`recordPodatekCitPobranie: ${error.message}`);
+  }
+
+  /**
+   * Tick returns as filed with the tax office, or take the tick off. A row
+   * already ticked keeps who ticked it and when. Returns the rows as they now are.
+   */
+  async setPodatkiCitZlozone(ids: number[], filed: boolean, who: string): Promise<PodatekCit[]> {
+    if (ids.length === 0) return [];
+    const { data, error } = await getSupabase().from('podatki_cit').select('*').in('id', ids);
+    if (error) throw new Error(`setPodatkiCitZlozone: ${error.message}`);
+    const stamp = { at: new Date().toISOString(), by: who };
+    const out: PodatekCit[] = [];
+    for (const slice of DatabaseService.chunk((data ?? []).map(DatabaseService.citRow), 10)) {
+      out.push(
+        ...(await Promise.all(
+          slice.map(async (rek) => {
+            const dane = { ...rek.dane, zlozone: filed ? rek.dane.zlozone ?? stamp : null };
+            const { error: updateError } = await getSupabase().from('podatki_cit').update({ dane }).eq('id', rek.id);
+            if (updateError) throw new Error(`setPodatkiCitZlozone: ${updateError.message}`);
+            return { ...rek, dane };
+          }),
+        )),
+      );
+    }
+    return out;
+  }
+
+  /**
+   * Start year `naRok` from `zRoku`: every community of `zRoku` the new year
+   * does not have yet gets a draft of its return — identification and signer
+   * carried over, statement and decisions left to the new year.
+   */
+  async przeniesCitNaRok(zRoku: number, naRok: number, who: string): Promise<number> {
+    const all = await this.getPodatkiCit();
+    const have = new Set(all.filter((p) => p.rok === naRok).map((p) => p.adresNazwa));
+    const now = new Date().toISOString();
+    const nowe = all
+      .filter((p) => p.rok === zRoku && !have.has(p.adresNazwa))
+      .map((p) => ({
+        adres_nazwa: p.adresNazwa,
+        rok: naRok,
+        dane: daneCitNaKolejnyRok(p.dane),
+        created_at: now,
+        created_by: who,
+        updated_at: now,
+        updated_by: who,
+      }));
+    await this.insertChunked('podatki_cit', nowe);
+    return nowe.length;
+  }
+
+  /** The stored dictionary row, or null while the defaults are in use — for the backup. */
+  private async getPodatkiCitUstawieniaRow(): Promise<PodatkiCitUstawienia | null> {
+    const { data, error } = await getSupabase()
+      .from('podatki_cit_ustawienia')
+      .select('dane')
+      .eq('id', 1)
+      .maybeSingle();
+    if (error) throw new Error(`getPodatkiCitUstawieniaRow: ${error.message}`);
+    return data ? normalizeCitUstawienia((data as { dane?: unknown }).dane) : null;
+  }
+
+  /** The CIT dictionary; the built-in one until someone saves changes. */
+  async getPodatkiCitUstawienia(): Promise<PodatkiCitUstawienia> {
+    return (await this.getPodatkiCitUstawieniaRow()) ?? normalizeCitUstawienia(null);
+  }
+
+  async setPodatkiCitUstawienia(value: PodatkiCitUstawienia, who: string): Promise<PodatkiCitUstawienia> {
+    const dane = normalizeCitUstawienia(value);
+    const { error } = await getSupabase()
+      .from('podatki_cit_ustawienia')
+      .upsert({ id: 1, dane, updated_at: new Date().toISOString(), updated_by: who });
+    if (error) throw new Error(`setPodatkiCitUstawienia: ${error.message}`);
+    return dane;
+  }
+
   /** Every library row with its statement — for the backup. */
   private async getSprawozdaniaFull(): Promise<SprawozdanieZapisane[]> {
     const rows = await fetchAllPaged<any>('getSprawozdaniaFull', (from, to) =>
@@ -4088,6 +4647,15 @@ class DatabaseService {
     return this.settingsStore.get('settings');
   }
 
+  /**
+   * The Claude model to call, read at the call so a change in Settings applies
+   * to the next request. Installs that predate the setting, or a value no build
+   * serves any more, get the default.
+   */
+  getAiModel(): string {
+    return resolveAiModel(this.getSetting('aiModel'));
+  }
+
   setSetting(key: string, value: string): void {
     const settings = this.settingsStore.get('settings');
     this.settingsStore.set('settings', { ...settings, [key]: value });
@@ -4164,6 +4732,10 @@ class DatabaseService {
       planyGospodarcze,
       podatkiNieruchomosci,
       podatkiStawki,
+      podatkiCit,
+      podatkiPit,
+      podatkiCitUstawienia,
+      podpisHistoria,
     ] = await Promise.all([
       this.getAllBanks(),
       this.getAllKontrahenci(),
@@ -4200,6 +4772,10 @@ class DatabaseService {
       this.getPlanyWlasne().catch(() => undefined),
       this.getPodatkiNieruchomosci().catch(() => undefined),
       this.getPodatkiStawki().catch(() => undefined),
+      this.getPodatkiCit().catch(() => undefined),
+      this.getPodatkiPit().catch(() => undefined),
+      this.getPodatkiCitUstawieniaRow().catch(() => undefined),
+      this.getPodpisHistoria().catch(() => undefined),
     ]);
     return {
       format: 'filefunky-backup',
@@ -4238,6 +4814,10 @@ class DatabaseService {
         planyGospodarcze,
         podatkiNieruchomosci,
         podatkiStawki,
+        podatkiCit,
+        podatkiPit,
+        podatkiCitUstawienia,
+        podpisHistoria,
         // The `app_users` ROWS are deliberately absent: they mirror the Supabase
         // auth accounts, rebuilt by a trigger, not data this app authors — and
         // the participants stored on each meeting carry their own snapshot. The
@@ -4340,6 +4920,10 @@ class DatabaseService {
       planyGospodarcze,
       podatkiNieruchomosci,
       podatkiStawki,
+      podatkiCit,
+      podatkiPit,
+      podatkiCitUstawienia,
+      podpisHistoria,
       settings,
     } = backup.data;
 
@@ -4413,6 +4997,8 @@ class DatabaseService {
             a.zgnJednostkaId != null ? zgnIdMap.get(a.zgnJednostkaId) ?? null : null,
           // Absent in backups written before communities had a board.
           zarzad: DatabaseService.zarzadList(a.zarzad),
+          // Absent in backups written before communities had a tax identification.
+          identyfikacja: normalizeIdentyfikacja(a.identyfikacja),
           created_at: a.createdAt,
         };
       }),
@@ -4524,7 +5110,7 @@ class DatabaseService {
             {
               klucz: typ.klucz,
               // The built-in kind's name is fixed (a trigger refuses any other).
-              nazwa: typ.systemowy ? MAILING_TYP_ZAWIADOMIENIE_NAZWA : typ.nazwa,
+              nazwa: typ.systemowy ? DatabaseService.builtinMailingTypNazwa(typ.klucz) ?? typ.nazwa : typ.nazwa,
               systemowy: typ.systemowy === true,
               opis: typ.opis ?? '',
               adresaci: DatabaseService.mailingAdresaci(typ.adresaci),
@@ -4690,6 +5276,7 @@ class DatabaseService {
             // Absent in backups written before these columns existed: a meeting
             // from back then meant a real date and no paperwork trail.
             termin_status: m.terminStatus === 'wstepny' ? 'wstepny' : 'potwierdzony',
+            termin_wysylki: DatabaseService.dayKeyOrNull(m.terminWysylki),
             termin_zmieniony_at: m.terminZmienionyAt ?? null,
             termin_zmieniony_z: m.terminZmienionyZ ?? null,
             termin_zmieniony_by: m.terminZmienionyBy ?? null,
@@ -4773,7 +5360,13 @@ class DatabaseService {
               major: w.major ?? 1,
               minor: w.minor ?? 0,
               nazwa: w.nazwa ?? '',
-              status: DatabaseService.zebranieStatus(w.status),
+              // Older backups have no marks: a prepared version then counts every document ready.
+              ...(() => {
+                const gotowe = w.gotowe
+                  ? normalizeGotowe(w.gotowe)
+                  : gotoweForStatus(DatabaseService.zebranieStatus(w.status));
+                return { gotowe, status: wersjaStatusFromGotowe(gotowe) };
+              })(),
               opis: w.opis ?? '',
               materialy: normalizeMaterialy(w.materialy).map(m => ({
                 ...m,
@@ -4901,6 +5494,73 @@ class DatabaseService {
             updated_at: s.updatedAt || new Date().toISOString(),
             updated_by: s.updatedBy ?? '',
           })),
+      );
+    }
+
+    // CIT-8 returns: keyed by the community's name and the year, and the dictionary is one row.
+    if (podatkiCit) {
+      const { error: wipeError } = await getSupabase().from('podatki_cit').delete().gt('id', 0);
+      if (wipeError) throw new Error(`restore podatki_cit: ${wipeError.message}`);
+      await this.insertChunked(
+        'podatki_cit',
+        podatkiCit
+          .filter(p => p.adresNazwa && Number.isInteger(p.rok))
+          .map(p => ({
+            adres_nazwa: p.adresNazwa,
+            rok: p.rok,
+            dane: normalizeDaneCit(p.dane),
+            created_at: p.createdAt || new Date().toISOString(),
+            created_by: p.createdBy ?? '',
+            updated_at: p.updatedAt || new Date().toISOString(),
+            updated_by: p.updatedBy ?? '',
+          })),
+      );
+    }
+    // PIT: one row per community and year, the people and the PIT-4R inside `dane`.
+    if (podatkiPit) {
+      const { error: wipeError } = await getSupabase().from('podatki_pit').delete().gt('id', 0);
+      if (wipeError) throw new Error(`restore podatki_pit: ${wipeError.message}`);
+      await this.insertChunked(
+        'podatki_pit',
+        podatkiPit
+          .filter(p => p.nip && Number.isInteger(p.rok))
+          .map(p => ({
+            nip: tylkoCyfry(p.nip),
+            rok: p.rok,
+            dane: normalizeDanePit(p.dane),
+            created_at: p.createdAt || new Date().toISOString(),
+            created_by: p.createdBy ?? '',
+            updated_at: p.updatedAt || new Date().toISOString(),
+            updated_by: p.updatedBy ?? '',
+          })),
+      );
+    }
+    if (podatkiCitUstawienia !== undefined) {
+      const { error: wipeError } = await getSupabase().from('podatki_cit_ustawienia').delete().eq('id', 1);
+      if (wipeError) throw new Error(`restore podatki_cit_ustawienia: ${wipeError.message}`);
+      if (podatkiCitUstawienia) {
+        const { error } = await getSupabase()
+          .from('podatki_cit_ustawienia')
+          .insert({ id: 1, dane: normalizeCitUstawienia(podatkiCitUstawienia) });
+        if (error) throw new Error(`restore podatki_cit_ustawienia: ${error.message}`);
+      }
+    }
+    // The Podpis module's runs: one row per run, nothing that points elsewhere.
+    if (podpisHistoria) {
+      const { error: wipeError } = await getSupabase().from('podpisy_historia').delete().gt('id', 0);
+      if (wipeError) throw new Error(`restore podpisy_historia: ${wipeError.message}`);
+      await this.insertChunked(
+        'podpisy_historia',
+        podpisHistoria.map(h => ({
+          signed_at: h.signedAt || new Date().toISOString(),
+          signed_by: h.signedBy ?? '',
+          podmiot: h.podpis?.podmiot ?? '',
+          wystawca: h.podpis?.wystawca ?? '',
+          numer_seryjny: h.podpis?.numerSeryjny ?? '',
+          pliki: Array.isArray(h.pliki) ? h.pliki : [],
+          podpisanych: h.podpisanych ?? 0,
+          przerwano: h.przerwano ?? null,
+        })),
       );
     }
 

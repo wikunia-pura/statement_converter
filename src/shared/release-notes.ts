@@ -84,6 +84,131 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    // Drafted with the PIT tab; the version string must match whatever package.json is bumped to.
+    // If another feature ships in the same release, merge its highlights into this entry.
+    version: '9.6.0',
+    date: '2026-10-09',
+    title: 'PIT-11 i PIT-4R wspólnot oraz uchwały zebrań',
+    tagline:
+      'Nowa zakładka „PIT” w module „Podatki” przygotowuje PIT-11 wszystkich osób, którym wspólnota coś wypłaciła, i roczny PIT-4R wspólnoty — plik XML dla e-Deklaracji, PDF na oficjalnym wzorze i podpis kwalifikowany kartą Szafir. W „Zebraniach” pojawia się zakładka „Uchwały”: kilka szablonów z Mailingu naraz zamienia się w gotowe uchwały z danymi zebrania z kalendarza.',
+    stats: [
+      { value: '2', label: 'nowe funkcje' },
+    ],
+    highlights: [
+      {
+        id: 'podatki-pit',
+        kind: 'new',
+        icon: 'briefcase',
+        title: 'Podatki → PIT: PIT-11 i PIT-4R',
+        summary:
+          'Dla każdej wspólnoty i roku masz listę osób (zarząd, dozorcy, zarządca) z kwotami oraz PIT-4R z zaliczkami miesiąc po miesiącu. Z tego powstają gotowe pliki do e-Deklaracji.',
+        details: [
+          'Zeszłoroczne kwoty widać pod każdym polem, więc od razu wiesz, z czym porównać nowe. Koszty, dochód i zaliczka zarządcy (art. 13) liczą się same; koszty zlecenia domyślnie wg reguły 20% z limitem 3 000 zł (3 600 zł przy podwyższonych).',
+          'Aplikacja pilnuje błędów, które dotąd kończyły się korektą: zły PESEL, brak adresu, PIT-4R niezgodny z sumą PIT-11 (ostrzeżenie), niewłaściwy urząd skarbowy. Dokument z błędem nie wyjdzie, dopóki go nie poprawisz.',
+          'Podpisany XML (XAdES) to plik, który wczytujesz do e-Deklaracji. PDF to kopia dla podatnika — podpisuje się go tylko na życzenie.',
+        ],
+        where: ['Podatki', 'PIT'],
+        steps: [
+          {
+            do: 'Kliknij „Importuj XML” i wskaż folder z plikami PIT-11 i PIT-4R z e-Deklaracji (np. za poprzedni rok).',
+            then: 'Pojawiają się wspólnoty z osobami i PIT-4R. Osoby, przy których import znalazł coś podejrzanego (zły PESEL, rok, kwoty), są oznaczone „do przeglądu” i czekają na Twoje „Sprawdzone”.',
+          },
+          {
+            do: 'Wybierz nowy rok w nagłówku i kliknij „Przenieś z <rok>”.',
+            then: 'Powstaje nowy rok z danymi poprzedniego: te same osoby, tytuły i kwoty (oznaczenia „złożone” i pobrane pliki nie przechodzą). To ostatnie znane kwoty — popraw je ręcznie; poprzedni rok widać pod polami jako punkt odniesienia.',
+          },
+          {
+            do: 'Kliknij „Szablon Excel”, uzupełnij kwoty w arkuszu i wczytaj go przyciskiem „Wczytaj Excel” — albo wpisz kwoty ręcznie na ekranie wspólnoty.',
+            then: 'Kwoty z arkusza trafiają do osób i do PIT-4R. Arkusz wczytany bez zmian nic nie zmienia.',
+          },
+          {
+            do: 'Otwórz wspólnotę i sprawdź PIT-4R: miesięczne zaliczki oraz ramkę „Zgodność z PIT-11”.',
+            then: 'Jeśli sumy się nie zgadzają, widzisz o ile — popraw przed wysłaniem.',
+          },
+          {
+            do: 'Zaznacz dokumenty na liście i kliknij „Podpisz”, wybierz certyfikat i wpisz PIN.',
+            then: 'Jednym PIN-em podpisują się wszystkie zaznaczone. Pliki „… (podpisany).xml” i PDF-y lądują w „PIT <rok>” w folderze z Ustawień, osobny podfolder dla każdej wspólnoty.',
+          },
+          {
+            do: 'Po wysłaniu do e-Deklaracji kliknij „Oznacz jako złożone” i wpisz numer referencyjny z bramki.',
+            then: 'Dokument dostaje zielone oznaczenie, a pasek postępu na górze liczy złożone.',
+          },
+        ],
+        expect: [
+          'Pliki bez podpisu (sam XML i PDF) pobierzesz przyciskiem „Pobierz wszystko” albo „Pobierz XML i PDF” przy zaznaczeniu.',
+          'Korekta: przy osobie lub PIT-4R wybierz cel „Korekta” i wpisz uzasadnienie — trafia do załącznika ORD-ZU. W PDF jest to osobna strona (MF nie udostępnia płaskiego wzoru ORD-ZU).',
+        ],
+        note: {
+          type: 'warning',
+          text: 'Wzory PIT-11 (29) i PIT-4R (13) są potwierdzone dla 2024 i 2025. Dla 2026 aplikacja zakłada, że się nie zmieniły — przed styczniem 2027 sprawdź, czy MF nie wydał nowych (e-Deklaracje odrzucą plik niezgodny ze schematem).',
+        },
+      },
+      {
+        id: 'zebrania-uchwaly',
+        kind: 'new',
+        icon: 'file-text',
+        title: 'Zebrania → Uchwały: kilka uchwał z szablonów naraz',
+        summary:
+          'W zakładce „Uchwały” zebrania wybierasz wiele szablonów z Mailingu, a aplikacja robi z nich osobne uchwały — z datą, godziną i miejscem zebrania wstawionymi z kalendarza.',
+        details: [
+          'Data, godzina i miejsce nie są wpisywane na stałe: aplikacja czyta je z kalendarza za każdym razem, gdy pokazuje albo drukuje uchwałę. Przesuniesz zebranie w kalendarzu — termin zmieni się we wszystkich uchwałach sam. Zebranie bez powiązania z kalendarzem bierze te dane z własnych ustawień zebrania.',
+          'Każda uchwała jest kopią szablonu: poprawki w treści robisz tylko w tej uchwale, a późniejsza zmiana szablonu jej nie rusza. Pola dynamiczne, których kalendarz nie zna (np. numer uchwały czy kwota), wpisujesz klikając je w tekście. Lista pokazuje, którym uchwałom jeszcze czegoś brakuje.',
+          'Nowa wersja zebrania (1.1, 1.2 …) zaczyna z kopią uchwał poprzedniej, a uchwały trafiają też do „Pakietu PDF” w zakładce „Podsumowanie”.',
+        ],
+        where: ['Zebrania', '<wybrane zebranie>', 'Uchwały'],
+        steps: [
+          {
+            do: 'Kliknij „Dodaj uchwały”, zaznacz szablony (np. z typu „Uchwała”) i kliknij „Dodaj wybrane”.',
+            then: 'Każdy zaznaczony szablon staje się osobną uchwałą; kolejność zaznaczania to kolejność na liście.',
+          },
+          {
+            do: 'Kliknij „Podgląd” przy uchwale albo jej tytuł, by ją edytować.',
+            then: 'Widzisz uchwałę tak, jak się wydrukuje. Puste pola są oznaczone — kliknij pole i wpisz wartość, potem „Zapisz”.',
+          },
+          {
+            do: 'Kliknij „PDF” przy uchwale albo „Pobierz wszystkie (PDF)” nad listą.',
+            then: 'Plik trafia do folderu Pobrane. Uchwała z pustym polem nie wyjdzie — aplikacja mówi, czego brakuje.',
+          },
+          {
+            do: 'Przeciągnij uchwałę za uchwyt po lewej, żeby zmienić kolejność. W menu „⋯” możesz też przesunąć ją o jedno miejsce, zduplikować albo usunąć.',
+          },
+        ],
+        expect: [
+          'Wszyscy użytkownicy muszą zaktualizować aplikację, zanim ktokolwiek doda pierwszą uchwałę: starsza wersja, zapisując zawiadomienie lub notatkę wersji zebrania, usunęłaby dodane uchwały.',
+          'Szablony uchwał tworzysz w Mailing → Szablony, wybierając nowy, wbudowany typ „Uchwała”.',
+          'W „Podsumowaniu” zebrania uchwały mają własny wiersz (gotowe / do uzupełnienia) i przełącznik w pakiecie PDF.',
+        ],
+        note: {
+          type: 'tip',
+          text: 'Żeby tytuł uchwały na liście był czytelny, wpisz w temacie szablonu np. „Uchwała nr {{Numer uchwały}} w sprawie …” — temat jest tytułem, a treść pełnym tekstem uchwały.',
+        },
+      },
+      {
+        id: 'podatki-nieruchomosci-lista',
+        kind: 'improved',
+        icon: 'landmark',
+        title: 'Podatki → Nieruchomości: wszystkie wspólnoty z Adresów',
+        summary:
+          'Lista pokazuje każdą wspólnotę z „Adresów”, także tę, która nie ma jeszcze deklaracji na dany rok — z oznaczeniem „Brak informacji”. Gotowe deklaracje są na fioletowo, a „Zaksięguj w DOM” działa dopiero po pobraniu PDF.',
+        details: [
+          'Wspólnotę z deklaracją aplikacja łączy z „Adresami” po NIP-ie zapisanym w adresie, a gdy go brak — po nazwie. Deklaracja, której nie da się połączyć z żadnym adresem, zostaje na liście z dopiskiem „Brak w Adresach”.',
+          'Przycisk „Zaksięguj w DOM” (przy wspólnocie, w jej deklaracji i na pasku zaznaczenia) pojawia się dopiero, gdy deklaracja ma status „PDF pobrany”. Cofnąć wcześniejsze zaksięgowanie można zawsze.',
+        ],
+        where: ['Podatki', 'Nieruchomości'],
+        steps: [
+          {
+            do: 'Kliknij filtr „Brak informacji” nad listą.',
+            then: 'Zostają same wspólnoty z „Adresów” bez deklaracji na wybrany rok.',
+          },
+          {
+            do: 'Kliknij taką wspólnotę.',
+            then: 'Otwiera się nowa deklaracja z nazwą, NIP-em i adresem siedziby z „Adresów” — uzupełniasz działki i zapisujesz.',
+          },
+        ],
+      },
+    ],
+  },
+  {
     // Carries everything new since 9.3.0: 9.5.0 reached Windows without a working
     // card lookup, so this is the first build most users get the features in.
     version: '9.5.1',

@@ -94,19 +94,24 @@ export const FormSection: React.FC<FormSectionProps> = ({
 
   return (
     <section className={`form-section${collapsible ? ' is-collapsible' : ''}${collapsed ? ' is-collapsed' : ''}`}>
-      <header className="form-section__header">
+      {/* A collapsible header is one target: the whole bar lights up and toggles,
+          not just the title or the chevron. The toggle button stays for the keyboard
+          (its click bubbles up to the bar); the aside's own controls do not toggle. */}
+      <header className="form-section__header" onClick={collapsible ? toggle : undefined}>
         {collapsible ? (
-          <button type="button" className="form-section__toggle" onClick={toggle} aria-expanded={!collapsed}>
+          <button type="button" className="form-section__toggle" aria-expanded={!collapsed}>
             {heading}
           </button>
         ) : (
           heading
         )}
-        {aside && <div className="form-section__aside">{aside}</div>}
+        {aside && (
+          <div className="form-section__aside" onClick={collapsible ? (e) => e.stopPropagation() : undefined}>
+            {aside}
+          </div>
+        )}
         {collapsible && (
-          // The keyboard path is the header button; this is the visual cue and
-          // a second, mouse-sized target at the edge.
-          <span className="form-section__chevron" onClick={toggle} aria-hidden="true">
+          <span className="form-section__chevron" aria-hidden="true">
             <Icon name="chevron-down" size={16} />
           </span>
         )}

@@ -29,6 +29,7 @@ import {
   MailingSendResult,
   MailingPole,
   MailingTyp,
+  MAILING_TYP_UCHWALA,
   Spotkanie,
 } from '../../shared/types';
 import {
@@ -452,7 +453,11 @@ function exportBaseName(
   adresNazwa: string,
   typNazwa: string,
 ): string {
-  const what = slugifyForFileName(typNazwa || request.templateName || 'mail');
+  // Several resolutions of one meeting share a kind, a community and a date: the
+  // template's name is what tells their files apart in a Downloads list.
+  const what = slugifyForFileName(
+    (request.typ === MAILING_TYP_UCHWALA ? request.templateName : '') || typNazwa || request.templateName || 'mail',
+  );
   const where = adresNazwa ? `-${slugifyForFileName(adresNazwa)}` : '';
   const when = request.kalendarz?.dataText ? `-${request.kalendarz.dataText}` : '';
   return `${what}${where}${when}`;

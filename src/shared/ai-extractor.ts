@@ -7,6 +7,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { AITransaction, AIExtractedData, AIExtractionResponse, AIConfig } from './ai-types';
+import { DEFAULT_AI_MODEL, maxTokensFor, modelRequestFields } from './ai-models';
 import logger from './logger';
 
 function logCacheUsage(label: string, usage: unknown): void {
@@ -20,6 +21,25 @@ function logCacheUsage(label: string, usage: unknown): void {
       `[AI-EXTRACTOR/${label}] cache created=${created}, read=${read}, fresh input=${input}`,
     );
   }
+}
+
+/**
+ * The answer text of a Claude reply. Picked by block type, not position: a model
+ * that thinks by default opens its reply with `thinking` blocks.
+ */
+function responseText(message: Anthropic.Message): string {
+  // A reply cut off at the ceiling is not valid JSON and would not become valid
+  // on a retry either, so it must not reach the parse-error retry below.
+  if (message.stop_reason === 'max_tokens') {
+    throw new Error('Claude response cut off at max_tokens');
+  }
+  const text = message.content
+    .map((block) => (block.type === 'text' ? block.text : ''))
+    .join('');
+  if (!text) {
+    throw new Error(`No text in Claude response (stop_reason: ${message.stop_reason})`);
+  }
+  return text;
 }
 
 /** Contractor as it appears in a prompt — either as a pre-filtered candidate or in the shared pool. */
@@ -151,6 +171,14 @@ export class AIExtractor {
     
     // Check for network timeouts (retryable)
     if (message.includes('timeout') || message.includes('econnreset') || message.includes('network')) {
+      return true;
+    }
+    
+    // A sampled reply now and then carries malformed JSON (a broken \u escape in a
+    // Polish word, once in ~150 Haiku 5.5 calls on the ERSTE test statements).
+    // Asking again returns valid JSON, where failing would cost the whole
+    // conversion its AI step.
+    if (message.includes('json parse error')) {
       return true;
     }
     
@@ -297,10 +325,11 @@ export class AIExtractor {
           throw new Error('TEST: Simulating network timeout error');
         }
 
+        const model = this.config.model || DEFAULT_AI_MODEL;
         const message = await this.anthropic!.messages.create({
-          model: this.config.model || 'claude-sonnet-4-6',
-          max_tokens: 2000 + (transactions.length * 200),
-          temperature: 0,
+          model,
+          max_tokens: maxTokensFor(model, 2000 + (transactions.length * 200)),
+          ...modelRequestFields(model, { deterministic: true }),
           // Mark system prompt with cache_control for prompt caching. Cast is
           // needed because SDK v0.32 doesn't yet expose cache_control in types.
           system: [
@@ -318,13 +347,10 @@ export class AIExtractor {
           ],
         });
 
-        const content = message.content[0];
-        if (content.type !== 'text') {
-          throw new Error('Unexpected response type from Claude');
-        }
+        const text = responseText(message);
         logCacheUsage('extract', message.usage);
 
-        const response: AIExtractionResponse = this.parseJsonResponse(content.text);
+        const response: AIExtractionResponse = this.parseJsonResponse(text);
         return this.processAIResponse(response, transactions);
       } catch (error) {
         logger.error('Claude API error (extract):', error);
@@ -776,10 +802,11 @@ Example 3 (lettered apartment — the letter must survive):
 
     return this.retryWithBackoff(async () => {
       try {
+        const model = this.config.model || DEFAULT_AI_MODEL;
         const message = await this.anthropic!.messages.create({
-          model: this.config.model || 'claude-sonnet-4-6',
-          max_tokens: 2000 + (transactions.length * 300),
-          temperature: 0,
+          model,
+          max_tokens: maxTokensFor(model, 2000 + (transactions.length * 300)),
+          ...modelRequestFields(model, { deterministic: true }),
           // Cast is needed because SDK v0.32 doesn't yet expose cache_control in types.
           system: systemBlocks as unknown as Anthropic.MessageCreateParamsNonStreaming['system'],
           messages: [
@@ -790,13 +817,10 @@ Example 3 (lettered apartment — the letter must survive):
           ],
         });
 
-        const content = message.content[0];
-        if (content.type !== 'text') {
-          throw new Error('Unexpected response type from Claude');
-        }
+        const text = responseText(message);
         logCacheUsage('match', message.usage);
 
-        const response = this.parseJsonResponse(content.text);
+        const response = this.parseJsonResponse(text);
         return this.processContractorMatchingResponse(response, candidatesPerTransaction, sharedPool);
       } catch (error) {
         logger.error('Claude API error (contractor matching):', error);

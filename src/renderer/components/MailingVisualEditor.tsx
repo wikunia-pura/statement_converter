@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { MailingKalendarzContext, MailingPole, MailingPoleTyp } from '../../shared/types';
 import { translations, Language } from '../translations';
@@ -74,6 +75,13 @@ export interface MailingVisualEditorProps {
   kalendarz?: MailingKalendarzContext | null;
   /** Fields ticked for `{{Tabela pól}}`. */
   tableFields?: string[];
+  /**
+   * The fields the table can hold (the template's shortlist). With
+   * `onTableFieldsChange` the table in the letter becomes editable: clicking it
+   * opens a card to tick its rows and type their values.
+   */
+  tablePool?: MailingPole[];
+  onTableFieldsChange?: (names: string[]) => void;
   /** Render the letterhead frame around the text, as in the PDF. Default true. */
   showLetterhead?: boolean;
   /** "Zapisz jako szablon" — the button is shown only when this is given. */
@@ -94,6 +102,11 @@ const ignoreChipActivate = (): void => undefined;
 
 /** Popover width; also what keeps it inside the editor's right edge. */
 const POPOVER_WIDTH = 320;
+/** The table's card is wider: a row is a tick, a label and an input. */
+const TABLE_POPOVER_WIDTH = 460;
+/** Room kept between the card and the window's edge, and between card and pill. */
+const VIEWPORT_MARGIN = 8;
+const GAP = 6;
 
 /**
  * Store a value under exactly one spelling of the field's name — the same rule as
@@ -129,8 +142,10 @@ interface ValueEditorState {
   kind: MailingPoleTyp | null;
   /** Why the field cannot be typed into (kind null). */
   info?: string;
+  /** The `{{Tabela pól}}` card: rows to tick and fill in place. */
+  table?: boolean;
   draft: string;
-  /** Anchor geometry relative to the editor's frame. */
+  /** Anchor geometry in viewport coordinates — the card is fixed to the window. */
   anchorTop: number;
   anchorBottom: number;
   left: number;
@@ -148,6 +163,8 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
   adresNazwa,
   kalendarz,
   tableFields,
+  tablePool,
+  onTableFieldsChange,
   showLetterhead = true,
   onSaveAsTemplate,
   readOnly = false,
@@ -161,7 +178,8 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
   const popoverRef = useRef<HTMLDivElement>(null);
   const [editor, setEditor] = useState<ValueEditorState | null>(null);
   /** Popover placed above its pill — when there is no room below it. */
-  const [flipUp, setFlipUp] = useState(false);
+  const [fit, setFit] = useState<{ up: boolean; maxHeight: number } | null>(null);
+  const tableEditable = !readOnly && !!tablePool && !!onTableFieldsChange;
 
   const ctx = useMemo<MailingRenderContext>(
     () => ({
@@ -186,9 +204,11 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
 
         if (isFieldTableField(ref.nazwa)) {
           const html = buildFieldTableHtml(ctx);
+          const tone = tableEditable ? 'editable' : 'locked';
+          const title = tableEditable ? t.mveChipTableEdit : t.mveChipTable;
           return html
-            ? { text: '', html, tone: 'locked', title: t.mveChipTable }
-            : { text: '', missing: t.mveTableEmpty, tone: 'locked', title: t.mveChipTable };
+            ? { text: '', html, tone, title }
+            : { text: '', missing: t.mveTableEmpty, tone, title };
         }
 
         const kal = kalendarzFieldOf(ref.nazwa);
@@ -218,7 +238,13 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
           ? { text, missing: pole.nazwa, tone, title: t.mveChipClickToFill }
           : { text, tone, title: t.mveChipClickToChange };
       },
-    [ctx, pola, t, chipLabels, readOnly],
+    [ctx, pola, t, chipLabels, readOnly, tableEditable],
+  );
+
+  /** A read-only letter explains nothing on hover — the tooltips are for the editor. */
+  const shownDisplay = useMemo<ChipDisplayResolver>(
+    () => (readOnly ? (ref: MailingFieldRef) => ({ ...display(ref), title: '' }) : display),
+    [display, readOnly],
   );
 
   /** What clicking a given pill offers: an input of the field's kind, or a reason. */
@@ -232,7 +258,9 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
         return { nazwa: kal.nazwa, title: kal.nazwa, kind: kal.typWartosci, hint: t.mveCalendarFieldHint };
       }
       if (isFieldTableField(ref.nazwa)) {
-        return { nazwa: ref.nazwa, title: ref.nazwa, kind: null, info: t.mveChipTable };
+        return tableEditable
+          ? { nazwa: ref.nazwa, title: ref.nazwa, kind: null, table: true }
+          : { nazwa: ref.nazwa, title: ref.nazwa, kind: null, info: t.mveChipTable };
       }
       if (isBuiltinField(ref.nazwa)) {
         return { nazwa: ref.nazwa, title: ref.nazwa, kind: null, info: t.mveChipAutomatic };
@@ -250,25 +278,25 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
         kind: pole.typWartosci ?? 'tekst',
       };
     },
-    [ctx, pola, t, chipLabels],
+    [ctx, pola, t, chipLabels, tableEditable],
   );
 
   /** Open the popover for a field, anchored under the element that asked for it. */
   const openEditor = useCallback(
     (ref: MailingFieldRef, anchor: HTMLElement) => {
-      const wrap = wrapperRef.current;
-      if (!wrap) return;
       const a = anchor.getBoundingClientRect();
-      const w = wrap.getBoundingClientRect();
-      const width = Math.min(POPOVER_WIDTH, w.width);
       const described = describeField(ref);
-      setFlipUp(false);
+      const width = Math.min(
+        described.table ? TABLE_POPOVER_WIDTH : POPOVER_WIDTH,
+        window.innerWidth - 2 * VIEWPORT_MARGIN,
+      );
+      setFit(null);
       setEditor({
         ...described,
         draft: described.kind ? readFieldValue(values, described.nazwa) : '',
-        anchorTop: a.top - w.top,
-        anchorBottom: a.bottom - w.top,
-        left: Math.max(0, Math.min(a.left - w.left, w.width - width)),
+        anchorTop: a.top,
+        anchorBottom: a.bottom,
+        left: Math.max(VIEWPORT_MARGIN, Math.min(a.left, window.innerWidth - width - VIEWPORT_MARGIN)),
       });
     },
     [describeField, values],
@@ -279,15 +307,33 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
   // (and publish it) in a letter that is not meant to change.
   const onChipActivate = readOnly ? ignoreChipActivate : openEditor;
 
-  // Below the pill when it fits on screen, above it otherwise — a pill on the
-  // letter's last line would push its input out of sight.
+  // Below the pill when it fits in the window, above it otherwise, and capped
+  // to the room there is — the card is fixed to the window, so it never grows
+  // the scrolling letter under it (which made the page jump).
   useLayoutEffect(() => {
-    if (!editor || !popoverRef.current) return;
-    const rect = popoverRef.current.getBoundingClientRect();
-    if (!flipUp && rect.bottom > window.innerHeight - 8 && rect.height < editor.anchorTop) {
-      setFlipUp(true);
-    }
-  }, [editor, flipUp]);
+    if (!editor || !popoverRef.current || fit) return;
+    const height = popoverRef.current.getBoundingClientRect().height;
+    const below = window.innerHeight - editor.anchorBottom - GAP - VIEWPORT_MARGIN;
+    const above = editor.anchorTop - GAP - VIEWPORT_MARGIN;
+    const up = height > below && above > below;
+    setFit({ up, maxHeight: Math.max(160, up ? above : below) });
+  }, [editor, fit]);
+
+  // The letter scrolling or the window resizing moves the pill away from a card
+  // fixed to the window — close it rather than leave it floating over nothing.
+  useEffect(() => {
+    if (!editor) return;
+    const onMove = (event: Event) => {
+      if (event.target instanceof Node && popoverRef.current?.contains(event.target)) return;
+      setEditor(null);
+    };
+    window.addEventListener('scroll', onMove, true);
+    window.addEventListener('resize', onMove);
+    return () => {
+      window.removeEventListener('scroll', onMove, true);
+      window.removeEventListener('resize', onMove);
+    };
+  }, [editor]);
 
   // Outside click cancels — the same as Esc. Applying is always explicit.
   useEffect(() => {
@@ -377,19 +423,70 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
     </div>
   );
 
-  const inputType = editor?.kind === 'data' ? 'date' : editor?.kind === 'godzina' ? 'time' : 'text';
-  const popoverTop = editor
-    ? flipUp
-      ? undefined
-      : editor.anchorBottom + 6
-    : undefined;
-  const popoverBottom =
-    editor && flipUp && wrapperRef.current
-      ? wrapperRef.current.getBoundingClientRect().height - editor.anchorTop + 6
-      : undefined;
+  /** One row of the table card: tick, label, value. Typing a value ticks the row. */
+  const setTableRow = (pole: MailingPole, patch: { checked?: boolean; value?: string }) => {
+    if (!tablePool || !onTableFieldsChange) return;
+    const key = normalizeFieldName(pole.nazwa);
+    const isTicked = (name: string) => (tableFields ?? NO_FIELDS).some((n) => normalizeFieldName(n) === normalizeFieldName(name));
+    let on = patch.checked ?? isTicked(pole.nazwa);
+    if (patch.value !== undefined) {
+      onValuesChange(withFieldValue(values, pole.nazwa, patch.value));
+      if (patch.value.trim()) on = true;
+    }
+    onTableFieldsChange(
+      tablePool
+        .filter((p) => (normalizeFieldName(p.nazwa) === key ? on : isTicked(p.nazwa)))
+        .map((p) => p.nazwa),
+    );
+  };
 
+  const tableRows = editor?.table ? (
+    tablePool && tablePool.length > 0 ? (
+      <div className="mve-table">
+        {tablePool.map((p) => {
+          const checked = (tableFields ?? NO_FIELDS).some(
+            (n) => normalizeFieldName(n) === normalizeFieldName(p.nazwa),
+          );
+          return (
+            <div key={p.id} className="mve-table__row">
+              <label className={`ks-check${checked ? ' is-on' : ''}`}>
+                <input
+                  type="checkbox"
+                  className="ks-check__input"
+                  checked={checked}
+                  onChange={(e) => setTableRow(p, { checked: e.target.checked })}
+                  aria-label={p.nazwa}
+                />
+                <span className="ks-check__box" aria-hidden="true">
+                  <Icon name="check" size={12} strokeWidth={3} />
+                </span>
+              </label>
+              <span className="mve-table__label" title={p.nazwa}>
+                {p.tekst || p.nazwa}
+              </span>
+              <input
+                className="mve-table__input"
+                type={p.typWartosci === 'data' ? 'date' : p.typWartosci === 'godzina' ? 'time' : 'text'}
+                value={readFieldValue(values, p.nazwa)}
+                placeholder={t.mvePopoverPlaceholder}
+                aria-label={`${t.mailingFieldValue}: ${p.tekst || p.nazwa}`}
+                onChange={(e) => setTableRow(p, { value: e.target.value })}
+              />
+              {p.jednostka && <span className="mve-popover__unit">{p.jednostka}</span>}
+            </div>
+          );
+        })}
+      </div>
+    ) : (
+      <div className="mve-popover__info">
+        <Icon name="info" size={13} /> <span>{t.mailingFieldTableNoPool}</span>
+      </div>
+    )
+  ) : null;
+
+  const inputType = editor?.kind === 'data' ? 'date' : editor?.kind === 'godzina' ? 'time' : 'text';
   return (
-    <div className="mve" ref={wrapperRef}>
+    <div className={`mve${readOnly ? ' mve--readonly' : ''}`} ref={wrapperRef}>
       {!hideHint && !readOnly && (
         <div className="mve-hint">
           <Icon name="edit" size={13} />
@@ -422,7 +519,7 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
         onChange={onTrescChange}
         placeholder={t.mveBodyPlaceholder}
         minHeight={180}
-        chipDisplay={display}
+        chipDisplay={shownDisplay}
         onChipActivate={onChipActivate}
         skipUnchangedEmits
         renderContent={renderLetter}
@@ -482,93 +579,116 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
         </div>
       )}
 
-      {editor && (
-        <div
-          ref={popoverRef}
-          className="mve-popover"
-          role="dialog"
-          aria-label={editor.title}
-          style={{
-            top: popoverTop,
-            bottom: popoverBottom,
-            left: editor.left,
-            width: `min(${POPOVER_WIDTH}px, 100%)`,
-          }}
-          onKeyDown={(e) => {
-            // Stopped here so an Esc meant for the popover does not also close a
-            // modal the editor sits in (ModalDismiss listens on the document).
-            if (e.key === 'Escape') {
-              e.preventDefault();
-              e.stopPropagation();
-              setEditor(null);
-            }
-          }}
-        >
-          <div className="mve-popover__title">{editor.title}</div>
-          {editor.kind ? (
-            <>
-              {editor.hint && <div className="mve-popover__hint">„{editor.hint}”</div>}
-              <div className="mve-popover__row">
-                <input
-                  type={inputType}
-                  value={editor.draft}
-                  autoFocus
-                  placeholder={t.mvePopoverPlaceholder}
-                  onChange={(e) => {
-                    const draft = e.target.value;
-                    setEditor((prev) => (prev ? { ...prev, draft } : prev));
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      apply(editor.draft);
-                    }
-                  }}
-                />
-                {editor.unit && <span className="mve-popover__unit">{editor.unit}</span>}
-              </div>
-              <div className="mve-popover__keys">{t.mvePopoverKeys}</div>
-              <div className="mve-popover__actions">
-                {readFieldValue(values, editor.nazwa) && (
+      {editor &&
+        createPortal(
+          <div
+            ref={popoverRef}
+            className="mve-popover"
+            role="dialog"
+            aria-label={editor.title}
+            style={{
+              position: 'fixed',
+              zIndex: 3000,
+              // Measured once at natural size (fit null) — hidden until placed.
+              visibility: fit ? 'visible' : 'hidden',
+              ...(fit?.up
+                ? { bottom: window.innerHeight - editor.anchorTop + GAP }
+                : { top: editor.anchorBottom + GAP }),
+              left: editor.left,
+              width: `min(${editor.table ? TABLE_POPOVER_WIDTH : POPOVER_WIDTH}px, calc(100vw - ${2 * VIEWPORT_MARGIN}px))`,
+              maxHeight: fit?.maxHeight,
+              overflowY: 'auto',
+            }}
+            onKeyDown={(e) => {
+              // Stopped here so an Esc meant for the popover does not also close a
+              // modal the editor sits in (ModalDismiss listens on the document).
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                setEditor(null);
+              }
+            }}
+          >
+            <div className="mve-popover__title">{editor.title}</div>
+            {editor.table ? (
+              <>
+                {tableRows}
+                <div className="mve-popover__actions">
                   <button
                     type="button"
-                    className="button button-ghost button-small"
-                    onClick={() => apply('')}
-                    style={{ marginRight: 'auto' }}
+                    className="button button-primary button-small"
+                    onClick={() => setEditor(null)}
+                    autoFocus
                   >
-                    {t.mvePopoverClear}
+                    {t.mvePopoverOk}
                   </button>
-                )}
-                <button type="button" className="button button-secondary button-small" onClick={() => setEditor(null)}>
-                  {t.cancel}
-                </button>
-                <button
-                  type="button"
-                  className="button button-primary button-small"
-                  onClick={() => apply(editor.draft)}
-                >
-                  {t.mvePopoverApply}
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="mve-popover__info">
-                <Icon name="info" size={13} /> <span>{editor.info}</span>
-              </div>
-              <div className="mve-popover__actions">
-                <button
-                  type="button"
-                  className="button button-secondary button-small"
-                  onClick={() => setEditor(null)}
-                  autoFocus
-                >
-                  {t.mvePopoverOk}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+                </div>
+              </>
+            ) : editor.kind ? (
+              <>
+                {editor.hint && <div className="mve-popover__hint">„{editor.hint}”</div>}
+                <div className="mve-popover__row">
+                  <input
+                    type={inputType}
+                    value={editor.draft}
+                    autoFocus
+                    placeholder={t.mvePopoverPlaceholder}
+                    onChange={(e) => {
+                      const draft = e.target.value;
+                      setEditor((prev) => (prev ? { ...prev, draft } : prev));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        apply(editor.draft);
+                      }
+                    }}
+                  />
+                  {editor.unit && <span className="mve-popover__unit">{editor.unit}</span>}
+                </div>
+                <div className="mve-popover__keys">{t.mvePopoverKeys}</div>
+                <div className="mve-popover__actions">
+                  {readFieldValue(values, editor.nazwa) && (
+                    <button
+                      type="button"
+                      className="button button-ghost button-small"
+                      onClick={() => apply('')}
+                      style={{ marginRight: 'auto' }}
+                    >
+                      {t.mvePopoverClear}
+                    </button>
+                  )}
+                  <button type="button" className="button button-secondary button-small" onClick={() => setEditor(null)}>
+                    {t.cancel}
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-primary button-small"
+                    onClick={() => apply(editor.draft)}
+                  >
+                    {t.mvePopoverApply}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mve-popover__info">
+                  <Icon name="info" size={13} /> <span>{editor.info}</span>
+                </div>
+                <div className="mve-popover__actions">
+                  <button
+                    type="button"
+                    className="button button-secondary button-small"
+                    onClick={() => setEditor(null)}
+                    autoFocus
+                  >
+                    {t.mvePopoverOk}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>,
+        document.body,
       )}
     </div>
   );

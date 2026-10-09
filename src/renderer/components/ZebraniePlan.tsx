@@ -748,6 +748,8 @@ export const PlanWorkspace: React.FC<{
   notice?: React.ReactNode;
   /** Header actions placed before the plan's own. */
   actions?: React.ReactNode;
+  /** A box below the plan (the version's final status). */
+  bottom?: React.ReactNode;
   /** Store the plan, or with null remove it. Throws when that fails. */
   persist: (plan: PlanGospodarczy | null) => Promise<void>;
   onChanged: () => Promise<void> | void;
@@ -764,6 +766,7 @@ export const PlanWorkspace: React.FC<{
   readOnly = false,
   notice,
   actions,
+  bottom,
   persist,
   onChanged,
   onOpenUstawienia,
@@ -912,6 +915,8 @@ export const PlanWorkspace: React.FC<{
         )}
       </FormSection>
 
+      {bottom}
+
       {/* The page's one action, closing the form — not sticky. */}
       {!readOnly && (
         <ModalFooter
@@ -944,6 +949,8 @@ const ZebraniePlan: React.FC<{
   ustawienia: ZebraniaUstawienia;
   dataZebrania: string | null;
   onChanged: () => Promise<void>;
+  /** The version's status box, shown below the plan, also before there is one. */
+  statusBox?: React.ReactNode;
   onGoToSprawozdania: () => void;
   onOpenUstawienia: () => void;
 }> = ({
@@ -955,6 +962,7 @@ const ZebraniePlan: React.FC<{
   ustawienia,
   dataZebrania,
   onChanged,
+  statusBox,
   onGoToSprawozdania,
   onOpenUstawienia,
 }) => {
@@ -1015,6 +1023,7 @@ const ZebraniePlan: React.FC<{
         persist={persist}
         onChanged={onChanged}
         onOpenUstawienia={onOpenUstawienia}
+        bottom={statusBox}
       />
     );
   }
@@ -1022,16 +1031,19 @@ const ZebraniePlan: React.FC<{
   if (!spr) {
     return (
       <div className="page-form zeb-page">
-        <div className="zeb-tab-empty">
-          <span className="zeb-tab-empty__icon">
-            <Icon name="wallet" size={22} />
-          </span>
-          <strong>{t.zplanNeedStatement}</strong>
-          <p>{t.zplanNeedStatementText}</p>
-          <button type="button" className="button button-primary" onClick={onGoToSprawozdania}>
-            <Icon name="bar-chart" size={14} /> {t.zplanGoToStatement}
-          </button>
-        </div>
+        <FormSection icon="wallet" title={t.zebraniaTabPlan}>
+          <div className="uch-empty">
+            <span className="zeb-tab-empty__icon">
+              <Icon name="wallet" size={22} />
+            </span>
+            <strong>{t.zplanNeedStatement}</strong>
+            <p>{t.zplanNeedStatementText}</p>
+            <button type="button" className="button button-primary" onClick={onGoToSprawozdania}>
+              <Icon name="bar-chart" size={14} /> {t.zplanGoToStatement}
+            </button>
+          </div>
+        </FormSection>
+        {statusBox}
       </div>
     );
   }
@@ -1068,6 +1080,8 @@ const ZebraniePlan: React.FC<{
           </button>
         </div>
       </FormSection>
+
+      {statusBox}
     </div>
   );
 };

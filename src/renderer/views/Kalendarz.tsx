@@ -12,6 +12,7 @@ import {
   SpotkanieMaterialyStatus,
   SpotkanieMaterialyKrok,
   SPOTKANIE_MATERIALY_KROKI,
+  ZEBRANIE_DOKUMENTY,
   SPOTKANIE_MATERIALY_POPRZEDNI,
   SpotkanieTyp,
   SpotkanieUczestnik,
@@ -22,7 +23,7 @@ import {
   SpotkanieZarzadOsoba,
   Zebranie,
 } from '../../shared/types';
-import { latestWersja, wersjaLabel, zebranieForSpotkanie } from '../../shared/zebrania';
+import { latestWersja, zebranieForSpotkanie } from '../../shared/zebrania';
 import { comparePeople, personLabel, personName } from '../../shared/app-users';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
@@ -34,7 +35,8 @@ import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
 import { FormField, FormRow, FormSection, RequiredNote } from '../components/FormSection';
 import MailingDetailsModal from '../components/MailingDetailsModal';
 import { ZadanieFormModal, ZadaniePreviewModal } from './Zadania';
-import { zebranieStatusLabel } from './Zebrania';
+import { dokumentLabel } from './Zebrania';
+import Tip from '../components/Tip';
 import ZawiadomienieModal from '../components/ZawiadomienieModal';
 import KalendarzPdfModal from '../components/KalendarzPdfModal';
 import { formatDayKey } from '../../shared/zadania';
@@ -48,11 +50,8 @@ import {
   formatTimeRange,
   groupByDay,
   countAlerts,
-  daysToDokumentyDeadline,
   hasAnyAlert,
-  hasDokumentyOut,
   hasUnreadTerminChange,
-  isDokumentyOverdue,
   isTerminWstepny,
   sentByMailingIds,
   SpotkaniaDocsContext,
@@ -80,6 +79,7 @@ import {
   typOf,
   upcomingSpotkania,
   DEFAULT_TYP_COLOR,
+  defaultTerminWysylki,
 } from '../../shared/calendar';
 
 interface Props {
@@ -122,6 +122,11 @@ interface Props {
   onOpenZebranie?: (zebranieId: number) => void;
   /** "Mailing → Szablony" — the notice flow's way out when no notice template exists. */
   onOpenSzablony?: () => void;
+  /**
+   * Show just one meeting's card, in a window — the same card, with the same
+   * buttons, as the day panel — for a screen that is not the calendar (Zebrania).
+   */
+  cardOnly?: { spotkanieId: number; onClose: () => void };
 }
 
 /**
@@ -539,6 +544,14 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
   const [materialyPotrzebne, setMaterialyPotrzebne] = useState(
     base ? base.materialyStatus !== 'brak' : true,
   );
+  /**
+   * The day the documents are due by, when set on this meeting by hand. Null
+   * follows the meeting's kind (its notice period before the date) — and keeps
+   * following it when the kind or the date changes.
+   */
+  const [terminWysylkiOwn, setTerminWysylkiOwn] = useState<string | null>(
+    base?.terminWysylki ?? null,
+  );
   // A unit or one of its proxies, as one picker value (see `zgnPickValue`).
   const [zgnPick, setZgnPick] = useState(
     zgnPickValue(base?.zgnJednostkaId ?? null, base?.zgnPelnomocnikId ?? null),
@@ -723,6 +736,10 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
     zgnOptions.push({ value: zgnPick, label: base.zgnNazwa });
   }
 
+  const selectedTyp = typy.find((typ) => String(typ.id) === typId) ?? null;
+  const terminWysylkiDefault = defaultTerminWysylki(partsToIso(date, timeFrom), selectedTyp);
+  const terminWysylki = terminWysylkiOwn ?? terminWysylkiDefault ?? '';
+
   const handleSubmit = () => {
     const name = nazwa.trim();
     if (!name) {
@@ -756,6 +773,9 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
         opis: opis.trim(),
         uczestnicy,
         terminStatus,
+        // Stored only when it differs from what the kind says.
+        terminWysylki:
+          terminWysylkiOwn && terminWysylkiOwn !== terminWysylkiDefault ? terminWysylkiOwn : null,
         ...resolveZgn(),
         zarzad,
       },
@@ -1122,7 +1142,7 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
             )}
           </FormSection>
 
-          <FormSection icon="paperclip" title={t.kalSectionWork} description={t.kalSectionWorkDesc}>
+          <FormSection icon="paperclip" title={t.kalSectionMaterials} description={t.kalSectionMaterialsDesc}>
             <FormField label={t.kalMaterialsNeeded} hint={t.kalMaterialsNeededHint}>
               <div className="kal-pill-switch" role="group" aria-label={t.kalMaterialsNeeded}>
                 {[true, false].map((needed) => (
@@ -1140,6 +1160,44 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
                 ))}
               </div>
             </FormField>
+            <FormField
+              label={t.kalFieldTerminWysylki}
+              htmlFor="kal-meeting-wysylka"
+              hint={
+                terminWysylkiOwn
+                  ? t.kalFieldTerminWysylkiOwn
+                  : terminWysylkiDefault && selectedTyp
+                    ? t.kalFieldTerminWysylkiFromTyp
+                        .replace('{days}', String(selectedTyp.dniNaDokumenty))
+                        .replace('{typ}', selectedTyp.nazwa)
+                    : t.kalFieldTerminWysylkiNone
+              }
+            >
+              <div className="kal-wysylka">
+                <input
+                  id="kal-meeting-wysylka"
+                  type="date"
+                  value={terminWysylki}
+                  max={date || undefined}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setTerminWysylkiOwn(v && v !== terminWysylkiDefault ? v : null);
+                  }}
+                />
+                {terminWysylkiOwn && terminWysylkiDefault && (
+                  <button
+                    type="button"
+                    className="button button-small button-subtle"
+                    onClick={() => setTerminWysylkiOwn(null)}
+                  >
+                    <Icon name="undo" size={13} /> {t.kalFieldTerminWysylkiReset}
+                  </button>
+                )}
+              </div>
+            </FormField>
+          </FormSection>
+
+          <FormSection icon="clipboard" title={t.kalSectionTasks} description={t.kalSectionTasksDesc}>
             <SpotkanieZadania
               zadania={editing ? linkedZadania : []}
               pending={pendingZadania}
@@ -1289,7 +1347,6 @@ const MeetingCard: React.FC<{
   spotkanie,
   typ,
   place,
-  mailings,
   language,
   locale,
   highlighted,
@@ -1299,10 +1356,6 @@ const MeetingCard: React.FC<{
   onDelete,
   onAckTermin,
   onTerminStatus,
-  onDokumenty,
-  onSendMailing,
-  onOpenMailing,
-  docsCtx,
   onMaterialy,
   zebranie,
   onPrzygotuj,
@@ -1321,14 +1374,6 @@ const MeetingCard: React.FC<{
   const color = normalizeHexColor(typ?.kolor ?? DEFAULT_TYP_COLOR);
   const changed = hasUnreadTerminChange(spotkanie);
   const tentative = isTerminWstepny(spotkanie);
-  // Either path counts as sent: the manual tick, or a mailing that went out.
-  const sent = hasDokumentyOut(spotkanie, docsCtx);
-  const overdue = isDokumentyOverdue(spotkanie, docsCtx);
-  const daysLeft = daysToDokumentyDeadline(spotkanie, docsCtx);
-  // Open only while the user is writing the note; a card is a summary, and this
-  // is the one thing on it that takes typing.
-  const [editingDocs, setEditingDocs] = useState(false);
-  const [docsOpis, setDocsOpis] = useState(spotkanie.dokumentyOpis);
   const materialyMark: Record<SpotkanieMaterialyKrok, string> = {
     do_przygotowania: t.kalMatMarkDo,
     przygotowane: t.kalMatMarkPrzygotowane,
@@ -1339,21 +1384,15 @@ const MeetingCard: React.FC<{
     return user ? personLabel(user) : email;
   };
   const zebranieWersja = zebranie ? latestWersja(zebranie) : null;
+  // "Przygotowane" (and "Wysłane", which implies it) only once every document of
+  // the newest version is marked ready in Zebrania — these are what is not yet.
+  const notReady = ZEBRANIE_DOKUMENTY.filter((d) => zebranieWersja?.gotowe[d] !== true).map((d) =>
+    dokumentLabel(t, d),
+  );
   // "Przygotuj materiały" only once the meeting says its materials are to be
   // prepared, and only while it has no entry yet — after that the button is
   // "Otwórz w Zebraniach": one meeting, one entry.
   const canPrzygotuj = !zebranie && !!onPrzygotuj && spotkanie.materialyStatus === 'do_przygotowania';
-  const zawiadomienieButton = onZawiadomienie && (
-    <button
-      type="button"
-      className="button button-small button-secondary"
-      onClick={onZawiadomienie}
-      disabled={busy}
-      title={t.zebraniaKalNoticeHint}
-    >
-      <Icon name="mail" size={13} /> {t.zebraniaKalNotice}
-    </button>
-  );
   // In the materials section, the way into Zebrania and the notice: a tile each — a coloured icon, what
   // it opens and a line on what is there — so the two read apart at a glance.
   const zebAction = (
@@ -1363,12 +1402,13 @@ const MeetingCard: React.FC<{
     sub: string,
     onClick: () => void,
     title?: string,
+    blocked = false,
   ) => (
     <button
       type="button"
       className={`kal-action kal-action--${tone}`}
       onClick={onClick}
-      disabled={busy}
+      disabled={busy || blocked}
       title={title}
     >
       <span className="kal-action__icon">
@@ -1386,11 +1426,6 @@ const MeetingCard: React.FC<{
     spotkanie.materialyStatus as SpotkanieMaterialyKrok,
   );
   const materialyPrev = SPOTKANIE_MATERIALY_POPRZEDNI[spotkanie.materialyStatus];
-  const docsBadge = sent
-    ? { tone: 'status-success', label: t.kalPreviewDocsSent }
-    : overdue
-      ? { tone: 'status-error', label: t.kalDocsBadgeOverdue }
-      : { tone: 'status-neutral', label: t.kalPreviewDocsNotSent };
 
   return (
     <article
@@ -1621,21 +1656,46 @@ const MeetingCard: React.FC<{
             {SPOTKANIE_MATERIALY_KROKI.map((krok, i) => {
               const done = i < materialyStep;
               const current = i === materialyStep;
+              const blocked =
+                !current && !done && (krok === 'przygotowane' || krok === 'wyslane') && notReady.length > 0;
+              const button = (
+                <button
+                  type="button"
+                  className={`kal-step${done ? ' is-done' : ''}${current ? ' is-current' : ''}`}
+                  onClick={() => onMaterialy(krok)}
+                  disabled={busy || current || blocked}
+                  aria-pressed={current}
+                  title={current || blocked ? undefined : materialyMark[krok]}
+                >
+                  <span className="kal-step__dot">
+                    {done || current ? <Icon name="check" size={11} /> : i + 1}
+                  </span>
+                  <span className="kal-step__label">{materialyStepLabel(t, krok)}</span>
+                </button>
+              );
               return (
                 <li key={krok}>
-                  <button
-                    type="button"
-                    className={`kal-step${done ? ' is-done' : ''}${current ? ' is-current' : ''}`}
-                    onClick={() => onMaterialy(krok)}
-                    disabled={busy || current}
-                    aria-pressed={current}
-                    title={current ? undefined : materialyMark[krok]}
-                  >
-                    <span className="kal-step__dot">
-                      {done || current ? <Icon name="check" size={11} /> : i + 1}
-                    </span>
-                    <span className="kal-step__label">{materialyStepLabel(t, krok)}</span>
-                  </button>
+                  {blocked ? (
+                    <Tip
+                      className="kal-step-tip"
+                      ariaLabel={`${t.kalMatNotReadyTitle}: ${notReady.join(', ')}`}
+                      content={
+                        <>
+                          <div className="tip__title">{t.kalMatNotReadyTitle}</div>
+                          <ul className="tip__list">
+                            {notReady.map((m) => (
+                              <li key={m}>{m}</li>
+                            ))}
+                          </ul>
+                          <div className="tip__note">{t.kalMatNotReadyHint}</div>
+                        </>
+                      }
+                    >
+                      {button}
+                    </Tip>
+                  ) : (
+                    button
+                  )}
                 </li>
               );
             })}
@@ -1652,16 +1712,6 @@ const MeetingCard: React.FC<{
               state as above, kept in step by the main process) and the notice. */}
           {(zebranie || canPrzygotuj || onZawiadomienie) && (
             <div className="kal-zeb">
-              {zebranie && (
-                <span className="kal-zeb__state">
-                  <Icon name="file-check" size={13} />
-                  {zebranieWersja
-                    ? t.zebraniaKalEntry
-                        .replace('{v}', wersjaLabel(zebranieWersja))
-                        .replace('{status}', zebranieStatusLabel(t, zebranieWersja.status))
-                    : t.zebrania}
-                </span>
-              )}
               <div className="kal-zeb__actions">
                 {zebranie &&
                   onOpenZebranie &&
@@ -1677,166 +1727,39 @@ const MeetingCard: React.FC<{
                     t.zebraniaKalPrepareHint,
                   )}
                 {onZawiadomienie &&
-                  zebAction(
-                    'info',
-                    'mail',
-                    t.zebraniaKalNotice,
-                    t.zebraniaKalNoticeSub,
-                    onZawiadomienie,
-                    t.zebraniaKalNoticeHint,
-                  )}
+                  (notReady.length > 0 ? (
+                    <Tip
+                      className="kal-action-tip"
+                      ariaLabel={`${t.kalNoticeNotReadyTitle}: ${notReady.join(', ')}`}
+                      content={
+                        <>
+                          <div className="tip__title">{t.kalNoticeNotReadyTitle}</div>
+                          <ul className="tip__list">
+                            {notReady.map((m) => (
+                              <li key={m}>{m}</li>
+                            ))}
+                          </ul>
+                          <div className="tip__note">{t.kalMatNotReadyHint}</div>
+                        </>
+                      }
+                    >
+                      {zebAction('info', 'mail', t.zebraniaKalNotice, t.zebraniaKalNoticeSub, onZawiadomienie, undefined, true)}
+                    </Tip>
+                  ) : (
+                    zebAction(
+                      'info',
+                      'mail',
+                      t.zebraniaKalNotice,
+                      t.zebraniaKalNoticeSub,
+                      onZawiadomienie,
+                      t.zebraniaKalNoticeHint,
+                    )
+                  ))}
               </div>
             </div>
           )}
         </section>
       )}
-
-      {/* Paperwork, last on the card: the one part about what happened AFTER the
-          meeting was arranged. Two ways in, one question answered — did it go out? */}
-      <section className={`kal-section kal-section--docs${overdue ? ' is-overdue' : ''}`}>
-        <div className="kal-section__head">
-          <span className="kal-section__title">
-            <Icon name={sent ? 'file-check' : 'file-text'} size={13} /> {t.kalPreviewDocs}
-          </span>
-          <span className={`status-badge ${docsBadge.tone}`}>{docsBadge.label}</span>
-          {!editingDocs && (
-            <div className="kal-section__actions">
-              <button
-                type="button"
-                className="button button-small button-subtle"
-                onClick={() => {
-                  setDocsOpis(spotkanie.dokumentyOpis);
-                  setEditingDocs(true);
-                }}
-                disabled={busy}
-              >
-                <Icon name={sent ? 'edit' : 'check'} size={13} /> {sent ? t.kalDocsEdit : t.kalDocsMark}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* The notice period, but only for a kind of meeting that has one — and
-            only while it still says something: once the papers are out, when
-            they were due stops being the question. */}
-        {!sent && daysLeft !== null && (
-          <div className={`kal-docs__deadline${overdue ? ' is-overdue' : ''}`}>
-            <Icon name={overdue ? 'alert-circle' : 'clock'} size={13} />
-            <span>
-              {overdue
-                ? t.kalDocsOverdue.replace('{days}', String(Math.abs(daysLeft)))
-                : t.kalDocsDueIn.replace('{days}', String(daysLeft))}
-            </span>
-          </div>
-        )}
-
-        {sent && !editingDocs && (
-          <div className="kal-docs__note">
-            {spotkanie.dokumentyOpis && <p>{spotkanie.dokumentyOpis}</p>}
-            <span className="kal-section__stamp">
-              {t.kalDocsStamp
-                .replace('{when}', formatStamp(spotkanie.dokumentyWyslaneAt ?? '', locale))
-                .replace('{who}', spotkanie.dokumentyWyslaneBy || '—')}
-            </span>
-          </div>
-        )}
-
-        {editingDocs && (
-          <div className="kal-docs__form">
-            <textarea
-              rows={2}
-              value={docsOpis}
-              placeholder={t.kalDocsPlaceholder}
-              onChange={(e) => setDocsOpis(e.target.value)}
-              autoFocus
-            />
-            <div className="kal-docs__form-actions">
-              {sent && (
-                <button
-                  type="button"
-                  className="button button-small button-ghost icon-danger kal-docs__undo"
-                  onClick={() => {
-                    onDokumenty(false, '');
-                    setEditingDocs(false);
-                  }}
-                  disabled={busy}
-                >
-                  <Icon name="undo" size={13} /> {t.kalDocsUndo}
-                </button>
-              )}
-              <button
-                type="button"
-                className="button button-small button-secondary"
-                onClick={() => setEditingDocs(false)}
-                disabled={busy}
-              >
-                {t.cancel}
-              </button>
-              <button
-                type="button"
-                className="button button-small button-success"
-                onClick={() => {
-                  onDokumenty(true, docsOpis);
-                  setEditingDocs(false);
-                }}
-                disabled={busy}
-              >
-                <Icon name="check" size={13} /> {t.kalDocsSave}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* What the Mailing module actually sent for this meeting. Each row
-            opens the same details window the mailing history opens, because a
-            send recorded here and the same send in the history are one thing. */}
-        {mailings.length > 0 && (
-          <ul className="kal-docs__mailings">
-            {mailings.map((m) => (
-              <li key={m.id}>
-                <button
-                  type="button"
-                  className={`kal-docs__mailing${m.status === 'error' ? ' is-error' : ''}`}
-                  onClick={() => onOpenMailing(m)}
-                  title={t.kalDocsMailingOpen}
-                >
-                  <Icon name={m.status === 'error' ? 'alert-circle' : 'mail'} size={12} />
-                  <span className="kal-docs__mailing-main">
-                    {m.templateName || m.subject || '—'}
-                    {m.jednostkaNazwa ? ` → ${m.jednostkaNazwa}` : ''}
-                  </span>
-                  {m.attachmentNames.length > 0 && (
-                    <span className="kal-docs__mailing-files" title={m.attachmentNames.join(', ')}>
-                      <Icon name="paperclip" size={11} /> {m.attachmentNames.length}
-                    </span>
-                  )}
-                  <span className="kal-docs__mailing-when">{formatStamp(m.sentAt, locale)}</span>
-                  <Icon name="chevron-right" size={12} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {/* Sending is the section's way forward; right-aligned, like every action row. */}
-        {!editingDocs && (onSendMailing || (spotkanie.materialyStatus === 'brak' && zawiadomienieButton)) && (
-          <div className="kal-section__buttons">
-            {/* No materials section to hold it when none are needed — the
-                notice is still a document this meeting may send. */}
-            {spotkanie.materialyStatus === 'brak' && zawiadomienieButton}
-            {onSendMailing && (
-              <button
-                type="button"
-                className="button button-small button-secondary"
-                onClick={onSendMailing}
-                disabled={busy}
-              >
-                <Icon name="mail" size={13} /> {t.kalDocsSendMailing}
-              </button>
-            )}
-          </div>
-        )}
-      </section>
 
       {/* Tasks last: follow-ups to the meeting, not facts about it. */}
       <section className="kal-section">
@@ -1857,6 +1780,175 @@ const MeetingCard: React.FC<{
 };
 
 /* ================================ The view ================================= */
+
+/**
+ * A meeting's Kalendarz card in a window, from anywhere: the calendar's own
+ * component in its one-card mode, so every button on it works as it does there.
+ */
+export const SpotkanieKartaModal: React.FC<{
+  language: Language;
+  userEmail?: string;
+  spotkanieId: number;
+  onClose: () => void;
+  onOpenSzablony?: () => void;
+}> = ({ language, userEmail, spotkanieId, onClose, onOpenSzablony }) => {
+  const [monthKey, setMonthKey] = useState(() => monthOfDayKey(todayKey()));
+  const [stateFilter, setStateFilter] = useState<SpotkanieStateFilter>('all');
+  return (
+    <Kalendarz
+      language={language}
+      monthKey={monthKey}
+      setMonthKey={setMonthKey}
+      stateFilter={stateFilter}
+      setStateFilter={setStateFilter}
+      userEmail={userEmail}
+      onOpenSzablony={onOpenSzablony}
+      cardOnly={{ spotkanieId, onClose }}
+    />
+  );
+};
+
+/**
+ * The meeting's edit form on its own, for a screen that is not the calendar
+ * (Zebrania): the same form and the same save, without leaving that screen.
+ * Loads what the form needs; `onSaved` lets the host reload its own data.
+ */
+export const SpotkanieEditModal: React.FC<{
+  language: Language;
+  userEmail?: string;
+  spotkanie: Spotkanie;
+  onSaved: () => void;
+  onCancel: () => void;
+}> = ({ language, userEmail, spotkanie, onSaved, onCancel }) => {
+  const t = translations[language];
+  const notify = useNotify();
+  const [typy, setTypy] = useState<SpotkanieTyp[]>([]);
+  const [lokalizacje, setLokalizacje] = useState<SpotkanieLokalizacja[]>([]);
+  const [adresy, setAdresy] = useState<Adres[]>([]);
+  const [users, setUsers] = useState<AppUser[]>([]);
+  const [zgnJednostki, setZgnJednostki] = useState<ZgnJednostka[]>([]);
+  const [zgnPelnomocnicy, setZgnPelnomocnicy] = useState<ZgnPelnomocnik[]>([]);
+  const [zadania, setZadania] = useState<Zadanie[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadZadania = async () => {
+    try {
+      const all = await window.electronAPI.getZadania();
+      setZadania(all.filter((z) => z.spotkanieId === spotkanie.id && !z.zarchiwizowane));
+    } catch {
+      setZadania([]);
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [typyData, lokalizacjeData, adresyData, usersData] = await Promise.all([
+          window.electronAPI.getSpotkaniaTypy(),
+          window.electronAPI.getSpotkaniaLokalizacje(),
+          window.electronAPI.getAdresy(),
+          window.electronAPI.getAppUsers(),
+        ]);
+        if (cancelled) return;
+        setTypy(typyData);
+        setLokalizacje(lokalizacjeData);
+        setAdresy(adresyData);
+        setUsers(usersData);
+      } catch {
+        if (!cancelled) notify.error(t.kalLoadError);
+      }
+      try {
+        const [jednostki, pelnomocnicy] = await Promise.all([
+          window.electronAPI.mailingGetZgn(),
+          window.electronAPI.getZgnPelnomocnicy(),
+        ]);
+        if (cancelled) return;
+        setZgnJednostki(jednostki);
+        setZgnPelnomocnicy(pelnomocnicy);
+      } catch {
+        // Without the units the picker is only empty.
+      }
+      await loadZadania();
+      if (!cancelled) setLoaded(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spotkanie.id]);
+
+  const handleSubmit = async (
+    input: SpotkanieInput,
+    _pendingZadania: ZadanieInput[],
+    materialyPotrzebne: boolean,
+  ) => {
+    setIsSaving(true);
+    setError(null);
+    try {
+      await window.electronAPI.updateSpotkanie(spotkanie.id, input);
+      const was = spotkanie.materialyStatus;
+      if (!materialyPotrzebne && was !== 'brak') {
+        await window.electronAPI.setSpotkanieMaterialy(spotkanie.id, 'brak');
+      } else if (materialyPotrzebne && was === 'brak') {
+        await window.electronAPI.setSpotkanieMaterialy(spotkanie.id, 'potrzebne');
+      }
+      if (materialyPotrzebne) {
+        try {
+          await window.electronAPI.ensureZebranieForSpotkanie(spotkanie.id);
+        } catch (err: unknown) {
+          notify.error(
+            `${t.zebraniaAutoCreateError}${err instanceof Error ? `: ${err.message}` : ''}`,
+          );
+        }
+      }
+      notify.success(t.kalUpdated);
+      onSaved();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteZadanie = async (z: Zadanie) => {
+    if (!(await notify.confirm(t.zadConfirmDelete.replace('{title}', z.tytul), { danger: true }))) {
+      return;
+    }
+    try {
+      await window.electronAPI.deleteZadanie(z.id);
+      notify.success(t.kalTaskDeleted);
+    } catch (err: unknown) {
+      notify.error(err instanceof Error ? err.message : t.zadSaveError);
+    }
+    await loadZadania();
+  };
+
+  if (!loaded) return null;
+  return (
+    <SpotkanieFormModal
+      language={language}
+      editing={spotkanie}
+      defaultDay={toDayKey(spotkanie.startsAt)}
+      typy={typy}
+      lokalizacje={lokalizacje}
+      adresy={adresy}
+      users={users}
+      userEmail={userEmail}
+      isSaving={isSaving}
+      error={error}
+      onSubmit={handleSubmit}
+      onCancel={onCancel}
+      zgnJednostki={zgnJednostki}
+      zgnPelnomocnicy={zgnPelnomocnicy}
+      linkedZadania={zadania}
+      onZadaniaChanged={() => void loadZadania()}
+      onDeleteZadanie={(z) => void handleDeleteZadanie(z)}
+    />
+  );
+};
 
 /**
  * "Kalendarz" — the month, its meetings, and one panel showing the selected day.
@@ -1882,6 +1974,7 @@ const Kalendarz: React.FC<Props> = ({
   onFocusHandled,
   onOpenZebranie,
   onOpenSzablony,
+  cardOnly,
 }) => {
   const t = translations[language];
   const notify = useNotify();
@@ -2404,9 +2497,8 @@ const Kalendarz: React.FC<Props> = ({
     );
 
   /**
-   * "Przygotuj materiały": the meeting's entry in Zebrania, version 1.0. Then
-   * offered at once — the entry is where the work continues, but the user may
-   * have more to do on the calendar first.
+   * "Przygotuj materiały": the meeting's entry in Zebrania, version 1.0, opened
+   * at once — the entry is where the work continues.
    */
   const handlePrzygotuj = async (spotkanie: Spotkanie) => {
     setBusyId(spotkanie.id);
@@ -2420,16 +2512,11 @@ const Kalendarz: React.FC<Props> = ({
       setBusyId(null);
     }
     if (!created) return;
-    const w = latestWersja(created);
     if (!onOpenZebranie) {
       notify.success(t.zebraniaKalPreparedDone);
       return;
     }
-    const go = await notify.confirm(
-      t.zebraniaKalPrepared.replace('{v}', w ? wersjaLabel(w) : '1.0'),
-      { confirmLabel: t.zebraniaKalOpen, cancelLabel: t.zebraniaKalStay },
-    );
-    if (go) onOpenZebranie(created.id);
+    onOpenZebranie(created.id);
   };
 
   const handleDokumenty = (spotkanie: Spotkanie, sent: boolean, opis: string) =>
@@ -2530,6 +2617,7 @@ const Kalendarz: React.FC<Props> = ({
   /* ------------------------------- Rendering ------------------------------- */
 
   if (isLoading) {
+    if (cardOnly) return null;
     return (
       <div className="content-body">
         <Loader label={t.loading} />
@@ -2566,6 +2654,8 @@ const Kalendarz: React.FC<Props> = ({
             }
           : undefined
       }
+      // Shown always; the card greys it out until every document of the newest
+      // version is marked ready in Zebrania.
       onZawiadomienie={s.adresId !== null ? () => setZawiadomienieFor(s.id) : undefined}
       onSendMailing={
         onSendDocuments && s.adresId !== null
@@ -2591,6 +2681,216 @@ const Kalendarz: React.FC<Props> = ({
 
   const facts = [`${t.kalFactsUpcoming}: ${upcoming.length}`];
   if (typy.length > 0) facts.push(`${t.kalFactsTypes}: ${typy.length}`);
+
+  const overlays = (
+    <>
+      {tip && (
+        <div
+          className="kal-tip"
+          role="tooltip"
+          style={{ left: tip.left, top: tip.top, bottom: tip.bottom }}
+        >
+          <div className="kal-tip__time">
+            <Icon name="clock" size={12} /> {formatTimeRange(tip.spotkanie, locale)}
+          </div>
+          <div className="kal-tip__name">{tip.spotkanie.nazwa}</div>
+          <div className="kal-tip__meta">
+            <span
+              className="kal-chip"
+              style={{
+                ['--chip' as string]: normalizeHexColor(
+                  typOf(tip.spotkanie, typy)?.kolor ?? DEFAULT_TYP_COLOR,
+                ),
+              }}
+            >
+              <span className="kal-chip__dot" />
+              <span className="kal-chip__name">
+                {typOf(tip.spotkanie, typy)?.nazwa ?? t.kalNoType}
+              </span>
+            </span>
+          </div>
+          {tip.spotkanie.materialyStatus !== 'brak' && (
+            <div className="kal-tip__line">
+              <span className={`kal-chip__mat kal-chip__mat--${tip.spotkanie.materialyStatus}`}>
+                <Icon name="briefcase" size={12} />
+                {materialyStatusLabel(t, tip.spotkanie.materialyStatus)}
+              </span>
+            </div>
+          )}
+          {tip.spotkanie.adresNazwa && (
+            <div className="kal-tip__line">
+              <Icon name="map-pin" size={12} /> {tip.spotkanie.adresNazwa}
+            </div>
+          )}
+          {tip.spotkanie.uczestnicy.length > 0 && (
+            <div className="kal-tip__line">
+              <Icon name="users" size={12} />{' '}
+              {tip.spotkanie.uczestnicy.map((person) => personLabel(person)).join(', ')}
+            </div>
+          )}
+          {lokalizacjaLabel(tip.spotkanie, lokalizacje) && (
+            <div className="kal-tip__line">
+              <Icon name="map-pin" size={12} />
+              {lokalizacjaLabel(tip.spotkanie, lokalizacje)}
+            </div>
+          )}
+          {isTerminWstepny(tip.spotkanie) && (
+            <div className="kal-tip__line kal-tip__line--warn">
+              <Icon name="clock" size={12} /> {t.kalTerminTentative}
+            </div>
+          )}
+          {hasUnreadTerminChange(tip.spotkanie) && (
+            <div className="kal-tip__line kal-tip__line--warn">
+              <Icon name="alert-triangle" size={12} />
+              {tip.spotkanie.terminZmienionyZ
+                ? t.kalTerminChangedFrom.replace(
+                    '{from}',
+                    formatStamp(tip.spotkanie.terminZmienionyZ, locale),
+                  )
+                : t.kalTerminChangedTitle}
+            </div>
+          )}
+          {tip.spotkanie.opis && <p className="kal-tip__desc">{tip.spotkanie.opis}</p>}
+          <div className="kal-tip__hint">{t.kalChipDoubleClick}</div>
+        </div>
+      )}
+
+      {pdfOpen && (
+        <KalendarzPdfModal
+          language={language}
+          monthKey={monthKey}
+          filtersActive={search.trim().length > 0 || typFilter !== null || stateFilter !== 'all'}
+          busy={pdfBusy}
+          onClose={() => setPdfOpen(false)}
+          onSubmit={(od, doDnia) => void downloadPdf(od, doDnia)}
+        />
+      )}
+
+      {zawiadomienieFor !== null && (
+        <ZawiadomienieModal
+          key={zawiadomienieFor}
+          language={language}
+          userEmail={userEmail ?? ''}
+          spotkanieId={zawiadomienieFor}
+          onClose={() => setZawiadomienieFor(null)}
+          onChanged={() => void load(true)}
+          onOpenSzablony={onOpenSzablony}
+          sending
+        />
+      )}
+
+      {mailingDetails && (
+        <MailingDetailsModal
+          entry={mailingDetails}
+          language={language}
+          onClose={() => setMailingDetails(null)}
+        />
+      )}
+
+      {form && (
+        <SpotkanieFormModal
+          // Remounting per target keeps the form's own state honest: opening a
+          // different meeting must not inherit the previous one's fields.
+          key={
+            form.editing
+              ? `edit-${form.editing.id}`
+              : form.template
+                ? `clone-${form.template.id}`
+                : `new-${form.day}`
+          }
+          language={language}
+          editing={form.editing}
+          template={form.template ?? null}
+          onClone={form.editing ? () => openClone(form.editing as Spotkanie) : undefined}
+          defaultDay={form.day}
+          typy={typy}
+          lokalizacje={lokalizacje}
+          adresy={adresy}
+          users={users}
+          userEmail={userEmail}
+          isSaving={isSaving}
+          error={formError}
+          onSubmit={handleSubmit}
+          onCancel={() => {
+            setForm(null);
+            setFormError(null);
+          }}
+          onManageTypes={onManageTypes}
+          onManagePlaces={onManagePlaces}
+          zgnJednostki={zgnJednostki}
+          zgnPelnomocnicy={zgnPelnomocnicy}
+          linkedZadania={form.editing ? zadaniaBySpotkanie.get(form.editing.id) ?? [] : []}
+          onZadaniaChanged={() => void loadZadania()}
+          onDeleteZadanie={(z) => void handleDeleteZadanie(z)}
+          onOpenZadanie={onOpenZadanie ? (z) => onOpenZadanie(z.id) : undefined}
+        />
+      )}
+
+      {taskPreview && (
+        <ZadaniePreviewModal
+          key={taskPreview.zadanie.id}
+          language={language}
+          zadanie={taskPreview.zadanie}
+          spotkanie={taskPreview.spotkanie}
+          users={users}
+          userEmail={userEmail ?? ''}
+          onCommentsChange={() => {}}
+          onEdit={() => {
+            openCardTask(taskPreview.spotkanie, taskPreview.zadanie);
+            setTaskPreview(null);
+          }}
+          onClose={() => setTaskPreview(null)}
+        />
+      )}
+
+      {cardTask && (
+        <ZadanieFormModal
+          key={cardTask.editing ? `edit-${cardTask.editing.id}` : `new-${cardTask.spotkanie.id}`}
+          language={language}
+          editing={cardTask.editing}
+          initialStatus="todo"
+          initialValues={{
+            termin: toDayKey(cardTask.spotkanie.startsAt),
+            spotkanieId: cardTask.spotkanie.id,
+          }}
+          users={users}
+          userEmail={userEmail ?? ''}
+          onCommentsChange={() => {}}
+          isSaving={cardTaskSaving}
+          error={cardTaskError}
+          onSubmit={(input) => void handleCardTaskSubmit(input)}
+          onCancel={() => setCardTask(null)}
+        />
+      )}
+    </>
+  );
+
+  if (cardOnly) {
+    const s = spotkania.find((x) => x.id === cardOnly.spotkanieId) ?? null;
+    return (
+      <>
+        <div className="modal-overlay" onClick={cardOnly.onClose}>
+          <div
+            className="modal kal-card-modal"
+            role="dialog"
+            aria-label={s?.nazwa ?? t.kalendarz}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <ModalDismiss onClose={cardOnly.onClose} ariaLabel={t.close} />
+            {/* The card itself shows only the hours — out of the calendar, the day goes on top. */}
+            <div className="kal-card-modal__head">
+              <Icon name="calendar" size={14} />
+              {s ? formatDayKey(toDayKey(s.startsAt), language) : t.kalendarz}
+            </div>
+            <div className="modal-body kal-card-modal__body">
+              {s ? renderMeetingCard(s) : <p className="zeb-muted">{t.kalMeetingGone}</p>}
+            </div>
+          </div>
+        </div>
+        {overlays}
+      </>
+    );
+  }
 
   return (
     <div className="content-body content-body--fill">
@@ -3080,183 +3380,7 @@ const Kalendarz: React.FC<Props> = ({
         </div>
       )}
 
-      {tip && (
-        <div
-          className="kal-tip"
-          role="tooltip"
-          style={{ left: tip.left, top: tip.top, bottom: tip.bottom }}
-        >
-          <div className="kal-tip__time">
-            <Icon name="clock" size={12} /> {formatTimeRange(tip.spotkanie, locale)}
-          </div>
-          <div className="kal-tip__name">{tip.spotkanie.nazwa}</div>
-          <div className="kal-tip__meta">
-            <span
-              className="kal-chip"
-              style={{
-                ['--chip' as string]: normalizeHexColor(
-                  typOf(tip.spotkanie, typy)?.kolor ?? DEFAULT_TYP_COLOR,
-                ),
-              }}
-            >
-              <span className="kal-chip__dot" />
-              <span className="kal-chip__name">
-                {typOf(tip.spotkanie, typy)?.nazwa ?? t.kalNoType}
-              </span>
-            </span>
-          </div>
-          {tip.spotkanie.materialyStatus !== 'brak' && (
-            <div className="kal-tip__line">
-              <span className={`kal-chip__mat kal-chip__mat--${tip.spotkanie.materialyStatus}`}>
-                <Icon name="briefcase" size={12} />
-                {materialyStatusLabel(t, tip.spotkanie.materialyStatus)}
-              </span>
-            </div>
-          )}
-          {tip.spotkanie.adresNazwa && (
-            <div className="kal-tip__line">
-              <Icon name="map-pin" size={12} /> {tip.spotkanie.adresNazwa}
-            </div>
-          )}
-          {tip.spotkanie.uczestnicy.length > 0 && (
-            <div className="kal-tip__line">
-              <Icon name="users" size={12} />{' '}
-              {tip.spotkanie.uczestnicy.map((person) => personLabel(person)).join(', ')}
-            </div>
-          )}
-          {lokalizacjaLabel(tip.spotkanie, lokalizacje) && (
-            <div className="kal-tip__line">
-              <Icon name="map-pin" size={12} />
-              {lokalizacjaLabel(tip.spotkanie, lokalizacje)}
-            </div>
-          )}
-          {isTerminWstepny(tip.spotkanie) && (
-            <div className="kal-tip__line kal-tip__line--warn">
-              <Icon name="clock" size={12} /> {t.kalTerminTentative}
-            </div>
-          )}
-          {hasUnreadTerminChange(tip.spotkanie) && (
-            <div className="kal-tip__line kal-tip__line--warn">
-              <Icon name="alert-triangle" size={12} />
-              {tip.spotkanie.terminZmienionyZ
-                ? t.kalTerminChangedFrom.replace(
-                    '{from}',
-                    formatStamp(tip.spotkanie.terminZmienionyZ, locale),
-                  )
-                : t.kalTerminChangedTitle}
-            </div>
-          )}
-          {tip.spotkanie.opis && <p className="kal-tip__desc">{tip.spotkanie.opis}</p>}
-          <div className="kal-tip__hint">{t.kalChipDoubleClick}</div>
-        </div>
-      )}
-
-      {pdfOpen && (
-        <KalendarzPdfModal
-          language={language}
-          monthKey={monthKey}
-          filtersActive={search.trim().length > 0 || typFilter !== null || stateFilter !== 'all'}
-          busy={pdfBusy}
-          onClose={() => setPdfOpen(false)}
-          onSubmit={(od, doDnia) => void downloadPdf(od, doDnia)}
-        />
-      )}
-
-      {zawiadomienieFor !== null && (
-        <ZawiadomienieModal
-          key={zawiadomienieFor}
-          language={language}
-          userEmail={userEmail ?? ''}
-          spotkanieId={zawiadomienieFor}
-          onClose={() => setZawiadomienieFor(null)}
-          onChanged={() => void load(true)}
-          onOpenSzablony={onOpenSzablony}
-        />
-      )}
-
-      {mailingDetails && (
-        <MailingDetailsModal
-          entry={mailingDetails}
-          language={language}
-          onClose={() => setMailingDetails(null)}
-        />
-      )}
-
-      {form && (
-        <SpotkanieFormModal
-          // Remounting per target keeps the form's own state honest: opening a
-          // different meeting must not inherit the previous one's fields.
-          key={
-            form.editing
-              ? `edit-${form.editing.id}`
-              : form.template
-                ? `clone-${form.template.id}`
-                : `new-${form.day}`
-          }
-          language={language}
-          editing={form.editing}
-          template={form.template ?? null}
-          onClone={form.editing ? () => openClone(form.editing as Spotkanie) : undefined}
-          defaultDay={form.day}
-          typy={typy}
-          lokalizacje={lokalizacje}
-          adresy={adresy}
-          users={users}
-          userEmail={userEmail}
-          isSaving={isSaving}
-          error={formError}
-          onSubmit={handleSubmit}
-          onCancel={() => {
-            setForm(null);
-            setFormError(null);
-          }}
-          onManageTypes={onManageTypes}
-          onManagePlaces={onManagePlaces}
-          zgnJednostki={zgnJednostki}
-          zgnPelnomocnicy={zgnPelnomocnicy}
-          linkedZadania={form.editing ? zadaniaBySpotkanie.get(form.editing.id) ?? [] : []}
-          onZadaniaChanged={() => void loadZadania()}
-          onDeleteZadanie={(z) => void handleDeleteZadanie(z)}
-          onOpenZadanie={onOpenZadanie ? (z) => onOpenZadanie(z.id) : undefined}
-        />
-      )}
-
-      {taskPreview && (
-        <ZadaniePreviewModal
-          key={taskPreview.zadanie.id}
-          language={language}
-          zadanie={taskPreview.zadanie}
-          spotkanie={taskPreview.spotkanie}
-          users={users}
-          userEmail={userEmail ?? ''}
-          onCommentsChange={() => {}}
-          onEdit={() => {
-            openCardTask(taskPreview.spotkanie, taskPreview.zadanie);
-            setTaskPreview(null);
-          }}
-          onClose={() => setTaskPreview(null)}
-        />
-      )}
-
-      {cardTask && (
-        <ZadanieFormModal
-          key={cardTask.editing ? `edit-${cardTask.editing.id}` : `new-${cardTask.spotkanie.id}`}
-          language={language}
-          editing={cardTask.editing}
-          initialStatus="todo"
-          initialValues={{
-            termin: toDayKey(cardTask.spotkanie.startsAt),
-            spotkanieId: cardTask.spotkanie.id,
-          }}
-          users={users}
-          userEmail={userEmail ?? ''}
-          onCommentsChange={() => {}}
-          isSaving={cardTaskSaving}
-          error={cardTaskError}
-          onSubmit={(input) => void handleCardTaskSubmit(input)}
-          onCancel={() => setCardTask(null)}
-        />
-      )}
+      {overlays}
     </div>
   );
 };

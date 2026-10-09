@@ -1,0 +1,125 @@
+/* ============================== Podatki — PIT ============================== */
+
+/* A community's documents under its row: a quieter list, indented past the row's tick. */
+.pit-wsp { display: flex; flex-direction: column; gap: var(--s-2); }
+.pit-docs {
+  list-style: none;
+  margin: 0 0 var(--s-2) 32px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+.pit-doc {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2) var(--s-4) var(--s-2) var(--s-2);
+  border-left: 3px solid transparent;
+}
+.pit-doc + .pit-doc { border-top: 1px solid var(--border-subtle); }
+.pit-doc.is-selected { background: var(--accent-subtle); }
+.pit-doc--blad { border-left-color: var(--warning); }
+.pit-doc--uwagi { border-left-color: var(--info); }
+.pit-doc--zlozone { border-left-color: var(--success); }
+.pit-doc > .ksieg-row__select { width: 32px; padding-left: 0; justify-content: flex-start; }
+.pit-doc__main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-1) var(--s-3);
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+.pit-doc__main:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
+.pit-doc__kind {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  min-width: 52px;
+}
+.pit-doc__name { font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; }
+.pit-doc__meta { font-size: var(--fs-sm); color: var(--text-secondary); }
+
+/* The person's form: sub-headings, title toggles and their amount blocks. */
+.pit-aside { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; justify-content: flex-end; }
+.pit-sub {
+  margin-top: var(--s-4);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.pit-details { margin: 0; }
+.pit-details > summary { cursor: pointer; font-size: var(--fs-sm); color: var(--text-secondary); padding: var(--s-1) 0; }
+.pit-apply { display: flex; justify-content: flex-end; }
+.pit-tytuly { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.pit-tytul {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-pill);
+  background: var(--bg-surface);
+  cursor: pointer;
+  font-size: var(--fs-sm);
+}
+.pit-tytul.is-on { border-color: var(--accent-border); background: var(--accent-subtle); color: var(--accent); font-weight: 600; }
+.pit-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--bg-surface-sunken);
+}
+.pit-title-block__name { font-weight: 600; color: var(--text-primary); }
+.pit-check { display: flex; align-items: flex-start; gap: var(--s-2); font-size: var(--fs-sm); cursor: pointer; }
+.pit-check small { color: var(--text-tertiary); }
+.pit-prev { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+
+/* PIT-4R: twelve months across, the typed rows above the computed one. Never scrolls
+   sideways: the columns share the width, and the row labels wrap instead of stretching it. */
+.pit-mies { table-layout: fixed; border-collapse: collapse; width: 100%; font-size: var(--fs-sm); }
+.pit-mies th, .pit-mies td { padding: 3px 2px; border-bottom: 1px solid var(--border-subtle); text-align: right; }
+.pit-mies thead th { color: var(--text-tertiary); font-weight: 600; }
+.pit-mies thead th:first-child { width: clamp(110px, 18%, 190px); }
+.pit-mies thead th:last-child { width: 64px; }
+.pit-mies tbody th { text-align: left; font-weight: 500; color: var(--text-secondary); padding-right: 8px; line-height: 1.25; overflow-wrap: anywhere; }
+.pit-mies .pod-num input { padding: 4px 3px; min-width: 0; }
+.pit-mies__sum { font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pit-mies__calc td, .pit-mies__calc th { background: var(--bg-surface-sunken); font-variant-numeric: tabular-nums; }
+.pit-check-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+}
+.pit-ok { display: flex; align-items: center; gap: var(--s-2); margin: 0; color: var(--success); }
+.pit-fill { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; }
+.pit-fill .select { min-width: 120px; }
+
+/* Communities of Adresy that have no PIT yet in the year: a folded list under the rows. */
+.pit-adresy { margin-top: var(--s-4); }
+.pit-adresy > summary { cursor: pointer; font-weight: 600; color: var(--text-secondary); padding: var(--s-2) 0; }
+.pit-adresy__list { list-style: none; margin: var(--s-2) 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--s-2); }
+.pit-adresy__list li { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); padding: var(--s-2) var(--s-3); border: 1px solid var(--border-subtle); border-radius: var(--r-md); background: var(--bg-surface); }
+
+.pit-selall__expand { margin-left: auto; display: flex; align-items: center; gap: var(--s-1); }
+
+/* A section header's badge already is a pill (.form-section__badge, amber by default): the tone is set on that
+   pill by what it holds, instead of a second pill inside it. */
+.form-section__badge:has(> .pit-tone-ok) { border-color: var(--success-border); background: var(--success-bg); color: var(--success); }
+.form-section__badge:has(> .pit-tone-info) { border-color: var(--accent-border); background: var(--accent-subtle); color: var(--accent); }

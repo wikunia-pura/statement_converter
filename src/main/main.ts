@@ -24,7 +24,7 @@ import {
   MailingAdresaci,
   MailingExportRequest,
   ZebranieInput,
-  ZebranieStatus,
+  ZebranieDokumentKlucz,
   ZebranieWersjaInput,
   PlanGospodarczy,
   SprawozdanieWstepTekst,
@@ -42,6 +42,14 @@ import {
   PodatkiStawkiDane,
   PodatkiPodpisWieleResult,
   PodpisWybor,
+  PodatekCit,
+  PodatekCitDane,
+  PodatkiCitPdfWszystkieResult,
+  PodatkiCitUstawienia,
+  CitAiPozycja,
+  PodpisPdfAnaliza,
+  PodpisPdfWynik,
+  PodpisHistoriaPlik,
   ZebraniePakietRequest,
   KalendarzPdfRequest,
   ZadanieInput,
@@ -74,11 +82,8 @@ import { sanitizeForFilename } from '../shared/outputPaths';
 import { extractAccountNumbersFromFile } from '../shared/account-extractor-node';
 import { resolveScanConflicts, scanStatementsFolder, sha1, statementPeriodOf } from './statementScanner';
 import type { ConversionHistory, ScanDecision } from '../shared/types';
-import {
-  DEFAULT_ZALICZKI_MODEL,
-  ZALICZKI_MODELS,
-  extractZaliczkiFromPdf,
-} from './zaliczki/extractor';
+import { extractZaliczkiFromPdf } from './zaliczki/extractor';
+import { AI_MODELS } from '../shared/ai-models';
 import { cacheStats, clearCache } from './zaliczki/extractionCache';
 import { buildWorkbookFromEdited, EditedFile } from './zaliczki/excelWriter';
 import { extractNotaFromPdf } from './notySwiadczenia/extractor';
@@ -115,11 +120,17 @@ import { planWZebraniach, planyZZebran } from '../shared/plany';
 import { eksportujPakiet } from './zebrania/pakiet';
 import { wersjaLabel } from '../shared/zebrania';
 import { dn1Pdf } from './podatki/dn1Pdf';
+import { cit8Pdf } from './podatki/cit8Pdf';
+import { klasyfikujCitAi } from './podatki/citAi';
 import { BladKarty, stanKarty, zamknijKarte, zKartaDoPodpisu } from './podpis/karta';
 import { downloadLatestInstaller } from './installerDownload';
 import { podpiszPdf } from './podpis/pades';
+import { analizujPdf } from './podpis/pdfAnaliza';
+import { podpiszPliki } from './podpis/podpiszPliki';
 import { parsePodatkiXlsx } from './podatki/importXlsx';
+import { registerPitHandlers } from './podatki/pitHandlers';
 import { opisProblemu, problemyDN1, zDataPodpisu } from '../shared/podatki';
+import { opisProblemuCit, problemyCIT8 } from '../shared/podatki-cit';
 
 // Log environment variable for testing
 log.debug('[MAIN] TEST_AI_BILLING_ERROR =', process.env.TEST_AI_BILLING_ERROR);
@@ -1400,10 +1411,6 @@ function setupIpcHandlers() {
   });
 
   // ---- Zaliczki (podsumowanie zaliczek miesięcznych) ----
-  ipcMain.handle(IPC_CHANNELS.ZALICZKI_GET_MODELS, async () => {
-    return { models: ZALICZKI_MODELS, default: DEFAULT_ZALICZKI_MODEL };
-  });
-
   ipcMain.handle(IPC_CHANNELS.ZALICZKI_SELECT_PDFS, async () => {
     const result = await dialog.showOpenDialog(mainWindow!, {
       properties: ['openFile', 'multiSelections'],
@@ -1415,7 +1422,7 @@ function setupIpcHandlers() {
 
   ipcMain.handle(
     IPC_CHANNELS.ZALICZKI_EXTRACT_PDF,
-    async (_event, filePath: string, model: string, force?: boolean) => {
+    async (_event, filePath: string, force?: boolean) => {
       const apiKey = converterRegistry.getAnthropicApiKey();
       if (!apiKey) {
         return {
@@ -1423,7 +1430,7 @@ function setupIpcHandlers() {
         };
       }
       try {
-        const extraction = await extractZaliczkiFromPdf(filePath, apiKey, model, {
+        const extraction = await extractZaliczkiFromPdf(filePath, apiKey, database.getAiModel(), {
           force: force === true,
           onProgress: (progress) =>
             mainWindow?.webContents.send('zaliczki:progress', progress),
@@ -2352,6 +2359,7 @@ function setupIpcHandlers() {
         const v = database.getSetting('alwaysUseAI') as unknown;
         return !(v === false || v === 'false');
       })(),
+      aiModel: database.getAiModel(),
       contractorSortOrder: database.getSetting('contractorSortOrder') || 'name-asc',
       // Defaults to collapsed: an absent/undefined value (existing installs that
       // predate this setting) reads as collapsed; only an explicit false expands.
@@ -2436,6 +2444,12 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.SET_ALWAYS_USE_AI, async (_, enabled: boolean) => {
     database.setSetting('alwaysUseAI', enabled.toString());
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.SET_AI_MODEL, async (_, model: string) => {
+    if (!AI_MODELS.some((m) => m.id === model)) return false;
+    database.setSetting('aiModel', model);
     return true;
   });
 
@@ -3023,6 +3037,22 @@ function setupIpcHandlers() {
     return true;
   });
 
+  // Identyfikacja podatkowa — NIP, full name, seat of a community, edited in its Adresy modal.
+  ipcMain.handle(IPC_CHANNELS.SET_ADRES_IDENTYFIKACJA, async (_, id: number, identyfikacja: unknown) => {
+    await database.setAdresIdentyfikacja(id, identyfikacja);
+    return true;
+  });
+
+  // One-time fill of that identification from the DN-1 declarations.
+  ipcMain.handle(IPC_CHANNELS.ADRESY_ZASIL_Z_DN1, async () => {
+    const wynik = await database.zasilAdresyZDn1();
+    log.info(
+      `[ADRESY] identification filled from DN-1: ${wynik.zasilone} addresses, ${wynik.bezZmian} unchanged, ` +
+        `${wynik.bezDopasowania.length} unmatched, ${wynik.niejednoznaczne.length} ambiguous`,
+    );
+    return wynik;
+  });
+
   // Pełnomocnicy — people acting for a unit, managed under it in Adresy.
   ipcMain.handle(IPC_CHANNELS.GET_ZGN_PELNOMOCNICY, async () => {
     return await database.getZgnPelnomocnicy();
@@ -3301,6 +3331,11 @@ function setupIpcHandlers() {
     return true;
   });
 
+  ipcMain.handle(IPC_CHANNELS.DELETE_ZEBRANIE_WERSJA, async (_, id: number) => {
+    await database.deleteZebranieWersja(id, await zebraniaWho());
+    return true;
+  });
+
   ipcMain.handle(IPC_CHANNELS.ADD_ZEBRANIE_WERSJA, async (_, zebranieId: number) => {
     return await database.addZebranieWersja(zebranieId, await zebraniaWho());
   });
@@ -3314,9 +3349,9 @@ function setupIpcHandlers() {
   );
 
   ipcMain.handle(
-    IPC_CHANNELS.SET_ZEBRANIE_WERSJA_STATUS,
-    async (_, id: number, status: ZebranieStatus) => {
-      await database.setZebranieWersjaStatus(id, status, await zebraniaWho());
+    IPC_CHANNELS.SET_ZEBRANIE_DOKUMENT_GOTOWE,
+    async (_, id: number, dokument: ZebranieDokumentKlucz, gotowe: boolean) => {
+      await database.setZebranieDokumentGotowe(id, dokument, gotowe === true, await zebraniaWho());
       return true;
     },
   );
@@ -3624,12 +3659,12 @@ function setupIpcHandlers() {
     (await database.getPodatkiStawki()).find((s) => s.rok === rok)?.stawki ?? null;
 
   /**
-   * The year's folder inside the DN-1 folder set in Settings — "<folder>/DN-1
-   * 2027", PDFs and signed PDFs side by side — or null when none is set and
+   * The year's folder inside the tax folder set in Settings — "<folder>/DN-1
+   * 2027" (or "CIT-8 2026"), PDFs and signed PDFs side by side — or null when none is set and
    * the files go to Downloads. A set folder that is gone (drive not mounted)
    * is an error: writing elsewhere would scatter the declarations.
    */
-  const podatkiRokFolder = (rok: number): string | null => {
+  const podatkiRokFolder = (rok: number, prefiks = 'DN-1'): string | null => {
     const folder = database.getSettings().podatkiFolder ?? '';
     if (!folder) return null;
     if (!fs.existsSync(folder)) {
@@ -3637,7 +3672,7 @@ function setupIpcHandlers() {
         `Folder na deklaracje ustawiony w Ustawieniach nie istnieje: ${folder}. Podłącz dysk albo zmień folder w Ustawieniach.`,
       );
     }
-    const rokFolder = path.join(folder, `DN-1 ${rok}`);
+    const rokFolder = path.join(folder, `${prefiks} ${rok}`);
     fs.mkdirSync(rokFolder, { recursive: true });
     return rokFolder;
   };
@@ -3839,6 +3874,249 @@ function setupIpcHandlers() {
     },
   );
 
+  // ---- Podatki: PIT (PIT-11, PIT-4R) ----
+
+  registerPitHandlers({
+    getMainWindow: () => mainWindow,
+    database,
+    who: zebraniaWho,
+    rokFolder: podatkiRokFolder,
+    downloads: app.getPath('downloads'),
+    uniquePath,
+    podpisBiblioteka: () => database.getSettings().podpisBiblioteka ?? '',
+  });
+
+  // ---- Podatki: CIT-8 ----
+
+  ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_LISTA, async () => database.getPodatkiCit());
+
+  ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_ADD, async (_, adresNazwa: string, rok: number, dane: PodatekCitDane) =>
+    database.addPodatekCit(adresNazwa, rok, dane, await zebraniaWho()),
+  );
+
+  ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_SET, async (_, id: number, dane: PodatekCitDane) =>
+    database.setPodatekCit(id, dane, await zebraniaWho()),
+  );
+
+  ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_DELETE, async (_, id: number) => {
+    await database.deletePodatekCit(id);
+    return true;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_PRZENIES, async (_, zRoku: number, naRok: number) =>
+    database.przeniesCitNaRok(zRoku, naRok, await zebraniaWho()),
+  );
+
+  ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_SET_ZLOZONE, async (_, ids: number[], filed: boolean) =>
+    database.setPodatkiCitZlozone(ids, filed, await zebraniaWho()),
+  );
+
+  ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_USTAWIENIA_GET, async () => database.getPodatkiCitUstawienia());
+
+  ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_USTAWIENIA_SET, async (_, ustawienia: PodatkiCitUstawienia) =>
+    database.setPodatkiCitUstawienia(ustawienia, await zebraniaWho()),
+  );
+
+  /**
+   * Suggestions of the AI for statement rows no dictionary rule covers. Needs the
+   * Anthropic key; nothing is stored here — the renderer keeps them as
+   * unconfirmed suggestions in the return.
+   */
+  ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_KLASYFIKUJ_AI, async (_, pozycje: CitAiPozycja[]) => {
+    const apiKey = converterRegistry.getAnthropicApiKey();
+    if (!apiKey) throw new Error('AI nie jest skonfigurowane — brak klucza API Anthropic.');
+    const lista = (Array.isArray(pozycje) ? pozycje : []).filter(
+      (p) => p && typeof p.klucz === 'string' && typeof p.nazwa === 'string' && (p.strona === 'przychod' || p.strona === 'koszt'),
+    );
+    return klasyfikujCitAi(lista, apiKey, database.getAiModel());
+  });
+
+  /** A return's file name: "CIT-8 2026 - Wspólnota Mieszkaniowa Testowa 1.pdf" (+ " (podpisana)"). */
+  const citPlik = (rek: PodatekCit, dopisek = '') =>
+    `${nazwaPliku(`CIT-8 ${rek.rok} - ${rek.dane.nazwaPelna || rek.adresNazwa}`)}${dopisek}.pdf`;
+
+  /** The PDF of a stored return — read from the saved data, never from the screen. */
+  const citBytes = async (rek: PodatekCit, dane = rek.dane) =>
+    cit8Pdf({ rok: rek.rok, dane, slownik: (await database.getPodatkiCitUstawienia()).slownik });
+
+  ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_PDF, async (_, id: number) => {
+    const rek = await database.getPodatekCit(id);
+    if (!rek) throw new Error('Tego zeznania już nie ma — mogło zostać usunięte.');
+    const bytes = await citBytes(rek);
+    const filePath = uniquePath(podatkiRokFolder(rek.rok, 'CIT-8') ?? app.getPath('downloads'), citPlik(rek));
+    fs.writeFileSync(filePath, bytes);
+    try {
+      await database.recordPodatekCitPobranie(rek.id, path.basename(filePath), await zebraniaWho());
+    } catch (error: unknown) {
+      log.warn('[CIT] download not recorded:', error instanceof Error ? error.message : error);
+    }
+    return { filePath };
+  });
+
+  /**
+   * One return made and signed with the card (PAdES), as "… (podpisana).pdf" next
+   * to its PDF (Settings folder) or in Downloads. An empty poz. 327 gets the
+   * signing date. The PIN goes straight to the card and is never logged.
+   */
+  ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_PODPISZ, async (_, id: number, wybor: PodpisWybor) => {
+    const rek = await database.getPodatekCit(id);
+    if (!rek) throw new Error('Tego zeznania już nie ma — mogło zostać usunięte.');
+    // Before the PIN: a missing folder must not cost a signature.
+    const dir = podatkiRokFolder(rek.rok, 'CIT-8') ?? app.getPath('downloads');
+    const bytes = await citBytes(rek, zDataPodpisu(rek.dane, dzisIso()));
+    const { pdf, podpis } = await zKartaDoPodpisu(database.getSettings().podpisBiblioteka ?? '', wybor, async (sesja) => ({
+      pdf: await podpiszPdf(bytes, { ...sesja, powod: `Zeznanie CIT-8 za ${rek.rok} r.` }),
+      podpis: { podmiot: sesja.cert.podmiot, wystawca: sesja.cert.wystawca, numerSeryjny: sesja.cert.numerSeryjny },
+    }));
+    const filePath = uniquePath(dir, citPlik(rek, ' (podpisana)'));
+    fs.writeFileSync(filePath, pdf);
+    log.info(`[CIT] return ${rek.id} signed with certificate ${podpis.numerSeryjny}`);
+    try {
+      await database.recordPodatekCitPobranie(rek.id, path.basename(filePath), await zebraniaWho(), podpis);
+    } catch (error: unknown) {
+      log.warn('[CIT] download not recorded:', error instanceof Error ? error.message : error);
+    }
+    return { filePath, podpis };
+  });
+
+  /** "Przerwij" of a signing run: it stops after the return in hand. */
+  let citPodpisyPrzerwane = false;
+  ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_PODPISZ_PRZERWIJ, () => {
+    citPodpisyPrzerwane = true;
+    return true;
+  });
+
+  /**
+   * The ticked returns of a year signed one by one under a single login — one
+   * PIN for all — into the Settings folder's "CIT-8 <rok>", else a new "CIT-8
+   * <rok> podpisane" in Downloads. Same contract as the DN-1 run: a return that
+   * cannot be printed yet is skipped with the reason before the card is touched;
+   * a card failure stops the run (rejecting when nothing is signed yet, so the
+   * window can ask for the PIN again).
+   */
+  ipcMain.handle(
+    IPC_CHANNELS.PODATKI_CIT_PODPISZ_WIELE,
+    async (event, rok: number, ids: number[], wybor: PodpisWybor): Promise<PodatkiPodpisWieleResult> => {
+      citPodpisyPrzerwane = false;
+      const only = new Set(ids);
+      const rekordy = (await database.getPodatkiCit()).filter((p) => p.rok === rok && only.has(p.id));
+      const slownik = (await database.getPodatkiCitUstawienia()).slownik;
+      const nazwa = (rek: PodatekCit) => rek.dane.nazwaPelna || rek.adresNazwa;
+      const pominiete: PodatkiPodpisWieleResult['pominiete'] = [];
+      const gotowe = rekordy.filter((rek) => {
+        const problemy = problemyCIT8(rek, slownik);
+        if (problemy.length > 0) {
+          pominiete.push({ id: rek.id, nazwa: nazwa(rek), powod: problemy.map((p) => opisProblemuCit(p, rok)).join('; ') });
+        }
+        return problemy.length === 0;
+      });
+      if (gotowe.length === 0) {
+        return { folder: '', podpis: null, podpisane: [], pominiete, przerwano: null, niepodpisane: [] };
+      }
+
+      // Before the PIN: a missing folder must not cost a signature.
+      const folder = podatkiRokFolder(rok, 'CIT-8') ?? uniquePath(app.getPath('downloads'), `CIT-8 ${rok} podpisane`);
+      const who = await zebraniaWho();
+      const dzis = dzisIso();
+      const postep = (zrobione: number, teraz: string) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send('podatki:cit-podpis-postep', { zrobione, wszystkie: gotowe.length, nazwa: teraz });
+        }
+      };
+      const podpisane: PodatkiPodpisWieleResult['podpisane'] = [];
+      let przetworzone = 0;
+      let przerwano: string | null = null;
+      let slad: PodatkiPodpisWieleResult['podpis'] = null;
+
+      await zKartaDoPodpisu(database.getSettings().podpisBiblioteka ?? '', wybor, async (sesja) => {
+        const podpis = { podmiot: sesja.cert.podmiot, wystawca: sesja.cert.wystawca, numerSeryjny: sesja.cert.numerSeryjny };
+        slad = podpis;
+        for (const rek of gotowe) {
+          if (citPodpisyPrzerwane) {
+            przerwano = 'Podpisywanie przerwane na Twoje polecenie.';
+            break;
+          }
+          postep(przetworzone, nazwa(rek));
+          try {
+            const bytes = await cit8Pdf({ rok, dane: zDataPodpisu(rek.dane, dzis), slownik });
+            const pdf = await podpiszPdf(bytes, { ...sesja, powod: `Zeznanie CIT-8 za ${rok} r.` });
+            if (podpisane.length === 0) fs.mkdirSync(folder, { recursive: true });
+            const filePath = uniquePath(folder, citPlik(rek, ' (podpisana)'));
+            fs.writeFileSync(filePath, pdf);
+            podpisane.push({ id: rek.id, nazwa: nazwa(rek), sciezka: filePath });
+            await database.recordPodatekCitPobranie(rek.id, path.basename(filePath), who, podpis).catch((error: unknown) => {
+              log.warn('[CIT] download not recorded:', error instanceof Error ? error.message : error);
+            });
+          } catch (error: unknown) {
+            if (error instanceof BladKarty) {
+              if (podpisane.length === 0) throw error;
+              przerwano = error.message;
+              break;
+            }
+            pominiete.push({ id: rek.id, nazwa: nazwa(rek), powod: error instanceof Error ? error.message : String(error) });
+          }
+          przetworzone += 1;
+        }
+        postep(przetworzone, '');
+      });
+
+      log.info(
+        `[CIT] ${podpisane.length}/${gotowe.length} returns of ${rok} signed with one login` +
+          (przerwano ? ` — stopped: ${przerwano}` : ''),
+      );
+      return {
+        folder: podpisane.length > 0 ? folder : '',
+        podpis: slad,
+        podpisane,
+        pominiete,
+        przerwano,
+        // The run stopped at `przetworzone`: that one and the rest are left.
+        niepodpisane: gotowe.slice(przetworzone).map((rek) => ({ id: rek.id, nazwa: nazwa(rek) })),
+      };
+    },
+  );
+
+  /**
+   * Every return of a year — or only the ticked ones — one PDF each, into the
+   * Settings folder's "CIT-8 <rok>", else a new "CIT-8 <rok>" in Downloads. A
+   * community whose return cannot be printed yet is skipped and named with the
+   * reason, rather than stopping the rest.
+   */
+  ipcMain.handle(
+    IPC_CHANNELS.PODATKI_CIT_PDF_WSZYSTKIE,
+    async (_, rok: number, ids?: number[]): Promise<PodatkiCitPdfWszystkieResult> => {
+      const only = ids && ids.length > 0 ? new Set(ids) : null;
+      const rekordy = (await database.getPodatkiCit()).filter((p) => p.rok === rok && (!only || only.has(p.id)));
+      const slownik = (await database.getPodatkiCitUstawienia()).slownik;
+      const folder = podatkiRokFolder(rok, 'CIT-8') ?? uniquePath(app.getPath('downloads'), `CIT-8 ${rok}`);
+      const who = await zebraniaWho();
+      const pominiete: PodatkiCitPdfWszystkieResult['pominiete'] = [];
+      let zapisane = 0;
+      for (const rek of rekordy) {
+        const nazwa = rek.dane.nazwaPelna || rek.adresNazwa;
+        const problemy = problemyCIT8(rek, slownik);
+        if (problemy.length > 0) {
+          pominiete.push({ nazwa, powod: problemy.map((p) => opisProblemuCit(p, rok)).join('; ') });
+          continue;
+        }
+        try {
+          const bytes = await cit8Pdf({ rok, dane: rek.dane, slownik });
+          if (zapisane === 0) fs.mkdirSync(folder, { recursive: true });
+          const filePath = uniquePath(folder, citPlik(rek));
+          fs.writeFileSync(filePath, bytes);
+          zapisane += 1;
+          await database.recordPodatekCitPobranie(rek.id, path.basename(filePath), who).catch((error: unknown) => {
+            log.warn('[CIT] download not recorded:', error instanceof Error ? error.message : error);
+          });
+        } catch (error: unknown) {
+          pominiete.push({ nazwa, powod: error instanceof Error ? error.message : String(error) });
+        }
+      }
+      log.info(`[CIT] ${zapisane}/${rekordy.length} returns of ${rok} saved to ${folder}`);
+      return { folder: zapisane > 0 ? folder : '', zapisane, pominiete };
+    },
+  );
+
   // ---- Podpis kwalifikowany (karta Szafir przez PKCS#11) ----
 
   ipcMain.handle(IPC_CHANNELS.PODPIS_KARTA_STAN, async () => stanKarty(database.getSettings().podpisBiblioteka ?? ''));
@@ -3862,6 +4140,102 @@ function setupIpcHandlers() {
   ipcMain.handle(IPC_CHANNELS.PODPIS_BIBLIOTEKA_AUTO, async () => {
     database.setSetting('podpisBiblioteka', '');
     return stanKarty('');
+  });
+
+  // ---- Podpis kwalifikowany: any PDF signed with the card ----
+
+  ipcMain.handle(IPC_CHANNELS.PODPIS_PDF_WYBIERZ, async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: 'Pliki PDF do podpisania',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+    if (result.canceled) return [];
+    return result.filePaths.map((p) => ({ fileName: path.basename(p), filePath: p }));
+  });
+
+  /** What the screen shows about a dropped file — and whether it can be signed at all. */
+  ipcMain.handle(IPC_CHANNELS.PODPIS_PDF_ANALIZA, async (_, filePath: string): Promise<PodpisPdfAnaliza> => {
+    try {
+      return await analizujPdf(fs.readFileSync(filePath));
+    } catch (error: unknown) {
+      const brak = (error as NodeJS.ErrnoException).code === 'ENOENT';
+      return {
+        rozmiar: 0,
+        strony: null,
+        blokada: brak ? 'Nie ma takiego pliku — mógł zostać przeniesiony.' : `Nie udało się odczytać pliku: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  });
+
+  /** "Przerwij" of a run: it stops after the file in hand. */
+  let podpisPdfPrzerwane = false;
+  ipcMain.handle(IPC_CHANNELS.PODPIS_PDF_PRZERWIJ, () => {
+    podpisPdfPrzerwane = true;
+    return true;
+  });
+
+  /**
+   * The given PDFs signed one by one under a single card login, each into
+   * "<name> (podpisany).pdf" next to its original. Files the app cannot sign
+   * (already signed, encrypted, unreadable) are named with the reason before the
+   * card is touched. A card failure with nothing signed yet rejects, so the
+   * window asks for the PIN again; later it stops the run and returns the rest
+   * as unsigned. A run that reached the card goes to the history.
+   */
+  ipcMain.handle(
+    IPC_CHANNELS.PODPIS_PDF_PODPISZ,
+    async (event, filePaths: string[], wybor: PodpisWybor): Promise<PodpisPdfWynik> => {
+      podpisPdfPrzerwane = false;
+      const wynik = await podpiszPliki({
+        biblioteka: database.getSettings().podpisBiblioteka ?? '',
+        wybor,
+        pliki: filePaths,
+        postep: (zrobione, wszystkie, nazwa) => {
+          if (!event.sender.isDestroyed()) event.sender.send('podpis:pdf-postep', { zrobione, wszystkie, nazwa });
+        },
+        czyPrzerwano: () => podpisPdfPrzerwane,
+        wolnaSciezka: uniquePath,
+      });
+      log.info(
+        `[PODPIS] ${wynik.podpisane.length}/${filePaths.length} PDF files signed, ${wynik.pominiete.length} skipped` +
+          (wynik.przerwano ? ` — stopped: ${wynik.przerwano}` : ''),
+      );
+
+      const pliki: PodpisHistoriaPlik[] = [
+        ...wynik.podpisane.map((p): PodpisHistoriaPlik => ({ nazwa: p.nazwa, zrodlo: p.zrodlo, wynik: p.sciezka, status: 'podpisany' })),
+        ...wynik.pominiete.map((p): PodpisHistoriaPlik => ({ nazwa: p.nazwa, zrodlo: p.zrodlo, wynik: '', status: 'pominiety', powod: p.powod })),
+        ...wynik.niepodpisane.map((p): PodpisHistoriaPlik => ({ nazwa: p.nazwa, zrodlo: p.zrodlo, wynik: '', status: 'niepodpisany' })),
+      ];
+      // A run that never reached the card (every file held back) did nothing to record.
+      if (wynik.podpis) {
+        try {
+          await database.addPodpisHistoria({
+            signedBy: await zebraniaWho(),
+            podpis: wynik.podpis,
+            pliki,
+            przerwano: wynik.przerwano,
+          });
+        } catch (error: unknown) {
+          log.warn('[PODPIS] run not recorded in history:', error instanceof Error ? error.message : error);
+        }
+      }
+      return wynik;
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.PODPIS_HISTORIA_GET, async () => {
+    try {
+      return await database.getPodpisHistoria();
+    } catch (error: unknown) {
+      log.error('[PODPIS] history read failed:', error instanceof Error ? error.message : String(error));
+      return [];
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PODPIS_HISTORIA_CLEAR, async () => {
+    await database.clearPodpisHistoria();
+    return true;
   });
 
   ipcMain.handle(

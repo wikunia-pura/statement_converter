@@ -1,6 +1,7 @@
 // Shared types for the application
 
 import type { NotificationPrefs } from './notifications';
+import type { PodatekPit } from './podatki-pit';
 
 export interface Bank {
   id: number;
@@ -129,7 +130,41 @@ export interface Adres {
   zgnJednostkaId?: number | null;
   /** The community's board — added to a meeting when the community is picked there. */
   zarzad?: ZarzadOsoba[];
+  /** Who the community is for the tax office — the one place its NIP, full name and seat are kept. */
+  identyfikacja?: AdresIdentyfikacja;
   createdAt: string;
+}
+
+/**
+ * What the tax forms ask about a community and the Adresy list did not carry.
+ * Kept on the address itself and maintained by hand in Adresy; the tax modules
+ * read it instead of asking again for every return. All fields may be empty.
+ */
+export interface AdresIdentyfikacja {
+  /** Digits only. */
+  nip: string;
+  /** Digits only. */
+  regon: string;
+  /** "Wspólnota Mieszkaniowa Al. Lotników 20" — as the forms print it. */
+  nazwaPelna: string;
+  /** The seat (forms: "Adres siedziby"). */
+  siedziba: PodatekAdres;
+  /** The tax office the community files to (CIT-8 poz. 6), e.g. "Naczelnik Urzędu Skarbowego Warszawa-Mokotów". */
+  urzadSkarbowy: string;
+  telefon: string;
+  email: string;
+}
+
+/** What the one-time "fill from DN-1" did. */
+export interface AdresyZasilenieResult {
+  /** Addresses that got at least one field filled. */
+  zasilone: number;
+  /** Matched addresses that already had everything the DN-1 could give. */
+  bezZmian: number;
+  /** DN-1 communities no address matched (name as in the DN-1). */
+  bezDopasowania: string[];
+  /** DN-1 communities that fit more than one address — left alone. */
+  niejednoznaczne: string[];
 }
 
 /**
@@ -649,6 +684,13 @@ export const MAILING_TYP_ZGN = 'zgn-zaliczki';
  */
 export const MAILING_TYP_ZAWIADOMIENIE = 'zawiadomienie-o-zebraniu';
 export const MAILING_TYP_ZAWIADOMIENIE_NAZWA = 'Zawiadomienie o zebraniu';
+/**
+ * The second built-in kind: a resolution. The "Uchwały" tab of a meeting offers
+ * the templates of this kind (and, on request, any other) and keeps the same
+ * key-based lookup contract as the notice — it cannot be deleted or renamed.
+ */
+export const MAILING_TYP_UCHWALA = 'uchwala';
+export const MAILING_TYP_UCHWALA_NAZWA = 'Uchwała';
 
 /**
  * Who a mailing goes to, per community. Every enabled group is resolved for each
@@ -1116,6 +1158,11 @@ export interface Spotkanie {
   /** What was sent, in the sender's own words. */
   dokumentyOpis: string;
   /**
+   * The day the documents have to be out by (`YYYY-MM-DD`), set on this meeting.
+   * Null means "as the meeting's kind says" — its notice period before the start.
+   */
+  terminWysylki: string | null;
+  /**
    * The city unit the meeting is with, or — with `zgnPelnomocnikId` set too —
    * one of that unit's proxies. Null when none. `zgnNazwa` is what the meeting
    * shows ("Jan Kowalski (ZGN Wola)" for a proxy), kept so a deleted unit or a
@@ -1198,13 +1245,29 @@ export interface SpotkanieMailing {
 export type ZebranieStatus = 'w_przygotowaniu' | 'przygotowane';
 export const ZEBRANIE_STATUSES: readonly ZebranieStatus[] = ['w_przygotowaniu', 'przygotowane'];
 
-/** Kind of material a version holds. Only the meeting notice exists so far. */
-export type ZebranieMaterialRodzaj = 'zawiadomienie';
+/** The documents of a version, each marked ready on its own tab. */
+export type ZebranieDokumentKlucz = 'zawiadomienie' | 'sprawozdanie' | 'plan' | 'uchwaly';
+export const ZEBRANIE_DOKUMENTY: readonly ZebranieDokumentKlucz[] = [
+  'zawiadomienie',
+  'sprawozdanie',
+  'plan',
+  'uchwaly',
+];
+/** Which documents are marked ready; a missing key is "not yet". */
+export type ZebranieGotowe = Partial<Record<ZebranieDokumentKlucz, boolean>>;
 
 /**
- * One prepared document — for now the meeting notice. Self-contained: the text
- * is copied from the template when the material is created and edited here, so
- * changing or deleting the template later never rewrites a prepared letter.
+ * Kind of material a version holds: the meeting notice (at most one) or a
+ * resolution (as many as the meeting needs, in the order they are kept).
+ */
+export type ZebranieMaterialRodzaj = 'zawiadomienie' | 'uchwala';
+
+/**
+ * One prepared document — the meeting notice or a resolution. Self-contained: the
+ * text is copied from the template when the material is created and edited here,
+ * so changing or deleting the template later never rewrites a prepared document.
+ * A resolution carries recipients it never uses (it is not mailed); they stay at
+ * the defaults so both kinds share one shape and one jsonb column.
  */
 export interface ZebranieMaterial {
   /** Stable within the version (uuid). */
@@ -1245,6 +1308,11 @@ export interface ZebranieWersja {
   /** What changed in this revision, in the author's words. */
   opis: string;
   materialy: ZebranieMaterial[];
+  /**
+   * Each document marked ready on its own. `status` is derived from it:
+   * "przygotowane" only once every document is (see `wersjaStatusFromGotowe`).
+   */
+  gotowe: ZebranieGotowe;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -1673,6 +1741,211 @@ export interface PodatkiPdfWszystkieResult {
   pominiete: { nazwa: string; powod: string }[];
 }
 
+/* ================================ Podatki — PIT ================================ */
+
+/** What "Importuj z plików XML" did with the folder of e-Deklaracje files. */
+export interface PodatkiPitImportResult {
+  folder: string;
+  plikow: number;
+  /** Communities added to the year. */
+  dodane: number;
+  /** Communities the year already had — left alone. */
+  istniejace: number;
+  osoby: number;
+  /** People that need a look before they can be filed (wrong PESEL, year, amounts…). */
+  doPrzegladu: number;
+  pominiete: { plik: string; powod: string }[];
+  ostrzezenia: string[];
+}
+
+/** What reading the filled Excel back did. */
+export interface PodatkiPitExcelResult {
+  plikNazwa: string;
+  /** People / PIT-4Rs whose amounts changed. */
+  zmienione: number;
+  /** Rows the file could not use, with the reason. */
+  pominiete: { wiersz: number; powod: string }[];
+  ostrzezenia: string[];
+}
+
+/** One file of "Pobierz" / signing — which document it came from and where it went. */
+export interface PodatkiPitPlik {
+  /** Document id (`dokumentId`). */
+  id: string;
+  nazwa: string;
+  sciezka: string;
+}
+
+/** "Pobierz" / "Podpisz" of ticked documents — what was written, what was not and why. */
+export interface PodatkiPitPlikiResult {
+  folder: string;
+  zapisane: PodatkiPitPlik[];
+  /** Not made, with the reason: a blocking problem, or the file failed. */
+  pominiete: { id: string; nazwa: string; powod: string }[];
+  /** The certificate that signed; null for plain files. */
+  podpis: PodpisSlad | null;
+  /** A signing run stopped early (card pulled out, "Przerwij") — why. */
+  przerwano: string | null;
+  /** Left unsigned because the run stopped. */
+  niepodpisane: { id: string; nazwa: string }[];
+}
+
+/** Progress of signing PIT documents, sent before each one. */
+export interface PodatkiPitPostep {
+  zrobione: number;
+  wszystkie: number;
+  nazwa: string;
+}
+
+/* ============================== Podatki — CIT-8 ============================== */
+
+/**
+ * Where a row of a financial statement goes in the CIT-8. A community's income
+ * from running the housing stock is exempt (art. 17 ust. 1 pkt 44) — the owners'
+ * charges, the repair fund — while renting out common parts, advertising on the
+ * building and bank interest are taxed. Which row is which is the dictionary's
+ * (and, row by row, the accountant's) call, never the code's.
+ */
+export type CitKategoria =
+  /** Income from outside the housing stock's upkeep: rent, adverts, interest. */
+  | 'przychod_opodatkowany'
+  /** Income from running the housing stock: owners' advances, the repair fund. */
+  | 'przychod_zwolniony'
+  /** A cost that belongs wholly to the taxed income. */
+  | 'koszt_opodatkowany'
+  /** A cost that belongs wholly to the exempt income. */
+  | 'koszt_zwolniony'
+  /** A cost shared by both — split by the share of taxed income in all income. */
+  | 'koszt_wspolny'
+  /** Not a tax-deductible cost (transfers to funds, fines…). Left out. */
+  | 'niekoszt'
+  /** Not a flow of the year at all: opening balances, carried-over results. */
+  | 'pomin';
+
+/** Which column of the statement a row's amount comes from. */
+export type CitStrona = 'przychod' | 'koszt';
+
+/** Who said which category a row has. A suggestion of the AI counts only once somebody confirmed it. */
+export type CitZrodloKlasyfikacji = 'regula' | 'ai' | 'reczne';
+
+/** One decision on a statement row, kept in the declaration it was made for. */
+export interface CitKlasyfikacja {
+  kategoria: CitKategoria;
+  zrodlo: CitZrodloKlasyfikacji;
+  /** False only for an AI suggestion nobody has accepted yet. */
+  potwierdzona: boolean;
+  /** The AI's reason, shown next to its suggestion. */
+  uzasadnienie?: string;
+}
+
+/** A dictionary rule: a row whose name contains `fraza` (accents and case ignored) gets `kategoria`. First match wins. */
+export interface CitSlownikRegula {
+  id: string;
+  fraza: string;
+  /** Which column the rule applies to — "Zaliczka A" is income, never a cost. */
+  strona: CitStrona;
+  kategoria: CitKategoria;
+}
+
+/** The module's settings — one row for the whole office. */
+export interface PodatkiCitUstawienia {
+  slownik: CitSlownikRegula[];
+}
+
+/** The statement a declaration was drawn from — a snapshot, so a later upload never rewrites a filed return. */
+export interface PodatekCitSprawozdanie {
+  /** The library row it was taken from (informational — the row may be replaced later). */
+  zrodloId: number | null;
+  dane: Sprawozdanie;
+  plikNazwa: string;
+  dodano: string;
+  dodal: string;
+}
+
+/** Everything one community's CIT-8 for one year says. The amounts follow from the statement and the decisions below. */
+export interface PodatekCitDane {
+  /** Poz. 1 — the community's NIP, digits only. Typed once; later years carry it over. */
+  nip: string;
+  /** Poz. 6 — the tax office the return is addressed to. */
+  urzad: string;
+  /** Poz. 7 — 1 złożenie zeznania, 2 korekta zeznania. */
+  cel: 1 | 2;
+  /** Poz. 8 — only for a correction: 1 art. 81 Ordynacji, 2 art. 81b § 1a. */
+  rodzajKorekty: 1 | 2 | null;
+  /** Poz. 9. */
+  nazwaPelna: string;
+  /** B.2 — seat (poz. 10–18). */
+  siedziba: PodatekAdres;
+  /** The statement the figures come from; null until one is attached. */
+  sprawozdanie: PodatekCitSprawozdanie | null;
+  /**
+   * A statement that does not span the whole year may be used on purpose (a test,
+   * a mid-year estimate). The person accepts it for the period it covers —
+   * "<od>|<do>" of the statement — so attaching another statement asks again.
+   */
+  zaakceptowanyOkres: string | null;
+  /** Decisions on statement rows, by row key (`klucz` of `PozycjaCit`) — what overrides the dictionary. */
+  klasyfikacja: Record<string, CitKlasyfikacja>;
+  /** Poz. 142 — the rate: 9% for a small taxpayer, 19% otherwise. */
+  stawka: 9 | 19;
+  /** Poz. 28 — advances paid quarterly instead of monthly. */
+  zaliczkiKwartalne: boolean;
+  /**
+   * Advances paid, whole złoty, by month (index 0 = January). With quarterly
+   * advances only the quarter-ending months (3, 6, 9, 12) are used.
+   */
+  zaliczki: (number | null)[];
+  /** Poz. 325, 327 — who is responsible for the calculation, and the day the return was filled in. */
+  reprezentant: { imie: string; nazwisko: string; dataWypelnienia: string | null };
+  /** Poz. 328 — that person's phone. */
+  telefon: string;
+  /** Every PDF made of this return, oldest first. */
+  pobrania: PodatekPobranie[];
+  /** Ticked as filed with the tax office — a statement of the user, set from the list, never from the form. */
+  zlozone: PodatekDom | null;
+}
+
+/**
+ * One community's CIT-8 for one tax year. The community is one of the Adresy
+ * list, kept by NAME (like the dashboard and Zebrania tables) so the row
+ * survives a backup restore that renumbers `adresy`.
+ */
+export interface PodatekCit {
+  id: number;
+  /** `Adres.nazwa` of the community the return belongs to. */
+  adresNazwa: string;
+  /** Poz. 4 and 5 — the calendar year. */
+  rok: number;
+  dane: PodatekCitDane;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+/** "Pobierz wszystkie" of one year's CIT-8s — one PDF per community into one folder. */
+export interface PodatkiCitPdfWszystkieResult {
+  folder: string;
+  zapisane: number;
+  pominiete: { nazwa: string; powod: string }[];
+}
+
+/** One statement row for the AI to sort. */
+export interface CitAiPozycja {
+  klucz: string;
+  nazwa: string;
+  strona: CitStrona;
+  sekcja: 'fundusz' | 'eksploatacja';
+  kwota: number;
+}
+
+/** The AI's suggestion for one row. */
+export interface CitAiPropozycja {
+  klucz: string;
+  kategoria: CitKategoria;
+  uzasadnienie: string;
+}
+
 /* ======================= Podpis kwalifikowany (karta Szafir) ======================= */
 
 /**
@@ -1782,6 +2055,61 @@ export interface PodpisSlad {
   numerSeryjny: string;
 }
 
+/* ---------------- Podpis kwalifikowany — signing any PDF ---------------- */
+
+/** What the module saw in a PDF dropped into it, before the card is touched. */
+export interface PodpisPdfAnaliza {
+  rozmiar: number;
+  strony: number | null;
+  /**
+   * Why the file cannot be signed — null when it can. Signing means rewriting
+   * the file, which would silently void a signature already on it, so a signed
+   * (or encrypted, or unreadable) PDF is held back, never signed "anyway".
+   */
+  blokada: string | null;
+}
+
+/**
+ * "Podpisz zaznaczone" in the Podpis module — what one PIN signed and what it
+ * did not. Every file handed in is in exactly one list; `zrodlo` is the path it
+ * came from, the key the screen's rows have.
+ */
+export interface PodpisPdfWynik {
+  /** The certificate that signed; null when the run never reached the card. */
+  podpis: PodpisSlad | null;
+  podpisane: { zrodlo: string; nazwa: string; sciezka: string }[];
+  /** Not signed, with the reason: held back by the check, or failed on its own. */
+  pominiete: { zrodlo: string; nazwa: string; powod: string }[];
+  /** The run stopped early (card pulled out, "Przerwij") — why, as a sentence. */
+  przerwano: string | null;
+  /** Left unsigned because the run stopped. */
+  niepodpisane: { zrodlo: string; nazwa: string }[];
+}
+
+/** One file of a run in the history: what went in, what came out, or why nothing did. */
+export interface PodpisHistoriaPlik {
+  nazwa: string;
+  /** Where the original was. */
+  zrodlo: string;
+  /** The signed copy ('' when the file was not signed). */
+  wynik: string;
+  status: 'podpisany' | 'pominiety' | 'niepodpisany';
+  powod?: string;
+}
+
+/** One run of "Podpisz zaznaczone" — a single PIN, one certificate, one or more files. */
+export interface PodpisHistoriaEntry {
+  id: number;
+  signedAt: string;
+  signedBy: string;
+  podpis: PodpisSlad | null;
+  pliki: PodpisHistoriaPlik[];
+  /** How many of `pliki` got signed — kept apart so the list needs no counting. */
+  podpisanych: number;
+  /** Why the run stopped early; null when it ran to the end. */
+  przerwano: string | null;
+}
+
 /**
  * "Pakiet PDF" of one version: a cover summing the materials up, then the
  * parts asked for, in one file — what goes to the board, the owners or
@@ -1794,6 +2122,10 @@ export interface ZebraniePakietRequest {
   /** The statement opens with its introduction. */
   wstep: boolean;
   plan: boolean;
+  /** Resolutions of the version, one part each, in their order. */
+  uchwaly: boolean;
+  /** Only these (by id); absent = every resolution of the version. */
+  uchwalyIds?: string[];
 }
 
 /** Which document to produce, in which format. */
@@ -2003,6 +2335,12 @@ export interface AppSettings {
    * a deliberately free run).
    */
   alwaysUseAI: boolean;
+  /**
+   * The Claude model every AI call uses — contractor matching and the
+   * "Podsumowanie zaliczek" OCR alike. One of `AI_MODELS` (shared/ai-models.ts);
+   * anything else, absent included, reads as `DEFAULT_AI_MODEL`.
+   */
+  aiModel: string;
   skipUserApproval: boolean; // Skip transaction review and generate files directly
   contractorSortOrder: ContractorSortOrder; // Ordering of contractor pick-lists in review (default: name-asc)
   sidebarCollapsed: boolean; // Collapse the navigation sidebar to an icon-only rail (default: true)
@@ -2185,6 +2523,14 @@ export interface BackupData {
     podatkiNieruchomosci?: PodatekNieruchomosci[];
     /** The yearly property-tax rates. Absent in backups written before they existed. */
     podatkiStawki?: PodatkiStawki[];
+    /** CIT-8 returns of the Podatki module, per community and year. Absent in backups written before it existed. */
+    podatkiCit?: PodatekCit[];
+    /** PIT-11 / PIT-4R of the Podatki module, per community and year. Absent in backups written before it existed. */
+    podatkiPit?: PodatekPit[];
+    /** The CIT dictionary; null when nobody has changed the defaults. */
+    podatkiCitUstawienia?: PodatkiCitUstawienia | null;
+    /** Runs of the Podpis module (signing any PDF). Absent in backups written before it existed. */
+    podpisHistoria?: PodpisHistoriaEntry[];
     /** Never carries `smtpPass` — the SMTP password stays on the machine. */
     settings: AppSettings;
   };
@@ -2225,6 +2571,10 @@ export interface BackupCounts {
   planyGospodarcze: number;
   podatkiNieruchomosci: number;
   podatkiStawki: number;
+  podatkiCit: number;
+  podatkiPit: number;
+  podatkiCitUstawienia: number;
+  podpisHistoria: number;
 }
 
 export function countBackup(data: BackupData): BackupCounts {
@@ -2262,6 +2612,10 @@ export function countBackup(data: BackupData): BackupCounts {
     planyGospodarcze: data.data.planyGospodarcze?.length ?? 0,
     podatkiNieruchomosci: data.data.podatkiNieruchomosci?.length ?? 0,
     podatkiStawki: data.data.podatkiStawki?.length ?? 0,
+    podatkiCit: data.data.podatkiCit?.length ?? 0,
+    podatkiPit: data.data.podatkiPit?.length ?? 0,
+    podatkiCitUstawienia: data.data.podatkiCitUstawienia ? 1 : 0,
+    podpisHistoria: data.data.podpisHistoria?.length ?? 0,
   };
 }
 
@@ -2291,6 +2645,8 @@ export const IPC_CHANNELS = {
   ADD_ADRES: 'db:add-adres',
   UPDATE_ADRES: 'db:update-adres',
   SET_ADRES_ZARZAD: 'db:set-adres-zarzad',
+  SET_ADRES_IDENTYFIKACJA: 'db:set-adres-identyfikacja',
+  ADRESY_ZASIL_Z_DN1: 'db:adresy-zasil-z-dn1',
   DELETE_ADRES: 'db:delete-adres',
   DELETE_ALL_ADRESY: 'db:delete-all-adresy',
   IMPORT_ADRESY_FROM_FILE: 'db:import-adresy-from-file',
@@ -2333,6 +2689,7 @@ export const IPC_CHANNELS = {
   SET_LANGUAGE: 'settings:set-language',
   SET_SKIP_USER_APPROVAL: 'settings:set-skip-user-approval',
   SET_ALWAYS_USE_AI: 'settings:set-always-use-ai',
+  SET_AI_MODEL: 'settings:set-ai-model',
   SET_CONTRACTOR_SORT_ORDER: 'settings:set-contractor-sort-order',
   SET_SIDEBAR_COLLAPSED: 'settings:set-sidebar-collapsed',
   SET_SIDEBAR_ORDER: 'settings:set-sidebar-order',
@@ -2370,7 +2727,6 @@ export const IPC_CHANNELS = {
   ZALICZKI_SELECT_PDFS: 'zaliczki:select-pdfs',
   ZALICZKI_EXTRACT_PDF: 'zaliczki:extract-pdf',
   ZALICZKI_GENERATE_XLSX: 'zaliczki:generate-xlsx',
-  ZALICZKI_GET_MODELS: 'zaliczki:get-models',
   ZALICZKI_CACHE_STATS: 'zaliczki:cache-stats',
   ZALICZKI_CLEAR_CACHE: 'zaliczki:clear-cache',
 
@@ -2442,8 +2798,9 @@ export const IPC_CHANNELS = {
   UPDATE_ZEBRANIE: 'zebrania:update',
   DELETE_ZEBRANIE: 'zebrania:delete',
   ADD_ZEBRANIE_WERSJA: 'zebrania:add-wersja',
+  DELETE_ZEBRANIE_WERSJA: 'zebrania:delete-wersja',
   UPDATE_ZEBRANIE_WERSJA: 'zebrania:update-wersja',
-  SET_ZEBRANIE_WERSJA_STATUS: 'zebrania:set-wersja-status',
+  SET_ZEBRANIE_DOKUMENT_GOTOWE: 'zebrania:set-dokument-gotowe',
   SET_ZEBRANIE_WERSJA_NAZWA: 'zebrania:set-wersja-nazwa',
   ZEBRANIA_SPRAWOZDANIA_IMPORT: 'zebrania:sprawozdania-import',
   ZEBRANIA_SPRAWOZDANIA_LISTA: 'zebrania:sprawozdania-lista',
@@ -2483,10 +2840,46 @@ export const IPC_CHANNELS = {
   PODATKI_NIER_PODPISZ_WIELE: 'podatki:nieruchomosci-podpisz-wiele',
   PODATKI_NIER_PODPISZ_PRZERWIJ: 'podatki:nieruchomosci-podpisz-przerwij',
 
+  // Podatki — CIT-8
+  PODATKI_CIT_LISTA: 'podatki:cit-lista',
+  PODATKI_CIT_ADD: 'podatki:cit-add',
+  PODATKI_CIT_SET: 'podatki:cit-set',
+  PODATKI_CIT_DELETE: 'podatki:cit-delete',
+  PODATKI_CIT_PRZENIES: 'podatki:cit-przenies',
+  PODATKI_CIT_PDF: 'podatki:cit-pdf',
+  PODATKI_CIT_PDF_WSZYSTKIE: 'podatki:cit-pdf-wszystkie',
+  PODATKI_CIT_SET_ZLOZONE: 'podatki:cit-set-zlozone',
+  PODATKI_CIT_PODPISZ: 'podatki:cit-podpisz',
+  PODATKI_CIT_PODPISZ_WIELE: 'podatki:cit-podpisz-wiele',
+  PODATKI_CIT_PODPISZ_PRZERWIJ: 'podatki:cit-podpisz-przerwij',
+  PODATKI_CIT_USTAWIENIA_GET: 'podatki:cit-ustawienia-get',
+  PODATKI_CIT_USTAWIENIA_SET: 'podatki:cit-ustawienia-set',
+  PODATKI_CIT_KLASYFIKUJ_AI: 'podatki:cit-klasyfikuj-ai',
+
+  // Podatki — PIT (PIT-11 and PIT-4R)
+  PODATKI_PIT_LISTA: 'podatki:pit-lista',
+  PODATKI_PIT_ADD: 'podatki:pit-add',
+  PODATKI_PIT_SET: 'podatki:pit-set',
+  PODATKI_PIT_DELETE: 'podatki:pit-delete',
+  PODATKI_PIT_PRZENIES: 'podatki:pit-przenies',
+  PODATKI_PIT_IMPORT_XML: 'podatki:pit-import-xml',
+  PODATKI_PIT_EXCEL_SZABLON: 'podatki:pit-excel-szablon',
+  PODATKI_PIT_EXCEL_WCZYTAJ: 'podatki:pit-excel-wczytaj',
+  PODATKI_PIT_PLIKI: 'podatki:pit-pliki',
+  PODATKI_PIT_SET_ZLOZONE: 'podatki:pit-set-zlozone',
+  PODATKI_PIT_PODPISZ_WIELE: 'podatki:pit-podpisz-wiele',
+  PODATKI_PIT_PODPISZ_PRZERWIJ: 'podatki:pit-podpisz-przerwij',
+
   // Podpis kwalifikowany (karta Szafir przez PKCS#11)
   PODPIS_KARTA_STAN: 'podpis:karta-stan',
   PODPIS_BIBLIOTEKA_WSKAZ: 'podpis:biblioteka-wskaz',
   PODPIS_BIBLIOTEKA_AUTO: 'podpis:biblioteka-auto',
+  PODPIS_PDF_WYBIERZ: 'podpis:pdf-wybierz',
+  PODPIS_PDF_ANALIZA: 'podpis:pdf-analiza',
+  PODPIS_PDF_PODPISZ: 'podpis:pdf-podpisz',
+  PODPIS_PDF_PRZERWIJ: 'podpis:pdf-przerwij',
+  PODPIS_HISTORIA_GET: 'podpis:historia-get',
+  PODPIS_HISTORIA_CLEAR: 'podpis:historia-clear',
   KALENDARZ_PDF_EXPORT: 'kalendarz:pdf-export',
   RECORD_ZEBRANIE_POBRANIE: 'zebrania:record-pobranie',
 

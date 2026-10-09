@@ -1,8 +1,15 @@
 // Type definitions for Electron API exposed via preload
 
 import type { NotificationPrefs } from '../shared/notifications';
+import type { PitDane, PodatekPit } from '../shared/podatki-pit';
+import type {
+  PodatkiPitExcelResult,
+  PodatkiPitImportResult,
+  PodatkiPitPlikiResult,
+  PodatkiPitPostep,
+} from '../shared/types';
 import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, ZgnPelnomocnik, ZarzadOsoba, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent, AppUser, SpotkanieTyp, SpotkanieLokalizacja, Spotkanie, SpotkanieInput, KalendarzPdfRequest, SpotkanieMailing, SpotkanieTerminStatus, SpotkanieMaterialyStatus, SpotkanieMaterialyKrok, KsiegowaniePriorytet,
-  KsiegowaniePrzypisanie, KsiegowanieUwaga, KsiegowaniePlik, ScanDecision, ScanProgress, ScanReport, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik, ZadanieKomentarz, ZadanieKomentarzInput, ZadanieKomentarzPodsumowanie, ZadanieNotatka, MailingAdresaci, MailingTypDef, MailingKalendarzContext, MailingExportRequest, MailingExportResult, Zebranie, ZebranieInput, ZebranieStatus, ZebranieWersja, ZebranieWersjaInput, SprawozdaniaImportResult, SprawozdaniaWlasneImportResult, SprawozdanieExportRequest, PlanWlasny, PlanWlasnyExportRequest, PodatekNieruchomosci, PodatekNieruchomosciDane, PodatkiImportResult, PodatkiPdfWszystkieResult, PodatkiPodpisPostep, PodatkiPodpisWieleResult, PodatkiStawki, PodatkiStawkiDane, PodpisKartaStan, PodpisSlad, PodpisWybor, ZebraniePakietRequest, SprawozdanieZapisane, SprawozdanieWstepTekst, PlanGospodarczy, ZebraniaWspolnota, AdresUdzialy, ZebraniaUstawienia, ZebranieDokumentRequest } from '../shared/types';
+  KsiegowaniePrzypisanie, KsiegowanieUwaga, KsiegowaniePlik, ScanDecision, ScanProgress, ScanReport, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik, ZadanieKomentarz, ZadanieKomentarzInput, ZadanieKomentarzPodsumowanie, ZadanieNotatka, MailingAdresaci, MailingTypDef, MailingKalendarzContext, MailingExportRequest, MailingExportResult, Zebranie, ZebranieInput, ZebranieDokumentKlucz, ZebranieWersja, ZebranieWersjaInput, SprawozdaniaImportResult, SprawozdaniaWlasneImportResult, SprawozdanieExportRequest, PlanWlasny, PlanWlasnyExportRequest, PodatekNieruchomosci, PodatekNieruchomosciDane, PodatkiImportResult, PodatkiPdfWszystkieResult, PodatkiPodpisPostep, PodatkiPodpisWieleResult, PodatkiStawki, PodatkiStawkiDane, AdresIdentyfikacja, AdresyZasilenieResult, PodatekCit, PodatekCitDane, PodatkiCitPdfWszystkieResult, PodatkiCitUstawienia, CitAiPozycja, CitAiPropozycja, PodpisKartaStan, PodpisSlad, PodpisWybor, PodpisPdfAnaliza, PodpisPdfWynik, PodpisHistoriaEntry, ZebraniePakietRequest, SprawozdanieZapisane, SprawozdanieWstepTekst, PlanGospodarczy, ZebraniaWspolnota, AdresUdzialy, ZebraniaUstawienia, ZebranieDokumentRequest } from '../shared/types';
 import type { MailingRecipientsResolved } from '../shared/mailing-recipients';
 
 // Zaliczki shared types (referenced by the main-process helpers)
@@ -63,11 +70,6 @@ export interface ZaliczkiEditedFile {
   month: number | null;
   year: number | null;
   properties: ZaliczkiPropertyData[];
-}
-
-export interface ZaliczkiModel {
-  id: string;
-  label: string;
 }
 
 export interface ScalanieAnalyzedFile {
@@ -283,6 +285,7 @@ interface ElectronAPI {
   setLanguage: (language: string) => Promise<boolean>;
   setSkipUserApproval: (enabled: boolean) => Promise<boolean>;
   setAlwaysUseAI: (enabled: boolean) => Promise<boolean>;
+  setAiModel: (model: string) => Promise<boolean>;
   setContractorSortOrder: (sortOrder: string) => Promise<boolean>;
   setSidebarCollapsed: (collapsed: boolean) => Promise<boolean>;
   /** The menu's order as view ids; null restores the default. */
@@ -341,10 +344,9 @@ interface ElectronAPI {
   backupOpenFolder: () => Promise<{ success: boolean }>;
   
   // Zaliczki
-  zaliczkiGetModels: () => Promise<{ models: readonly ZaliczkiModel[]; default: string }>;
   zaliczkiSelectPdfs: () => Promise<{ fileName: string; filePath: string }[]>;
-  /** `force` skips the per-page cache and re-asks the model. */
-  zaliczkiExtractPdf: (filePath: string, model: string, force?: boolean) =>
+  /** Reads with the model picked in Settings. `force` skips the per-page cache and re-asks the model. */
+  zaliczkiExtractPdf: (filePath: string, force?: boolean) =>
     Promise<{ data?: ZaliczkiExtractionResult; error?: string }>;
   zaliczkiGenerateXlsx: (files: ZaliczkiEditedFile[], year: number) =>
     Promise<{ success?: boolean; filePath?: string; canceled?: boolean; error?: string }>;
@@ -414,6 +416,10 @@ interface ElectronAPI {
   setZgnAdresy: (jednostkaId: number, adresIds: number[]) => Promise<boolean>;
   /** Replace a community's board — the whole list, as the modal holds it. */
   setAdresZarzad: (id: number, zarzad: ZarzadOsoba[]) => Promise<boolean>;
+  /** Replace a community's tax identification (NIP, full name, seat, office…) — the whole record. */
+  setAdresIdentyfikacja: (id: number, identyfikacja: AdresIdentyfikacja) => Promise<boolean>;
+  /** One-time: fill empty identification fields from the DN-1 declarations; never overwrites. */
+  zasilAdresyZDn1: () => Promise<AdresyZasilenieResult>;
   /** Every proxy of every city unit. */
   getZgnPelnomocnicy: () => Promise<ZgnPelnomocnik[]>;
   addZgnPelnomocnik: (jednostkaId: number, imieNazwisko: string, email: string) => Promise<ZgnPelnomocnik>;
@@ -526,9 +532,12 @@ interface ElectronAPI {
   deleteZebranie: (id: number) => Promise<boolean>;
   /** A new revision (1.0 → 1.1), copied from the newest version; the meeting goes back to "to prepare". */
   addZebranieWersja: (zebranieId: number) => Promise<ZebranieWersja>;
+  /** Delete one version; the only version of an entry cannot be deleted. */
+  deleteZebranieWersja: (id: number) => Promise<boolean>;
   updateZebranieWersja: (id: number, input: ZebranieWersjaInput) => Promise<boolean>;
   /** The newest version of a linked entry moves the meeting's materials status with it. */
-  setZebranieWersjaStatus: (id: number, status: ZebranieStatus) => Promise<boolean>;
+  /** Mark one document of a version ready or not; the version's status is derived from all of them. */
+  setZebranieDokumentGotowe: (id: number, dokument: ZebranieDokumentKlucz, gotowe: boolean) => Promise<boolean>;
   /** Rename a revision; an empty name falls back to its number. */
   setZebranieWersjaNazwa: (id: number, nazwa: string) => Promise<boolean>;
   /** Pick a vDom "RozliczenieWsp" PDF and store every community's statement; null when cancelled. */
@@ -606,6 +615,86 @@ interface ElectronAPI {
   przerwijPodpisPodatkow: () => Promise<boolean>;
   /** Progress of the signing run; returns the unsubscribe. */
   onPodatkiPodpisPostep: (callback: (postep: PodatkiPodpisPostep) => void) => () => void;
+
+  // Podpis kwalifikowany — any PDF
+  /** Native picker for PDFs to sign; empty when cancelled. */
+  podpisWybierzPdf: () => Promise<{ fileName: string; filePath: string }[]>;
+  /** Size, pages and whether the file can be signed at all — see `PodpisPdfAnaliza.blokada`. */
+  podpisAnalizujPdf: (filePath: string) => Promise<PodpisPdfAnaliza>;
+  /**
+   * Sign the given PDFs one by one with one PIN, each into "<name> (podpisany).pdf"
+   * next to the original. Rejects only when nothing got signed (wrong PIN, no
+   * card); otherwise resolves with everything the summary shows. The run is
+   * written to the history.
+   */
+  podpisPodpiszPdf: (filePaths: string[], wybor: PodpisWybor) => Promise<PodpisPdfWynik>;
+  /** Stop the run after the file in hand. */
+  podpisPrzerwijPdf: () => Promise<boolean>;
+  /** Progress of the run; returns the unsubscribe. */
+  onPodpisPdfPostep: (callback: (postep: PodatkiPodpisPostep) => void) => () => void;
+  podpisGetHistoria: () => Promise<PodpisHistoriaEntry[]>;
+  podpisClearHistoria: () => Promise<boolean>;
+
+  // Podatki — CIT-8
+  /** Every year's CIT-8 data of the Podatki module. */
+  getPodatkiCit: () => Promise<PodatekCit[]>;
+  /** For the community of that name (`Adres.nazwa`); refused when it already has a return that year. */
+  addPodatekCit: (adresNazwa: string, rok: number, dane: PodatekCitDane) => Promise<PodatekCit>;
+  setPodatekCit: (id: number, dane: PodatekCitDane) => Promise<PodatekCit>;
+  deletePodatekCit: (id: number) => Promise<boolean>;
+  /** Draft `naRok` from `zRoku` for the communities it lacks; how many were added. */
+  przeniesCitNaRok: (zRoku: number, naRok: number) => Promise<number>;
+  /** Write one return as PDF (CIT-8, with the CIT-8/O when it has exempt income) — to the Settings folder's "CIT-8 <rok>", else Downloads. */
+  exportPodatekCitPdf: (id: number) => Promise<{ filePath: string }>;
+  /** Every printable return of a year (or only `ids`), one PDF each, into one folder. */
+  exportPodatkiCitPdfWszystkie: (rok: number, ids?: number[]) => Promise<PodatkiCitPdfWszystkieResult>;
+  /** Tick returns as filed with the tax office (or untick them); the rows as they now are. */
+  setPodatkiCitZlozone: (ids: number[], filed: boolean) => Promise<PodatekCit[]>;
+  /** Sign one return with the card; the file and who signed. A wrong PIN rejects — never retried. */
+  podpiszPodatekCitPdf: (id: number, wybor: PodpisWybor) => Promise<{ filePath: string; podpis: PodpisSlad }>;
+  /** Sign the ticked returns of a year one by one with one PIN. Rejects only when nothing got signed. */
+  podpiszPodatkiCitPdf: (rok: number, ids: number[], wybor: PodpisWybor) => Promise<PodatkiPodpisWieleResult>;
+  /** Stop the signing run after the return in hand. */
+  przerwijPodpisCit: () => Promise<boolean>;
+  /** Progress of the signing run; returns the unsubscribe. */
+  onPodatkiCitPodpisPostep: (callback: (postep: PodatkiPodpisPostep) => void) => () => void;
+  /** The CIT dictionary — the built-in one until someone saves changes. */
+  getPodatkiCitUstawienia: () => Promise<PodatkiCitUstawienia>;
+  setPodatkiCitUstawienia: (ustawienia: PodatkiCitUstawienia) => Promise<PodatkiCitUstawienia>;
+  /** Ask the AI to sort statement rows; one suggestion per row it could place. Rejects when the AI is not set up. */
+  klasyfikujCitAi: (pozycje: CitAiPozycja[]) => Promise<CitAiPropozycja[]>;
+
+  // Podatki — PIT (PIT-11, PIT-4R)
+  /** Every year's PIT data of the Podatki module — one row per community and year. */
+  getPodatkiPit: () => Promise<PodatekPit[]>;
+  /** Refused when the community (NIP) already has a PIT that year. */
+  addPodatekPit: (nip: string, rok: number, dane: PitDane) => Promise<PodatekPit>;
+  /** Save an edited community; what was filed and downloaded is kept from the stored row. */
+  setPodatekPit: (id: number, nip: string, dane: PitDane) => Promise<PodatekPit>;
+  deletePodatekPit: (id: number) => Promise<boolean>;
+  /** Draft `naRok` from `zRoku` for the communities it lacks (same people, empty amounts); how many were added. */
+  przeniesPitNaRok: (zRoku: number, naRok: number) => Promise<number>;
+  /** Pick a folder of e-Deklaracje XML files (PIT-11, PIT-4R) and add what they say to the year; null when cancelled. */
+  importPitXml: (rok: number) => Promise<PodatkiPitImportResult | null>;
+  /** Save the year's Excel template (people, last year's amounts beside empty cells); the file, null when cancelled. */
+  pitExcelSzablon: (rok: number) => Promise<{ filePath: string } | null>;
+  /** Pick the filled Excel and write its amounts into the year; null when cancelled. */
+  pitExcelWczytaj: (rok: number) => Promise<PodatkiPitExcelResult | null>;
+  /** Write the XML and / or the PDF of the ticked documents (ids from `dokumentId`) into the year's folder. */
+  pitPliki: (rok: number, ids: string[], tryb: 'xml' | 'pdf' | 'oba') => Promise<PodatkiPitPlikiResult>;
+  /** Mark documents as filed with the tax office (with the gateway's reference number) or take it off; the rows as they now are. */
+  setPitZlozone: (ids: string[], zlozone: boolean, numerRef: string) => Promise<PodatekPit[]>;
+  /** Sign the ticked documents' XML (XAdES) with one PIN, plus their PDFs (PAdES when `pdfPodpisany`). Rejects only when nothing got signed. */
+  podpiszPit: (
+    rok: number,
+    ids: string[],
+    wybor: PodpisWybor,
+    opcje: { pdfPodpisany: boolean },
+  ) => Promise<PodatkiPitPlikiResult>;
+  /** Stop the signing run after the document in hand. */
+  przerwijPodpisPit: () => Promise<boolean>;
+  /** Progress of the signing run; returns the unsubscribe. */
+  onPodatkiPitPostep: (callback: (postep: PodatkiPitPostep) => void) => () => void;
 
   // Podpis kwalifikowany (karta Szafir)
   /** The signing library in use and every reader with its card and certificates — read fresh each call. */

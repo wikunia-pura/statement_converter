@@ -41,6 +41,8 @@ interface SearchableSelectProps {
    * otherwise open a menu as narrow as the name, too small to search in.
    */
   menuMinWidth?: number;
+  /** Cap the menu's width in px — long option hints are cut with an ellipsis instead of widening it. */
+  menuMaxWidth?: number;
 }
 
 /**
@@ -68,6 +70,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
   className,
   overlay = false,
   menuMinWidth = 0,
+  menuMaxWidth,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -191,6 +194,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
           // As wide as the longest option, never narrower than the field; the
           // shift below keeps it inside the window.
           minWidth: Math.max(anchor.width, menuMinWidth, openWidth ?? 0),
+          maxWidth: menuMaxWidth,
           // Same flip as the in-place menu, expressed in viewport coordinates.
           ...(placement.bottom !== undefined
             ? { bottom: window.innerHeight - anchor.top + 2 }
@@ -207,6 +211,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
           marginBottom: placement.marginBottom,
           maxHeight: placement.maxHeight,
           minWidth: openWidth ?? undefined,
+          maxWidth: menuMaxWidth,
           transform: shift ? `translateX(-${shift}px)` : undefined,
         };
 

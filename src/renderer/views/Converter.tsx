@@ -1396,6 +1396,18 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                                 />
                               </>
                             )}
+                            {/* Over the dashboard the list is the work itself: its last file is not removable, or the window is left empty. */}
+                            {file.status !== 'success' && !(embedded && files.length <= 1) && (
+                              <button
+                                type="button"
+                                className="button button-ghost button-icon icon-danger"
+                                onClick={() => handleRemoveFile(file.id)}
+                                title={t.remove}
+                                aria-label={`${t.remove}: ${file.fileName}`}
+                              >
+                                <Icon name="trash" size={15} />
+                              </button>
+                            )}
                             {(file.status === 'pending' || file.status === 'error') && (
                               <button
                                 className="button button-small button-success"
@@ -1408,14 +1420,6 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                                 } : {}}
                               ><Icon name={file.status === 'error' ? 'refresh' : 'arrow-right'} size={13} />{' '}
                                 {file.status === 'error' ? t.convTryAgain : t.convert}
-                              </button>
-                            )}
-                            {file.status !== 'success' && (
-                              <button
-                                className="button button-small button-danger"
-                                onClick={() => handleRemoveFile(file.id)}
-                              ><Icon name="trash" size={13} />{' '}
-                                {t.remove}
                               </button>
                             )}
                           </div>

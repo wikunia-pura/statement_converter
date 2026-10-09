@@ -24,6 +24,10 @@ import Zebrania, { ZebranieTab } from './views/Zebrania';
 import Sprawozdania from './views/Sprawozdania';
 import PlanyGospodarcze from './views/PlanyGospodarcze';
 import PodatkiNieruchomosci from './views/PodatkiNieruchomosci';
+import PodatkiCit from './views/PodatkiCit';
+import PodatkiPit from './views/PodatkiPit';
+import PodpisPdf, { PodpisPlikEntry } from './views/PodpisPdf';
+import PodpisHistoria from './views/PodpisHistoria';
 import Zadania from './views/Zadania';
 import ZadaniaPulpit from './components/ZadaniaPulpit';
 import ModuleTabs from './components/ModuleTabs';
@@ -102,6 +106,7 @@ const DEFAULT_SIDEBAR_ORDER = [
   'sprawozdania',
   'plany',
   'podatki',
+  'podpis',
   'divider',
   'converter',
   'podsumowanie',
@@ -184,6 +189,7 @@ type View =
   | 'sprawozdania'
   | 'plany'
   | 'podatki'
+  | 'podpis'
   | 'zadania'
   | 'conowego';
 
@@ -260,6 +266,7 @@ const App: React.FC = () => {
   const [scalanieFiles, setScalanieFiles] = useState<ScalanieFileEntry[]>([]);
   const [homebankingFiles, setHomebankingFiles] = useState<HomebankingFileEntry[]>([]);
   const [odczytyFiles, setOdczytyFiles] = useState<OdczytyFileEntry[]>([]);
+  const [podpisFiles, setPodpisFiles] = useState<PodpisPlikEntry[]>([]);
   // Each module keeps its own Konwersja/Historia tab, so switching modules and
   // coming back lands where the user left off.
   const [converterTab, setConverterTab] = useState<'convert' | 'bookings' | 'history'>('convert');
@@ -271,7 +278,8 @@ const App: React.FC = () => {
   const [odczytyTab, setOdczytyTab] = useState<'convert' | 'history'>('convert');
   const [mailingTab, setMailingTab] = useState<'send' | 'templates' | 'types' | 'fields' | 'history'>('send');
   const [kalendarzTab, setKalendarzTab] = useState<'calendar' | 'types' | 'places'>('calendar');
-  const [podatkiTab, setPodatkiTab] = useState<'nieruchomosci'>('nieruchomosci');
+  const [podatkiTab, setPodatkiTab] = useState<'nieruchomosci' | 'cit' | 'pit'>('nieruchomosci');
+  const [podpisTab, setPodpisTab] = useState<'sign' | 'history'>('sign');
   // Kalendarz: the month lives here so a detour to "Typy spotkań" — or to any
   // other module — comes back to the month the user was looking at.
   const [kalMonth, setKalMonth] = useState<string>(() => currentMonthKey());
@@ -418,6 +426,7 @@ const App: React.FC = () => {
     if (view === 'mailing') return mailingTab;
     if (view === 'kalendarz') return kalendarzTab;
     if (view === 'podatki') return podatkiTab;
+    if (view === 'podpis') return podpisTab;
     return undefined;
   };
 
@@ -429,6 +438,7 @@ const App: React.FC = () => {
     else if (view === 'mailing') setMailingTab(tab as typeof mailingTab);
     else if (view === 'kalendarz') setKalendarzTab(tab as typeof kalendarzTab);
     else if (view === 'podatki') setPodatkiTab(tab as typeof podatkiTab);
+    else if (view === 'podpis') setPodpisTab(tab as typeof podpisTab);
   };
 
   /**
@@ -688,6 +698,7 @@ const App: React.FC = () => {
       sprawozdania: t.sprawozdania,
       plany: t.planyGospodarcze,
       podatki: t.podatki,
+      podpis: t.podpisTitle,
       zadania: t.zadania,
       conowego: t.whatsNew,
     };
@@ -702,6 +713,8 @@ const App: React.FC = () => {
       types: t.kalTabTypes,
       places: t.kalTabPlaces,
       nieruchomosci: t.podTabNieruchomosci,
+      cit: t.citTab,
+      sign: t.podpisPdfTabSign,
     };
     const base = view[loc.view];
     // Mailing and Kalendarz both have a 'types' tab; the map above names the
@@ -764,6 +777,12 @@ const App: React.FC = () => {
       icon: 'landmark',
       label: t.podatki,
       onClick: () => setCurrentView('podatki'),
+    },
+    podpis: {
+      id: 'podpis',
+      icon: 'signature',
+      label: t.podpisTitle,
+      onClick: () => setCurrentView('podpis'),
     },
     zadania: {
       id: 'zadania',
@@ -1212,10 +1231,6 @@ const App: React.FC = () => {
               setKalMonth(monthOfDayKey(toDayKey(s.startsAt)));
               openSpotkanie(s.id);
             }}
-            onEditSpotkanie={(s) => {
-              setKalMonth(monthOfDayKey(toDayKey(s.startsAt)));
-              openSpotkanie(s.id, true);
-            }}
             onOpenSzablony={() => navigate('mailing', 'templates')}
           />
         )}
@@ -1226,11 +1241,34 @@ const App: React.FC = () => {
         {currentView === 'podatki' && (
           <>
             <ModuleTabs
-              tabs={[{ id: 'nieruchomosci', label: t.podTabNieruchomosci, icon: 'building' }]}
+              tabs={[
+                { id: 'nieruchomosci', label: t.podTabNieruchomosci, icon: 'building' },
+                { id: 'cit', label: t.citTab, icon: 'landmark' },
+                { id: 'pit', label: t.pitTab, icon: 'briefcase' },
+              ]}
               active={podatkiTab}
               onChange={(id) => navigate('podatki', id)}
             />
             {podatkiTab === 'nieruchomosci' && <PodatkiNieruchomosci language={language} />}
+            {podatkiTab === 'cit' && <PodatkiCit language={language} />}
+            {podatkiTab === 'pit' && <PodatkiPit language={language} />}
+          </>
+        )}
+        {currentView === 'podpis' && (
+          <>
+            <ModuleTabs
+              tabs={[
+                { id: 'sign', label: t.podpisPdfTabSign, icon: 'signature' },
+                { id: 'history', label: t.tabHistory, icon: 'history' },
+              ]}
+              active={podpisTab}
+              onChange={(id) => navigate('podpis', id)}
+            />
+            {podpisTab === 'sign' ? (
+              <PodpisPdf language={language} files={podpisFiles} setFiles={setPodpisFiles} />
+            ) : (
+              <PodpisHistoria language={language} />
+            )}
           </>
         )}
         {currentView === 'zadania' && <Zadania

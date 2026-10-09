@@ -17,7 +17,14 @@ import { PDFDocument } from 'pdf-lib';
 import { ZebraniePakietRequest } from '../../shared/types';
 import type DatabaseService from '../database';
 import { buildKalendarzContext, formatPolishDate, missingFieldValues } from '../../shared/mailing-template';
-import { wersjaLabel, zawiadomienieOf, zebranieDane } from '../../shared/zebrania';
+import {
+  uchwalaMissing,
+  uchwalaTytul,
+  uchwalyOf,
+  wersjaLabel,
+  zawiadomienieOf,
+  zebranieDane,
+} from '../../shared/zebrania';
 import { nazwaNieruchomosci } from '../../shared/plan-gospodarczy';
 import { okresLabel } from '../../shared/sprawozdanie';
 import { Skrot, planSkrot, sprawozdanieSkrot } from '../../shared/zebranie-podsumowanie';
@@ -106,7 +113,15 @@ export async function eksportujPakiet(
   if (req.plan && !plan) {
     throw new Error('Ta wersja nie ma jeszcze planu gospodarczego — utwórz go w zakładce „Plan gospodarczy”.');
   }
-  if (!material && !spr && !plan) throw new Error('Wybierz co najmniej jedną część materiałów.');
+  const uchwaly = req.uchwaly
+    ? uchwalyOf(wersja).filter((u) => !req.uchwalyIds || req.uchwalyIds.includes(u.id))
+    : [];
+  if (req.uchwaly && uchwaly.length === 0) {
+    throw new Error('Ta wersja nie ma wybranych uchwał — dodaj je albo zaznacz w zakładce „Uchwały”.');
+  }
+  if (!material && !spr && !plan && uchwaly.length === 0) {
+    throw new Error('Wybierz co najmniej jedną część materiałów.');
+  }
 
   if (material) {
     const missing = missingFieldValues(
@@ -124,6 +139,21 @@ export async function eksportujPakiet(
     if (missing.length > 0) {
       throw new Error(
         `W zawiadomieniu nie wypełniono: ${missing.join(', ')}. Uzupełnij je w zakładce „Zawiadomienie o zebraniu” albo pobierz pakiet bez zawiadomienia.`,
+      );
+    }
+  }
+
+  if (uchwaly.length > 0) {
+    // The same gate as the notice: a resolution with a blank field is not handed out.
+    const pola = await database.getMailingPola();
+    const niekompletne = uchwaly
+      .map((u) => ({ tytul: uchwalaTytul(u, dane, pola), missing: uchwalaMissing(u, dane, pola) }))
+      .filter((u) => u.missing.length > 0);
+    if (niekompletne.length > 0) {
+      throw new Error(
+        `W uchwałach nie wypełniono pól: ${niekompletne
+          .map((u) => `${u.tytul} (${u.missing.join(', ')})`)
+          .join('; ')}. Uzupełnij je w zakładce „Uchwały” albo pobierz pakiet bez uchwał.`,
       );
     }
   }
@@ -175,6 +205,36 @@ export async function eksportujPakiet(
         opis: `Załącznik nr 1 do Uchwały nr ${plan.uchwalaNr || '……'}`,
         plik,
       });
+    }
+
+    if (uchwaly.length > 0) {
+      const pola = await database.getMailingPola();
+      for (const [i, u] of uchwaly.entries()) {
+        const plik = path.join(tmp, `uchwala-${i + 1}.pdf`);
+        await renderLetterPdf(
+          database,
+          {
+            typ: u.typ,
+            templateName: u.szablonNazwa,
+            temat: u.temat,
+            tresc: u.tresc,
+            values: u.values,
+            tableFields: u.tableFields,
+            kalendarz,
+            adresId: dane.adresId,
+            adresNazwa: dane.adresNazwa,
+            spotkanieId: zebranie.spotkanieId,
+            adresaci: u.adresaci,
+            wykluczeni: u.wykluczeni,
+          },
+          plik,
+        );
+        czesci.push({
+          tytul: uchwaly.length > 1 ? `Uchwała ${i + 1} z ${uchwaly.length}` : 'Uchwała',
+          opis: uchwalaTytul(u, dane, pola),
+          plik,
+        });
+      }
     }
 
     const docs = await Promise.all(czesci.map(async (c) => PDFDocument.load(fs.readFileSync(c.plik))));

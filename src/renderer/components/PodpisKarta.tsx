@@ -16,7 +16,7 @@ import Icon from './Icon';
 type T = (typeof translations)['pl'];
 
 /** An IPC rejection carries "Error invoking remote method '…': Error: " before the main process's message. */
-const bezPrefiksu = (err: unknown): string =>
+export const bezPrefiksu = (err: unknown): string =>
   (err instanceof Error ? err.message : String(err)).replace(/^Error invoking remote method '[^']*': (?:Error: )?/, '');
 
 type Waznosc = 'ok' | 'wygasl' | 'jeszcze';

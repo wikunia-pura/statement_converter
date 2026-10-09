@@ -10,7 +10,6 @@ import {
   SpotkanieLokalizacja,
   Zebranie,
   ZebranieMaterial,
-  ZebranieStatus,
   ZebranieWersja,
   ZgnJednostka,
   ZgnPelnomocnik,
@@ -26,6 +25,7 @@ import {
   buildKalendarzContext,
   formatPolishDate,
   missingFieldValues,
+  normalizeFieldName,
 } from '../../shared/mailing-template';
 import { MailingRecipientLookup, resolveOdbiorcy } from '../../shared/mailing-recipients';
 import { formatStamp } from '../../shared/calendar';
@@ -78,6 +78,12 @@ export interface ZawiadomienieModalProps {
   onChanged?: () => void;
   /** "Mailing → Szablony", for when no notice template exists yet. */
   onOpenSzablony?: () => void;
+  /**
+   * Sending the notice (Kalendarz → "Wyślij zawiadomienie"): the side panel with
+   * the blank fields, who it goes to, the PDF / e-mail downloads and the status.
+   * Without it (Zebrania) the window is the letter alone.
+   */
+  sending?: boolean;
 }
 
 type Phase = 'loading' | 'error' | 'pick' | 'edit';
@@ -111,6 +117,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
   onClose,
   onChanged,
   onOpenSzablony,
+  sending = false,
 }) => {
   const t = translations[language];
   const notify = useNotify();
@@ -149,7 +156,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
       szablony
         .filter((s) => s.typ === MAILING_TYP_ZAWIADOMIENIE)
         .sort((a, b) => a.nazwa.localeCompare(b.nazwa, 'pl')),
-    [szablony],
+    [szablony]
   );
 
   const wersja: ZebranieWersja | null = useMemo(() => {
@@ -160,20 +167,22 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
 
   const dane = useMemo(
     () => (zebranie ? zebranieDane(zebranie, spotkania, lokalizacje) : null),
-    [zebranie, spotkania, lokalizacje],
+    [zebranie, spotkania, lokalizacje]
   );
   const kalendarz = useMemo(() => (dane ? buildKalendarzContext(dane) : null), [dane]);
   const spotkanie = useMemo(
     () =>
-      zebranie?.spotkanieId != null ? spotkania.find((s) => s.id === zebranie.spotkanieId) ?? null : null,
-    [zebranie, spotkania],
+      zebranie?.spotkanieId != null
+        ? (spotkania.find((s) => s.id === zebranie.spotkanieId) ?? null)
+        : null,
+    [zebranie, spotkania]
   );
 
   /** What the recipient groups resolve against: the community, the meeting, the units. */
   const lookup: MailingRecipientLookup | null = useMemo(() => {
     if (!dane) return null;
     return {
-      adres: dane.adresId != null ? adresy.find((a) => a.id === dane.adresId) ?? null : null,
+      adres: dane.adresId != null ? (adresy.find((a) => a.id === dane.adresId) ?? null) : null,
       spotkanie,
       jednostki,
       pelnomocnicy,
@@ -182,7 +191,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
 
   const resolved = useMemo(
     () => (lookup && draft ? resolveOdbiorcy(lookup, draft.adresaci, draft.wykluczeni) : null),
-    [lookup, draft],
+    [lookup, draft]
   );
 
   const missing = useMemo(() => {
@@ -197,9 +206,17 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
         kalendarz,
       },
       draft.temat,
-      draft.tresc,
+      draft.tresc
     );
   }, [draft, dane, pola, kalendarz]);
+
+  /** The table's rows: the template's shortlist, resolved against the dictionary. */
+  const tablePool = useMemo(() => {
+    const names = szablony.find((x) => x.id === draft?.szablonId)?.tableFields ?? [];
+    return names
+      .map((name) => pola.find((p) => normalizeFieldName(p.nazwa) === normalizeFieldName(name)))
+      .filter((p): p is MailingPole => !!p);
+  }, [szablony, draft?.szablonId, pola]);
 
   const dirty = !!draft && !!saved && materialContent(draft) !== materialContent(saved);
 
@@ -216,21 +233,24 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
       const resolveZebranie = async (): Promise<Zebranie> => {
         if (spotkanieId != null) return window.electronAPI.zebranieFromSpotkanie(spotkanieId);
         if (!zebranieProp) throw new Error(t.zawVersionGone);
-        const fresh = (await window.electronAPI.getZebrania()).find((z) => z.id === zebranieProp.id);
+        const fresh = (await window.electronAPI.getZebrania()).find(
+          (z) => z.id === zebranieProp.id
+        );
         if (!fresh) throw new Error(t.zawVersionGone);
         return fresh;
       };
-      const [z, spotkaniaD, lokD, adresyD, jednD, pelD, polaD, szablonyD, typyD] = await Promise.all([
-        resolveZebranie(),
-        window.electronAPI.getSpotkania(),
-        window.electronAPI.getSpotkaniaLokalizacje(),
-        window.electronAPI.getAdresy(),
-        window.electronAPI.mailingGetZgn().catch(() => [] as ZgnJednostka[]),
-        window.electronAPI.getZgnPelnomocnicy().catch(() => [] as ZgnPelnomocnik[]),
-        window.electronAPI.mailingGetPola(),
-        window.electronAPI.mailingGetSzablony(),
-        window.electronAPI.mailingGetTypy().catch(() => [] as MailingTypDef[]),
-      ]);
+      const [z, spotkaniaD, lokD, adresyD, jednD, pelD, polaD, szablonyD, typyD] =
+        await Promise.all([
+          resolveZebranie(),
+          window.electronAPI.getSpotkania(),
+          window.electronAPI.getSpotkaniaLokalizacje(),
+          window.electronAPI.getAdresy(),
+          window.electronAPI.mailingGetZgn().catch(() => [] as ZgnJednostka[]),
+          window.electronAPI.getZgnPelnomocnicy().catch(() => [] as ZgnPelnomocnik[]),
+          window.electronAPI.mailingGetPola(),
+          window.electronAPI.mailingGetSzablony(),
+          window.electronAPI.mailingGetTypy().catch(() => [] as MailingTypDef[]),
+        ]);
       // Coming from a meeting the entry may have just been created, and the
       // meeting's materials status moved with it.
       if (spotkanieId != null) onChanged?.();
@@ -279,7 +299,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
   const writeMaterial = async (
     material: ZebranieMaterial,
     base: Zebranie,
-    target: ZebranieWersja,
+    target: ZebranieWersja
   ): Promise<ZebranieMaterial> => {
     const fresh = (await window.electronAPI.getZebrania()).find((z) => z.id === base.id);
     const freshWersja = fresh?.wersje.find((w) => w.id === target.id);
@@ -292,7 +312,9 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
       updatedBy: userEmail,
     };
     // One notice per version: a notice started again from a template replaces the old one.
-    const others = freshWersja.materialy.filter((m) => m.id !== material.id && m.rodzaj !== material.rodzaj);
+    const others = freshWersja.materialy.filter(
+      (m) => m.id !== material.id && m.rodzaj !== material.rodzaj
+    );
     const materialy = [...others, next];
     await window.electronAPI.updateZebranieWersja(target.id, { opis: freshWersja.opis, materialy });
     setZebranie({
@@ -308,7 +330,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
     szablon: MailingSzablon,
     base: Zebranie | null = zebranie,
     target: ZebranieWersja | null = wersja,
-    kinds: MailingTypDef[] = typy,
+    kinds: MailingTypDef[] = typy
   ) => {
     if (!base || !target) return;
     const kindAdresaci = kinds.find((k) => k.klucz === MAILING_TYP_ZAWIADOMIENIE)?.adresaci;
@@ -367,7 +389,9 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
       return;
     }
     if (format === 'eml' && resolved && resolved.odbiorcy.length === 0) {
-      const go = await notify.confirm(t.zawNoRecipientsConfirm, { confirmLabel: t.zawDownloadAnyway });
+      const go = await notify.confirm(t.zawNoRecipientsConfirm, {
+        confirmLabel: t.zawDownloadAnyway,
+      });
       if (!go) return;
     }
     setBusy(format);
@@ -415,32 +439,44 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
     }
   };
 
-  /** Mark this version prepared (or back). The main process moves the meeting with it. */
-  const handleStatus = async (status: ZebranieStatus) => {
-    if (!zebranie || !wersja) return;
-    setBusy('status');
-    try {
-      await saveIfDirty();
-      await window.electronAPI.setZebranieWersjaStatus(wersja.id, status);
-      const fresh = (await window.electronAPI.getZebrania()).find((z) => z.id === zebranie.id);
-      if (fresh) setZebranie(fresh);
-      onChanged?.();
-      notify.success(t.zawStatusSaved);
-    } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(null);
-    }
+  const showFile = async (filePath: string) => {
+    const ok = await window.electronAPI.mailingShowInFolder(filePath);
+    if (!ok) notify.warning(t.zawFileMissing);
   };
 
-  const handleRestart = async () => {
-    const ok = await notify.confirm(t.zawRestartConfirm, {
-      confirmLabel: t.zawRestartConfirmLabel,
+  const openFile = async (filePath: string) => {
+    const ok = await window.electronAPI.openFile(filePath);
+    if (!ok) notify.warning(t.zawFileMissing);
+  };
+
+  /** Drop the notice from this version — the next visit starts from a template again. */
+  const handleDelete = async () => {
+    if (!draft || !zebranie || !wersja) return;
+    const ok = await notify.confirm(t.zawDeleteConfirm, {
+      confirmLabel: t.zawDeleteConfirmLabel,
       danger: true,
     });
     if (!ok) return;
-    setRestarting(true);
-    setPhase('pick');
+    setBusy('save');
+    try {
+      const fresh = (await window.electronAPI.getZebrania()).find((z) => z.id === zebranie.id);
+      const freshWersja = fresh?.wersje.find((w) => w.id === wersja.id);
+      if (!fresh || !freshWersja) throw new Error(t.zawVersionGone);
+      const materialy = freshWersja.materialy.filter(
+        (m) => m.id !== draft.id && m.rodzaj !== draft.rodzaj
+      );
+      await window.electronAPI.updateZebranieWersja(wersja.id, {
+        opis: freshWersja.opis,
+        materialy,
+      });
+      onChanged?.();
+      notify.success(t.zawDeleted);
+      onClose();
+    } catch (err: unknown) {
+      notify.error(err instanceof Error ? err.message : String(err), t.zawSaveError);
+    } finally {
+      setBusy(null);
+    }
   };
 
   const handleClose = async () => {
@@ -459,16 +495,6 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
       if (!discard) return;
     }
     onClose();
-  };
-
-  const showFile = async (filePath: string) => {
-    const ok = await window.electronAPI.mailingShowInFolder(filePath);
-    if (!ok) notify.warning(t.zawFileMissing);
-  };
-
-  const openFile = async (filePath: string) => {
-    const ok = await window.electronAPI.openFile(filePath);
-    if (!ok) notify.warning(t.zawFileMissing);
   };
 
   const patchDraft = (patch: Partial<ZebranieMaterial>) =>
@@ -508,7 +534,11 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
       <div className="modal-overlay" onClick={() => void handleClose()}>
         <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
           <ModalDismiss onClose={() => void handleClose()} ariaLabel={t.close} />
-          <ModalHeader icon="mail" title={phase === 'pick' ? t.zawPickTitle : t.zawTitle} subtitle={contextLine} />
+          <ModalHeader
+            icon="mail"
+            title={phase === 'pick' ? t.zawPickTitle : t.zawTitle}
+            subtitle={contextLine}
+          />
           <div className="modal-body">
             {phase === 'loading' && <Loader label={t.zawLoading} />}
 
@@ -603,15 +633,16 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
         <ModalDismiss onClose={() => void handleClose()} ariaLabel={t.close} />
         <ModalHeader icon="mail" title={t.zawTitle} subtitle={contextLine} />
 
-        <div className="zaw-body">
+        <div className={`zaw-body${sending ? ' zaw-body--side' : ''}`}>
           <div className="zaw-main">
             {isOlder && newest && (
               <div className="callout callout--info" role="status">
                 <Icon name="info" size={16} />
-                <div className="callout__body">{t.zawOlderVersion.replace('{v}', wersjaLabel(newest))}</div>
+                <div className="callout__body">
+                  {t.zawOlderVersion.replace('{v}', wersjaLabel(newest))}
+                </div>
               </div>
             )}
-            <p className="zaw-hint">{t.zawStepTextHint}</p>
             <MailingVisualEditor
               language={language}
               temat={draft.temat}
@@ -624,151 +655,126 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
               adresNazwa={dane.adresNazwa}
               kalendarz={kalendarz}
               tableFields={draft.tableFields}
+              tablePool={tablePool}
+              onTableFieldsChange={(tableFields) => patchDraft({ tableFields })}
               onSaveAsTemplate={() => setSaveTemplateOpen(true)}
+              hideHint
             />
           </div>
 
-          <aside className="zaw-side">
-            <section className={`zaw-panel${missing.length > 0 ? ' is-warning' : ' is-ok'}`}>
-              <h4 className="zaw-panel__title">
-                <Icon name={missing.length > 0 ? 'alert-triangle' : 'check-circle'} size={15} />
-                {t.zawStepText}
-              </h4>
-              {missing.length === 0 ? (
-                <p>{t.zawMissingNone}</p>
-              ) : (
-                <>
-                  <p>{t.zawMissingList}</p>
-                  <ul className="zaw-missing">
-                    {missing.map((m) => (
-                      <li key={m}>{m}</li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </section>
+          {sending && (
+            <aside className="zaw-side">
+              <section className={`zaw-panel${missing.length > 0 ? ' is-warning' : ' is-ok'}`}>
+                <h4 className="zaw-panel__title">
+                  <Icon name={missing.length > 0 ? 'alert-triangle' : 'check-circle'} size={15} />
+                  {t.zawStepText}
+                </h4>
+                {missing.length === 0 ? (
+                  <p>{t.zawMissingNone}</p>
+                ) : (
+                  <>
+                    <p>{t.zawMissingList}</p>
+                    <ul className="zaw-missing">
+                      {missing.map((m) => (
+                        <li key={m}>{m}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </section>
 
-            <section className="zaw-panel">
-              <h4 className="zaw-panel__title">
-                <Icon name="users" size={15} /> {t.zawRecipients}
-              </h4>
-              <p className="zaw-panel__hint">{t.zawRecipientsHint}</p>
-              <MailingRecipientsEditor
-                language={language}
-                adresaci={draft.adresaci}
-                onAdresaciChange={(adresaci) => patchDraft({ adresaci })}
-                wykluczeni={draft.wykluczeni}
-                onWykluczeniChange={(wykluczeni) => patchDraft({ wykluczeni })}
-                lookup={lookup}
-                contextLabel={dane.adresNazwa || undefined}
-                disabled={busy !== null}
-              />
-            </section>
-
-            <section className="zaw-panel">
-              <h4 className="zaw-panel__title">
-                <Icon name="download" size={15} /> {t.zawDownload}
-              </h4>
-              <p className="zaw-panel__hint">{t.zawDownloadHint}</p>
-              <div className="zaw-downloads">
-                <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={() => void handleDownload('pdf')}
+              <section className="zaw-panel">
+                <h4 className="zaw-panel__title">
+                  <Icon name="users" size={15} /> {t.zawRecipients}
+                </h4>
+                <p className="zaw-panel__hint">{t.zawRecipientsHint}</p>
+                <MailingRecipientsEditor
+                  language={language}
+                  adresaci={draft.adresaci}
+                  onAdresaciChange={(adresaci) => patchDraft({ adresaci })}
+                  wykluczeni={draft.wykluczeni}
+                  onWykluczeniChange={(wykluczeni) => patchDraft({ wykluczeni })}
+                  lookup={lookup}
+                  contextLabel={dane.adresNazwa || undefined}
                   disabled={busy !== null}
-                >
-                  <Icon name={busy === 'pdf' ? 'loader' : 'file-text'} size={14} />{' '}
-                  {busy === 'pdf' ? t.zawDownloading : t.zawDownloadPdf}
-                </button>
-                <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={() => void handleDownload('eml')}
-                  disabled={busy !== null}
-                >
-                  <Icon name={busy === 'eml' ? 'loader' : 'mail'} size={14} />{' '}
-                  {busy === 'eml' ? t.zawDownloading : t.zawDownloadEml}
-                </button>
-              </div>
+                />
+              </section>
 
-              {lastFiles && lastFiles.length > 0 && (
-                <ul className="zaw-files">
-                  {lastFiles.map((f) => (
-                    <li key={f.filePath} className="zaw-file">
-                      <Icon name={f.format === 'pdf' ? 'file-check' : 'mail'} size={14} />
-                      <span className="zaw-file__name" title={f.filePath}>
-                        {baseName(f.filePath)}
-                      </span>
-                      <span className="zaw-file__actions">
-                        <button
-                          type="button"
-                          className="button button-small button-secondary"
-                          onClick={() => void showFile(f.filePath)}
-                        >
-                          <Icon name="folder" size={12} /> {t.zawShowInFolder}
-                        </button>
-                        <button
-                          type="button"
-                          className="button button-small button-secondary"
-                          onClick={() => void openFile(f.filePath)}
-                        >
-                          <Icon name="eye" size={12} /> {t.zawOpenFile}
-                        </button>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <section className="zaw-panel">
+                <h4 className="zaw-panel__title">
+                  <Icon name="download" size={15} /> {t.zawDownload}
+                </h4>
+                <p className="zaw-panel__hint">{t.zawDownloadHint}</p>
+                <div className="zaw-downloads">
+                  <button
+                    type="button"
+                    className="button button-primary"
+                    onClick={() => void handleDownload('pdf')}
+                    disabled={busy !== null}
+                  >
+                    <Icon name={busy === 'pdf' ? 'loader' : 'file-text'} size={14} />{' '}
+                    {busy === 'pdf' ? t.zawDownloading : t.zawDownloadPdf}
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-primary"
+                    onClick={() => void handleDownload('eml')}
+                    disabled={busy !== null}
+                  >
+                    <Icon name={busy === 'eml' ? 'loader' : 'mail'} size={14} />{' '}
+                    {busy === 'eml' ? t.zawDownloading : t.zawDownloadEml}
+                  </button>
+                </div>
 
-              {recentDownloads.length > 0 && (
-                <div className="zaw-history">
-                  <span className="zaw-history__label">{t.zawLastDownloads}</span>
-                  <ul>
-                    {recentDownloads.map((p, i) => (
-                      <li key={`${p.at}-${i}`}>
-                        <span>{p.pliki.join(', ')}</span>
-                        <span className="zaw-history__when">
-                          {t.zawDownloadedBy
-                            .replace('{when}', formatStamp(p.at, locale))
-                            .replace('{who}', p.by || '—')}
+                {lastFiles && lastFiles.length > 0 && (
+                  <ul className="zaw-files">
+                    {lastFiles.map((f) => (
+                      <li key={f.filePath} className="zaw-file">
+                        <Icon name={f.format === 'pdf' ? 'file-check' : 'mail'} size={14} />
+                        <span className="zaw-file__name" title={f.filePath}>
+                          {baseName(f.filePath)}
+                        </span>
+                        <span className="zaw-file__actions">
+                          <button
+                            type="button"
+                            className="button button-small button-secondary"
+                            onClick={() => void showFile(f.filePath)}
+                          >
+                            <Icon name="folder" size={12} /> {t.zawShowInFolder}
+                          </button>
+                          <button
+                            type="button"
+                            className="button button-small button-secondary"
+                            onClick={() => void openFile(f.filePath)}
+                          >
+                            <Icon name="eye" size={12} /> {t.zawOpenFile}
+                          </button>
                         </span>
                       </li>
                     ))}
                   </ul>
-                </div>
-              )}
-            </section>
+                )}
 
-            <section className="zaw-panel">
-              <h4 className="zaw-panel__title">
-                <Icon name="flag" size={15} /> {t.zawStatus}
-              </h4>
-              <p>
-                <span className={`status-badge zeb-status zeb-status--${wersja.status}`}>
-                  {wersja.status === 'przygotowane' ? t.zebraniaStatusPrzygotowane : t.zebraniaStatusW}
-                </span>
-              </p>
-              {wersja.status === 'przygotowane' ? (
-                <button
-                  type="button"
-                  className="button button-small button-secondary"
-                  onClick={() => void handleStatus('w_przygotowaniu')}
-                  disabled={busy !== null}
-                >
-                  <Icon name="undo" size={13} /> {t.zawMarkInProgress}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="button button-small button-success"
-                  onClick={() => void handleStatus('przygotowane')}
-                  disabled={busy !== null}
-                >
-                  <Icon name="check" size={13} /> {t.zawMarkReady}
-                </button>
-              )}
-            </section>
-          </aside>
+                {recentDownloads.length > 0 && (
+                  <div className="zaw-history">
+                    <span className="zaw-history__label">{t.zawLastDownloads}</span>
+                    <ul>
+                      {recentDownloads.map((p, i) => (
+                        <li key={`${p.at}-${i}`}>
+                          <span>{p.pliki.join(', ')}</span>
+                          <span className="zaw-history__when">
+                            {t.zawDownloadedBy
+                              .replace('{when}', formatStamp(p.at, locale))
+                              .replace('{who}', p.by || '—')}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </section>
+            </aside>
+          )}
         </div>
 
         <ModalFooter
@@ -785,11 +791,11 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
               )}
               <button
                 type="button"
-                className="button button-small button-subtle"
-                onClick={() => void handleRestart()}
+                className="button button-small button-ghost icon-danger"
+                onClick={() => void handleDelete()}
                 disabled={busy !== null}
               >
-                <Icon name="refresh" size={13} /> {t.zawRestart}
+                <Icon name="trash" size={13} /> {t.zawDelete}
               </button>
             </span>
           }

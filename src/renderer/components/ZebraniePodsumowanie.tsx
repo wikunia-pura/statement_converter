@@ -1,6 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { MailingPole, ZebranieWersja } from '../../shared/types';
-import { ZebranieDane, wersjaLabel, zawiadomienieOf } from '../../shared/zebrania';
+import { MailingPole, ZebranieDokumentKlucz, ZebranieWersja } from '../../shared/types';
+import {
+  ZebranieDane,
+  uchwalaMissing,
+  uchwalaTytul,
+  uchwalyOf,
+  wersjaLabel,
+  zawiadomienieOf,
+} from '../../shared/zebrania';
 import {
   buildKalendarzContext,
   formatPolishDate,
@@ -15,8 +22,8 @@ import { FormSection } from './FormSection';
 import Icon from './Icon';
 
 type T = (typeof translations)['pl'];
-type Tab = 'zawiadomienie' | 'sprawozdania' | 'plan';
-type Stan = 'gotowe' | 'uzupelnij' | 'brak';
+type Tab = 'zawiadomienie' | 'sprawozdania' | 'plan' | 'uchwaly';
+type Stan = 'gotowe' | 'wtoku' | 'uzupelnij' | 'brak';
 
 const baseName = (p: string) => p.split(/[\\/]/).pop() ?? p;
 
@@ -53,10 +60,9 @@ const PakietSwitch: React.FC<{
   hint: string;
   checked: boolean;
   disabled: boolean;
-  nested?: boolean;
   onChange: (value: boolean) => void;
-}> = ({ label, hint, checked, disabled, nested, onChange }) => (
-  <label className={`switch-row${nested ? ' zpod-switch--nested' : ''}${disabled ? ' is-disabled' : ''}`}>
+}> = ({ label, hint, checked, disabled, onChange }) => (
+  <label className={`switch-row${disabled ? ' is-disabled' : ''}`}>
     <span className="switch-row__text">
       <span className="switch-row__label">{label}</span>
       <span className="switch-row__hint">{hint}</span>
@@ -91,7 +97,7 @@ const ZebraniePodsumowanie: React.FC<{
   const [pola, setPola] = useState<MailingPole[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [lastFile, setLastFile] = useState<string | null>(null);
-  const [wybor, setWybor] = useState({ zawiadomienie: true, sprawozdanie: true, wstep: true, plan: true });
+  const [wybor, setWybor] = useState({ zawiadomienie: true, sprawozdanie: true, plan: true, uchwaly: true });
 
   useEffect(() => {
     let cancelled = false;
@@ -128,6 +134,24 @@ const ZebraniePodsumowanie: React.FC<{
       material.tresc
     );
   }, [material, pola, dane]);
+
+  // Resolutions: each is its own switch in the package. One with a blank field cannot
+  // go in (the file would print the blank) but never holds the others back.
+  const uchwaly = uchwalyOf(wersja);
+  const uchwalyWiersze = useMemo(
+    () =>
+      pola
+        ? uchwalyOf(wersja).map((u) => ({
+            u,
+            tytul: uchwalaTytul(u, dane, pola),
+            missing: uchwalaMissing(u, dane, pola),
+          }))
+        : [],
+    [wersja, pola, dane]
+  );
+  const uchwalyBraki = uchwalyWiersze.filter((r) => r.missing.length > 0);
+  // Only the finished ones go in; the rest wait for their blanks and never hold the others back.
+  const uchwalyWybrane = uchwalyWiersze.filter((r) => r.missing.length === 0);
 
   const planNieaktualny =
     !!plan &&
@@ -194,14 +218,44 @@ const ZebraniePodsumowanie: React.FC<{
               .filter(Boolean)
               .join(' · '),
     },
+    {
+      tab: 'uchwaly',
+      icon: 'file-text',
+      title: t.zebraniaTabResolutions,
+      stan: uchwaly.length === 0 ? 'brak' : uchwalyBraki.length > 0 ? 'uzupelnij' : 'gotowe',
+      detail:
+        uchwaly.length === 0
+          ? t.uchPodNone
+          : uchwalyBraki.length > 0
+            ? t.uchSummary
+                .replace('{n}', String(uchwaly.length))
+                .replace('{ready}', String(uchwaly.length - uchwalyBraki.length))
+                .replace('{todo}', String(uchwalyBraki.length))
+            : t.uchPodDetail.replace('{n}', String(uchwaly.length)),
+    },
   ];
+  // What a part says is its ready mark (the "Status" box on its tab): "Gotowe"
+  // only when marked so. Not marked, it says what its content lacks, or that it
+  // is still being prepared.
+  const dokumentOf: Record<Tab, ZebranieDokumentKlucz> = {
+    zawiadomienie: 'zawiadomienie',
+    sprawozdania: 'sprawozdanie',
+    plan: 'plan',
+    uchwaly: 'uchwaly',
+  };
+  for (const c of czesci) {
+    const marked = wersja.gotowe[dokumentOf[c.tab]] === true;
+    c.stan = marked ? 'gotowe' : c.stan === 'gotowe' ? 'wtoku' : c.stan;
+  }
   const stanLabel: Record<Stan, string> = {
     gotowe: t.zpodReady,
+    wtoku: t.zebraniaStatusW,
     uzupelnij: t.zpodNeedsWork,
     brak: t.zpodMissing,
   };
   const stanTone: Record<Stan, string> = {
     gotowe: 'status-success',
+    wtoku: 'status-pending',
     uzupelnij: 'status-pending',
     brak: 'status-neutral',
   };
@@ -210,15 +264,19 @@ const ZebraniePodsumowanie: React.FC<{
     zawiadomienie: !!material && missing.length === 0,
     sprawozdanie: !!spr,
     plan: !!plan,
+    uchwaly: uchwalyWiersze.some((r) => r.missing.length === 0),
   };
   const request = {
     wersjaId: wersja.id,
     zawiadomienie: moze.zawiadomienie && wybor.zawiadomienie,
     sprawozdanie: moze.sprawozdanie && wybor.sprawozdanie,
-    wstep: wybor.wstep,
+    // The statement always opens with its introduction — it is part of how it is presented.
+    wstep: true,
     plan: moze.plan && wybor.plan,
+    uchwaly: moze.uchwaly && wybor.uchwaly && uchwalyWybrane.length > 0,
+    uchwalyIds: uchwalyWybrane.map((r) => r.u.id),
   };
-  const anything = request.zawiadomienie || request.sprawozdanie || request.plan;
+  const anything = request.zawiadomienie || request.sprawozdanie || request.plan || request.uchwaly;
 
   const download = async () => {
     setBusy(true);
@@ -298,25 +356,34 @@ const ZebraniePodsumowanie: React.FC<{
           onChange={(value) => setWybor((w) => ({ ...w, sprawozdanie: value }))}
         />
         <PakietSwitch
-          nested
-          label={t.zfinIntroInPdf}
-          hint={t.zfinIntroInPdfHint}
-          checked={wybor.wstep}
-          disabled={!request.sprawozdanie || busy}
-          onChange={(value) => setWybor((w) => ({ ...w, wstep: value }))}
-        />
-        <PakietSwitch
           label={t.zebraniaTabPlan}
           hint={plan ? t.zpodPlanHint : t.zpodNotInVersion}
           checked={wybor.plan}
           disabled={!moze.plan || busy}
           onChange={(value) => setWybor((w) => ({ ...w, plan: value }))}
         />
+        <PakietSwitch
+          label={t.zebraniaTabResolutions}
+          hint={
+            uchwaly.length === 0
+              ? t.zpodNotInVersion
+              : !moze.uchwaly
+                ? t.uchPodFillFirst
+                : uchwalyBraki.length === 0
+                  ? t.uchPodAllInPackage.replace('{n}', String(uchwaly.length))
+                  : t.uchPodSomeInPackage
+                      .replace('{n}', String(uchwalyWybrane.length))
+                      .replace('{all}', String(uchwaly.length))
+          }
+          checked={wybor.uchwaly}
+          disabled={!moze.uchwaly || busy}
+          onChange={(value) => setWybor((w) => ({ ...w, uchwaly: value }))}
+        />
         {!anything && (
           <div className="callout callout--muted">
             <Icon name="info" size={16} />
             <div className="callout__body">
-              {moze.zawiadomienie || moze.sprawozdanie || moze.plan ? t.zpodPickSomething : t.zpodNothingYet}
+              {moze.zawiadomienie || moze.sprawozdanie || moze.plan || moze.uchwaly ? t.zpodPickSomething : t.zpodNothingYet}
             </div>
           </div>
         )}

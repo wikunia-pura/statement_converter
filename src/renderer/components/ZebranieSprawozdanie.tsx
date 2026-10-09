@@ -530,7 +530,9 @@ const ZebranieSprawozdanie: React.FC<{
   lista: SprawozdanieZapisane[];
   dataZebrania: string | null;
   onChanged: () => Promise<void>;
-}> = ({ language, locale, wersja, adresNazwa, wspolnota, lista, dataZebrania, onChanged }) => {
+  /** The version's status box, shown at the end of the statement, also while none is attached. */
+  statusBox?: React.ReactNode;
+}> = ({ language, locale, wersja, adresNazwa, wspolnota, lista, dataZebrania, onChanged, statusBox }) => {
   const t = translations[language];
   const notify = useNotify();
   const [busy, setBusy] = useState(false);
@@ -665,62 +667,66 @@ const ZebranieSprawozdanie: React.FC<{
     return (
       <>
         <div className="page-form zeb-page">
-          <div className="zeb-tab-empty zfin-empty-state">
-            <span className="zeb-tab-empty__icon">
-              <Icon name="bar-chart" size={22} />
-            </span>
-            <strong>{t.zfinEmptyTitle}</strong>
-            <p>{t.zfinUploadHint}</p>
-            <div className="zfin-empty-state__actions">
-              <button
-                type="button"
-                className="button button-primary"
-                onClick={() => void upload()}
-                disabled={busy}
-              >
-                <Icon name={busy ? 'loader' : 'upload'} size={14} /> {t.zfinUpload}
-              </button>
-              {lista.length > 0 && (
+          <FormSection icon="bar-chart" title={t.zebraniaTabReports}>
+            <div className="uch-empty zfin-empty-state">
+              <span className="zeb-tab-empty__icon">
+                <Icon name="bar-chart" size={22} />
+              </span>
+              <strong>{t.zfinEmptyTitle}</strong>
+              <p>{t.zfinUploadHint}</p>
+              <div className="zfin-empty-state__actions">
                 <button
                   type="button"
-                  className="button button-secondary"
-                  onClick={() => setPicker({})}
+                  className="button button-primary"
+                  onClick={() => void upload()}
                   disabled={busy}
                 >
-                  <Icon name="search" size={14} /> {t.zfinPickFromLibrary}
+                  <Icon name={busy ? 'loader' : 'upload'} size={14} /> {t.zfinUpload}
                 </button>
+                {lista.length > 0 && (
+                  <button
+                    type="button"
+                    className="button button-secondary"
+                    onClick={() => setPicker({})}
+                    disabled={busy}
+                  >
+                    <Icon name="search" size={14} /> {t.zfinPickFromLibrary}
+                  </button>
+                )}
+              </div>
+              {matches.length > 0 && (
+                <div className="zfin-matches">
+                  <span className="zfin-matches__title">{t.zfinFound}</span>
+                  <ul>
+                    {matches.map((s) => (
+                      <li key={s.id}>
+                        <span>
+                          <strong>{okresLabel(s.okresOd, s.okresDo)}</strong>
+                          <span className="zeb-muted">
+                            {' '}
+                            · {s.plikNazwa} ·{' '}
+                            {t.zfinImportedBy
+                              .replace('{when}', formatStamp(s.importedAt, locale))
+                              .replace('{who}', s.importedBy || '—')}
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          className="button button-small button-success"
+                          onClick={() => void attach(s)}
+                          disabled={busy}
+                        >
+                          <Icon name="plus" size={12} /> {t.zfinAttach}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
-            {matches.length > 0 && (
-              <div className="zfin-matches">
-                <span className="zfin-matches__title">{t.zfinFound}</span>
-                <ul>
-                  {matches.map((s) => (
-                    <li key={s.id}>
-                      <span>
-                        <strong>{okresLabel(s.okresOd, s.okresDo)}</strong>
-                        <span className="zeb-muted">
-                          {' '}
-                          · {s.plikNazwa} ·{' '}
-                          {t.zfinImportedBy
-                            .replace('{when}', formatStamp(s.importedAt, locale))
-                            .replace('{who}', s.importedBy || '—')}
-                        </span>
-                      </span>
-                      <button
-                        type="button"
-                        className="button button-small button-success"
-                        onClick={() => void attach(s)}
-                        disabled={busy}
-                      >
-                        <Icon name="plus" size={12} /> {t.zfinAttach}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
+          </FormSection>
+
+          {statusBox}
         </div>
         {picking}
       </>
@@ -802,6 +808,8 @@ const ZebranieSprawozdanie: React.FC<{
         </FormSection>
 
         <SprawozdaniePodglad t={t} spr={spr} />
+
+        {statusBox}
       </div>
       {picking}
     </>

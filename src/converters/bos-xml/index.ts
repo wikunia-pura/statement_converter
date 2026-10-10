@@ -50,11 +50,10 @@ export class BosXmlConverter extends BaseConverter<BosTransaction> {
 
   protected doFilter(
     transactions: BosTransaction[],
-    opts: { skipNegative: boolean; skipBankFees: boolean }
+    opts: { skipNegative: boolean }
   ): BosTransaction[] {
     return this.parser.filterTransactions(transactions, {
       skipNegative: opts.skipNegative,
-      skipBankFees: opts.skipBankFees,
     });
   }
 

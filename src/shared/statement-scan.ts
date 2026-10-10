@@ -443,24 +443,26 @@ export function monthCovered(from: string, to: string): string | null {
 }
 
 /**
- * The name a recognised statement PDF is given:
+ * The name a recognised statement file or PDF is given, keeping its own
+ * extension (`ext`, with the dot — a converter may still tell the format by it):
  * `Pulawska_116_Eksploatacja_2026-08.pdf` for a whole month,
- * `Pulawska_116_Eksploatacja_2026-08-01_2026-08-15.pdf` for part of one.
+ * `Pulawska_116_Eksploatacja_2026-08-01_2026-08-15.xml` for part of one.
  * `accountSuffix` (the account's last digits) tells two accounts of the same
  * type apart: `Modzelewskiego_52_Eksploatacja_4963_2026-09.pdf`.
  */
-export function pdfTargetName(
+export function scanTargetName(
   adresNazwa: string,
   accountTypeName: string | null,
   from: string,
   to: string,
+  ext: string,
   accountSuffix?: string | null,
 ): string {
   const parts = [sanitizeForFilename(adresNazwa)];
   if (accountTypeName) parts.push(sanitizeForFilename(accountTypeName));
   if (accountSuffix) parts.push(accountSuffix);
   parts.push(monthCovered(from, to) ?? `${from}_${to}`);
-  return `${parts.filter(Boolean).join('_')}.pdf`;
+  return `${parts.filter(Boolean).join('_')}${ext.toLowerCase()}`;
 }
 
 /**

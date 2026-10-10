@@ -147,20 +147,23 @@ const IPC_CHANNELS = {
   UPDATE_ZEBRANIE_WERSJA: 'zebrania:update-wersja',
   SET_ZEBRANIE_DOKUMENT_GOTOWE: 'zebrania:set-dokument-gotowe',
   SET_ZEBRANIE_WERSJA_NAZWA: 'zebrania:set-wersja-nazwa',
-  ZEBRANIA_SPRAWOZDANIA_IMPORT: 'zebrania:sprawozdania-import',
   ZEBRANIA_SPRAWOZDANIA_LISTA: 'zebrania:sprawozdania-lista',
   ZEBRANIA_SPRAWOZDANIE_GET: 'zebrania:sprawozdanie-get',
   ZEBRANIE_WERSJA_ATTACH_SPRAWOZDANIE: 'zebrania:wersja-attach-sprawozdanie',
   ZEBRANIE_WERSJA_REMOVE_SPRAWOZDANIE: 'zebrania:wersja-remove-sprawozdanie',
   ZEBRANIE_WERSJA_SET_SPRAWOZDANIE_WSTEP: 'zebrania:wersja-set-sprawozdanie-wstep',
+  ZEBRANIE_WERSJA_SET_SPRAWOZDANIE_LACZENIA: 'zebrania:wersja-set-sprawozdanie-laczenia',
+  ZEBRANIE_SPRAWOZDANIE_LACZENIA_AI: 'zebrania:sprawozdanie-laczenia-ai',
+  ZEBRANIE_SPRAWOZDANIE_WSTEP_AI: 'zebrania:sprawozdanie-wstep-ai',
+  ZEBRANIA_PLAN_ZALICZKA_AI: 'zebrania:plan-zaliczka-ai',
   ZEBRANIE_WERSJA_SET_PLAN: 'zebrania:wersja-set-plan',
   ZEBRANIA_WSPOLNOTY_GET: 'zebrania:wspolnoty-get',
   ZEBRANIA_WSPOLNOTA_SET: 'zebrania:wspolnota-set',
   ZEBRANIA_USTAWIENIA_GET: 'zebrania:ustawienia-get',
   ZEBRANIA_USTAWIENIA_SET: 'zebrania:ustawienia-set',
   ZEBRANIA_DOKUMENT_EXPORT: 'zebrania:dokument-export',
-  SPRAWOZDANIA_IMPORT_WLASNE: 'sprawozdania:import-wlasne',
-  SPRAWOZDANIE_DELETE_WLASNE: 'sprawozdania:delete-wlasne',
+  SPRAWOZDANIA_IMPORT: 'sprawozdania:import',
+  SPRAWOZDANIE_DELETE: 'sprawozdania:delete',
   SPRAWOZDANIE_EXPORT: 'sprawozdania:export',
   ZEBRANIA_PAKIET_EXPORT: 'zebrania:pakiet-export',
   PLANY_WLASNE_GET: 'plany:get',
@@ -542,14 +545,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteZgnPelnomocnik: (id: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.DELETE_ZGN_PELNOMOCNIK, id),
   mailingGetPola: () => ipcRenderer.invoke(IPC_CHANNELS.MAILING_GET_POLA),
-  mailingAddPole: (nazwa: string, tekst: string, jednostka: string, typWartosci: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.MAILING_ADD_POLE, nazwa, tekst, jednostka, typWartosci),
+  mailingAddPole: (
+    nazwa: string,
+    tekst: string,
+    jednostka: string,
+    typWartosci: string,
+    typ: string | null,
+  ) =>
+    ipcRenderer.invoke(IPC_CHANNELS.MAILING_ADD_POLE, nazwa, tekst, jednostka, typWartosci, typ),
   mailingUpdatePole: (
     id: number,
     nazwa: string,
     tekst: string,
     jednostka: string,
     typWartosci: string,
+    typ: string | null,
   ) =>
     ipcRenderer.invoke(
       IPC_CHANNELS.MAILING_UPDATE_POLE,
@@ -558,6 +568,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       tekst,
       jednostka,
       typWartosci,
+      typ,
     ),
   mailingDeletePole: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.MAILING_DELETE_POLE, id),
   mailingGetSzablony: () => ipcRenderer.invoke(IPC_CHANNELS.MAILING_GET_SZABLONY),
@@ -609,15 +620,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.SET_ZEBRANIE_DOKUMENT_GOTOWE, id, dokument, gotowe),
   setZebranieWersjaNazwa: (id: number, nazwa: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_ZEBRANIE_WERSJA_NAZWA, id, nazwa),
-  importSprawozdania: () => ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_SPRAWOZDANIA_IMPORT),
   getSprawozdaniaLista: () => ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_SPRAWOZDANIA_LISTA),
   getSprawozdanie: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_SPRAWOZDANIE_GET, id),
   attachZebranieSprawozdanie: (wersjaId: number, sprawozdanieId: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIE_WERSJA_ATTACH_SPRAWOZDANIE, wersjaId, sprawozdanieId),
   removeZebranieSprawozdanie: (wersjaId: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIE_WERSJA_REMOVE_SPRAWOZDANIE, wersjaId),
-  setZebranieSprawozdanieWstep: (wersjaId: number, wstep: unknown) =>
-    ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIE_WERSJA_SET_SPRAWOZDANIE_WSTEP, wersjaId, wstep),
+  setSprawozdanieWstep: (cel: unknown, wstep: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIE_WERSJA_SET_SPRAWOZDANIE_WSTEP, cel, wstep),
+  setSprawozdanieLaczenia: (cel: unknown, rodzaj: string, lista: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIE_WERSJA_SET_SPRAWOZDANIE_LACZENIA, cel, rodzaj, lista),
+  proponujLaczeniaSprawozdaniaAi: (cel: unknown, rodzaj: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIE_SPRAWOZDANIE_LACZENIA_AI, cel, rodzaj),
+  napiszWstepSprawozdaniaAi: (cel: unknown, wskazowki: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIE_SPRAWOZDANIE_WSTEP_AI, cel, wskazowki),
+  proponujZaliczkeAi: (plan: unknown, rodzaj: string, wskazowki: string, dataZebrania: string | null) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_PLAN_ZALICZKA_AI, plan, rodzaj, wskazowki, dataZebrania),
   setZebranieWersjaPlan: (wersjaId: number, plan: unknown) =>
     ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIE_WERSJA_SET_PLAN, wersjaId, plan),
   getZebraniaWspolnoty: () => ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_WSPOLNOTY_GET),
@@ -627,8 +645,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setZebraniaUstawienia: (value: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_USTAWIENIA_SET, value),
   exportZebranieDokument: (request: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_DOKUMENT_EXPORT, request),
   // Sprawozdania
-  importSprawozdaniaWlasne: () => ipcRenderer.invoke(IPC_CHANNELS.SPRAWOZDANIA_IMPORT_WLASNE),
-  deleteSprawozdanieWlasne: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.SPRAWOZDANIE_DELETE_WLASNE, id),
+  importSprawozdania: () => ipcRenderer.invoke(IPC_CHANNELS.SPRAWOZDANIA_IMPORT),
+  deleteSprawozdanie: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.SPRAWOZDANIE_DELETE, id),
   exportSprawozdanie: (request: unknown) => ipcRenderer.invoke(IPC_CHANNELS.SPRAWOZDANIE_EXPORT, request),
   exportZebraniePakiet: (request: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_PAKIET_EXPORT, request),
   // Plany gospodarcze

@@ -245,6 +245,10 @@ export function linkConversions(
   for (const p of pliki) {
     if (p.kind !== 'statement' || p.status !== 'ok') continue;
     push(byName, p.fileName.toLowerCase(), p);
+    // The scan renames what it pins; a conversion of the file under the name it came with still counts.
+    if (p.originalName && p.originalName.toLowerCase() !== p.fileName.toLowerCase()) {
+      push(byName, p.originalName.toLowerCase(), p);
+    }
     if (p.fileHash) push(byHash, p.fileHash, p);
   }
   const byPlik = new Map<number, BookingRow>();
@@ -804,6 +808,16 @@ export function sortGroups(groups: AddressBookingGroup[], sort: BookingSort, loc
     if (rank[a.state] !== rank[b.state]) return rank[a.state] - rank[b.state];
     return byName(a, b);
   });
+}
+
+/**
+ * Nothing left to do for the community this month: it has accounting files,
+ * every one is ticked in DOM, no pinned statement waits for a conversion and
+ * nothing failed. A priority on such a row has done its job — the dashboard
+ * takes it off when a row turns finished (see the Pulpit).
+ */
+export function isBookingFinished(group: AddressBookingGroup): boolean {
+  return !group.unassigned && group.state === 'done' && group.ready === 0 && group.errors === 0;
 }
 
 /**

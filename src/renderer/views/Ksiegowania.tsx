@@ -32,7 +32,6 @@ import {
   upcomingSpotkania,
 } from '../../shared/calendar';
 import MeetingsIllustration from '../components/MeetingsIllustration';
-import PriorityOrderModal from '../components/PriorityOrderModal';
 import OverflowMenu from '../components/OverflowMenu';
 import { NoteEditor, uwagaMeta, uwagaResolvedMeta } from '../components/PostingNotes';
 import { resolveOutputFilePath } from '../../shared/outputPaths';
@@ -50,6 +49,7 @@ import {
   attributeToStatementMonths,
   currentMonthKey,
   groupByAddress,
+  isBookingFinished,
   matchesBookingFilter,
   matchesBookingSearch,
   monthLabel,
@@ -324,7 +324,8 @@ const Ksiegowania: React.FC<Props> = ({
   // The conversion dialog's files, and the communities ticked for converting together.
   const [conversion, setConversion] = useState<{ title: string; entries: FileEntry[] } | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [showOrder, setShowOrder] = useState(false);
+  /** The queue row being dragged, and the one it is over (group keys). */
+  const [prioDrag, setPrioDrag] = useState<{ from: string; over: string | null } | null>(null);
   const [orderSaving, setOrderSaving] = useState(false);
   const tiles = resolveBookingTileOrder(tileOrder);
   // Rows (by group key) with a priority / note write in flight.
@@ -724,12 +725,47 @@ const Ksiegowania: React.FC<Props> = ({
     },
   });
 
+  /**
+   * A priority comes off by itself once its community is finished — every file
+   * ticked in DOM and nothing more to post (see `isBookingFinished`). Only on the
+   * change to finished, seen here: a row that was already finished when it came
+   * on screen keeps a flag somebody put on it on purpose. Held while a tick is
+   * still being saved, so a write that fails and is rolled back takes nothing off.
+   */
+  const finishedSeen = useRef<Map<string, boolean>>(new Map());
+  useEffect(() => {
+    if (isLoading || saving.size > 0) return;
+    const released: AddressBookingGroup[] = [];
+    for (const g of groups) {
+      if (g.unassigned) continue;
+      const key = `${monthKey}|${g.key}`;
+      const finished = isBookingFinished(g);
+      const before = finishedSeen.current.get(key);
+      finishedSeen.current.set(key, finished);
+      if (before === false && finished && g.priority) released.push(g);
+    }
+    if (released.length === 0) return;
+    void (async () => {
+      const done: string[] = [];
+      for (const g of released) {
+        try {
+          await window.electronAPI.removeKsiegowaniePriorytet(g.priority!.id);
+          done.push(g.nazwa);
+        } catch {
+          notify.error(t.ksPrioError);
+        }
+      }
+      await loadNotes();
+      if (done.length > 0) notify.info(t.ksPrioAutoRemoved.replace('{names}', done.join(', ')));
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups, isLoading, saving, monthKey]);
+
   const saveOrder = async (orderedPriorityIds: number[]) => {
     setOrderSaving(true);
     try {
       await window.electronAPI.reorderKsiegowaniaPriorytety(monthKey, orderedPriorityIds);
       await loadNotes();
-      setShowOrder(false);
       notify.success(t.ksPrioOrderSaved);
     } catch {
       notify.error(t.ksPrioError);
@@ -737,6 +773,21 @@ const Ksiegowania: React.FC<Props> = ({
     } finally {
       setOrderSaving(false);
     }
+  };
+
+  /**
+   * A queue row dropped on another: it takes that row's place in the WHOLE
+   * month's queue (a filter may be hiding some of it), saved at once.
+   */
+  const dropPriority = (fromKey: string, toKey: string) => {
+    if (fromKey === toKey || orderSaving) return;
+    const order = [...priorityGroups];
+    const from = order.findIndex((g) => g.key === fromKey);
+    const to = order.findIndex((g) => g.key === toKey);
+    if (from < 0 || to < 0) return;
+    const [moved] = order.splice(from, 1);
+    order.splice(to, 0, moved);
+    void saveOrder(order.map((g) => g.priority!.id));
   };
 
   const openFile = async (filePath: string) => {
@@ -1270,18 +1321,6 @@ const Ksiegowania: React.FC<Props> = ({
             ariaLabel={t.ksWhoLabel}
             title={t.ksWhoLabel}
           />
-          {priorityGroups.length > 0 && (
-            <button
-              type="button"
-              className="ksieg-prio-order"
-              onClick={() => setShowOrder(true)}
-              title={t.ksPrioOrderHint}
-            >
-              <Icon name="flag" size={13} />
-              <span>{t.ksPrioOrderButton}</span>
-              <span className="ksieg-prio-order__count">{priorityGroups.length}</span>
-            </button>
-          )}
           {orderStale && (
             <button
               type="button"
@@ -1373,6 +1412,23 @@ const Ksiegowania: React.FC<Props> = ({
                   peopleOptions={peopleOptions}
                   onAssign={(email) => void assign(group, email)}
                   userEmail={userEmail}
+                  reorder={
+                    index < queueLength && group.priority
+                      ? {
+                          busy: orderSaving,
+                          dragging: prioDrag?.from === group.key,
+                          over: prioDrag !== null && prioDrag.over === group.key && prioDrag.from !== group.key,
+                          onStart: () => setPrioDrag({ from: group.key, over: null }),
+                          onOver: () =>
+                            setPrioDrag((d) => (d && d.over !== group.key ? { ...d, over: group.key } : d)),
+                          onDrop: () => {
+                            if (prioDrag) dropPriority(prioDrag.from, group.key);
+                            setPrioDrag(null);
+                          },
+                          onEnd: () => setPrioDrag(null),
+                        }
+                      : undefined
+                  }
                 />
               </React.Fragment>
             ))}
@@ -1456,16 +1512,6 @@ const Ksiegowania: React.FC<Props> = ({
         />
       )}
 
-      {showOrder && (
-        <PriorityOrderModal
-          groups={priorityGroups}
-          monthLabel={monthLabel(monthKey, locale)}
-          language={language}
-          saving={orderSaving}
-          onSave={(ids) => void saveOrder(ids)}
-          onClose={() => setShowOrder(false)}
-        />
-      )}
     </div>
   );
 };
@@ -1568,16 +1614,42 @@ const BookingTiles: React.FC<{
 
 /* --------------------------- One community row ---------------------------- */
 
-const Metric: React.FC<{ value: number; label: string; tone?: 'ok' | 'wait' | 'err' }> = ({
-  value,
-  label,
-  tone,
-}) => (
-  <span className={`ksieg-metric ${tone ? `ksieg-metric--${tone}` : ''}`}>
-    <b>{value}</b>
-    <i>{label}</i>
-  </span>
-);
+type MetricTone = 'ok' | 'wait' | 'err';
+
+/**
+ * A row's counts as ONE coloured dot, the avatar's shape: the most pressing
+ * number inside — errors (red), then files to convert / waiting for DOM (amber),
+ * then what is in DOM (green), else a neutral count of files — and the full
+ * list (files · in DOM · waiting · to convert · errors) on hover.
+ */
+const Metrics: React.FC<{ items: { value: number; label: string; tone?: MetricTone }[] }> = ({ items }) => {
+  const urgency: Record<MetricTone, number> = { err: 0, wait: 1, ok: 2 };
+  // Reversed first, so of two amber counts the later one ("do konwersji", the
+  // earlier step of the work) wins the stable sort.
+  const lead =
+    [...items]
+      .reverse()
+      .filter((m) => m.tone && m.value > 0)
+      .sort((a, b) => urgency[a.tone!] - urgency[b.tone!])[0] ?? items[0];
+  return (
+    <span className="ksieg-stats" aria-label={items.map((m) => `${m.label}: ${m.value}`).join(', ')}>
+      <span className={`ksieg-stats__dot ksieg-stats__dot--${lead.value > 0 && lead.tone ? lead.tone : 'none'}`}>
+        {lead.value}
+      </span>
+      <span className="ksieg-stats__pop" role="tooltip">
+        {items.map((m) => (
+          <span
+            key={m.label}
+            className={`ksieg-stats__seg${m.tone ? ` ksieg-stats__seg--${m.tone}` : ''}${m.value === 0 ? ' is-zero' : ''}`}
+          >
+            <i>{m.label}</i>
+            <b>{m.value}</b>
+          </span>
+        ))}
+      </span>
+    </span>
+  );
+};
 
 /**
  * What a row can do to its own priority and notes. Built per row by the view —
@@ -1626,6 +1698,16 @@ const CommunityRow: React.FC<{
   onAssign: (email: string | null) => void;
   /** The signed-in mailbox, for "Przypisz do mnie". */
   userEmail?: string;
+  /** Set on the priority queue's rows: grab the head and drop it on another queue row. */
+  reorder?: {
+    busy: boolean;
+    dragging: boolean;
+    over: boolean;
+    onStart: () => void;
+    onOver: () => void;
+    onDrop: () => void;
+    onEnd: () => void;
+  };
 }> = ({
   group,
   language,
@@ -1648,8 +1730,12 @@ const CommunityRow: React.FC<{
   peopleOptions,
   onAssign,
   userEmail,
+  reorder,
 }) => {
   const t = translations[language];
+  // Draggable only while the head is held: the row's pickers, notes and
+  // buttons must keep their own clicks and text selection.
+  const [dragArmed, setDragArmed] = useState(false);
   const assigneeUser = assignee ? users.find((u) => sameMailbox(u.email, assignee)) : undefined;
   // Which editor is open on this row. Local on purpose: it is a draft, and the
   // row below the one being typed in must not care.
@@ -1686,7 +1772,42 @@ const CommunityRow: React.FC<{
     <article
       className={`ksieg-row ksieg-row--${group.state} ${open ? 'is-open' : ''}${
         group.priorityRank !== null ? ' ksieg-row--priority' : ''
-      }`}
+      }${reorder ? ' is-reorderable' : ''}${reorder?.dragging ? ' is-dragging' : ''}${reorder?.over ? ' is-drop-target' : ''}`}
+      draggable={reorder !== undefined && dragArmed && !reorder.busy}
+      onDragStart={
+        reorder
+          ? (e) => {
+              e.dataTransfer.effectAllowed = 'move';
+              // Some engines refuse a drag that carries no payload.
+              e.dataTransfer.setData('text/plain', group.key);
+              reorder.onStart();
+            }
+          : undefined
+      }
+      onDragOver={
+        reorder
+          ? (e) => {
+              e.preventDefault();
+              reorder.onOver();
+            }
+          : undefined
+      }
+      onDrop={
+        reorder
+          ? (e) => {
+              e.preventDefault();
+              reorder.onDrop();
+            }
+          : undefined
+      }
+      onDragEnd={
+        reorder
+          ? () => {
+              setDragArmed(false);
+              reorder.onEnd();
+            }
+          : undefined
+      }
     >
       {/* The tick for batch actions (convert, assign) sits left of the head —
           outside it, as the head is a button and cannot hold a control of its
@@ -1720,20 +1841,30 @@ const CommunityRow: React.FC<{
         type="button"
         className="ksieg-row__head"
         onClick={onToggle}
+        onMouseDown={reorder ? () => setDragArmed(true) : undefined}
+        onMouseUp={reorder ? () => setDragArmed(false) : undefined}
         aria-expanded={open}
-        title={open ? t.ksCollapseRow : t.ksExpandRow}
+        title={reorder ? `${open ? t.ksCollapseRow : t.ksExpandRow} · ${t.ksPrioDragHint}` : open ? t.ksCollapseRow : t.ksExpandRow}
       >
         <span className="ksieg-row__glyph">
-          <Icon name={STATE_ICON[group.state]} size={17} />
+          <Icon name={STATE_ICON[group.state]} size={17} className="ksieg-row__glyph-state" />
+          {/* A queue row shows it can be grabbed when the pointer is on it. */}
+          {reorder && <Icon name="grip" size={17} className="ksieg-row__glyph-grip" />}
         </span>
         <span className="ksieg-row__id">
           <span className="ksieg-row__name">
             <span className="ksieg-row__name-text">
               {group.unassigned ? t.ksUnassigned : group.nazwa}
             </span>
-            <span className={`status-badge ksieg-state ksieg-state--${group.state}`}>
-              {stateLabel(group.state, t)}
-            </span>
+            {/* "Brak pliku" means no booking file yet — but a statement found in
+                the folder is that file's way in, so say what is next instead. */}
+            {group.state === 'missing' && group.statements.length > 0 ? (
+              <span className="status-badge ksieg-state ksieg-state--ready">{t.ksStateReady}</span>
+            ) : (
+              <span className={`status-badge ksieg-state ksieg-state--${group.state}`}>
+                {stateLabel(group.state, t)}
+              </span>
+            )}
             {group.priorityRank !== null && (
               <span
                 className="ksieg-prio-badge"
@@ -1743,17 +1874,17 @@ const CommunityRow: React.FC<{
                 {t.ksPrioBadge.replace('{n}', String(group.priorityRank))}
               </span>
             )}
-            {group.statements.length > 0 && (
+            {/* Only what needs attention: the folder's files themselves are in
+                the count dot and the "Do konwersji" label. */}
+            {group.noPdf > 0 && (
               <span
-                className={`ksieg-files-badge${group.noPdf > 0 ? ' is-missing-pdf' : ''}`}
+                className="ksieg-files-badge is-missing-pdf"
                 title={t.ksFilesBadgeHint
                   .replace('{n}', String(group.statements.length))
                   .replace('{pdf}', String(group.statements.length - group.noPdf))
                   .replace('{ready}', String(group.ready))}
               >
-                <Icon name="folder" size={11} />
-                {t.ksFilesBadge.replace('{n}', String(group.statements.length))}
-                {group.noPdf > 0 && <b>· {t.ksFileNoPdf}</b>}
+                {t.ksFileNoPdf}
               </span>
             )}
             {group.openUwagi > 0 && (
@@ -1764,13 +1895,6 @@ const CommunityRow: React.FC<{
             )}
           </span>
           <span className="ksieg-row__sub">{subtitle}</span>
-        </span>
-        <span className="ksieg-row__metrics">
-          <Metric value={group.generated} label={t.ksMetricFiles} />
-          <Metric value={group.booked} label={t.ksMetricDom} tone="ok" />
-          <Metric value={group.todo} label={t.ksMetricWaiting} tone="wait" />
-          {group.ready > 0 && <Metric value={group.ready} label={t.ksMetricReady} tone="wait" />}
-          {group.errors > 0 && <Metric value={group.errors} label={t.ksMetricErrors} tone="err" />}
         </span>
         <span className="ksieg-row__gauge" aria-hidden="true">
           <span className="ksieg-row__gauge-bar">
@@ -1845,50 +1969,65 @@ const CommunityRow: React.FC<{
             </button>
           </span>
         )}
-        {/* One thing in the slot, in the order the work is done: convert what the
-            scan pinned first — its file then goes to DOM in the same sitting as
-            the rest — then post, then the "done" state. A row never shows a
-            convert button beside "Zaksięgowane w DOM": that row is not done. */}
+        {/* One small square in the slot, a monogram for the step it stands for,
+            in the order the work is done: K = convert what the scan pinned (how many: the dot beside it) —
+            its file then goes to DOM in the same sitting as the rest — Z = post
+            in DOM, ✓ = done (a click takes the mark off; hovering shows the undo
+            glyph first). A row never shows K beside ✓: that row is not done. */}
+        <span className="ksieg-row__count">
+          <Metrics
+            items={[
+              { value: group.generated, label: t.ksMetricFiles },
+              { value: group.booked, label: t.ksMetricDom, tone: 'ok' },
+              { value: group.todo, label: t.ksMetricWaiting, tone: 'wait' },
+              ...(group.ready > 0 ? [{ value: group.ready, label: t.ksMetricReady, tone: 'wait' as const }] : []),
+              ...(group.errors > 0 ? [{ value: group.errors, label: t.ksMetricErrors, tone: 'err' as const }] : []),
+            ]}
+          />
+        </span>
         {group.ready > 0 ? (
           <button
             type="button"
-            className="ksieg-convert"
+            className="ksieg-act ksieg-act--convert"
             onClick={onConvert}
-            title={t.ksConvertReadyHint}
+            title={`${t.ksConvertReady.replace('{n}', String(group.ready))} — ${t.ksConvertReadyHint}`}
             aria-label={t.ksConvertReady.replace('{n}', String(group.ready))}
           >
-            <Icon name="zap" size={16} />
-            <span>{t.ksConvertShort}</span>
-            <span className="ksieg-book__count">{group.ready}</span>
+            <span className="ksieg-act__mono" aria-hidden="true">{t.ksActMonoConvert}</span>
           </button>
         ) : pendingIds.length > 0 ? (
           <button
             type="button"
-            className="ksieg-book"
+            className="ksieg-act ksieg-act--book"
             disabled={busy}
             onClick={() => void onSetBooked(pendingIds, true, true)}
+            title={t.ksBookInDom}
+            aria-label={`${t.ksBookInDom}: ${group.nazwa}`}
           >
-            <Icon name="check-circle" size={16} />
-            <span>{t.ksBookInDom}</span>
+            <span className="ksieg-act__mono" aria-hidden="true">{t.ksActMonoBook}</span>
           </button>
         ) : group.generated > 0 ? (
-          <div className="ksieg-book-done">
-            <span className="ksieg-book-done__label">
-              <Icon name="check-circle" size={15} /> {t.ksAllInDom}
+          bookedIds.length > 0 ? (
+            <button
+              type="button"
+              className="ksieg-act ksieg-act--done"
+              disabled={busy}
+              onClick={() => void onSetBooked(bookedIds, false, true)}
+              title={`${t.ksAllInDom} — ${t.ksActUndoHint}`}
+              aria-label={`${t.ksAllInDom}. ${t.ksUnmarkAll}: ${group.nazwa}`}
+            >
+              <Icon name="check" size={16} className="ksieg-act__done" />
+              <Icon name="undo" size={15} className="ksieg-act__undo" />
+            </button>
+          ) : (
+            <span className="ksieg-act ksieg-act--done is-static" title={t.ksAllInDom} aria-label={t.ksAllInDom}>
+              <Icon name="check" size={16} />
             </span>
-            {bookedIds.length > 0 && (
-              <button
-                type="button"
-                className="ksieg-book-undo"
-                disabled={busy}
-                onClick={() => void onSetBooked(bookedIds, false, true)}
-              >
-                {t.ksUnmarkAll}
-              </button>
-            )}
-          </div>
+          )
         ) : (
-          <span className="ksieg-book-none">{t.ksNoFileYet}</span>
+          <span className="ksieg-act ksieg-act--none" title={t.ksNoFileYet} aria-label={t.ksNoFileYet}>
+            –
+          </span>
         )}
       </div>
 

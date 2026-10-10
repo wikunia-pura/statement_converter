@@ -28,7 +28,6 @@ async function test() {
       useCache: false,
       useRegexFirst: true,
       skipNegativeAmounts: false,
-      skipBankFees: false,
       contractors: [],
       addresses: [],
       language: 'pl',

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { MailingPole, ZebranieMaterial } from '../../shared/types';
-import { ZebranieDane } from '../../shared/zebrania';
+import { MailingPole, ZebranieMaterial, ZebranieWersja } from '../../shared/types';
+import { ZebranieDane, buildZebranieContext } from '../../shared/zebrania';
 import {
   buildKalendarzContext,
   formatPolishDate,
@@ -25,10 +25,12 @@ const ZawiadomieniePodglad: React.FC<{
   language: Language;
   locale: string;
   notice: ZebranieMaterial | undefined;
+  /** The version the notice belongs to — its statement, plan and resolutions fill the Zebrania fields. */
+  wersja: ZebranieWersja;
   dane: ZebranieDane;
   busy: boolean;
   onOpenNotice: () => void;
-}> = ({ language, locale, notice, dane, busy, onOpenNotice }) => {
+}> = ({ language, locale, notice, wersja, dane, busy, onOpenNotice }) => {
   const t = translations[language];
   const [pola, setPola] = useState<MailingPole[] | null>(null);
 
@@ -48,6 +50,7 @@ const ZawiadomieniePodglad: React.FC<{
   }, []);
 
   const kalendarz = useMemo(() => buildKalendarzContext(dane), [dane]);
+  const zebranieCtx = useMemo(() => buildZebranieContext(wersja, dane, pola ?? []), [wersja, dane, pola]);
   const ctx = useMemo(
     () => ({
       adresNazwa: dane.adresNazwa,
@@ -56,8 +59,9 @@ const ZawiadomieniePodglad: React.FC<{
       values: notice?.values ?? {},
       tableFields: notice?.tableFields ?? [],
       kalendarz,
+      zebranie: zebranieCtx,
     }),
-    [dane.adresNazwa, pola, notice?.values, notice?.tableFields, kalendarz]
+    [dane.adresNazwa, pola, notice?.values, notice?.tableFields, kalendarz, zebranieCtx]
   );
   const missing = useMemo(
     () => (pola && notice ? missingFieldValues(ctx, notice.temat, notice.tresc) : []),
@@ -132,6 +136,8 @@ const ZawiadomieniePodglad: React.FC<{
               pola={pola}
               adresNazwa={dane.adresNazwa}
               kalendarz={kalendarz}
+              zebranie={zebranieCtx}
+              typ={notice.typ}
               tableFields={notice.tableFields}
               readOnly
               hideHint

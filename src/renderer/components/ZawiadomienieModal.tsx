@@ -15,6 +15,7 @@ import {
   ZgnPelnomocnik,
 } from '../../shared/types';
 import {
+  buildZebranieContext,
   latestWersja,
   newZawiadomienieMaterial,
   wersjaLabel,
@@ -80,7 +81,8 @@ export interface ZawiadomienieModalProps {
   onOpenSzablony?: () => void;
   /**
    * Sending the notice (Kalendarz → "Wyślij zawiadomienie"): the side panel with
-   * the blank fields, who it goes to, the PDF / e-mail downloads and the status.
+   * the blank fields, who it goes to and the PDF / e-mail downloads, and "Wyślij"
+   * — the notice mailed through the Mailing's SMTP box — as the window's action.
    * Without it (Zebrania) the window is the letter alone.
    */
   sending?: boolean;
@@ -141,7 +143,11 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
   const [draft, setDraft] = useState<ZebranieMaterial | null>(null);
   /** The picker was opened from the editor ("start again") — it can go back. */
   const [restarting, setRestarting] = useState(false);
-  const [busy, setBusy] = useState<null | 'save' | 'pdf' | 'eml' | 'status' | 'start'>(null);
+  const [busy, setBusy] = useState<
+    null | 'save' | 'pdf' | 'eml' | 'send' | 'status' | 'start'
+  >(null);
+  /** The Mailing's SMTP box — "Wyślij" needs one; `user` is who the mail comes from. */
+  const [smtp, setSmtp] = useState<{ ready: boolean; user: string }>({ ready: false, user: '' });
   const [lastFiles, setLastFiles] = useState<MailingExportResult['files'] | null>(null);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   /**
@@ -170,6 +176,11 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
     [zebranie, spotkania, lokalizacje]
   );
   const kalendarz = useMemo(() => (dane ? buildKalendarzContext(dane) : null), [dane]);
+  /** The version's statement, plan and resolutions — what the Zebrania fields read. */
+  const zebranieCtx = useMemo(
+    () => (dane ? buildZebranieContext(wersja, dane, pola) : null),
+    [wersja, dane, pola]
+  );
   const spotkanie = useMemo(
     () =>
       zebranie?.spotkanieId != null
@@ -204,11 +215,12 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
         values: draft.values,
         tableFields: draft.tableFields,
         kalendarz,
+        zebranie: zebranieCtx,
       },
       draft.temat,
       draft.tresc
     );
-  }, [draft, dane, pola, kalendarz]);
+  }, [draft, dane, pola, kalendarz, zebranieCtx]);
 
   /** The table's rows: the template's shortlist, resolved against the dictionary. */
   const tablePool = useMemo(() => {
@@ -239,7 +251,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
         if (!fresh) throw new Error(t.zawVersionGone);
         return fresh;
       };
-      const [z, spotkaniaD, lokD, adresyD, jednD, pelD, polaD, szablonyD, typyD] =
+      const [z, spotkaniaD, lokD, adresyD, jednD, pelD, polaD, szablonyD, typyD, smtpD] =
         await Promise.all([
           resolveZebranie(),
           window.electronAPI.getSpotkania(),
@@ -250,6 +262,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
           window.electronAPI.mailingGetPola(),
           window.electronAPI.mailingGetSzablony(),
           window.electronAPI.mailingGetTypy().catch(() => [] as MailingTypDef[]),
+          window.electronAPI.mailingGetSmtp().catch(() => null),
         ]);
       // Coming from a meeting the entry may have just been created, and the
       // meeting's materials status moved with it.
@@ -263,6 +276,10 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
       setPola(polaD);
       setSzablony(szablonyD);
       setTypy(typyD);
+      setSmtp({
+        ready: Boolean(smtpD?.host && smtpD.user && smtpD.passwordSet),
+        user: smtpD?.user ?? '',
+      });
 
       const target = z.wersje.find((w) => w.id === wersjaId) ?? latestWersja(z);
       if (!target) throw new Error(t.zawVersionGone);
@@ -406,6 +423,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
         values: material.values,
         tableFields: material.tableFields,
         kalendarz,
+        zebranie: zebranieCtx,
         adresId: dane.adresId,
         adresNazwa: dane.adresNazwa,
         spotkanieId: zebranie.spotkanieId,
@@ -437,6 +455,78 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
     } finally {
       setBusy(null);
     }
+  };
+
+  /**
+   * "Wyślij" — the notice mailed to the recipients ticked in "Do kogo", through
+   * the same SMTP send as the Mailing module (so it lands in the Mailing history,
+   * against the meeting). Saved first, so what went out is what is stored.
+   */
+  const handleSend = async () => {
+    if (!draft || !zebranie || !dane || !resolved) return;
+    const blocked = sendBlockedReason();
+    if (blocked) {
+      notify.warning(blocked);
+      return;
+    }
+    const source = szablony.find((s) => s.id === draft.szablonId);
+    if (!source) {
+      notify.error(t.zawSendNoTemplate, t.mailingSendError);
+      return;
+    }
+    const ok = await notify.confirm(
+      t.zawSendConfirm
+        .replace('{count}', String(resolved.odbiorcy.length))
+        .replace('{from}', smtp.user),
+      { confirmLabel: t.zawSend }
+    );
+    if (!ok) return;
+    setBusy('send');
+    try {
+      const material = (await saveIfDirty()) ?? draft;
+      const response = await window.electronAPI.mailingSend({
+        typ: material.typ || MAILING_TYP_ZAWIADOMIENIE,
+        templateId: source.id,
+        temat: material.temat,
+        tresc: material.tresc,
+        adresIds: [dane.adresId as number],
+        values: material.values,
+        tableFields: material.tableFields,
+        attachPdf: source.attachPdf ?? true,
+        attachments: [],
+        spotkanieId: zebranie.spotkanieId ?? null,
+        kalendarz,
+        zebranie: zebranieCtx,
+        adresaci: material.adresaci,
+        wykluczeni: material.wykluczeni,
+      });
+      if (response.error) {
+        notify.error(response.error, t.mailingSendError);
+        return;
+      }
+      const result = response.results?.[0];
+      if (!result || result.status !== 'success') {
+        notify.error(result?.errorMessage || t.mailingSendError, t.mailingSendError);
+        return;
+      }
+      notify.success(
+        t.zawSent.replace('{count}', String(result.odbiorcy?.length ?? resolved.odbiorcy.length))
+      );
+      onChanged?.();
+    } catch (err: unknown) {
+      notify.error(err instanceof Error ? err.message : String(err), t.mailingSendError);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /** Why "Wyślij" is grey — said on hover, and as the warning when clicked anyway. */
+  const sendBlockedReason = (): string | undefined => {
+    if (!dane || dane.adresId == null) return t.zawSendNoCommunity;
+    if (missing.length > 0) return t.zawMissingBlock.replace('{fields}', missing.join(', '));
+    if (!resolved || resolved.odbiorcy.length === 0) return t.zawSendNoRecipients;
+    if (!smtp.ready) return t.mailingSmtpNotConfigured;
+    return undefined;
   };
 
   const showFile = async (filePath: string) => {
@@ -626,6 +716,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
   const sourceTemplate = szablony.find((s) => s.id === draft.szablonId) ?? null;
   const recentDownloads = [...draft.pobrania].reverse().slice(0, 3);
   const isOlder = !!newest && newest.id !== wersja.id;
+  const sendBlocked = sending ? sendBlockedReason() : undefined;
 
   return (
     <div className="modal-overlay zaw-overlay">
@@ -654,6 +745,8 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
               pola={pola}
               adresNazwa={dane.adresNazwa}
               kalendarz={kalendarz}
+              zebranie={zebranieCtx}
+              typ={draft.typ}
               tableFields={draft.tableFields}
               tablePool={tablePool}
               onTableFieldsChange={(tableFields) => patchDraft({ tableFields })}
@@ -801,11 +894,34 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
           }
           onCancel={() => void handleClose()}
           cancelLabel={t.close}
-          onSubmit={() => void handleSave()}
-          submitLabel={t.zawSave}
-          submitIcon="save"
-          submitDisabled={busy !== null || !dirty}
-          submitTitle={!dirty ? t.noChangesToSave : undefined}
+          {...(sending
+            ? {
+                // Sending is what this window is for; saving stays beside it.
+                secondaryAction: (
+                  <button
+                    type="button"
+                    className="button button-secondary"
+                    onClick={() => void handleSave()}
+                    disabled={busy !== null || !dirty}
+                    title={!dirty ? t.noChangesToSave : undefined}
+                  >
+                    <Icon name="save" size={14} /> {t.zawSave}
+                  </button>
+                ),
+                onSubmit: () => void handleSend(),
+                submitLabel: busy === 'send' ? t.mailingSending : t.zawSend,
+                submitIcon: 'mail' as const,
+                submitDisabled: busy !== null || !!sendBlocked,
+                busy: busy === 'send',
+                submitTitle: busy === null ? sendBlocked : undefined,
+              }
+            : {
+                onSubmit: () => void handleSave(),
+                submitLabel: t.zawSave,
+                submitIcon: 'save' as const,
+                submitDisabled: busy !== null || !dirty,
+                submitTitle: !dirty ? t.noChangesToSave : undefined,
+              })}
         />
       </div>
 

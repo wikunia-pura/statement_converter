@@ -47,7 +47,6 @@ async function main() {
     useCache: true,
     useRegexFirst: true,
     skipNegativeAmounts: true,
-    skipBankFees: true,
     
     confidenceThresholds: {
       autoApprove: 85,

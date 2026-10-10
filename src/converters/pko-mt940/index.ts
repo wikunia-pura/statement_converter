@@ -52,11 +52,10 @@ export class PKOBPMT940Converter extends BaseConverter<MT940Transaction> {
 
   protected doFilter(
     transactions: MT940Transaction[],
-    opts: { skipNegative: boolean; skipBankFees: boolean }
+    opts: { skipNegative: boolean }
   ): MT940Transaction[] {
     return this.parser.filterTransactions(transactions, {
       skipNegative: opts.skipNegative,
-      skipBankFees: opts.skipBankFees,
       skipVirtualAccountTransfers: true,
     });
   }

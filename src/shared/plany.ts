@@ -4,7 +4,7 @@
  * process (which refuses a module plan Zebrania already has) and the renderer.
  */
 
-import { PlanGospodarczy, Zebranie, ZebraniaWspolnota, ZebranieWersja } from './types';
+import { AdresUdzialy, PlanGospodarczy, Zebranie, ZebraniaWspolnota, ZebranieWersja } from './types';
 import { sortWersje } from './zebrania';
 
 /** A plan of a Zebrania entry: the newest version that has one. */
@@ -42,4 +42,26 @@ export function planWZebraniach(
 ): PlanZZebran | undefined {
   const key = planKey(nrWsp, rok);
   return key ? plany.find((p) => planKey(p.nrWsp, p.plan.rok) === key) : undefined;
+}
+
+/**
+ * The ownership split a new plan of this community and year starts from: the
+ * city's and the leased areas of its newest earlier plan (Zebrania or this
+ * module), else what was remembered for the community. Only a default — the
+ * new plan's fields stay editable.
+ */
+export function udzialyDlaNowegoPlanu(
+  plany: { nrWsp: number | null; plan: PlanGospodarczy }[],
+  nrWsp: number | null,
+  rok: number,
+  zapamietane: AdresUdzialy | null | undefined,
+): AdresUdzialy {
+  const poprzedni =
+    nrWsp == null
+      ? undefined
+      : plany
+          .filter((p) => p.nrWsp === nrWsp && p.plan.rok < rok)
+          .sort((a, b) => b.plan.rok - a.plan.rok)[0]?.plan;
+  if (poprzedni) return { miastoM2: poprzedni.miastoM2, pozytkiM2: poprzedni.pozytkiM2 };
+  return { miastoM2: zapamietane?.miastoM2 ?? 0, pozytkiM2: zapamietane?.pozytkiM2 ?? 0 };
 }

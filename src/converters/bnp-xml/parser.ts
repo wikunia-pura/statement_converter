@@ -229,20 +229,12 @@ export class BnpXmlParser {
     transactions: BnpTransaction[],
     options: {
       skipNegative?: boolean;
-      skipBankFees?: boolean;
     } = {}
   ): BnpTransaction[] {
     return transactions.filter((trn) => {
       // Skip expenses (DBIT) if requested
       if (options.skipNegative && trn.creditDebitIndicator === 'DBIT') {
         return false;
-      }
-
-      // Skip bank fees — code 244 with empty description or very small amounts with no counterparty
-      if (options.skipBankFees) {
-        if (trn.txCode === '244' && !trn.description && !trn.counterpartyName) {
-          return false;
-        }
       }
 
       return true;

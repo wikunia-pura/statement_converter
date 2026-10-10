@@ -281,7 +281,6 @@ export class AliorMT940Parser {
     transactions: AliorTransaction[],
     options: {
       skipNegative?: boolean;
-      skipBankFees?: boolean;
       onlyPositive?: boolean;
     } = {}
   ): AliorTransaction[] {
@@ -292,13 +291,6 @@ export class AliorMT940Parser {
 
       if (options.onlyPositive && trn.debitCredit !== 'C') {
         return false;
-      }
-
-      // Skip bank fees: NCHG transaction type or 8090 transaction code
-      if (options.skipBankFees) {
-        if (trn.transactionType === 'NCHG' || trn.details.transactionCode.startsWith('8090')) {
-          return false;
-        }
       }
 
       return true;

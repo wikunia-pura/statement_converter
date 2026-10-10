@@ -32,7 +32,6 @@ async function main() {
     useCache: false,
     useRegexFirst: true,
     skipNegativeAmounts: false,
-    skipBankFees: true,
   });
   
   console.log('🔄 Starting conversion...\n');

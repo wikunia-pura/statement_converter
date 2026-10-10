@@ -209,6 +209,13 @@ alter table public.mailing_pola
   add constraint mailing_pola_typ_wartosci_check
   check (typ_wartosci in ('tekst', 'data', 'godzina'));
 
+-- The mailing kind a field belongs to (`mailing_typy.klucz`), or null for a field
+-- every kind may use. A bound field is offered only in templates of that kind.
+-- The key rather than the id, like `mailing_szablony.typ`: a restore renumbers
+-- rows and the binding must survive one. Deleting a kind sets it back to null.
+alter table public.mailing_pola
+  add column if not exists typ text;
+
 -- Message templates. Subject and body are authored with {{field}} placeholders
 -- resolved at send time; `attach_pdf` is the template's default for the
 -- "also attach the body as PDF" switch (the send screen can override it).

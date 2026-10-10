@@ -462,6 +462,8 @@ interface FormProps {
   zgnPelnomocnicy: ZgnPelnomocnik[];
   /** Tasks already linked to the meeting being edited. */
   linkedZadania: Zadanie[];
+  /** Every meeting — to warn about another one of the same type for the same community. */
+  spotkania?: Spotkanie[];
   /** A linked task was added, changed or deleted here — reload them. */
   onZadaniaChanged: () => void;
   onDeleteZadanie: (zadanie: Zadanie) => void;
@@ -488,6 +490,7 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
   zgnJednostki,
   zgnPelnomocnicy,
   linkedZadania,
+  spotkania = [],
   onZadaniaChanged,
   onDeleteZadanie,
   onOpenZadanie,
@@ -739,6 +742,18 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
   const selectedTyp = typy.find((typ) => String(typ.id) === typId) ?? null;
   const terminWysylkiDefault = defaultTerminWysylki(partsToIso(date, timeFrom), selectedTyp);
   const terminWysylki = terminWysylkiOwn ?? terminWysylkiDefault ?? '';
+  /** Other meetings of this type for this community — a warning, never a block. */
+  const duplikaty =
+    typId && adresId
+      ? spotkania
+          .filter(
+            (x) =>
+              x.id !== editing?.id &&
+              String(x.typId) === typId &&
+              String(x.adresId) === adresId,
+          )
+          .sort((a, b) => b.startsAt.localeCompare(a.startsAt))
+      : [];
 
   const handleSubmit = () => {
     const name = nazwa.trim();
@@ -891,6 +906,23 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
                 rows={3}
               />
             </FormField>
+            {duplikaty.length > 0 && (
+              <div className="callout callout--warning" role="status">
+                <Icon name="alert-triangle" size={16} />
+                <div className="callout__body">
+                  {t.kalDuplicateWarning
+                    .replace('{typ}', selectedTyp?.nazwa ?? '')
+                    .replace('{adres}', adresNazwa(adresId) ?? '')}
+                  <ul className="kal-duplicates">
+                    {duplikaty.slice(0, 5).map((d) => (
+                      <li key={d.id}>
+                        {formatStamp(d.startsAt, language === 'en' ? 'en-GB' : 'pl-PL')} — {d.nazwa}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
           </FormSection>
 
           <FormSection icon="clock" title={t.kalSectionWhen} description={t.kalSectionWhenDesc}>
@@ -1393,6 +1425,9 @@ const MeetingCard: React.FC<{
   // prepared, and only while it has no entry yet — after that the button is
   // "Otwórz w Zebraniach": one meeting, one entry.
   const canPrzygotuj = !zebranie && !!onPrzygotuj && spotkanie.materialyStatus === 'do_przygotowania';
+  // Same rule as the Zebrania list: the entry opens only once work on the
+  // materials has started ("Przygotuj" or later).
+  const openBlocked = spotkanie.materialyStatus === 'brak' || spotkanie.materialyStatus === 'potrzebne';
   // In the materials section, the way into Zebrania and the notice: a tile each — a coloured icon, what
   // it opens and a line on what is there — so the two read apart at a glance.
   const zebAction = (
@@ -1715,7 +1750,22 @@ const MeetingCard: React.FC<{
               <div className="kal-zeb__actions">
                 {zebranie &&
                   onOpenZebranie &&
-                  zebAction('accent', 'folder', t.zebraniaKalOpen, t.zebraniaKalOpenSub, onOpenZebranie)}
+                  (openBlocked ? (
+                    <Tip
+                      className="kal-action-tip"
+                      ariaLabel={`${t.zebraniaNoMaterials}: ${t.kalOpenNotStartedHint}`}
+                      content={
+                        <>
+                          <div className="tip__title">{t.zebraniaNoMaterials}</div>
+                          <div>{t.kalOpenNotStartedHint}</div>
+                        </>
+                      }
+                    >
+                      {zebAction('accent', 'folder', t.zebraniaKalOpen, t.zebraniaKalOpenSub, onOpenZebranie, undefined, true)}
+                    </Tip>
+                  ) : (
+                    zebAction('accent', 'folder', t.zebraniaKalOpen, t.zebraniaKalOpenSub, onOpenZebranie)
+                  ))}
                 {canPrzygotuj &&
                   onPrzygotuj &&
                   zebAction(
@@ -1829,6 +1879,7 @@ export const SpotkanieEditModal: React.FC<{
   const [zgnJednostki, setZgnJednostki] = useState<ZgnJednostka[]>([]);
   const [zgnPelnomocnicy, setZgnPelnomocnicy] = useState<ZgnPelnomocnik[]>([]);
   const [zadania, setZadania] = useState<Zadanie[]>([]);
+  const [wszystkie, setWszystkie] = useState<Spotkanie[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1846,13 +1897,15 @@ export const SpotkanieEditModal: React.FC<{
     let cancelled = false;
     (async () => {
       try {
-        const [typyData, lokalizacjeData, adresyData, usersData] = await Promise.all([
+        const [typyData, lokalizacjeData, adresyData, usersData, spotkaniaData] = await Promise.all([
           window.electronAPI.getSpotkaniaTypy(),
           window.electronAPI.getSpotkaniaLokalizacje(),
           window.electronAPI.getAdresy(),
           window.electronAPI.getAppUsers(),
+          window.electronAPI.getSpotkania(),
         ]);
         if (cancelled) return;
+        setWszystkie(spotkaniaData);
         setTypy(typyData);
         setLokalizacje(lokalizacjeData);
         setAdresy(adresyData);
@@ -1944,6 +1997,7 @@ export const SpotkanieEditModal: React.FC<{
       zgnJednostki={zgnJednostki}
       zgnPelnomocnicy={zgnPelnomocnicy}
       linkedZadania={zadania}
+      spotkania={wszystkie}
       onZadaniaChanged={() => void loadZadania()}
       onDeleteZadanie={(z) => void handleDeleteZadanie(z)}
     />
@@ -2443,9 +2497,11 @@ const Kalendarz: React.FC<Props> = ({
   };
 
   const handleDelete = async (spotkanie: Spotkanie) => {
-    const message = t.kalConfirmDelete
-      .replace('{name}', spotkanie.nazwa)
-      .replace('{when}', formatStamp(spotkanie.startsAt, locale));
+    const message =
+      t.kalConfirmDelete
+        .replace('{name}', spotkanie.nazwa)
+        .replace('{when}', formatStamp(spotkanie.startsAt, locale)) +
+      (zebranieForSpotkanie(zebrania, spotkanie.id) ? t.kalConfirmDeleteZebranie : '');
     if (!(await notify.confirm(message, { danger: true }))) return;
     try {
       await window.electronAPI.deleteSpotkanie(spotkanie.id);
@@ -2613,6 +2669,14 @@ const Kalendarz: React.FC<Props> = ({
     // Only a new request moves the view; later reloads must not pull it back.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusRequest, isLoading]);
+
+  // One-card mode: once the meeting is gone (deleted from this very card), the
+  // window has nothing left to show — it closes instead of saying so.
+  const cardGone = !!cardOnly && !isLoading && !spotkania.some((x) => x.id === cardOnly.spotkanieId);
+  useEffect(() => {
+    if (cardGone) cardOnly?.onClose();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardGone]);
 
   /* ------------------------------- Rendering ------------------------------- */
 
@@ -2820,6 +2884,7 @@ const Kalendarz: React.FC<Props> = ({
           zgnJednostki={zgnJednostki}
           zgnPelnomocnicy={zgnPelnomocnicy}
           linkedZadania={form.editing ? zadaniaBySpotkanie.get(form.editing.id) ?? [] : []}
+          spotkania={spotkania}
           onZadaniaChanged={() => void loadZadania()}
           onDeleteZadanie={(z) => void handleDeleteZadanie(z)}
           onOpenZadanie={onOpenZadanie ? (z) => onOpenZadanie(z.id) : undefined}
@@ -2867,6 +2932,7 @@ const Kalendarz: React.FC<Props> = ({
 
   if (cardOnly) {
     const s = spotkania.find((x) => x.id === cardOnly.spotkanieId) ?? null;
+    if (!s) return null;
     return (
       <>
         <div className="modal-overlay" onClick={cardOnly.onClose}>
@@ -2883,7 +2949,7 @@ const Kalendarz: React.FC<Props> = ({
               {s ? formatDayKey(toDayKey(s.startsAt), language) : t.kalendarz}
             </div>
             <div className="modal-body kal-card-modal__body">
-              {s ? renderMeetingCard(s) : <p className="zeb-muted">{t.kalMeetingGone}</p>}
+              {s && renderMeetingCard(s)}
             </div>
           </div>
         </div>

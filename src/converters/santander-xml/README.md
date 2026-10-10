@@ -207,7 +207,6 @@ const converter = new SantanderXmlConverter({
   
   // Filtrowanie
   skipNegativeAmounts: true,  // Pomija wydatki
-  skipBankFees: true,         // Pomija opłaty bankowe (trn-code: X_06)
   
   // Progi pewności
   confidenceThresholds: {

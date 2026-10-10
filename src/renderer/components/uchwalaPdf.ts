@@ -1,4 +1,10 @@
-import { MailingExportResult, Zebranie, ZebranieMaterial, ZebranieWersja } from '../../shared/types';
+import {
+  MailingExportResult,
+  MailingZebranieContext,
+  Zebranie,
+  ZebranieMaterial,
+  ZebranieWersja,
+} from '../../shared/types';
 import { ZebranieDane } from '../../shared/zebrania';
 import { buildKalendarzContext } from '../../shared/mailing-template';
 
@@ -23,6 +29,8 @@ export async function downloadUchwalaPdf(
   dane: ZebranieDane,
   uchwala: ZebranieMaterial,
   who: string,
+  /** The version's statement, plan and resolutions — `buildZebranieContext`. */
+  zebranieCtx: MailingZebranieContext | null,
 ): Promise<UchwalaPdfResult> {
   const result = await window.electronAPI.mailingExport({
     typ: uchwala.typ,
@@ -32,6 +40,7 @@ export async function downloadUchwalaPdf(
     values: uchwala.values,
     tableFields: uchwala.tableFields,
     kalendarz: buildKalendarzContext(dane),
+    zebranie: zebranieCtx,
     adresId: dane.adresId,
     adresNazwa: dane.adresNazwa,
     spotkanieId: zebranie.spotkanieId,

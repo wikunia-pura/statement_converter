@@ -183,7 +183,6 @@ export interface ConverterConfig {
   useCache: boolean;
   useRegexFirst: boolean;
   skipNegativeAmounts: boolean;
-  skipBankFees: boolean;
   useAIForExpenses: boolean; // Whether to use AI for contractor matching in expenses
   
   // Contractors list for expense matching

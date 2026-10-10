@@ -330,7 +330,6 @@ export class INGMT940Parser {
     transactions: INGTransaction[],
     options: {
       skipNegative?: boolean;
-      skipBankFees?: boolean;
       onlyPositive?: boolean;
     } = {}
   ): INGTransaction[] {
@@ -341,14 +340,6 @@ export class INGMT940Parser {
 
       if (options.onlyPositive && trn.debitCredit !== 'C') {
         return false;
-      }
-
-      // Skip bank fees: type "940" (balance info) already filtered in parseTransaction
-      // Also skip known fee codes if any
-      if (options.skipBankFees) {
-        if (trn.transactionType === '940') {
-          return false;
-        }
       }
 
       return true;

@@ -218,30 +218,12 @@ export class PKOSAParser {
     transactions: PKOSATransaction[],
     options: {
       skipNegative: boolean;
-      skipBankFees: boolean;
     }
   ): PKOSATransaction[] {
     return transactions.filter(transaction => {
       // Skip expenses if skipNegative is enabled (keep only income)
       if (options.skipNegative && !transaction.isIncome) {
         return false;
-      }
-      
-      // Skip bank fees if skipBankFees is enabled
-      // Bank fees typically have codes like 8300 or descriptions with "Opłata"
-      if (options.skipBankFees) {
-        if (transaction.code === '8300') {
-          return false;
-        }
-        const desc = transaction.description.toLowerCase();
-        if (
-          desc.includes('opłata za kod') || 
-          desc.includes('opłata za przelew') ||
-          desc.includes('prowizja') ||
-          desc.includes('komisja')
-        ) {
-          return false;
-        }
       }
       
       return true;

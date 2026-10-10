@@ -9,8 +9,10 @@
  *               line → community, the transaction dates → period), exactly
  *               the way a file dropped into the Converter is recognised;
  *   PDF       — recognised from the text of its first page (account + "za
- *               okres"), no AI, and renamed in place to
- *               `<adres>_<typ konta>_<RRRR-MM>.pdf`.
+ *               okres"), no AI.
+ *
+ * Both are renamed in place to `<adres>_<typ konta>_<RRRR-MM>.<rozszerzenie>`
+ * once recognised (a statement keeps its extension).
  *
  * A newer file for something already pinned is never swapped in on its own:
  * it comes back as a conflict, and the user decides (`resolveScanConflicts`).
@@ -52,11 +54,11 @@ import {
   looksLikeMt940,
   monthOfRange,
   parseLooseDate,
-  pdfTargetName,
   periodOfDates,
   periodsOverlap,
   pickConverter,
   readPdfHeader,
+  scanTargetName,
   sniffTextFormat,
 } from '../shared/statement-scan';
 import { linkConversions, toBookingRows } from '../shared/bookings';
@@ -151,12 +153,13 @@ async function walk(root: string, since: Date, onCount: (n: number) => void): Pr
     } catch {
       continue; // unreadable subfolder — the rest of the tree still counts
     }
+    const unpacked = unpackedFolderTest(entries);
     for (const entry of entries) {
       const name = entry.name;
       if (name.startsWith('.') || name.startsWith('~$')) continue;
       const absPath = path.join(dir, name);
       if (entry.isDirectory()) {
-        stack.push(absPath);
+        if (!unpacked(name)) stack.push(absPath);
         continue;
       }
       if (!entry.isFile()) continue;
@@ -177,6 +180,25 @@ async function walk(root: string, since: Date, onCount: (n: number) => void): Pr
     }
   }
   return out;
+}
+
+/**
+ * Folders that are an archive lying beside them, unpacked: `Raporty_MT940_….zip`
+ * opened in Finder becomes `Raporty_MT940_…/` (or `Raporty_MT940_… 2/` when that
+ * name is taken). The archive is the statement; its unpacked daily files would
+ * be pinned a second time and converted twice, so the walk does not go in.
+ */
+function unpackedFolderTest(entries: fs.Dirent[]): (folder: string) => boolean {
+  const stems = new Set(
+    entries
+      .filter((e) => e.isFile() && path.extname(e.name).toLowerCase() === '.zip')
+      .map((e) => e.name.slice(0, -4).toLowerCase()),
+  );
+  if (stems.size === 0) return () => false;
+  return (folder) => {
+    const name = folder.toLowerCase();
+    return stems.has(name) || stems.has(name.replace(/ \d+$/, ''));
+  };
 }
 
 /**
@@ -478,17 +500,25 @@ class Scanner {
     }
     if (period.monthKey !== this.input.monthKey) return { type: 'other-month' };
 
+    const typeName = this.accountTypeOf(adres, account);
     return {
       type: 'candidate',
       c: {
         absPath: file.absPath,
-        targetName: null,
+        targetName: scanTargetName(
+          adres.nazwa,
+          typeName,
+          period.from,
+          period.to,
+          path.extname(file.absPath),
+          accountSuffixFor(adres, account, this.input.kontoTypy),
+        ),
         draft: this.draft(file, await sha1(file.absPath), {
           kind: 'statement',
           adresId: adres.id,
           adresNazwa: adres.nazwa,
           accountNumber: account,
-          accountTypeName: this.accountTypeOf(adres, account),
+          accountTypeName: typeName,
           bankId: bank.id,
           bankName: bank.name,
           converterId,
@@ -539,11 +569,12 @@ class Scanner {
       type: 'candidate',
       c: {
         absPath: file.absPath,
-        targetName: pdfTargetName(
+        targetName: scanTargetName(
           adres.nazwa,
           typeName,
           header.period.from,
           header.period.to,
+          '.pdf',
           accountSuffixFor(adres, header.account, this.input.kontoTypy),
         ),
         draft: this.draft(file, await sha1(file.absPath), {
@@ -566,7 +597,7 @@ class Scanner {
   }
 }
 
-/* ------------------------------ Placing PDFs ------------------------------- */
+/* ------------------------------ Placing files ------------------------------ */
 
 function samePath(a: string, b: string): boolean {
   // Mac and Windows file systems ignore case; a rename that only changes case
@@ -575,11 +606,12 @@ function samePath(a: string, b: string): boolean {
 }
 
 /**
- * Give a recognised PDF its name, in its own folder. A name already taken by
- * another file gets `_2`, `_3`… — nothing is ever overwritten. On failure the
- * PDF stays pinned under the name it had.
+ * Give a recognised file (statement or PDF) its name, in its own folder. A
+ * name already taken by another file gets `_2`, `_3`… — nothing is ever
+ * overwritten. On failure the file stays pinned under the name it had. Error
+ * rows have no target name and keep theirs.
  */
-async function placePdf(
+async function placeFile(
   root: string,
   c: Candidate,
   failures: ScanReport['renameFailures'],
@@ -589,7 +621,8 @@ async function placePdf(
   const dir = path.dirname(c.absPath);
   let name = c.targetName;
   for (let n = 2; fs.existsSync(path.join(dir, name)) && !samePath(path.join(dir, name), c.absPath); n++) {
-    name = c.targetName.replace(/\.pdf$/i, `_${n}.pdf`);
+    const ext = path.extname(c.targetName);
+    name = `${c.targetName.slice(0, c.targetName.length - ext.length)}_${n}${ext}`;
   }
   const target = path.join(dir, name);
   try {
@@ -739,7 +772,7 @@ export async function scanStatementsFolder(input: ScanInput, store: ScanStore): 
         report.duplicates++;
       } else {
         // Same file, moved: follow it.
-        const placed = d.kind === 'pdf' ? await placePdf(root, c, report.renameFailures) : d;
+        const placed = await placeFile(root, c, report.renameFailures);
         const row = await store.replaceKsiegowaniePlik(byHash.id, {
           ...placed,
           originalName: byHash.originalName ?? placed.originalName,
@@ -796,7 +829,7 @@ export async function scanStatementsFolder(input: ScanInput, store: ScanStore): 
       return;
     }
 
-    const placed = d.kind === 'pdf' ? await placePdf(root, c, report.renameFailures) : d;
+    const placed = await placeFile(root, c, report.renameFailures);
     existing.push(await store.addKsiegowaniePlik(placed));
     report.added.push(foundOf(placed));
   }
@@ -834,7 +867,7 @@ export async function resolveScanConflicts(
         continue;
       }
       const renameFailures: ScanReport['renameFailures'] = [];
-      const placed = c.draft.kind === 'pdf' ? await placePdf(root, c, renameFailures) : c.draft;
+      const placed = await placeFile(root, c, renameFailures);
       failed.push(...renameFailures);
       if (decision === 'replace') {
         await store.replaceKsiegowaniePlik(existing.id, { ...placed, ignoredHashes: existing.ignoredHashes });

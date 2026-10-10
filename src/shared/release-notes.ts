@@ -92,7 +92,9 @@ export const RELEASES: Release[] = [
     tagline:
       'Nowa zakładka „PIT” w module „Podatki” przygotowuje PIT-11 wszystkich osób, którym wspólnota coś wypłaciła, i roczny PIT-4R wspólnoty — plik XML dla e-Deklaracji, PDF na oficjalnym wzorze i podpis kwalifikowany kartą Szafir. W „Zebraniach” pojawia się zakładka „Uchwały”: kilka szablonów z Mailingu naraz zamienia się w gotowe uchwały z danymi zebrania z kalendarza.',
     stats: [
-      { value: '2', label: 'nowe funkcje' },
+      { value: '4', label: 'nowe funkcje' },
+      { value: '9', label: 'usprawnień' },
+      { value: '1', label: 'poprawka' },
     ],
     highlights: [
       {
@@ -184,6 +186,256 @@ export const RELEASES: Release[] = [
         },
       },
       {
+        id: 'mailing-pola-z-zebrania',
+        kind: 'new',
+        icon: 'sparkles',
+        title: 'Pola dynamiczne z zebrania: sprawozdanie, plan i uchwały w treści pisma',
+        summary:
+          'Pięć nowych pól wbudowanych wstawia do zawiadomienia i uchwał kwoty prosto z zebrania: wynik funduszu remontowego, wynik salda zaliczki A, pokrycie straty, tabelę zaliczek A i B oraz listę uchwał.',
+        details: [
+          '„Wynik funduszu remontowego” i „Wynik salda zaliczki A” biorą się ze sprawozdania powiązanego z wersją zebrania (stan funduszu na koniec okresu i narastający wynik kosztów eksploatacji — strata ze znakiem minus).',
+          '„Pokrycie straty” bierze kwotę z planu gospodarczego zebrania. Gdy plan ma kilka pozycji pokrycia straty, w dokumencie klikasz pole i wybierasz pozycję z listy.',
+          '„Zaliczki A i B z planu” wstawia tabelę stawek obu zaliczek z podziałem na miesiące roku (miesiące z tymi samymi stawkami w jednym wierszu, np. „I–III/2027”). „Lista uchwał” wstawia numerowaną listę tytułów uchwał tej wersji zebrania.',
+          'Wartości nie są przepisywane do pisma: zmienisz plan albo podepniesz nowsze sprawozdanie — zawiadomienie i uchwały pokażą nowe kwoty same.',
+        ],
+        where: ['Mailing', 'Szablony'],
+        steps: [
+          {
+            do: 'W szablonie zawiadomienia albo uchwały kliknij „Wstaw pole” i wpisz np. „pokrycie” albo „zaliczki”.',
+            then: 'Nowe pola są na liście pól wbudowanych; w „Pola dynamiczne” → „Pola wbudowane” mają oznaczenie „Z zebrania”.',
+          },
+          {
+            do: 'W zebraniu otwórz zawiadomienie albo uchwałę z tego szablonu.',
+            then: 'W miejscu pól są już kwoty, tabela zaliczek i lista uchwał. Pole, dla którego zebranie nie ma danych, jest oznaczone jako puste — po najechaniu widać dlaczego (np. brak powiązanego sprawozdania).',
+          },
+        ],
+        expect: [
+          'Pola działają tylko w dokumentach przygotowywanych w module Zebrania. W zwykłej wysyłce z Mailingu zostają puste i blokują wysyłkę — ekran mówi o tym nad podglądem pisma.',
+          'Pismo z pustym polem z zebrania nie da się pobrać ani wysłać, tak jak z każdym innym niewypełnionym polem.',
+        ],
+      },
+      {
+        id: 'mailing-pola-typ',
+        kind: 'improved',
+        icon: 'mail',
+        title: 'Pole dynamiczne powiązane z typem szablonu',
+        summary:
+          'Pole dynamiczne możesz powiązać z jednym typem mailingu. Wtedy proponowane jest tylko w szablonach tego typu — lista „Wstaw pole” w uchwale nie pokazuje pól listu o zaliczkach.',
+        where: ['Mailing', 'Pola dynamiczne'],
+        steps: [
+          {
+            do: 'Kliknij „Edytuj” przy polu i w sekcji „Typ szablonu” wybierz typ (albo zostaw „Wszystkie typy”).',
+            then: 'Na liście pól przy nazwie pojawia się etykieta z nazwą typu.',
+          },
+          {
+            do: 'Otwórz szablon innego typu i kliknij „Wstaw pole”.',
+            then: 'Pola powiązanego z innym typem nie ma na liście ani w wyborze pól do „Tabeli pól”.',
+          },
+        ],
+        expect: [
+          'Pole już wstawione do szablonu działa dalej, nawet jeśli później powiążesz je z innym typem — ograniczenie dotyczy tylko tego, co jest proponowane.',
+          'Usunięcie typu mailingu zdejmuje powiązanie z jego pól — znów są dostępne we wszystkich szablonach.',
+        ],
+      },
+      {
+        id: 'zebrania-szablon',
+        kind: 'new',
+        icon: 'copy',
+        title: 'Zebrania → Zebranie-szablon: nowe zebrania zaczynają od gotowych materiałów',
+        summary:
+          'Wybierasz wspólnotę, której zebranie jest wzorem. Każde nowe zebranie od razu ma jego zawiadomienie i uchwały, a nowy plan gospodarczy — jego wzrost kosztów. Te same materiały możesz też wgrać do zebrań, które już istnieją.',
+        details: [
+          'Każdą część bierze się z najnowszego zebrania wybranej wspólnoty, które ją ma — zawiadomienie może więc pochodzić z tegorocznego zebrania, a plan z zeszłorocznego. Poprawisz w nim zawiadomienie albo uchwałę — kolejne nowe zebrania dostaną już poprawioną wersję. Zebrania utworzone wcześniej zmieniają się tylko wtedy, gdy sam zastosujesz do nich szablon.',
+          'Zawiadomienie i uchwały przechodzą z treścią i wpisanymi wartościami pól. Data, godzina i miejsce dalej czytają się z kalendarza danego zebrania. Nie przechodzą odznaczone skrzynki ani dodatkowi adresaci wpisani dla wspólnoty-wzoru.',
+          'Z planu gospodarczego przechodzi wzrost kosztów (%) i własne wzrosty poszczególnych pozycji — dopasowane po nazwach wierszy sprawozdania. Stawki zaliczek, salda, remonty z funduszu i udziały zostają właściwe dla każdej wspólnoty.',
+        ],
+        where: ['Zebrania'],
+        steps: [
+          {
+            do: 'Na liście zebrań, w wyróżnionej ramce „Zebranie-szablon”, wybierz wspólnotę.',
+            then: 'Pod spodem widzisz, z którego zebrania i wersji biorą się materiały, oraz co zawiera: zawiadomienie, liczbę uchwał i wzrost kosztów planu.',
+          },
+          {
+            do: 'Dodaj nowe zebranie (przyciskiem albo ze spotkania w Kalendarzu).',
+            then: 'Wersja 1.0 ma już zawiadomienie i uchwały ze szablonu. Gdy tylko podepnie się sprawozdanie, plan gospodarczy tworzy się sam — ze wzrostem kosztów szablonu i udziałami tej wspólnoty.',
+          },
+          {
+            do: 'Kliknij „Zastosuj do istniejących…”.',
+            then: 'Okno pokazuje wszystkie pozostałe zebrania i przy każdym, czy zawiadomienie, uchwały i plan mają już dane, czy są puste. Filtr „Puste” / „Z danymi” zawęża listę, a na start zaznaczone są tylko puste.',
+          },
+          {
+            do: 'Wybierz, co zastosować (zawiadomienie, uchwały, założenia planu), zaznacz zebrania i kliknij „Zastosuj”.',
+            then: 'Materiały trafiają do bieżącej wersji każdego zaznaczonego zebrania. Jeśli coś zostanie nadpisane, aplikacja najpierw pyta.',
+          },
+        ],
+        expect: [
+          'Dokument oznaczony jako gotowy, który szablon nadpisze, wraca do przygotowania — trzeba go przejrzeć i oznaczyć ponownie.',
+          'Zebranie, które ma już sprawozdanie, ale nie ma planu, nie dostaje go samo: w zakładce „Plan gospodarczy” wzrost kosztów jest wpisany ze szablonu — kliknij „Utwórz plan”.',
+          'Krzyżyk obok wybranej wspólnoty wyłącza szablon — nowe zebrania znów zaczynają puste.',
+        ],
+      },
+      {
+        id: 'sprawozdania-zrodlo-prawdy',
+        kind: 'improved',
+        icon: 'bar-chart',
+        title: 'Sprawozdania: jedno miejsce wgrywania, zebrania się z nimi wiążą',
+        summary:
+          'Plik „RozliczenieWsp” z vDom wgrywasz już tylko w module „Sprawozdania”. Zebranie nie trzyma własnej kopii sprawozdania — jest z nim powiązane, więc zawsze pokazuje to, co jest w module.',
+        details: [
+          'Nowszy wydruk tej samej wspólnoty za ten sam okres, wgrany w „Sprawozdaniach”, zastępuje poprzedni — i od razu pojawia się we wszystkich powiązanych zebraniach. Akapit wstępny przeredagowany w zebraniu zostaje przy tym zebraniu.',
+          'Lista w „Sprawozdaniach” ma filtr „Powiązane z zebraniem” / „Niezależne”. Na ekranie sprawozdania widać, które zebrania (i które ich wersje) je pokazują — kliknięcie otwiera zebranie.',
+          'Sprawozdania powiązanego z zebraniem nie da się usunąć. Najpierw odłącz je w zebraniu.',
+        ],
+        where: ['Sprawozdania'],
+        steps: [
+          {
+            do: 'W „Sprawozdaniach” kliknij „Wgraj plik z vDom” i wskaż plik „RozliczenieWsp”.',
+            then: 'Na liście pojawiają się sprawozdania wszystkich wspólnot z pliku.',
+          },
+          {
+            do: 'Otwórz zebranie i zakładkę „Sprawozdania finansowe”.',
+            then: 'Jeśli wspólnota ma zapamiętany numer z vDom i przed datą zebrania jest dokładnie jedno najnowsze sprawozdanie (najwyżej rok wcześniej), zebranie powiąże się z nim samo. W innym przypadku kliknij „Powiąż” przy jednym ze sprawozdań tej wspólnoty albo „Wybierz sprawozdanie”.',
+          },
+          {
+            do: 'Przy powiązanym sprawozdaniu kliknij „Otwórz w Sprawozdaniach”, „Zmień” albo „Odłącz”.',
+            then: 'Odłączone sprawozdanie zostaje w module, a zakładka nie powiąże już tej wersji zebrania sama.',
+          },
+        ],
+        expect: [
+          'Przycisku „Wgraj plik z vDom” nie ma już w zebraniu — zamiast niego jest „Przejdź do modułu Sprawozdania”.',
+          'Dotychczasowe zebrania zostają powiązane ze sprawozdaniami, z których brały kopie.',
+          'Wszyscy użytkownicy muszą zaktualizować aplikację razem z aktualizacją bazy: starsza wersja pokaże zakładkę „Sprawozdania finansowe” zebrania jako pustą, a sprawozdanie wgrane w niej nie powiąże się z zebraniem.',
+        ],
+        note: {
+          type: 'warning',
+          text: 'Ta wersja wymaga jednorazowej aktualizacji bazy (supabase/zebrania-sprawozdanie-relacja.sql). Bez niej nie wczytają się ani Zebrania, ani Sprawozdania.',
+        },
+      },
+      {
+        id: 'zebrania-laczenie-pozycji',
+        kind: 'improved',
+        icon: 'bar-chart',
+        title: 'Zebrania: łączenie pozycji sprawozdania, podkategorie i akapit wstępny z AI',
+        summary:
+          'W zakładce „Sprawozdania finansowe” zebrania możesz połączyć kilka pozycji jednej sekcji w jedną i nadać jej nazwę — np. „Pomieszczenie zsypu” i „Czynsz części wspólnej” jako „Najem części wspólnych” — albo zebrać pozycje w podkategorię, np. wszystkie „Remonty bieżące …” pod nagłówkiem „Remonty bieżące”. AI może zaproponować jedno i drugie, a Ty każdą propozycję akceptujesz, zmieniasz albo odrzucasz. Akapit wstępny jest domyślnie pusty — pisze go AI z Twoimi wskazówkami albo Ty sam.',
+        details: [
+          'Połączona pozycja sumuje kwoty swoich pozycji w każdej kolumnie i stoi w miejscu pierwszej z nich. Tak pokazują ją podgląd, PDF, Excel, pakiet PDF i podsumowanie tej wersji zebrania. Plan gospodarczy też układa swoje pozycje według połączeń i podkategorii (zob. „Plan gospodarczy: pozycje ze sprawozdania”).',
+          'Kwoty w module „Sprawozdania” się nie zmieniają — połączenia należą do wersji zebrania. Nowa wersja zebrania przejmuje je z poprzedniej, a wybranie innego sprawozdania zaczyna bez połączeń.',
+          'Podkategoria nie zmienia pozycji: w dokumentach jest pogrubiony nagłówek z sumą, a pod nim, z wcięciem, jej pozycje. Podkategorie układa się na pozycjach po połączeniach, więc do podkategorii możesz dodać też połączoną pozycję. We wstępie podkategoria liczy się jako jedna pozycja kosztowa.',
+          'Akapit wstępny sprawozdania nie jest już wyliczany z kwot — domyślnie jest pusty, a PDF zaczyna się od kafelków i ważnych uwag (te nadal są wyliczane). AI pisze akapit tylko z kwot i pozycji sprawozdania (po połączeniach i podkategoriach) oraz Twoich wskazówek; tekst trafia do edytora i zapisuje się dopiero po kliknięciu „Zapisz”. Akapity zapisane wcześniej w wersjach zebrań zostają.',
+          'Jeśli nowszy wydruk sprawozdania nie ma którejś z pozycji, połączenie albo podkategoria jest oznaczona „Nieaktualne” i pomijana, dopóki jej nie zmienisz albo nie usuniesz.',
+        ],
+        where: ['Zebrania', 'Sprawozdania finansowe'],
+        steps: [
+          {
+            do: 'Otwórz zebranie z powiązanym sprawozdaniem, zakładkę „Sprawozdania finansowe”, i w karcie „Połączone pozycje” kliknij „Połącz pozycje”.',
+            then: 'Otwiera się okno z listą pozycji pierwszej sekcji.',
+          },
+          {
+            do: 'Wybierz sekcję, zaznacz co najmniej dwie pozycje, wpisz nazwę i kliknij „Zapisz połączenie”.',
+            then: 'Połączenie pojawia się na liście, a w tabeli „Pozycje sprawozdania” zamiast kilku pozycji jest jedna, z ikonką liczby połączonych pozycji.',
+          },
+          {
+            do: 'Kliknij „Zaproponuj (AI)”.',
+            then: 'Pod przyciskami pojawiają się propozycje AI z krótkim uzasadnieniem. Przy każdej kliknij „Akceptuj”, „Zmień” (otwiera okno połączenia z tą propozycją) albo „Odrzuć” — lub „Akceptuj wszystkie” / „Odrzuć wszystkie”.',
+          },
+          {
+            do: 'Przy zapisanym połączeniu kliknij „Rozłącz”.',
+            then: 'Pozycje wracają do postaci z wydruku vDom.',
+          },
+          {
+            do: 'W karcie „Podkategorie” kliknij „Dodaj podkategorię”, wybierz sekcję (np. „Koszty eksploatacji”), zaznacz pozycje „Remonty bieżące …”, wpisz „Remonty bieżące” i zapisz — albo kliknij „Zaproponuj (AI)” i przejrzyj propozycje.',
+            then: 'W tabeli „Pozycje sprawozdania” pojawia się nagłówek „Remonty bieżące” z sumą, a pod nim, wcięte, jego pozycje. Tak samo w PDF i Excelu.',
+          },
+          {
+            do: 'W karcie „Akapit wstępny” wpisz opcjonalnie wskazówki (np. „podkreśl wymianę domofonów”) i kliknij „Wygeneruj akapit”.',
+            then: 'Podczas pisania widać wskaźnik pracy AI. Potem tekst pojawia się w edytorze — popraw go, jeśli trzeba, i kliknij „Zapisz”. „Napisz z AI” przy zapisanym akapicie pozwala wygenerować go ponownie, „Wyczyść” go usuwa.',
+          },
+        ],
+        expect: [
+          'Nic nie jest zapisywane, dopóki nie zaakceptujesz propozycji AI ani nie zapiszesz akapitu napisanego przez AI.',
+          'Pozycja należy najwyżej do jednego połączenia i jednej podkategorii — w oknie pozycje zajęte przez inne są wyszarzone.',
+          'Wiersze podsumowań („Razem”, „Stan na dzień…”, „Wynik finansowy…”) nie dają się łączyć.',
+        ],
+      },
+      {
+        id: 'zebrania-plan-pozycje',
+        kind: 'improved',
+        icon: 'wallet',
+        title: 'Plan gospodarczy: pozycje to kopia sprawozdania',
+        summary:
+          'Przychody i koszty w części I planu to teraz te same pozycje, które są w sprawozdaniu tej wersji zebrania (z jej połączeniami i podkategoriami), każda z własną kwotą planu. Nie ma już stałych linii wzoru, takich jak „Reklamy” czy „Ubezpieczenie budynku na wniosek Wspólnoty”, gdy w sprawozdaniu ich nie ma. Gdy sprawozdanie się zmieni, plan to pokazuje i pozwala ułożyć pozycje od nowa bez utraty kwot.',
+        details: [
+          'Kwota każdej pozycji jest liczona z zeszłorocznej (przeliczonej na pełny rok): koszt podniesiony o wskaźnik i zaokrąglony w górę do kroku z „Ustawień planu”, przychód zaokrąglony w dół do pełnych złotych. Ujemna kwota (zwrot) jest planowana jako 0.',
+          'Połączona pozycja sprawozdania jest w planie jedną pozycją. Podkategoria jest nagłówkiem z sumą, a pod nim są jej pozycje — tak jak w sprawozdaniu.',
+          '„Zaliczka A” nie jest pozycją przychodu — z niej liczona jest stawka zaliczki. „Wynik roku” i „Rozliczenie wyniku” są pomijane.',
+          '„Słownika pozycji” już nie ma — pozycje planu wynikają wprost ze sprawozdania. W „Ustawieniach planu” zostały numer uchwały i zaokrąglenie kosztów.',
+          '„Remonty bieżące” nie wyrównują już planu same. Jeśli wpływy i koszty się różnią, plan pokazuje różnicę — popraw kwoty albo dopisz pozycję.',
+          'Pod przychodami i kosztami jest przycisk „Dodaj pozycję” — na wydatek, którego nie było w zeszłym roku.',
+          '„Przegeneruj pozycje” zachowuje kwoty: pozycja z tymi samymi wierszami ma tę samą kwotę, połączone pozycje sumują swoje kwoty, a rozdzielona pozycja dzieli kwotę według zeszłorocznych kwot. Tylko pozycje nowe w sprawozdaniu dostają kwotę ze sprawozdania. Pozycje dopisane ręcznie zostają. Przed zmianą widać, które pozycje są nowe, a które znikną.',
+          'Plany zapisane wcześniej zachowują swoje kwoty: kwota każdej dawnej linii rozkłada się na pozycje sprawozdania, z których była policzona. Kliknij „Przegeneruj pozycje”, żeby ułożyć je według aktualnego sprawozdania.',
+        ],
+        where: ['Zebrania', 'Plan gospodarczy'],
+        steps: [
+          {
+            do: 'Otwórz zebranie z powiązanym sprawozdaniem i zakładkę „Plan gospodarczy”.',
+            then: 'W części I widać pozycje sprawozdania: nazwę, kwotę z zeszłego roku i pole z kwotą planu.',
+          },
+          {
+            do: 'Zmień kwotę jednej z pozycji.',
+            then: 'Sumy i bilans planu przeliczają się od razu. Zapisz plan przyciskiem „Zapisz plan”.',
+          },
+          {
+            do: 'W zakładce „Sprawozdania finansowe” połącz kilka pozycji albo zbierz je w podkategorię, a potem wróć do „Planu gospodarczego”.',
+            then: 'Nad planem pojawia się informacja, że pozycje sprawozdania się zmieniły, z przyciskiem „Przegeneruj pozycje”.',
+          },
+          {
+            do: 'Kliknij „Przegeneruj pozycje” i potwierdź.',
+            then: 'Pozycje planu układają się według sprawozdania, a kwoty zostają. Zapisz plan.',
+          },
+        ],
+        expect: [
+          'PDF i Excel planu drukują te same pozycje: koszty z numerami, podkategorie jako pogrubione nagłówki z sumą.',
+          '„Przelicz ze sprawozdania” działa jak dotąd — liczy wszystkie kwoty od nowa. Do samej zmiany układu pozycji służy „Przegeneruj pozycje”.',
+          'Nie wymaga aktualizacji bazy.',
+        ],
+      },
+      {
+        id: 'plany-zakladka-sprawozdania',
+        kind: 'improved',
+        icon: 'bar-chart',
+        title: 'Plany gospodarcze: zakładka „Sprawozdania finansowe” jak w zebraniu',
+        summary:
+          'Plan założony w module „Plany gospodarcze” (bez zebrania) ma teraz dwie zakładki: „Sprawozdania finansowe” i „Plan gospodarczy”. W sprawozdaniu połączysz pozycje, zbierzesz je w podkategorie i napiszesz wstęp — dokładnie tak jak w zebraniu — a plan ułoży pozycje według tego grupowania.',
+        details: [
+          'Grupowanie należy do tego planu: nie zmienia sprawozdania w module „Sprawozdania” ani w zebraniach.',
+          'Sprawozdanie pobierzesz jako PDF albo Excel z połączeniami, podkategoriami i wstępem.',
+          'Plan zastąpiony później przez plan z zebrania pokazuje sprawozdanie tylko do odczytu.',
+        ],
+        where: ['Plany gospodarcze', 'plan wspólnoty', 'Sprawozdania finansowe'],
+        steps: [
+          {
+            do: 'Otwórz plan założony w „Planach gospodarczych” i kliknij zakładkę „Sprawozdania finansowe”.',
+            then: 'Widać sprawozdanie, z którego powstał plan: dane wspólnoty, wstęp, pobieranie, „Połączone pozycje”, „Podkategorie” i podgląd.',
+          },
+          {
+            do: 'Połącz kilka pozycji albo zbierz je w podkategorię (ręcznie lub z propozycji AI).',
+            then: 'Podgląd sprawozdania od razu pokazuje nowe grupowanie.',
+          },
+          {
+            do: 'Przejdź do zakładki „Plan gospodarczy” i kliknij „Przegeneruj pozycje”.',
+            then: 'Pozycje planu układają się według grupowania, a kwoty zostają. Zapisz plan.',
+          },
+        ],
+        expect: [
+          'Gdy sprawozdania, z którego powstał plan, nie ma już w module „Sprawozdania”, zakładka mówi, za jaki okres trzeba je wgrać ponownie.',
+        ],
+        note: {
+          type: 'warning',
+          text: 'Wymaga jednorazowej aktualizacji bazy (supabase/plany-gospodarcze-sprawozdanie.sql). Bez niej moduł się wczyta, ale grupowania i wstępu planu nie da się zapisać, a przywracanie kopii zapasowej się nie powiedzie.',
+        },
+      },
+      {
         id: 'podatki-nieruchomosci-lista',
         kind: 'improved',
         icon: 'landmark',
@@ -204,6 +456,108 @@ export const RELEASES: Release[] = [
             do: 'Kliknij taką wspólnotę.',
             then: 'Otwiera się nowa deklaracja z nazwą, NIP-em i adresem siedziby z „Adresów” — uzupełniasz działki i zapisujesz.',
           },
+        ],
+      },
+      {
+        id: 'zawiadomienie-wyslij',
+        kind: 'improved',
+        icon: 'mail',
+        title: 'Zawiadomienie o zebraniu: przycisk „Wyślij”',
+        summary:
+          'Zawiadomienie otwarte z Kalendarza wysyłasz prosto z jego okna — ze skrzynki ustawionej w Mailingu, do adresatów zaznaczonych w „Do kogo”. Pobieranie PDF i e-maila zostaje jak było.',
+        details: [
+          'Przed wysłaniem zawiadomienie zapisuje się samo, więc wychodzi dokładnie to, co widać w oknie.',
+          '„Wyślij” jest nieaktywny, dopóki zawiadomienie ma puste pola, nie ma żadnego adresata albo w Mailingu nie ustawiono skrzynki — po najechaniu na przycisk widać, czego brakuje.',
+          'Wysłane zawiadomienie trafia do historii Mailingu, przypisane do spotkania.',
+        ],
+        where: ['Kalendarz', 'Zawiadomienie o zebraniu'],
+        steps: [
+          {
+            do: 'W Kalendarzu otwórz spotkanie i kliknij „Zawiadomienie o zebraniu”.',
+            then: 'W prawym dolnym rogu okna jest przycisk „Wyślij”, obok „Zapisz”.',
+          },
+          {
+            do: 'Uzupełnij pola oznaczone jako brakujące, sprawdź listę „Do kogo” i kliknij „Wyślij”.',
+            then: 'Aplikacja pyta o potwierdzenie (z nazwą skrzynki i liczbą adresatów), a po wysłaniu pokazuje komunikat „Zawiadomienie wysłane”.',
+          },
+        ],
+      },
+      {
+        id: 'pulpit-kompaktowe-wiersze-menu-ukryj',
+        kind: 'improved',
+        icon: 'eye',
+        title: 'Pulpit zwięźlej, a menu bez pozycji, których nie używasz',
+        summary:
+          'Zamiast kilku liczb przy wspólnocie na Pulpicie jest jedno kolorowe kółko z tą najważniejszą — czerwone przy błędach, pomarańczowe przy plikach do konwersji lub czekających na DOM, zielone, gdy wszystko jest w DOM — a pełne zestawienie widać po najechaniu na nie kursorem. Wspólnota z wyciągiem w folderze, ale jeszcze bez pliku księgowego, ma etykietę „Do konwersji” zamiast „Brak pliku”. Duży przycisk akcji zastąpił mały kwadrat z literą. W Ustawieniach, przy kolejności menu, możesz ukryć pozycje, których nie używasz.',
+        details: [
+          'Kwadrat akcji: „K” — konwertuj wyciągi z folderu (ile — mówi kółko obok), „Z” — zaksięguj w DOM, zielony ✓ — wszystko zaksięgowane w DOM, kreska — brak pliku księgowego. Po najechaniu kursorem widać pełny opis.',
+          'Kliknięcie zielonego ✓ zdejmuje oznaczenie „w DOM” — po najechaniu na niego ✓ zmienia się w strzałkę cofania.',
+          '„Ustawień” nie da się ukryć — tylko przez nie wraca się do tej opcji.',
+          'Kolejność priorytetów zmieniasz prosto na liście: chwyć wiersz z kolejki priorytetów i upuść go w miejscu innego. Nowa kolejność zapisuje się od razu — przycisk „Kolejność priorytetów” i jego okno zniknęły.',
+          'Priorytet zdejmuje się sam, gdy wspólnota ma wszystko zaksięgowane w DOM i nic więcej do zrobienia w tym miesiącu — żadnego wyciągu czekającego na konwersję ani błędu. Pulpit pokazuje wtedy komunikat, z których wspólnot zdjął priorytet. Wspólnocie, która już ma wszystko w DOM, priorytet nadany ręcznie zostaje.',
+        ],
+        where: ['Pulpit', 'Ustawienia'],
+        steps: [
+          {
+            do: 'Na Pulpicie spójrz na wiersz wspólnoty.',
+            then: 'Przy wspólnocie jest kolorowe kółko z liczbą — najedź na nie, żeby zobaczyć pliki, w DOM, czeka i do konwersji — a po prawej stronie jest mały kwadrat z literą zamiast szerokiego przycisku.',
+          },
+          {
+            do: 'W Ustawieniach kliknij „Zmień kolejność menu” i przy wybranej pozycji kliknij ikonę oka, a potem „Zapisz kolejność”.',
+            then: 'Pozycja znika z menu po lewej. W oknie kolejności zostaje — przekreślona — i tym samym okiem pokażesz ją z powrotem.',
+          },
+        ],
+      },
+      {
+        id: 'ksiegowania-nazwy-wyciagow',
+        kind: 'improved',
+        icon: 'edit',
+        title: 'Znajdź pliki księgowe nadaje nazwy także wyciągom',
+        summary:
+          'Do tej pory „Znajdź pliki księgowe” zmieniało nazwy tylko PDF-om. Teraz tak samo nazywa każdy rozpoznany wyciąg (XML, MT940, CSV, ZIP…): adres, typ konta i miesiąc, np. „Puławska_116_Eksploatacja_2026-08.xml”. Wyciąg i jego PDF mają więc tę samą nazwę i różnią się tylko rozszerzeniem.',
+        details: [
+          'Wyciąg zachowuje swoje rozszerzenie i zostaje w tym samym folderze — zmienia się tylko nazwa.',
+          'Wyciąg za część miesiąca dostaje zakres dat, np. „…_2026-08-01_2026-08-15.xml”. Gdy wspólnota ma dwa konta tego samego typu, w nazwie są też ostatnie cyfry konta.',
+          'Gdy nazwa jest już zajęta przez inny plik, nowy dostaje dopisek „_2”, „_3”… — żaden plik nie jest nadpisywany.',
+          'Nazwy nie zmieniają się wyciągom przypisanym wcześniej ani tym z błędem odczytu.',
+          'Rozpakowany ZIP nie dubluje już wyciągu: folder o tej samej nazwie co leżący obok plik ZIP (np. dzienne raporty MT940 PKO BP) jest przy skanie pomijany — wyciągiem jest sam ZIP.',
+          '„Otwórz plik” przy wyciągu w ZIP-ie pokazuje go w folderze zamiast otwierać — otwarcie rozpakowałoby archiwum obok.',
+        ],
+        where: ['Pulpit', 'Znajdź pliki księgowe'],
+        steps: [
+          {
+            do: 'Na Pulpicie wybierz miesiąc i kliknij „Znajdź pliki księgowe”.',
+            then: 'W „Wyniku skanowania”, przy przypisanym wyciągu, widać nową nazwę, a obok — jak plik nazywał się wcześniej.',
+          },
+        ],
+        expect: [
+          'Jeśli zmiana nazwy się nie uda (np. plik jest otwarty w innym programie), wyciąg i tak zostaje przypisany pod starą nazwą, a raport pokazuje go w sekcji „Nie udało się zmienić nazwy pliku”.',
+        ],
+      },
+      {
+        id: 'konwerter-prowizje-bankowe',
+        kind: 'fixed',
+        icon: 'check',
+        title: 'Prowizje i opłaty bankowe trafiają do księgowania',
+        summary:
+          'Konwerter pomijał prowizje i opłaty pobierane przez bank — za prowadzenie rachunku, przelewy, wyciągi, karty czy bankowość elektroniczną. Nie było ich w pliku księgowym ani w „Przeglądzie transakcji”. Teraz są zwykłymi wydatkami: jeśli pasują do kontrahenta, księgują się na jego konto, a jeśli nie — czekają na Twoją decyzję w „Przeglądzie transakcji”.',
+        details: [
+          'Dotyczy wszystkich banków. Najwięcej takich pozycji mają wyciągi BOŚ, PKO BP, PKO SA i Erste — co miesiąc kilka do kilkunastu na rachunek.',
+          'Żeby prowizje księgowały się same, dodaj w „Kontrahentach” wpis typu „Pozostałe koszty” (np. „Prowizje bankowe”) z kontem kosztów i nazwami alternatywnymi z opisów banku, np. „Opłaty i prowizje”, „Opłata za prowadzenie rachunku”, „Prowizja za wyciąg”.',
+        ],
+        where: ['Konwerter', 'Przegląd transakcji'],
+        steps: [
+          {
+            do: 'Przekonwertuj wyciąg, na którym bank pobrał opłatę.',
+            then: 'W „Przeglądzie transakcji” opłata jest wśród wydatków — chyba że pasuje do kontrahenta, wtedy jest już przypisana.',
+          },
+          {
+            do: 'Wybierz kontrahenta albo wpis „Pozostałe koszty” i zatwierdź.',
+            then: 'Opłata jest w pliku księgowym po stronie Wn na koncie, które wskazałeś.',
+          },
+        ],
+        expect: [
+          'Część opłat banki podają bez żadnego opisu (np. BNP 3,00 zł za przyjęcie wpłaty) — w „Przeglądzie transakcji” widać wtedy tylko kwotę i datę.',
         ],
       },
     ],

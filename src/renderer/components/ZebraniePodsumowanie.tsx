@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { MailingPole, ZebranieDokumentKlucz, ZebranieWersja } from '../../shared/types';
 import {
   ZebranieDane,
+  buildZebranieContext,
   uchwalaMissing,
   uchwalaTytul,
   uchwalyOf,
@@ -13,7 +14,7 @@ import {
   formatPolishDate,
   missingFieldValues,
 } from '../../shared/mailing-template';
-import { okresLabel } from '../../shared/sprawozdanie';
+import { okresLabel, sprawozdanieWersji } from '../../shared/sprawozdanie';
 import { Skrot, planSkrot, sprawozdanieSkrot } from '../../shared/zebranie-podsumowanie';
 import { formatStamp } from '../../shared/calendar';
 import { translations, Language } from '../translations';
@@ -118,6 +119,12 @@ const ZebraniePodsumowanie: React.FC<{
   const spr = wersja.sprawozdanie;
   const plan = wersja.plan;
 
+  /** The version's statement, plan and resolutions — what the Zebrania fields read. */
+  const zebranieCtx = useMemo(
+    () => (pola ? buildZebranieContext(wersja, dane, pola) : null),
+    [wersja, dane, pola]
+  );
+
   // The blanks the notice's own download would refuse — the package refuses them too.
   const missing = useMemo(() => {
     if (!material || !pola) return [];
@@ -129,11 +136,12 @@ const ZebraniePodsumowanie: React.FC<{
         values: material.values,
         tableFields: material.tableFields,
         kalendarz: buildKalendarzContext(dane),
+        zebranie: zebranieCtx,
       },
       material.temat,
       material.tresc
     );
-  }, [material, pola, dane]);
+  }, [material, pola, dane, zebranieCtx]);
 
   // Resolutions: each is its own switch in the package. One with a blank field cannot
   // go in (the file would print the blank) but never holds the others back.
@@ -143,11 +151,11 @@ const ZebraniePodsumowanie: React.FC<{
       pola
         ? uchwalyOf(wersja).map((u) => ({
             u,
-            tytul: uchwalaTytul(u, dane, pola),
-            missing: uchwalaMissing(u, dane, pola),
+            tytul: uchwalaTytul(u, dane, pola, zebranieCtx),
+            missing: uchwalaMissing(u, dane, pola, zebranieCtx),
           }))
         : [],
-    [wersja, pola, dane]
+    [wersja, pola, dane, zebranieCtx]
   );
   const uchwalyBraki = uchwalyWiersze.filter((r) => r.missing.length > 0);
   // Only the finished ones go in; the rest wait for their blanks and never hold the others back.
@@ -324,7 +332,7 @@ const ZebraniePodsumowanie: React.FC<{
           title={t.zpodStatementShort}
           description={t.zpodPeriod.replace('{okres}', okresLabel(spr.dane.okresOd, spr.dane.okresDo))}
         >
-          <SkrotTiles t={t} skrot={sprawozdanieSkrot(spr.dane, spr.wstep)} />
+          <SkrotTiles t={t} skrot={sprawozdanieSkrot(sprawozdanieWersji(spr), spr.wstep)} />
         </FormSection>
       )}
 

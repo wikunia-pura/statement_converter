@@ -69,8 +69,10 @@ import {
   ZebranieGotowe,
   ZebranieWersja,
   ZebranieWersjaInput,
+  ZebranieMaterial,
   ZEBRANIE_STATUSES,
   PlanGospodarczy,
+  PlanSprawozdanieMeta,
   PlanWlasny,
   PodatekNieruchomosci,
   PodatekNieruchomosciDane,
@@ -84,8 +86,9 @@ import {
   PodpisSlad,
   Sprawozdanie,
   SprawozdanieWstepTekst,
+  SprawozdanieLaczenie,
+  SprawozdanieGrupowanie,
   SprawozdanieZapisane,
-  SprawozdanieZrodlo,
   ZebraniaUstawienia,
   ZebraniaWspolnota,
   ZebranieDokument,
@@ -104,9 +107,16 @@ import {
   normalizeDanePit,
 } from '../shared/podatki-pit';
 import {
+  SPRAWOZDANIE_ODLACZONE,
+  isSprawozdanieOdlaczone,
   normalizeSprawozdanieDane,
+  normalizeSprawozdanieMeta,
+  normalizePlanSprawozdanieMeta,
   normalizeWstepTekst,
-  normalizeZebranieSprawozdanie,
+  sprawozdanieZKopii,
+  normalizeLaczenia,
+  zebranieSprawozdanie,
+  ZebranieSprawozdanieMeta,
 } from '../shared/sprawozdanie';
 import {
   copyMaterialyForRevision,
@@ -120,6 +130,9 @@ import {
   wersjaStatusFromGotowe,
   ZEBRANIE_WERSJA_NAZWA_MAX,
   zebranieStatusFromMaterialy,
+  materialyZeSzablonu,
+  materialySzablonu,
+  zrodloSzablonu,
 } from '../shared/zebrania';
 import { randomUUID } from 'crypto';
 import { getSupabase } from './supabaseClient';
@@ -186,7 +199,7 @@ const ZGN_COLS = 'id, nazwa, email, createdAt:created_at';
 const ZGN_PELNOMOCNIK_COLS =
   'id, jednostkaId:jednostka_id, imieNazwisko:imie_nazwisko, email, createdAt:created_at';
 const MAILING_POLE_COLS =
-  'id, nazwa, tekst, jednostka, typWartosci:typ_wartosci, createdAt:created_at';
+  'id, nazwa, tekst, jednostka, typWartosci:typ_wartosci, typ, createdAt:created_at';
 const MAILING_SZABLON_COLS =
   'id, nazwa, typ, temat, tresc, attachPdf:attach_pdf, tableFields:table_fields, createdAt:created_at';
 const MAILING_HISTORY_COLS =
@@ -198,10 +211,10 @@ const ZEBRANIE_COLS =
   'lokalizacjaAdres:lokalizacja_adres, startsAt:starts_at, ' +
   'createdBy:created_by, createdAt:created_at, updatedAt:updated_at';
 const ZEBRANIE_WERSJA_COLS =
-  'id, zebranieId:zebranie_id, major, minor, nazwa, status, opis, materialy, gotowe, sprawozdanie, plan, ' +
+  'id, zebranieId:zebranie_id, major, minor, nazwa, status, opis, materialy, gotowe, sprawozdanie, sprawozdanie_id, plan, ' +
   'createdBy:created_by, createdAt:created_at, updatedAt:updated_at, updatedBy:updated_by';
 const SPRAWOZDANIE_LISTA_COLS =
-  'id, nr_wsp, nazwa, okres_od, okres_do, plik_nazwa, imported_at, imported_by, zrodlo';
+  'id, nr_wsp, nazwa, okres_od, okres_do, plik_nazwa, imported_at, imported_by';
 const KONTO_TYP_COLS =
   'id, name, bankAccountSymbol:bank_account_symbol, apartmentPrefix:apartment_prefix, isDefault:is_default, createdAt:created_at';
 const HISTORY_COLS =
@@ -1564,6 +1577,13 @@ class DatabaseService {
         `Typ „${typ.nazwa}” ma przypisane szablony (${count}). Przenieś je do innego typu albo usuń, zanim usuniesz typ.`,
       );
     }
+    // Fields bound to the kind go back to "every kind" rather than staying bound
+    // to a key no template can carry — they would be offered nowhere.
+    const { error: polaError } = await getSupabase()
+      .from('mailing_pola')
+      .update({ typ: null })
+      .eq('typ', typ.klucz);
+    if (polaError) throw new Error(`deleteMailingTyp (pola): ${polaError.message}`);
     const { error } = await getSupabase().from('mailing_typy').delete().eq('id', id);
     if (error) throw new Error(`deleteMailingTyp: ${error.message}`);
   }
@@ -1584,6 +1604,7 @@ class DatabaseService {
     tekst: string,
     jednostka: string,
     typWartosci: MailingPoleTyp,
+    typ: string | null,
   ): Promise<MailingPole> {
     const { data, error } = await getSupabase()
       .from('mailing_pola')
@@ -1592,6 +1613,7 @@ class DatabaseService {
         tekst,
         jednostka: jednostka.trim(),
         typ_wartosci: typWartosci,
+        typ: typ || null,
       })
       .select(MAILING_POLE_COLS)
       .single();
@@ -1604,6 +1626,7 @@ class DatabaseService {
     tekst: string,
     jednostka: string,
     typWartosci: MailingPoleTyp,
+    typ: string | null,
   ): Promise<void> {
     const { error } = await getSupabase()
       .from('mailing_pola')
@@ -1612,6 +1635,7 @@ class DatabaseService {
         tekst,
         jednostka: jednostka.trim(),
         typ_wartosci: typWartosci,
+        typ: typ || null,
       })
       .eq('id', id);
     if (error) throw new Error(`updateMailingPole: ${error.message}`);
@@ -2696,10 +2720,12 @@ class DatabaseService {
   }
 
   async deleteSpotkanie(id: number): Promise<void> {
-    // The meeting's Zebranie outlives it (ON DELETE SET NULL), and until now it
-    // read its date, community and place from the meeting. Write them onto the
-    // entry first, so it still says what it was about once the link is gone.
-    await this.snapshotZebranieFromSpotkanie(id);
+    // The meeting's Zebrania entry goes with it: the entry is that meeting's
+    // materials, and left behind it would turn into a stray "niezależne" entry
+    // for a meeting that no longer exists (the delete confirmation says so).
+    // Its versions go with it (ON DELETE CASCADE).
+    const { error: zebError } = await getSupabase().from('zebrania').delete().eq('spotkanie_id', id);
+    if (zebError) throw new Error(`deleteSpotkanie (zebranie): ${zebError.message}`);
     const { error } = await getSupabase().from('spotkania').delete().eq('id', id);
     if (error) throw new Error(`deleteSpotkanie: ${error.message}`);
   }
@@ -2719,7 +2745,8 @@ class DatabaseService {
       : 'w_przygotowaniu';
   }
 
-  private static zebranieWersjaRow(r: any): ZebranieWersja {
+  /** A version row; `biblioteka` holds the library rows its statement may link (with their figures). */
+  private static zebranieWersjaRow(r: any, biblioteka: Map<number, SprawozdanieZapisane>): ZebranieWersja {
     return {
       id: r.id,
       zebranieId: r.zebranieId,
@@ -2734,7 +2761,11 @@ class DatabaseService {
       createdAt: r.createdAt,
       updatedAt: r.updatedAt ?? r.createdAt,
       updatedBy: r.updatedBy ?? '',
-      sprawozdanie: normalizeZebranieSprawozdanie(r.sprawozdanie),
+      sprawozdanie:
+        r.sprawozdanie_id != null
+          ? zebranieSprawozdanie(r.sprawozdanie, biblioteka.get(Number(r.sprawozdanie_id)))
+          : null,
+      sprawozdanieOdlaczone: r.sprawozdanie_id == null && isSprawozdanieOdlaczone(r.sprawozdanie),
       plan: normalizePlan(r.plan),
     };
   }
@@ -2757,6 +2788,24 @@ class DatabaseService {
     };
   }
 
+  /**
+   * Version rows as versions: the statements they link are read from the
+   * library — figures included — in one query, not once per version.
+   */
+  private async zebranieWersjeRows(rows: any[]): Promise<ZebranieWersja[]> {
+    const ids = [...new Set(rows.map(r => r.sprawozdanie_id).filter((id): id is number => id != null))];
+    const biblioteka = new Map<number, SprawozdanieZapisane>();
+    for (const slice of DatabaseService.chunk(ids, 100)) {
+      const { data, error } = await getSupabase()
+        .from('zebrania_sprawozdania')
+        .select(`${SPRAWOZDANIE_LISTA_COLS}, dane`)
+        .in('id', slice);
+      if (error) throw new Error(`zebranieWersjeRows (sprawozdania): ${error.message}`);
+      for (const r of data ?? []) biblioteka.set(Number(r.id), DatabaseService.sprawozdanieZapisaneRow(r));
+    }
+    return rows.map(r => DatabaseService.zebranieWersjaRow(r, biblioteka));
+  }
+
   /** Every entry with its versions, newest entry first. Two queries, joined here. */
   async getZebrania(): Promise<Zebranie[]> {
     const [rows, wersje] = await Promise.all([
@@ -2775,7 +2824,7 @@ class DatabaseService {
           .range(from, to),
       ),
     ]);
-    const versions = wersje.map(DatabaseService.zebranieWersjaRow);
+    const versions = await this.zebranieWersjeRows(wersje);
     return rows.map(r => DatabaseService.zebranieRow(r, versions));
   }
 
@@ -2794,7 +2843,7 @@ class DatabaseService {
       .eq('zebranie_id', row.id)
       .order('id', { ascending: true });
     if (wError) throw new Error(`getZebranie (wersje): ${wError.message}`);
-    return DatabaseService.zebranieRow(row, (wersje ?? []).map(DatabaseService.zebranieWersjaRow));
+    return DatabaseService.zebranieRow(row, await this.zebranieWersjeRows(wersje ?? []));
   }
 
   async getZebranie(id: number): Promise<Zebranie | null> {
@@ -2836,25 +2885,33 @@ class DatabaseService {
     };
   }
 
-  private async snapshotZebranieFromSpotkanie(spotkanieId: number): Promise<void> {
-    const snapshot = await this.spotkanieSnapshot(spotkanieId);
-    if (!snapshot) return;
-    const { materialy_status: _ignored, ...columns } = snapshot;
-    const { error } = await getSupabase()
-      .from('zebrania')
-      .update({ ...columns, updated_at: new Date().toISOString() })
-      .eq('spotkanie_id', spotkanieId);
-    if (error) throw new Error(`snapshotZebranieFromSpotkanie: ${error.message}`);
+  /**
+   * The template meeting's notice and resolutions, for a new meeting's first
+   * version (see `ZebraniaUstawienia.szablonAdresNazwa`). A template that cannot
+   * be read leaves the meeting empty rather than failing its creation.
+   */
+  private async materialySzablonu(who: string): Promise<ZebranieMaterial[]> {
+    try {
+      const { szablonAdresNazwa } = await this.getZebraniaUstawienia();
+      if (!szablonAdresNazwa) return [];
+      const [zebrania, spotkania] = await Promise.all([this.getZebrania(), this.getSpotkania()]);
+      const zrodlo = zrodloSzablonu(zebrania, spotkania, [], szablonAdresNazwa);
+      return zrodlo ? materialyZeSzablonu(materialySzablonu(zrodlo), who) : [];
+    } catch (err) {
+      console.warn('[Zebrania] template materials not applied:', err);
+      return [];
+    }
   }
 
   private async insertFirstWersja(zebranieId: number, who: string): Promise<void> {
+    const materialy = await this.materialySzablonu(who);
     const { error } = await getSupabase().from('zebrania_wersje').insert({
       zebranie_id: zebranieId,
       major: 1,
       minor: 0,
       status: 'w_przygotowaniu',
       opis: '',
-      materialy: [],
+      materialy,
       created_by: who,
       updated_by: who,
     });
@@ -3032,8 +3089,14 @@ class DatabaseService {
           opis: '',
           materialy: copyMaterialyForRevision(from?.materialy ?? []),
           // The statement and the plan come along too; their downloads were of
-          // the old version and stay behind with it.
-          sprawozdanie: from?.sprawozdanie ? { ...from.sprawozdanie, pobrania: [] } : null,
+          // the old version and stay behind with it. The statement stays the
+          // same library row; a hand-made unlink carries over as well.
+          sprawozdanie_id: from?.sprawozdanie?.sprawozdanieId ?? null,
+          sprawozdanie: from?.sprawozdanie
+            ? DatabaseService.sprawozdanieMetaRow({ ...from.sprawozdanie, pobrania: [] })
+            : from?.sprawozdanieOdlaczone
+              ? SPRAWOZDANIE_ODLACZONE
+              : null,
           plan: from?.plan ? { ...from.plan, pobrania: [] } : null,
           created_by: who,
           updated_by: who,
@@ -3047,7 +3110,7 @@ class DatabaseService {
       }
       await this.touchZebranie(zebranieId);
       await this.syncSpotkanieFromWersja(zebranie.spotkanieId, 'w_przygotowaniu', who);
-      return DatabaseService.zebranieWersjaRow(data);
+      return (await this.zebranieWersjeRows([data]))[0];
     }
     throw new Error('addZebranieWersja: nie udało się nadać numeru wersji.');
   }
@@ -3184,82 +3247,126 @@ class DatabaseService {
       .eq('id', id)
       .maybeSingle();
     if (error) throw new Error(`getZebranieWersja: ${error.message}`);
-    return data ? DatabaseService.zebranieWersjaRow(data) : null;
+    return data ? (await this.zebranieWersjeRows([data]))[0] : null;
+  }
+
+  /** The version's own part of its statement, as stored. */
+  private static sprawozdanieMetaRow(meta: ZebranieSprawozdanieMeta): ZebranieSprawozdanieMeta {
+    const m = normalizeSprawozdanieMeta(meta);
+    return { dodano: m.dodano, dodal: m.dodal, pobrania: m.pobrania, wstep: m.wstep, laczenia: m.laczenia, podkategorie: m.podkategorie };
   }
 
   /**
-   * Attach a library statement to a version — as a copy, so a later upload of
-   * the same period never changes what this version presents.
+   * Link a library statement to a version. The figures stay the library's: a
+   * newer print uploaded in Sprawozdania shows in the meeting at once.
    */
   async attachZebranieSprawozdanie(wersjaId: number, sprawozdanieId: number, who: string): Promise<void> {
-    const row = await this.getSprawozdanie(sprawozdanieId);
-    if (!row?.dane) throw new Error('Tego sprawozdania nie ma już w bibliotece — wgraj plik ponownie.');
-    await this.setZebranieWersjaSprawozdanie(
+    const { data: row, error: rowError } = await getSupabase()
+      .from('zebrania_sprawozdania')
+      .select('id')
+      .eq('id', sprawozdanieId)
+      .maybeSingle();
+    if (rowError) throw new Error(`attachZebranieSprawozdanie (odczyt): ${rowError.message}`);
+    if (!row) throw new Error('Tego sprawozdania nie ma już w module Sprawozdania — mogło zostać usunięte.');
+    await this.writeZebranieWersjaSprawozdanie(
       wersjaId,
-      {
-        dane: row.dane,
-        plikNazwa: row.plikNazwa,
-        zrodloId: row.id,
+      sprawozdanieId,
+      // Another statement means other figures: an introduction edited for the old one, and its merges, do not carry over.
+      DatabaseService.sprawozdanieMetaRow({
         dodano: new Date().toISOString(),
         dodal: who,
         pobrania: [],
-        // A new statement means new figures: an introduction edited for the old one does not carry over.
         wstep: null,
-      },
+        laczenia: [],
+        podkategorie: [],
+      }),
       who,
     );
   }
 
-  /** Attach a statement to a version (or take it off with null). */
-  async setZebranieWersjaSprawozdanie(
+  /**
+   * Unlink a version's statement. The library row stays; the version is marked
+   * so the tab does not link one again by itself.
+   */
+  async unlinkZebranieSprawozdanie(wersjaId: number, who: string): Promise<void> {
+    await this.writeZebranieWersjaSprawozdanie(wersjaId, null, SPRAWOZDANIE_ODLACZONE, who);
+  }
+
+  private async writeZebranieWersjaSprawozdanie(
     wersjaId: number,
-    value: ZebranieSprawozdanie | null,
+    sprawozdanieId: number | null,
+    stored: object,
     who: string,
   ): Promise<void> {
     const { data, error } = await getSupabase()
       .from('zebrania_wersje')
       .update({
-        sprawozdanie: value ? normalizeZebranieSprawozdanie(value) : null,
+        sprawozdanie_id: sprawozdanieId,
+        sprawozdanie: stored,
         updated_at: new Date().toISOString(),
         updated_by: who,
       })
       .eq('id', wersjaId)
       .select('zebranie_id')
       .maybeSingle();
-    if (error) throw new Error(`setZebranieWersjaSprawozdanie: ${error.message}`);
+    if (error) throw new Error(`writeZebranieWersjaSprawozdanie: ${error.message}`);
     if (!data) throw new Error('Tej wersji już nie ma — mogła zostać usunięta.');
     await this.touchZebranie((data as { zebranie_id: number }).zebranie_id);
   }
 
   /**
    * Save the edited introduction of a version's statement (null = back to the
-   * computed one). Written into the stored statement, so the download record
-   * and the figures are kept as they are.
+   * computed one). Written into the version's own part, so the download record
+   * is kept as it is.
    */
   async setZebranieSprawozdanieWstep(
     wersjaId: number,
     wstep: SprawozdanieWstepTekst | null,
     who: string,
   ): Promise<void> {
+    await this.patchZebranieSprawozdanieMeta(wersjaId, { wstep: normalizeWstepTekst(wstep) }, who, 'setZebranieSprawozdanieWstep');
+  }
+
+  /** Save the rows merged, or the subcategories, of a version's statement (an empty list = none). */
+  async setZebranieSprawozdanieLaczenia(
+    wersjaId: number,
+    rodzaj: SprawozdanieGrupowanie,
+    lista: SprawozdanieLaczenie[],
+    who: string,
+  ): Promise<void> {
+    await this.patchZebranieSprawozdanieMeta(
+      wersjaId,
+      rodzaj === 'podkategorie' ? { podkategorie: normalizeLaczenia(lista) } : { laczenia: normalizeLaczenia(lista) },
+      who,
+      'setZebranieSprawozdanieLaczenia',
+    );
+  }
+
+  /** Rewrite part of a version's own statement data, keeping the rest — the download record too — as stored. */
+  private async patchZebranieSprawozdanieMeta(
+    wersjaId: number,
+    patch: Partial<ZebranieSprawozdanieMeta>,
+    who: string,
+    op: string,
+  ): Promise<void> {
     const { data, error } = await getSupabase()
       .from('zebrania_wersje')
-      .select('zebranie_id, sprawozdanie')
+      .select('zebranie_id, sprawozdanie, sprawozdanie_id')
       .eq('id', wersjaId)
       .maybeSingle();
-    if (error) throw new Error(`setZebranieSprawozdanieWstep (odczyt): ${error.message}`);
+    if (error) throw new Error(`${op} (odczyt): ${error.message}`);
     if (!data) throw new Error('Tej wersji już nie ma — mogła zostać usunięta.');
-    const row = data as { zebranie_id: number; sprawozdanie: unknown };
-    const stored = normalizeZebranieSprawozdanie(row.sprawozdanie);
-    if (!stored) throw new Error('Ta wersja nie ma już sprawozdania.');
+    const row = data as { zebranie_id: number; sprawozdanie: unknown; sprawozdanie_id: number | null };
+    if (row.sprawozdanie_id == null) throw new Error('Ta wersja nie ma już sprawozdania.');
     const { error: writeError } = await getSupabase()
       .from('zebrania_wersje')
       .update({
-        sprawozdanie: { ...stored, wstep: normalizeWstepTekst(wstep) },
+        sprawozdanie: DatabaseService.sprawozdanieMetaRow({ ...normalizeSprawozdanieMeta(row.sprawozdanie), ...patch }),
         updated_at: new Date().toISOString(),
         updated_by: who,
       })
       .eq('id', wersjaId);
-    if (writeError) throw new Error(`setZebranieSprawozdanieWstep: ${writeError.message}`);
+    if (writeError) throw new Error(`${op}: ${writeError.message}`);
     await this.touchZebranie(row.zebranie_id);
   }
 
@@ -3333,27 +3440,19 @@ class DatabaseService {
       plikNazwa: r.plik_nazwa ?? '',
       importedAt: r.imported_at ?? '',
       importedBy: r.imported_by ?? '',
-      zrodlo: r.zrodlo === 'sprawozdania' ? 'sprawozdania' : 'zebrania',
       ...(r.dane !== undefined ? { dane: normalizeSprawozdanieDane(r.dane) ?? undefined } : {}),
     };
   }
 
   /**
-   * Store every statement of an uploaded file. A statement of a period already
-   * in the library replaces it (a newer print of the same figures). A statement
-   * without a community number or a period cannot be matched and is skipped.
-   *
-   * Zebrania is the source of truth: its upload takes over any row, also one
-   * the Sprawozdania module added. The module's own upload
-   * (`zrodlo: 'sprawozdania'`) leaves out every community and period Zebrania
-   * already has — see `importSprawozdaniaWlasne`.
+   * Store every statement of an uploaded file — the Sprawozdania module is the
+   * one place they are uploaded, and the source of truth. A statement of a
+   * period already in the library replaces it in place (a newer print of the
+   * same figures, same row), so every meeting linked to it shows the new print.
+   * A statement without a community number or a period cannot be matched and
+   * is skipped.
    */
-  async importSprawozdania(
-    lista: Sprawozdanie[],
-    plikNazwa: string,
-    who: string,
-    zrodlo: SprawozdanieZrodlo = 'zebrania',
-  ): Promise<SprawozdanieZapisane[]> {
+  async importSprawozdania(lista: Sprawozdanie[], plikNazwa: string, who: string): Promise<SprawozdanieZapisane[]> {
     const rows = lista
       .filter((s) => s.nrWsp != null && s.okresOd && s.okresDo)
       .map((s) => ({
@@ -3365,7 +3464,6 @@ class DatabaseService {
         plik_nazwa: plikNazwa,
         imported_at: new Date().toISOString(),
         imported_by: who,
-        zrodlo,
       }));
     const out: SprawozdanieZapisane[] = [];
     for (const slice of DatabaseService.chunk(rows, 100)) {
@@ -3380,48 +3478,22 @@ class DatabaseService {
   }
 
   /**
-   * An upload in the Sprawozdania module: only the statements Zebrania does
-   * not have. A community and period already uploaded in Zebrania is left
-   * out (and counted); one this module added earlier is replaced by the newer
-   * print, like in Zebrania.
+   * Remove a statement from the library. One a meeting's version links is
+   * refused — unlink it in Zebrania first, so no meeting loses its statement
+   * without anyone deciding so.
    */
-  async importSprawozdaniaWlasne(
-    lista: Sprawozdanie[],
-    plikNazwa: string,
-    who: string,
-  ): Promise<{ zapisane: SprawozdanieZapisane[]; pominiete: number }> {
-    const key = (nr: number | null, od: string, doDnia: string) => `${nr}|${od}|${doDnia}`;
-    const numery = [...new Set(lista.map((s) => s.nrWsp).filter((n): n is number => n != null))];
-    const zZebran = new Set<string>();
-    for (const slice of DatabaseService.chunk(numery, 200)) {
-      const { data, error } = await getSupabase()
-        .from('zebrania_sprawozdania')
-        .select('nr_wsp, okres_od, okres_do')
-        .eq('zrodlo', 'zebrania')
-        .in('nr_wsp', slice);
-      if (error) throw new Error(`importSprawozdaniaWlasne: ${error.message}`);
-      for (const r of data ?? []) zZebran.add(key(r.nr_wsp, r.okres_od, r.okres_do));
+  async deleteSprawozdanie(id: number): Promise<void> {
+    const { count, error: linkError } = await getSupabase()
+      .from('zebrania_wersje')
+      .select('id', { count: 'exact', head: true })
+      .eq('sprawozdanie_id', id);
+    if (linkError) throw new Error(`deleteSprawozdanie (powiązania): ${linkError.message}`);
+    if ((count ?? 0) > 0) {
+      throw new Error('To sprawozdanie jest powiązane z zebraniem — odłącz je najpierw w Zebraniach.');
     }
-    const nowe = lista.filter((s) => !zZebran.has(key(s.nrWsp, s.okresOd, s.okresDo)));
-    const zapisane = await this.importSprawozdania(nowe, plikNazwa, who, 'sprawozdania');
-    return { zapisane, pominiete: lista.length - nowe.length };
-  }
-
-  /**
-   * Remove a statement the Sprawozdania module added. A row from Zebrania is
-   * never removed here: it is the source of truth, and a meeting found it there.
-   */
-  async deleteSprawozdanieWlasne(id: number): Promise<void> {
-    const { data, error } = await getSupabase()
-      .from('zebrania_sprawozdania')
-      .delete()
-      .eq('id', id)
-      .eq('zrodlo', 'sprawozdania')
-      .select('id');
-    if (error) throw new Error(`deleteSprawozdanieWlasne: ${error.message}`);
-    if (!data || data.length === 0) {
-      throw new Error('To sprawozdanie pochodzi z Zebrań albo zostało już usunięte — nie można go usunąć tutaj.');
-    }
+    const { data, error } = await getSupabase().from('zebrania_sprawozdania').delete().eq('id', id).select('id');
+    if (error) throw new Error(`deleteSprawozdanie: ${error.message}`);
+    if (!data || data.length === 0) throw new Error('Tego sprawozdania już nie ma — mogło zostać usunięte.');
   }
 
   /** The library, without the statements themselves — newest period first. */
@@ -3435,6 +3507,20 @@ class DatabaseService {
         .range(from, to),
     );
     return rows.map(DatabaseService.sprawozdanieZapisaneRow);
+  }
+
+  /** The library statement of a community and period, figures included — what a module plan was drafted from. */
+  async getSprawozdanieOkresu(nrWsp: number, od: string, doDnia: string): Promise<SprawozdanieZapisane | null> {
+    const { data, error } = await getSupabase()
+      .from('zebrania_sprawozdania')
+      .select(`${SPRAWOZDANIE_LISTA_COLS}, dane`)
+      .eq('nr_wsp', nrWsp)
+      .eq('okres_od', od)
+      .eq('okres_do', doDnia)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(`getSprawozdanieOkresu: ${error.message}`);
+    return data ? DatabaseService.sprawozdanieZapisaneRow(data) : null;
   }
 
   async getSprawozdanie(id: number): Promise<SprawozdanieZapisane | null> {
@@ -3458,6 +3544,8 @@ class DatabaseService {
       nazwa: r.nazwa ?? '',
       rok: r.rok ?? plan.rok,
       plan,
+      // Absent before plany-gospodarcze-sprawozdanie.sql: nothing regrouped yet.
+      sprawozdanie: normalizePlanSprawozdanieMeta(r.sprawozdanie),
       createdAt: r.created_at ?? '',
       createdBy: r.created_by ?? '',
       updatedAt: r.updated_at ?? '',
@@ -3542,16 +3630,53 @@ class DatabaseService {
     if (error) throw new Error(`deletePlanWlasny: ${error.message}`);
   }
 
-  /** Note a download of a module plan. */
-  async recordPlanWlasnyPobranie(id: number, pliki: string[], who: string): Promise<void> {
+  /** Note a download of a module plan, or of its statement. */
+  async recordPlanWlasnyPobranie(
+    id: number,
+    dokument: 'plan' | 'sprawozdanie',
+    pliki: string[],
+    who: string,
+  ): Promise<void> {
     const stored = await this.getPlanWlasny(id);
     if (!stored) return;
     const entry = { at: new Date().toISOString(), by: who, pliki };
     const { error } = await getSupabase()
       .from('plany_gospodarcze')
-      .update({ plan: { ...stored.plan, pobrania: [...stored.plan.pobrania, entry] } })
+      .update(
+        dokument === 'sprawozdanie'
+          ? { sprawozdanie: { ...stored.sprawozdanie, pobrania: [...stored.sprawozdanie.pobrania, entry] } }
+          : { plan: { ...stored.plan, pobrania: [...stored.plan.pobrania, entry] } },
+      )
       .eq('id', id);
     if (error) throw new Error(`recordPlanWlasnyPobranie: ${error.message}`);
+  }
+
+  /**
+   * Rewrite part of a module plan's own statement data (merges, subcategories,
+   * the introduction), keeping the rest as stored.
+   */
+  async patchPlanWlasnySprawozdanie(
+    id: number,
+    patch: Partial<Omit<PlanSprawozdanieMeta, 'pobrania'>>,
+    who: string,
+  ): Promise<void> {
+    const stored = await this.getPlanWlasny(id);
+    if (!stored) throw new Error('Tego planu już nie ma — mógł zostać usunięty.');
+    const { error } = await getSupabase()
+      .from('plany_gospodarcze')
+      .update({
+        sprawozdanie: normalizePlanSprawozdanieMeta({ ...stored.sprawozdanie, ...patch }),
+        updated_at: new Date().toISOString(),
+        updated_by: who,
+      })
+      .eq('id', id);
+    if (error) {
+      throw new Error(
+        /sprawozdanie/.test(error.message)
+          ? 'Baza nie ma jeszcze miejsca na sprawozdanie planu — uruchom w Supabase plik plany-gospodarcze-sprawozdanie.sql.'
+          : `patchPlanWlasnySprawozdanie: ${error.message}`,
+      );
+    }
   }
 
   /* ------------------------ Podatki — nieruchomości (DN-1) ------------------------ */
@@ -5135,12 +5260,14 @@ class DatabaseService {
         'mailing_pola',
         // `jednostka` and `typ_wartosci` default for backups written before
         // those columns existed — both are NOT NULL, so an undefined would fail
-        // the whole restore.
+        // the whole restore. `typ` is absent in backups written before fields
+        // could be bound to a kind: null keeps them offered everywhere.
         mailingPola.map(p => ({
           nazwa: p.nazwa,
           tekst: p.tekst,
           jednostka: p.jednostka ?? '',
           typ_wartosci: p.typWartosci ?? 'tekst',
+          typ: p.typ ?? null,
           created_at: p.createdAt,
         })),
       );
@@ -5314,6 +5441,67 @@ class DatabaseService {
       restoredLokalizacjaIdMap = lokalizacjaIdMap;
     }
 
+    // The statement library — ahead of Zebrania, whose versions link its rows.
+    // Absent in backups written before it existed: a missing key leaves the
+    // live rows alone. The rows get fresh ids, so the links are re-pointed by
+    // community and period: versions restored below find their row through
+    // `sprawozdanieIdByKey`; live versions (a backup without Zebrania) are
+    // re-linked after the wipe, which nulls their link (ON DELETE SET NULL).
+    const sprawozdanieKey = (nr: number | null, od: string, doDnia: string) => `${nr}|${od}|${doDnia}`;
+    const sprawozdanieIdByKey = new Map<string, number>();
+    if (zebraniaSprawozdania) {
+      const liveLinks: { wersjaId: number; key: string }[] = [];
+      if (!zebrania) {
+        const linked = await fetchAllPaged<any>('restore zebrania_sprawozdania (powiązania)', (from, to) =>
+          getSupabase()
+            .from('zebrania_wersje')
+            .select('id, sprawozdanie_id')
+            .not('sprawozdanie_id', 'is', null)
+            .order('id', { ascending: true })
+            .range(from, to),
+        );
+        const live = await this.getSprawozdaniaLista();
+        const keyById = new Map(live.map(r => [r.id, sprawozdanieKey(r.nrWsp, r.okresOd, r.okresDo)] as const));
+        for (const r of linked) {
+          const key = keyById.get(Number(r.sprawozdanie_id));
+          if (key) liveLinks.push({ wersjaId: Number(r.id), key });
+        }
+      }
+      const { error: wipeError } = await getSupabase().from('zebrania_sprawozdania').delete().gt('id', 0);
+      if (wipeError) throw new Error(`restore zebrania_sprawozdania: ${wipeError.message}`);
+      await this.insertChunked(
+        'zebrania_sprawozdania',
+        zebraniaSprawozdania
+          .filter(s => s.nrWsp != null && s.okresOd && s.okresDo && s.dane)
+          .map(s => ({
+            nr_wsp: s.nrWsp,
+            nazwa: s.nazwa ?? '',
+            okres_od: s.okresOd,
+            okres_do: s.okresDo,
+            dane: normalizeSprawozdanieDane(s.dane),
+            plik_nazwa: s.plikNazwa ?? '',
+            imported_at: s.importedAt,
+            imported_by: s.importedBy ?? '',
+          })),
+      );
+      for (const r of await this.getSprawozdaniaLista()) {
+        sprawozdanieIdByKey.set(sprawozdanieKey(r.nrWsp, r.okresOd, r.okresDo), r.id);
+      }
+      for (const link of liveLinks) {
+        const id = sprawozdanieIdByKey.get(link.key);
+        if (id === undefined) continue;
+        const { error } = await getSupabase()
+          .from('zebrania_wersje')
+          .update({ sprawozdanie_id: id })
+          .eq('id', link.wersjaId);
+        if (error) throw new Error(`restore zebrania_wersje (powiązanie): ${error.message}`);
+      }
+    } else if (zebrania) {
+      for (const r of await this.getSprawozdaniaLista()) {
+        sprawozdanieIdByKey.set(sprawozdanieKey(r.nrWsp, r.okresOd, r.okresDo), r.id);
+      }
+    }
+
     // Zebrania, with their versions. Wipe-and-insert (the versions go with the
     // wipe, ON DELETE CASCADE), re-pointing every link: the meeting through the
     // meetings restored above, the community through its name, the location
@@ -5327,6 +5515,28 @@ class DatabaseService {
       const szablonIdByNazwa = new Map(
         (await this.getMailingSzablony()).map(t => [t.nazwa.trim().toLowerCase(), t.id] as const),
       );
+      // A version's statement links a library row; one the library does not
+      // hold (an older backup's copy of a print replaced since) goes back in
+      // from the copy the backup carries.
+      const kopiaKey = (k: { dane: Sprawozdanie }) => sprawozdanieKey(k.dane.nrWsp, k.dane.okresOd, k.dane.okresDo);
+      const brakujace = new Map<string, NonNullable<ReturnType<typeof sprawozdanieZKopii>>>();
+      for (const z of zebrania) {
+        for (const w of z.wersje ?? []) {
+          const kopia = sprawozdanieZKopii(w.sprawozdanie);
+          if (!kopia || kopia.dane.nrWsp == null || !kopia.dane.okresOd || !kopia.dane.okresDo) continue;
+          if (!sprawozdanieIdByKey.has(kopiaKey(kopia))) brakujace.set(kopiaKey(kopia), kopia);
+        }
+      }
+      if (brakujace.size > 0) {
+        await this.importSprawozdania(
+          [...brakujace.values()].map(k => k.dane),
+          [...brakujace.values()][0].plikNazwa,
+          'kopia zapasowa',
+        );
+        for (const r of await this.getSprawozdaniaLista()) {
+          sprawozdanieIdByKey.set(sprawozdanieKey(r.nrWsp, r.okresOd, r.okresDo), r.id);
+        }
+      }
       for (const slice of DatabaseService.chunk(zebrania)) {
         const idMap = await this.insertRemapped(
           'zebrania',
@@ -5375,7 +5585,13 @@ class DatabaseService {
                   : null,
               })),
               // Absent in backups written before versions carried a statement and a plan.
-              sprawozdanie: normalizeZebranieSprawozdanie(w.sprawozdanie),
+              ...(() => {
+                const kopia = sprawozdanieZKopii(w.sprawozdanie);
+                const id = kopia ? sprawozdanieIdByKey.get(kopiaKey(kopia)) : undefined;
+                return kopia && id !== undefined
+                  ? { sprawozdanie_id: id, sprawozdanie: DatabaseService.sprawozdanieMetaRow(kopia.meta) }
+                  : { sprawozdanie_id: null, sprawozdanie: w.sprawozdanieOdlaczone ? SPRAWOZDANIE_ODLACZONE : null };
+              })(),
               plan: normalizePlan(w.plan),
               created_by: w.createdBy ?? '',
               created_at: w.createdAt,
@@ -5387,31 +5603,10 @@ class DatabaseService {
       }
     }
 
-    // The statement library, the per-community data and the module settings.
-    // Each key is absent in backups written before it existed, so a missing key
-    // leaves the live rows alone. Nothing here points at ids that a restore
-    // renumbers: communities are keyed by name, statements by their vDom number.
-    if (zebraniaSprawozdania) {
-      const { error: wipeError } = await getSupabase().from('zebrania_sprawozdania').delete().gt('id', 0);
-      if (wipeError) throw new Error(`restore zebrania_sprawozdania: ${wipeError.message}`);
-      await this.insertChunked(
-        'zebrania_sprawozdania',
-        zebraniaSprawozdania
-          .filter(s => s.nrWsp != null && s.okresOd && s.okresDo && s.dane)
-          .map(s => ({
-            nr_wsp: s.nrWsp,
-            nazwa: s.nazwa ?? '',
-            okres_od: s.okresOd,
-            okres_do: s.okresDo,
-            dane: normalizeSprawozdanieDane(s.dane),
-            plik_nazwa: s.plikNazwa ?? '',
-            imported_at: s.importedAt,
-            imported_by: s.importedBy ?? '',
-            // Backups written before the column existed held Zebrania's uploads only.
-            zrodlo: s.zrodlo === 'sprawozdania' ? 'sprawozdania' : 'zebrania',
-          })),
-      );
-    }
+    // The per-community data and the module settings (the statement library is
+    // restored ahead of Zebrania, which links it). Each key is absent in backups
+    // written before it existed, so a missing key leaves the live rows alone.
+    // Communities are keyed by name, so no restored id is involved.
     if (zebraniaWspolnoty) {
       const { error: wipeError } = await getSupabase().from('zebrania_wspolnoty').delete().neq('adres_nazwa', '');
       if (wipeError) throw new Error(`restore zebrania_wspolnoty: ${wipeError.message}`);
@@ -5453,6 +5648,7 @@ class DatabaseService {
             nazwa: p.nazwa ?? '',
             rok: plan!.rok,
             plan,
+            sprawozdanie: normalizePlanSprawozdanieMeta(p.sprawozdanie),
             created_at: p.createdAt || new Date().toISOString(),
             created_by: p.createdBy ?? '',
             updated_at: p.updatedAt || new Date().toISOString(),

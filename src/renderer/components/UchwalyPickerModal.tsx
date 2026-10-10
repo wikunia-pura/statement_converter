@@ -1,11 +1,32 @@
 import React, { useMemo, useState } from 'react';
-import { MailingSzablon, MailingTypDef } from '../../shared/types';
+import {
+  MAILING_TYP_UCHWALA,
+  MailingPole,
+  MailingSzablon,
+  MailingTypDef,
+  MailingZebranieContext,
+} from '../../shared/types';
+import {
+  buildKalendarzContext,
+  formatPolishDate,
+  MailingRenderContext,
+  renderPlain,
+} from '../../shared/mailing-template';
+import { ZebranieDane } from '../../shared/zebrania';
 import { translations, Language } from '../translations';
 import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
 import Icon from './Icon';
 
 /** A subject as a person reads it: `{{Adres Wspólnoty}}` becomes `[Adres Wspólnoty]`. */
-const readable = (text: string) => text.replace(/\{\{\s*([^{}|]+?)\s*(?:\|[^{}]*)?\}\}/g, '[$1]');
+/**
+ * A template's subject as this meeting will read it: fields the meeting fills
+ * (community, date, place …) filled in, the rest left as `[Field]`.
+ */
+const readable = (text: string, ctx: MailingRenderContext | null) =>
+  text.replace(/\{\{\s*([^{}|]+?)\s*(?:\|[^{}]*)?\}\}/g, (all, nazwa: string) => {
+    const value = ctx ? renderPlain(all, ctx).trim() : '';
+    return value || `[${nazwa}]`;
+  });
 
 /**
  * "Dodaj uchwały" — pick several Mailing templates at once; each becomes a
@@ -28,19 +49,44 @@ const UchwalyPickerModal: React.FC<{
   onClose: () => void;
   /** "Mailing → Szablony", for when no template exists yet. */
   onOpenSzablony?: () => void;
-}> = ({ language, szablony, typy, uzyte, busy, onSubmit, onClose, onOpenSzablony }) => {
+  /** The meeting — fills the subjects' fields in the list. */
+  dane?: ZebranieDane;
+  pola?: MailingPole[];
+  /** The version's statement, plan and resolutions — fills the Zebrania fields of the subjects. */
+  zebranieCtx?: MailingZebranieContext | null;
+}> = ({ language, szablony: wszystkie, uzyte, busy, onSubmit, onClose, onOpenSzablony, dane, pola, zebranieCtx }) => {
   const t = translations[language];
-  const typNazwa = useMemo(() => new Map(typy.map((k) => [k.klucz, k.nazwa])), [typy]);
+  const ctx = useMemo<MailingRenderContext | null>(
+    () =>
+      dane
+        ? {
+            adresNazwa: dane.adresNazwa,
+            dateText: formatPolishDate(new Date()),
+            pola: pola ?? [],
+            values: {},
+            tableFields: [],
+            kalendarz: buildKalendarzContext(dane),
+            zebranie: zebranieCtx ?? null,
+          }
+        : null,
+    [dane, pola, zebranieCtx],
+  );
 
+  /** Only resolution templates, by name — that is the order they are first ticked in. */
+  const szablony = useMemo(
+    () =>
+      wszystkie
+        .filter((s) => s.typ === MAILING_TYP_UCHWALA)
+        .sort((a, b) => a.nazwa.localeCompare(b.nazwa, 'pl')),
+    [wszystkie],
+  );
   const [search, setSearch] = useState('');
-  /** In the order ticked. */
-  const [picked, setPicked] = useState<number[]>([]);
+  /** In the order ticked; every resolution template to start with. */
+  const [picked, setPicked] = useState<number[]>(() => szablony.map((s) => s.id));
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return szablony
-      .filter((s) => !q || `${s.nazwa} ${s.temat}`.toLowerCase().includes(q))
-      .sort((a, b) => a.nazwa.localeCompare(b.nazwa, 'pl'));
+    return szablony.filter((s) => !q || `${s.nazwa} ${s.temat}`.toLowerCase().includes(q));
   }, [szablony, search]);
 
   const toggle = (id: number) =>
@@ -114,8 +160,7 @@ const UchwalyPickerModal: React.FC<{
                           <span className="uch-pick__text">
                             <strong>{s.nazwa}</strong>
                             <span>
-                              <em>{typNazwa.get(s.typ) ?? s.typ}</em>
-                              {s.temat ? readable(s.temat) : ''}
+                              {s.temat ? readable(s.temat, ctx) : ''}
                             </span>
                           </span>
                           <span className="uch-pick__used">

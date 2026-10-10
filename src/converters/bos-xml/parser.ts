@@ -184,28 +184,16 @@ export class BosXmlParser {
 
   /**
    * Filter transactions.
-   * Bank-fee heuristic for BOŚ: DBIT with BOŚ itself as counterparty
-   * (no separate transaction code is available — BkTxCd is always "UNDEFINED").
    */
   filterTransactions(
     transactions: BosTransaction[],
     options: {
       skipNegative?: boolean;
-      skipBankFees?: boolean;
     } = {}
   ): BosTransaction[] {
     return transactions.filter((trn) => {
       if (options.skipNegative && trn.creditDebitIndicator === 'DBIT') {
         return false;
-      }
-
-      if (options.skipBankFees) {
-        if (
-          trn.creditDebitIndicator === 'DBIT' &&
-          /bank\s+ochrony\s+środowiska/i.test(trn.counterpartyName)
-        ) {
-          return false;
-        }
       }
 
       return true;

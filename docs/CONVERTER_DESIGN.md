@@ -566,7 +566,7 @@ What information is missing or uncertain? Can you extract it with more confidenc
 
 ### Warstwa 1: XML Parser (darmowa)
 - Parsuj XML do struktury Transaction[]
-- Filtruj oczywiste przypadki (opłaty bankowe po trn-code: X_06)
+- Opłat bankowych (trn-code: X_06) nie filtruj — to zwykłe wydatki, dopasowywane do kontrahentów
 
 ### Warstwa 2: Smart Extractor (hybrydowa)
 ```typescript

@@ -412,3 +412,9 @@ export const PIT4R_URZEDY_DODATKOWE: Readonly<Record<string, string>> = {
 
 /** Name of an office for PIT-11 / PIT-4R, '' when the code is not in the dictionary. */
 export const nazwaUrzedu = (kod: string): string => PIT11_URZEDY[kod] ?? PIT4R_URZEDY_DODATKOWE[kod] ?? '';
+
+/** The offices as picker options, "1433 URZĄD SKARBOWY WARSZAWA-MOKOTÓW", by code; PIT-4R's list is the wider one. */
+export const urzedyOpcje = (pit4r: boolean): { value: string; label: string }[] =>
+  Object.entries(pit4r ? { ...PIT11_URZEDY, ...PIT4R_URZEDY_DODATKOWE } : PIT11_URZEDY)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([kod, nazwa]) => ({ value: kod, label: `${kod} ${nazwa}` }));

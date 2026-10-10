@@ -149,8 +149,10 @@ export interface AdresIdentyfikacja {
   nazwaPelna: string;
   /** The seat (forms: "Adres siedziby"). */
   siedziba: PodatekAdres;
-  /** The tax office the community files to (CIT-8 poz. 6), e.g. "Naczelnik Urzędu Skarbowego Warszawa-Mokotów". */
+  /** The tax office the community files to (CIT-8 poz. 6), e.g. "Urząd Skarbowy Warszawa-Mokotów". */
   urzadSkarbowy: string;
+  /** That office's 4-digit code of the e-Deklaracje dictionary ("1433"), optional; the PIT-4R's KodUrzedu. */
+  kodUrzedu: string;
   telefon: string;
   email: string;
 }
@@ -502,7 +504,7 @@ export interface KsiegowaniePlik {
   /** Relative to the statements folder, `/`-separated. */
   relPath: string;
   fileName: string;
-  /** A renamed PDF's name as it was found. */
+  /** A renamed file's name as it was found. */
   originalName: string | null;
   fileSize: number;
   /** Last change of the file (ISO) — a conversion older than this is of an older version. */
@@ -532,7 +534,7 @@ export interface ScanFoundFile {
   periodFrom: string | null;
   periodTo: string | null;
   fileMtime: string;
-  /** A PDF's name before the scan renamed it. */
+  /** A file's name before the scan renamed it. */
   originalName?: string | null;
   /** What is wrong with a file pinned as an error. */
   errorMessage?: string | null;
@@ -595,7 +597,7 @@ export interface ScanReport {
   /** Statements of a recognised community that could not be read — pinned as errors. */
   errors: ScanFoundFile[];
   unrecognized: ScanUnrecognized[];
-  /** PDFs pinned under their old name because renaming failed. */
+  /** Files pinned under their old name because renaming failed. */
   renameFailures: { relPath: string; message: string }[];
 }
 
@@ -778,6 +780,16 @@ export interface MailingPole {
    * Nothing to do with `ZgnJednostka`, the city unit a mail is addressed to.
    */
   jednostka: string;
+  /**
+   * The mailing kind (`MailingTypDef.klucz`) this field belongs to, or null for
+   * a field every kind may use. A bound field is offered only in templates of
+   * that kind — the dictionary runs to dozens of fields, and a resolution's
+   * template has no use for a rate letter's positions.
+   *
+   * The key, not the row id, for the reason templates store it: a restore
+   * renumbers rows, and the binding must survive one.
+   */
+  typ: MailingTyp | null;
   createdAt: string;
 }
 
@@ -915,6 +927,39 @@ export interface MailingKalendarzContext {
   adresZebrania: string;
 }
 
+/**
+ * Values a meeting's version hands a letter made in the Zebrania module — what
+ * the "… ze sprawozdania", "… z planu" and "Lista uchwał" fields resolve to.
+ * Built by `buildZebranieContext` in shared/zebrania; already spelled for the
+ * letter, so the editor, the PDF and the sent mail cannot disagree. A part the
+ * version does not have (no statement linked, no plan yet) is empty, and the
+ * field then shows as missing — these fields are never typed by hand.
+ */
+export interface MailingZebranieContext {
+  /** The repair fund's balance at the statement's end ("12 345,60 zł"). */
+  wynikFunduszuRemontowego: string;
+  /** The running-costs result carried forward — advance "A"'s balance; a loss is negative. */
+  saldoZaliczkiA: string;
+  /**
+   * The plan's lines that cover a loss. One ⇒ it is the value; several ⇒ the
+   * letter picks one (its `klucz` is stored among the typed values).
+   */
+  pokrycieStraty: MailingZebranieOpcja[];
+  /** The plan's advances by stretch of the year: one row per stretch with both rates. */
+  zaliczki: { okres: string; zaliczkaA: string; zaliczkaB: string }[];
+  /** The version's resolutions, in order, by their rendered titles. */
+  uchwaly: string[];
+}
+
+/** One line a letter may pick for a field with several candidates. */
+export interface MailingZebranieOpcja {
+  /** What the choice is stored as — the line's name, stable across a regenerated plan. */
+  klucz: string;
+  etykieta: string;
+  /** The amount as the letter prints it. */
+  kwota: string;
+}
+
 /** What a letter is rendered for, beyond its text and the typed values. */
 export interface MailingRecipientSource {
   /** Community the letter is about; null for a letter about none (custom addresses only). */
@@ -937,6 +982,8 @@ export interface MailingExportRequest {
   values: Record<string, string>;
   tableFields?: string[];
   kalendarz?: MailingKalendarzContext | null;
+  /** The meeting version's statement, plan and resolutions — only for a letter made in Zebrania. */
+  zebranie?: MailingZebranieContext | null;
   /** Community the letter is about — substitutes `{{Adres Wspólnoty}}` and picks recipients. */
   adresId: number | null;
   /** Used when `adresId` is null or no longer resolves (a standalone Zebranie). */
@@ -1319,6 +1366,11 @@ export interface ZebranieWersja {
   updatedBy: string;
   /** The financial statement this version presents. */
   sprawozdanie: ZebranieSprawozdanie | null;
+  /**
+   * The statement was unlinked by hand: the tab no longer links one by itself
+   * (see `sprawozdanieDlaZebrania`) until someone links one again.
+   */
+  sprawozdanieOdlaczone: boolean;
   /** The budget plan drafted from it. */
   plan: PlanGospodarczy | null;
 }
@@ -1382,6 +1434,13 @@ export interface SprawozdanieWiersz {
   podsumowanie: boolean;
   /** Printed in bold in vDom — the figures the section ends on. */
   wyroznienie: boolean;
+  /** A row merged for a meeting (`SprawozdanieLaczenie`): the names of the rows it sums, as printed. */
+  polaczone?: string[];
+  /**
+   * A subcategory made for a meeting: 'naglowek' is its heading row (its name and
+   * the sums of its rows), 'pozycja' a row under it. Absent = a row of the section.
+   */
+  podkategoria?: 'naglowek' | 'pozycja';
 }
 
 /** One numbered section of a statement ("1. Fundusz remontowy", "Informacja o kredytach" …). */
@@ -1424,29 +1483,14 @@ export interface SprawozdanieZapisane {
   plikNazwa: string;
   importedAt: string;
   importedBy: string;
-  /** Where the row came from — see `SprawozdanieZrodlo`. */
-  zrodlo: SprawozdanieZrodlo;
   /** Left out of the list; read one by id. */
   dane?: Sprawozdanie;
 }
-
-/**
- * Who put a statement in the library. A file uploaded in Zebrania is the source
- * of truth; the Sprawozdania module only adds what Zebrania does not have, and
- * a Zebrania upload of the same community and period takes such a row over.
- */
-export type SprawozdanieZrodlo = 'zebrania' | 'sprawozdania';
 
 /** What one upload did: how many communities it held, and the library rows they became. */
 export interface SprawozdaniaImportResult {
   plikNazwa: string;
   zapisane: SprawozdanieZapisane[];
-}
-
-/** An upload in the Sprawozdania module: what it added, and what Zebrania already had. */
-export interface SprawozdaniaWlasneImportResult extends SprawozdaniaImportResult {
-  /** Statements of the file left out because Zebrania has that community and period. */
-  pominiete: number;
 }
 
 /** "Pobierz PDF" / "Pobierz Excel" of a library statement, outside any meeting. */
@@ -1464,17 +1508,54 @@ export interface DokumentPobranie {
   pliki: string[];
 }
 
-/** The statement attached to one version of a meeting — a snapshot of the library row. */
+/**
+ * The statement one version of a meeting presents: a link to a library row
+ * (`zebrania_wersje.sprawozdanie_id`). The figures and the file name are read
+ * from the library — the Sprawozdania module is the source of truth, and a
+ * newer print uploaded there shows here at once. The rest is the version's own.
+ */
 export interface ZebranieSprawozdanie {
+  /** The library row's, as read with the version. */
   dane: Sprawozdanie;
   plikNazwa: string;
-  /** The library row it was taken from (informational — the row may be replaced later). */
-  zrodloId: number | null;
+  /** The library row linked. */
+  sprawozdanieId: number;
+  /** When and by whom the statement was linked to the version. */
   dodano: string;
   dodal: string;
   pobrania: DokumentPobranie[];
   /** The introduction as edited for this version; null = the one computed from the figures. */
   wstep: SprawozdanieWstepTekst | null;
+  /** Rows merged under one name for this version — applied over `dane` by `sprawozdanieWersji`. */
+  laczenia: SprawozdanieLaczenie[];
+  /** Rows grouped under a subcategory heading, over the merged rows — applied after `laczenia`. */
+  podkategorie: SprawozdanieLaczenie[];
+}
+
+/**
+ * The two ways a version regroups its statement's rows: merged into one row,
+ * or kept and put under a subcategory heading ("Remonty bieżące").
+ */
+export type SprawozdanieGrupowanie = 'laczenia' | 'podkategorie';
+
+/**
+ * Item rows of one section shown as one (a merge), or under one heading (a
+ * subcategory), under a name given for the meeting
+ * ("Pomieszczenie zsypu" + "Czynsz części wspólnej" → "Najem części wspólnych").
+ * Rows are named, not numbered: a newer print of the statement replaces the
+ * library row in place, and its rows may sit elsewhere.
+ */
+export interface SprawozdanieLaczenie {
+  /** The section's title, as printed. */
+  sekcja: string;
+  /** The rows' names, as printed — two or more, item rows only. */
+  wiersze: string[];
+  nazwa: string;
+}
+
+/** A merge the AI suggests — nothing is stored until somebody accepts it. */
+export interface SprawozdanieLaczeniePropozycja extends SprawozdanieLaczenie {
+  uzasadnienie: string;
 }
 
 /** The words of a statement's introduction, as someone edited them. The headline figures stay computed. */
@@ -1493,23 +1574,27 @@ export type PlanKategoriaKosztu =
   | 'ubezpieczenie'
   | 'pozostale';
 export type PlanKategoriaPrzychodu = 'reklamy' | 'pozytki' | 'inne';
-/** `zaliczkaA` marks the advance-payment income the current rate is read from; `pomin` leaves a row out. */
-export type PlanKategoria = PlanKategoriaKosztu | PlanKategoriaPrzychodu | 'zaliczkaA' | 'pomin';
+/** A fixed line of the form plans had before they copied the statement — read only to convert those plans. */
+export type PlanKategoria = PlanKategoriaKosztu | PlanKategoriaPrzychodu;
 
-/** "A statement row whose name contains `wzorzec` goes to `kategoria`." First match wins. */
-export interface PlanSlownikRegula {
-  id: string;
-  wzorzec: string;
-  kategoria: PlanKategoria;
-}
-
-/** Settings of the Zebrania module, shared by everyone. */
+/**
+ * Settings of the Zebrania module, shared by everyone. (Stored settings may
+ * still carry `slownik` — the dictionary of plan lines, gone since the plan
+ * copies the statement's items; it is ignored.)
+ */
 export interface ZebraniaUstawienia {
-  slownik: PlanSlownikRegula[];
   /** Default number of the resolution adopting the plan; `{rok}` is the plan's year. */
   uchwalaPlanNr: string;
   /** Planned costs are rounded up to this (zł). */
   zaokraglenie: number;
+  /**
+   * The template meeting ("Zebranie-szablon"), named by its community — by NAME,
+   * like the dashboard tables, so it survives a restore that renumbers rows.
+   * Resolved live to that community's newest meeting holding materials (see
+   * `zrodloSzablonu`): every new meeting starts with its notice and resolutions,
+   * and a new plan with its cost rise and own growths. '' = no template.
+   */
+  szablonAdresNazwa: string;
 }
 
 /** One stretch of the year at one advance rate: "I–III at 2,50 zł/m²". */
@@ -1525,14 +1610,28 @@ export interface PlanRemontFR {
   kwota: number;
 }
 
-/** One statement row that fed a plan category — shown so the number can be checked. */
-export interface PlanZrodlo {
-  kategoria: PlanKategoria;
+/**
+ * A position of the plan — a copy of an item of the statement's "Koszty
+ * eksploatacji" (after the meeting version's merges and subcategories), with
+ * the amount planned for it. A position typed in by hand has no printed rows.
+ */
+export interface PlanPozycja {
+  id: string;
+  strona: 'przychod' | 'koszt';
   nazwa: string;
-  /** The amount for a full year (scaled up when the statement covers less). */
+  /** The rows as printed by vDom it stands for — what a regenerate matches by. Empty = typed in by hand. */
+  wiersze: string[];
+  /** The subcategory it sits under, as in the statement; '' = none. */
+  grupa: string;
+  /** Last year's amount for a full year (scaled up when the statement covers less). */
   kwotaRoczna: number;
-  /** True when no dictionary rule matched and the row fell to the default category. */
-  bezReguly: boolean;
+  /** The planned amount — drafted from `kwotaRoczna`, then the user's. */
+  kwota: number;
+  /**
+   * A statement cost's own growth over last year (%), e.g. 0 for a fixed
+   * contract; absent = it shares the plan's index with the other costs.
+   */
+  wzrost?: number;
 }
 
 /**
@@ -1552,11 +1651,15 @@ export interface PlanGospodarczy {
   pozytkiM2: number;
   /* Część I — zaliczka "A" */
   saldoA: number;
+  /**
+   * A positive balance of advance "A" moved over to the repair fund — part I
+   * gives it up ("przeksięgowanie na f. remontowy"), part II takes it in. A
+   * negative balance is always covered by the fund, flag or not.
+   */
+  saldoANaFundusz?: boolean;
   zaliczkaA: PlanOkresZaliczki[];
-  przychody: Record<PlanKategoriaPrzychodu, number>;
-  koszty: Record<PlanKategoriaKosztu, number>;
-  /** Fill "Remonty bieżące" with whatever balances part I — kept on until the user types a value. */
-  remontyDomykaja: boolean;
+  /** Income (besides advance "A") and costs of part I — the statement's items, in its order. */
+  pozycje: PlanPozycja[];
   /* Część II — zaliczka "B" (fundusz remontowy) */
   saldoB: number;
   zaliczkaB: PlanOkresZaliczki[];
@@ -1564,12 +1667,19 @@ export interface PlanGospodarczy {
   kredyt: number;
   remontyFR: PlanRemontFR[];
   /* Provenance */
-  zrodla: PlanZrodlo[];
   wskaznik: number;
   sprawozdanieOkres: { od: string; do: string };
   zmieniono: string;
   zmienil: string;
   pobrania: DokumentPobranie[];
+}
+
+/** The AI's proposal of the advance "A" rate — applied to the plan only when the user says so. */
+export interface PlanZaliczkaAiPropozycja {
+  /** The year's stretches with their rate (zł/m² a month); their months add up to 12. */
+  okresy: PlanOkresZaliczki[];
+  /** Why this rate — a few sentences in Polish, for the manager. */
+  uzasadnienie: string;
 }
 
 /**
@@ -1584,16 +1694,38 @@ export interface PlanWlasny {
   nazwa: string;
   rok: number;
   plan: PlanGospodarczy;
+  /**
+   * The plan's own part of the statement it was drafted from — as a meeting
+   * version keeps it: merges, subcategories, the introduction, downloads. The
+   * statement itself is the library's row of the community and the plan's
+   * period (`plan.sprawozdanieOkres`).
+   */
+  sprawozdanie: PlanSprawozdanieMeta;
   createdAt: string;
   createdBy: string;
   updatedAt: string;
   updatedBy: string;
 }
 
-/** "Pobierz PDF" / "Pobierz Excel" of a plan of the Plany gospodarcze module. */
+/** What a plan of the Plany gospodarcze module keeps of its statement. */
+export interface PlanSprawozdanieMeta {
+  pobrania: DokumentPobranie[];
+  wstep: SprawozdanieWstepTekst | null;
+  laczenia: SprawozdanieLaczenie[];
+  podkategorie: SprawozdanieLaczenie[];
+}
+
+/** Whose statement is regrouped or introduced: a meeting version's, or a Plany gospodarcze plan's. */
+export type SprawozdanieCel = { wersjaId: number } | { planId: number };
+
+/** "Pobierz PDF" / "Pobierz Excel" of a plan of the Plany gospodarcze module, or of its statement. */
 export interface PlanWlasnyExportRequest {
   planId: number;
   format: ZebranieDokumentFormat;
+  /** Absent = the plan. */
+  dokument?: 'plan' | 'sprawozdanie';
+  /** The statement's PDF: open with the introduction (default yes). */
+  wstep?: boolean;
 }
 
 /* ============================ Podatki — nieruchomości ============================ */
@@ -2802,20 +2934,23 @@ export const IPC_CHANNELS = {
   UPDATE_ZEBRANIE_WERSJA: 'zebrania:update-wersja',
   SET_ZEBRANIE_DOKUMENT_GOTOWE: 'zebrania:set-dokument-gotowe',
   SET_ZEBRANIE_WERSJA_NAZWA: 'zebrania:set-wersja-nazwa',
-  ZEBRANIA_SPRAWOZDANIA_IMPORT: 'zebrania:sprawozdania-import',
   ZEBRANIA_SPRAWOZDANIA_LISTA: 'zebrania:sprawozdania-lista',
   ZEBRANIA_SPRAWOZDANIE_GET: 'zebrania:sprawozdanie-get',
   ZEBRANIE_WERSJA_ATTACH_SPRAWOZDANIE: 'zebrania:wersja-attach-sprawozdanie',
   ZEBRANIE_WERSJA_REMOVE_SPRAWOZDANIE: 'zebrania:wersja-remove-sprawozdanie',
   ZEBRANIE_WERSJA_SET_SPRAWOZDANIE_WSTEP: 'zebrania:wersja-set-sprawozdanie-wstep',
+  ZEBRANIE_WERSJA_SET_SPRAWOZDANIE_LACZENIA: 'zebrania:wersja-set-sprawozdanie-laczenia',
+  ZEBRANIE_SPRAWOZDANIE_LACZENIA_AI: 'zebrania:sprawozdanie-laczenia-ai',
+  ZEBRANIE_SPRAWOZDANIE_WSTEP_AI: 'zebrania:sprawozdanie-wstep-ai',
+  ZEBRANIA_PLAN_ZALICZKA_AI: 'zebrania:plan-zaliczka-ai',
   ZEBRANIE_WERSJA_SET_PLAN: 'zebrania:wersja-set-plan',
   ZEBRANIA_WSPOLNOTY_GET: 'zebrania:wspolnoty-get',
   ZEBRANIA_WSPOLNOTA_SET: 'zebrania:wspolnota-set',
   ZEBRANIA_USTAWIENIA_GET: 'zebrania:ustawienia-get',
   ZEBRANIA_USTAWIENIA_SET: 'zebrania:ustawienia-set',
   ZEBRANIA_DOKUMENT_EXPORT: 'zebrania:dokument-export',
-  SPRAWOZDANIA_IMPORT_WLASNE: 'sprawozdania:import-wlasne',
-  SPRAWOZDANIE_DELETE_WLASNE: 'sprawozdania:delete-wlasne',
+  SPRAWOZDANIA_IMPORT: 'sprawozdania:import',
+  SPRAWOZDANIE_DELETE: 'sprawozdania:delete',
   SPRAWOZDANIE_EXPORT: 'sprawozdania:export',
   ZEBRANIA_PAKIET_EXPORT: 'zebrania:pakiet-export',
   PLANY_WLASNE_GET: 'plany:get',

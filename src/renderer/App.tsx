@@ -37,7 +37,11 @@ import Logo from './components/Logo';
 import SplashScreen from './components/SplashScreen';
 import SidebarWelcome from './components/SidebarWelcome';
 import NotificationBell from './components/NotificationBell';
-import SidebarOrderModal, { SIDEBAR_DIVIDER } from './components/SidebarOrderModal';
+import SidebarOrderModal, {
+  SIDEBAR_DIVIDER,
+  isHiddenSidebarId,
+  sidebarIdOf,
+} from './components/SidebarOrderModal';
 import Footer from './components/Footer';
 import Icon from './components/Icon';
 import UpdateNotification from './components/UpdateNotification';
@@ -133,15 +137,22 @@ type MenuView = Exclude<(typeof DEFAULT_SIDEBAR_ORDER)[number], typeof SIDEBAR_D
  * Sprawozdania next to Zebrania, not under Ustawienia — or at the end when
  * that one is not in the menu either.
  */
-function resolveSidebarOrder(saved: string[] | null): (MenuView | typeof SIDEBAR_DIVIDER)[] {
+function resolveSidebarOrder(saved: string[] | null): {
+  order: (MenuView | typeof SIDEBAR_DIVIDER)[];
+  hidden: Set<MenuView>;
+} {
   const known = new Set<string>(DEFAULT_SIDEBAR_ORDER);
   const seen = new Set<string>();
   const order: (MenuView | typeof SIDEBAR_DIVIDER)[] = [];
-  for (const id of saved ?? DEFAULT_SIDEBAR_ORDER) {
+  const hidden = new Set<MenuView>();
+  for (const raw of saved ?? DEFAULT_SIDEBAR_ORDER) {
+    const id = sidebarIdOf(raw);
     if (id === SIDEBAR_DIVIDER) order.push(SIDEBAR_DIVIDER);
     else if (known.has(id) && !seen.has(id)) {
       seen.add(id);
       order.push(id as MenuView);
+      // Ustawienia never hides: it is the only way back to this setting.
+      if (isHiddenSidebarId(raw) && id !== 'settings') hidden.add(id as MenuView);
     }
   }
   let previous: MenuView | null = null;
@@ -155,7 +166,7 @@ function resolveSidebarOrder(saved: string[] | null): (MenuView | typeof SIDEBAR
     }
     previous = id;
   }
-  return order;
+  return { order, hidden };
 }
 
 /** What the sidebar draws: no separator first, last, or next to another one. */
@@ -852,9 +863,10 @@ const App: React.FC = () => {
       onClick: () => setCurrentView('settings'),
     },
   };
-  const sidebarEntries = resolveSidebarOrder(sidebarOrder).map((id) =>
-    id === SIDEBAR_DIVIDER ? SIDEBAR_DIVIDER : navConfig[id],
-  );
+  const sidebarMenu = resolveSidebarOrder(sidebarOrder);
+  const sidebarEntries = sidebarMenu.order
+    .filter((id) => id === SIDEBAR_DIVIDER || !sidebarMenu.hidden.has(id))
+    .map((id) => (id === SIDEBAR_DIVIDER ? SIDEBAR_DIVIDER : navConfig[id]));
 
   const [tileOrderOpen, setTileOrderOpen] = useState(false);
   const [tileOrderSaving, setTileOrderSaving] = useState(false);
@@ -1232,9 +1244,15 @@ const App: React.FC = () => {
               openSpotkanie(s.id);
             }}
             onOpenSzablony={() => navigate('mailing', 'templates')}
+            onOpenSprawozdanie={(id) =>
+              // Straight onto the statement's screen; the view names it once loaded.
+              navigate('sprawozdania', undefined, id != null ? { id: String(id), label: '' } : undefined)
+            }
           />
         )}
-        {currentView === 'sprawozdania' && <Sprawozdania language={language} />}
+        {currentView === 'sprawozdania' && (
+          <Sprawozdania language={language} onOpenZebranie={(id) => openZebranie(id, 'sprawozdania')} />
+        )}
         {currentView === 'plany' && (
           <PlanyGospodarcze language={language} onOpenZebranie={(id) => openZebranie(id, 'plan')} />
         )}
@@ -1305,12 +1323,19 @@ const App: React.FC = () => {
       </div>
       {sidebarOrderOpen && (
         <SidebarOrderModal
-          items={sidebarEntries.map((entry) =>
-            entry === SIDEBAR_DIVIDER
+          items={sidebarMenu.order.map((id) =>
+            id === SIDEBAR_DIVIDER
               ? { id: SIDEBAR_DIVIDER, label: '', icon: 'align-justify' as const }
-              : { id: entry.id, label: entry.label, icon: entry.icon },
+              : {
+                  id: navConfig[id].id,
+                  label: navConfig[id].label,
+                  icon: navConfig[id].icon,
+                  hidden: sidebarMenu.hidden.has(id),
+                },
           )}
           defaultOrder={[...DEFAULT_SIDEBAR_ORDER]}
+          allowHide
+          unhideableIds={['settings']}
           language={language}
           saving={sidebarOrderSaving}
           onSave={(order) => void saveSidebarOrder(order)}

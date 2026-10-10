@@ -1,17 +1,20 @@
-import React, { useEffect, useState } from 'react';
-import { MailingPole, MailingPoleTyp } from '../../shared/types';
+import React, { useEffect, useMemo, useState } from 'react';
+import { MailingPole, MailingPoleTyp, MailingTypDef } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
 import { FormField, FormSection, RequiredNote } from '../components/FormSection';
 import Icon from '../components/Icon';
 import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
+import SearchableSelect, { SearchableOption } from '../components/SearchableSelect';
+import Tip from '../components/Tip';
 import {
   BUILTIN_MAILING_FIELDS,
   fieldPlaceholder,
   formatFieldValue,
   kalendarzFieldOf,
   normalizeFieldName,
+  zebranieFieldOf,
 } from '../../shared/mailing-template';
 
 interface Props {
@@ -24,6 +27,8 @@ interface FieldFormData {
   tekst: string;
   jednostka: string;
   typWartosci: MailingPoleTyp;
+  /** Mailing kind the field is offered in; null = every kind. */
+  typ: string | null;
 }
 
 /** The value kinds, in the order the switch offers them. */
@@ -43,6 +48,8 @@ interface FieldFormModalProps {
   language: Language;
   /** Field being edited, or null when adding a new one. */
   editing: MailingPole | null;
+  /** Mailing kinds a field can be linked to. */
+  typy: MailingTypDef[];
   isSaving: boolean;
   /** Submit-time error surfaced from the parent (name clash, API failure). */
   error: string | null;
@@ -58,6 +65,7 @@ interface FieldFormModalProps {
 const FieldFormModal: React.FC<FieldFormModalProps> = ({
   language,
   editing,
+  typy,
   isSaving,
   error,
   onSubmit,
@@ -65,6 +73,7 @@ const FieldFormModal: React.FC<FieldFormModalProps> = ({
 }) => {
   const t = translations[language];
   const [nazwa, setNazwa] = useState(editing?.nazwa || '');
+  const [typ, setTyp] = useState<string>(editing?.typ ?? '');
   const [tekst, setTekst] = useState(editing?.tekst || '');
   const [jednostka, setJednostka] = useState(editing?.jednostka || '');
   const [typWartosci, setTypWartosci] = useState<MailingPoleTyp>(
@@ -97,8 +106,23 @@ const FieldFormModal: React.FC<FieldFormModalProps> = ({
     }
     // The unit is dropped rather than kept hidden: a field switched to a date
     // must not carry a "zł/m²" that reappears if it is switched back later.
-    onSubmit({ nazwa: n, tekst, jednostka: usesUnit ? jednostka.trim() : '', typWartosci });
+    onSubmit({ nazwa: n, tekst, jednostka: usesUnit ? jednostka.trim() : '', typWartosci, typ: typ || null });
   };
+
+  /**
+   * "Every kind" first, then the kinds. A field still linked to a kind that is
+   * gone keeps an entry of its own, so opening the form does not silently unlink it.
+   */
+  const typOptions = useMemo<SearchableOption[]>(() => {
+    const options: SearchableOption[] = [
+      { value: '', label: t.mailingFieldTypAny },
+      ...typy.map((d) => ({ value: d.klucz, label: d.nazwa, hint: d.opis || undefined })),
+    ];
+    if (typ && !typy.some((d) => d.klucz === typ)) {
+      options.push({ value: typ, label: `${typ} (${t.mailingFieldTypUnknown})` });
+    }
+    return options;
+  }, [typy, typ, t]);
 
   const submitOnEnter = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -176,6 +200,22 @@ const FieldFormModal: React.FC<FieldFormModalProps> = ({
             )}
           </FormSection>
 
+          <FormSection icon="mail" title={t.mailingFieldSectionTyp} description={t.mailingFieldSectionTypDesc}>
+            <FormField label={t.mailingFieldTyp} hint={t.mailingFieldTypHint}>
+              <SearchableSelect
+                value={typ}
+                options={typOptions}
+                onChange={setTyp}
+                placeholder={t.mailingFieldTypAny}
+                searchPlaceholder={t.mailingInsertFieldSearch}
+                emptyText={t.mailingInsertFieldNoMatch}
+                ariaLabel={t.mailingFieldTyp}
+                overlay
+                style={{ maxWidth: '360px' }}
+              />
+            </FormField>
+          </FormSection>
+
           {(nazwa.trim() || tekst.trim() || (usesUnit && jednostka.trim())) && (
             <FormSection icon="eye" title={t.mailingFieldPreview}>
               {/* The two halves separately — this is where a user meets them, and
@@ -216,6 +256,7 @@ const MailingPola: React.FC<Props> = ({ language }) => {
   const t = translations[language];
   const notify = useNotify();
   const [pola, setPola] = useState<MailingPole[]>([]);
+  const [typy, setTypy] = useState<MailingTypDef[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -228,7 +269,12 @@ const MailingPola: React.FC<Props> = ({ language }) => {
 
   const load = async () => {
     try {
-      setPola(await window.electronAPI.mailingGetPola());
+      const [loadedPola, loadedTypy] = await Promise.all([
+        window.electronAPI.mailingGetPola(),
+        window.electronAPI.mailingGetTypy(),
+      ]);
+      setPola(loadedPola);
+      setTypy(loadedTypy);
     } catch (err) {
       notify.error(t.mailingLoadError);
     } finally {
@@ -260,6 +306,7 @@ const MailingPola: React.FC<Props> = ({ language }) => {
           data.tekst,
           data.jednostka,
           data.typWartosci,
+          data.typ,
         );
       } else {
         await window.electronAPI.mailingAddPole(
@@ -267,6 +314,7 @@ const MailingPola: React.FC<Props> = ({ language }) => {
           data.tekst,
           data.jednostka,
           data.typWartosci,
+          data.typ,
         );
       }
       setFormState(null);
@@ -288,6 +336,10 @@ const MailingPola: React.FC<Props> = ({ language }) => {
       notify.error(err instanceof Error ? err.message : 'Unknown error');
     }
   };
+
+  /** A kind's name by its key — the key itself, marked, for a kind deleted since. */
+  const typNazwa = (klucz: string) =>
+    typy.find((d) => d.klucz === klucz)?.nazwa ?? `${klucz} (${t.mailingFieldTypUnknown})`;
 
   if (isLoading) {
     return (
@@ -347,6 +399,14 @@ const MailingPola: React.FC<Props> = ({ language }) => {
                       {p.typWartosci !== 'tekst' && (
                         <span className="form-section__badge is-neutral">{valueTypeLabel(p.typWartosci, t)}</span>
                       )}
+                      {p.typ && (
+                        <Tip
+                          className="form-section__badge is-accent"
+                          content={t.mailingFieldTypBadgeTip.replace('{name}', typNazwa(p.typ))}
+                        >
+                          {typNazwa(p.typ)}
+                        </Tip>
+                      )}
                     </span>
                   </td>
                   <td>
@@ -400,6 +460,10 @@ const MailingPola: React.FC<Props> = ({ language }) => {
           <Icon name="calendar" size={16} />
           <div className="callout__body">{t.mveBuiltinCalendarNote}</div>
         </div>
+        <div className="callout callout--muted">
+          <Icon name="file-check" size={16} />
+          <div className="callout__body">{t.mveBuiltinZebraniaNote}</div>
+        </div>
         <table className="form-table">
           <thead>
             <tr>
@@ -422,6 +486,11 @@ const MailingPola: React.FC<Props> = ({ language }) => {
                       {valueTypeLabel(kalendarzFieldOf(f.nazwa)!.typWartosci, t)}
                     </div>
                   )}
+                  {zebranieFieldOf(f.nazwa) && (
+                    <div className="form-table__sub">
+                      <Icon name="file-check" size={12} /> {t.mveBuiltinZebraniaBadge}
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}
@@ -433,6 +502,7 @@ const MailingPola: React.FC<Props> = ({ language }) => {
         <FieldFormModal
           language={language}
           editing={formState.editing}
+          typy={typy}
           isSaving={isSaving}
           error={error}
           onSubmit={handleFormSubmit}

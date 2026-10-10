@@ -57,11 +57,10 @@ export class PocztowyConverter extends BaseConverter<PocztowyTransaction> {
 
   protected doFilter(
     transactions: PocztowyTransaction[],
-    opts: { skipNegative: boolean; skipBankFees: boolean }
+    opts: { skipNegative: boolean }
   ): PocztowyTransaction[] {
     return this.parser.filterTransactions(transactions, {
       skipNegative: opts.skipNegative,
-      skipBankFees: opts.skipBankFees,
     });
   }
 

@@ -20,7 +20,6 @@ import ExcelJS from 'exceljs';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import {
   PlanGospodarczy,
-  PlanKategoriaKosztu,
   Sprawozdanie,
   SprawozdanieSekcja,
   SprawozdanieWstepTekst,
@@ -35,7 +34,7 @@ import {
   MAIL_PAGE_COLOR,
   MAIL_TEXT_COLOR,
 } from '../../shared/mailing-logo';
-import { PLAN_KATEGORIA_NAZWA, nazwaNieruchomosci, okresyLabels, planSumy } from '../../shared/plan-gospodarczy';
+import { naM2, nazwaNieruchomosci, okresyLabels, planSumy, PlanSumy, wierszePlanu } from '../../shared/plan-gospodarczy';
 import {
   bezZerowych,
   formatData,
@@ -172,6 +171,7 @@ ${INTER_FONT_FACES}
   .doc td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .doc td.lp { width: 34px; color: ${MUTED}; }
   .doc td.sub { padding-left: 22px; color: ${MUTED}; }
+  .doc td.sub2 { padding-left: 40px; color: ${MUTED}; }
   .doc tbody tr:nth-child(even) td { background: #fafbfc; }
   .doc tr.sum td { font-weight: 700; background: #f2f4f5; border-top: 1px solid #9aa5ad; }
   .doc tr.strong td { font-weight: 600; }
@@ -184,6 +184,7 @@ ${INTER_FONT_FACES}
   .sign .line { border-top: 1px dotted #7b858c; margin-top: 38px; padding-top: 4px; }
   .balance { margin-top: 6px; padding: 6px 10px; border-radius: 4px; background: #fff4e5;
              color: #7a4b00; font-size: 9pt; }
+  .balance.ok { background: #e8f5ec; color: #1e6b3a; }
 
   /* The statement's introduction: headline figures, a summary, the points to note. */
   .intro { margin: 0 0 2mm; padding: 4mm 4.5mm; border: 1px solid #e3e7ea; border-radius: 6px;
@@ -272,7 +273,14 @@ function sectionTable(sec: SprawozdanieSekcja): string {
   const cells = (kwoty: (number | null)[]) =>
     kwoty.map((k) => `<td class="num${k != null && k < 0 ? ' neg' : ''}">${num(k)}</td>`).join('');
   const rows = items.length
-    ? items.map((w) => `<tr><td class="l">${esc(w.nazwa)}</td>${cells(w.kwoty)}</tr>`).join('')
+    ? items
+        .map((w) =>
+          // A subcategory as the plan prints its "w tym" groups: a bold heading with the sums, its rows indented.
+          w.podkategoria === 'naglowek'
+            ? `<tr class="group"><td class="l">${esc(w.nazwa)}</td>${cells(w.kwoty)}</tr>`
+            : `<tr><td class="l${w.podkategoria === 'pozycja' ? ' sub' : ''}">${esc(w.nazwa)}</td>${cells(w.kwoty)}</tr>`,
+        )
+        .join('')
     : `<tr><td class="l empty" colspan="${sec.kolumny.length + 1}">Brak pozycji w tym okresie</td></tr>`;
   const sumRows = sums
     .map((w, i) => `<tr class="${i === 0 ? 'sum' : w.wyroznienie ? 'strong' : ''}"><td class="l">${esc(w.nazwa)}</td>${cells(w.kwoty)}</tr>`)
@@ -300,8 +308,10 @@ function lead(text: string): string {
 }
 
 function wstepHtml(spr: Sprawozdanie, tekst: SprawozdanieWstepTekst | null): string {
-  // The figures are always the statement's; the words may have been edited.
-  const w = { ...sprawozdanieWstep(spr), ...(tekst ?? {}) };
+  // The figures are always the statement's; the paragraph is only what was
+  // written for the version (empty by default), the notes computed until edited.
+  const computed = sprawozdanieWstep(spr);
+  const w = { kluczowe: computed.kluczowe, akapit: tekst?.akapit ?? '', uwagi: tekst ? tekst.uwagi : computed.uwagi };
   if (!w.akapit && w.kluczowe.length === 0 && w.uwagi.length === 0) return '';
   const kpis = w.kluczowe
     .map((k) => `<div class="kpi ${k.ton}"><span>${esc(k.etykieta)}</span><b>${zl(k.kwota)}</b></div>`)
@@ -359,14 +369,39 @@ function zaliczkaRows(lp: string, label: string, okresy: PlanGospodarczy['zalicz
   );
 }
 
+/** Part I's line 4: the fund covering a loss, or a positive balance moved over to it. */
+function przeksiegowanieLabel(s: PlanSumy): string {
+  return s.saldoANaFundusz > 0
+    ? 'Dyspozycje dot. salda — przeksięgowanie na fundusz remontowy'
+    : 'Dyspozycje dot. salda — przeksięgowanie z funduszu remontowego';
+}
+
 export function planHtml(plan: PlanGospodarczy, ctx: DokumentKontekst): string {
   const s = planSumy(plan);
   const stan = formatData(plan.stanNaDzien);
   const prevYear = (plan.stanNaDzien || '').slice(0, 4) || String(plan.rok - 1);
   const row = (lp: string, label: string, m2: string, kwota: number | null, cls = '') =>
-    `<tr class="${cls}"><td class="lp">${lp}</td><td class="l${cls === 'subrow' ? ' sub' : ''}">${esc(label)}</td>` +
+    `<tr class="${cls}"><td class="lp">${lp}</td><td class="l${/\bsubrow2\b/.test(cls) ? ' sub2' : /\bsubrow\b/.test(cls) ? ' sub' : ''}">${esc(label)}</td>` +
     `<td class="num">${m2}</td><td class="num${kwota != null && kwota < 0 ? ' neg' : ''}">${kwota == null ? '' : num(kwota)}</td></tr>`;
-  const m2 = (k: PlanKategoriaKosztu) => `${num(s.kosztM2[k])} zł`;
+  const m2 = (kwota: number) => `${num(naM2(plan, kwota))} zł`;
+  // Income items under line 3, one level in; a subcategory's items one more.
+  const przychody = wierszePlanu(plan, 'przychod')
+    .map((w) =>
+      w.typ === 'grupa'
+        ? row('', w.nazwa, '', w.kwota, 'subrow group')
+        : row('', w.pozycja.nazwa || '—', '', w.pozycja.kwota, w.wGrupie ? 'subrow2' : 'subrow'),
+    )
+    .join('');
+  // Cost items numbered as the statement lists them; a subcategory is one number, its items under it.
+  let lp = 0;
+  const koszty = wierszePlanu(plan, 'koszt')
+    .map((w) => {
+      if (w.typ === 'grupa') return row(`${++lp}.`, w.nazwa, m2(w.kwota), w.kwota, 'group');
+      const z = w.pozycja;
+      return w.wGrupie ? row('', z.nazwa || '—', m2(z.kwota), z.kwota, 'subrow') : row(`${++lp}.`, z.nazwa || '—', m2(z.kwota), z.kwota);
+    })
+    .join('');
+  const razemLp = Array.from({ length: lp }, (_, i) => i + 1).join('+');
 
   const czescI = `
 <h2><span>Część I — wpływy z zaliczki „A” na koszty zarządu nieruchomością wspólną</span></h2>
@@ -374,35 +409,29 @@ export function planHtml(plan: PlanGospodarczy, ctx: DokumentKontekst): string {
 ${row('1.', `Saldo zaliczki „A” na ${stan}`, '', plan.saldoA)}
 ${zaliczkaRows('2.', 'Zaliczka „A”:', plan.zaliczkaA, s.zaliczkaA, plan.rok)}
 ${row('3.', 'Przychód z nieruchomości wspólnej, w tym:', '', s.przychodyRazem, 'group')}
-${row('', 'a) Reklamy', '', plan.przychody.reklamy, 'subrow')}
-${row('', 'b) Pożytki z wynajmu pow. wspólnej', '', plan.przychody.pozytki, 'subrow')}
-${row('', 'c) Inne', '', plan.przychody.inne, 'subrow')}
-${row('4.', 'Dyspozycje dot. salda — przeksięgowanie z funduszu remontowego', '', s.przeksiegowanie)}
+${przychody}
+${row('4.', przeksiegowanieLabel(s), '', s.przeksiegowanie)}
 ${row('5.', 'RAZEM: 1+2+3+4', '', s.wplywyA, 'sum')}
 </tbody></table>
 
 <h3>Koszty</h3>
 <table><thead><tr><th class="l">Lp.</th><th class="l">Rodzaj kosztów</th><th>Koszt utrzymania 1 m² / mies.</th><th>Planowane koszty na ${plan.rok} r.</th></tr></thead><tbody>
-${row('1.', PLAN_KATEGORIA_NAZWA.remonty, m2('remonty'), plan.koszty.remonty)}
-${row('2.', PLAN_KATEGORIA_NAZWA.energia, m2('energia'), plan.koszty.energia)}
-${row('3.', PLAN_KATEGORIA_NAZWA.porzadek, m2('porzadek'), plan.koszty.porzadek)}
-${row('4.', PLAN_KATEGORIA_NAZWA.zarzadzanie, m2('zarzadzanie'), plan.koszty.zarzadzanie)}
-${row('5.', 'Inne koszty, w tym:', '', plan.koszty.zarzad + plan.koszty.ubezpieczenie + plan.koszty.pozostale, 'group')}
-${row('', `a) ${PLAN_KATEGORIA_NAZWA.zarzad}`, m2('zarzad'), plan.koszty.zarzad, 'subrow')}
-${row('', `b) ${PLAN_KATEGORIA_NAZWA.ubezpieczenie}`, m2('ubezpieczenie'), plan.koszty.ubezpieczenie, 'subrow')}
-${row('', `c) ${PLAN_KATEGORIA_NAZWA.pozostale}`, m2('pozostale'), plan.koszty.pozostale, 'subrow')}
-${row('6.', 'RAZEM: 1+2+3+4+5', `${num(plan.powierzchnia > 0 ? s.kosztyA / 12 / plan.powierzchnia : 0)} zł`, s.kosztyA, 'sum')}
+${koszty}
+${row(lp > 0 ? `${lp + 1}.` : '', lp > 1 && lp <= 12 ? `RAZEM: ${razemLp}` : 'RAZEM', m2(s.kosztyA), s.kosztyA, 'sum')}
 </tbody></table>
-${Math.abs(s.roznicaA) >= 0.01 ? `<div class="balance">Wpływy i koszty części I różnią się o ${num(s.roznicaA)} zł.</div>` : ''}`;
+${Math.abs(s.roznicaA) >= 0.01 ? `<div class="balance${s.roznicaA > 0 ? ' ok' : ''}">${s.roznicaA > 0 ? `Nadwyżka części I: wpływy przewyższają koszty o ${num(s.roznicaA)} zł.` : `Niedobór części I: koszty przewyższają wpływy o ${num(-s.roznicaA)} zł.`}</div>` : ''}`;
 
   const remonty = plan.remontyFR.filter((r) => r.opis.trim() || r.kwota);
+  // A positive balance moved over from part I is the fund's own inflow line.
+  const naFundusz = s.saldoANaFundusz > 0;
   const czescII = `
 <h2><span>Część II — wpływy z zaliczki „B” na fundusz remontowy</span></h2>
 <table><thead><tr><th class="l">Lp.</th><th class="l">Rodzaj przychodów</th><th>W przeliczeniu na 1 m²</th><th>Planowane wpływy</th></tr></thead><tbody>
 ${row('1.', `Saldo zaliczki „B” na ${stan}`, '', plan.saldoB)}
 ${zaliczkaRows('2.', 'Zaliczka „B”:', plan.zaliczkaB, s.zaliczkaB, plan.rok)}
-${row('3.', 'Inne wpływy', '', plan.inneWplywyB)}
-${row('4.', 'RAZEM: 1+2+3', '', s.wplywyB, 'sum')}
+${naFundusz ? row('3.', `Saldo zaliczki „A” za ${prevYear} r. — przeksięgowanie nadwyżki`, '', s.saldoANaFundusz) : ''}
+${row(naFundusz ? '4.' : '3.', 'Inne wpływy', '', plan.inneWplywyB)}
+${row(naFundusz ? '5.' : '4.', naFundusz ? 'RAZEM: 1+2+3+4' : 'RAZEM: 1+2+3', '', s.wplywyB, 'sum')}
 </tbody></table>
 
 <h3>Koszty pokrywane z funduszu remontowego</h3>
@@ -635,7 +664,13 @@ export async function sprawozdanieXlsx(pelne: Sprawozdanie, adres: string, outPa
       w.kwoty.forEach((k, i) => setNumber(row.getCell(first + i), k));
       return row;
     };
-    items.forEach((w, i) => itemStyle(line(w), COLS, i % 2 === 1));
+    items.forEach((w, i) => {
+      const row = line(w);
+      itemStyle(row, COLS, i % 2 === 1);
+      // A subcategory: a bold heading with the sums, its rows indented under it.
+      if (w.podkategoria === 'naglowek') row.eachCell((cell) => (cell.font = { ...(cell.font ?? {}), bold: true }));
+      if (w.podkategoria === 'pozycja') row.getCell(1).alignment = { ...(row.getCell(1).alignment ?? {}), indent: 2 };
+    });
     sec.wiersze
       .filter((w) => w.podsumowanie)
       .forEach((w, i) => {
@@ -702,9 +737,9 @@ export async function planXlsx(plan: PlanGospodarczy, ctx: DokumentKontekst, out
   setNumber(pozRow.getCell(4), plan.pozytkiM2);
   for (const r of [miastoRow, fizRow, pozRow]) itemStyle(r, COLS, false);
 
-  const line = (lp: string, label: string, value: number | ExcelJS.CellFormulaValue | null, m2?: number | ExcelJS.CellFormulaValue | null, sub = false) => {
+  const line = (lp: string, label: string, value: number | ExcelJS.CellFormulaValue | null, m2?: number | ExcelJS.CellFormulaValue | null, sub: boolean | number = false) => {
     const row = ws.addRow([lp, label]);
-    if (sub) row.getCell(2).alignment = { indent: 2 };
+    if (sub) row.getCell(2).alignment = { indent: sub === true ? 2 : sub };
     if (m2 !== undefined && m2 !== null) {
       row.getCell(3).value = m2;
       row.getCell(3).numFmt = NUM_FMT;
@@ -720,6 +755,46 @@ export async function planXlsx(plan: PlanGospodarczy, ctx: DokumentKontekst, out
     return row;
   };
   const f = (formula: string, result: number): ExcelJS.CellFormulaValue => ({ formula, result });
+  const perM2 = (r: ExcelJS.Row, result: number) => {
+    r.getCell(3).value = f(`IF(${AREA}>0,D${r.number}/12/${AREA},0)`, result);
+    r.getCell(3).numFmt = NUM_FMT;
+  };
+  /**
+   * One side's positions: a subcategory is a bold heading summing its items,
+   * indented one level deeper. Returns the rows that add up to the side's total.
+   */
+  const pozycjeRows = (strona: 'przychod' | 'koszt', depth: number, numbered: boolean): number[] => {
+    const top: number[] = [];
+    let heading: { row: ExcelJS.Row; kwota: number; items: number[] } | null = null;
+    let lp = 0;
+    const closeHeading = () => {
+      if (!heading) return;
+      const { row, kwota, items } = heading;
+      row.getCell(4).value = f(items.length ? `SUM(D${items[0]}:D${items[items.length - 1]})` : '0', kwota);
+      row.getCell(4).numFmt = NUM_FMT;
+      heading = null;
+    };
+    for (const w of wierszePlanu(plan, strona)) {
+      if (w.typ === 'grupa') {
+        closeHeading();
+        const r = line(numbered ? `${++lp}.` : '', w.nazwa, null, null, depth);
+        r.font = { bold: true };
+        if (strona === 'koszt') perM2(r, naM2(plan, w.kwota));
+        heading = { row: r, kwota: w.kwota, items: [] };
+        top.push(r.number);
+        continue;
+      }
+      if (!w.wGrupie) closeHeading();
+      const z = w.pozycja;
+      const r = line(w.wGrupie || !numbered ? '' : `${++lp}.`, z.nazwa || '—', z.kwota, null, w.wGrupie ? depth + 2 : depth);
+      if (strona === 'koszt') perM2(r, naM2(plan, z.kwota));
+      if (w.wGrupie && heading) (heading as { items: number[] }).items.push(r.number);
+      else top.push(r.number);
+    }
+    closeHeading();
+    return top;
+  };
+  const sumOf = (rows: number[]) => (rows.length ? rows.map((r) => `D${r}`).join('+') : '0');
 
   const zaliczkaBlock = (lp: string, label: string, okresy: PlanGospodarczy['zaliczkaA'], kwoty: number[]) => {
     line(lp, label, null).font = { bold: true };
@@ -738,13 +813,12 @@ export async function planXlsx(plan: PlanGospodarczy, ctx: DokumentKontekst, out
   const rSaldoA = line('1.', `Saldo zaliczki „A” na ${formatData(plan.stanNaDzien)}`, plan.saldoA).number;
   const zaRows = zaliczkaBlock('2.', 'Zaliczka „A”:', plan.zaliczkaA, s.zaliczkaA);
   const r3 = line('3.', 'Przychód z nieruchomości wspólnej, w tym:', null);
-  const r3a = line('', 'a) Reklamy', plan.przychody.reklamy, undefined, true).number;
-  line('', 'b) Pożytki z wynajmu pow. wspólnej', plan.przychody.pozytki, undefined, true);
-  const r3c = line('', 'c) Inne', plan.przychody.inne, undefined, true).number;
-  r3.getCell(4).value = f(`SUM(D${r3a}:D${r3c})`, s.przychodyRazem);
+  r3.getCell(4).value = f(sumOf(pozycjeRows('przychod', 2, false)), s.przychodyRazem);
   r3.getCell(4).numFmt = NUM_FMT;
   r3.font = { bold: true };
-  const r4 = line('4.', 'Dyspozycje dot. salda — przeksięgowanie z funduszu remontowego', f(`MAX(0,-D${rSaldoA})`, s.przeksiegowanie)).number;
+  // A loss is covered by the fund; a positive balance moved over to it leaves part I as a minus.
+  const naFundusz = s.saldoANaFundusz > 0;
+  const r4 = line('4.', przeksiegowanieLabel(s), f(naFundusz ? `-D${rSaldoA}` : `MAX(0,-D${rSaldoA})`, s.przeksiegowanie)).number;
   const razemA = line(
     '5.',
     'RAZEM: 1+2+3+4',
@@ -754,29 +828,9 @@ export async function planXlsx(plan: PlanGospodarczy, ctx: DokumentKontekst, out
 
   ws.addRow([]);
   headerRow(ws, ['Lp.', 'Rodzaj kosztów', 'Koszt utrzymania 1 m² / mies.', `Planowane koszty na ${plan.rok} r.`]);
-  const costRow = (lp: string, k: PlanKategoriaKosztu, label: string, sub = false) => {
-    const r = line(lp, label, plan.koszty[k], null, sub);
-    r.getCell(3).value = f(`IF(${AREA}>0,D${r.number}/12/${AREA},0)`, s.kosztM2[k]);
-    r.getCell(3).numFmt = NUM_FMT;
-    return r.number;
-  };
-  const c1 = costRow('1.', 'remonty', PLAN_KATEGORIA_NAZWA.remonty);
-  costRow('2.', 'energia', PLAN_KATEGORIA_NAZWA.energia);
-  costRow('3.', 'porzadek', PLAN_KATEGORIA_NAZWA.porzadek);
-  const c4 = costRow('4.', 'zarzadzanie', PLAN_KATEGORIA_NAZWA.zarzadzanie);
-  const c5 = line('5.', 'Inne koszty, w tym:', null);
-  const c5a = costRow('', 'zarzad', `a) ${PLAN_KATEGORIA_NAZWA.zarzad}`, true);
-  costRow('', 'ubezpieczenie', `b) ${PLAN_KATEGORIA_NAZWA.ubezpieczenie}`, true);
-  const c5c = costRow('', 'pozostale', `c) ${PLAN_KATEGORIA_NAZWA.pozostale}`, true);
-  c5.getCell(4).value = f(
-    `SUM(D${c5a}:D${c5c})`,
-    plan.koszty.zarzad + plan.koszty.ubezpieczenie + plan.koszty.pozostale,
-  );
-  c5.getCell(4).numFmt = NUM_FMT;
-  c5.font = { bold: true };
-  const razemK = line('6.', 'RAZEM: 1+2+3+4+5', f(`SUM(D${c1}:D${c4})+D${c5.number}`, s.kosztyA));
-  razemK.getCell(3).value = f(`IF(${AREA}>0,D${razemK.number}/12/${AREA},0)`, plan.powierzchnia > 0 ? s.kosztyA / 12 / plan.powierzchnia : 0);
-  razemK.getCell(3).numFmt = NUM_FMT;
+  const kosztyTop = pozycjeRows('koszt', 0, true);
+  const razemK = line(kosztyTop.length ? `${kosztyTop.length + 1}.` : '', 'RAZEM', f(sumOf(kosztyTop), s.kosztyA));
+  perM2(razemK, naM2(plan, s.kosztyA));
   sumStyle(razemK, COLS);
 
   // Część II
@@ -784,19 +838,22 @@ export async function planXlsx(plan: PlanGospodarczy, ctx: DokumentKontekst, out
   headerRow(ws, ['Lp.', 'Rodzaj przychodów', 'W przeliczeniu na 1 m²', 'Planowane wpływy']);
   const rSaldoB = line('1.', `Saldo zaliczki „B” na ${formatData(plan.stanNaDzien)}`, plan.saldoB).number;
   const zbRows = zaliczkaBlock('2.', 'Zaliczka „B”:', plan.zaliczkaB, s.zaliczkaB);
-  const rInne = line('3.', 'Inne wpływy', plan.inneWplywyB).number;
+  const prevYear = (plan.stanNaDzien || '').slice(0, 4) || String(plan.rok - 1);
+  const rSaldoANaFR = naFundusz
+    ? line('3.', `Saldo zaliczki „A” za ${prevYear} r. — przeksięgowanie nadwyżki`, f(`-D${r4}`, s.saldoANaFundusz)).number
+    : null;
+  const rInne = line(naFundusz ? '4.' : '3.', 'Inne wpływy', plan.inneWplywyB).number;
   const razemB = line(
-    '4.',
-    'RAZEM: 1+2+3',
-    f(`D${rSaldoB}+${zbRows.map((r) => `D${r}`).join('+')}+D${rInne}`, s.wplywyB),
+    naFundusz ? '5.' : '4.',
+    naFundusz ? 'RAZEM: 1+2+3+4' : 'RAZEM: 1+2+3',
+    f(`D${rSaldoB}+${zbRows.map((r) => `D${r}`).join('+')}${rSaldoANaFR ? `+D${rSaldoANaFR}` : ''}+D${rInne}`, s.wplywyB),
   );
   sumStyle(razemB, COLS);
 
   ws.addRow([]);
   headerRow(ws, ['Lp.', 'Koszty pokrywane z funduszu remontowego', '', 'Planowane koszty']);
   const k1 = line('1.', 'Spłata kredytu + odsetki', plan.kredyt).number;
-  const prevYear = (plan.stanNaDzien || '').slice(0, 4) || String(plan.rok - 1);
-  const k2 = line('2.', `Saldo zaliczki „A” za ${prevYear} r.`, f(`D${r4}`, s.saldoAKoszt)).number;
+  const k2 = line('2.', `Saldo zaliczki „A” za ${prevYear} r.`, f(`MAX(0,D${r4})`, s.saldoAKoszt)).number;
   const k3 = line('3.', 'Remonty, w tym:', null);
   const remonty = plan.remontyFR.filter((r) => r.opis.trim() || r.kwota);
   const remRows = remonty.map((r) => line('', r.opis || '—', r.kwota, undefined, true).number);

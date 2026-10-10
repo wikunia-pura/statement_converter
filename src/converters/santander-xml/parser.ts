@@ -92,7 +92,6 @@ export class SantanderXmlParser {
     transactions: XmlTransaction[],
     options: {
       skipNegative?: boolean;
-      skipBankFees?: boolean;
       onlyPositive?: boolean;
     } = {}
   ): XmlTransaction[] {
@@ -104,11 +103,6 @@ export class SantanderXmlParser {
 
       // Only positive amounts (income)
       if (options.onlyPositive && trn.value <= 0) {
-        return false;
-      }
-
-      // Skip bank fees (X_06 code)
-      if (options.skipBankFees && trn.trnCode === 'X_06') {
         return false;
       }
 

@@ -59,11 +59,10 @@ export class PKOSAConverter extends BaseConverter<PKOSATransaction> {
 
   protected doFilter(
     transactions: PKOSATransaction[],
-    opts: { skipNegative: boolean; skipBankFees: boolean }
+    opts: { skipNegative: boolean }
   ): PKOSATransaction[] {
     return this.parser.filterTransactions(transactions, {
       skipNegative: opts.skipNegative,
-      skipBankFees: opts.skipBankFees,
     });
   }
 

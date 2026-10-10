@@ -21,6 +21,7 @@ export const pustaIdentyfikacja = (): AdresIdentyfikacja => ({
   nazwaPelna: '',
   siedziba: pustyAdres(),
   urzadSkarbowy: '',
+  kodUrzedu: '',
   telefon: '',
   email: '',
 });
@@ -34,6 +35,7 @@ export function normalizeIdentyfikacja(raw: unknown): AdresIdentyfikacja {
     nazwaPelna: czysc(r.nazwaPelna),
     siedziba: normalizeAdres(r.siedziba),
     urzadSkarbowy: czysc(r.urzadSkarbowy),
+    kodUrzedu: tylkoCyfry(r.kodUrzedu).slice(0, 4),
     telefon: czysc(r.telefon),
     email: czysc(r.email),
   };
@@ -105,6 +107,7 @@ export function zasilZDn1(
       nazwaPelna: obecna.nazwaPelna || czysc(d.nazwaPelna),
       siedziba,
       urzadSkarbowy: obecna.urzadSkarbowy,
+      kodUrzedu: obecna.kodUrzedu,
       telefon: obecna.telefon || czysc(d.telefon),
       email: obecna.email || czysc(d.email),
     };

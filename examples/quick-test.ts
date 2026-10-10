@@ -29,7 +29,6 @@ async function quickTest() {
     useCache: true,
     useRegexFirst: true,
     skipNegativeAmounts: true,
-    skipBankFees: true,
   });
 
   console.log('⚙️  Config: Regex only (no AI)');

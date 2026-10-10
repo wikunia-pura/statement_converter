@@ -169,7 +169,6 @@ export interface ConverterConfig {
   useCache: boolean;
   useRegexFirst: boolean;
   skipNegativeAmounts: boolean;
-  skipBankFees: boolean;
   useAIForExpenses: boolean;
   contractors?: Kontrahent[];
   addresses?: Adres[];

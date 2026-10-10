@@ -58,11 +58,10 @@ export class AliorConverter extends BaseConverter<AliorTransaction> {
 
   protected doFilter(
     transactions: AliorTransaction[],
-    opts: { skipNegative: boolean; skipBankFees: boolean }
+    opts: { skipNegative: boolean }
   ): AliorTransaction[] {
     return this.parser.filterTransactions(transactions, {
       skipNegative: opts.skipNegative,
-      skipBankFees: opts.skipBankFees,
     });
   }
 

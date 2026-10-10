@@ -76,11 +76,10 @@ export class PKOBiznesConverter extends BaseConverter<PKOBiznesTransaction> {
 
   protected doFilter(
     transactions: PKOBiznesTransaction[],
-    opts: { skipNegative: boolean; skipBankFees: boolean }
+    opts: { skipNegative: boolean }
   ): PKOBiznesTransaction[] {
     return this.parser.filterTransactions(transactions, {
       skipNegative: opts.skipNegative,
-      skipBankFees: opts.skipBankFees,
     });
   }
 

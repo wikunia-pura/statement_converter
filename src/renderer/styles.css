@@ -2357,6 +2357,8 @@ body.dark-mode .modal-overlay {
 .callout--muted > svg { color: var(--text-tertiary); }
 
 .callout__body { flex: 1; min-width: 0; }
+/* A callout's action buttons: their own row under the text, right-aligned. */
+.callout__actions { display: flex; justify-content: flex-end; gap: var(--s-2); margin-top: var(--s-3); }
 
 /* ==========================================================================
    Sectioned modal forms — see FormSection.tsx / TagInput.tsx
@@ -3143,6 +3145,8 @@ body.dark-mode .modal-overlay {
 /* Generic table-cell helpers. */
 .cell-mono { font-family: var(--font-mono); white-space: nowrap; }
 .cell-with-badge { display: inline-flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; }
+.cell-with-badge--nowrap { flex-wrap: nowrap; white-space: nowrap; }
+.cell-with-badge--nowrap .form-section__badge { flex-shrink: 0; }
 
 /* A few on/off options as cards — see ChoiceCards.tsx. */
 .choice-cards {
@@ -3779,8 +3783,17 @@ body.dark-mode .modal-overlay {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.apt-result__value { margin-top: 2px; font-size: 22px; font-weight: 700; letter-spacing: 0.02em; }
+.apt-result__value { margin-top: 2px; font-size: var(--fs-lg); font-weight: 700; letter-spacing: 0.02em; }
 .apt-result__hint { margin-top: 4px; font-size: var(--fs-sm); line-height: 1.4; }
+/* A contractor name is a phrase, not a short number: account inline beside it. */
+.apt-result--text .apt-result__value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  letter-spacing: 0;
+}
+.apt-result__account { font-family: var(--font-mono); font-size: var(--fs-sm); font-weight: 500; opacity: 0.85; }
 .mapping-choice__resolved { font-family: var(--font-mono); }
 
 /* A small form opened inside a card (save a rule, teach a spelling). */
@@ -5254,6 +5267,8 @@ body.dark-mode .footer-piggy-svg {
 
 /* Dot above the label: the panel is narrow, and beside the dot a label like
    "Przygotowane" had no room left and broke mid-word. */
+.kal-duplicates { margin: 4px 0 0; padding-left: 18px; }
+
 .kal-wysylka { display: flex; align-items: center; gap: var(--s-2); }
 .kal-wysylka input { max-width: 200px; }
 
@@ -7302,6 +7317,11 @@ body.dark-mode .month-art {
   display: flex;
   flex-direction: column;
   gap: var(--s-3);
+  /* The rows answer to the width THEY get, not to the window's: with the
+     sidebar open a 1366 px laptop leaves the list ~240 px narrower than the
+     same window with it folded, and window breakpoints could not tell the two
+     apart — the name was squeezed to nothing. See "Responsive" below. */
+  container: ksieg-rows / inline-size;
 }
 
 /* The row is the page: full width, its own card, its status readable from the
@@ -7340,7 +7360,7 @@ body.dark-mode .month-art {
 
 .ksieg-row__head {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) auto 92px;
+  grid-template-columns: 32px minmax(0, 1fr) 92px;
   align-items: center;
   gap: var(--s-4);
   padding: var(--s-4) var(--s-3) var(--s-4) var(--s-5);
@@ -7392,6 +7412,12 @@ body.dark-mode .month-art {
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text-primary);
+  /* When the name and its badges do not fit on one line the badges wrap under
+     the name — never the name squeezed to nothing beside them, which is what a
+     narrow screen used to get. A name longer than the whole line still ends in
+     an ellipsis on a line of its own. */
+  flex-wrap: wrap;
+  row-gap: 4px;
 }
 
 .ksieg-row__name-text {
@@ -7446,41 +7472,104 @@ body.dark-mode .month-art {
   border-color: var(--warning-border);
 }
 
+.ksieg-state--ready {
+  background: var(--accent-subtle);
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+
 .ksieg-state--missing {
   background: var(--bg-surface-sunken);
   color: var(--text-tertiary);
   border-color: var(--border-default);
 }
 
-.ksieg-row__metrics {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--s-5);
+.ksieg-row__count {
+  display: inline-flex;
+  align-items: center;
 }
 
-.ksieg-metric {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  min-width: 42px;
-  line-height: 1.15;
-}
-
-.ksieg-metric b {
-  font-size: var(--fs-xl);
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-}
-
-.ksieg-metric i {
-  font-style: normal;
+/* The row's counts as one small badge: the most pressing number; all of them
+   in a small card on hover. */
+.ksieg-stats {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
   font-size: var(--fs-xs);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.ksieg-stats__dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-sm);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: #ffffff;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0) 55%),
+    var(--dot, var(--text-tertiary));
+  box-shadow:
+    inset 0 0 0 1.5px rgba(255, 255, 255, 0.22),
+    0 1px 2px rgba(16, 24, 40, 0.25);
+  cursor: default;
+}
+.ksieg-stats__dot--ok   { --dot: var(--success); }
+.ksieg-stats__dot--wait { --dot: var(--warning); }
+.ksieg-stats__dot--err  { --dot: var(--danger); }
+/* Nothing pressing: a light dot with dark text, in both themes. */
+.ksieg-stats__dot--none { --dot: var(--bg-surface-sunken); color: var(--text-secondary); box-shadow: inset 0 0 0 1px var(--border-strong); }
+/* Dark mode's tones are light; dark text reads on them, white does not. */
+body.dark-mode .ksieg-stats__dot--ok,
+body.dark-mode .ksieg-stats__dot--wait,
+body.dark-mode .ksieg-stats__dot--err { color: #111318; }
+
+.ksieg-stats__seg i {
+  font-style: normal;
   color: var(--text-tertiary);
 }
 
-.ksieg-metric--ok b   { color: var(--success); }
-.ksieg-metric--wait b { color: var(--warning); }
-.ksieg-metric--err b  { color: var(--danger); }
+.ksieg-stats__seg b {
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.ksieg-stats__pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 150px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.35);
+}
+.ksieg-stats:hover .ksieg-stats__pop { display: flex; }
+
+.ksieg-stats__seg {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-4);
+}
+
+.ksieg-stats__seg--ok b   { color: var(--success); }
+.ksieg-stats__seg--wait b { color: var(--warning); }
+.ksieg-stats__seg--err b  { color: var(--danger); }
+.ksieg-stats__seg.is-zero b { color: var(--text-tertiary); font-weight: 600; }
 
 .ksieg-row__gauge {
   display: flex;
@@ -7520,13 +7609,9 @@ body.dark-mode .month-art {
   padding: var(--s-4) var(--s-5) var(--s-4) var(--s-3);
 }
 
-/* The row's main slot holds ONE thing and has one width whichever of its four
-   states it is in — convert, post, "already in DOM" or "no file yet" — so the
-   tools beside it stay put as the work is ticked off. All of them END at the
-   row's right padding, the way they did before the slot had a width: centring
-   them left the shorter ones stopping short of the button's edge. The width is
-   that of the widest label ("Zaksięgowane w DOM"), so a button is no wider than
-   the text it gives way to. */
+/* The row's main slot: one small square (.ksieg-act, below) whichever of its
+   four states it is in, so the tools beside it stay put as the work is ticked
+   off. The wide-button rules that follow are kept for the old classes. */
 .ksieg-row__cta > .ksieg-book,
 .ksieg-row__cta > .ksieg-convert,
 .ksieg-row__cta > .ksieg-book-done,
@@ -7892,22 +7977,24 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 
 /* ------------------------------ Responsive ------------------------------ */
 
-/* Below this the row's numbers and the month nav stop fitting next to the
-   names; both drop to their own line rather than squeezing. */
-@media (max-width: 1200px) {
-  .ksieg-row__head { grid-template-columns: 32px minmax(0, 1fr) auto; }
+/* The rows step down by the width of their list (container `ksieg-rows`), the
+   rest of the view by the window's. Each step hands the name line back room it
+   needs, in order of what says least:
+   - the state badge goes first: the row's left edge, its icon and its button
+     already say the same thing;
+   - then the gauge, which is the same three numbers as a percentage;
+   - then the numbers themselves;
+   - and last the row folds, its button under the name. */
+@container ksieg-rows (max-width: 1100px) {
+  .ksieg-row__name > .status-badge { display: none; }
+}
+
+@container ksieg-rows (max-width: 1000px) {
+  .ksieg-row__head { grid-template-columns: 32px minmax(0, 1fr); }
   .ksieg-row__gauge { display: none; }
 }
 
-@media (max-width: 1100px) {
-  .ksieg-hero { grid-template-columns: auto minmax(0, 1fr); }
-  .ksieg-hero__art { grid-row: 1; }
-  .ksieg-hero__nav { grid-column: 1 / span 2; grid-row: 2; justify-self: start; }
-  .ksieg-hero__progress { grid-column: 1 / span 2; grid-row: 3; }
-}
-
-@media (max-width: 980px) {
-  .ksieg-row__metrics { display: none; }
+@container ksieg-rows (max-width: 780px) {
   .ksieg-files__head { display: none; }
   .ksieg-file {
     grid-template-columns: minmax(0, 1fr);
@@ -7920,17 +8007,27 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
   .ksieg-file__book { justify-content: flex-start; }
 }
 
+@container ksieg-rows (max-width: 560px) {
+  .ksieg-row { grid-template-columns: minmax(0, 1fr); }
+  .ksieg-row__head,
+  .ksieg-row.is-open .ksieg-row__head { border-radius: var(--r-xl) var(--r-xl) 0 0; }
+  .ksieg-row__cta { padding: 0 var(--s-5) var(--s-4); justify-content: flex-start; }
+  .ksieg-row__body { grid-column: 1; }
+}
+
+@media (max-width: 1100px) {
+  .ksieg-hero { grid-template-columns: auto minmax(0, 1fr); }
+  .ksieg-hero__art { grid-row: 1; }
+  .ksieg-hero__nav { grid-column: 1 / span 2; grid-row: 2; justify-self: start; }
+  .ksieg-hero__progress { grid-column: 1 / span 2; grid-row: 3; }
+}
+
 @media (max-width: 760px) {
   .ksieg-hero__art { display: none; }
   .ksieg-hero { grid-template-columns: minmax(0, 1fr); }
   .ksieg-hero__nav,
   .ksieg-hero__progress { grid-column: 1; }
   .ksieg-hero__month { font-size: 27px; }
-  .ksieg-row { grid-template-columns: minmax(0, 1fr); }
-  .ksieg-row__head,
-  .ksieg-row.is-open .ksieg-row__head { border-radius: var(--r-xl) var(--r-xl) 0 0; }
-  .ksieg-row__cta { padding: 0 var(--s-5) var(--s-4); justify-content: flex-start; }
-  .ksieg-row__body { grid-column: 1; }
 }
 
 /* ==========================================================================
@@ -9398,36 +9495,6 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
   background: var(--warning-bg);
   border: 1px solid var(--warning-border);
   color: var(--warning);
-}
-
-.ksieg-prio-order {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-2);
-  flex: 0 0 auto;
-  height: 32px;
-  padding: 0 var(--s-3);
-  border: 1px solid var(--border-default);
-  border-radius: var(--r-md);
-  background: var(--bg-surface);
-  font: inherit;
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
-}
-.ksieg-prio-order:hover { border-color: var(--accent); color: var(--accent); }
-.ksieg-prio-order:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.ksieg-prio-order__count {
-  min-width: 18px;
-  padding: 0 5px;
-  border-radius: var(--r-pill);
-  background: var(--accent-subtle);
-  color: var(--accent);
-  font-size: var(--fs-xs);
-  text-align: center;
 }
 
 /* Two small icon buttons, left of the row's one big action. */
@@ -11661,6 +11728,7 @@ body.dark-mode .mve-subject .ff-chip__missing {
 .zeb-row--off { cursor: default; opacity: 0.6; }
 .zeb-row--off:hover { transform: none; }
 .zeb-row__chevron-off { visibility: hidden; }
+.zeb-row__delete { padding: 6px; }
 .zeb-link--button:hover:not(:disabled) { filter: brightness(1.15); }
 
 .zeb-link {
@@ -11726,6 +11794,153 @@ body.dark-mode .mve-subject .ff-chip__missing {
 }
 
 .zeb-toolbar .ksieg-search { flex: 1 1 260px; }
+
+/* ---- "Zebranie-szablon": the community every new meeting starts from ---- */
+.zeb-szablon {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  margin-bottom: var(--s-4);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--accent-border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-lg);
+  background: var(--accent-subtle);
+}
+
+.zeb-szablon__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+
+.zeb-szablon__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: var(--r-md);
+  background: var(--accent);
+  color: #fff;
+}
+
+.zeb-szablon__intro { flex: 1 1 320px; min-width: 0; }
+.zeb-szablon__intro strong { color: var(--text-primary); }
+.zeb-szablon__intro p { margin: 2px 0 0; font-size: var(--fs-sm); color: var(--text-secondary); }
+
+.zeb-szablon__pick {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  flex: 0 1 300px;
+  min-width: 220px;
+}
+.zeb-szablon__pick > :first-child { flex: 1; min-width: 0; }
+
+.zeb-szablon__body {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--accent-border);
+}
+
+.zeb-szablon__source {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.zeb-szablon__source:hover { border-color: var(--accent); }
+.zeb-szablon__source-name { font-weight: 600; }
+
+.zeb-szablon__chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto; }
+.zeb-szablon__chips .status-badge { gap: 4px; }
+.zeb-szablon__from { font-weight: 400; opacity: 0.85; }
+
+.zeb-szablon__warn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--warning);
+}
+
+.zeb-szablon-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: var(--s-2) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--accent);
+}
+
+.zeb-szb-parts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3);
+  margin-bottom: var(--s-3);
+}
+.zeb-szb-parts__label { font-weight: 600; color: var(--text-primary); }
+.zeb-szb-part { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.zeb-szb-part.is-off { cursor: default; opacity: 0.6; }
+
+.zeb-szb-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  margin-bottom: var(--s-3);
+}
+.zeb-szb-toolbar__select { display: flex; gap: var(--s-1); }
+
+.zeb-szb-table-wrap {
+  max-height: 52vh;
+  overflow: auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+}
+
+.zeb-szb-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.zeb-szb-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 10px;
+  background: var(--bg-surface-sunken);
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+.zeb-szb-table td {
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-default);
+  vertical-align: middle;
+}
+.zeb-szb-table td:nth-child(2) > span { display: block; }
+.zeb-szb-table tbody tr { cursor: pointer; }
+.zeb-szb-table tbody tr:hover { background: var(--bg-surface-sunken); }
+.zeb-szb-table tr.is-checked,
+.zeb-szb-table tr.is-checked:hover { background: var(--accent-subtle); }
+.zeb-szb-table tr.is-overwrite td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
+.zeb-szb-table .is-off { opacity: 0.4; }
+.zeb-szb-table .status-badge { gap: 4px; white-space: nowrap; }
+.zeb-szb-name { font-weight: 600; color: var(--text-primary); }
 
 .zeb-list {
   list-style: none;
@@ -12054,9 +12269,10 @@ body.dark-mode .mve-subject .ff-chip__missing {
 .switch-row.is-disabled:hover { border-color: var(--border-default); }
 
 /* ---- Sprawozdania: the statement library as a module of its own ---- */
-/* The left rule says where a statement came from: Zebrania (the source of
-   truth) in the calendar link's blue, one added here in neutral grey. */
-.spr-row--zebrania { border-left-color: var(--info); }
+/* The left rule in the calendar link's blue: a statement a meeting presents
+   (Sprawozdania), a plan made in Zebrania (Plany gospodarcze). */
+.spr-row--zebrania,
+.spr-row--powiazane { border-left-color: var(--info); }
 /* A plan made in Plany gospodarcze that Zebrania has since made too. */
 .spr-row--zastapiony { border-left-color: var(--warning); }
 
@@ -12158,6 +12374,17 @@ body.dark-mode .mve-subject .ff-chip__missing {
 .zfin-kpi--zle > strong { color: var(--danger); }
 .zfin-kpi--dobrze > strong { color: var(--success); }
 
+.zfin-lead-empty { margin: 0; font-size: var(--fs-sm); font-style: italic; color: var(--text-tertiary); }
+/* Guidance for the AI: a tinted box under the paragraph, its button on the right. */
+.zfin-ai-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface-sunken);
+}
 .zfin-lead { margin: 0; font-size: var(--fs-md); line-height: 1.6; color: var(--text-primary); }
 .zfin-notes { margin: 4px 0 0 18px; padding: 0; }
 .zfin-notes li { margin: 2px 0; }
@@ -12165,6 +12392,118 @@ body.dark-mode .mve-subject .ff-chip__missing {
 /* Editing the notes: one line each, the add button under the last. */
 .zfin-notes-edit { display: flex; flex-direction: column; gap: 6px; }
 .zfin-notes-edit__add { align-self: flex-start; }
+
+/* A merged row in the preview: how many printed rows it sums. */
+.zfin-merged {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  vertical-align: middle;
+}
+.tip__rows { margin: 0; padding-left: var(--s-4); }
+
+/* Merged items: one card each — name and section, the rows it sums, actions on the right. */
+.zlacz-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-2); }
+
+.zlacz-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+}
+.zlacz-item--ai { border-style: dashed; border-color: var(--accent); background: var(--accent-subtle); }
+.zlacz-item.is-stale { opacity: 0.75; }
+
+.zlacz-item__main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.zlacz-item__title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px var(--s-2); }
+.zlacz-item__sum { font-size: var(--fs-sm); font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.zlacz-item__why { font-size: var(--fs-sm); font-style: italic; color: var(--text-secondary); }
+.zlacz-item__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; flex-shrink: 0; }
+
+.zlacz-parts { margin: 0 0 0 18px; padding: 0; font-size: var(--fs-sm); color: var(--text-primary); }
+.zlacz-parts li { margin: 1px 0; }
+
+.zlacz-proposals { display: flex; flex-direction: column; gap: var(--s-2); }
+.zlacz-proposals__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--accent);
+}
+.zlacz-proposals__head > span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* While the AI works: a spinner and what it is doing, over shimmering cards where its answer will appear. */
+.zlacz-ai-working {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-3);
+  border: 1px dashed var(--accent);
+  border-radius: var(--r-md);
+  background: var(--accent-subtle);
+}
+.zlacz-ai-working__head { display: flex; align-items: center; gap: var(--s-3); }
+.zlacz-ai-working__spinner { width: 22px; height: 22px; border-width: 2px; }
+.zlacz-ai-working__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.zlacz-ai-working__text > strong { color: var(--accent); font-size: var(--fs-md); }
+.zlacz-ai-working__text > span { color: var(--text-secondary); font-size: var(--fs-sm); }
+.zlacz-ai-working__skeleton { display: flex; flex-direction: column; gap: 6px; }
+.zlacz-ai-working__skeleton > span {
+  display: block;
+  height: 38px;
+  border-radius: var(--r-md);
+  background: linear-gradient(90deg,
+    var(--bg-surface-sunken) 0%,
+    var(--bg-surface) 50%,
+    var(--bg-surface-sunken) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s infinite;
+}
+.zlacz-ai-working__skeleton > span:nth-child(2) { width: 82%; animation-delay: 0.15s; }
+.zlacz-ai-working__skeleton > span:nth-child(3) { width: 64%; animation-delay: 0.3s; }
+
+/* The editor's rows: a checkbox, the name, its amounts. */
+.zlacz-pick-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.zlacz-pick {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 6px var(--s-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  cursor: pointer;
+}
+.zlacz-pick:hover { border-color: var(--accent); }
+.zlacz-pick.is-picked { border-color: var(--accent); background: var(--accent-subtle); }
+.zlacz-pick.is-taken { cursor: not-allowed; opacity: 0.6; }
+.zlacz-pick__text { display: flex; flex-direction: column; min-width: 0; }
+.zlacz-pick__text > span { font-size: var(--fs-sm); color: var(--text-secondary); }
+.zlacz-pick__amount { font-size: var(--fs-sm); font-variant-numeric: tabular-nums; color: var(--text-secondary); white-space: nowrap; }
 
 /* Search and the negative filter: one row, the search takes the rest. */
 .zfin-filter { flex-wrap: wrap; gap: var(--s-2) var(--s-3); }
@@ -12256,6 +12595,78 @@ body.dark-mode .mve-subject .ff-chip__missing {
 }
 
 .zfin-table tr.is-strong td { font-weight: 650; }
+/* A subcategory — two levels at a glance: the heading (accent bar, tinted,
+   bold sums, folds its rows away) and its rows, indented and hung on a tree
+   line; the bar runs down the whole block, so where it ends is plain. */
+.zfin-table tr.is-subcat td {
+  padding-top: 7px;
+  padding-bottom: 7px;
+  background: var(--accent-subtle);
+  font-weight: 650;
+  border-bottom-color: transparent;
+}
+.zfin-table tr.is-subcat td:first-child { box-shadow: inset 3px 0 0 var(--accent); padding-left: 6px; }
+.zfin-table tr.is-subcat.is-folded td { border-bottom-color: var(--border-subtle); }
+
+.zfin-subcat__head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.zfin-subcat__head:disabled { cursor: default; }
+.zfin-subcat__chevron {
+  flex-shrink: 0;
+  color: var(--accent);
+  transform: rotate(90deg);
+  transition: transform var(--t-fast);
+}
+.zfin-table tr.is-folded .zfin-subcat__chevron { transform: none; }
+.zfin-subcat__name { min-width: 0; }
+.zfin-subcat__count {
+  flex-shrink: 0;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  color: var(--accent);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.zfin-table tr.is-subitem td { background: color-mix(in srgb, var(--accent-subtle) 35%, transparent); }
+.zfin-table tr.is-subitem td:first-child {
+  position: relative;
+  padding-left: 46px;
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
+}
+/* The tree: a line down from the heading, a branch to each row; the last row ends it. */
+.zfin-table tr.is-subitem td:first-child::before {
+  content: '';
+  position: absolute;
+  left: 24px;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--border-strong);
+}
+.zfin-table tr.is-subitem.is-last td:first-child::before { bottom: 50%; }
+.zfin-table tr.is-subitem td:first-child::after {
+  content: '';
+  position: absolute;
+  left: 24px;
+  top: 50%;
+  width: 14px;
+  border-top: 1px solid var(--border-strong);
+}
+.zfin-table tr.is-subitem.is-last td { border-bottom-color: var(--border-default); }
+.zfin-table tr.is-subitem td.zfin-num { color: var(--text-secondary); }
 
 .zfin-table .is-negative,
 .zplan-fund.is-negative strong { color: var(--danger); }
@@ -12300,44 +12711,18 @@ body.dark-mode .mve-subject .ff-chip__missing {
 
 .zplan-table tr.zplan-sub td:nth-child(2) { padding-left: var(--s-6); }
 
-.zplan-table tr.zplan-src td {
-  padding-top: 2px;
-  padding-bottom: 2px;
-  font-size: var(--fs-sm);
-  color: var(--text-secondary);
-  background: var(--bg-surface-sunken);
-}
+.zplan-table tr.zplan-sub--deep td:nth-child(2) { padding-left: var(--s-10); }
 
-.zplan-table tr.zplan-src td:nth-child(2) { padding-left: var(--s-8); }
+/* A subcategory of the statement: a heading with the sum of its items. */
+.zplan-table tr.zplan-group td { font-weight: 600; }
 
 .zplan-label { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px var(--s-2); }
 
-.zplan-src-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 0;
-  border: none;
-  background: none;
+/* Last year's figure beside a position — the planned amount is in the last column. */
+.zplan-src__last {
+  font-size: var(--fs-xs);
   color: var(--text-tertiary);
-  font: inherit;
-  font-size: var(--fs-xs);
-  cursor: pointer;
-}
-
-.zplan-src-toggle:hover { color: var(--accent); }
-
-.zplan-src__flag {
-  margin-left: var(--s-2);
-  font-size: var(--fs-xs);
-  color: var(--warning);
-}
-
-.zplan-closing {
-  background: var(--accent-subtle);
-  color: var(--accent);
-  border-color: var(--accent-border);
-  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
 }
 
 .zplan-okres,
@@ -12354,11 +12739,40 @@ body.dark-mode .mve-subject .ff-chip__missing {
 
 .zplan-warn { margin-left: var(--s-3); }
 
+/* The month a stretch of the advance starts in. */
+.zplan-month { width: auto; min-width: 0; padding-top: 2px; padding-bottom: 2px; }
+
+/* A statement cost's growth over last year: the others' share of the index, or its own (highlighted). */
+.zplan-growth {
+  padding: 0 6px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.zplan-growth:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.zplan-growth:disabled { cursor: default; }
+.zplan-growth.is-own { border-color: transparent; background: var(--accent-subtle); color: var(--accent); font-weight: 600; }
+
+/* A position's own growth being typed in its row. */
+.zplan-growth-edit { display: inline-flex; align-items: center; gap: var(--s-2); }
+.zplan-input--pct { width: 64px; }
+
+/* How the costs without an own growth rise, under the plan's assumptions. */
+.zplan-own-growth__note { margin: var(--s-3) 0 0; }
+
 .zplan-balance { margin-top: var(--s-4); }
 
 .zplan-balance .callout__body { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); }
 
 .zplan-fund { margin: var(--s-3) 0 0; text-align: right; color: var(--text-secondary); }
+/* The AI's advance "A" proposal: its periods, the totals it gives, the reasons. */
+.zplan-adv-proposal ul { margin: var(--s-2) 0; padding-left: var(--s-5); }
+.zplan-adv-proposal p { margin: var(--s-2) 0 0; }
 
 .zplan-private { margin: var(--s-2) 0 0; }
 
@@ -12374,6 +12788,19 @@ input[type='text'].zplan-input { width: 140px; padding-top: 4px; padding-bottom:
 input[type='text'].zplan-input--months { width: 54px; }
 
 input[type='text'].zplan-input--rate { width: 84px; }
+
+/* An amount with its way back to the statement's / drafted figure, the undo before the field. */
+.zplan-amount { display: inline-flex; align-items: center; justify-content: flex-end; gap: 2px; }
+.zplan-restore { display: inline-flex; border-radius: var(--radius-sm, 4px); }
+.zplan-restore .button-icon { color: var(--text-tertiary); }
+.zplan-restore:hover .button-icon,
+.zplan-restore:focus-visible .button-icon { color: var(--accent, var(--text-primary)); }
+
+/* "Przenieś saldo na fundusz remontowy" under part I's line 1. */
+.zplan-toggle { display: inline-flex; align-items: center; gap: var(--s-2); cursor: pointer; }
+
+/* The advance box's live result: the total and how its part balances. */
+.zplan-adv-result { margin: 0 0 4px; font-weight: 600; color: var(--text-primary); }
 
 /* ---- Settings: the dictionary ---- */
 .zset-search { margin-bottom: var(--s-3); }
@@ -13450,6 +13877,11 @@ body.dark-mode .ksieg-selbar .ksieg-convert:hover { color: #0d0e24; }
 }
 .ksieg-files-badge b { font-weight: 650; }
 .ksieg-files-badge.is-missing-pdf b { color: var(--warning); }
+.ksieg-files-badge.is-missing-pdf {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+  color: var(--warning);
+}
 
 /* The scan found nothing new and nothing wrong — one calm answer. */
 .ks-rep-none {
@@ -13999,3 +14431,74 @@ body.dark-mode .ksieg-selbar .ksieg-convert:hover { color: #0d0e24; }
 .tip__docs li.is-ready { color: var(--success); }
 .tip__docs li:not(.is-ready) { color: var(--text-secondary); }
 .tip__list { margin: 0; padding-left: 18px; color: var(--text-secondary); }
+
+/* Menu order dialog: a hidden item stays listed, faded, with its eye crossed out. */
+.ks-prio-item.is-hidden .ks-prio-item__name { color: var(--text-tertiary); text-decoration: line-through; }
+.ks-prio-item.is-hidden > .ks-prio-item__grip { opacity: 0.5; }
+.ks-prio-item__moves button.is-off { border-color: var(--warning-border); color: var(--warning); background: var(--warning-bg); }
+
+/* ---- The row's one action as a small square with a monogram ---------------
+   K = convert (accent), Z = post in DOM (solid green), ✓ = in DOM (quiet green;
+   on hover it turns into the undo glyph, since a click takes the mark off),
+   – = no file yet. Same 36px square in every state so nothing beside it moves. */
+.ksieg-act {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  font: inherit;
+  font-size: var(--fs-base);
+  font-weight: 750;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast), transform var(--t-fast);
+}
+.ksieg-act:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ksieg-act:disabled { opacity: 0.6; cursor: progress; }
+.ksieg-act:hover:not(:disabled):not(.is-static) { transform: translateY(-1px); }
+
+.ksieg-act--convert { background: var(--accent); color: var(--text-on-accent); }
+.ksieg-act--convert:hover { background: var(--accent-hover); }
+body.dark-mode .ksieg-act--convert { color: #0d0e24; }
+
+.ksieg-act--book { background: var(--success); color: #ffffff; }
+.ksieg-act--book:hover:not(:disabled) { background: var(--success-hover); }
+body.dark-mode .ksieg-act--book { color: #0b1a12; }
+
+.ksieg-act--done {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+  color: var(--success);
+}
+.ksieg-act--done.is-static { cursor: default; }
+.ksieg-act__undo { display: none; }
+.ksieg-act--done:hover:not(:disabled):not(.is-static) {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+.ksieg-act--done:hover:not(:disabled):not(.is-static) .ksieg-act__done { display: none; }
+.ksieg-act--done:hover:not(:disabled):not(.is-static) .ksieg-act__undo { display: inline; }
+
+.ksieg-act--none {
+  border: 1px dashed var(--border-default);
+  color: var(--text-tertiary);
+  cursor: default;
+}
+
+
+/* The priority queue is reordered on the dashboard itself: grab a queue row's
+   head and drop it on another queue row. The glyph turns into a grip on hover. */
+.ksieg-row.is-reorderable .ksieg-row__head { cursor: grab; }
+.ksieg-row.is-reorderable .ksieg-row__head:active { cursor: grabbing; }
+.ksieg-row__glyph-grip { display: none; }
+.ksieg-row.is-reorderable .ksieg-row__head:hover .ksieg-row__glyph-state { display: none; }
+.ksieg-row.is-reorderable .ksieg-row__head:hover .ksieg-row__glyph-grip { display: inline; }
+.ksieg-row.is-dragging { opacity: 0.45; }
+.ksieg-row.is-drop-target { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }

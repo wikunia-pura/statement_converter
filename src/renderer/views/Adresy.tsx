@@ -14,6 +14,7 @@ import {
 import { normalizeIdentyfikacja, pustaIdentyfikacja } from '../../shared/adres-identyfikacja';
 import { nazwaNieruchomosci } from '../../shared/plan-gospodarczy';
 import { nipPoprawny, tylkoCyfry } from '../../shared/podatki';
+import { nazwaUrzedu, urzedyOpcje } from '../../shared/pit-urzedy';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import { formatAccount, normalizeAccount } from '../../shared/account-extractor';
@@ -32,6 +33,7 @@ import Loader, { BusyOverlay } from '../components/Loader';
 import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
 import ModuleTabs from '../components/ModuleTabs';
 import Select from '../components/Select';
+import SearchableSelect from '../components/SearchableSelect';
 import { plural } from '../plural';
 import TagInput from '../components/TagInput';
 import AdresyZasilDn1 from './AdresyZasilDn1';
@@ -1579,6 +1581,13 @@ const IdentyfikacjaSection: React.FC<{
 }> = ({ t, nazwa, value, onChange }) => {
   const set = <K extends keyof AdresIdentyfikacja>(key: K, v: AdresIdentyfikacja[K]) => onChange({ ...value, [key]: v });
   const setSiedziba = (key: keyof PodatekAdres, v: string) => set('siedziba', { ...value.siedziba, [key]: v });
+  const kodyUrzedow = useMemo(() => [{ value: '', label: t.adresIdentKodUrzeduBrak }, ...urzedyOpcje(true)], [t]);
+  // The code names its office: an empty name, or the one the previous code put there, follows the pick.
+  const setKodUrzedu = (kod: string) => {
+    const nazwaKodu = nazwaUrzedu(kod);
+    const wpisanaZKodu = !value.urzadSkarbowy.trim() || value.urzadSkarbowy === nazwaUrzedu(value.kodUrzedu);
+    onChange({ ...value, kodUrzedu: kod, urzadSkarbowy: nazwaKodu && wpisanaZKodu ? nazwaKodu : value.urzadSkarbowy });
+  };
   const sugestia = nazwa.trim() ? `Wspólnota Mieszkaniowa ${nazwaNieruchomosci(nazwa)}` : 'Wspólnota Mieszkaniowa …';
   return (
     <FormSection
@@ -1628,14 +1637,27 @@ const IdentyfikacjaSection: React.FC<{
       <FormField label={t.adresIdentSeat}>
         <AdresFields t={t} idPrefix="adres-ident-siedziba" value={value.siedziba} onChange={setSiedziba} />
       </FormField>
-      <FormField label={t.adresIdentUrzad} htmlFor="adres-ident-urzad" hint={t.adresIdentUrzadHint}>
-        <input
-          id="adres-ident-urzad"
-          type="text"
-          value={value.urzadSkarbowy}
-          onChange={(e) => set('urzadSkarbowy', e.target.value)}
-        />
-      </FormField>
+      <FormRow>
+        <FormField label={t.adresIdentUrzad} htmlFor="adres-ident-urzad" hint={t.adresIdentUrzadHint}>
+          <input
+            id="adres-ident-urzad"
+            type="text"
+            value={value.urzadSkarbowy}
+            onChange={(e) => set('urzadSkarbowy', e.target.value)}
+          />
+        </FormField>
+        <FormField label={t.adresIdentKodUrzedu} hint={t.adresIdentKodUrzeduHint}>
+          <SearchableSelect
+            overlay
+            value={value.kodUrzedu}
+            options={kodyUrzedow}
+            onChange={setKodUrzedu}
+            ariaLabel={t.adresIdentKodUrzedu}
+            searchPlaceholder={t.adresIdentKodUrzeduSearch}
+            emptyText={t.adresIdentKodUrzeduEmpty}
+          />
+        </FormField>
+      </FormRow>
       <FormRow>
         <FormField label={t.adresIdentTelefon} htmlFor="adres-ident-tel">
           <input id="adres-ident-tel" type="text" value={value.telefon} onChange={(e) => set('telefon', e.target.value)} />

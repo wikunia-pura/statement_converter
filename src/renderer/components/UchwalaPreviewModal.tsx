@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { MailingPole, ZebranieMaterial } from '../../shared/types';
+import { MailingPole, MailingZebranieContext, ZebranieMaterial } from '../../shared/types';
 import { ZebranieDane, uchwalaMissing, uchwalaTytul } from '../../shared/zebrania';
 import { buildKalendarzContext } from '../../shared/mailing-template';
 import { formatStamp } from '../../shared/calendar';
@@ -20,12 +20,17 @@ const UchwalaPreviewModal: React.FC<{
   lp: number;
   dane: ZebranieDane;
   pola: MailingPole[];
+  /** The version's statement, plan and resolutions — `buildZebranieContext`. */
+  zebranieCtx: MailingZebranieContext | null;
   onEdit: () => void;
   onClose: () => void;
-}> = ({ language, locale, uchwala, lp, dane, pola, onEdit, onClose }) => {
+}> = ({ language, locale, uchwala, lp, dane, pola, zebranieCtx, onEdit, onClose }) => {
   const t = translations[language];
   const kalendarz = useMemo(() => buildKalendarzContext(dane), [dane]);
-  const missing = useMemo(() => uchwalaMissing(uchwala, dane, pola), [uchwala, dane, pola]);
+  const missing = useMemo(
+    () => uchwalaMissing(uchwala, dane, pola, zebranieCtx),
+    [uchwala, dane, pola, zebranieCtx],
+  );
   const noop = () => undefined;
 
   return (
@@ -35,7 +40,7 @@ const UchwalaPreviewModal: React.FC<{
         <ModalHeader
           icon="eye"
           title={`${t.uchPreviewTitle} · ${lp}`}
-          subtitle={uchwalaTytul(uchwala, dane, pola)}
+          subtitle={uchwalaTytul(uchwala, dane, pola, zebranieCtx)}
         />
         <div className="modal-body uch-preview__body">
           {missing.length > 0 && (
@@ -56,6 +61,8 @@ const UchwalaPreviewModal: React.FC<{
             pola={pola}
             adresNazwa={dane.adresNazwa}
             kalendarz={kalendarz}
+            zebranie={zebranieCtx}
+            typ={uchwala.typ}
             tableFields={uchwala.tableFields}
             readOnly
             hideHint

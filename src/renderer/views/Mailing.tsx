@@ -44,6 +44,7 @@ import {
   isBuiltinField,
   isFieldTableField,
   isKalendarzValueInjected,
+  isZebranieField,
   kalendarzFieldOf,
   missingFieldValues,
   normalizeFieldName,
@@ -603,6 +604,16 @@ const Mailing: React.FC<Props> = ({
     [template, pola, draft.values, tableFieldNames, kalendarz, draft.temat, draft.tresc],
   );
 
+  /**
+   * Zebrania fields the text places. A send from here has no meeting version
+   * behind it, so they can never be filled — said once, above the letter, rather
+   * than left for the user to discover chip by chip.
+   */
+  const zebranieFieldsUsed = useMemo(
+    () => extractUsedFields(draft.temat, draft.tresc).filter(isZebranieField),
+    [draft.temat, draft.tresc],
+  );
+
   /** "Zapisz jako szablon" done: the draft now matches the template it saved to. */
   const handleTemplateSaved = (saved: MailingSzablon, mode: 'overwrite' | 'new') => {
     setSzablony((prev) =>
@@ -1159,6 +1170,14 @@ const Mailing: React.FC<Props> = ({
                   (the template changes only through "Zapisz jako szablon"); values
                   typed into its fields are the same `draft.values` the list above
                   edits. */}
+              {zebranieFieldsUsed.length > 0 && (
+                <div className="callout callout--warning">
+                  <Icon name="alert-triangle" size={16} />
+                  <div className="callout__body">
+                    {t.mailingZebranieFieldsHere.replace('{names}', zebranieFieldsUsed.join(', '))}
+                  </div>
+                </div>
+              )}
               <MailingVisualEditor
                 language={language}
                 temat={draft.temat}
@@ -1170,6 +1189,7 @@ const Mailing: React.FC<Props> = ({
                 pola={pola}
                 adresNazwa={previewAdres?.nazwa ?? t.mailingPreviewNoAddress}
                 kalendarz={kalendarz}
+                typ={template?.typ ?? null}
                 tableFields={tableFieldNames}
                 tablePool={usesFieldTable ? tableFieldPool : undefined}
                 onTableFieldsChange={

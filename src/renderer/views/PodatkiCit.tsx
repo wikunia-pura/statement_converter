@@ -46,6 +46,8 @@ import {
 } from '../../shared/sprawozdanie';
 import { foldText, nazwaNieruchomosci } from '../../shared/plan-gospodarczy';
 import { formatStamp } from '../../shared/calendar';
+import { nazwaUrzedu } from '../../shared/pit-urzedy';
+import Tip from '../components/Tip';
 import { translations, Language } from '../translations';
 import { plural } from '../plural';
 import { useNotify } from '../components/Notifications';
@@ -155,7 +157,7 @@ const zAdresu = (dane: PodatekCitDane, ident: AdresIdentyfikacja | undefined): P
     nip: ident.nip || dane.nip,
     nazwaPelna: ident.nazwaPelna || dane.nazwaPelna,
     siedziba: Object.values(ident.siedziba).some(Boolean) ? { ...ident.siedziba } : dane.siedziba,
-    urzad: ident.urzadSkarbowy || dane.urzad,
+    urzad: ident.urzadSkarbowy || nazwaUrzedu(ident.kodUrzedu) || dane.urzad,
     telefon: ident.telefon || dane.telefon,
   };
 };
@@ -1075,6 +1077,19 @@ const ZeznanieScreen: React.FC<{
     setDane((d) => zAdresu(d, adres?.identyfikacja));
     notify.success(t.citRefreshed);
   };
+  /** "Refresh from Adresy" — in the return's section for the office, in the taxpayer's for the rest. */
+  const przyciskOdswiez = (
+    <Tip content={adres?.identyfikacja ? t.citRefreshHint : t.citRefreshNone}>
+      <button
+        type="button"
+        className="button button-small button-secondary"
+        onClick={odswiez}
+        disabled={!adres?.identyfikacja}
+      >
+        <Icon name="refresh" size={13} /> {t.citRefresh}
+      </button>
+    </Tip>
+  );
   /** Names a statement of this community may be filed under. */
   const nazwy = useMemo(() => [adresNazwa, ...(adres?.alternativeNames ?? [])], [adresNazwa, adres]);
 
@@ -1294,7 +1309,7 @@ const ZeznanieScreen: React.FC<{
               <div className="callout__body">{t.citDraftFrom.replace('{rok}', String(szkic.zRoku))}</div>
             </div>
           )}
-          <FormSection icon="landmark" title={t.citSecReturn} description={t.citSecReturnDesc}>
+          <FormSection icon="landmark" title={t.citSecReturn} description={t.citSecReturnDesc} aside={przyciskOdswiez}>
             <FormField label={t.citUrzad} htmlFor="cit-urzad" required hint={t.citUrzadHint}>
               <input id="cit-urzad" type="text" value={dane.urzad} onChange={(e) => set('urzad', e.target.value)} />
             </FormField>
@@ -1353,17 +1368,7 @@ const ZeznanieScreen: React.FC<{
             icon="building"
             title={t.citSecTaxpayer}
             description={t.citSecTaxpayerDesc}
-            aside={
-              <button
-                type="button"
-                className="button button-small button-secondary"
-                onClick={odswiez}
-                disabled={!adres?.identyfikacja}
-                title={adres?.identyfikacja ? t.citRefreshHint : t.citRefreshNone}
-              >
-                <Icon name="refresh" size={13} /> {t.citRefresh}
-              </button>
-            }
+            aside={przyciskOdswiez}
           >
             <FormField
               label={t.podNip}

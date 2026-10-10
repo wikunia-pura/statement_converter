@@ -64,11 +64,10 @@ export class INGConverter extends BaseConverter<INGTransaction> {
 
   protected doFilter(
     transactions: INGTransaction[],
-    opts: { skipNegative: boolean; skipBankFees: boolean }
+    opts: { skipNegative: boolean }
   ): INGTransaction[] {
     return this.parser.filterTransactions(transactions, {
       skipNegative: opts.skipNegative,
-      skipBankFees: opts.skipBankFees,
     });
   }
 

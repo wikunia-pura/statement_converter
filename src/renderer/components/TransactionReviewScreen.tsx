@@ -788,6 +788,56 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
       );
     })()}
 
+    {/* Highlighted contractor box (for expense) — same box as the income one:
+        what the row will be booked to, matched or picked by hand. */}
+    {trn.transactionType === 'expense' && (() => {
+      const manualCost = manualRemainingCostId != null
+        ? remainingCostEntries.find(k => k.id === manualRemainingCostId)
+        : undefined;
+      const manualContractor = manualContractorId != null
+        ? kontrahenci.find(k => k.id === manualContractorId)
+        : undefined;
+      const picked = manualCost || manualContractor;
+
+      if (picked) {
+        return (
+          <div className="apt-result apt-result--text is-manual">
+            <div className="apt-result__label">
+              <Icon name="edit" size={12} />
+              {manualCost ? t.revOtherCostManualBox : t.revContractorManualBox}
+            </div>
+            <div className="apt-result__value">
+              {picked.nazwa}
+              {picked.kontoKontrahenta && <span className="apt-result__account">{picked.kontoKontrahenta}</span>}
+            </div>
+          </div>
+        );
+      }
+      if (trn.matchedContractor?.contractorName) {
+        return (
+          <div className="apt-result apt-result--text is-ok">
+            <div className="apt-result__label">
+              <Icon name="check-circle" size={12} /> {t.revContractorMatchedBox}
+            </div>
+            <div className="apt-result__value">
+              {trn.matchedContractor.contractorName}
+              {trn.matchedContractor.contractorAccount && (
+                <span className="apt-result__account">{trn.matchedContractor.contractorAccount}</span>
+              )}
+            </div>
+          </div>
+        );
+      }
+      return (
+        <div className="apt-result apt-result--text is-missing">
+          <div className="apt-result__label">
+            <Icon name="alert-triangle" size={12} /> {t.revContractorMissingBox}
+          </div>
+          <div className="apt-result__value">{t.revNotFound}</div>
+        </div>
+      );
+    })()}
+
     {/* Action zone — decision + manual input + status */}
     {(() => {
       const hasManualNumber = !!(manualInput && manualInput.trim().length > 0);

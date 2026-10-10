@@ -18,6 +18,7 @@ import { ZebraniePakietRequest } from '../../shared/types';
 import type DatabaseService from '../database';
 import { buildKalendarzContext, formatPolishDate, missingFieldValues } from '../../shared/mailing-template';
 import {
+  buildZebranieContext,
   uchwalaMissing,
   uchwalaTytul,
   uchwalyOf,
@@ -26,7 +27,7 @@ import {
   zebranieDane,
 } from '../../shared/zebrania';
 import { nazwaNieruchomosci } from '../../shared/plan-gospodarczy';
-import { okresLabel } from '../../shared/sprawozdanie';
+import { okresLabel, sprawozdanieWersji } from '../../shared/sprawozdanie';
 import { Skrot, planSkrot, sprawozdanieSkrot } from '../../shared/zebranie-podsumowanie';
 import { LOGO_ACCENT_COLOR, LOGO_BAND_COLOR } from '../../shared/mailing-logo';
 import { renderLetterPdf, uniquePath } from '../mailing/service';
@@ -100,12 +101,17 @@ export async function eksportujPakiet(
   ]);
   const dane = zebranieDane(zebranie, spotkania, lokalizacje);
   const kalendarz = buildKalendarzContext(dane);
+  const pola = await database.getMailingPola();
+  // The version's statement, plan and resolutions — what the Zebrania fields read.
+  const zebranieCtx = buildZebranieContext(wersja, dane, pola);
 
   const material = req.zawiadomienie ? zawiadomienieOf(wersja) : undefined;
   if (req.zawiadomienie && !material) {
     throw new Error('Ta wersja nie ma jeszcze zawiadomienia — przygotuj je w zakładce „Zawiadomienie o zebraniu”.');
   }
-  const spr = req.sprawozdanie ? wersja.sprawozdanie : null;
+  const spr = req.sprawozdanie && wersja.sprawozdanie
+    ? { ...wersja.sprawozdanie, dane: sprawozdanieWersji(wersja.sprawozdanie) }
+    : null;
   if (req.sprawozdanie && !spr) {
     throw new Error('Ta wersja nie ma jeszcze sprawozdania — dołącz je w zakładce „Sprawozdania finansowe”.');
   }
@@ -128,10 +134,11 @@ export async function eksportujPakiet(
       {
         adresNazwa: dane.adresNazwa,
         dateText: formatPolishDate(new Date()),
-        pola: await database.getMailingPola(),
+        pola,
         values: material.values,
         tableFields: material.tableFields,
         kalendarz,
+        zebranie: zebranieCtx,
       },
       material.temat,
       material.tresc,
@@ -145,9 +152,11 @@ export async function eksportujPakiet(
 
   if (uchwaly.length > 0) {
     // The same gate as the notice: a resolution with a blank field is not handed out.
-    const pola = await database.getMailingPola();
     const niekompletne = uchwaly
-      .map((u) => ({ tytul: uchwalaTytul(u, dane, pola), missing: uchwalaMissing(u, dane, pola) }))
+      .map((u) => ({
+        tytul: uchwalaTytul(u, dane, pola, zebranieCtx),
+        missing: uchwalaMissing(u, dane, pola, zebranieCtx),
+      }))
       .filter((u) => u.missing.length > 0);
     if (niekompletne.length > 0) {
       throw new Error(
@@ -175,6 +184,7 @@ export async function eksportujPakiet(
           values: material.values,
           tableFields: material.tableFields,
           kalendarz,
+          zebranie: zebranieCtx,
           adresId: dane.adresId,
           adresNazwa: dane.adresNazwa,
           spotkanieId: zebranie.spotkanieId,
@@ -208,7 +218,6 @@ export async function eksportujPakiet(
     }
 
     if (uchwaly.length > 0) {
-      const pola = await database.getMailingPola();
       for (const [i, u] of uchwaly.entries()) {
         const plik = path.join(tmp, `uchwala-${i + 1}.pdf`);
         await renderLetterPdf(
@@ -221,6 +230,7 @@ export async function eksportujPakiet(
             values: u.values,
             tableFields: u.tableFields,
             kalendarz,
+            zebranie: zebranieCtx,
             adresId: dane.adresId,
             adresNazwa: dane.adresNazwa,
             spotkanieId: zebranie.spotkanieId,
@@ -231,7 +241,7 @@ export async function eksportujPakiet(
         );
         czesci.push({
           tytul: uchwaly.length > 1 ? `Uchwała ${i + 1} z ${uchwaly.length}` : 'Uchwała',
-          opis: uchwalaTytul(u, dane, pola),
+          opis: uchwalaTytul(u, dane, pola, zebranieCtx),
           plik,
         });
       }

@@ -59,11 +59,10 @@ export class BnpXmlConverter extends BaseConverter<BnpTransaction> {
 
   protected doFilter(
     transactions: BnpTransaction[],
-    opts: { skipNegative: boolean; skipBankFees: boolean }
+    opts: { skipNegative: boolean }
   ): BnpTransaction[] {
     return this.parser.filterTransactions(transactions, {
       skipNegative: opts.skipNegative,
-      skipBankFees: opts.skipBankFees,
     });
   }
 

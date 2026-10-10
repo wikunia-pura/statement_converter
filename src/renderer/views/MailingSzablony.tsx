@@ -19,6 +19,7 @@ import {
   extractUsedFields,
   isFieldTableField,
   normalizeFieldName,
+  poleAllowedForTyp,
 } from '../../shared/mailing-template';
 
 interface Props {
@@ -29,6 +30,8 @@ interface FieldTablePickerProps {
   language: Language;
   /** The whole dictionary — the pool is a shortlist out of this. */
   pola: MailingPole[];
+  /** The template's mailing kind — fields bound to another kind are not offered. */
+  typ: MailingTyp;
   /** Field names currently on the shortlist, in row order. */
   selected: string[];
   /** True when the body actually contains the `{{Tabela pól}}` placeholder. */
@@ -46,19 +49,21 @@ interface FieldTablePickerProps {
 const FieldTablePicker: React.FC<FieldTablePickerProps> = ({
   language,
   pola,
+  typ,
   selected,
   inBody,
   onChange,
 }) => {
   const t = translations[language];
 
-  /** Dictionary fields not on the shortlist yet. */
+  /** Dictionary fields of this kind not on the shortlist yet. */
   const options = useMemo<SearchableOption[]>(
     () =>
       pola
+        .filter((p) => poleAllowedForTyp(p, typ))
         .filter((p) => !selected.some((name) => normalizeFieldName(name) === normalizeFieldName(p.nazwa)))
         .map((p) => ({ value: p.nazwa, label: p.nazwa, hint: p.tekst || undefined })),
-    [pola, selected],
+    [pola, typ, selected],
   );
 
   const move = (index: number, delta: number) => {
@@ -521,6 +526,7 @@ const MailingSzablony: React.FC<Props> = ({ language }) => {
               temat={editing.temat}
               tresc={editing.tresc}
               pola={pola}
+              typ={editing.typ}
               onChange={(patch) =>
                 setEditing((prev) => (prev ? { ...prev, ...patch } : prev))
               }
@@ -543,6 +549,7 @@ const MailingSzablony: React.FC<Props> = ({ language }) => {
             <FieldTablePicker
               language={language}
               pola={pola}
+              typ={editing.typ}
               selected={editing.tableFields}
               inBody={extractUsedFields(editing.tresc).some(isFieldTableField)}
               onChange={(tableFields) =>

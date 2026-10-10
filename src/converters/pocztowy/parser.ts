@@ -65,9 +65,6 @@ const TAG_LINE = /^:(\d{2,3}[A-Z]?):/;
  */
 const FIELD_61 = /^(\d{6})(\d{4})?(R?)([DC])([\d,.]+)(.*)$/;
 
-/** Counterparty names Pocztowy uses for its own fees on the account. */
-const BANK_ITSELF = /^\s*(bank\s+pocztowy|bp\s*s\.?\s*a\.?)\s*$/i;
-
 export class PocztowyMT940Parser {
   /**
    * Parse MT940 file content.
@@ -339,16 +336,11 @@ export class PocztowyMT940Parser {
 
   /**
    * Filter transactions.
-   *
-   * Bank-fee heuristic: a debit whose counterparty is Pocztowy itself ("opł. za
-   * rachunek", "prowizja wplaty otwarte"). There is no transaction-type code to
-   * key on, so the name is the only evidence — same approach as the BOŚ parser.
    */
   filterTransactions(
     transactions: PocztowyTransaction[],
     options: {
       skipNegative?: boolean;
-      skipBankFees?: boolean;
       onlyPositive?: boolean;
     } = {}
   ): PocztowyTransaction[] {
@@ -358,14 +350,6 @@ export class PocztowyMT940Parser {
       }
 
       if (options.onlyPositive && trn.debitCredit !== 'C') {
-        return false;
-      }
-
-      if (
-        options.skipBankFees &&
-        trn.debitCredit === 'D' &&
-        BANK_ITSELF.test(trn.details.counterpartyName)
-      ) {
         return false;
       }
 

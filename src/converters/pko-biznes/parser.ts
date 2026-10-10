@@ -215,27 +215,12 @@ export class PKOBiznesParser {
     transactions: PKOBiznesTransaction[],
     options: {
       skipNegative: boolean;
-      skipBankFees: boolean;
     }
   ): PKOBiznesTransaction[] {
     return transactions.filter(transaction => {
       // Skip expenses if skipNegative is enabled (keep only income)
       if (options.skipNegative && transaction.operationType === '222') {
         return false;
-      }
-      
-      // Skip bank fees if skipBankFees is enabled
-      // Bank fees typically have specific codes or descriptions
-      if (options.skipBankFees) {
-        const desc = transaction.description.toLowerCase();
-        if (
-          desc.includes('opłata') || 
-          desc.includes('prowizja') ||
-          desc.includes('komisja') ||
-          desc.includes('fee')
-        ) {
-          return false;
-        }
       }
       
       return true;

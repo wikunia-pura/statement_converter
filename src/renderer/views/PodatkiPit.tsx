@@ -48,7 +48,7 @@ import {
   tozsamoscOsoby,
   zaliczkaArt13,
 } from '../../shared/podatki-pit';
-import { PIT11_URZEDY, PIT4R_URZEDY_DODATKOWE } from '../../shared/pit-urzedy';
+import { urzedyOpcje } from '../../shared/pit-urzedy';
 import { foldText } from '../../shared/plan-gospodarczy';
 import { formatStamp } from '../../shared/calendar';
 import { tylkoCyfry } from '../../shared/podatki';
@@ -74,11 +74,6 @@ const zl0 = (n: number) => `${Math.round(n).toLocaleString('pl-PL')} zł`;
 const zl2 = (n: number) => `${n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł`;
 const sub = (s: string, vars: Record<string, string | number>) =>
   Object.entries(vars).reduce((acc, [k, v]) => acc.split(`{${k}}`).join(String(v)), s);
-
-const urzedyOpcje = (pit4r: boolean) =>
-  Object.entries(pit4r ? { ...PIT11_URZEDY, ...PIT4R_URZEDY_DODATKOWE } : PIT11_URZEDY)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([kod, nazwa]) => ({ value: kod, label: `${kod} ${nazwa}` }));
 
 type Filtr = 'all' | 'errors' | 'ready' | 'waiting' | 'filed';
 const FILTRY: Filtr[] = ['all', 'errors', 'ready', 'waiting', 'filed'];
@@ -878,6 +873,8 @@ interface Rejestr {
   rdzenie: string[];
   /** The NIP the community's PIT rows of other years carry; '' when it has none yet. */
   nip: string;
+  /** The community's tax office code kept in Adresy; '' when none is set. */
+  kodUrzedu: string;
 }
 
 const maPitRoku = (r: Rejestr, wiersze: PodatekPit[]) => wiersze.some((w) => r.rdzenie.includes(rdzenWspolnoty(w.dane.nazwa)));
@@ -903,7 +900,9 @@ const WspolnotaScreen: React.FC<{
   const notify = useNotify();
   const tMain = translations[language];
   const [nip, setNip] = useState(rekord?.nip ?? wstepnie?.nip ?? '');
-  const [dane, setDane] = useState<PitDane>(rekord?.dane ?? { ...pusteDanePit(), nazwa: wstepnie?.platnik ?? '' });
+  const [dane, setDane] = useState<PitDane>(
+    rekord?.dane ?? { ...pusteDanePit(), nazwa: wstepnie?.platnik ?? '', urzadPlatnika: wstepnie?.kodUrzedu || URZAD_DOMYSLNY },
+  );
   const [baseline, setBaseline] = useState(() => (rekord ? migawka(rekord.nip, rekord.dane) : ''));
   const [busy, setBusy] = useState<null | 'save' | 'delete' | 'apply'>(null);
   const [pickOsoba, setPickOsoba] = useState('');
@@ -1103,7 +1102,7 @@ const WspolnotaScreen: React.FC<{
                     const r = rejestr.find((x) => x.nazwa === v);
                     if (!r) return;
                     if (r.nip) setNip(r.nip);
-                    setDane((d) => ({ ...d, nazwa: r.platnik }));
+                    setDane((d) => ({ ...d, nazwa: r.platnik, urzadPlatnika: r.kodUrzedu || d.urzadPlatnika }));
                   }}
                   ariaLabel={t.platnikPick}
                   searchPlaceholder={t.pickSearch}
@@ -1495,6 +1494,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
             platnik: nazwaPlatnikaZAdresu(a.nazwa),
             rdzenie,
             nip: lista.find((w) => rdzenie.includes(rdzenWspolnoty(w.dane.nazwa)))?.nip ?? '',
+            kodUrzedu: a.identyfikacja?.kodUrzedu ?? '',
           };
         })
         .sort((a, b) => a.nazwa.localeCompare(b.nazwa, 'pl', { numeric: true })),

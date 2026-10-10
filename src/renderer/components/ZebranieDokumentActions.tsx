@@ -7,11 +7,11 @@ import Icon from './Icon';
 
 const baseName = (p: string) => p.split(/[\\/]/).pop() ?? p;
 
-/** What a file is built from: a meeting version's document, a library statement, or a module plan. */
+/** What a file is built from: a meeting version's document, a library statement, or a module plan (or its statement). */
 export type DokumentZrodlo =
   | { wersjaId: number; dokument: ZebranieDokument; dataZebrania: string | null }
   | { sprawozdanieId: number }
-  | { planId: number };
+  | { planId: number; dokument?: 'plan' | 'sprawozdanie' };
 
 /**
  * "Pobierz PDF" / "Pobierz Excel" for one document — of one version, a
@@ -45,7 +45,7 @@ const ZebranieDokumentActions: React.FC<{
         'sprawozdanieId' in zrodlo
           ? await window.electronAPI.exportSprawozdanie({ sprawozdanieId: zrodlo.sprawozdanieId, format, wstep })
           : 'planId' in zrodlo
-            ? await window.electronAPI.exportPlanWlasny({ planId: zrodlo.planId, format })
+            ? await window.electronAPI.exportPlanWlasny({ planId: zrodlo.planId, format, dokument: zrodlo.dokument, wstep })
             : await window.electronAPI.exportZebranieDokument({ ...zrodlo, format, wstep });
       setLastFile(filePath);
       notify.success(t.zfinDownloaded.replace('{file}', baseName(filePath)), { file: filePath });

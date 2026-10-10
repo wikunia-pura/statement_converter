@@ -1,9 +1,17 @@
 import { createPortal } from 'react-dom';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { MailingKalendarzContext, MailingPole, MailingPoleTyp } from '../../shared/types';
+import {
+  MailingKalendarzContext,
+  MailingPole,
+  MailingPoleTyp,
+  MailingTyp,
+  MailingZebranieContext,
+  MailingZebranieOpcja,
+} from '../../shared/types';
 import { translations, Language } from '../translations';
 import Icon from './Icon';
 import RichTextEditor from './RichTextEditor';
+import Select from './Select';
 import { ChipDisplay, ChipDisplayResolver, usePlaceholderChips } from './fieldChips';
 import { useFieldChipLabels, useMailingFieldOptions } from './MailingComposer';
 import {
@@ -19,8 +27,10 @@ import {
   MailingRenderContext,
   buildFieldTableHtml,
   buildLogoHeader,
+  buildZebranieBlockHtml,
   fieldPlaceholder,
   formatPolishDate,
+  isBlockField,
   isBuiltinField,
   isFieldTableField,
   isKalendarzValueInjected,
@@ -29,6 +39,10 @@ import {
   normalizeFieldName,
   readFieldValue,
   renderPlain,
+  zebranieChoice,
+  zebranieFieldOf,
+  zebranieMissingReason,
+  zebranieOptions,
 } from '../../shared/mailing-template';
 
 /**
@@ -46,7 +60,9 @@ import {
  *     for `data`/`godzina` fields — and the value appears in the letter at once
  *     via `onValuesChange`. Clicking it again edits the value.
  *   - Placeholders the context fills (Adres Wspólnoty, Data, calendar fields
- *     injected by the meeting) show their value and are not editable.
+ *     injected by the meeting, the Zebrania fields) show their value and are
+ *     not editable — except "Pokrycie straty" when the plan has several
+ *     candidates: clicking it offers them in a dropdown.
  *   - A field still missing a value is visibly marked in the text.
  *
  * HOW: it is the template editor (`RichTextEditor` on `usePlaceholderChips`) in
@@ -73,6 +89,13 @@ export interface MailingVisualEditorProps {
   adresNazwa: string;
   /** What the meeting fills the calendar fields with; null/absent when not made from one. */
   kalendarz?: MailingKalendarzContext | null;
+  /**
+   * What the meeting version fills the Zebrania fields with. Absent outside the
+   * Zebrania module: those fields are then not offered and stay unfilled.
+   */
+  zebranie?: MailingZebranieContext | null;
+  /** The letter's mailing kind — dictionary fields bound to another kind are not offered. */
+  typ?: MailingTyp | null;
   /** Fields ticked for `{{Tabela pól}}`. */
   tableFields?: string[];
   /**
@@ -138,8 +161,13 @@ interface ValueEditorState {
   hint?: string;
   /** Unit written after the value in the letter. */
   unit?: string;
-  /** Kind of input; null ⇒ nothing to type, the popover only explains why. */
-  kind: MailingPoleTyp | null;
+  /**
+   * Kind of input; `wybor` ⇒ pick one of `options`; null ⇒ nothing to type, the
+   * popover only explains why.
+   */
+  kind: MailingPoleTyp | 'wybor' | null;
+  /** The candidates of a `wybor` field. */
+  options?: MailingZebranieOpcja[];
   /** Why the field cannot be typed into (kind null). */
   info?: string;
   /** The `{{Tabela pól}}` card: rows to tick and fill in place. */
@@ -162,6 +190,8 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
   pola,
   adresNazwa,
   kalendarz,
+  zebranie,
+  typ,
   tableFields,
   tablePool,
   onTableFieldsChange,
@@ -171,8 +201,8 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
   hideHint = false,
 }) => {
   const t = translations[language];
-  const fields = useMailingFieldOptions(pola);
-  const subjectFields = useMailingFieldOptions(pola, { fieldTable: false });
+  const fields = useMailingFieldOptions(pola, { typ, zebranie: !!zebranie });
+  const subjectFields = useMailingFieldOptions(pola, { fieldTable: false, typ, zebranie: !!zebranie });
   const chipLabels = useFieldChipLabels(language);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -189,8 +219,9 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
       values,
       tableFields: tableFields ?? NO_FIELDS,
       kalendarz: kalendarz ?? null,
+      zebranie: zebranie ?? null,
     }),
-    [adresNazwa, pola, values, tableFields, kalendarz],
+    [adresNazwa, pola, values, tableFields, kalendarz, zebranie],
   );
 
   /**
@@ -221,6 +252,22 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
           return text
             ? { text, tone, title: t.mveChipClickToChange }
             : { text: '', missing: kal.nazwa, tone, title: t.mveChipClickToFill };
+        }
+
+        const zeb = zebranieFieldOf(ref.nazwa);
+        if (zeb) {
+          const reason = zebranieMissingReason(ref.nazwa, ctx);
+          if (zeb.kind === 'lista') {
+            const html = buildZebranieBlockHtml(ref.nazwa, ctx);
+            return html
+              ? { text: '', html, tone: 'locked', title: t.mveChipFromZebranie }
+              : { text: '', missing: zeb.nazwa, tone: 'locked', title: reason };
+          }
+          const pickable = !readOnly && zebranieOptions(ref.nazwa, ctx).length > 1;
+          const tone = pickable ? 'editable' : 'locked';
+          const text = renderPlain(placeholder, ctx);
+          if (!text) return { text: '', missing: zeb.nazwa, tone, title: reason };
+          return { text, tone, title: pickable ? t.mveChipPickOption : t.mveChipFromZebranie };
         }
 
         if (isBuiltinField(ref.nazwa)) {
@@ -262,6 +309,19 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
           ? { nazwa: ref.nazwa, title: ref.nazwa, kind: null, table: true }
           : { nazwa: ref.nazwa, title: ref.nazwa, kind: null, info: t.mveChipTable };
       }
+      const zeb = zebranieFieldOf(ref.nazwa);
+      if (zeb) {
+        const options = zebranieOptions(ref.nazwa, ctx);
+        if (zeb.kind === 'wybor' && options.length > 1) {
+          return { nazwa: zeb.nazwa, title: zeb.nazwa, kind: 'wybor', options, hint: t.mveChipPickOption };
+        }
+        return {
+          nazwa: zeb.nazwa,
+          title: zeb.nazwa,
+          kind: null,
+          info: zebranieMissingReason(ref.nazwa, ctx) || t.mveChipFromZebranie,
+        };
+      }
       if (isBuiltinField(ref.nazwa)) {
         return { nazwa: ref.nazwa, title: ref.nazwa, kind: null, info: t.mveChipAutomatic };
       }
@@ -293,13 +353,18 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
       setFit(null);
       setEditor({
         ...described,
-        draft: described.kind ? readFieldValue(values, described.nazwa) : '',
+        draft:
+          described.kind === 'wybor'
+            ? zebranieChoice(described.nazwa, ctx)?.klucz ?? ''
+            : described.kind
+              ? readFieldValue(values, described.nazwa)
+              : '',
         anchorTop: a.top,
         anchorBottom: a.bottom,
         left: Math.max(VIEWPORT_MARGIN, Math.min(a.left, window.innerWidth - width - VIEWPORT_MARGIN)),
       });
     },
-    [describeField, values],
+    [describeField, values, ctx],
   );
 
   // Read-only still passes a handler: without one a click falls back to the
@@ -319,12 +384,20 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
     setFit({ up, maxHeight: Math.max(160, up ? above : below) });
   }, [editor, fit]);
 
+  /**
+   * The card, or the menu of the dropdown inside it — which is drawn on the body,
+   * outside the card, so that the card's scrolling cannot clip it.
+   */
+  const insidePopover = (node: Node) =>
+    !!popoverRef.current?.contains(node) ||
+    (node instanceof Element && !!node.closest('.ui-select__menu'));
+
   // The letter scrolling or the window resizing moves the pill away from a card
   // fixed to the window — close it rather than leave it floating over nothing.
   useEffect(() => {
     if (!editor) return;
     const onMove = (event: Event) => {
-      if (event.target instanceof Node && popoverRef.current?.contains(event.target)) return;
+      if (event.target instanceof Node && insidePopover(event.target)) return;
       setEditor(null);
     };
     window.addEventListener('scroll', onMove, true);
@@ -339,7 +412,7 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
   useEffect(() => {
     if (!editor) return;
     const onMouseDown = (event: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) setEditor(null);
+      if (popoverRef.current && !insidePopover(event.target as Node)) setEditor(null);
     };
     document.addEventListener('mousedown', onMouseDown);
     return () => document.removeEventListener('mousedown', onMouseDown);
@@ -357,8 +430,12 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
    */
   const subjectDisplay = useMemo<ChipDisplayResolver>(
     () => (ref) =>
-      isFieldTableField(ref.nazwa)
-        ? { text: renderPlain(fieldPlaceholder(ref.nazwa), ctx) || '…', tone: 'locked', title: t.mveChipTable }
+      isBlockField(ref.nazwa)
+        ? {
+            text: renderPlain(fieldPlaceholder(ref.nazwa), ctx) || '…',
+            tone: 'locked',
+            title: isFieldTableField(ref.nazwa) ? t.mveChipTable : t.mveChipFromZebranie,
+          }
         : display(ref),
     [display, ctx, t],
   );
@@ -621,6 +698,35 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
                     autoFocus
                   >
                     {t.mvePopoverOk}
+                  </button>
+                </div>
+              </>
+            ) : editor.kind === 'wybor' ? (
+              <>
+                {editor.hint && <div className="mve-popover__hint">{editor.hint}</div>}
+                <Select
+                  value={editor.draft}
+                  options={(editor.options ?? []).map((o) => ({
+                    value: o.klucz,
+                    label: `${o.etykieta} — ${o.kwota}`,
+                  }))}
+                  onChange={(draft) => setEditor((prev) => (prev ? { ...prev, draft } : prev))}
+                  placeholder={t.mvePopoverPickPlaceholder}
+                  ariaLabel={editor.title}
+                  size="sm"
+                  overlay
+                />
+                <div className="mve-popover__actions">
+                  <button type="button" className="button button-secondary button-small" onClick={() => setEditor(null)}>
+                    {t.cancel}
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-primary button-small"
+                    onClick={() => apply(editor.draft)}
+                    disabled={!editor.draft}
+                  >
+                    {t.mvePopoverApply}
                   </button>
                 </div>
               </>

@@ -28,6 +28,10 @@ import {
   ZebranieWersjaInput,
   PlanGospodarczy,
   SprawozdanieWstepTekst,
+  SprawozdanieLaczenie,
+  SprawozdanieGrupowanie,
+  SprawozdanieCel,
+  ZebranieSprawozdanie,
   AdresUdzialy,
   ZebraniaUstawienia,
   ZebranieDokumentRequest,
@@ -114,14 +118,17 @@ import { parseSprawozdaniaPdf } from './zebrania/sprawozdanieParser';
 import { nazwaPliku, planPdf, planXlsx, sprawozdaniePdf, sprawozdanieXlsx } from './zebrania/dokumenty';
 import { kalendarzPdf, kalendarzPdfName } from './kalendarz/pdf';
 import { KALENDARZ_PDF_MAX_MIESIECY, kalendarzOkresProblem } from '../shared/calendar';
-import { nazwaNieruchomosci } from '../shared/plan-gospodarczy';
-import { formatData } from '../shared/sprawozdanie';
+import { nazwaNieruchomosci, normalizePlan } from '../shared/plan-gospodarczy';
+import { formatData, normalizeWstepTekst, sprawozdanieWersji, zastosujLaczenia } from '../shared/sprawozdanie';
 import { planWZebraniach, planyZZebran } from '../shared/plany';
 import { eksportujPakiet } from './zebrania/pakiet';
 import { wersjaLabel } from '../shared/zebrania';
 import { dn1Pdf } from './podatki/dn1Pdf';
 import { cit8Pdf } from './podatki/cit8Pdf';
 import { klasyfikujCitAi } from './podatki/citAi';
+import { proponujLaczeniaAi } from './zebrania/laczeniaAi';
+import { napiszWstepAi } from './zebrania/wstepAi';
+import { proponujZaliczkeAi } from './zebrania/zaliczkaAi';
 import { BladKarty, stanKarty, zamknijKarte, zKartaDoPodpisu } from './podpis/karta';
 import { downloadLatestInstaller } from './installerDownload';
 import { podpiszPdf } from './podpis/pades';
@@ -2314,6 +2321,13 @@ function setupIpcHandlers() {
       if (!fs.existsSync(filePath)) {
         return false;
       }
+      // Opening an archive unpacks it beside itself (macOS Archive Utility), and
+      // the folder scan would then pin every unpacked file as a statement of its
+      // own — so an archive is shown in its folder instead.
+      if (path.extname(filePath).toLowerCase() === '.zip') {
+        shell.showItemInFolder(filePath);
+        return true;
+      }
       const result = await shell.openPath(filePath);
       // shell.openPath returns empty string on success, error message on failure
       if (result === '') return true;
@@ -3084,8 +3098,15 @@ function setupIpcHandlers() {
 
   ipcMain.handle(
     IPC_CHANNELS.MAILING_ADD_POLE,
-    async (_, nazwa: string, tekst: string, jednostka: string, typWartosci: MailingPoleTyp) => {
-      return await database.addMailingPole(nazwa, tekst, jednostka ?? '', typWartosci ?? 'tekst');
+    async (
+      _,
+      nazwa: string,
+      tekst: string,
+      jednostka: string,
+      typWartosci: MailingPoleTyp,
+      typ: string | null,
+    ) => {
+      return await database.addMailingPole(nazwa, tekst, jednostka ?? '', typWartosci ?? 'tekst', typ ?? null);
     },
   );
 
@@ -3098,8 +3119,9 @@ function setupIpcHandlers() {
       tekst: string,
       jednostka: string,
       typWartosci: MailingPoleTyp,
+      typ: string | null,
     ) => {
-      await database.updateMailingPole(id, nazwa, tekst, jednostka ?? '', typWartosci ?? 'tekst');
+      await database.updateMailingPole(id, nazwa, tekst, jednostka ?? '', typWartosci ?? 'tekst', typ ?? null);
       return true;
     },
   );
@@ -3391,30 +3413,19 @@ function setupIpcHandlers() {
     return filePath;
   };
 
-  ipcMain.handle(IPC_CHANNELS.ZEBRANIA_SPRAWOZDANIA_IMPORT, async () => {
+  // ---- Sprawozdania: the statement library, the one place statements are uploaded ----
+
+  ipcMain.handle(IPC_CHANNELS.SPRAWOZDANIA_IMPORT, async () => {
     const picked = await pickSprawozdaniaPdf();
     if (!picked) return null;
     const { lista, plikNazwa } = picked;
     const zapisane = await database.importSprawozdania(lista, plikNazwa, await zebraniaWho());
-    log.info(`[ZEBRANIA] imported ${zapisane.length}/${lista.length} statements from ${plikNazwa}`);
+    log.info(`[SPRAWOZDANIA] imported ${zapisane.length}/${lista.length} statements from ${plikNazwa}`);
     return { plikNazwa, zapisane };
   });
 
-  // ---- Sprawozdania: the library on its own, outside any meeting ----
-
-  ipcMain.handle(IPC_CHANNELS.SPRAWOZDANIA_IMPORT_WLASNE, async () => {
-    const picked = await pickSprawozdaniaPdf();
-    if (!picked) return null;
-    const { lista, plikNazwa } = picked;
-    const { zapisane, pominiete } = await database.importSprawozdaniaWlasne(lista, plikNazwa, await zebraniaWho());
-    log.info(
-      `[SPRAWOZDANIA] added ${zapisane.length}/${lista.length} statements from ${plikNazwa}, ${pominiete} already in Zebrania`,
-    );
-    return { plikNazwa, zapisane, pominiete };
-  });
-
-  ipcMain.handle(IPC_CHANNELS.SPRAWOZDANIE_DELETE_WLASNE, async (_, id: number) => {
-    await database.deleteSprawozdanieWlasne(id);
+  ipcMain.handle(IPC_CHANNELS.SPRAWOZDANIE_DELETE, async (_, id: number) => {
+    await database.deleteSprawozdanie(id);
     return true;
   });
 
@@ -3450,15 +3461,109 @@ function setupIpcHandlers() {
   );
 
   ipcMain.handle(IPC_CHANNELS.ZEBRANIE_WERSJA_REMOVE_SPRAWOZDANIE, async (_, wersjaId: number) => {
-    await database.setZebranieWersjaSprawozdanie(wersjaId, null, await zebraniaWho());
+    await database.unlinkZebranieSprawozdanie(wersjaId, await zebraniaWho());
     return true;
   });
 
+  /** Whose statement a call is about — a version's id as a bare number, as the tab sent it before plans had one. */
+  const celSprawozdania = (value: unknown): SprawozdanieCel => {
+    const v = value as { planId?: unknown; wersjaId?: unknown } | null;
+    if (v && typeof v === 'object' && typeof v.planId === 'number') return { planId: v.planId };
+    return { wersjaId: Number(v && typeof v === 'object' ? v.wersjaId : value) };
+  };
+
+  /**
+   * A version's or a Plany gospodarcze plan's statement as stored: the
+   * library's figures with the owner's own merges, subcategories and introduction.
+   */
+  const sprawozdanieCelu = async (cel: SprawozdanieCel): Promise<ZebranieSprawozdanie> => {
+    if ('planId' in cel) {
+      const row = await database.getPlanWlasny(cel.planId);
+      if (!row) throw new Error('Tego planu już nie ma — mógł zostać usunięty.');
+      const { od, do: doDnia } = row.plan.sprawozdanieOkres;
+      const spr = await database.getSprawozdanieOkresu(row.nrWsp, od, doDnia);
+      if (!spr?.dane) throw new Error('Sprawozdania, z którego powstał ten plan, nie ma w module Sprawozdania.');
+      return { ...row.sprawozdanie, dane: spr.dane, plikNazwa: spr.plikNazwa, sprawozdanieId: spr.id, dodano: '', dodal: '' };
+    }
+    const wersja = await database.getZebranieWersja(cel.wersjaId);
+    if (!wersja?.sprawozdanie) throw new Error('Ta wersja nie ma jeszcze sprawozdania.');
+    return wersja.sprawozdanie;
+  };
+
   ipcMain.handle(
     IPC_CHANNELS.ZEBRANIE_WERSJA_SET_SPRAWOZDANIE_WSTEP,
-    async (_, wersjaId: number, wstep: SprawozdanieWstepTekst | null) => {
-      await database.setZebranieSprawozdanieWstep(wersjaId, wstep, await zebraniaWho());
+    async (_, target: unknown, wstep: SprawozdanieWstepTekst | null) => {
+      const cel = celSprawozdania(target);
+      const who = await zebraniaWho();
+      if ('planId' in cel) await database.patchPlanWlasnySprawozdanie(cel.planId, { wstep: normalizeWstepTekst(wstep) }, who);
+      else await database.setZebranieSprawozdanieWstep(cel.wersjaId, wstep, who);
       return true;
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.ZEBRANIE_WERSJA_SET_SPRAWOZDANIE_LACZENIA,
+    async (_, target: unknown, rodzaj: SprawozdanieGrupowanie, lista: SprawozdanieLaczenie[]) => {
+      const cel = celSprawozdania(target);
+      const r: SprawozdanieGrupowanie = rodzaj === 'podkategorie' ? 'podkategorie' : 'laczenia';
+      const who = await zebraniaWho();
+      if ('planId' in cel) await database.patchPlanWlasnySprawozdanie(cel.planId, { [r]: lista }, who);
+      else await database.setZebranieSprawozdanieLaczenia(cel.wersjaId, r, lista, who);
+      return true;
+    },
+  );
+
+  /**
+   * Merges the AI suggests for a version's (or a module plan's) statement, read
+   * from what is stored. Nothing is stored here — the tab shows them for review.
+   */
+  ipcMain.handle(IPC_CHANNELS.ZEBRANIE_SPRAWOZDANIE_LACZENIA_AI, async (_, target: unknown, rodzaj: SprawozdanieGrupowanie) => {
+    const apiKey = converterRegistry.getAnthropicApiKey();
+    if (!apiKey) throw new Error('AI nie jest skonfigurowane — brak klucza API Anthropic.');
+    const spr = await sprawozdanieCelu(celSprawozdania(target));
+    // Subcategories are made over the merged rows, so they are proposed over them too.
+    return rodzaj === 'podkategorie'
+      ? proponujLaczeniaAi(zastosujLaczenia(spr.dane, spr.laczenia), spr.podkategorie, 'podkategorie', apiKey, database.getAiModel())
+      : proponujLaczeniaAi(spr.dane, spr.laczenia, 'laczenia', apiKey, database.getAiModel());
+  });
+
+  /**
+   * A draft of the introduction's paragraph, written by the AI over the
+   * statement as the meeting (or the module plan) shows it. Nothing is stored
+   * here — the tab puts it in the editor to be checked and saved.
+   */
+  ipcMain.handle(IPC_CHANNELS.ZEBRANIE_SPRAWOZDANIE_WSTEP_AI, async (_, target: unknown, wskazowki: unknown) => {
+    const apiKey = converterRegistry.getAnthropicApiKey();
+    if (!apiKey) throw new Error('AI nie jest skonfigurowane — brak klucza API Anthropic.');
+    const spr = await sprawozdanieCelu(celSprawozdania(target));
+    return napiszWstepAi(
+      sprawozdanieWersji(spr),
+      typeof wskazowki === 'string' ? wskazowki : '',
+      apiKey,
+      database.getAiModel(),
+    );
+  });
+
+  /**
+   * The AI's proposal of a plan's advance "A" or "B" rate, over the plan as on screen
+   * (a meeting version's or the Plany module's, unsaved edits too). Nothing is
+   * stored here — the plan takes it when the user applies it.
+   */
+  ipcMain.handle(
+    IPC_CHANNELS.ZEBRANIA_PLAN_ZALICZKA_AI,
+    async (_, plan: unknown, rodzaj: unknown, wskazowki: unknown, dataZebrania: unknown) => {
+      const apiKey = converterRegistry.getAnthropicApiKey();
+      if (!apiKey) throw new Error('AI nie jest skonfigurowane — brak klucza API Anthropic.');
+      const p = normalizePlan(plan);
+      if (!p) throw new Error('Brak planu do policzenia stawki.');
+      return proponujZaliczkeAi(
+        p,
+        rodzaj === 'B' ? 'B' : 'A',
+        typeof wskazowki === 'string' ? wskazowki : '',
+        typeof dataZebrania === 'string' ? dataZebrania : null,
+        apiKey,
+        database.getAiModel(),
+      );
     },
   );
 
@@ -3497,7 +3602,7 @@ function setupIpcHandlers() {
     const zebranie = await database.getZebranie(wersja.zebranieId).catch(() => null);
     let filePath: string;
     if (request.dokument === 'sprawozdanie') {
-      const spr = wersja.sprawozdanie?.dane;
+      const spr = wersja.sprawozdanie ? sprawozdanieWersji(wersja.sprawozdanie) : null;
       if (!spr) throw new Error('Ta wersja nie ma jeszcze sprawozdania.');
       filePath = await writeSprawozdanie(spr, request.format, {
         adres: zebranie?.adresNazwa || nazwaNieruchomosci(spr.nazwa),
@@ -3576,20 +3681,31 @@ function setupIpcHandlers() {
     return true;
   });
 
-  /** A module plan as PDF or Excel — read from the stored plan, not from the screen. */
+  /** A module plan, or its statement, as PDF or Excel — read from what is stored, not from the screen. */
   ipcMain.handle(IPC_CHANNELS.PLAN_WLASNY_EXPORT, async (_, request: PlanWlasnyExportRequest) => {
     const row = await database.getPlanWlasny(request.planId);
     if (!row) throw new Error('Tego planu już nie ma — mógł zostać usunięty.');
     const plan = row.plan;
     const wspolnota = (await database.getZebraniaWspolnoty().catch(() => [])).find((w) => w.vdomNr === row.nrWsp);
-    const name = nazwaPliku(`Plan gospodarczy ${plan.rok} - ${plan.nieruchomosc}`);
-    const filePath = uniquePath(app.getPath('downloads'), `${name}.${request.format}`);
-    // No meeting: the date under "przyjęto na zebraniu w dniu" stays a blank to fill in.
-    const ctx = { dataZebrania: null, adres: wspolnota?.adresNazwa || plan.nieruchomosc };
-    if (request.format === 'pdf') await planPdf(plan, ctx, filePath);
-    else await planXlsx(plan, ctx, filePath);
+    const dokument = request.dokument === 'sprawozdanie' ? 'sprawozdanie' : 'plan';
+    let filePath: string;
+    if (dokument === 'sprawozdanie') {
+      const spr = await sprawozdanieCelu({ planId: row.id });
+      filePath = await writeSprawozdanie(sprawozdanieWersji(spr), request.format, {
+        adres: wspolnota?.adresNazwa || nazwaNieruchomosci(spr.dane.nazwa),
+        wstep: request.wstep !== false,
+        wstepTekst: spr.wstep,
+      });
+    } else {
+      const name = nazwaPliku(`Plan gospodarczy ${plan.rok} - ${plan.nieruchomosc}`);
+      filePath = uniquePath(app.getPath('downloads'), `${name}.${request.format}`);
+      // No meeting: the date under "przyjęto na zebraniu w dniu" stays a blank to fill in.
+      const ctx = { dataZebrania: null, adres: wspolnota?.adresNazwa || plan.nieruchomosc };
+      if (request.format === 'pdf') await planPdf(plan, ctx, filePath);
+      else await planXlsx(plan, ctx, filePath);
+    }
     try {
-      await database.recordPlanWlasnyPobranie(row.id, [path.basename(filePath)], await zebraniaWho());
+      await database.recordPlanWlasnyPobranie(row.id, dokument, [path.basename(filePath)], await zebraniaWho());
     } catch (error: unknown) {
       log.warn('[PLANY] download not recorded:', error instanceof Error ? error.message : error);
     }

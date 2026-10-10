@@ -23,6 +23,7 @@ import {
   zebranieDane,
   ZebranieDane,
   wersjaStatusFromGotowe,
+  zrodloSzablonu,
 } from '../../shared/zebrania';
 import { formatStamp, formatTime, partsToIso, toParts } from '../../shared/calendar';
 import { translations, Language } from '../translations';
@@ -41,10 +42,16 @@ import { SpotkanieEditModal, SpotkanieKartaModal } from './Kalendarz';
 import ZebranieSprawozdanie from '../components/ZebranieSprawozdanie';
 import ZebranieUchwaly from '../components/ZebranieUchwaly';
 import ZawiadomieniePodglad from '../components/ZawiadomieniePodglad';
-import ZebraniePlan from '../components/ZebraniePlan';
+import ZebraniePlan, {
+  PlanSzablonu,
+  planNaStart,
+  udzialyNaStart,
+  zapamietajUdzialy,
+} from '../components/ZebraniePlan';
 import ZebranieStatusBox from '../components/ZebranieStatusBox';
 import ZebraniePodsumowanie from '../components/ZebraniePodsumowanie';
 import ZebraniaUstawieniaModal from '../components/ZebraniaUstawieniaModal';
+import { ZebraniaSzablonModal, ZebraniaSzablonSekcja } from '../components/ZebraniaSzablon';
 import ScreenTitle from '../components/ScreenTitle';
 import { useNavItem } from '../navigation';
 import { defaultUstawienia, foldText } from '../../shared/plan-gospodarczy';
@@ -66,6 +73,8 @@ interface Props {
   onOpenSpotkanie?: (spotkanie: Spotkanie) => void;
   /** "Mailing → Szablony", for the notice flow when no notice template exists yet. */
   onOpenSzablony?: () => void;
+  /** The Sprawozdania module — on one statement, or on its list with null. */
+  onOpenSprawozdanie?: (sprawozdanieId: number | null) => void;
 }
 
 type StatusFilter = 'all' | ZebranieStatus;
@@ -390,6 +399,8 @@ const ZebranieScreen: React.FC<{
   lista: SprawozdanieZapisane[];
   wspolnoty: ZebraniaWspolnota[];
   ustawienia: ZebraniaUstawienia;
+  /** The template meeting's plan, for a plan not yet drafted; null when there is none to start from. */
+  szablonPlan: PlanSzablonu | null;
   onReload: () => Promise<void>;
   onOpenUstawienia: () => void;
   onBack: () => void;
@@ -404,6 +415,7 @@ const ZebranieScreen: React.FC<{
   onDelete: () => void;
   onOpenNotice: (wersja: ZebranieWersja) => void;
   onOpenSzablony?: () => void;
+  onOpenSprawozdanie?: (sprawozdanieId: number | null) => void;
 }> = ({
   language,
   locale,
@@ -419,6 +431,7 @@ const ZebranieScreen: React.FC<{
   lista,
   wspolnoty,
   ustawienia,
+  szablonPlan,
   onReload,
   onOpenUstawienia,
   onBack,
@@ -432,8 +445,10 @@ const ZebranieScreen: React.FC<{
   onDelete,
   onOpenNotice,
   onOpenSzablony,
+  onOpenSprawozdanie,
 }) => {
   const t = translations[language];
+  const notify = useNotify();
   const current = latestWersja(zebranie);
   // Oldest to newest, left to right — the way the revisions were made.
   const wersje = sortWersje(zebranie.wersje);
@@ -457,6 +472,27 @@ const ZebranieScreen: React.FC<{
   const wspolnota = dane.adresNazwa
     ? (wspolnoty.find((w) => foldText(w.adresNazwa) === foldText(dane.adresNazwa)) ?? null)
     : null;
+
+  /**
+   * With a template meeting, a version without a plan gets one as soon as its
+   * statement is linked — drafted with the template's cost rise and own growths
+   * and the community's own ownership split, ready to correct on the Plan tab.
+   */
+  const planZeSzablonuPoPodpieciu = async (w: ZebranieWersja, sprawozdanieId: number) => {
+    if (!szablonPlan || w.plan) return;
+    try {
+      const s = await window.electronAPI.getSprawozdanie(sprawozdanieId);
+      if (!s?.dane) return;
+      const rok = Number(s.dane.okresDo.slice(0, 4)) + 1;
+      const udzialy = await udzialyNaStart(s.dane.nrWsp ?? wspolnota?.vdomNr ?? null, rok, wspolnota);
+      const plan = planNaStart(s.dane, ustawienia, { wskaznik: szablonPlan.plan.wskaznik, ...udzialy }, null, szablonPlan);
+      await window.electronAPI.setZebranieWersjaPlan(w.id, plan);
+      await zapamietajUdzialy(dane.adresNazwa, wspolnota, plan);
+      notify.info(t.zebSzablonPlanAuto.replace('{nazwa}', szablonPlan.nazwa).replace('{rok}', String(rok)));
+    } catch (err: unknown) {
+      notify.warning(`${t.zebSzablonPlanAutoError} ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
 
   const tabs: (ModuleTab & { id: ZebranieTab; icon: NonNullable<ModuleTab['icon']> })[] = [
     { id: 'podsumowanie', label: t.zebraniaTabSummary, icon: 'clipboard' },
@@ -540,6 +576,7 @@ const ZebranieScreen: React.FC<{
           language={language}
           locale={locale}
           notice={zawiadomienieOf(wersja)}
+          wersja={wersja}
           dane={dane}
           busy={busy}
           onOpenNotice={() => onOpenNotice(wersja)}
@@ -671,12 +708,15 @@ const ZebranieScreen: React.FC<{
             language={language}
             locale={locale}
             wersja={wersja}
+            biezaca={wersja.id === current?.id}
             adresNazwa={dane.adresNazwa}
             wspolnota={wspolnota}
             lista={lista}
             dataZebrania={dane.startsAt}
             onChanged={onReload}
+            onOpenSprawozdanie={(id) => onOpenSprawozdanie?.(id)}
             statusBox={statusBoxFor('sprawozdanie')}
+            onLinked={szablonPlan && !wersja.plan ? (id) => planZeSzablonuPoPodpieciu(wersja, id) : undefined}
           />
         ) : activeTab.id === 'plan' && wersja ? (
           <ZebraniePlan
@@ -692,6 +732,7 @@ const ZebranieScreen: React.FC<{
             statusBox={statusBoxFor('plan')}
             onGoToSprawozdania={() => onTab('sprawozdania')}
             onOpenUstawienia={onOpenUstawienia}
+            szablon={szablonPlan}
           />
         ) : activeTab.id === 'uchwaly' && wersja ? (
           <ZebranieUchwaly
@@ -734,6 +775,7 @@ const Zebrania: React.FC<Props> = ({
   onOpenRequestHandled,
   onOpenSpotkanie,
   onOpenSzablony,
+  onOpenSprawozdanie,
 }) => {
   const t = translations[language];
   const notify = useNotify();
@@ -769,6 +811,7 @@ const Zebrania: React.FC<Props> = ({
   const [wspolnoty, setWspolnoty] = useState<ZebraniaWspolnota[]>([]);
   const [ustawienia, setUstawienia] = useState<ZebraniaUstawienia>(() => defaultUstawienia());
   const [ustawieniaOpen, setUstawieniaOpen] = useState(false);
+  const [szablonOpen, setSzablonOpen] = useState(false);
 
   useEffect(() => {
     void load();
@@ -875,6 +918,12 @@ const Zebrania: React.FC<Props> = ({
 
   const detail = detailId != null ? (rows.find((r) => r.zebranie.id === detailId) ?? null) : null;
 
+  /** The template meeting ("Zebranie-szablon") as it stands now — read live, like the main process does. */
+  const zrodlo = useMemo(
+    () => zrodloSzablonu(zebrania, spotkania, lokalizacje, ustawienia.szablonAdresNazwa),
+    [zebrania, spotkania, lokalizacje, ustawienia.szablonAdresNazwa]
+  );
+
   // The history entry names the meeting, for the Back/Forward tooltips — also
   // when it was opened by id from elsewhere, or just created.
   useEffect(() => {
@@ -915,6 +964,20 @@ const Zebrania: React.FC<Props> = ({
       await action();
       await load(true);
       notify.success(done);
+    } catch (err: unknown) {
+      notify.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSzablon = async (szablonAdresNazwa: string) => {
+    const next = { ...ustawienia, szablonAdresNazwa };
+    setBusy(true);
+    try {
+      await window.electronAPI.setZebraniaUstawienia(next);
+      setUstawienia(next);
+      notify.success(szablonAdresNazwa ? t.zebSzablonSaved.replace('{nazwa}', szablonAdresNazwa) : t.zebSzablonCleared);
     } catch (err: unknown) {
       notify.error(err instanceof Error ? err.message : String(err));
     } finally {
@@ -966,7 +1029,8 @@ const Zebrania: React.FC<Props> = ({
       t.zebraniaDeleteConfirm.replace('{name}', dane.nazwa || '—') +
       (zebranie.spotkanieId != null ? t.zebraniaDeleteLinkedNote : '');
     if (!(await notify.confirm(message, { danger: true, confirmLabel: t.delete }))) return;
-    navItem.close();
+    // From the list no entry is open, so there is nothing to close.
+    if (detailId === zebranie.id) navItem.close();
     await run(() => window.electronAPI.deleteZebranie(zebranie.id), t.zebraniaDeleted);
   };
 
@@ -1093,6 +1157,21 @@ const Zebrania: React.FC<Props> = ({
             ) : (
               wersja && <WersjaStatusBadge t={t} wersja={wersja} />
             )}
+            {/* Offered on every row — also one that cannot be opened (no materials
+                yet) or whose Kalendarz meeting is gone. */}
+            <button
+              type="button"
+              className="button button-ghost button-icon icon-danger zeb-row__delete"
+              disabled={busy}
+              aria-label={`${t.zebraniaDelete}: ${dane.nazwa || '—'}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                void handleDelete(zebranie, dane);
+              }}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <Icon name="trash" size={15} />
+            </button>
             <Icon name="chevron-right" size={16} className={bezMaterialow ? 'zeb-row__chevron-off' : undefined} />
           </div>
         </div>
@@ -1183,6 +1262,18 @@ const Zebrania: React.FC<Props> = ({
           onClose={() => setUstawieniaOpen(false)}
         />
       )}
+      {szablonOpen && zrodlo && (
+        <ZebraniaSzablonModal
+          language={language}
+          locale={locale}
+          userEmail={userEmail}
+          rows={rows}
+          zrodlo={zrodlo}
+          ustawienia={ustawienia}
+          onClose={() => setSzablonOpen(false)}
+          onDone={() => load(true)}
+        />
+      )}
     </>
   );
 
@@ -1205,6 +1296,7 @@ const Zebrania: React.FC<Props> = ({
           lista={lista}
           wspolnoty={wspolnoty}
           ustawienia={ustawienia}
+          szablonPlan={zrodlo?.plan ? { plan: zrodlo.plan, nazwa: zrodlo.dane.adresNazwa } : null}
           onReload={() => load(true)}
           onOpenUstawienia={() => setUstawieniaOpen(true)}
           onBack={() => navItem.close()}
@@ -1234,6 +1326,7 @@ const Zebrania: React.FC<Props> = ({
           onDelete={() => void handleDelete(detail.zebranie, detail.dane)}
           onOpenNotice={(w) => setNotice({ zebranie: detail.zebranie, wersjaId: w.id })}
           onOpenSzablony={onOpenSzablony}
+          onOpenSprawozdanie={onOpenSprawozdanie}
         />
         {modals}
       </>
@@ -1301,6 +1394,17 @@ const Zebrania: React.FC<Props> = ({
         </div>
       ) : (
         <>
+          <ZebraniaSzablonSekcja
+            language={language}
+            locale={locale}
+            rows={rows}
+            ustawienia={ustawienia}
+            zrodlo={zrodlo}
+            busy={busy}
+            onChange={(n) => void handleSzablon(n)}
+            onOpen={openDetail}
+            onApply={() => setSzablonOpen(true)}
+          />
           <div className="zeb-toolbar">
             <div className="ksieg-search">
               <Icon name="search" size={15} />

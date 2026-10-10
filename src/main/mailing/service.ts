@@ -23,6 +23,7 @@ import {
   MailingExportRequest,
   MailingExportResult,
   MailingKalendarzContext,
+  MailingZebranieContext,
   MailingOdbiorca,
   MailingOdbiorcaRodzaj,
   MailingProgressEvent,
@@ -101,6 +102,8 @@ export interface MailingSendRequest {
   wykluczeni?: string[];
   /** What the meeting fills the calendar fields with, when sent from one. */
   kalendarz?: MailingKalendarzContext | null;
+  /** The meeting version's statement, plan and resolutions, when sent from Zebrania. */
+  zebranie?: MailingZebranieContext | null;
 }
 
 /** Why a group the user asked for produced nobody, in Polish — for the history row. */
@@ -346,6 +349,7 @@ export async function sendMailing(
         values: request.values,
         tableFields: request.tableFields ?? [],
         kalendarz: request.kalendarz ?? null,
+        zebranie: request.zebranie ?? null,
       };
       const subject = renderPlain(request.temat, ctx);
       const renderedBody = renderHtml(request.tresc, ctx);
@@ -492,6 +496,7 @@ async function prepareLetter(database: DatabaseService, request: MailingLetterRe
     values: request.values ?? {},
     tableFields: request.tableFields ?? [],
     kalendarz: request.kalendarz ?? null,
+    zebranie: request.zebranie ?? null,
   };
   // Same rule as a send: the meeting's own proxy and board apply to its community.
   const meetingHere =

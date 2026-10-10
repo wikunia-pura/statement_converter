@@ -7,12 +7,19 @@ import {
   Sprawozdanie,
   SprawozdanieZapisane,
   ZebraniaUstawienia,
+  ZebranieSprawozdanie,
   ZebraniaWspolnota,
   Zebranie,
 } from '../../shared/types';
-import { PlanZZebran, planKey, planWZebraniach, planyZZebran } from '../../shared/plany';
+import {
+  PlanZZebran,
+  planKey,
+  planWZebraniach,
+  planyZZebran,
+  udzialyDlaNowegoPlanu,
+} from '../../shared/plany';
 import { defaultUstawienia, foldText, nazwaNieruchomosci } from '../../shared/plan-gospodarczy';
-import { okresLabel } from '../../shared/sprawozdanie';
+import { okresLabel, sprawozdanieDlaPlanu, sprawozdanieWersji } from '../../shared/sprawozdanie';
 import { wersjaLabel, zebranieDane } from '../../shared/zebrania';
 import { formatStamp } from '../../shared/calendar';
 import { translations, Language } from '../translations';
@@ -25,6 +32,8 @@ import Select from '../components/Select';
 import SearchableSelect from '../components/SearchableSelect';
 import ZebraniaUstawieniaModal from '../components/ZebraniaUstawieniaModal';
 import ScreenTitle from '../components/ScreenTitle';
+import ModuleTabs, { ModuleTab } from '../components/ModuleTabs';
+import { SprawozdanieRobocze } from '../components/ZebranieSprawozdanie';
 import { useNavItem } from '../navigation';
 import {
   PlanWorkspace,
@@ -36,6 +45,8 @@ import {
 
 type T = (typeof translations)['pl'];
 type ZrodloFilter = 'all' | 'zebrania' | 'wlasne';
+/** The tabs of a plan made here — its statement and the plan, as a meeting has them. */
+type PlanTab = 'sprawozdanie' | 'plan';
 
 /**
  * One plan on the list: a Zebrania entry's (the source of truth) or one made
@@ -140,14 +151,16 @@ const NowyPlanModal: React.FC<{
       .filter((s) => String(s.nrWsp) === value)
       .sort((a, b) => b.okresDo.localeCompare(a.okresDo))[0];
     setSprId(newest ? String(newest.id) : null);
-    // The split remembered for the community, as its plans in Zebrania would get it.
-    const w = wspolnoty.find((x) => String(x.vdomNr) === value);
-    setZalozenia((z) => ({
-      ...z,
-      miastoM2: w?.udzialy?.miastoM2 ?? 0,
-      pozytkiM2: w?.udzialy?.pozytkiM2 ?? 0,
-    }));
   };
+
+  // The areas carry over from the community's previous plan (else as remembered for it),
+  // refilled when the community or the year changes — editable from there.
+  useEffect(() => {
+    if (!spr || rok == null) return;
+    const w = wspolnoty.find((x) => x.vdomNr === spr.nrWsp);
+    setZalozenia((z) => ({ ...z, ...udzialyDlaNowegoPlanu(wpisy, spr.nrWsp, rok, w?.udzialy) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spr?.nrWsp, rok]);
 
   const create = async () => {
     if (!spr || spr.nrWsp == null || existing) return;
@@ -251,7 +264,7 @@ const NowyPlanModal: React.FC<{
                 className="button button-small button-subtle"
                 onClick={onOpenUstawienia}
               >
-                <Icon name="settings" size={13} /> {t.zplanDictionary}
+                <Icon name="settings" size={13} /> {t.zplanSettings}
               </button>
             }
           >
@@ -303,34 +316,56 @@ const PlanScreen: React.FC<{
 }) => {
   const t = translations[language];
   const notify = useNotify();
-  const [spr, setSpr] = useState<Sprawozdanie | null>(null);
+  const [sprRow, setSprRow] = useState<SprawozdanieZapisane | null>(null);
+  /** The statement's figures are being read — a failed read ends as "no statement". */
+  const [sprLoading, setSprLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState<PlanTab>('plan');
 
-  // The statement a plan made here was drafted from, for "Przelicz ze sprawozdania".
+  // The statement a plan made here was drafted from: its community's, of its period.
   const zrodloSpr =
-    wpis.kind === 'wlasny'
-      ? lista.find(
-          (s) =>
-            s.nrWsp === wpis.nrWsp &&
-            s.okresOd === wpis.plan.sprawozdanieOkres.od &&
-            s.okresDo === wpis.plan.sprawozdanieOkres.do
-        )
-      : undefined;
+    wpis.kind === 'wlasny' ? sprawozdanieDlaPlanu(lista, wpis.nrWsp, wpis.plan.sprawozdanieOkres) : undefined;
   useEffect(() => {
     let cancelled = false;
-    setSpr(null);
+    setSprRow(null);
+    setSprLoading(!!zrodloSpr);
     if (zrodloSpr) {
       window.electronAPI
         .getSprawozdanie(zrodloSpr.id)
         .then((row) => {
-          if (!cancelled) setSpr(row?.dane ?? null);
+          if (!cancelled) setSprRow(row?.dane ? row : null);
         })
-        .catch(() => undefined);
+        .catch(() => undefined)
+        .finally(() => {
+          if (!cancelled) setSprLoading(false);
+        });
     }
     return () => {
       cancelled = true;
     };
   }, [zrodloSpr?.id]);
+  const spr: Sprawozdanie | null = sprRow?.dane ?? null;
+
+  // The library's figures with the plan's own merges, subcategories and introduction —
+  // what its statement tab shows and the plan's positions follow.
+  const sprawozdaniePlanu = useMemo<ZebranieSprawozdanie | null>(
+    () =>
+      wpis.kind === 'wlasny' && sprRow?.dane
+        ? {
+            ...wpis.wlasny.sprawozdanie,
+            dane: sprRow.dane,
+            plikNazwa: sprRow.plikNazwa,
+            sprawozdanieId: sprRow.id,
+            dodano: '',
+            dodal: '',
+          }
+        : null,
+    [wpis, sprRow]
+  );
+  const pogrupowane = useMemo(
+    () => (sprawozdaniePlanu ? sprawozdanieWersji(sprawozdaniePlanu) : null),
+    [sprawozdaniePlanu]
+  );
 
   const wspolnotyPlanow = useMemo(() => {
     const seen = new Map<number, Wpis>();
@@ -373,6 +408,10 @@ const PlanScreen: React.FC<{
   };
 
   const wspolnota = wspolnoty.find((w) => w.vdomNr != null && w.vdomNr === wpis.nrWsp) ?? null;
+  const tabs: ModuleTab[] = [
+    { id: 'sprawozdanie', label: t.zebraniaTabReports, icon: 'bar-chart' },
+    { id: 'plan', label: t.zebraniaTabPlan, icon: 'wallet' },
+  ];
 
   return (
     <>
@@ -467,8 +506,44 @@ const PlanScreen: React.FC<{
         </div>
       </div>
 
+      {wpis.kind === 'wlasny' && (
+        <ModuleTabs tabs={tabs} active={tab} onChange={(id) => setTab(id as PlanTab)} />
+      )}
       <div className="content-body">
-        {wpis.kind === 'zebrania' ? (
+        {wpis.kind === 'wlasny' && tab === 'sprawozdanie' ? (
+          sprawozdaniePlanu ? (
+            <SprawozdanieRobocze
+              key={wpis.id}
+              language={language}
+              locale={locale}
+              cel={{ planId: wpis.wlasny.id }}
+              z={sprawozdaniePlanu}
+              pobieranie={{ planId: wpis.wlasny.id, dokument: 'sprawozdanie' }}
+              busy={busy}
+              readOnly={!!wpis.zastapiony}
+              onChanged={onReload}
+            />
+          ) : (
+            <div className="page-form zeb-page">
+              <FormSection icon="bar-chart" title={t.zebraniaTabReports}>
+                <div className="uch-empty zfin-empty-state">
+                  <span className="zeb-tab-empty__icon">
+                    <Icon name="bar-chart" size={22} />
+                  </span>
+                  <strong>{sprLoading ? t.loading : t.planySprawozdanieBrakTitle}</strong>
+                  {!sprLoading && (
+                    <p>
+                      {t.planySprawozdanieBrak.replace(
+                        '{okres}',
+                        okresLabel(wpis.plan.sprawozdanieOkres.od, wpis.plan.sprawozdanieOkres.do)
+                      )}
+                    </p>
+                  )}
+                </div>
+              </FormSection>
+            </div>
+          )
+        ) : wpis.kind === 'zebrania' ? (
           <PlanWorkspace
             key={wpis.id}
             language={language}
@@ -500,6 +575,7 @@ const PlanScreen: React.FC<{
             stored={wpis.plan}
             storeKey={wpis.id}
             spr={spr}
+            pogrupowane={pogrupowane}
             ustawienia={ustawienia}
             zrodlo={{ planId: wpis.wlasny.id }}
             deleteConfirm={t.planyDeleteConfirm
@@ -836,7 +912,7 @@ const PlanyGospodarcze: React.FC<{
             className="button button-secondary"
             onClick={() => setUstawieniaOpen(true)}
           >
-            <Icon name="settings" size={14} /> {t.zplanDictionary}
+            <Icon name="settings" size={14} /> {t.zplanSettings}
           </button>
           <button type="button" className="button button-primary" onClick={() => setCreating(true)}>
             <Icon name="plus" size={14} /> {t.planyAdd}

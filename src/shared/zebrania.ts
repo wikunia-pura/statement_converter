@@ -13,6 +13,10 @@ import {
   MailingPole,
   MailingSzablon,
   MailingTyp,
+  MailingZebranieContext,
+  MailingZebranieOpcja,
+  PlanGospodarczy,
+  PlanOkresZaliczki,
   Spotkanie,
   SpotkanieLokalizacja,
   SpotkanieMaterialyStatus,
@@ -31,6 +35,9 @@ import {
   missingFieldValues,
   renderPlain,
 } from './mailing-template';
+import { foldText, okresyLabels, planSumy, saldaZeSprawozdania } from './plan-gospodarczy';
+import { formatKwota, sprawozdanieWersji } from './sprawozdanie';
+import { nazwaInterEj } from './inter-ej';
 
 /* ------------------------------ Version numbers ----------------------------- */
 
@@ -278,6 +285,101 @@ export function copyMaterialyForRevision(materialy: ZebranieMaterial[]): Zebrani
   }));
 }
 
+/**
+ * The template meeting's materials, for another community's meeting: a deep copy
+ * like a revision's, but without what belongs to the template's own community —
+ * its unticked mailboxes and the extra recipients typed for it.
+ */
+export function materialyZeSzablonu(materialy: ZebranieMaterial[], who: string): ZebranieMaterial[] {
+  const at = new Date().toISOString();
+  return copyMaterialyForRevision(materialy).map((m) => ({
+    ...m,
+    adresaci: { ...m.adresaci, wlasne: [] },
+    wykluczeni: [],
+    updatedAt: at,
+    updatedBy: who,
+  }));
+}
+
+/* --------------------------------- Template --------------------------------- */
+
+/** Whether a version holds anything a template could pass on. */
+export function wersjaMaMaterialy(wersja: Pick<ZebranieWersja, 'materialy' | 'plan'> | null): boolean {
+  return !!wersja && (wersja.materialy.length > 0 || wersja.plan != null);
+}
+
+/** One of the template community's meetings, as the template draws on it. */
+export interface ZebranieSzablonu {
+  zebranie: Zebranie;
+  dane: ZebranieDane;
+  wersja: ZebranieWersja;
+}
+
+/**
+ * The template ("Zebranie-szablon") as resolved. Each part comes from the
+ * community's newest meeting that has it — the newest meeting may hold only a
+ * notice while last year's holds the plan, and both are what the office means
+ * by "do it like Bokserska". `zebranie`/`dane`/`wersja` name the newest of them.
+ */
+export interface ZrodloSzablonu extends ZebranieSzablonu {
+  zawiadomienie: ZebranieMaterial | null;
+  uchwaly: ZebranieMaterial[];
+  plan: PlanGospodarczy | null;
+  /** Where the plan was read from, when it is not the newest meeting. */
+  planZ: ZebranieSzablonu | null;
+}
+
+/**
+ * The template of community `adresNazwa`, read from its meetings newest first
+ * (by date, then the latest added). Notice and resolutions come from a meeting's
+ * current version; the plan from its newest version that has one. Null when
+ * there is no template or none of the community's meetings holds anything.
+ */
+export function zrodloSzablonu(
+  zebrania: Zebranie[],
+  spotkania: Spotkanie[],
+  lokalizacje: SpotkanieLokalizacja[],
+  adresNazwa: string,
+): ZrodloSzablonu | null {
+  const nazwa = adresNazwa.trim();
+  if (!nazwa) return null;
+  const time = (d: ZebranieDane) => (d.startsAt ? new Date(d.startsAt).getTime() : NaN);
+  const kandydaci = zebrania
+    .map((zebranie) => ({ zebranie, dane: zebranieDane(zebranie, spotkania, lokalizacje), wersja: latestWersja(zebranie) }))
+    .filter((r): r is ZebranieSzablonu => r.dane.adresNazwa.trim() === nazwa && r.wersja != null);
+  kandydaci.sort((a, b) => {
+    const ta = time(a.dane);
+    const tb = time(b.dane);
+    if (Number.isNaN(ta) !== Number.isNaN(tb)) return Number.isNaN(ta) ? 1 : -1;
+    if (!Number.isNaN(ta) && ta !== tb) return tb - ta;
+    return b.zebranie.id - a.zebranie.id;
+  });
+  const zZawiadomieniem = kandydaci.find((r) => zawiadomienieOf(r.wersja));
+  const zUchwalami = kandydaci.find((r) => uchwalyOf(r.wersja).length > 0);
+  let planZ: ZebranieSzablonu | null = null;
+  for (const r of kandydaci) {
+    const w = [...sortWersje(r.zebranie.wersje)].reverse().find((x) => x.plan);
+    if (w) {
+      planZ = { ...r, wersja: w };
+      break;
+    }
+  }
+  const najnowszy = kandydaci.find((r) => r === zZawiadomieniem || r === zUchwalami || r.zebranie === planZ?.zebranie);
+  if (!najnowszy) return null;
+  return {
+    ...najnowszy,
+    zawiadomienie: zZawiadomieniem ? zawiadomienieOf(zZawiadomieniem.wersja) ?? null : null,
+    uchwaly: zUchwalami ? uchwalyOf(zUchwalami.wersja) : [],
+    plan: planZ?.wersja.plan ?? null,
+    planZ: planZ && planZ.zebranie !== najnowszy.zebranie ? planZ : null,
+  };
+}
+
+/** The template's notice and resolutions, in the order a version keeps them. */
+export function materialySzablonu(zrodlo: ZrodloSzablonu): ZebranieMaterial[] {
+  return [...(zrodlo.zawiadomienie ? [zrodlo.zawiadomienie] : []), ...zrodlo.uchwaly];
+}
+
 /** The version's notice, when it has one. */
 export function zawiadomienieOf(wersja: ZebranieWersja | null): ZebranieMaterial | undefined {
   return wersja?.materialy.find((m) => m.rodzaj === 'zawiadomienie');
@@ -337,14 +439,16 @@ export function moveUchwalaNextTo(
 
 /**
  * What a resolution's fields resolve against: the meeting's data — read live, so
- * a moved date or place reaches a resolution prepared earlier — the dictionary of
- * dynamic fields and the values typed for this document. The same context the
- * editor, the preview, the PDF and the package use.
+ * a moved date or place reaches a resolution prepared earlier — the version's
+ * statement, plan and resolutions (`zebranie`, from `buildZebranieContext`), the
+ * dictionary of dynamic fields and the values typed for this document. The same
+ * context the editor, the preview, the PDF and the package use.
  */
 export function uchwalaContext(
   uchwala: ZebranieMaterial,
   dane: ZebranieDane,
   pola: MailingPole[],
+  zebranie: MailingZebranieContext | null = null,
   today: Date = new Date(),
 ): MailingRenderContext {
   return {
@@ -354,6 +458,7 @@ export function uchwalaContext(
     values: uchwala.values,
     tableFields: uchwala.tableFields,
     kalendarz: buildKalendarzContext(dane),
+    zebranie,
   };
 }
 
@@ -362,8 +467,9 @@ export function uchwalaMissing(
   uchwala: ZebranieMaterial,
   dane: ZebranieDane,
   pola: MailingPole[],
+  zebranie: MailingZebranieContext | null = null,
 ): string[] {
-  return missingFieldValues(uchwalaContext(uchwala, dane, pola), uchwala.temat, uchwala.tresc);
+  return missingFieldValues(uchwalaContext(uchwala, dane, pola, zebranie), uchwala.temat, uchwala.tresc);
 }
 
 /** The document's title as it reads in the list: its subject, rendered; the template's name when empty. */
@@ -371,9 +477,99 @@ export function uchwalaTytul(
   uchwala: ZebranieMaterial,
   dane: ZebranieDane,
   pola: MailingPole[],
+  zebranie: MailingZebranieContext | null = null,
 ): string {
-  const rendered = renderPlain(uchwala.temat, uchwalaContext(uchwala, dane, pola)).trim();
+  const rendered = renderPlain(uchwala.temat, uchwalaContext(uchwala, dane, pola, zebranie)).trim();
   return rendered || uchwala.szablonNazwa || '—';
+}
+
+/* ------------------------- Zebrania fields of a letter ------------------------- */
+
+const zl = (n: number) => `${formatKwota(n)} zł`;
+const naM2 = (n: number) => `${formatKwota(n)} zł/m²`;
+
+/** "Pokrycie straty", "strata" — the word itself, not "administratora". */
+const STRATA_RE = /(^|[^a-z])strat/;
+
+/**
+ * The plan's lines that cover a loss. Part I's transfer from the repair fund
+ * and part II's "Saldo zaliczki A (pokrycie straty)" are one and the same sum
+ * booked on both sides, so they are one candidate; besides it, any position or
+ * repair typed into the plan under a name speaking of a loss. INTER-EJ's lines
+ * never — its amounts are not quoted in letters (shared/inter-ej).
+ */
+function pokrycieStratyOpcje(plan: PlanGospodarczy | null): MailingZebranieOpcja[] {
+  if (!plan) return [];
+  const opcje: MailingZebranieOpcja[] = [];
+  const add = (etykieta: string, kwota: number) => {
+    const name = etykieta.trim();
+    if (!name || !(kwota > 0.005) || nazwaInterEj(name) || opcje.some((o) => o.klucz === name)) return;
+    opcje.push({ klucz: name, etykieta: name, kwota: zl(kwota) });
+  };
+  add('Pokrycie straty z funduszu remontowego (saldo zaliczki „A”)', planSumy(plan).saldoAKoszt);
+  for (const z of plan.pozycje) if (STRATA_RE.test(foldText(z.nazwa))) add(z.nazwa, z.kwota);
+  for (const r of plan.remontyFR) if (STRATA_RE.test(foldText(r.opis))) add(r.opis, r.kwota);
+  return opcje;
+}
+
+/** Each month's rate (January first) — the stretches laid out over the year. */
+function stawkiMiesieczne(okresy: PlanOkresZaliczki[]): number[] {
+  const out: number[] = [];
+  for (const o of okresy) {
+    for (let i = 0; i < Math.max(0, o.miesiace || 0) && out.length < 12; i++) out.push(o.stawka || 0);
+  }
+  while (out.length < 12) out.push(out.length > 0 ? out[out.length - 1] : 0);
+  return out;
+}
+
+/**
+ * Advances "A" and "B" month by month, the months at the same pair of rates
+ * joined into one row ("I–III/2027"). The two advances change on their own
+ * schedules, so a row ends wherever either of them changes.
+ */
+function zaliczkiPlanu(plan: PlanGospodarczy | null): MailingZebranieContext['zaliczki'] {
+  if (!plan) return [];
+  const a = stawkiMiesieczne(plan.zaliczkaA);
+  const b = stawkiMiesieczne(plan.zaliczkaB);
+  const rows: { miesiace: number; a: number; b: number }[] = [];
+  for (let m = 0; m < 12; m++) {
+    const last = rows[rows.length - 1];
+    if (last && last.a === a[m] && last.b === b[m]) last.miesiace += 1;
+    else rows.push({ miesiace: 1, a: a[m], b: b[m] });
+  }
+  const labels = okresyLabels(
+    rows.map((r) => ({ miesiace: r.miesiace, stawka: 0 })),
+    plan.rok,
+  );
+  return rows.map((r, i) => ({ okres: labels[i], zaliczkaA: naM2(r.a), zaliczkaB: naM2(r.b) }));
+}
+
+/**
+ * What a letter made in Zebrania reads from its version: the linked statement's
+ * repair-fund balance and advance "A"'s balance, the plan's loss coverage and
+ * advances, and the version's resolutions by title. Built once per version and
+ * handed to every render — the editor, the preview, the PDF and the send.
+ */
+export function buildZebranieContext(
+  wersja: Pick<ZebranieWersja, 'sprawozdanie' | 'plan' | 'materialy'> | null,
+  dane: ZebranieDane,
+  pola: MailingPole[],
+): MailingZebranieContext {
+  const spr = wersja?.sprawozdanie ? sprawozdanieWersji(wersja.sprawozdanie) : null;
+  const salda = spr ? saldaZeSprawozdania(spr) : { saldoA: null, saldoB: null };
+  const plan = wersja?.plan ?? null;
+  const bezUchwal: MailingZebranieContext = {
+    wynikFunduszuRemontowego: salda.saldoB != null ? zl(salda.saldoB) : '',
+    saldoZaliczkiA: salda.saldoA != null ? zl(salda.saldoA) : '',
+    pokrycieStraty: pokrycieStratyOpcje(plan),
+    zaliczki: zaliczkiPlanu(plan),
+    uchwaly: [],
+  };
+  // A title may quote the version's figures too; it cannot quote the list it is in.
+  return {
+    ...bezUchwal,
+    uchwaly: uchwalyOf(wersja).map((u) => uchwalaTytul(u, dane, pola, bezUchwal)),
+  };
 }
 
 /**

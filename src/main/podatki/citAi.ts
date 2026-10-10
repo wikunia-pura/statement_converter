@@ -12,6 +12,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import logger from '../../shared/logger';
 import { maxTokensFor, modelRequestFields } from '../../shared/ai-models';
 import { kategorieDlaStrony } from '../../shared/podatki-cit';
+import { nazwaInterEj } from '../../shared/inter-ej';
 import { CitAiPozycja, CitAiPropozycja, CitKategoria } from '../../shared/types';
 
 /** Rows per request: ~25 tokens a row in, ~40 out, so a batch stays far from any limit. */
@@ -54,11 +55,12 @@ interface Wiersz {
 }
 
 function prompt(batch: Wiersz[]): string {
+  // An INTER-EJ row is classified by its name alone — its amount never reaches the model (shared/inter-ej).
   const lines = batch.map(
     ({ id, pozycja: p }) =>
-      `${id}\t${p.strona}\t${p.sekcja === 'fundusz' ? 'Fundusz remontowy' : 'Koszty eksploatacji'}\t${p.kwota.toFixed(2)}\t${p.nazwa}`,
+      `${id}\t${p.strona}\t${p.sekcja === 'fundusz' ? 'Fundusz remontowy' : 'Koszty eksploatacji'}\t${nazwaInterEj(p.nazwa) ? '-' : p.kwota.toFixed(2)}\t${p.nazwa}`,
   );
-  return `Rows to classify (tab-separated: id, strona, section, amount in zł, name):\n${lines.join('\n')}`;
+  return `Rows to classify (tab-separated: id, strona, section, amount in zł or "-" when withheld, name):\n${lines.join('\n')}`;
 }
 
 /** The JSON object of a reply, tolerating a code fence or a line of prose around it. */

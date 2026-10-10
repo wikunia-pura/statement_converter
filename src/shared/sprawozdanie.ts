@@ -6,7 +6,9 @@
 
 import {
   DokumentPobranie,
+  PlanSprawozdanieMeta,
   Sprawozdanie,
+  SprawozdanieLaczenie,
   SprawozdanieSekcja,
   SprawozdanieWiersz,
   SprawozdanieWstepTekst,
@@ -14,6 +16,7 @@ import {
   ZebranieSprawozdanie,
 } from './types';
 import { foldText, nazwaNieruchomosci, normalizePobrania } from './plan-gospodarczy';
+import { ukryteKwotyInterEj } from './inter-ej';
 
 const numOrNull = (v: unknown): number | null => {
   if (v === null || v === undefined || v === '') return null;
@@ -61,21 +64,79 @@ export function normalizeSprawozdanieDane(value: unknown): Sprawozdanie | null {
   };
 }
 
-/** Coerce a version's attached statement; null when there is none. */
-export function normalizeZebranieSprawozdanie(value: unknown): ZebranieSprawozdanie | null {
-  if (!value || typeof value !== 'object') return null;
-  const v = value as Record<string, unknown>;
-  const dane = normalizeSprawozdanieDane(v.dane);
-  if (!dane) return null;
+/**
+ * What a version stores of its statement (`zebrania_wersje.sprawozdanie`): only
+ * its own part. The figures are the linked library row's (`sprawozdanie_id`).
+ */
+export interface ZebranieSprawozdanieMeta {
+  dodano: string;
+  dodal: string;
+  pobrania: DokumentPobranie[];
+  wstep: SprawozdanieWstepTekst | null;
+  laczenia: SprawozdanieLaczenie[];
+  podkategorie: SprawozdanieLaczenie[];
+}
+
+/** Coerce a version's own part of its statement. */
+export function normalizeSprawozdanieMeta(value: unknown): ZebranieSprawozdanieMeta {
+  const v = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
   return {
-    dane,
-    plikNazwa: String(v.plikNazwa ?? ''),
-    zrodloId: numOrNull(v.zrodloId),
     dodano: String(v.dodano ?? ''),
     dodal: String(v.dodal ?? ''),
     pobrania: normalizePobrania(v.pobrania) as DokumentPobranie[],
     wstep: normalizeWstepTekst(v.wstep),
+    laczenia: normalizeLaczenia(v.laczenia),
+    podkategorie: normalizeLaczenia(v.podkategorie),
   };
+}
+
+/** Coerce a Plany gospodarcze plan's own part of its statement (none stored = nothing regrouped). */
+export function normalizePlanSprawozdanieMeta(value: unknown): PlanSprawozdanieMeta {
+  const { pobrania, wstep, laczenia, podkategorie } = normalizeSprawozdanieMeta(value);
+  return { pobrania, wstep, laczenia, podkategorie };
+}
+
+/** The library statement a Plany gospodarcze plan was drafted from: its community's, of the plan's period. */
+export function sprawozdanieDlaPlanu<T extends Pick<SprawozdanieZapisane, 'nrWsp' | 'okresOd' | 'okresDo'>>(
+  lista: T[],
+  nrWsp: number,
+  okres: { od: string; do: string },
+): T | undefined {
+  return lista.find((s) => s.nrWsp === nrWsp && s.okresOd === okres.od && s.okresDo === okres.do);
+}
+
+/** The stored mark of a statement unlinked by hand — see `ZebranieWersja.sprawozdanieOdlaczone`. */
+export const SPRAWOZDANIE_ODLACZONE = { odlaczone: true } as const;
+
+export function isSprawozdanieOdlaczone(stored: unknown): boolean {
+  return !!stored && typeof stored === 'object' && (stored as Record<string, unknown>).odlaczone === true;
+}
+
+/**
+ * A version's statement: its own part joined with the library row it links.
+ * Null when it links none, or the row has no readable figures.
+ */
+export function zebranieSprawozdanie(
+  stored: unknown,
+  row: SprawozdanieZapisane | undefined,
+): ZebranieSprawozdanie | null {
+  if (!row?.dane) return null;
+  return { ...normalizeSprawozdanieMeta(stored), dane: row.dane, plikNazwa: row.plikNazwa, sprawozdanieId: row.id };
+}
+
+/**
+ * A version's statement as a backup carries it — whole, figures included (also
+ * the copies of backups written before versions linked the library). Restore
+ * finds or re-creates the library row from it.
+ */
+export function sprawozdanieZKopii(
+  value: unknown,
+): { dane: Sprawozdanie; plikNazwa: string; meta: ZebranieSprawozdanieMeta } | null {
+  if (!value || typeof value !== 'object') return null;
+  const v = value as Record<string, unknown>;
+  const dane = normalizeSprawozdanieDane(v.dane);
+  if (!dane) return null;
+  return { dane, plikNazwa: String(v.plikNazwa ?? ''), meta: normalizeSprawozdanieMeta(v) };
 }
 
 /** Coerce an edited introduction; null when there is none (the computed one applies). */
@@ -86,6 +147,139 @@ export function normalizeWstepTekst(value: unknown): SprawozdanieWstepTekst | nu
     akapit: String(v.akapit ?? '').trim(),
     uwagi: (Array.isArray(v.uwagi) ? v.uwagi : []).map((u) => String(u ?? '').trim()).filter(Boolean),
   };
+}
+
+/* -------------------------------- Merged rows -------------------------------- */
+
+/** Coerce stored merges: a merge of fewer than two named rows is no merge. */
+export function normalizeLaczenia(value: unknown): SprawozdanieLaczenie[] {
+  return (Array.isArray(value) ? value : [])
+    .filter((l) => l && typeof l === 'object')
+    .map((l) => {
+      const r = l as Record<string, unknown>;
+      const wiersze = (Array.isArray(r.wiersze) ? r.wiersze : []).map((w) => String(w ?? '')).filter(Boolean);
+      return { sekcja: String(r.sekcja ?? ''), wiersze: [...new Set(wiersze)], nazwa: String(r.nazwa ?? '').trim() };
+    })
+    .filter((l) => l.sekcja && l.nazwa && l.wiersze.length >= 2);
+}
+
+/**
+ * A row a merge must not take: the introduction reads it by its printed name
+ * (the repair fund's opening balance), so a merge would skew its figures.
+ * A subcategory keeps the name and may hold it.
+ */
+export function bezLaczenia(nazwa: string): boolean {
+  return /^bilans otwarcia/.test(foldText(nazwa));
+}
+
+/**
+ * Whether a merge still fits the statement: its section is there, and so is
+ * every row it names, as an item row. A newer print that renamed or dropped a
+ * row leaves the merge out — it is shown as out of date, never re-guessed.
+ */
+export function laczenieAktualne(spr: Sprawozdanie, l: SprawozdanieLaczenie): boolean {
+  const sec = spr.sekcje.find((s) => s.tytul === l.sekcja);
+  if (!sec) return false;
+  return l.wiersze.every((n) => sec.wiersze.some((w) => !w.podsumowanie && w.nazwa === n));
+}
+
+/**
+ * The statement with the merges applied: each merge's rows become one row at
+ * the place of its first, named as given, summing every column (a column empty
+ * in all of them stays empty). Summary rows are never touched — the
+ * introduction reads them. A merge that is out of date, or names a row an
+ * earlier merge took, is skipped.
+ */
+export function zastosujLaczenia(spr: Sprawozdanie, laczenia: SprawozdanieLaczenie[]): Sprawozdanie {
+  if (laczenia.length === 0) return spr;
+  const sekcje = spr.sekcje.map((sec) => {
+    const own = laczenia.filter((l) => l.sekcja === sec.tytul && laczenieAktualne(spr, l));
+    if (own.length === 0) return sec;
+    const taken = new Set<string>();
+    const merges = own.filter((l) => {
+      if (l.wiersze.some((n) => taken.has(n))) return false;
+      l.wiersze.forEach((n) => taken.add(n));
+      return true;
+    });
+    const wiersze: SprawozdanieWiersz[] = [];
+    const placed = new Set<SprawozdanieLaczenie>();
+    for (const w of sec.wiersze) {
+      const l = w.podsumowanie ? undefined : merges.find((m) => m.wiersze.includes(w.nazwa));
+      if (!l) {
+        wiersze.push(w);
+        continue;
+      }
+      if (placed.has(l)) continue;
+      placed.add(l);
+      const parts = sec.wiersze.filter((x) => !x.podsumowanie && l.wiersze.includes(x.nazwa));
+      wiersze.push({
+        nazwa: l.nazwa,
+        kwoty: sumaKolumn(sec, parts),
+        podsumowanie: false,
+        wyroznienie: false,
+        polaczone: parts.map((x) => x.nazwa),
+      });
+    }
+    return { ...sec, wiersze };
+  });
+  return { ...spr, sekcje };
+}
+
+/** Sum of the rows per column; a column empty in all of them stays empty. */
+function sumaKolumn(sec: SprawozdanieSekcja, rows: SprawozdanieWiersz[]): (number | null)[] {
+  return sec.kolumny.map((_, c) => {
+    const vals = rows.map((x) => x.kwoty[c]).filter((k): k is number => k != null);
+    return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) * 100) / 100 : null;
+  });
+}
+
+/**
+ * The statement with the subcategories applied: each one's rows move together
+ * under a heading row at the place of the first of them — the heading carries
+ * the name and the sums, the rows stay as they are. Same rules as a merge: item
+ * rows of one section only, out-of-date or overlapping ones skipped.
+ */
+export function zastosujPodkategorie(spr: Sprawozdanie, podkategorie: SprawozdanieLaczenie[]): Sprawozdanie {
+  if (podkategorie.length === 0) return spr;
+  const sekcje = spr.sekcje.map((sec) => {
+    const taken = new Set<string>();
+    const own = podkategorie.filter((l) => {
+      if (l.sekcja !== sec.tytul || !laczenieAktualne(spr, l) || l.wiersze.some((n) => taken.has(n))) return false;
+      l.wiersze.forEach((n) => taken.add(n));
+      return true;
+    });
+    if (own.length === 0) return sec;
+    const wiersze: SprawozdanieWiersz[] = [];
+    const placed = new Set<SprawozdanieLaczenie>();
+    for (const w of sec.wiersze) {
+      const l = w.podsumowanie ? undefined : own.find((m) => m.wiersze.includes(w.nazwa));
+      if (!l) {
+        wiersze.push(w);
+        continue;
+      }
+      if (placed.has(l)) continue;
+      placed.add(l);
+      const parts = sec.wiersze.filter((x) => !x.podsumowanie && l.wiersze.includes(x.nazwa));
+      wiersze.push({
+        nazwa: l.nazwa,
+        kwoty: sumaKolumn(sec, parts),
+        podsumowanie: false,
+        wyroznienie: false,
+        podkategoria: 'naglowek',
+      });
+      wiersze.push(...parts.map((x) => ({ ...x, podkategoria: 'pozycja' as const })));
+    }
+    return { ...sec, wiersze };
+  });
+  return { ...spr, sekcje };
+}
+
+/**
+ * A version's statement as its documents show it: the library's figures with
+ * the version's merges, then its subcategories over the merged rows.
+ */
+export function sprawozdanieWersji(z: ZebranieSprawozdanie): Sprawozdanie {
+  return zastosujPodkategorie(zastosujLaczenia(z.dane, z.laczenia), z.podkategorie);
 }
 
 /* -------------------------------- Formatting -------------------------------- */
@@ -145,6 +339,30 @@ export function sprawozdaniaDlaWspolnoty(
   return [...hits].sort((a, b) => b.okresDo.localeCompare(a.okresDo) || b.importedAt.localeCompare(a.importedAt));
 }
 
+/** How far before the meeting a statement's period may end and still be the one it presents. */
+const AUTO_OKRES_MIESIECY = 12;
+
+/**
+ * The statement a meeting links by itself, when the choice is unambiguous: the
+ * community's vDom number is known (never a match by name), and among its
+ * statements whose period ended before the meeting — at most a year before —
+ * exactly one has the latest end. Anything else is left to the user.
+ */
+export function sprawozdanieDlaZebrania(
+  lista: SprawozdanieZapisane[],
+  vdomNr: number | null,
+  dataZebrania: string | null,
+): SprawozdanieZapisane | null {
+  const dzien = dataZebrania?.slice(0, 10) ?? '';
+  if (vdomNr == null || !/^\d{4}-\d{2}-\d{2}$/.test(dzien)) return null;
+  const [y, m, d] = dzien.split('-').map(Number);
+  const od = new Date(Date.UTC(y, m - 1 - AUTO_OKRES_MIESIECY, d)).toISOString().slice(0, 10);
+  const kandydaci = lista.filter((s) => s.nrWsp === vdomNr && s.okresDo < dzien && s.okresDo >= od);
+  const najnowszy = kandydaci.reduce((max, s) => (s.okresDo > max ? s.okresDo : max), '');
+  const trafione = kandydaci.filter((s) => s.okresDo === najnowszy);
+  return trafione.length === 1 ? trafione[0] : null;
+}
+
 /* ------------------------------ For the documents ------------------------------ */
 
 const isZero = (k: number | null | undefined) => k == null || Math.abs(k) < 0.005;
@@ -157,10 +375,14 @@ const hasValue = (w: SprawozdanieWiersz) => w.kwoty.some((k) => !isZero(k));
  */
 export function bezZerowych(spr: Sprawozdanie): Sprawozdanie {
   const sekcje = spr.sekcje
-    .map((sec) => ({
-      ...sec,
-      wiersze: sec.wiersze.filter((w) => (w.podsumowanie ? w.kwoty.some((k) => k != null) : hasValue(w))),
-    }))
+    .map((sec) => {
+      const kept = sec.wiersze.filter((w) =>
+        w.podsumowanie ? w.kwoty.some((k) => k != null) : w.podkategoria === 'naglowek' || hasValue(w),
+      );
+      // A subcategory's heading goes with its rows: kept while one of them is.
+      const wiersze = kept.filter((w, i) => w.podkategoria !== 'naglowek' || kept[i + 1]?.podkategoria === 'pozycja');
+      return { ...sec, wiersze };
+    })
     .filter((sec) => !isZero(sec.kwotaNaglowka) || sec.wiersze.some(hasValue));
   return { ...spr, sekcje };
 }
@@ -181,7 +403,12 @@ export interface WstepPozycja {
  */
 export interface SprawozdanieWstep {
   kluczowe: WstepPozycja[];
-  akapit: string;
+  /**
+   * What the period came to, in plain sentences built from the figures. Not
+   * printed: the paragraph starts empty and is written by the AI from these
+   * facts (or by hand) — this is what the AI is told is true.
+   */
+  fakty: string;
   uwagi: string[];
 }
 
@@ -192,7 +419,8 @@ function sekcja(spr: Sprawozdanie, re: RegExp): SprawozdanieSekcja | undefined {
 }
 
 function wiersz(sec: SprawozdanieSekcja | undefined, re: RegExp): SprawozdanieWiersz | undefined {
-  return sec?.wiersze.find((w) => re.test(foldText(w.nazwa)));
+  // A subcategory's heading is a name given at the meeting, not a row vDom printed.
+  return sec?.wiersze.find((w) => w.podkategoria !== 'naglowek' && re.test(foldText(w.nazwa)));
 }
 
 function kolumna(sec: SprawozdanieSekcja | undefined, re: RegExp): number {
@@ -260,8 +488,11 @@ export function sprawozdanieWstep(spr: Sprawozdanie): SprawozdanieWstep {
     }
   }
   if (eks && eksK >= 0) {
+    // INTER-EJ's fee is never named (shared/inter-ej) — not even as one of the biggest costs.
+    const ukryte = ukryteKwotyInterEj(eks);
     const top = eks.wiersze
-      .filter((w) => !w.podsumowanie && (w.kwoty[eksK] ?? 0) > 0)
+      // A subcategory counts as one item, by its heading.
+      .filter((w, i) => !w.podsumowanie && w.podkategoria !== 'pozycja' && !ukryte.has(i) && (w.kwoty[eksK] ?? 0) > 0)
       .sort((a, b) => (b.kwoty[eksK] ?? 0) - (a.kwoty[eksK] ?? 0))
       .slice(0, 3);
     if (top.length > 0) {
@@ -330,5 +561,5 @@ export function sprawozdanieWstep(spr: Sprawozdanie): SprawozdanieWstep {
     if (srodki < 0) uwagi.push(`Stan środków pieniężnych jest ujemny: ${zl(srodki)}.`);
   }
 
-  return { kluczowe, akapit: zdania.join(' '), uwagi };
+  return { kluczowe, fakty: zdania.join(' '), uwagi };
 }

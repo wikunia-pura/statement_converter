@@ -57,11 +57,10 @@ export class SantanderXmlConverter extends BaseConverter<XmlTransaction> {
 
   protected doFilter(
     transactions: XmlTransaction[],
-    opts: { skipNegative: boolean; skipBankFees: boolean }
+    opts: { skipNegative: boolean }
   ): XmlTransaction[] {
     return this.parser.filterTransactions(transactions, {
       skipNegative: opts.skipNegative,
-      skipBankFees: opts.skipBankFees,
     });
   }
 

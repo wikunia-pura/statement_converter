@@ -9,7 +9,7 @@ import type {
   PodatkiPitPostep,
 } from '../shared/types';
 import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, ZgnPelnomocnik, ZarzadOsoba, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent, AppUser, SpotkanieTyp, SpotkanieLokalizacja, Spotkanie, SpotkanieInput, KalendarzPdfRequest, SpotkanieMailing, SpotkanieTerminStatus, SpotkanieMaterialyStatus, SpotkanieMaterialyKrok, KsiegowaniePriorytet,
-  KsiegowaniePrzypisanie, KsiegowanieUwaga, KsiegowaniePlik, ScanDecision, ScanProgress, ScanReport, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik, ZadanieKomentarz, ZadanieKomentarzInput, ZadanieKomentarzPodsumowanie, ZadanieNotatka, MailingAdresaci, MailingTypDef, MailingKalendarzContext, MailingExportRequest, MailingExportResult, Zebranie, ZebranieInput, ZebranieDokumentKlucz, ZebranieWersja, ZebranieWersjaInput, SprawozdaniaImportResult, SprawozdaniaWlasneImportResult, SprawozdanieExportRequest, PlanWlasny, PlanWlasnyExportRequest, PodatekNieruchomosci, PodatekNieruchomosciDane, PodatkiImportResult, PodatkiPdfWszystkieResult, PodatkiPodpisPostep, PodatkiPodpisWieleResult, PodatkiStawki, PodatkiStawkiDane, AdresIdentyfikacja, AdresyZasilenieResult, PodatekCit, PodatekCitDane, PodatkiCitPdfWszystkieResult, PodatkiCitUstawienia, CitAiPozycja, CitAiPropozycja, PodpisKartaStan, PodpisSlad, PodpisWybor, PodpisPdfAnaliza, PodpisPdfWynik, PodpisHistoriaEntry, ZebraniePakietRequest, SprawozdanieZapisane, SprawozdanieWstepTekst, PlanGospodarczy, ZebraniaWspolnota, AdresUdzialy, ZebraniaUstawienia, ZebranieDokumentRequest } from '../shared/types';
+  KsiegowaniePrzypisanie, KsiegowanieUwaga, KsiegowaniePlik, ScanDecision, ScanProgress, ScanReport, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik, ZadanieKomentarz, ZadanieKomentarzInput, ZadanieKomentarzPodsumowanie, ZadanieNotatka, MailingAdresaci, MailingTypDef, MailingKalendarzContext, MailingZebranieContext, MailingExportRequest, MailingExportResult, Zebranie, ZebranieInput, ZebranieDokumentKlucz, ZebranieWersja, ZebranieWersjaInput, SprawozdaniaImportResult, SprawozdanieExportRequest, PlanWlasny, PlanWlasnyExportRequest, PodatekNieruchomosci, PodatekNieruchomosciDane, PodatkiImportResult, PodatkiPdfWszystkieResult, PodatkiPodpisPostep, PodatkiPodpisWieleResult, PodatkiStawki, PodatkiStawkiDane, AdresIdentyfikacja, AdresyZasilenieResult, PodatekCit, PodatekCitDane, PodatkiCitPdfWszystkieResult, PodatkiCitUstawienia, CitAiPozycja, CitAiPropozycja, PodpisKartaStan, PodpisSlad, PodpisWybor, PodpisPdfAnaliza, PodpisPdfWynik, PodpisHistoriaEntry, ZebraniePakietRequest, SprawozdanieZapisane, SprawozdanieWstepTekst, SprawozdanieLaczenie, SprawozdanieLaczeniePropozycja, SprawozdanieGrupowanie, SprawozdanieCel, PlanGospodarczy, PlanZaliczkaAiPropozycja, ZebraniaWspolnota, AdresUdzialy, ZebraniaUstawienia, ZebranieDokumentRequest } from '../shared/types';
 import type { MailingRecipientsResolved } from '../shared/mailing-recipients';
 
 // Zaliczki shared types (referenced by the main-process helpers)
@@ -433,6 +433,8 @@ interface ElectronAPI {
     tekst: string,
     jednostka: string,
     typWartosci: MailingPoleTyp,
+    /** Mailing kind (`klucz`) the field is offered in; null = every kind. */
+    typ: string | null,
   ) => Promise<MailingPole>;
   mailingUpdatePole: (
     id: number,
@@ -440,6 +442,7 @@ interface ElectronAPI {
     tekst: string,
     jednostka: string,
     typWartosci: MailingPoleTyp,
+    typ: string | null,
   ) => Promise<boolean>;
   mailingDeletePole: (id: number) => Promise<boolean>;
 
@@ -474,6 +477,8 @@ interface ElectronAPI {
     wykluczeni?: string[];
     /** What the meeting fills the calendar fields with, when sent from one. */
     kalendarz?: MailingKalendarzContext | null;
+    /** The meeting version's statement, plan and resolutions, when sent from Zebrania. */
+    zebranie?: MailingZebranieContext | null;
   }) => Promise<{ success?: boolean; results?: MailingSendResult[]; error?: string }>;
   mailingGetHistory: () => Promise<MailingHistoryEntry[]>;
   mailingClearHistory: () => Promise<boolean>;
@@ -540,16 +545,34 @@ interface ElectronAPI {
   setZebranieDokumentGotowe: (id: number, dokument: ZebranieDokumentKlucz, gotowe: boolean) => Promise<boolean>;
   /** Rename a revision; an empty name falls back to its number. */
   setZebranieWersjaNazwa: (id: number, nazwa: string) => Promise<boolean>;
-  /** Pick a vDom "RozliczenieWsp" PDF and store every community's statement; null when cancelled. */
-  importSprawozdania: () => Promise<SprawozdaniaImportResult | null>;
   /** The statement library, without the statements themselves. */
   getSprawozdaniaLista: () => Promise<SprawozdanieZapisane[]>;
   getSprawozdanie: (id: number) => Promise<SprawozdanieZapisane | null>;
-  /** Attach a library statement to a version, as a copy. */
+  /** Link a library statement to a version (the figures stay the library's). */
   attachZebranieSprawozdanie: (wersjaId: number, sprawozdanieId: number) => Promise<boolean>;
   removeZebranieSprawozdanie: (wersjaId: number) => Promise<boolean>;
-  /** Save the edited introduction of a version's statement; null goes back to the computed one. */
-  setZebranieSprawozdanieWstep: (wersjaId: number, wstep: SprawozdanieWstepTekst | null) => Promise<boolean>;
+  /** Save the edited introduction of a version's (or a module plan's) statement; null goes back to the computed one. */
+  setSprawozdanieWstep: (cel: SprawozdanieCel, wstep: SprawozdanieWstepTekst | null) => Promise<boolean>;
+  /** Save the merges, or the subcategories, of a version's (or a module plan's) statement — the whole list of that kind. */
+  setSprawozdanieLaczenia: (
+    cel: SprawozdanieCel,
+    rodzaj: SprawozdanieGrupowanie,
+    lista: SprawozdanieLaczenie[],
+  ) => Promise<boolean>;
+  /** Merges or subcategories the AI suggests for the statement — only suggestions, nothing is stored. */
+  proponujLaczeniaSprawozdaniaAi: (
+    cel: SprawozdanieCel,
+    rodzaj: SprawozdanieGrupowanie,
+  ) => Promise<SprawozdanieLaczeniePropozycja[]>;
+  /** A draft of the statement introduction's paragraph, by the AI, with the user's guidance — nothing is stored. */
+  napiszWstepSprawozdaniaAi: (cel: SprawozdanieCel, wskazowki: string) => Promise<string>;
+  /** The AI's proposal of the advance "A" or "B" rate for a plan as on screen (unsaved edits too). */
+  proponujZaliczkeAi: (
+    plan: PlanGospodarczy,
+    rodzaj: 'A' | 'B',
+    wskazowki: string,
+    dataZebrania: string | null
+  ) => Promise<PlanZaliczkaAiPropozycja>;
   /** Save (or with null remove) a version's budget plan. */
   setZebranieWersjaPlan: (wersjaId: number, plan: PlanGospodarczy | null) => Promise<boolean>;
   getZebraniaWspolnoty: () => Promise<ZebraniaWspolnota[]>;
@@ -562,12 +585,13 @@ interface ElectronAPI {
   /** Write a version's statement or plan to Downloads; the path of the file. */
   exportZebranieDokument: (request: ZebranieDokumentRequest) => Promise<{ filePath: string }>;
   /**
-   * Sprawozdania: pick a vDom file and add the statements Zebrania does not
-   * have (those it has are counted in `pominiete`); null when cancelled.
+   * Sprawozdania: pick a vDom "RozliczenieWsp" PDF and store every community's
+   * statement — a newer print of a period replaces it, also in the meetings
+   * linked to it; null when cancelled.
    */
-  importSprawozdaniaWlasne: () => Promise<SprawozdaniaWlasneImportResult | null>;
-  /** Remove a statement added in Sprawozdania; one from Zebrania is refused. */
-  deleteSprawozdanieWlasne: (id: number) => Promise<boolean>;
+  importSprawozdania: () => Promise<SprawozdaniaImportResult | null>;
+  /** Remove a statement from the library; one a meeting is linked to is refused. */
+  deleteSprawozdanie: (id: number) => Promise<boolean>;
   /** Write a library statement to Downloads as PDF or Excel; the path of the file. */
   exportSprawozdanie: (request: SprawozdanieExportRequest) => Promise<{ filePath: string }>;
   /** Write a version's materials as one PDF (cover + the parts asked for) to Downloads. */

@@ -61,7 +61,11 @@ export function planSkrot(plan: PlanGospodarczy): Skrot {
   });
   const uwagi: string[] = [];
   if (Math.abs(s.roznicaA) >= 0.01) {
-    uwagi.push(`Wpływy i koszty części I planu różnią się o ${zl(s.roznicaA)}.`);
+    uwagi.push(
+      s.roznicaA > 0
+        ? `Część I planu ma nadwyżkę: wpływy przewyższają koszty o ${zl(s.roznicaA)}.`
+        : `Część I planu ma niedobór: koszty przewyższają wpływy o ${zl(-s.roznicaA)}.`,
+    );
   }
   if (s.saldoBKoniec < 0) {
     uwagi.push(`Planowane koszty przekraczają fundusz remontowy o ${zl(-s.saldoBKoniec)}.`);

@@ -295,7 +295,6 @@ export class PKOBPMT940Parser {
     transactions: MT940Transaction[],
     options: {
       skipNegative?: boolean;
-      skipBankFees?: boolean;
       onlyPositive?: boolean;
       skipVirtualAccountTransfers?: boolean;
     } = {}
@@ -308,11 +307,6 @@ export class PKOBPMT940Parser {
 
       // Only include credit transactions (income) if requested
       if (options.onlyPositive && trn.debitCredit !== 'C') {
-        return false;
-      }
-
-      // Skip bank fees (transaction type "N188")
-      if (options.skipBankFees && trn.transactionType.includes('188')) {
         return false;
       }
 

@@ -16,7 +16,15 @@
  * process. The pills are decoration the editor puts on and takes off again.
  */
 
-import { MailingFieldValue, MailingKalendarzContext, MailingPole, MailingPoleTyp } from './types';
+import {
+  MailingFieldValue,
+  MailingKalendarzContext,
+  MailingPole,
+  MailingPoleTyp,
+  MailingTyp,
+  MailingZebranieContext,
+  MailingZebranieOpcja,
+} from './types';
 import {
   LOGO_ACCENT_COLOR,
   LOGO_BAND_COLOR,
@@ -91,6 +99,69 @@ export const KALENDARZ_FIELDS: {
   },
 ];
 
+/** The repair fund's balance at the end of the statement linked to the meeting. */
+export const FIELD_ZEB_WYNIK_FR = 'Wynik funduszu remontowego';
+/** Advance "A"'s balance — the running costs' result carried forward, from the statement. */
+export const FIELD_ZEB_SALDO_A = 'Wynik salda zaliczki A';
+/** The plan's line covering a loss; with several, the letter picks one. */
+export const FIELD_ZEB_POKRYCIE = 'Pokrycie straty';
+/** The plan's advances "A" and "B" by stretch of the year — a table. */
+export const FIELD_ZEB_ZALICZKI = 'Zaliczki A i B z planu';
+/** The meeting version's resolutions, in order — a numbered list. */
+export const FIELD_ZEB_UCHWALY = 'Lista uchwał';
+
+/**
+ * How a Zebrania field resolves: `tekst` is one value, `wybor` one of several
+ * candidates the letter picks from, `lista` several rows rendered as a block
+ * (a table or a list) — which, like `{{Tabela pól}}`, a subject cannot hold.
+ */
+export type ZebranieFieldKind = 'tekst' | 'wybor' | 'lista';
+
+/**
+ * The fields a meeting version fills in from its statement, its plan and its
+ * resolutions. Unlike the calendar fields they have no hand-typed fallback: they
+ * work only in a letter made in the Zebrania module, and anywhere else they
+ * stay visibly unfilled — a figure typed from memory is exactly the mistake they
+ * exist to prevent.
+ */
+export const ZEBRANIE_FIELDS: {
+  nazwa: string;
+  key: keyof MailingZebranieContext;
+  kind: ZebranieFieldKind;
+  opis: string;
+}[] = [
+  {
+    nazwa: FIELD_ZEB_WYNIK_FR,
+    key: 'wynikFunduszuRemontowego',
+    kind: 'tekst',
+    opis: 'Stan funduszu remontowego na koniec okresu sprawozdania dołączonego do zebrania.',
+  },
+  {
+    nazwa: FIELD_ZEB_SALDO_A,
+    key: 'saldoZaliczkiA',
+    kind: 'tekst',
+    opis: 'Narastający wynik finansowy kosztów eksploatacji (saldo zaliczki „A”) ze sprawozdania zebrania. Strata ze znakiem minus.',
+  },
+  {
+    nazwa: FIELD_ZEB_POKRYCIE,
+    key: 'pokrycieStraty',
+    kind: 'wybor',
+    opis: 'Kwota pokrycia straty z planu gospodarczego zebrania. Gdy plan ma kilka takich pozycji, wybierasz jedną w dokumencie.',
+  },
+  {
+    nazwa: FIELD_ZEB_ZALICZKI,
+    key: 'zaliczki',
+    kind: 'lista',
+    opis: 'Tabela stawek zaliczki „A” i „B” z planu gospodarczego zebrania, z podziałem na miesiące roku.',
+  },
+  {
+    nazwa: FIELD_ZEB_UCHWALY,
+    key: 'uchwaly',
+    kind: 'lista',
+    opis: 'Numerowana lista uchwał przygotowanych w zebraniu, w ich kolejności.',
+  },
+];
+
 /**
  * Fields every template can use without defining them. They resolve from the
  * send context rather than from a value the user types, so they carry no `tekst`.
@@ -105,7 +176,35 @@ export const BUILTIN_MAILING_FIELDS: { nazwa: string; opis: string }[] = [
       'Tabela: zdanie pola w pierwszej kolumnie, wartość w drugiej. Pola dla niej ' +
       'wybierasz w szablonie, a wiersze zaznaczasz przy wysyłce.',
   },
+  ...ZEBRANIE_FIELDS.map(({ nazwa, opis }) => ({ nazwa, opis })),
 ];
+
+/** The Zebrania field a name refers to, whatever its spelling. */
+export function zebranieFieldOf(nazwa: string): (typeof ZEBRANIE_FIELDS)[number] | undefined {
+  const key = normalizeFieldName(parseFieldRef(nazwa).nazwa);
+  return ZEBRANIE_FIELDS.find((f) => normalizeFieldName(f.nazwa) === key);
+}
+
+export function isZebranieField(nazwa: string): boolean {
+  return zebranieFieldOf(nazwa) !== undefined;
+}
+
+/**
+ * Fields that resolve to a block of markup — the field table, the advances table,
+ * the list of resolutions. A subject line is one line of text and cannot hold one.
+ */
+export function isBlockField(nazwa: string): boolean {
+  return isFieldTableField(nazwa) || zebranieFieldOf(nazwa)?.kind === 'lista';
+}
+
+/**
+ * Whether a dictionary field may be offered in a template of the given kind: an
+ * unbound field everywhere, a bound one only in its own kind. With no kind known
+ * (a letter made from scratch) every field is offered.
+ */
+export function poleAllowedForTyp(pole: Pick<MailingPole, 'typ'>, typ: MailingTyp | null | undefined): boolean {
+  return !pole.typ || !typ || pole.typ === typ;
+}
 
 /** The calendar field a name refers to, whatever its spelling. */
 export function kalendarzFieldOf(nazwa: string): (typeof KALENDARZ_FIELDS)[number] | undefined {
@@ -269,6 +368,123 @@ export interface MailingRenderContext {
    * into `values` under the field's name.
    */
   kalendarz?: MailingKalendarzContext | null;
+  /**
+   * What the meeting version says — fills the Zebrania fields. Absent outside
+   * the Zebrania module, where those fields stay unfilled.
+   */
+  zebranie?: MailingZebranieContext | null;
+}
+
+/**
+ * The candidate a "pick one" Zebrania field resolves to: the only one when there
+ * is one, otherwise the one the letter picked (stored among its values by key).
+ */
+export function zebranieChoice(nazwa: string, ctx: MailingRenderContext): MailingZebranieOpcja | undefined {
+  const field = zebranieFieldOf(nazwa);
+  if (!field || field.kind !== 'wybor' || !ctx.zebranie) return undefined;
+  const opcje = ctx.zebranie[field.key] as MailingZebranieOpcja[];
+  if (opcje.length === 1) return opcje[0];
+  const picked = readFieldValue(ctx.values, field.nazwa);
+  return opcje.find((o) => o.klucz === picked);
+}
+
+/** The candidates of a "pick one" Zebrania field — empty outside Zebrania. */
+export function zebranieOptions(nazwa: string, ctx: MailingRenderContext): MailingZebranieOpcja[] {
+  const field = zebranieFieldOf(nazwa);
+  if (!field || field.kind !== 'wybor' || !ctx.zebranie) return [];
+  return ctx.zebranie[field.key] as MailingZebranieOpcja[];
+}
+
+/**
+ * A Zebrania field as one line of text — the subject's spelling, and what the
+ * history records. Empty when the meeting has nothing for it (or there is no
+ * meeting at all).
+ */
+export function resolveZebranieValue(nazwa: string, ctx: MailingRenderContext): string {
+  const field = zebranieFieldOf(nazwa);
+  const z = ctx.zebranie;
+  if (!field || !z) return '';
+  switch (field.key) {
+    case 'wynikFunduszuRemontowego':
+    case 'saldoZaliczkiA':
+      return z[field.key].trim();
+    case 'pokrycieStraty':
+      return zebranieChoice(nazwa, ctx)?.kwota ?? '';
+    case 'zaliczki':
+      return z.zaliczki
+        .map((r) => `${r.okres}: zaliczka „A” ${r.zaliczkaA}, zaliczka „B” ${r.zaliczkaB}`)
+        .join('; ');
+    case 'uchwaly':
+      return z.uchwaly.map((tytul, i) => `${i + 1}. ${tytul}`).join('; ');
+    default:
+      return '';
+  }
+}
+
+/**
+ * A block Zebrania field as mail-safe markup — the advances as a table, the
+ * resolutions as a numbered list; every value escaped. Empty when there is
+ * nothing to list, like the field table: an empty box would read as a mistake.
+ */
+export function buildZebranieBlockHtml(nazwa: string, ctx: MailingRenderContext): string {
+  const field = zebranieFieldOf(nazwa);
+  const z = ctx.zebranie;
+  if (!field || !z) return '';
+  if (field.key === 'zaliczki') {
+    if (z.zaliczki.length === 0) return '';
+    const th = (text: string) =>
+      `<th style="${MAIL_TABLE_CELL_STYLE}${MAIL_TABLE_HEADER_CELL_STYLE}">${escapeHtml(text)}</th>`;
+    const td = (text: string, value = false) =>
+      `<td style="${MAIL_TABLE_CELL_STYLE}${value ? 'font-weight:600;' : ''}">${escapeHtml(text)}</td>`;
+    const body = z.zaliczki
+      .map((r) => `<tr>${td(r.okres)}${td(r.zaliczkaA, true)}${td(r.zaliczkaB, true)}</tr>`)
+      .join('');
+    return (
+      `<table style="${MAIL_TABLE_STYLE}" cellpadding="0" cellspacing="0" border="0">` +
+      `<thead><tr>${th('Okres')}${th('Zaliczka „A”')}${th('Zaliczka „B”')}</tr></thead>` +
+      `<tbody>${body}</tbody></table>`
+    );
+  }
+  if (field.key === 'uchwaly') {
+    if (z.uchwaly.length === 0) return '';
+    return `<ol>${z.uchwaly.map((tytul) => `<li>${escapeHtml(tytul)}</li>`).join('')}</ol>`;
+  }
+  return '';
+}
+
+/**
+ * The markup a block field resolves to in the body: the field table or a Zebrania
+ * list. Null for any other field.
+ */
+function blockFieldHtml(nazwa: string, ctx: MailingRenderContext): string | null {
+  if (isFieldTableField(nazwa)) return buildFieldTableHtml(ctx);
+  if (zebranieFieldOf(nazwa)?.kind === 'lista') return buildZebranieBlockHtml(nazwa, ctx);
+  return null;
+}
+
+/**
+ * Why a Zebrania field has no value, in the user's words — shown where it stays
+ * blank. Empty when it has one.
+ */
+export function zebranieMissingReason(nazwa: string, ctx: MailingRenderContext): string {
+  const field = zebranieFieldOf(nazwa);
+  if (!field || resolveZebranieValue(nazwa, ctx)) return '';
+  if (!ctx.zebranie) return 'Pole działa tylko w dokumentach przygotowywanych w module Zebrania.';
+  switch (field.key) {
+    case 'wynikFunduszuRemontowego':
+    case 'saldoZaliczkiA':
+      return 'Ta wersja zebrania nie ma dołączonego sprawozdania (albo sprawozdanie nie podaje tej kwoty).';
+    case 'pokrycieStraty':
+      return ctx.zebranie.pokrycieStraty.length > 1
+        ? 'Plan ma kilka pozycji pokrycia straty — wybierz, którą wstawić.'
+        : 'Plan gospodarczy tej wersji nie ma pozycji pokrycia straty (albo planu jeszcze nie ma).';
+    case 'zaliczki':
+      return 'Ta wersja zebrania nie ma jeszcze planu gospodarczego.';
+    case 'uchwaly':
+      return 'Ta wersja zebrania nie ma jeszcze uchwał.';
+    default:
+      return '';
+  }
 }
 
 /**
@@ -329,6 +545,10 @@ export function missingFieldValues(ctx: MailingRenderContext, ...texts: string[]
     if (missing.has(key)) continue;
     if (isKalendarzField(ref.nazwa)) {
       if (!resolveKalendarzValue(ref.nazwa, ctx)) missing.set(key, ref.nazwa);
+      continue;
+    }
+    if (isZebranieField(ref.nazwa)) {
+      if (!resolveZebranieValue(ref.nazwa, ctx)) missing.set(key, ref.nazwa);
       continue;
     }
     if (isBuiltinField(ref.nazwa) || ref.part === 'label') continue;
@@ -431,6 +651,8 @@ function resolveField(raw: string, ctx: MailingRenderContext): string {
   if (key === normalizeFieldName(FIELD_ADDRESS)) return ctx.adresNazwa;
   if (key === normalizeFieldName(FIELD_DATE)) return ctx.dateText;
   if (isKalendarzField(nazwa)) return resolveKalendarzValue(nazwa, ctx);
+  // A block field here is in the subject, spelled out on one line.
+  if (isZebranieField(nazwa)) return resolveZebranieValue(nazwa, ctx);
   // Only reachable from renderPlain — the subject line, where a table cannot go.
   // The rows are still written out rather than dropped, so a placeholder pasted
   // into the subject by mistake is visible instead of silently swallowed.
@@ -469,17 +691,18 @@ export function renderPlain(text: string, ctx: MailingRenderContext): string {
  * one.
  */
 export function renderHtml(html: string, ctx: MailingRenderContext): string {
-  const tableHtml = buildFieldTableHtml(ctx);
   return (
     (html ?? '')
       // The editor wraps whatever the user types in a block element, so the
       // placeholder normally sits alone inside a <p>. Replacing the paragraph as
-      // a whole keeps a <table> out of a <p>, which is markup mail clients
-      // re-shuffle in their own ways (and Outlook renders with extra spacing).
-      .replace(FIELD_TABLE_BLOCK_RE, () => tableHtml)
-      .replace(PLACEHOLDER_RE, (_all, nazwa: string) =>
-        isFieldTableField(nazwa) ? tableHtml : escapeHtml(resolveField(nazwa, ctx)),
-      )
+      // a whole keeps a <table> (or a list) out of a <p>, which is markup mail
+      // clients re-shuffle in their own ways (and Outlook renders with extra
+      // spacing).
+      .replace(BLOCK_FIELD_PARAGRAPH_RE, (all, _tag: string, nazwa: string) => blockFieldHtml(nazwa, ctx) ?? all)
+      .replace(PLACEHOLDER_RE, (_all, nazwa: string) => {
+        const block = blockFieldHtml(nazwa, ctx);
+        return block ?? escapeHtml(resolveField(nazwa, ctx));
+      })
   );
 }
 
@@ -551,14 +774,15 @@ export function buildFieldTableHtml(ctx: MailingRenderContext): string {
 }
 
 /**
- * The table placeholder alone in its own block element, `<br>` padding included —
- * that is how the rich-text editor stores a placeholder on its own line. Built
- * from `FIELD_TABLE` so the accepted spellings stay those `normalizeFieldName`
- * accepts: any casing, any run of whitespace.
+ * A block field's placeholder alone in its own block element, `<br>` padding
+ * included — that is how the rich-text editor stores a placeholder on its own
+ * line. Any placeholder matches here; `renderHtml` keeps the paragraph of one
+ * that is not a block field. Group 2 is the field's name, so the accepted
+ * spellings stay those `normalizeFieldName` accepts: any casing, any whitespace.
  */
-const FIELD_TABLE_BLOCK_RE = new RegExp(
+const BLOCK_FIELD_PARAGRAPH_RE = new RegExp(
   `<(p|div)[^>]*>\\s*(?:<br\\s*/?>\\s*)*` +
-    `\\{\\{\\s*${FIELD_TABLE.trim().split(/\s+/).join('\\s+')}\\s*\\}\\}` +
+    `\\{\\{\\s*([^{}|]+?)\\s*\\}\\}` +
     `\\s*(?:<br\\s*/?>\\s*)*</\\1>`,
   'gi',
 );
@@ -573,7 +797,7 @@ export function collectFieldValues(
   ctx: MailingRenderContext,
 ): MailingFieldValue[] {
   const names = [
-    ...usedFields.filter((nazwa) => !isBuiltinField(nazwa) || isKalendarzField(nazwa)),
+    ...usedFields.filter((nazwa) => !isBuiltinField(nazwa) || isKalendarzField(nazwa) || isZebranieField(nazwa)),
     ...(ctx.tableFields ?? []),
   ];
   const seen = new Set<string>();
@@ -582,6 +806,18 @@ export function collectFieldValues(
     const key = normalizeFieldName(nazwa);
     if (!key || seen.has(key)) continue;
     seen.add(key);
+    // A Zebrania field likewise: the plan may change, the sent letter does not.
+    const zebField = zebranieFieldOf(nazwa);
+    if (zebField) {
+      values.push({
+        nazwa: zebField.nazwa,
+        tekst: '',
+        wartosc: resolveZebranieValue(nazwa, ctx),
+        jednostka: '',
+        typWartosci: 'tekst',
+      });
+      continue;
+    }
     // A calendar field is recorded with the value it went out with, already
     // spelled — the meeting may move later, the letter that was sent does not.
     const kalField = kalendarzFieldOf(nazwa);

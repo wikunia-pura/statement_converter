@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { MailingPole } from '../../shared/types';
+import { MailingPole, MailingTyp } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { FormField } from './FormSection';
 import Icon from './Icon';
@@ -13,8 +13,11 @@ import {
   BUILTIN_MAILING_FIELDS,
   extractUsedFields,
   fieldPlaceholder,
+  isBlockField,
   isFieldTableField,
+  isZebranieField,
   normalizeFieldName,
+  poleAllowedForTyp,
 } from '../../shared/mailing-template';
 
 /**
@@ -22,25 +25,37 @@ import {
  * list, so a field missing from it shows up flagged in the text instead of going
  * out unsubstituted.
  *
- * `fieldTable: false` drops the `{{Tabela pól}}` entry — it resolves to a table,
- * which a subject line cannot hold.
+ * `fieldTable: false` drops the fields that resolve to a block — the
+ * `{{Tabela pól}}` table and the Zebrania lists — which a subject line cannot hold.
+ * `typ` leaves out dictionary fields bound to another mailing kind, and
+ * `zebranie: false` the Zebrania fields, for a letter that is not made in that
+ * module and so could never fill them.
+ *
+ * Only what is OFFERED is narrowed. A field already placed keeps resolving —
+ * the pills read the dictionary for that, not this list.
  */
 export function useMailingFieldOptions(
   pola: MailingPole[],
-  options?: { fieldTable?: boolean },
+  options?: { fieldTable?: boolean; typ?: MailingTyp | null; zebranie?: boolean },
 ): MailingFieldOption[] {
   const fieldTable = options?.fieldTable ?? true;
+  const typ = options?.typ ?? null;
+  const zebranie = options?.zebranie ?? true;
   return useMemo(
     () => [
-      ...BUILTIN_MAILING_FIELDS.filter((f) => fieldTable || !isFieldTableField(f.nazwa)).map((f) => ({
+      ...BUILTIN_MAILING_FIELDS.filter(
+        (f) => (fieldTable || !isBlockField(f.nazwa)) && (zebranie || !isZebranieField(f.nazwa)),
+      ).map((f) => ({
         nazwa: f.nazwa,
         hint: f.opis,
-        keywords: 'wbudowane builtin',
+        keywords: isZebranieField(f.nazwa) ? 'wbudowane builtin zebranie zebrania' : 'wbudowane builtin',
         builtin: true,
       })),
-      ...pola.map((p) => ({ nazwa: p.nazwa, hint: p.tekst || undefined })),
+      ...pola
+        .filter((p) => poleAllowedForTyp(p, typ))
+        .map((p) => ({ nazwa: p.nazwa, hint: p.tekst || undefined })),
     ],
-    [pola, fieldTable],
+    [pola, fieldTable, typ, zebranie],
   );
 }
 
@@ -91,6 +106,8 @@ interface MailingComposerProps {
   tresc: string;
   /** Defined dynamic fields, for the two insert pickers. */
   pola: MailingPole[];
+  /** The template's mailing kind — fields bound to another kind are not offered. */
+  typ?: MailingTyp | null;
   onChange: (patch: { temat?: string; tresc?: string }) => void;
   /** Cleared by the caller when the user edits — a submit error, typically. */
   onDirty?: () => void;
@@ -111,13 +128,14 @@ const MailingComposer: React.FC<MailingComposerProps> = ({
   temat,
   tresc,
   pola,
+  typ = null,
   onChange,
   onDirty,
   bodyNote,
 }) => {
   const t = translations[language];
-  const fields = useMailingFieldOptions(pola);
-  const subjectFields = useMailingFieldOptions(pola, { fieldTable: false });
+  const fields = useMailingFieldOptions(pola, { typ });
+  const subjectFields = useMailingFieldOptions(pola, { fieldTable: false, typ });
   const chipLabels = useFieldChipLabels(language);
   const unknownFields = useUnknownFields(pola, temat, tresc);
   /** Drives the hint explaining where the table's rows come from. */

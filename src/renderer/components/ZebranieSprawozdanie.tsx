@@ -1,16 +1,22 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Sprawozdanie,
+  SprawozdanieCel,
+  SprawozdanieWiersz,
   SprawozdanieWstepTekst,
   SprawozdanieZapisane,
   ZebraniaWspolnota,
+  ZebranieSprawozdanie as ZebranieSprawozdanieDane,
   ZebranieWersja,
 } from '../../shared/types';
 import {
   formatKwota,
   okresLabel,
   sprawozdaniaDlaWspolnoty,
+  sprawozdanieDlaZebrania,
+  sprawozdanieWersji,
   sprawozdanieWstep,
+  zastosujLaczenia,
 } from '../../shared/sprawozdanie';
 import { foldText, nazwaNieruchomosci } from '../../shared/plan-gospodarczy';
 import { wersjaLabel } from '../../shared/zebrania';
@@ -20,7 +26,10 @@ import { useNotify } from './Notifications';
 import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
 import { FormField, FormSection } from './FormSection';
 import Icon from './Icon';
-import ZebranieDokumentActions from './ZebranieDokumentActions';
+import ZebranieDokumentActions, { DokumentZrodlo } from './ZebranieDokumentActions';
+import ZebranieSprawozdanieLaczenia from './ZebranieSprawozdanieLaczenia';
+import { bezPrefiksu } from './PodpisKarta';
+import MergedBadge from './MergedBadge';
 
 type T = (typeof translations)['pl'];
 
@@ -63,34 +72,130 @@ export const SprawozdanieFakty: React.FC<{ t: T; spr: Sprawozdanie }> = ({ t, sp
 );
 
 /**
- * The introduction the PDF opens with — the same figures, summary and notes,
- * so what is shown here is what is printed. The figures are always the
- * statement's; the summary and the notes can be rewritten for the version
- * (and a note added where the figures raised none). Without `onSave` it is
- * read-only — a library statement belongs to no version to keep the words in.
+ * The introduction the PDF opens with — the same figures, paragraph and notes,
+ * so what is shown here is what is printed. The figures and the notes are
+ * computed from the statement; the paragraph starts empty and is written for
+ * the version — by the AI from the figures, with the user's guidance, or by
+ * hand. An AI draft lands in the editor and is stored only once saved. The
+ * notes can be rewritten too (and one added where the figures raised none).
+ * Without `onSave` it is read-only — a library statement belongs to no version
+ * to keep the words in.
  */
 export const SprawozdanieWstepSection: React.FC<{
   t: T;
   spr: Sprawozdanie;
-  /** The words as edited for this version; null = computed. */
+  /** The words as written for this version; null = none yet (empty paragraph, computed notes). */
   tekst: SprawozdanieWstepTekst | null;
   busy: boolean;
   onSave?: (tekst: SprawozdanieWstepTekst | null) => Promise<boolean>;
+  /** A draft of the paragraph by the AI; null when it failed (the caller says why). */
+  onGenerate?: (wskazowki: string) => Promise<string | null>;
   /** The description of a read-only introduction. */
   readOnlyHint?: string;
-}> = ({ t, spr, tekst, busy, onSave, readOnlyHint }) => {
+}> = ({ t, spr, tekst, busy: parentBusy, onSave, onGenerate, readOnlyHint }) => {
   const computed = useMemo(() => sprawozdanieWstep(spr), [spr]);
-  const akapit = tekst ? tekst.akapit : computed.akapit;
+  const akapit = tekst?.akapit ?? '';
   const uwagi = tekst ? tekst.uwagi : computed.uwagi;
   const [draft, setDraft] = useState<SprawozdanieWstepTekst | null>(null);
+  /** The draft's paragraph is the AI's, not yet saved. */
+  const [zAi, setZAi] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [wskazowki, setWskazowki] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const busy = parentBusy || generating;
 
-  const startEdit = (addNote = false) =>
+  const startEdit = (addNote = false) => {
+    setZAi(false);
     setDraft({ akapit, uwagi: addNote ? [...uwagi, ''] : [...uwagi] });
+  };
   const setNote = (i: number, value: string) =>
     setDraft((d) => d && { ...d, uwagi: d.uwagi.map((u, j) => (j === i ? value : u)) });
   const save = async (value: SprawozdanieWstepTekst | null) => {
-    if (onSave && (await onSave(value))) setDraft(null);
+    if (onSave && (await onSave(value))) {
+      setDraft(null);
+      setZAi(false);
+    }
   };
+  const cancel = () => {
+    setDraft(null);
+    setZAi(false);
+  };
+
+  const generate = async () => {
+    if (!onGenerate) return;
+    setGenerating(true);
+    try {
+      const text = await onGenerate(wskazowki);
+      if (text) {
+        // The draft keeps notes already being edited; otherwise it starts from the current ones.
+        setDraft((d) => ({ akapit: text, uwagi: d ? d.uwagi : [...uwagi] }));
+        setZAi(true);
+        setAiOpen(false);
+      }
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // The guidance panel: asked for, or offered while there is no paragraph to read.
+  const showAi = !!onGenerate && !generating && (aiOpen || (!akapit && !draft));
+
+  const aiPanel = showAi && (
+    <div className="zfin-ai-panel">
+      <FormField
+        label={t.zfinIntroAiGuidance}
+        htmlFor="zfin-ai-wskazowki"
+        hint={t.zfinIntroAiGuidanceHint}
+      >
+        <textarea
+          id="zfin-ai-wskazowki"
+          rows={3}
+          value={wskazowki}
+          maxLength={2000}
+          placeholder={t.zfinIntroAiGuidancePlaceholder}
+          onChange={(e) => setWskazowki(e.target.value)}
+          disabled={busy}
+        />
+      </FormField>
+      <div className="section-actions">
+        {aiOpen && (
+          <button
+            type="button"
+            className="button button-small button-secondary"
+            onClick={() => setAiOpen(false)}
+            disabled={busy}
+          >
+            {t.cancel}
+          </button>
+        )}
+        <button
+          type="button"
+          className="button button-small button-primary"
+          onClick={() => void generate()}
+          disabled={busy}
+        >
+          <Icon name="sparkles" size={13} /> {akapit || draft?.akapit ? t.zfinIntroAiRegenerate : t.zfinIntroAiGenerate}
+        </button>
+      </div>
+    </div>
+  );
+
+  const loader = generating && (
+    <div className="zlacz-ai-working" role="status" aria-live="polite">
+      <div className="zlacz-ai-working__head">
+        <span className="loader-spinner zlacz-ai-working__spinner" aria-hidden="true" />
+        <span className="zlacz-ai-working__text">
+          <strong>{t.zfinIntroAiWorking}</strong>
+          <span>{t.zfinIntroAiWorkingHint}</span>
+        </span>
+      </div>
+      <div className="zlacz-ai-working__skeleton" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
+    </div>
+  );
 
   return (
     <FormSection
@@ -100,7 +205,8 @@ export const SprawozdanieWstepSection: React.FC<{
       badge={tekst ? t.zfinIntroEdited : undefined}
       aside={
         onSave &&
-        !draft && (
+        !draft &&
+        !generating && (
           <div className="form-section__actions">
             {tekst && (
               <button
@@ -113,13 +219,23 @@ export const SprawozdanieWstepSection: React.FC<{
                 <Icon name="refresh" size={13} /> {t.zfinIntroReset}
               </button>
             )}
+            {onGenerate && akapit && !aiOpen && (
+              <button
+                type="button"
+                className="button button-small button-secondary"
+                onClick={() => setAiOpen(true)}
+                disabled={busy}
+              >
+                <Icon name="sparkles" size={13} /> {t.zfinIntroAiOpen}
+              </button>
+            )}
             <button
               type="button"
               className="button button-small button-secondary"
               onClick={() => startEdit()}
               disabled={busy}
             >
-              <Icon name="edit" size={13} /> {t.zfinIntroEdit}
+              <Icon name="edit" size={13} /> {akapit ? t.zfinIntroEdit : t.zfinIntroWrite}
             </button>
           </div>
         )
@@ -136,16 +252,42 @@ export const SprawozdanieWstepSection: React.FC<{
         </div>
       )}
 
+      {loader}
+
       {draft ? (
         <>
-          <FormField label={t.zfinIntroText}>
+          {zAi && (
+            <div className="callout callout--info">
+              <Icon name="sparkles" size={16} />
+              <div className="callout__body">{t.zfinIntroAiDraft}</div>
+            </div>
+          )}
+          <FormField
+            label={t.zfinIntroText}
+            action={
+              onGenerate &&
+              !aiOpen &&
+              !generating && (
+                <button
+                  type="button"
+                  className="button button-small button-ghost"
+                  onClick={() => setAiOpen(true)}
+                  disabled={busy}
+                >
+                  <Icon name="sparkles" size={13} /> {t.zfinIntroAiOpen}
+                </button>
+              )
+            }
+          >
             <textarea
               rows={6}
               value={draft.akapit}
+              placeholder={t.zfinIntroTextPlaceholder}
               onChange={(e) => setDraft({ ...draft, akapit: e.target.value })}
               disabled={busy}
             />
           </FormField>
+          {aiPanel}
           <FormField
             label={t.zfinIntroNotes}
             hint={draft.uwagi.length === 0 ? t.zfinIntroNoNotes : undefined}
@@ -189,7 +331,7 @@ export const SprawozdanieWstepSection: React.FC<{
             <button
               type="button"
               className="button button-small button-secondary"
-              onClick={() => setDraft(null)}
+              onClick={cancel}
               disabled={busy}
             >
               {t.cancel}
@@ -200,21 +342,27 @@ export const SprawozdanieWstepSection: React.FC<{
               onClick={() => void save(draft)}
               disabled={busy}
             >
-              <Icon name={busy ? 'loader' : 'save'} size={13} /> {t.zfinIntroSave}
+              <Icon name={parentBusy ? 'loader' : 'save'} size={13} /> {t.zfinIntroSave}
             </button>
           </div>
         </>
       ) : (
         <>
-          {akapit
-            .split(/\n\s*\n/)
-            .map((p) => p.trim())
-            .filter(Boolean)
-            .map((p, i) => (
-              <p key={i} className="zfin-lead">
-                {p}
-              </p>
-            ))}
+          {akapit ? (
+            akapit
+              .split(/\n\s*\n/)
+              .map((p) => p.trim())
+              .filter(Boolean)
+              .map((p, i) => (
+                <p key={i} className="zfin-lead">
+                  {p}
+                </p>
+              ))
+          ) : (
+            onSave &&
+            !generating && <p className="zfin-lead-empty">{t.zfinIntroEmpty}</p>
+          )}
+          {aiPanel}
           {uwagi.length > 0 ? (
             <div className="callout callout--warning">
               <Icon name="alert-triangle" size={16} />
@@ -256,28 +404,48 @@ export const SprawozdaniePodglad: React.FC<{ t: T; spr: Sprawozdanie }> = ({ t, 
   const [q, setQ] = useState('');
   const [onlyNegative, setOnlyNegative] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
+  /** Folded subcategories, as "section index:heading". */
+  const [subFolded, setSubFolded] = useState<Set<string>>(() => new Set());
   const query = foldText(q.trim());
   const filtering = !!query || onlyNegative;
 
   const negativeCount = useMemo(
     () =>
       spr.sekcje.reduce(
-        (n, sec) => n + sec.wiersze.filter((w) => w.kwoty.some(isNegative)).length,
+        (n, sec) =>
+          n + sec.wiersze.filter((w) => w.podkategoria !== 'naglowek' && w.kwoty.some(isNegative)).length,
         0
       ),
     [spr]
   );
 
   // A section named by the search keeps all its rows; otherwise only the rows that match.
+  // A subcategory goes as a block: named by the search, it keeps all its rows; a
+  // row of it that matches brings its heading along.
   const sekcje = useMemo(
     () =>
       spr.sekcje.map((sec) => {
         const titleHit = !!query && foldText(sec.tytul).includes(query);
-        const wiersze = sec.wiersze.filter(
-          (w) =>
-            (!query || titleHit || foldText(w.nazwa).includes(query)) &&
-            (!onlyNegative || w.kwoty.some(isNegative))
-        );
+        const hit = (w: SprawozdanieWiersz) =>
+          !query ||
+          titleHit ||
+          foldText(w.nazwa).includes(query) ||
+          !!w.polaczone?.some((n) => foldText(n).includes(query));
+        const neg = (w: SprawozdanieWiersz) => !onlyNegative || w.kwoty.some(isNegative);
+        const wiersze: SprawozdanieWiersz[] = [];
+        for (let r = 0; r < sec.wiersze.length; r++) {
+          const w = sec.wiersze[r];
+          if (w.podkategoria !== 'naglowek') {
+            if (hit(w) && neg(w)) wiersze.push(w);
+            continue;
+          }
+          let end = r + 1;
+          while (sec.wiersze[end]?.podkategoria === 'pozycja') end++;
+          const headHit = !!query && hit(w);
+          const kids = sec.wiersze.slice(r + 1, end).filter((k) => (headHit || hit(k)) && neg(k));
+          if (kids.length > 0 || (headHit && !onlyNegative)) wiersze.push(w, ...kids);
+          r = end - 1;
+        }
         return {
           sec,
           wiersze,
@@ -288,6 +456,14 @@ export const SprawozdaniePodglad: React.FC<{ t: T; spr: Sprawozdanie }> = ({ t, 
   );
   const shown = sekcje.filter((s) => s.visible);
   const allCollapsed = spr.sekcje.length > 0 && collapsed.size === spr.sekcje.length;
+
+  const toggleSub = (key: string) =>
+    setSubFolded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   const toggle = (i: number) =>
     setCollapsed((prev) => {
@@ -388,19 +564,77 @@ export const SprawozdaniePodglad: React.FC<{ t: T; spr: Sprawozdanie }> = ({ t, 
                           </td>
                         </tr>
                       )}
-                      {items.map((w, j) => (
-                        <tr key={j}>
-                          <td>{w.nazwa}</td>
-                          {w.kwoty.map((k, c) => (
-                            <td
-                              key={c}
-                              className={`zfin-num${isNegative(k) ? ' is-negative' : ''}`}
-                            >
+                      {(() => {
+                        // Two levels: a subcategory's heading (folds its rows away) and its
+                        // rows, joined to it by a tree line; a search or a filter opens it.
+                        const out: React.ReactNode[] = [];
+                        let fold = '';
+                        items.forEach((w, j) => {
+                          const cells = w.kwoty.map((k, c) => (
+                            <td key={c} className={`zfin-num${isNegative(k) ? ' is-negative' : ''}`}>
                               {formatKwota(k)}
                             </td>
-                          ))}
-                        </tr>
-                      ))}
+                          ));
+                          const merged = w.polaczone && (
+                            <MergedBadge label={t.zfinMergedOf} wiersze={w.polaczone} />
+                          );
+                          if (w.podkategoria === 'naglowek') {
+                            const key = `${i}:${w.nazwa}`;
+                            const folded = !filtering && subFolded.has(key);
+                            fold = folded ? key : '';
+                            let n = 0;
+                            while (items[j + 1 + n]?.podkategoria === 'pozycja') n++;
+                            out.push(
+                              <tr key={j} className={`is-subcat${folded ? ' is-folded' : ''}`}>
+                                <td>
+                                  <button
+                                    type="button"
+                                    className="zfin-subcat__head"
+                                    onClick={() => toggleSub(key)}
+                                    aria-expanded={!folded}
+                                    disabled={filtering}
+                                  >
+                                    <Icon name="chevron-right" size={13} className="zfin-subcat__chevron" />
+                                    <span className="zfin-subcat__name">{w.nazwa}</span>
+                                    <span className="zfin-subcat__count">
+                                      {t.zfinSubcatCount.replace('{n}', String(n))}
+                                    </span>
+                                  </button>
+                                </td>
+                                {cells}
+                              </tr>
+                            );
+                            return;
+                          }
+                          if (w.podkategoria === 'pozycja') {
+                            if (fold) return;
+                            const last = items[j + 1]?.podkategoria !== 'pozycja';
+                            out.push(
+                              <tr key={j} className={`is-subitem${last ? ' is-last' : ''}`}>
+                                <td>
+                                  <span className="zfin-subitem__name">
+                                    {w.nazwa}
+                                    {merged}
+                                  </span>
+                                </td>
+                                {cells}
+                              </tr>
+                            );
+                            return;
+                          }
+                          fold = '';
+                          out.push(
+                            <tr key={j}>
+                              <td>
+                                {w.nazwa}
+                                {merged}
+                              </td>
+                              {cells}
+                            </tr>
+                          );
+                        });
+                        return out;
+                      })()}
                       {sums.map((w, j) => (
                         <tr
                           key={`s${j}`}
@@ -431,30 +665,23 @@ export const SprawozdaniePodglad: React.FC<{ t: T; spr: Sprawozdanie }> = ({ t, 
 
 /* ================================ The picker ================================ */
 
-/** Every statement in the library, searchable — for a community the app could not match. */
+/** Every statement in the Sprawozdania module, searchable — for a community the app could not match. */
 const SprawozdaniePickerModal: React.FC<{
   t: T;
   locale: string;
   lista: SprawozdanieZapisane[];
   adresNazwa: string;
-  /** Statements of the file just uploaded come first. */
-  wyroznionyPlik?: string;
   busy: boolean;
   onPick: (s: SprawozdanieZapisane) => void;
   onClose: () => void;
-}> = ({ t, locale, lista, adresNazwa, wyroznionyPlik, busy, onPick, onClose }) => {
+}> = ({ t, locale, lista, adresNazwa, busy, onPick, onClose }) => {
   const [q, setQ] = useState('');
   const shown = useMemo(() => {
     const query = foldText(q);
-    const filtered = lista.filter(
+    return lista.filter(
       (s) => !query || foldText(s.nazwa).includes(query) || String(s.nrWsp ?? '') === query
     );
-    return wyroznionyPlik
-      ? [...filtered].sort(
-          (a, b) => Number(b.plikNazwa === wyroznionyPlik) - Number(a.plikNazwa === wyroznionyPlik)
-        )
-      : filtered;
-  }, [lista, q, wyroznionyPlik]);
+  }, [lista, q]);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -513,31 +740,192 @@ const SprawozdaniePickerModal: React.FC<{
   );
 };
 
+/* ============================== The statement body ============================== */
+
+/**
+ * A statement as its owner shows it — a meeting version, or a plan of Plany
+ * gospodarcze: the particulars, the introduction, the downloads, the merges and
+ * subcategories, and the preview. The figures are the library's; the rest is
+ * the owner's own (`cel`). Read-only shows the introduction and the preview
+ * as they are, with nothing to change.
+ */
+export const SprawozdanieRobocze: React.FC<{
+  language: Language;
+  locale: string;
+  cel: SprawozdanieCel;
+  z: ZebranieSprawozdanieDane;
+  /** Where "Pobierz PDF / Excel" builds the file from. */
+  pobieranie: DokumentZrodlo;
+  busy: boolean;
+  readOnly?: boolean;
+  /** Actions in the header of the statement's card. */
+  aside?: React.ReactNode;
+  /** A box at the end (a version's status). */
+  statusBox?: React.ReactNode;
+  onChanged: () => Promise<void>;
+}> = ({ language, locale, cel, z, pobieranie, busy: parentBusy, readOnly = false, aside, statusBox, onChanged }) => {
+  const t = translations[language];
+  const notify = useNotify();
+  const [saving, setSaving] = useState(false);
+  const [wstep, setWstep] = useState(true);
+  const busy = parentBusy || saving;
+  const celKey = 'planId' in cel ? `p${cel.planId}` : `w${cel.wersjaId}`;
+  // What the documents show: the library's figures with the owner's merges.
+  const spr = useMemo(() => sprawozdanieWersji(z), [z]);
+  // Subcategories are made over the rows as merged.
+  const pozycjePolaczone = useMemo(() => zastosujLaczenia(z.dane, z.laczenia), [z]);
+
+  /** Save the introduction's words (null = back to the computed ones). */
+  const saveWstep = async (value: SprawozdanieWstepTekst | null): Promise<boolean> => {
+    setSaving(true);
+    try {
+      await window.electronAPI.setSprawozdanieWstep(cel, value);
+      await onChanged();
+      notify.success(value ? t.zfinIntroSaved : t.zfinIntroResetDone);
+      return true;
+    } catch (err: unknown) {
+      notify.error(err instanceof Error ? err.message : String(err));
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /** A draft of the paragraph by the AI, over the statement as its owner shows it. */
+  const generateWstep = async (wskazowki: string): Promise<string | null> => {
+    try {
+      return await window.electronAPI.napiszWstepSprawozdaniaAi(cel, wskazowki);
+    } catch (err: unknown) {
+      notify.error(bezPrefiksu(err), t.zfinIntroAiError);
+      return null;
+    }
+  };
+
+  return (
+    // A column of cards of a sheet's width, like every page form — the
+    // statement reads like the printout, not stretched to the window.
+    <div className="page-form zeb-page">
+      <FormSection
+        icon="bar-chart"
+        title={`Wspólnota Mieszkaniowa ${nazwaNieruchomosci(spr.nazwa)}`}
+        description={t.zfinStatementDesc
+          .replace('{okres}', okresLabel(spr.okresOd, spr.okresDo))
+          .replace('{wydruk}', spr.wydruk || '—')}
+        aside={aside}
+      >
+        <SprawozdanieFakty t={t} spr={spr} />
+      </FormSection>
+
+      <SprawozdanieWstepSection
+        key={celKey}
+        t={t}
+        spr={spr}
+        tekst={z.wstep}
+        busy={busy}
+        onSave={readOnly ? undefined : saveWstep}
+        onGenerate={readOnly ? undefined : generateWstep}
+      />
+
+      <FormSection icon="download" title={t.zfinDownloadTitle} description={t.zfinZeroHint}>
+        <label className="switch-row">
+          <span className="switch-row__text">
+            <span className="switch-row__label">{t.zfinIntroInPdf}</span>
+            <span className="switch-row__hint">{t.zfinIntroInPdfHint}</span>
+          </span>
+          <span className="toggle-switch">
+            <input type="checkbox" checked={wstep} onChange={(e) => setWstep(e.target.checked)} />
+            <span className="toggle-slider"></span>
+          </span>
+        </label>
+        <ZebranieDokumentActions
+          language={language}
+          locale={locale}
+          zrodlo={pobieranie}
+          pobrania={z.pobrania}
+          wstep={wstep}
+          disabled={busy}
+          onDownloaded={() => void onChanged()}
+        />
+      </FormSection>
+
+      {!readOnly && (
+        <>
+          <ZebranieSprawozdanieLaczenia
+            key={`l${celKey}`}
+            t={t}
+            rodzaj="laczenia"
+            cel={cel}
+            spr={z.dane}
+            lista={z.laczenia}
+            busy={busy}
+            onChanged={onChanged}
+          />
+          <ZebranieSprawozdanieLaczenia
+            key={`p${celKey}`}
+            t={t}
+            rodzaj="podkategorie"
+            cel={cel}
+            spr={pozycjePolaczone}
+            lista={z.podkategorie}
+            busy={busy}
+            onChanged={onChanged}
+          />
+        </>
+      )}
+
+      <SprawozdaniePodglad t={t} spr={spr} />
+
+      {statusBox}
+    </div>
+  );
+};
+
 /* ================================== The tab ================================== */
 
 /**
- * "Sprawozdania finansowe" of one version. A vDom file holds every community,
- * so an upload fills the shared library and this version takes its own
- * community's statement from it — matched by the vDom number remembered for the
- * community, or by name the first time (then the number is remembered).
+ * "Sprawozdania finansowe" of one version. Statements are uploaded in the
+ * Sprawozdania module only — it is the source of truth; the version links one
+ * of them (its figures are always read from there) and keeps only its own
+ * introduction and downloads. The community's statements are matched by the
+ * vDom number remembered for it, or by name the first time (then the number is
+ * remembered). The current version links one by itself when the choice is
+ * unambiguous (`sprawozdanieDlaZebrania`) — never again after a hand-made unlink.
  */
 const ZebranieSprawozdanie: React.FC<{
   language: Language;
   locale: string;
   wersja: ZebranieWersja;
+  /** The entry's current version — the only one linked by itself. */
+  biezaca: boolean;
   adresNazwa: string;
   wspolnota: ZebraniaWspolnota | null;
   lista: SprawozdanieZapisane[];
   dataZebrania: string | null;
   onChanged: () => Promise<void>;
-  /** The version's status box, shown at the end of the statement, also while none is attached. */
+  /** Open the Sprawozdania module — on one statement, or on its list with null. */
+  onOpenSprawozdanie: (sprawozdanieId: number | null) => void;
+  /** The version's status box, shown at the end of the statement, also while none is linked. */
   statusBox?: React.ReactNode;
-}> = ({ language, locale, wersja, adresNazwa, wspolnota, lista, dataZebrania, onChanged, statusBox }) => {
+  /** After a statement is linked — the template meeting drafts the plan from it (see `ZebranieScreen`). */
+  onLinked?: (sprawozdanieId: number) => Promise<void>;
+}> = ({
+  language,
+  locale,
+  wersja,
+  biezaca,
+  adresNazwa,
+  wspolnota,
+  lista,
+  dataZebrania,
+  onChanged,
+  onOpenSprawozdanie,
+  statusBox,
+  onLinked,
+}) => {
   const t = translations[language];
   const notify = useNotify();
   const [busy, setBusy] = useState(false);
-  const [picker, setPicker] = useState<{ plik?: string } | null>(null);
-  const [wstep, setWstep] = useState(true);
+  const [picker, setPicker] = useState(false);
   const v = wersjaLabel(wersja);
   const attached = wersja.sprawozdanie;
 
@@ -547,8 +935,8 @@ const ZebranieSprawozdanie: React.FC<{
     [lista, wspolnota?.vdomNr, adresNazwa]
   );
 
-  /** Attach, and remember the community's vDom number for the next file. */
-  const attach = async (s: SprawozdanieZapisane, quiet = false) => {
+  /** Link, and remember the community's vDom number for the next time. */
+  const attach = async (s: SprawozdanieZapisane, message: string) => {
     setBusy(true);
     try {
       await window.electronAPI.attachZebranieSprawozdanie(wersja.id, s.id);
@@ -556,12 +944,13 @@ const ZebranieSprawozdanie: React.FC<{
         try {
           await window.electronAPI.setZebraniaWspolnota(adresNazwa, { vdomNr: s.nrWsp });
         } catch {
-          // The statement is attached; only the shortcut for next time is missing.
+          // The statement is linked; only the shortcut for next time is missing.
         }
       }
-      setPicker(null);
+      setPicker(false);
+      notify.success(message);
+      await onLinked?.(s.id);
       await onChanged();
-      if (!quiet) notify.success(t.zfinAttached.replace('{v}', v));
     } catch (err: unknown) {
       notify.error(err instanceof Error ? err.message : String(err));
     } finally {
@@ -569,65 +958,17 @@ const ZebranieSprawozdanie: React.FC<{
     }
   };
 
-  const upload = async () => {
-    setBusy(true);
-    let result: Awaited<ReturnType<typeof window.electronAPI.importSprawozdania>> = null;
-    try {
-      result = await window.electronAPI.importSprawozdania();
-    } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.zfinImportError);
-    } finally {
-      setBusy(false);
-    }
-    if (!result) return;
-    const { plikNazwa, zapisane } = result;
-    const n = String(zapisane.length);
-    const hits = sprawozdaniaDlaWspolnoty(
-      zapisane,
-      wspolnota?.vdomNr ?? null,
-      adresNazwa ? [adresNazwa] : []
-    );
-    // One statement of this community in the file: attach it — but a statement
-    // already attached (even of the same period: the print may be newer) is
-    // only replaced when the user says so.
-    const take =
-      hits.length === 1 &&
-      (!attached ||
-        (await notify.confirm(
-          t.zfinReplaceConfirm
-            .replace('{v}', v)
-            .replace('{okres}', okresLabel(hits[0].okresOd, hits[0].okresDo)),
-          { confirmLabel: t.zfinReplace }
-        )));
-    if (take) {
-      await attach(hits[0], true);
-      notify.success(t.zfinImportedAttached.replace('{n}', n).replace('{file}', plikNazwa));
-      return;
-    }
-    await onChanged();
-    if (attached) {
-      notify.success(t.zfinImported.replace('{n}', n).replace('{file}', plikNazwa));
-      return;
-    }
-    notify.info(t.zfinImportNoMatch.replace('{n}', n));
-    setPicker({ plik: plikNazwa });
-  };
-
-  /** Save the introduction's words (null = back to the computed ones). */
-  const saveWstep = async (value: SprawozdanieWstepTekst | null): Promise<boolean> => {
-    setBusy(true);
-    try {
-      await window.electronAPI.setZebranieSprawozdanieWstep(wersja.id, value);
-      await onChanged();
-      notify.success(value ? t.zfinIntroSaved : t.zfinIntroResetDone);
-      return true;
-    } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err));
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  };
+  // The one statement the meeting clearly presents is linked without a click —
+  // once per version shown, and never after someone unlinked it by hand.
+  const autoTried = useRef(false);
+  useEffect(() => {
+    if (autoTried.current || attached || wersja.sprawozdanieOdlaczone || !biezaca) return;
+    const s = sprawozdanieDlaZebrania(lista, wspolnota?.vdomNr ?? null, dataZebrania);
+    if (!s) return;
+    autoTried.current = true;
+    void attach(s, t.zfinAutoLinked.replace('{okres}', okresLabel(s.okresOd, s.okresDo)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attached, wersja.sprawozdanieOdlaczone, biezaca, lista, wspolnota?.vdomNr, dataZebrania]);
 
   const remove = async () => {
     if (
@@ -656,10 +997,9 @@ const ZebranieSprawozdanie: React.FC<{
       locale={locale}
       lista={lista}
       adresNazwa={adresNazwa}
-      wyroznionyPlik={picker.plik}
       busy={busy}
-      onPick={(s) => void attach(s)}
-      onClose={() => setPicker(null)}
+      onPick={(s) => void attach(s, t.zfinAttached.replace('{v}', v))}
+      onClose={() => setPicker(false)}
     />
   );
 
@@ -673,26 +1013,26 @@ const ZebranieSprawozdanie: React.FC<{
                 <Icon name="bar-chart" size={22} />
               </span>
               <strong>{t.zfinEmptyTitle}</strong>
-              <p>{t.zfinUploadHint}</p>
+              <p>{wersja.sprawozdanieOdlaczone ? t.zfinUnlinkedHint : t.zfinUploadHint}</p>
               <div className="zfin-empty-state__actions">
-                <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={() => void upload()}
-                  disabled={busy}
-                >
-                  <Icon name={busy ? 'loader' : 'upload'} size={14} /> {t.zfinUpload}
-                </button>
                 {lista.length > 0 && (
                   <button
                     type="button"
-                    className="button button-secondary"
-                    onClick={() => setPicker({})}
+                    className="button button-primary"
+                    onClick={() => setPicker(true)}
                     disabled={busy}
                   >
                     <Icon name="search" size={14} /> {t.zfinPickFromLibrary}
                   </button>
                 )}
+                <button
+                  type="button"
+                  className={`button ${lista.length > 0 ? 'button-secondary' : 'button-primary'}`}
+                  onClick={() => onOpenSprawozdanie(null)}
+                  disabled={busy}
+                >
+                  <Icon name="book" size={14} /> {t.zfinGoToSpraw}
+                </button>
               </div>
               {matches.length > 0 && (
                 <div className="zfin-matches">
@@ -713,10 +1053,10 @@ const ZebranieSprawozdanie: React.FC<{
                         <button
                           type="button"
                           className="button button-small button-success"
-                          onClick={() => void attach(s)}
+                          onClick={() => void attach(s, t.zfinAttached.replace('{v}', v))}
                           disabled={busy}
                         >
-                          <Icon name="plus" size={12} /> {t.zfinAttach}
+                          <Icon name="paperclip" size={12} /> {t.zfinAttach}
                         </button>
                       </li>
                     ))}
@@ -733,84 +1073,46 @@ const ZebranieSprawozdanie: React.FC<{
     );
   }
 
-  const spr = attached.dane;
   return (
     <>
-      {/* A column of cards of a sheet's width, like every page form — the
-          statement reads like the printout, not stretched to the window. */}
-      <div className="page-form zeb-page">
-        <FormSection
-          icon="bar-chart"
-          title={`Wspólnota Mieszkaniowa ${nazwaNieruchomosci(spr.nazwa)}`}
-          description={t.zfinStatementDesc
-            .replace('{okres}', okresLabel(spr.okresOd, spr.okresDo))
-            .replace('{wydruk}', spr.wydruk || '—')}
-          aside={
-            <div className="form-section__actions">
-              <button
-                type="button"
-                className="button button-small button-subtle"
-                onClick={() => void upload()}
-                disabled={busy}
-              >
-                <Icon name="upload" size={13} /> {t.zfinUpload}
-              </button>
-              <button
-                type="button"
-                className="button button-small button-secondary"
-                onClick={() => setPicker({})}
-                disabled={busy}
-              >
-                <Icon name="refresh" size={13} /> {t.zfinChange}
-              </button>
-              <button
-                type="button"
-                className="button button-small button-ghost icon-danger"
-                onClick={() => void remove()}
-                disabled={busy}
-              >
-                <Icon name="trash" size={13} /> {t.zfinRemove}
-              </button>
-            </div>
-          }
-        >
-          <SprawozdanieFakty t={t} spr={spr} />
-        </FormSection>
-
-        <SprawozdanieWstepSection
-          t={t}
-          spr={spr}
-          tekst={attached.wstep}
-          busy={busy}
-          onSave={saveWstep}
-        />
-
-        <FormSection icon="download" title={t.zfinDownloadTitle} description={t.zfinZeroHint}>
-          <label className="switch-row">
-            <span className="switch-row__text">
-              <span className="switch-row__label">{t.zfinIntroInPdf}</span>
-              <span className="switch-row__hint">{t.zfinIntroInPdfHint}</span>
-            </span>
-            <span className="toggle-switch">
-              <input type="checkbox" checked={wstep} onChange={(e) => setWstep(e.target.checked)} />
-              <span className="toggle-slider"></span>
-            </span>
-          </label>
-          <ZebranieDokumentActions
-            language={language}
-            locale={locale}
-            zrodlo={{ wersjaId: wersja.id, dokument: 'sprawozdanie', dataZebrania }}
-            pobrania={attached.pobrania}
-            wstep={wstep}
-            disabled={busy}
-            onDownloaded={() => void onChanged()}
-          />
-        </FormSection>
-
-        <SprawozdaniePodglad t={t} spr={spr} />
-
-        {statusBox}
-      </div>
+      <SprawozdanieRobocze
+        language={language}
+        locale={locale}
+        cel={{ wersjaId: wersja.id }}
+        z={attached}
+        pobieranie={{ wersjaId: wersja.id, dokument: 'sprawozdanie', dataZebrania }}
+        busy={busy}
+        statusBox={statusBox}
+        onChanged={onChanged}
+        aside={
+          <div className="form-section__actions">
+            <button
+              type="button"
+              className="button button-small button-subtle"
+              onClick={() => onOpenSprawozdanie(attached.sprawozdanieId)}
+              disabled={busy}
+            >
+              <Icon name="book" size={13} /> {t.zfinOpenInSpraw}
+            </button>
+            <button
+              type="button"
+              className="button button-small button-secondary"
+              onClick={() => setPicker(true)}
+              disabled={busy}
+            >
+              <Icon name="refresh" size={13} /> {t.zfinChange}
+            </button>
+            <button
+              type="button"
+              className="button button-small button-ghost icon-danger"
+              onClick={() => void remove()}
+              disabled={busy}
+            >
+              <Icon name="trash" size={13} /> {t.zfinRemove}
+            </button>
+          </div>
+        }
+      />
       {picking}
     </>
   );

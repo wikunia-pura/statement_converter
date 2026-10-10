@@ -3,6 +3,7 @@ import {
   MailingExportResult,
   MailingPole,
   MailingSzablon,
+  MailingZebranieContext,
   MAILING_TYP_UCHWALA,
   Zebranie,
   ZebranieMaterial,
@@ -49,6 +50,8 @@ const UchwalaEditorModal: React.FC<{
   /** Its place in the version, for the title. */
   lp: number;
   pola: MailingPole[];
+  /** The version's statement, plan and resolutions — `buildZebranieContext`. */
+  zebranieCtx: MailingZebranieContext | null;
   szablony: MailingSzablon[];
   userEmail: string;
   /** Write the resolution; resolves with what is stored (download record included). */
@@ -67,6 +70,7 @@ const UchwalaEditorModal: React.FC<{
   uchwala,
   lp,
   pola,
+  zebranieCtx,
   szablony,
   userEmail,
   onSave,
@@ -85,7 +89,10 @@ const UchwalaEditorModal: React.FC<{
   const closingRef = useRef(false);
 
   const kalendarz = useMemo(() => buildKalendarzContext(dane), [dane]);
-  const missing = useMemo(() => uchwalaMissing(draft, dane, pola), [draft, dane, pola]);
+  const missing = useMemo(
+    () => uchwalaMissing(draft, dane, pola, zebranieCtx),
+    [draft, dane, pola, zebranieCtx],
+  );
   const dirty = content(draft) !== content(saved);
   const sourceTemplate = szablony.find((s) => s.id === draft.szablonId) ?? null;
   const recent = [...draft.pobrania].reverse().slice(0, 3);
@@ -120,7 +127,7 @@ const UchwalaEditorModal: React.FC<{
     setBusy('pdf');
     try {
       const material = await saveIfDirty();
-      const result = await downloadUchwalaPdf(zebranie, wersja, dane, material, userEmail);
+      const result = await downloadUchwalaPdf(zebranie, wersja, dane, material, userEmail, zebranieCtx);
       if (!result.ok) {
         notify.error(result.error, t.zfinDownloadError);
         return;
@@ -195,6 +202,8 @@ const UchwalaEditorModal: React.FC<{
               pola={pola}
               adresNazwa={dane.adresNazwa}
               kalendarz={kalendarz}
+              zebranie={zebranieCtx}
+              typ={draft.typ}
               tableFields={draft.tableFields}
               onSaveAsTemplate={() => setSaveTemplateOpen(true)}
               hideHint

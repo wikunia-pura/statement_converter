@@ -5,11 +5,22 @@ import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
 
 /** The id a separator has in a saved order. Views appear once; separators as often as wanted. */
 export const SIDEBAR_DIVIDER = 'divider';
+/**
+ * A hidden menu item keeps its place in the saved order, written as `!<id>`, so
+ * showing it again puts it back where it was. A build that predates hiding drops
+ * the unknown id and re-adds the view — it shows up rather than goes missing.
+ */
+export const SIDEBAR_HIDDEN_PREFIX = '!';
+
+export const isHiddenSidebarId = (id: string) => id.startsWith(SIDEBAR_HIDDEN_PREFIX);
+export const sidebarIdOf = (id: string) => (isHiddenSidebarId(id) ? id.slice(SIDEBAR_HIDDEN_PREFIX.length) : id);
 
 export interface SidebarOrderItem {
   id: string;
   label: string;
   icon: React.ComponentProps<typeof Icon>['name'];
+  /** Left out of the menu, still listed here so it can be shown again. */
+  hidden?: boolean;
 }
 
 /** A row in the dialog: a menu item or a separator, with a key of its own. */
@@ -38,7 +49,24 @@ const SidebarOrderModal: React.FC<{
   icon?: React.ComponentProps<typeof Icon>['name'];
   /** Separators belong to the menu only. */
   allowDividers?: boolean;
-}> = ({ items, defaultOrder, language, saving, onSave, onClose, title, subtitle, icon = 'menu', allowDividers = true }) => {
+  /** Items that can be left out of the list (the menu); the saved order marks them `!<id>`. */
+  allowHide?: boolean;
+  /** Items that must stay visible — Ustawienia, the only way back to this dialog. */
+  unhideableIds?: string[];
+}> = ({
+  items,
+  defaultOrder,
+  language,
+  saving,
+  onSave,
+  onClose,
+  title,
+  subtitle,
+  icon = 'menu',
+  allowDividers = true,
+  allowHide = false,
+  unhideableIds = [],
+}) => {
   const t = translations[language];
   const dividerCount = useRef(0);
   const newDivider = (): Row => ({
@@ -75,10 +103,13 @@ const SidebarOrderModal: React.FC<{
   };
 
   const removeAt = (index: number) => setOrder((prev) => prev.filter((_, i) => i !== index));
+  const toggleHidden = (index: number) =>
+    setOrder((prev) => prev.map((r, i) => (i === index ? { ...r, hidden: !r.hidden } : r)));
 
   const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every((id, i) => id === b[i]);
-  const ids = order.map((r) => r.id);
-  const changed = !sameIds(ids, items.map((i) => i.id));
+  const encode = (r: SidebarOrderItem) => (r.hidden ? `${SIDEBAR_HIDDEN_PREFIX}${r.id}` : r.id);
+  const ids = order.map(encode);
+  const changed = !sameIds(ids, items.map(encode));
   const isDefault = sameIds(ids, defaultOrder);
 
   return (
@@ -91,7 +122,9 @@ const SidebarOrderModal: React.FC<{
             {order.map((item, index) => (
               <li
                 key={item.key}
-                className={`ks-prio-item${item.id === SIDEBAR_DIVIDER ? ' ks-prio-item--divider' : ''}${dragFrom === index ? ' is-dragging' : ''}${
+                className={`ks-prio-item${item.id === SIDEBAR_DIVIDER ? ' ks-prio-item--divider' : ''}${
+                  item.hidden ? ' is-hidden' : ''
+                }${dragFrom === index ? ' is-dragging' : ''}${
                   dragOver === index && dragFrom !== null && dragFrom !== index ? ' is-over' : ''
                 }`}
                 draggable={!saving}
@@ -131,10 +164,24 @@ const SidebarOrderModal: React.FC<{
                     </span>
                     <span className="ks-prio-item__text">
                       <span className="ks-prio-item__name">{item.label}</span>
+                      {item.hidden && <span className="ks-prio-item__note">{t.sidebarOrderHiddenNote}</span>}
                     </span>
                   </>
                 )}
                 <span className="ks-prio-item__moves">
+                  {allowHide && item.id !== SIDEBAR_DIVIDER && !unhideableIds.includes(item.id) && (
+                    <button
+                      type="button"
+                      className={item.hidden ? 'is-off' : undefined}
+                      onClick={() => toggleHidden(index)}
+                      disabled={saving}
+                      title={item.hidden ? t.sidebarOrderShow : t.sidebarOrderHide}
+                      aria-label={`${item.hidden ? t.sidebarOrderShow : t.sidebarOrderHide}: ${item.label}`}
+                      aria-pressed={item.hidden === true}
+                    >
+                      <Icon name={item.hidden ? 'eye-off' : 'eye'} size={15} />
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => move(index, index - 1)}

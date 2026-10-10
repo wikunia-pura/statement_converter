@@ -312,8 +312,8 @@ const MailingTypy: React.FC<Props> = ({ language }) => {
             <tbody>
               {typy.map((typ) => (
                 <tr key={typ.id}>
-                  <td className="data-table__name">
-                    <span className="cell-with-badge">
+                  <td className="data-table__name nowrap">
+                    <span className="cell-with-badge cell-with-badge--nowrap">
                       <span className="cell-title">{typ.nazwa}</span>
                       {typ.systemowy && (
                         <span className="form-section__badge is-accent" title={t.mailingTypyBuiltinHint}>

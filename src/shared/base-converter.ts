@@ -74,7 +74,6 @@ export interface BaseConverterConfig {
   useCache: boolean;
   useRegexFirst: boolean;
   skipNegativeAmounts: boolean;
-  skipBankFees: boolean;
   useAIForExpenses?: boolean;
   contractors?: Kontrahent[];
   addresses?: Adres[];
@@ -273,7 +272,6 @@ export abstract class BaseConverter<TRaw> {
       useCache: config.useCache ?? true,
       useRegexFirst: config.useRegexFirst ?? true,
       skipNegativeAmounts: config.skipNegativeAmounts ?? false,
-      skipBankFees: config.skipBankFees ?? true,
       // Opt-in only — see shouldUseAIForExpenses(). Conversions leave it unset
       // and expenses the matcher can't resolve come to acceptance unmatched.
       useAIForExpenses: config.useAIForExpenses,
@@ -316,10 +314,14 @@ export abstract class BaseConverter<TRaw> {
     content: string
   ): Promise<ParseResult<TRaw>>;
 
-  /** Filter transactions (remove bank fees, unwanted types, etc.). */
+  /**
+   * Filter out transactions that are not this statement's own movements.
+   * Bank fees are not filtered: they are ordinary expenses, matched against
+   * contractors like any other and brought to acceptance when nothing matches.
+   */
   protected abstract doFilter(
     transactions: TRaw[],
-    opts: { skipNegative: boolean; skipBankFees: boolean }
+    opts: { skipNegative: boolean }
   ): TRaw[];
 
   /** Return true if the transaction is income (credit). */
@@ -439,7 +441,6 @@ export abstract class BaseConverter<TRaw> {
     this.emitProgress('filter', 'Filtrowanie transakcji...');
     const filtered = this.doFilter(transactions, {
       skipNegative: this.config.skipNegativeAmounts,
-      skipBankFees: this.config.skipBankFees,
     });
     const skipped = transactions.length - filtered.length;
     console.log(`✂️  Filtered to ${filtered.length} transactions (skipped ${skipped})`);

@@ -9,6 +9,7 @@ import {
 } from '../../shared/types';
 import {
   ZebranieDane,
+  buildZebranieContext,
   copyMaterialyForRevision,
   moveUchwala,
   moveUchwalaNextTo,
@@ -101,15 +102,17 @@ const ZebranieUchwaly: React.FC<{
   }, []);
 
   const uchwaly = useMemo(() => uchwalyOf(wersja), [wersja]);
+  /** The version's statement, plan and resolutions — what the Zebrania fields read. */
+  const zebranieCtx = useMemo(() => buildZebranieContext(wersja, dane, pola), [wersja, dane, pola]);
   const rows = useMemo(
     () =>
       uchwaly.map((u, i) => ({
         u,
         lp: i + 1,
-        tytul: uchwalaTytul(u, dane, pola),
-        missing: uchwalaMissing(u, dane, pola),
+        tytul: uchwalaTytul(u, dane, pola, zebranieCtx),
+        missing: uchwalaMissing(u, dane, pola, zebranieCtx),
       })),
-    [uchwaly, dane, pola]
+    [uchwaly, dane, pola, zebranieCtx]
   );
   const todo = rows.filter((r) => r.missing.length > 0).length;
   const uzyte = useMemo(() => {
@@ -229,7 +232,7 @@ const ZebranieUchwaly: React.FC<{
     }
     setBusy(`pdf-${row.u.id}`);
     try {
-      const result = await downloadUchwalaPdf(zebranie, wersja, dane, row.u, userEmail);
+      const result = await downloadUchwalaPdf(zebranie, wersja, dane, row.u, userEmail, zebranieCtx);
       if (!result.ok) {
         notify.error(result.error, t.zfinDownloadError);
         return;
@@ -493,6 +496,9 @@ const ZebranieUchwaly: React.FC<{
           onSubmit={(ids) => void handleAdd(ids)}
           onClose={() => setPickerOpen(false)}
           onOpenSzablony={onOpenSzablony}
+          dane={dane}
+          pola={pola}
+          zebranieCtx={zebranieCtx}
         />
       )}
 
@@ -504,6 +510,7 @@ const ZebranieUchwaly: React.FC<{
           lp={previewing.lp}
           dane={dane}
           pola={pola}
+          zebranieCtx={zebranieCtx}
           onEdit={() => {
             setPreviewId(null);
             setEditingId(previewing.u.id);
@@ -523,6 +530,7 @@ const ZebranieUchwaly: React.FC<{
           uchwala={editing.u}
           lp={editing.lp}
           pola={pola}
+          zebranieCtx={zebranieCtx}
           szablony={szablony}
           userEmail={userEmail}
           onSave={handleSaveOne}

@@ -23,7 +23,13 @@
  * because table rows are what Chromium splits across pages most reliably.
  */
 
-import { KalendarzPdfRequest, Spotkanie, SpotkanieLokalizacja, SpotkanieTyp } from '../../shared/types';
+import {
+  KalendarzPdfRequest,
+  Spotkanie,
+  SpotkanieLokalizacja,
+  SpotkanieMaterialyStatus,
+  SpotkanieTyp,
+} from '../../shared/types';
 import {
   DEFAULT_TYP_COLOR,
   buildMonthGrid,
@@ -70,10 +76,17 @@ const GRID_MIN_MM = 120;
 
 const STAN_LABEL: Record<KalendarzPdfRequest['stan'], string> = {
   all: '',
+  overdue: 'materiały po terminie',
   changed: 'zmieniony termin',
   tentative: 'termin wstępny',
-  nodocs: 'dokumenty niewysłane',
-  overdue: 'wysyłka po terminie',
+};
+
+const MATERIALY_LABEL: Record<SpotkanieMaterialyStatus, string> = {
+  brak: 'niepotrzebne',
+  potrzebne: 'potrzebne',
+  do_przygotowania: 'do przygotowania',
+  przygotowane: 'przygotowane',
+  wyslane: 'wysłane',
 };
 
 export interface KalendarzPdfData {
@@ -98,6 +111,7 @@ function filtryOpis(data: KalendarzPdfData): string[] {
     out.push(`typ: ${typ?.nazwa ?? '—'}`);
   }
   if (request.stan !== 'all') out.push(STAN_LABEL[request.stan]);
+  if (request.materialy) out.push(`materiały: ${MATERIALY_LABEL[request.materialy]}`);
   if (request.szukaj.trim()) out.push(`wyszukiwanie: „${request.szukaj.trim()}”`);
   return out;
 }
@@ -149,7 +163,8 @@ function shell(body: string): string {
   h1 { margin: 0; font-size: 16pt; font-weight: 650; letter-spacing: -.01em; }
   .meta { color: ${MUTED}; font-size: 8.5pt; text-align: right; }
   .meta b { color: ${MAIL_TEXT_COLOR}; font-weight: 600; }
-  .colophon { margin-top: 14px; padding-top: 7px; border-top: 1px solid #edf0f2; color: ${MUTED}; font-size: 7.5pt; }
+  .colophon { margin-top: 14px; padding-top: 7px; border-top: 1px solid #edf0f2; color: ${MUTED}; font-size: 7.5pt;
+              break-before: avoid; break-inside: avoid; }
 
   /* ---- The month ---- */
   table.month { width: 100%; border-collapse: collapse; table-layout: fixed; }

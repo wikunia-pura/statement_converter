@@ -7,6 +7,7 @@ import {
   NotificationTarget,
   Spotkanie,
   SpotkanieMaterialyKrok,
+  SpotkanieTyp,
   Zadanie,
   ZadanieKomentarz,
 } from '../shared/types';
@@ -15,6 +16,10 @@ import { dayKey, isOverdue } from '../shared/zadania';
 import { personLabel } from '../shared/app-users';
 import { showSystemNotification } from './systemNotification';
 import { NotificationId, NotificationPrefs, isNotificationEnabled } from '../shared/notifications';
+import {
+  terminWysylkiDeadline,
+  hasMaterialyOutstanding,
+} from '../shared/calendar';
 
 /**
  * Operating-system notifications.
@@ -38,14 +43,23 @@ import { NotificationId, NotificationPrefs, isNotificationEnabled } from '../sha
  *   - a community was flagged as a priority,
  *   - a priority got a note (written or changed),
  *   - a community got a plain note.
+ * And one about me: I was tagged (@) in a priority's note or a community's note,
+ * new or edited. A note that both tags me and is news notifies once, as the tag.
  *
  * Kalendarz — the materials of any meeting, whoever takes part in it:
  *   - someone marked them ready to be prepared,
  *   - someone marked them prepared,
  *   - someone marked them sent.
+ * And the deadlines and dates of any meeting still ahead:
+ *   - the sending deadline is 3 days away or less and the materials are not sent,
+ *   - the deadline has passed and the materials are not sent,
+ *   - someone else moved the meeting's date.
+ * The deadline is the meeting's sending deadline (`terminWysylkiDeadline`): the day set on the
+ * meeting, else its kind's notice period. Each deadline notice shows once per
+ * meeting and deadline — moving the deadline may announce it again.
  *
  * My own edits never notify me. Every notification has a switch in Ustawienia →
- * Powiadomienia, per person (the first five are locked on, the rest start off).
+ * Powiadomienia, per person (the task ones and the dashboard tag are locked on, the rest start off).
  * A switched-off one is still noticed — the picture moves on — so switching it
  * back on does not replay what happened while it was off.
  */
@@ -55,6 +69,10 @@ const POLL_MS = 60_000;
 const FIRST_POLL_MS = 8_000;
 /** More than this at once becomes one summary, so a restored backup is not a barrage. */
 const MAX_INDIVIDUAL = 3;
+/** How close the sending deadline has to be for the "approaching" notice. */
+const SOON_MS = 3 * 24 * 60 * 60 * 1000;
+/** Kinds change rarely and deadlines are days apart: re-read them at most this often. */
+const TERMINY_CONTEXT_MS = 10 * 60_000;
 
 interface PersonState {
   /** Task id → `updatedAt` as last seen, for the tasks assigned to this person. */
@@ -75,10 +93,26 @@ interface PersonState {
   /** Highest community-note id already dealt with; absent until the baseline. */
   lastUwagaId?: number;
   /**
+   * `prio:<id>` / `uwaga:<id>` of the dashboard notes that tag me, as last seen —
+   * a key that appears is a new tag, whether the note is new or edited. Absent
+   * until the first poll that reads it, which only takes the baseline.
+   */
+  ksTagged?: string[];
+  /**
    * Meeting id → `status|changedAt` of its materials, as last seen. Absent until
    * the first Kalendarz poll, which only takes the baseline.
    */
   materialy?: Record<string, string>;
+  /**
+   * `kind|meetingId|deadline` of the deadline notices already shown, pruned to
+   * what is still true — like `overdue` for tasks.
+   */
+  terminy?: string[];
+  /**
+   * Meeting id → `terminZmienionyAt` as last seen. Absent until the first poll
+   * that reads it, which only takes the baseline.
+   */
+  terminZmiany?: Record<string, string>;
 }
 
 interface StoreSchema {
@@ -98,6 +132,8 @@ interface Deps {
   getPriorytety: () => Promise<KsiegowaniePriorytet[]>;
   getUwagi: () => Promise<KsiegowanieUwaga[]>;
   getSpotkania: () => Promise<Spotkanie[]>;
+  /** Meeting kinds — they carry the notice period the deadline comes from. */
+  getSpotkaniaTypy: () => Promise<SpotkanieTyp[]>;
   /** The person's own notification switches, from their account. */
   getNotificationPrefs: (email: string) => Promise<NotificationPrefs>;
   /** Display name of a mailbox (typed name, else the mailbox) — "Anna przypisała Ci…". */
@@ -128,12 +164,20 @@ const TEXT = {
       `${who} – „${name}”: ${text}`,
     uwagaTitle: 'Nowa notatka do wspólnoty',
     uwagaBody: (who: string, name: string, text: string) => `${who} – „${name}”: ${text}`,
+    ksMentionTitle: 'Oznaczono Cię na Pulpicie',
     materialyTitle: {
       do_przygotowania: 'Materiały gotowe do przygotowania',
       przygotowane: 'Materiały przygotowane',
       wyslane: 'Materiały wysłane',
     },
     materialyBody: (who: string, name: string, when: string) => `${who} – „${name}” (${when})`,
+    materialySoonTitle: 'Zbliża się termin materiałów',
+    materialyLateTitle: 'Materiały po terminie',
+    deadlineBody: (name: string, when: string, due: string) =>
+      `„${name}” (${when}) – termin wysyłki: ${due}`,
+    terminZmienionyTitle: 'Zmiana terminu spotkania',
+    terminZmienionyBody: (who: string, name: string, from: string, to: string) =>
+      `${who} – „${name}”: ${from} → ${to}`,
     materialyTestBody: (name: string, when: string) =>
       `Test – kliknij, aby otworzyć spotkanie „${name}” (${when})`,
     materialyTestBodyEmpty: 'Test – kliknij, aby otworzyć Kalendarz (brak spotkań do pokazania).',
@@ -161,12 +205,20 @@ const TEXT = {
       `${who} – "${name}": ${text}`,
     uwagaTitle: 'New note on a community',
     uwagaBody: (who: string, name: string, text: string) => `${who} – "${name}": ${text}`,
+    ksMentionTitle: 'You were tagged on the dashboard',
     materialyTitle: {
       do_przygotowania: 'Materials ready to be prepared',
       przygotowane: 'Materials prepared',
       wyslane: 'Materials sent',
     },
     materialyBody: (who: string, name: string, when: string) => `${who} – "${name}" (${when})`,
+    materialySoonTitle: 'Materials deadline approaching',
+    materialyLateTitle: 'Materials overdue',
+    deadlineBody: (name: string, when: string, due: string) =>
+      `"${name}" (${when}) – sending deadline: ${due}`,
+    terminZmienionyTitle: 'Meeting date changed',
+    terminZmienionyBody: (who: string, name: string, from: string, to: string) =>
+      `${who} – "${name}": ${from} → ${to}`,
     materialyTestBody: (name: string, when: string) =>
       `Test – click to open the meeting "${name}" (${when})`,
     materialyTestBodyEmpty: 'Test – click to open the Calendar (no meeting to show).',
@@ -211,6 +263,15 @@ function isMaterialyKrok(value: string): value is SpotkanieMaterialyKrok {
   return value in MATERIALY_NOTIFICATION;
 }
 
+/** A deadline as the toast shows it — the day only. */
+function deadlineDay(deadline: Date, lang: 'pl' | 'en'): string {
+  return deadline.toLocaleDateString(lang === 'en' ? 'en-GB' : 'pl-PL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
 /** A meeting's start as the toast shows it. */
 function meetingWhen(startsAt: string, lang: 'pl' | 'en'): string {
   return new Date(startsAt).toLocaleString(lang === 'en' ? 'en-GB' : 'pl-PL', {
@@ -230,6 +291,7 @@ export class Notifier {
     defaults: { people: {} },
   });
   private timer: NodeJS.Timeout | null = null;
+  private typyCache: { at: number; value: SpotkanieTyp[] } | null = null;
   private running = false;
 
   constructor(private readonly deps: Deps) {}
@@ -272,7 +334,18 @@ export class Notifier {
         );
       }
       try {
-        events.push(...(await this.diffMaterialy(email)));
+        const spotkania = await this.deps.getSpotkania();
+        events.push(...(await this.diffMaterialy(email, spotkania)));
+        // Apart from the steps: it reads the meeting kinds too, and that failing
+        // must not silence the materials steps.
+        try {
+          events.push(...(await this.diffTerminy(email, spotkania, await this.typy())));
+        } catch (error) {
+          log.warn(
+            '[NOTIFIER] Kalendarz deadline check failed:',
+            error instanceof Error ? error.message : error,
+          );
+        }
       } catch (error) {
         log.warn(
           '[NOTIFIER] Kalendarz check failed:',
@@ -433,14 +506,48 @@ export class Notifier {
     for (const p of priorytety) snapshot[String(p.id)] = fingerprint(p.notatka ?? '');
     const newestUwaga = uwagi.reduce((max, u) => Math.max(max, u.id), 0);
 
+    const tagsMe = (mentions: string[] | undefined) => (mentions ?? []).some((m) => mailbox(m) === email);
+    const tagged = [
+      ...priorytety.filter((p) => (p.notatka ?? '').trim() && tagsMe(p.mentions)).map((p) => `prio:${p.id}`),
+      ...uwagi.filter((u) => tagsMe(u.mentions)).map((u) => `uwaga:${u.id}`),
+    ];
+    // Tags that were not there last time. None on the first poll: that one only
+    // takes the picture.
+    const before = state.ksTagged === undefined ? null : new Set(state.ksTagged);
+    const newlyTagged = new Set(before ? tagged.filter((k) => !before.has(k)) : []);
+
     const events: Event[] = [];
+    const text = TEXT[this.deps.getLanguage()];
+    const target: NotifierTarget = { view: 'ksiegowania' };
+    for (const p of priorytety) {
+      if (!newlyTagged.has(`prio:${p.id}`)) continue;
+      events.push({
+        id: 'ksiegowaniaMention',
+        title: text.ksMentionTitle,
+        body: text.priorytetNotatkaBody(
+          await this.deps.resolveName(p.notatkaBy || p.createdBy || ''),
+          p.adresNazwa,
+          snippet(p.notatka),
+        ),
+        target,
+      });
+    }
+    for (const u of uwagi) {
+      if (!newlyTagged.has(`uwaga:${u.id}`)) continue;
+      events.push({
+        id: 'ksiegowaniaMention',
+        title: text.ksMentionTitle,
+        body: text.uwagaBody(await this.deps.resolveName(u.createdBy), u.adresNazwa, snippet(u.tresc)),
+        target,
+      });
+    }
+
     // The first run only takes the picture, like the board's: nobody wants a
     // notification for every priority already on the list.
     if (state.priorytety !== undefined && state.lastUwagaId !== undefined) {
-      const text = TEXT[this.deps.getLanguage()];
-      const target: NotifierTarget = { view: 'ksiegowania' };
-
       for (const p of priorytety) {
+        // Already announced as the tag.
+        if (newlyTagged.has(`prio:${p.id}`)) continue;
         const before = state.priorytety[String(p.id)];
         if (before === undefined) {
           if (mailbox(p.createdBy) === email) continue;
@@ -474,6 +581,7 @@ export class Notifier {
 
       for (const u of uwagi) {
         if (u.id <= state.lastUwagaId || mailbox(u.createdBy) === email) continue;
+        if (newlyTagged.has(`uwaga:${u.id}`)) continue;
         events.push({
           id: 'ksiegowaniaUwaga',
           title: text.uwagaTitle,
@@ -492,6 +600,9 @@ export class Notifier {
       ...state,
       priorytety: snapshot,
       lastUwagaId: Math.max(state.lastUwagaId ?? 0, newestUwaga),
+      // Only what tags me now, so a removed note or tag does not pile up — and a
+      // tag taken off and put back is news again.
+      ksTagged: tagged,
     };
     this.store.set('people', people);
     return events;
@@ -502,12 +613,11 @@ export class Notifier {
    * prepared or sent since the last poll — the whole office prepares them, not
    * only the people in the room. "Not needed" and "needed" are not news.
    */
-  private async diffMaterialy(email: string): Promise<Event[]> {
+  private async diffMaterialy(email: string, mine: Spotkanie[]): Promise<Event[]> {
     const people = this.store.get('people');
     const state = people[email];
     if (!state) return [];
 
-    const mine = await this.deps.getSpotkania();
     const snapshot: Record<string, string> = {};
     for (const s of mine) {
       snapshot[String(s.id)] = `${s.materialyStatus}|${s.materialyZmienioneAt ?? ''}`;
@@ -548,6 +658,93 @@ export class Notifier {
 
     // Pruned to the meetings that exist now, so deleted ones do not pile up.
     people[email] = { ...state, materialy: snapshot };
+    this.store.set('people', people);
+    return events;
+  }
+
+  /** The meeting kinds the deadline check needs — they carry the notice period. */
+  private async typy(): Promise<SpotkanieTyp[]> {
+    if (this.typyCache && Date.now() - this.typyCache.at < TERMINY_CONTEXT_MS) {
+      return this.typyCache.value;
+    }
+    const value = await this.deps.getSpotkaniaTypy();
+    this.typyCache = { at: Date.now(), value };
+    return value;
+  }
+
+  /**
+   * Deadlines and moved dates. A deadline notice is raised for a meeting still
+   * ahead, once per `kind|meeting|deadline`; a moved date is announced when
+   * `terminZmienionyAt` changed since the last poll and someone else moved it.
+   * Like the others, the very first run only takes the picture of moved dates;
+   * the deadline notices need no baseline — they are about what is true now.
+   */
+  private async diffTerminy(
+    email: string,
+    spotkania: Spotkanie[],
+    typy: SpotkanieTyp[],
+  ): Promise<Event[]> {
+    const people = this.store.get('people');
+    const state = people[email];
+    if (!state) return [];
+
+    const lang = this.deps.getLanguage();
+    const text = TEXT[lang];
+    const now = new Date();
+    const announced = new Set(state.terminy ?? []);
+    const active = new Set<string>();
+    const zmiany: Record<string, string> = {};
+    const events: Event[] = [];
+
+    for (const s of spotkania) {
+      const target: NotifierTarget = { view: 'kalendarz', spotkanieId: s.id };
+      const when = meetingWhen(s.startsAt, lang);
+
+      zmiany[String(s.id)] = s.terminZmienionyAt ?? '';
+      const before = state.terminZmiany?.[String(s.id)];
+      if (
+        before !== undefined &&
+        s.terminZmienionyAt &&
+        before !== s.terminZmienionyAt &&
+        mailbox(s.terminZmienionyBy) !== email
+      ) {
+        events.push({
+          id: 'spotkanieTerminZmieniony',
+          title: text.terminZmienionyTitle,
+          body: text.terminZmienionyBody(
+            await this.deps.resolveName(s.terminZmienionyBy ?? ''),
+            s.nazwa,
+            s.terminZmienionyZ ? meetingWhen(s.terminZmienionyZ, lang) : '—',
+            when,
+          ),
+          target,
+        });
+      }
+
+      // A meeting that has started is past being sent anything.
+      if (new Date(s.startsAt).getTime() <= now.getTime()) continue;
+      const deadline = terminWysylkiDeadline(s, typy);
+      if (!deadline) continue;
+      const due = deadlineDay(deadline, lang);
+      const raise = (kind: string, id: NotificationId, title: string) => {
+        const key = `${kind}|${s.id}|${deadline.toISOString()}`;
+        active.add(key);
+        if (announced.has(key)) return;
+        events.push({ id, title, body: text.deadlineBody(s.nazwa, when, due), target });
+      };
+
+      const left = deadline.getTime() - now.getTime();
+      if (hasMaterialyOutstanding(s)) {
+        if (left <= 0) raise('mat-late', 'spotkanieMaterialyPoTerminie', text.materialyLateTitle);
+        else if (left <= SOON_MS) {
+          raise('mat-soon', 'spotkanieMaterialyTerminBlisko', text.materialySoonTitle);
+        }
+      }
+    }
+
+    // Pruned to what is true now, so a deadline that moves, or materials that
+    // go back from "sent", may be announced again.
+    people[email] = { ...state, terminy: [...active], terminZmiany: zmiany };
     this.store.set('people', people);
     return events;
   }

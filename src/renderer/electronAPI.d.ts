@@ -2,6 +2,7 @@
 
 import type { NotificationPrefs } from '../shared/notifications';
 import type { PitDane, PodatekPit } from '../shared/podatki-pit';
+import type { CitPrzegladPozycja } from '../shared/podatki-cit';
 import type {
   PodatkiPitExcelResult,
   PodatkiPitImportResult,
@@ -9,7 +10,7 @@ import type {
   PodatkiPitPostep,
 } from '../shared/types';
 import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, ZgnPelnomocnik, ZarzadOsoba, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent, AppUser, SpotkanieTyp, SpotkanieLokalizacja, Spotkanie, SpotkanieInput, KalendarzPdfRequest, SpotkanieMailing, SpotkanieTerminStatus, SpotkanieMaterialyStatus, SpotkanieMaterialyKrok, KsiegowaniePriorytet,
-  KsiegowaniePrzypisanie, KsiegowanieUwaga, KsiegowaniePlik, ScanDecision, ScanProgress, ScanReport, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik, ZadanieKomentarz, ZadanieKomentarzInput, ZadanieKomentarzPodsumowanie, ZadanieNotatka, MailingAdresaci, MailingTypDef, MailingKalendarzContext, MailingZebranieContext, MailingExportRequest, MailingExportResult, Zebranie, ZebranieInput, ZebranieDokumentKlucz, ZebranieWersja, ZebranieWersjaInput, SprawozdaniaImportResult, SprawozdanieExportRequest, PlanWlasny, PlanWlasnyExportRequest, PodatekNieruchomosci, PodatekNieruchomosciDane, PodatkiImportResult, PodatkiPdfWszystkieResult, PodatkiPodpisPostep, PodatkiPodpisWieleResult, PodatkiStawki, PodatkiStawkiDane, AdresIdentyfikacja, AdresyZasilenieResult, PodatekCit, PodatekCitDane, PodatkiCitPdfWszystkieResult, PodatkiCitUstawienia, CitAiPozycja, CitAiPropozycja, PodpisKartaStan, PodpisSlad, PodpisWybor, PodpisPdfAnaliza, PodpisPdfWynik, PodpisHistoriaEntry, ZebraniePakietRequest, SprawozdanieZapisane, SprawozdanieWstepTekst, SprawozdanieLaczenie, SprawozdanieLaczeniePropozycja, SprawozdanieGrupowanie, SprawozdanieCel, PlanGospodarczy, PlanZaliczkaAiPropozycja, ZebraniaWspolnota, AdresUdzialy, ZebraniaUstawienia, ZebranieDokumentRequest } from '../shared/types';
+  KsiegowaniePrzypisanie, KsiegowanieUwaga, KsiegowaniePlik, ScanDecision, ScanProgress, ScanReport, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik, ZadanieKomentarz, ZadanieKomentarzInput, ZadanieKomentarzPodsumowanie, ZadanieNotatka, MailingAdresaci, MailingTypDef, MailingKalendarzContext, MailingZebranieContext, MailingExportRequest, MailingExportResult, Zebranie, ZebranieInput, ZebranieDokumentKlucz, ZebranieWersja, ZebranieWersjaInput, SprawozdaniaImportResult, SprawozdanieExportRequest, PlanWlasny, PlanWlasnyExportRequest, PodatekNieruchomosci, PodatekNieruchomosciDane, PodatkiImportResult, PodatkiPdfWszystkieResult, PodatkiPodpisPostep, PodatkiPodpisWieleResult, PodatkiStawki, PodatkiStawkiDane, AdresIdentyfikacja, AdresyZasilenieResult, PodatekCit, PodatekCitDane, PodatkiCitPlikiResult, PodatkiCitUpoResult, PodatkiCitUstawienia, CitAiPozycja, CitAiPrzyklad, CitAiWynik, PodpisKartaStan, PodpisSlad, PodpisWybor, PodpisPdfAnaliza, PodpisPdfWynik, PodpisHistoriaEntry, ZebraniePakietRequest, SprawozdanieZapisane, SprawozdanieWstepTekst, SprawozdanieLaczenie, SprawozdanieLaczeniePropozycja, SprawozdanieGrupowanie, SprawozdanieCel, PlanGospodarczy, PlanZaliczkaAiPropozycja, ZebraniaWspolnota, AdresUdzialy, ZebraniaUstawienia, ZebranieDokumentRequest } from '../shared/types';
 import type { MailingRecipientsResolved } from '../shared/mailing-recipients';
 
 // Zaliczki shared types (referenced by the main-process helpers)
@@ -286,6 +287,8 @@ interface ElectronAPI {
   setSkipUserApproval: (enabled: boolean) => Promise<boolean>;
   setAlwaysUseAI: (enabled: boolean) => Promise<boolean>;
   setAiModel: (model: string) => Promise<boolean>;
+  /** Switch the e-Deklaracje gateway of this computer ('test' / 'prod'); the value now in force. */
+  setEDeklaracjeSrodowisko: (srodowisko: 'test' | 'prod') => Promise<'test' | 'prod'>;
   setContractorSortOrder: (sortOrder: string) => Promise<boolean>;
   setSidebarCollapsed: (collapsed: boolean) => Promise<boolean>;
   /** The menu's order as view ids; null restores the default. */
@@ -640,14 +643,14 @@ interface ElectronAPI {
   /** Progress of the signing run; returns the unsubscribe. */
   onPodatkiPodpisPostep: (callback: (postep: PodatkiPodpisPostep) => void) => () => void;
 
-  // Podpis kwalifikowany — any PDF
-  /** Native picker for PDFs to sign; empty when cancelled. */
+  // Podpis kwalifikowany — any PDF or XML
+  /** Native picker for PDFs and XMLs to sign; empty when cancelled. */
   podpisWybierzPdf: () => Promise<{ fileName: string; filePath: string }[]>;
   /** Size, pages and whether the file can be signed at all — see `PodpisPdfAnaliza.blokada`. */
   podpisAnalizujPdf: (filePath: string) => Promise<PodpisPdfAnaliza>;
   /**
-   * Sign the given PDFs one by one with one PIN, each into "<name> (podpisany).pdf"
-   * next to the original. Rejects only when nothing got signed (wrong PIN, no
+   * Sign the given PDFs (PAdES) and XMLs (XAdES enveloped) one by one with one
+   * PIN, each into "<name> (podpisany).<ext>" next to the original. Rejects only when nothing got signed (wrong PIN, no
    * card); otherwise resolves with everything the summary shows. The run is
    * written to the history.
    */
@@ -670,14 +673,28 @@ interface ElectronAPI {
   przeniesCitNaRok: (zRoku: number, naRok: number) => Promise<number>;
   /** Write one return as PDF (CIT-8, with the CIT-8/O when it has exempt income) — to the Settings folder's "CIT-8 <rok>", else Downloads. */
   exportPodatekCitPdf: (id: number) => Promise<{ filePath: string }>;
-  /** Every printable return of a year (or only `ids`), one PDF each, into one folder. */
-  exportPodatkiCitPdfWszystkie: (rok: number, ids?: number[]) => Promise<PodatkiCitPdfWszystkieResult>;
+  /** Write one return as the e-Deklaracje XML (CIT-8, with the CIT-8/O when it has exempt income), unsigned — same folder as the PDF. */
+  exportPodatekCitXml: (id: number) => Promise<{ filePath: string }>;
+  /** Every return of a year (or only `ids`) as XML, PDF or both, into one folder; what could not be made, with the reason. */
+  zapiszPodatkiCitPliki: (rok: number, ids: number[] | undefined, tryb: 'xml' | 'pdf' | 'oba') => Promise<PodatkiCitPlikiResult>;
   /** Tick returns as filed with the tax office (or untick them); the rows as they now are. */
   setPodatkiCitZlozone: (ids: number[], filed: boolean) => Promise<PodatekCit[]>;
-  /** Sign one return with the card; the file and who signed. A wrong PIN rejects — never retried. */
-  podpiszPodatekCitPdf: (id: number, wybor: PodpisWybor) => Promise<{ filePath: string; podpis: PodpisSlad }>;
-  /** Sign the ticked returns of a year one by one with one PIN. Rejects only when nothing got signed. */
-  podpiszPodatkiCitPdf: (rok: number, ids: number[], wybor: PodpisWybor) => Promise<PodatkiPodpisWieleResult>;
+  /**
+   * Sign returns of a year one by one with one PIN: the XML with XAdES for e-Deklaracje, the PDF next to it —
+   * with PAdES only when `pdfPodpisany`. One entry of `podpisane` per file. Rejects only when nothing got signed.
+   */
+  podpiszPodatkiCit: (
+    rok: number,
+    ids: number[],
+    wybor: PodpisWybor,
+    opcje: { pdfPodpisany: boolean; wyslij: boolean },
+  ) => Promise<PodatkiPodpisWieleResult>;
+  /** Ask the e-Deklaracje gateway for the UPO of every send of the year still waiting (or of `ids` only). */
+  sprawdzUpoCit: (rok: number, ids?: number[]) => Promise<PodatkiCitUpoResult>;
+  /** Write the UPO kept on a send into the year's folder (or find it there); its path. */
+  pobierzUpoCit: (id: number, refId: string) => Promise<{ filePath: string }>;
+  /** What the 30-second UPO automat found changed (sends whose status moved); returns the unsubscribe. */
+  onCitUpo: (callback: (wynik: PodatkiCitUpoResult) => void) => () => void;
   /** Stop the signing run after the return in hand. */
   przerwijPodpisCit: () => Promise<boolean>;
   /** Progress of the signing run; returns the unsubscribe. */
@@ -686,7 +703,10 @@ interface ElectronAPI {
   getPodatkiCitUstawienia: () => Promise<PodatkiCitUstawienia>;
   setPodatkiCitUstawienia: (ustawienia: PodatkiCitUstawienia) => Promise<PodatkiCitUstawienia>;
   /** Ask the AI to sort statement rows; one suggestion per row it could place. Rejects when the AI is not set up. */
-  klasyfikujCitAi: (pozycje: CitAiPozycja[]) => Promise<CitAiPropozycja[]>;
+  /** `przyklady`: the dictionary the model follows — `[]` for none, the saved one when left out. */
+  klasyfikujCitAi: (pozycje: CitAiPozycja[], przyklady?: CitAiPrzyklad[]) => Promise<CitAiWynik>;
+  /** Every income and cost row name of the statement library, grouped — for the dictionary review. */
+  przegladPozycjiCit: () => Promise<CitPrzegladPozycja[]>;
 
   // Podatki — PIT (PIT-11, PIT-4R)
   /** Every year's PIT data of the Podatki module — one row per community and year. */
@@ -764,7 +784,6 @@ interface ElectronAPI {
   ackSpotkanieTermin: (id: number) => Promise<boolean>;
   setSpotkanieTerminStatus: (id: number, status: SpotkanieTerminStatus) => Promise<boolean>;
   /** Tick or untick "documents sent", with a note of what went out. */
-  setSpotkanieDokumenty: (id: number, sent: boolean, opis: string) => Promise<boolean>;
   /** Move the materials status; who and when come from the session. */
   setSpotkanieMaterialy: (id: number, status: SpotkanieMaterialyStatus) => Promise<boolean>;
   /** Every Mailing send triggered from a meeting, newest first. */
@@ -841,7 +860,8 @@ interface ElectronAPI {
     adresNazwa: string,
     notatka: string,
   ) => Promise<KsiegowaniePriorytet>;
-  setKsiegowaniePriorytetNotatka: (id: number, notatka: string) => Promise<boolean>;
+  /** `mentions`: mailboxes tagged with @ in the note. */
+  setKsiegowaniePriorytetNotatka: (id: number, notatka: string, mentions: string[]) => Promise<boolean>;
   removeKsiegowaniePriorytet: (id: number) => Promise<boolean>;
   /** Rewrite the month's queue to this order (ids of that month's priorities). */
   reorderKsiegowaniaPriorytety: (monthKey: string, orderedIds: number[]) => Promise<boolean>;
@@ -851,8 +871,9 @@ interface ElectronAPI {
     adresId: number | null,
     adresNazwa: string,
     tresc: string,
+    mentions: string[],
   ) => Promise<KsiegowanieUwaga>;
-  updateKsiegowanieUwaga: (id: number, tresc: string) => Promise<boolean>;
+  updateKsiegowanieUwaga: (id: number, tresc: string, mentions: string[]) => Promise<boolean>;
   setKsiegowanieUwagaResolved: (id: number, resolved: boolean) => Promise<boolean>;
   deleteKsiegowanieUwaga: (id: number) => Promise<boolean>;
   /** Every file the folder scan pinned (all months); [] when the table is not there yet. */

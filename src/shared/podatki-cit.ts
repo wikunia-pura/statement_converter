@@ -24,6 +24,7 @@
 import {
   CitKategoria,
   CitKlasyfikacja,
+  PodatekAdres,
   CitSlownikRegula,
   CitStrona,
   PodatekCit,
@@ -34,10 +35,66 @@ import {
   SprawozdanieSekcja,
   SprawozdanieZapisane,
 } from './types';
-import { czysc, doGroszy, doZlotych, normalizeAdres, pustyAdres, tylkoCyfry } from './podatki';
+import { czysc, doGroszy, doZlotych, nipPoprawny, normalizeAdres, pustyAdres, tylkoCyfry } from './podatki';
+import { PIT11_URZEDY, PIT4R_URZEDY_DODATKOWE } from './pit-urzedy';
 import { foldText } from './plan-gospodarczy';
 import { normalizeSprawozdanieDane, sprawozdaniaDlaWspolnoty } from './sprawozdanie';
 import { kluczNazwy } from './adres-identyfikacja';
+import { normalizeWysylki } from './e-deklaracje';
+
+/* ============================ The e-Deklaracje form ============================ */
+
+/**
+ * The XML form of a tax year: the CIT-8 and its CIT-8/O attachment as e-Deklaracje takes them. MF issues a new
+ * variant when the law changes, so each year names its own; the schemas are in scripts/cit-xsd.
+ */
+export interface CitWzor {
+  rok: number;
+  /** False for a year after the last one checked against MF's pages — the last form is assumed, with a warning. */
+  potwierdzony: boolean;
+  cit8: { kodSystemowy: string; wariant: number; wersjaSchemy: string; ns: string; etdNs: string };
+  cit8o: { kodSystemowy: string; wariant: number; wersjaSchemy: string; ns: string };
+}
+
+/** CIT-8 (34) with CIT-8/O (20): the form of tax years from 2025 (its schema refuses an earlier period). */
+const WZOR_2025: Omit<CitWzor, 'rok' | 'potwierdzony'> = {
+  cit8: {
+    kodSystemowy: 'CIT-8 (34)',
+    wariant: 34,
+    wersjaSchemy: '1-0E',
+    ns: 'http://crd.gov.pl/wzor/2026/01/07/14112/',
+    // The shared types (the taxpayer's NIP and name) live in MF's "DefinicjeTypy" namespace.
+    etdNs: 'http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/09/13/eD/DefinicjeTypy/',
+  },
+  cit8o: {
+    kodSystemowy: 'CIT8/O (20)',
+    wariant: 20,
+    wersjaSchemy: '1-0E',
+    ns: 'http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2025/12/30/eD/CIT8O/',
+  },
+};
+
+/** Years checked against MF's list of forms (2025: CIT-8 (34), published 2026-01-07). */
+const CIT_WZORY_POTWIERDZONE = [2025];
+
+/** The form of a tax year; later years reuse the last one, flagged. None before 2025. */
+export function citWzor(rok: number): CitWzor | null {
+  if (!Number.isInteger(rok) || rok < 2025) return null;
+  return { rok, potwierdzony: CIT_WZORY_POTWIERDZONE.includes(rok), ...WZOR_2025 };
+}
+
+/** A tax office e-Deklaracje knows for a CIT-8 (the full list, as for the PIT-4R). */
+export const kodUrzeduCit = (kod: string): boolean => kod in PIT11_URZEDY || kod in PIT4R_URZEDY_DODATKOWE;
+
+/** The seat fields the XML's address cannot be without (`TAdresPolski1`). */
+export const CIT_ADRES_WYMAGANY: (keyof PodatekAdres)[] = [
+  'wojewodztwo',
+  'powiat',
+  'gmina',
+  'nrDomu',
+  'miejscowosc',
+  'kodPocztowy',
+];
 
 /* ================================= Categories ================================= */
 
@@ -133,6 +190,78 @@ export function defaultCitSlownik(): CitSlownikRegula[] {
   return DEFAULT_RULES.map(([fraza, strona, kategoria]) => ({ id: newId(), fraza, strona, kategoria }));
 }
 
+const DEFAULT_KLUCZE = new Set(DEFAULT_RULES.map(([fraza, strona, kategoria]) => `${foldText(fraza)}|${strona}|${kategoria}`));
+
+/** True for a rule exactly as the built-in dictionary ships it. */
+export const czyRegulaDomyslna = (r: Pick<CitSlownikRegula, 'fraza' | 'strona' | 'kategoria'>): boolean =>
+  DEFAULT_KLUCZE.has(`${foldText(r.fraza)}|${r.strona}|${r.kategoria}`);
+
+/**
+ * Stamps the author on every rule that is not built-in and is new or changed
+ * since the stored dictionary — so the dictionary shows who put in each rule
+ * the office added. An unchanged rule keeps its stamp, or its lack of one: a
+ * rule from before the stamps stays without an author rather than taking the
+ * name of whoever saves next.
+ */
+export function oznaczAutorowRegul(
+  slownik: CitSlownikRegula[],
+  poprzedni: CitSlownikRegula[],
+  kto: string,
+  teraz: string,
+): CitSlownikRegula[] {
+  const byly = new Map(poprzedni.map((r) => [r.id, r]));
+  return slownik.map((r) => {
+    if (czyRegulaDomyslna(r)) return r;
+    const p = byly.get(r.id);
+    const bez = p && p.fraza === r.fraza && p.strona === r.strona && p.kategoria === r.kategoria;
+    if (bez) return p.dodano ? { ...r, dodal: p.dodal, dodano: p.dodano } : { id: r.id, fraza: r.fraza, strona: r.strona, kategoria: r.kategoria };
+    return { ...r, dodal: kto, dodano: teraz };
+  });
+}
+
+/** What "Uzupełnij domyślne" would do to a dictionary. */
+export interface CitUzupelnienie {
+  slownik: CitSlownikRegula[];
+  /** Built-in rules put back — their phrase was gone from the column altogether. */
+  dodane: CitSlownikRegula[];
+  /** Built-in phrases the office keeps under another category — left as they are. */
+  zmienione: { fraza: string; strona: CitStrona; domyslna: CitKategoria; obecna: CitKategoria }[];
+}
+
+/**
+ * Puts back the built-in rules whose phrase is missing from their column, each
+ * right after the built-in rule before it, so the shipped order holds; the
+ * office's own rules stay where they are. A built-in phrase kept under another
+ * category is someone's decision and is only reported.
+ */
+export function uzupelnijDomyslne(slownik: CitSlownikRegula[]): CitUzupelnienie {
+  const out = [...slownik];
+  const dodane: CitSlownikRegula[] = [];
+  const zmienione: CitUzupelnienie['zmienione'] = [];
+  const klucz = (fraza: string, strona: CitStrona) => `${foldText(fraza)}|${strona}`;
+  const domyslneKlucze = new Set(DEFAULT_RULES.map(([f, st]) => klucz(f, st)));
+  let ostatni = -1;
+  for (const [fraza, strona, kategoria] of DEFAULT_RULES) {
+    const i = out.findIndex((r) => klucz(r.fraza, r.strona) === klucz(fraza, strona));
+    if (i >= 0) {
+      if (out[i].kategoria !== kategoria) zmienione.push({ fraza, strona, domyslna: kategoria, obecna: out[i].kategoria });
+      ostatni = i;
+      continue;
+    }
+    // Before any built-in rule is met, go in front of the first one there is — never above the office's own rules on top.
+    let gdzie = ostatni + 1;
+    if (ostatni < 0) {
+      const pierwszy = out.findIndex((r) => domyslneKlucze.has(klucz(r.fraza, r.strona)));
+      gdzie = pierwszy >= 0 ? pierwszy : out.length;
+    }
+    const regula: CitSlownikRegula = { id: newId(), fraza, strona, kategoria };
+    out.splice(gdzie, 0, regula);
+    dodane.push(regula);
+    ostatni = gdzie;
+  }
+  return { slownik: out, dodane, zmienione };
+}
+
 export const defaultCitUstawienia = (): PodatkiCitUstawienia => ({ slownik: defaultCitSlownik() });
 
 const isKategoria = (v: unknown): v is CitKategoria => CIT_KATEGORIE.includes(v as CitKategoria);
@@ -156,6 +285,7 @@ export function normalizeCitUstawienia(value: unknown): PodatkiCitUstawienia {
       fraza: czysc(r.fraza),
       strona: r.strona as CitStrona,
       kategoria: r.kategoria as CitKategoria,
+      ...(typeof r.dodano === 'string' && r.dodano ? { dodano: r.dodano, dodal: str(r.dodal) } : {}),
     }));
   return { slownik };
 }
@@ -233,6 +363,8 @@ export interface PozycjaCitOcena extends PozycjaCit {
   /** False only for an AI suggestion nobody accepted. */
   potwierdzona: boolean;
   uzasadnienie: string;
+  /** The return holds its own decision for the row (a pick, an AI answer, or a clearing) — "Przywróć" drops it. */
+  wlasna: boolean;
 }
 
 /** The dictionary's category for a row, or null when no rule applies. */
@@ -241,13 +373,7 @@ export function kategoriaZeSlownika(
   strona: CitStrona,
   slownik: CitSlownikRegula[],
 ): CitKategoria | null {
-  const name = foldText(nazwa);
-  for (const r of slownik) {
-    const phrase = foldText(r.fraza);
-    if (!phrase || r.strona !== strona || !name.includes(phrase)) continue;
-    return r.kategoria;
-  }
-  return null;
+  return regulaDlaNazwy(nazwa, strona, slownik)?.kategoria ?? null;
 }
 
 export function ocenPozycje(
@@ -257,24 +383,107 @@ export function ocenPozycje(
 ): PozycjaCitOcena[] {
   return pozycje.map((p) => {
     const own = klasyfikacja[p.klucz];
-    if (own && czyKategoriaPasuje(own.kategoria, p.strona)) {
+    if (own && own.kategoria === null) {
+      return { ...p, kategoria: null, zrodlo: null, potwierdzona: false, uzasadnienie: '', wlasna: true };
+    }
+    if (own && own.kategoria && czyKategoriaPasuje(own.kategoria, p.strona)) {
       return {
         ...p,
         kategoria: own.kategoria,
         zrodlo: own.zrodlo,
         potwierdzona: own.potwierdzona,
         uzasadnienie: own.uzasadnienie ?? '',
+        wlasna: true,
       };
     }
     const rule = kategoriaZeSlownika(p.nazwa, p.strona, slownik);
-    if (rule) return { ...p, kategoria: rule, zrodlo: 'regula', potwierdzona: true, uzasadnienie: '' };
+    if (rule) return { ...p, kategoria: rule, zrodlo: 'regula', potwierdzona: true, uzasadnienie: '', wlasna: false };
     // A cost no rule knows is taken as shared: the split by income share is the
     // cautious reading, and costs are far more numerous than the few that matter.
     if (p.strona === 'koszt') {
-      return { ...p, kategoria: 'koszt_wspolny', zrodlo: 'domyslna', potwierdzona: true, uzasadnienie: '' };
+      return { ...p, kategoria: 'koszt_wspolny', zrodlo: 'domyslna', potwierdzona: true, uzasadnienie: '', wlasna: false };
     }
-    return { ...p, kategoria: null, zrodlo: null, potwierdzona: false, uzasadnienie: '' };
+    return { ...p, kategoria: null, zrodlo: null, potwierdzona: false, uzasadnienie: '', wlasna: false };
   });
+}
+
+/* ============================ Reviewing the dictionary ========================== */
+
+/**
+ * One statement row name as the whole library has it: every statement and
+ * every community where an income or cost row of that name (folded) stands in
+ * that column. What the dictionary review lists and the AI is asked about.
+ */
+export interface CitPrzegladPozycja {
+  /** Column and folded name — one entry per name per column across the library. */
+  klucz: string;
+  /** The spelling met most often. */
+  nazwa: string;
+  strona: CitStrona;
+  /** The section it was met in most often — context for the AI. */
+  sekcja: CitSekcja;
+  /** Communities (by vDom number, else by name) whose statements carry it. */
+  wspolnot: number;
+  sprawozdan: number;
+  /** Sum over every statement, for weighing what matters; never shown for an INTER-EJ name. */
+  kwota: number;
+  /** A few of the communities, for the tooltip. */
+  przyklady: string[];
+}
+
+const PRZYKLADY = 5;
+
+/** Every income and cost row name of the given statements, grouped by column and folded name. */
+export function przegladPozycjiCit(sprawozdania: SprawozdanieZapisane[]): CitPrzegladPozycja[] {
+  interface Zbior {
+    pisownie: Map<string, number>;
+    sekcje: Map<CitSekcja, number>;
+    wspolnoty: Map<string, string>;
+    sprawozdan: number;
+    kwota: number;
+    strona: CitStrona;
+  }
+  const out = new Map<string, Zbior>();
+  for (const spr of sprawozdania) {
+    if (!spr.dane) continue;
+    const wspolnota = spr.nrWsp !== null ? `nr:${spr.nrWsp}` : `n:${foldText(spr.nazwa)}`;
+    for (const p of pozycjeSprawozdania(spr.dane)) {
+      const klucz = `${p.strona}|${foldText(p.nazwa)}`;
+      let z = out.get(klucz);
+      if (!z) {
+        z = { pisownie: new Map(), sekcje: new Map(), wspolnoty: new Map(), sprawozdan: 0, kwota: 0, strona: p.strona };
+        out.set(klucz, z);
+      }
+      z.pisownie.set(p.nazwa, (z.pisownie.get(p.nazwa) ?? 0) + 1);
+      z.sekcje.set(p.sekcja, (z.sekcje.get(p.sekcja) ?? 0) + 1);
+      if (!z.wspolnoty.has(wspolnota)) z.wspolnoty.set(wspolnota, spr.nazwa);
+      z.sprawozdan += 1;
+      z.kwota = doGroszy(z.kwota + p.kwota);
+    }
+  }
+  const najczestszy = <K>(m: Map<K, number>): K => [...m.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  return [...out.entries()]
+    .map(([klucz, z]) => ({
+      klucz,
+      nazwa: najczestszy(z.pisownie),
+      strona: z.strona,
+      sekcja: najczestszy(z.sekcje),
+      wspolnot: z.wspolnoty.size,
+      sprawozdan: z.sprawozdan,
+      kwota: z.kwota,
+      przyklady: [...z.wspolnoty.values()].slice(0, PRZYKLADY),
+    }))
+    .sort((a, b) => b.wspolnot - a.wspolnot || Math.abs(b.kwota) - Math.abs(a.kwota));
+}
+
+/** The rule a row name falls under — the first match, as `kategoriaZeSlownika` takes it — or null. */
+export function regulaDlaNazwy(nazwa: string, strona: CitStrona, slownik: CitSlownikRegula[]): CitSlownikRegula | null {
+  const name = foldText(nazwa);
+  for (const r of slownik) {
+    const phrase = foldText(r.fraza);
+    if (phrase && r.strona === strona && name.includes(phrase)) return r;
+  }
+  return null;
 }
 
 /* ================================== Normalizing ================================= */
@@ -293,6 +502,7 @@ const liczba = (v: unknown): number | null => {
 export const pusteDaneCit = (): PodatekCitDane => ({
   nip: '',
   urzad: '',
+  kodUrzedu: '',
   cel: 1,
   rodzajKorekty: null,
   nazwaPelna: '',
@@ -306,6 +516,7 @@ export const pusteDaneCit = (): PodatekCitDane => ({
   reprezentant: { imie: '', nazwisko: '', dataWypelnienia: null },
   telefon: '',
   pobrania: [],
+  wysylki: [],
   zlozone: null,
 });
 
@@ -315,6 +526,10 @@ function normalizeKlasyfikacja(raw: unknown): Record<string, CitKlasyfikacja> {
   for (const [klucz, v] of Object.entries(raw as Record<string, unknown>)) {
     if (!v || typeof v !== 'object') continue;
     const r = v as Record<string, unknown>;
+    if (r.kategoria === null) {
+      out[klucz] = { kategoria: null, zrodlo: 'reczne', potwierdzona: true };
+      continue;
+    }
     if (!isKategoria(r.kategoria)) continue;
     const zrodlo = r.zrodlo === 'ai' ? 'ai' : r.zrodlo === 'regula' ? 'regula' : 'reczne';
     out[klucz] = {
@@ -355,6 +570,7 @@ export function normalizeDaneCit(raw: unknown): PodatekCitDane {
     ...base,
     nip: tylkoCyfry(r.nip),
     urzad: czysc(r.urzad),
+    kodUrzedu: tylkoCyfry(r.kodUrzedu).slice(0, 4),
     cel,
     rodzajKorekty: cel === 2 ? (r.rodzajKorekty === 2 ? 2 : 1) : null,
     nazwaPelna: czysc(r.nazwaPelna),
@@ -397,6 +613,7 @@ export function normalizeDaneCit(raw: unknown): PodatekCitDane {
             };
           })
       : [],
+    wysylki: normalizeWysylki(r.wysylki),
     zlozone: zlozone && str(zlozone.at) ? { at: str(zlozone.at), by: str(zlozone.by) } : null,
   };
 }
@@ -411,6 +628,7 @@ export function daneCitNaKolejnyRok(d: PodatekCitDane): PodatekCitDane {
     ...pusteDaneCit(),
     nip: d.nip,
     urzad: d.urzad,
+    kodUrzedu: d.kodUrzedu,
     nazwaPelna: d.nazwaPelna,
     siedziba: { ...d.siedziba },
     stawka: d.stawka,
@@ -616,7 +834,18 @@ export type ProblemCit8 =
   | { kod: 'nieposortowane'; ile: number }
   /** AI suggestions waiting for a decision. */
   | { kod: 'niepotwierdzone'; ile: number }
-  | { kod: 'korekta' };
+  | { kod: 'korekta' }
+  /* What only the XML needs — the PDF prints without it. */
+  /** No e-Deklaracje form for the year (before 2025). */
+  | { kod: 'wzor' }
+  /** The NIP fails its check digit or the schema's pattern. */
+  | { kod: 'nipXml' }
+  /** No office code, or one e-Deklaracje does not know. */
+  | { kod: 'kodUrzedu'; kodUrz: string }
+  /** Seat fields the XML requires, empty. */
+  | { kod: 'adres'; pola: (keyof PodatekAdres)[] }
+  /** A postcode not in the dd-ddd form. */
+  | { kod: 'kodPocztowy' };
 
 /** What an accepted partial period is remembered as. */
 export const okresKlucz = (spr: Pick<Sprawozdanie, 'okresOd' | 'okresDo'>): string => `${spr.okresOd}|${spr.okresDo}`;
@@ -655,6 +884,44 @@ export function problemyCIT8(
   return out;
 }
 
+/** The problems only the XML has — the PDF prints without these. */
+const TYLKO_XML = new Set<ProblemCit8['kod']>(['wzor', 'nipXml', 'kodUrzedu', 'adres', 'kodPocztowy']);
+export const problemTylkoXml = (p: ProblemCit8): boolean => TYLKO_XML.has(p.kod);
+
+/** Polish postcodes as the XML wants them. */
+const KOD_POCZTOWY = /^\d{2}-\d{3}$/;
+
+/**
+ * What stops the XML for e-Deklaracje — and with it the signing — on top of what stops the PDF: the office
+ * code, a NIP the schema accepts, and a seat address with every part the schema requires.
+ */
+export function problemyCIT8Xml(
+  rek: Pick<PodatekCit, 'rok' | 'dane'>,
+  slownik: CitSlownikRegula[],
+): ProblemCit8[] {
+  const out = problemyCIT8(rek, slownik);
+  const d = rek.dane;
+  if (!citWzor(rek.rok)) out.push({ kod: 'wzor' });
+  if (/^\d{10}$/.test(d.nip) && !nipPoprawny(d.nip)) out.push({ kod: 'nipXml' });
+  if (!kodUrzeduCit(d.kodUrzedu)) out.push({ kod: 'kodUrzedu', kodUrz: d.kodUrzedu });
+  const pola = CIT_ADRES_WYMAGANY.filter((k) => !d.siedziba[k]);
+  if (pola.length > 0) out.push({ kod: 'adres', pola });
+  if (d.siedziba.kodPocztowy && !KOD_POCZTOWY.test(d.siedziba.kodPocztowy)) out.push({ kod: 'kodPocztowy' });
+  return out;
+}
+
+const ADRES_POLE: Record<keyof PodatekAdres, string> = {
+  kraj: 'kraj',
+  wojewodztwo: 'województwo',
+  powiat: 'powiat',
+  gmina: 'gmina',
+  ulica: 'ulica',
+  nrDomu: 'nr domu',
+  nrLokalu: 'nr lokalu',
+  miejscowosc: 'miejscowość',
+  kodPocztowy: 'kod pocztowy',
+};
+
 /** The problem in Polish — for the main process, whose errors reach the user as they are. */
 export function opisProblemuCit(p: ProblemCit8, rok: number): string {
   switch (p.kod) {
@@ -674,6 +941,16 @@ export function opisProblemuCit(p: ProblemCit8, rok: number): string {
       return `${p.ile} pozycji sprawozdania czeka na przypisanie do kategorii`;
     case 'niepotwierdzone':
       return `${p.ile} propozycji AI czeka na potwierdzenie`;
+    case 'wzor':
+      return `dla ${rok} r. nie ma wzoru XML CIT-8 (e-Deklaracje przyjmują CIT-8 (34) od 2025 r.)`;
+    case 'nipXml':
+      return 'NIP nie przechodzi kontroli cyfry kontrolnej';
+    case 'kodUrzedu':
+      return p.kodUrz ? `urzędu skarbowego o kodzie ${p.kodUrz} nie ma na liście MF` : 'brak kodu urzędu skarbowego';
+    case 'adres':
+      return `adres siedziby bez pól: ${p.pola.map((k) => ADRES_POLE[k]).join(', ')}`;
+    case 'kodPocztowy':
+      return 'kod pocztowy siedziby nie ma postaci 00-000';
   }
 }
 
@@ -685,7 +962,8 @@ export type StanCit = 'zlozone' | 'braki' | 'pobrana' | 'gotowa';
 
 export function stanCit(rek: Pick<PodatekCit, 'rok' | 'dane'>, slownik: CitSlownikRegula[]): StanCit {
   if (rek.dane.zlozone) return 'zlozone';
-  if (problemyCIT8(rek, slownik).length > 0) return 'braki';
+  // Filed through e-Deklaracje: a return whose XML cannot be made yet is not ready, whatever its PDF.
+  if (problemyCIT8Xml(rek, slownik).length > 0) return 'braki';
   return rek.dane.pobrania.length > 0 ? 'pobrana' : 'gotowa';
 }
 

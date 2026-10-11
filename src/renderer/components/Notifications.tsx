@@ -43,7 +43,9 @@ interface ConfirmDialog {
   id: number;
   message: string;
   options: ConfirmOptions;
-  resolve: (value: boolean) => void;
+  /** Set for an unsaved-changes question: the footer adds the save button. */
+  unsaved?: UnsavedOptions;
+  resolve: (value: UnsavedChoice) => void;
 }
 
 export interface ConfirmOptions {
@@ -54,6 +56,21 @@ export interface ConfirmOptions {
   danger?: boolean;
 }
 
+/** What the user picked when leaving with unsaved changes. */
+export type UnsavedChoice = 'save' | 'discard' | 'keep';
+
+export interface UnsavedOptions {
+  title?: string;
+  /** "Zapisz i wyjdź". */
+  saveLabel: string;
+  /** "Wyjdź bez zapisywania". */
+  discardLabel: string;
+  /** "Wróć do edycji" — defaults to the provider's cancel label. */
+  keepLabel?: string;
+  /** False when the form cannot be saved yet (required fields missing): only discard or keep. */
+  canSave?: boolean;
+}
+
 export interface NotifyApi {
   success: (message: string, options?: ToastOptions) => void;
   info: (message: string, options?: ToastOptions) => void;
@@ -62,6 +79,8 @@ export interface NotifyApi {
   error: (message: string, title?: string) => void;
   /** Blocking yes/no modal; resolves true on confirm, false on cancel. */
   confirm: (message: string, options?: ConfirmOptions) => Promise<boolean>;
+  /** Leaving with unsaved changes: save and leave, leave without saving, or stay. */
+  unsaved: (message: string, options: UnsavedOptions) => Promise<UnsavedChoice>;
 }
 
 const NotificationContext = createContext<NotifyApi | null>(null);
@@ -164,7 +183,17 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
         setErrors((prev) => [...prev, { id: ++idRef.current, title, message }]),
       confirm: (message: string, options: ConfirmOptions = {}) =>
         new Promise<boolean>((resolve) => {
-          setConfirms((prev) => [...prev, { id: ++idRef.current, message, options, resolve }]);
+          setConfirms((prev) => [
+            ...prev,
+            { id: ++idRef.current, message, options, resolve: (choice) => resolve(choice === 'save') },
+          ]);
+        }),
+      unsaved: (message: string, options: UnsavedOptions) =>
+        new Promise<UnsavedChoice>((resolve) => {
+          setConfirms((prev) => [
+            ...prev,
+            { id: ++idRef.current, message, options: { title: options.title, danger: true }, unsaved: options, resolve },
+          ]);
         }),
     }),
     [pushToast]
@@ -175,8 +204,9 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
   const dismissError = useCallback(() => setErrors((prev) => prev.slice(1)), []);
 
   // Confirms also queue; resolving the promise dequeues the dialog.
+  // `save` is a confirm's "yes", `keep` its "no".
   const currentConfirm = confirms[0] ?? null;
-  const resolveConfirm = useCallback((value: boolean) => {
+  const resolveConfirm = useCallback((value: UnsavedChoice) => {
     setConfirms((prev) => {
       const [head, ...rest] = prev;
       head?.resolve(value);
@@ -191,7 +221,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       e.stopPropagation();
-      if (currentConfirm) resolveConfirm(false);
+      if (currentConfirm) resolveConfirm('keep');
       else dismissError();
     };
     document.addEventListener('keydown', onKeyDown);
@@ -263,7 +293,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
           role="alertdialog"
           aria-modal="true"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget) resolveConfirm(false);
+            if (e.target === e.currentTarget) resolveConfirm('keep');
           }}
         >
           <div className="modal notification-dialog">
@@ -276,16 +306,33 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
             <div className="modal-body modal-body--sectioned">
               <p className="notification-dialog__message">{currentConfirm.message}</p>
             </div>
-            {/* A destructive question starts on Cancel, so Enter never deletes by reflex. */}
+            {currentConfirm.unsaved ? (
+              // Save is the safe default, so it takes Enter; discarding is the red one in the middle.
+              <ModalFooter
+                onCancel={() => resolveConfirm('keep')}
+                cancelLabel={currentConfirm.unsaved.keepLabel ?? cancelLabel}
+                secondaryAction={
+                  <button type="button" className="button button-danger" onClick={() => resolveConfirm('discard')}>
+                    {currentConfirm.unsaved.discardLabel}
+                  </button>
+                }
+                onSubmit={currentConfirm.unsaved.canSave === false ? undefined : () => resolveConfirm('save')}
+                submitLabel={currentConfirm.unsaved.saveLabel}
+                submitIcon="save"
+                autoFocus={currentConfirm.unsaved.canSave === false ? 'cancel' : 'submit'}
+              />
+            ) : (
+            /* A destructive question starts on Cancel, so Enter never deletes by reflex. */
             <ModalFooter
-              onCancel={() => resolveConfirm(false)}
+              onCancel={() => resolveConfirm('keep')}
               cancelLabel={currentConfirm.options.cancelLabel ?? cancelLabel}
-              onSubmit={() => resolveConfirm(true)}
+              onSubmit={() => resolveConfirm('save')}
               submitLabel={currentConfirm.options.confirmLabel ?? confirmLabel}
               submitIcon="check"
               submitTone={currentConfirm.options.danger ? 'danger' : 'success'}
               autoFocus={currentConfirm.options.danger ? 'cancel' : 'submit'}
             />
+            )}
           </div>
         </div>
       )}

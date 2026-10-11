@@ -1121,11 +1121,6 @@ const Zebrania: React.FC<Props> = ({
                 {t.zebraniaStandalone}
               </span>
             )}
-            {wersja && (
-              <span className="zeb-row__version">
-                {t.zebraniaVersion.replace('{v}', wersjaLabel(wersja))}
-              </span>
-            )}
             {bezMaterialow ? (
               <Tip
                 className="zeb-status-tip"

@@ -5,8 +5,7 @@
  *
  * The element order and the rules for which positions appear follow the schemas of PIT-11 (29) and PIT-4R (13)
  * and the files the office filed in 2025. Amounts: "TKwota2Nieujemna" has two decimals ("1234.50"), advances
- * ("TKwotaCNieujemna") are whole złoty ("77"). The text is built with no insignificant whitespace but the
- * indentation of the official files, so what is signed is exactly what is sent.
+ * ("TKwotaCNieujemna") are whole złoty ("77"). The writing itself is shared with the CIT-8 (eDeklaracjeXml.ts).
  */
 
 import {
@@ -23,43 +22,7 @@ import {
   maBlad,
   PitDane,
 } from '../../shared/podatki-pit';
-
-const esc = (s: string): string =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-/** Two decimals, a dot: "1234.50". */
-export const kwota2 = (x: number): string => (Math.round(x * 100 + 1e-7) / 100).toFixed(2);
-
-/** Whole złoty: "77". */
-export const kwotaC = (x: number): string => String(Math.round(x));
-
-interface Wezel {
-  nazwa: string;
-  tekst?: string;
-  atr?: [string, string][];
-  dzieci?: Wezel[];
-}
-
-const el = (nazwa: string, tekst: string, atr?: [string, string][]): Wezel => ({ nazwa, tekst, atr });
-const gr = (nazwa: string, dzieci: Wezel[], atr?: [string, string][]): Wezel => ({ nazwa, dzieci, atr });
-
-function wypisz(w: Wezel, poziom: number): string {
-  const wciecie = '  '.repeat(poziom);
-  const atr = (w.atr ?? []).map(([k, v]) => ` ${k}="${esc(v)}"`).join('');
-  if (w.dzieci) {
-    return `${wciecie}<${w.nazwa}${atr}>\n${w.dzieci.map((d) => wypisz(d, poziom + 1)).join('')}${wciecie}</${w.nazwa}>\n`;
-  }
-  return `${wciecie}<${w.nazwa}${atr}>${esc(w.tekst ?? '')}</${w.nazwa}>\n`;
-}
-
-/** Names go to the form in capitals, with no doubled spaces — the way every filed file has them. */
-const duze = (s: string): string => s.replace(/\s+/g, ' ').trim().toLocaleUpperCase('pl-PL');
-
-function zlozXml(korzen: Wezel, korzenAtr: string): string {
-  const tekst = wypisz(korzen, 0);
-  const otwarcie = `<${korzen.nazwa}${korzenAtr}>`;
-  return `<?xml version="1.0" encoding="UTF-8"?>\n${tekst.replace(/^<[^>]+>/, otwarcie)}`;
-}
+import { Wezel, duze, el, gr, kwota2, kwotaC, zlozXml } from './eDeklaracjeXml';
 
 function naglowek(
   wzor: PitWzor['pit11'],

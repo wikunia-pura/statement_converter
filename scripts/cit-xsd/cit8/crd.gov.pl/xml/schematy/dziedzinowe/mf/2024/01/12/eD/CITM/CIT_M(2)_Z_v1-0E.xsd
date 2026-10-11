@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:czm="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2024/01/12/eD/CITM/" xmlns:etd="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/09/13/eD/DefinicjeTypy/" targetNamespace="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2024/01/12/eD/CITM/" elementFormDefault="qualified" attributeFormDefault="unqualified" xml:lang="pl">
+	<xsd:import namespace="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/09/13/eD/DefinicjeTypy/" schemaLocation="../../../../../2022/09/13/eD/DefinicjeTypy/StrukturyDanych_v12-0E.xsd"/>
+	<!--Załącznik do zeznań: CIT-8 i CIT-8AB.-->
+	<xsd:complexType name="TNaglowek_CIT_M">
+		<xsd:annotation>
+			<xsd:documentation>Nagłówek deklaracji</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="KodFormularza">
+				<xsd:complexType>
+					<xsd:simpleContent>
+						<xsd:extension base="czm:TKodFormularza_CIT_M">
+							<xsd:attribute name="kodSystemowy" type="xsd:string" use="required" fixed="CIT/M (2)"/>
+							<xsd:attribute name="wersjaSchemy" type="xsd:string" use="required" fixed="1-0E"/>
+						</xsd:extension>
+					</xsd:simpleContent>
+				</xsd:complexType>
+			</xsd:element>
+			<xsd:element name="WariantFormularza">
+				<xsd:simpleType>
+					<xsd:restriction base="xsd:byte">
+						<xsd:enumeration value="2"/>
+					</xsd:restriction>
+				</xsd:simpleType>
+			</xsd:element>
+			<xsd:element name="OkresOd">
+				<xsd:complexType>
+					<xsd:simpleContent>
+						<xsd:extension base="czm:TLData">
+							<xsd:attribute name="poz" type="xsd:string" use="required" fixed="P_4"/>
+						</xsd:extension>
+					</xsd:simpleContent>
+				</xsd:complexType>
+			</xsd:element>
+			<xsd:element name="OkresDo">
+				<xsd:complexType>
+					<xsd:simpleContent>
+						<xsd:extension base="czm:TLData">
+							<xsd:attribute name="poz" type="xsd:string" use="required" fixed="P_5"/>
+						</xsd:extension>
+					</xsd:simpleContent>
+				</xsd:complexType>
+			</xsd:element>
+		</xsd:sequence>
+	</xsd:complexType>
+	<xsd:simpleType name="TLData">
+		<xsd:annotation>
+			<xsd:documentation>Ograniczenie dla daty</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="etd:TData">
+			<xsd:minInclusive value="2024-01-01"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<xsd:simpleType name="TKodFormularza_CIT_M">
+		<xsd:annotation>
+			<xsd:documentation>Symbol wzoru formularza</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string">
+			<xsd:enumeration value="CIT/M"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<xsd:element name="Zalacznik_CIT_M">
+		<xsd:annotation>
+			<xsd:documentation>INFORMACJA O WYSOKOŚCI MINIMALNEGO PODATKU DOCHODOWEGO za rok podatkowy</xsd:documentation>
+		</xsd:annotation>
+		<xsd:complexType>
+			<xsd:sequence>
+				<xsd:element name="Naglowek" type="czm:TNaglowek_CIT_M"/>
+				<xsd:element name="PozycjeSzczegolowe">
+					<xsd:annotation>
+						<xsd:documentation>Podstawa opodatkowania, pomniejszenia podstawy opodatkowania, obliczenie minimalnego podatku dochodowego</xsd:documentation>
+					</xsd:annotation>
+					<xsd:complexType>
+						<xsd:sequence>
+							<xsd:element name="P_7" type="etd:TWybor1_2">
+								<xsd:annotation>
+									<xsd:documentation>Dane dodatkowe. Podatnik w roku podatkowym: 1 - poniósł stratę, o której mowa w art. 24ca ust. 1 pkt 1 ustawy, 2 - osiągnął udział dochodów w przychodach, o którym mowa w art. 24ca ust. 1 pkt 2 ustawy</xsd:documentation>
+								</xsd:annotation>
+								<!--Informacja po uwzględnieniu art. 24ca ust. 2 ustawy.-->
+							</xsd:element>
+							<xsd:sequence>
+								<!--B. PODSTAWA OPODATKOWANIA-->
+								<xsd:sequence>
+									<xsd:element name="P_8_1" type="etd:TWybor1" minOccurs="0">
+										<xsd:annotation>
+											<xsd:documentation>Podstawa opodatkowania, o której mowa w art. 24ca ustawy, w tym: wartość 1 - kwota, o której mowa w art. 24ca ust. 3 pkt 1 ustawy</xsd:documentation>
+										</xsd:annotation>
+									</xsd:element>
+									<xsd:element name="P_8_2" type="etd:TWybor1" minOccurs="0">
+										<xsd:annotation>
+											<xsd:documentation>Podstawa opodatkowania, o której mowa w art. 24ca ustawy, w tym: wartość 1 - koszty finansowania dłużnego, o których mowa w art. 24ca ust. 3 pkt 2 ustawy</xsd:documentation>
+										</xsd:annotation>
+									</xsd:element>
+									<xsd:element name="P_8_3" type="etd:TWybor1" minOccurs="0">
+										<xsd:annotation>
+											<xsd:documentation>Podstawa opodatkowania, o której mowa w art. 24ca ustawy, w tym: wartość 1 - koszty, o których mowa w art. 24ca ust. 3 pkt 4 ustawy</xsd:documentation>
+										</xsd:annotation>
+									</xsd:element>
+									<xsd:element name="P_8_4" type="etd:TWybor1" minOccurs="0">
+										<xsd:annotation>
+											<xsd:documentation>Podstawa opodatkowania, o której mowa w art. 24ca ustawy, w tym: wartość 1 - kwota, o której mowa w art. 24ca ust. 3a ustawy (podstawa opodatkowania obliczana w sposób uproszczony)</xsd:documentation>
+										</xsd:annotation>
+										<!--Informacja po uwzględnieniu art. 24ca ust. 9 ustawy.-->
+									</xsd:element>
+								</xsd:sequence>
+								<xsd:element name="P_9">
+									<xsd:annotation>
+										<xsd:documentation>Podstawa opodatkowania, o której mowa w art. 24ca ust. 3 ustawy - kwota</xsd:documentation>
+									</xsd:annotation>
+									<xsd:simpleType>
+										<xsd:restriction base="etd:TKwota2Nieujemna">
+											<xsd:minExclusive value="0"/>
+										</xsd:restriction>
+									</xsd:simpleType>
+								</xsd:element>
+							</xsd:sequence>
+							<!--C. POMNIEJSZENIA PODSTAWY OPODATKOWANIA-->
+							<xsd:sequence minOccurs="0">
+								<xsd:sequence>
+									<xsd:element name="P_10_1" type="etd:TWybor1" minOccurs="0">
+										<xsd:annotation>
+											<xsd:documentation>Pomniejszenia podstawy opodatkowania, o których mowa w art. 24ca ust. 10 ustawy, w tym: wartość 1 - wartość odliczeń, o których mowa w art. 24ca ust. 10 pkt 1 ustawy</xsd:documentation>
+										</xsd:annotation>
+									</xsd:element>
+									<xsd:element name="P_10_2" type="etd:TWybor1" minOccurs="0">
+										<xsd:annotation>
+											<xsd:documentation>Pomniejszenia podstawy opodatkowania, o których mowa w art. 24ca ust. 10 ustawy, w tym: wartość 1 - wartość przychodów, o których mowa w art. 24ca ust. 10 pkt 2 ustawy</xsd:documentation>
+										</xsd:annotation>
+									</xsd:element>
+									<xsd:element name="P_10_3" type="etd:TWybor1" minOccurs="0">
+										<xsd:annotation>
+											<xsd:documentation>Pomniejszenia podstawy opodatkowania, o których mowa w art. 24ca ust. 10 ustawy, w tym: wartość 1 - wartość przychodów, o których mowa w art. 24ca ust. 10 pkt 3 ustawy</xsd:documentation>
+										</xsd:annotation>
+									</xsd:element>
+								</xsd:sequence>
+								<xsd:element name="P_11">
+									<xsd:annotation>
+										<xsd:documentation>Pomniejszenia podstawy opodatkowania, o których mowa w art. 24ca ust. 10 ustawy - kwota</xsd:documentation>
+									</xsd:annotation>
+									<xsd:simpleType>
+										<xsd:restriction base="etd:TKwota2Nieujemna">
+											<xsd:minExclusive value="0"/>
+										</xsd:restriction>
+									</xsd:simpleType>
+								</xsd:element>
+							</xsd:sequence>
+							<!--D. OBLICZENIE MINIMALNEGO PODATKU DOCHODOWEGO (podaje się po zaokrągleniu do pełnych złotych)-->
+							<xsd:sequence>
+								<xsd:annotation>
+									<xsd:documentation>Obliczenie minimalnego podatku dochodowego (podaje się po zaokrągleniu do pełnych złotych)</xsd:documentation>
+								</xsd:annotation>
+								<xsd:element name="P_12" type="etd:TKwotaCNieujemna">
+									<xsd:annotation>
+										<xsd:documentation>Należny minimalny podatek dochodowy na podstawie art. 24ca ustawy</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_13" type="etd:TKwotaCNieujemna">
+									<xsd:annotation>
+										<xsd:documentation>Należny podatek dochodowy na podstawie art. 19 ustawy</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_14" type="etd:TKwotaCNieujemna">
+									<xsd:annotation>
+										<xsd:documentation>Należny minimalny podatek dochodowy na podstawie art. 24ca ust. 12 ustawy</xsd:documentation>
+									</xsd:annotation>
+									<!--Od kwoty z poz. 12 należy odjąć kwotę z poz. 13. Jeżeli różnica jest liczbą ujemną, należy wpisać 0.-->
+								</xsd:element>
+								<xsd:element name="P_15" type="etd:TKwotaCNieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Doliczenia do podatku</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_16" type="etd:TKwotaCNieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Odliczenia od podatku</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_17" type="etd:TKwotaCNieujemna">
+									<xsd:annotation>
+										<xsd:documentation>Podatek obliczony zgodnie z art. 24ca ustawy po uwzględnieniu doliczeń i odliczeń</xsd:documentation>
+									</xsd:annotation>
+									<!--Kwotę wpisać odpowiednio do właściwej pozycji w CIT-8 lub CIT-8AB.-->
+								</xsd:element>
+							</xsd:sequence>
+						</xsd:sequence>
+					</xsd:complexType>
+				</xsd:element>
+			</xsd:sequence>
+		</xsd:complexType>
+	</xsd:element>
+</xsd:schema>

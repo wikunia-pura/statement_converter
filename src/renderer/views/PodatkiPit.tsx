@@ -58,7 +58,7 @@ import { plural } from '../plural';
 import { useNotify } from '../components/Notifications';
 import { FormField, FormRow, FormSection } from '../components/FormSection';
 import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
-import { PodpisKartaModal } from '../components/PodpisKarta';
+import { PodpisKartaModal, PodpiszTezPdf } from '../components/PodpisKarta';
 import ScreenTitle from '../components/ScreenTitle';
 import { useNavItem } from '../navigation';
 import Icon from '../components/Icon';
@@ -930,7 +930,16 @@ const WspolnotaScreen: React.FC<{
     setDane((d) => ({ ...d, osoby: [...d.osoby, nowa] }));
   };
   const back = async () => {
-    if (dirty && !(await notify.confirm(t.unsavedConfirm, { danger: true, confirmLabel: t.unsavedDiscard }))) return;
+    if (dirty) {
+      const canSave = !!rekord || canAdd;
+      const choice = await notify.unsaved(canSave ? t.unsavedConfirm : t.unsavedNoSave, {
+        saveLabel: t.unsavedSave,
+        discardLabel: t.unsavedDiscard,
+        keepLabel: t.unsavedKeep,
+        canSave,
+      });
+      if (choice === 'keep' || (choice === 'save' && !(await save()))) return;
+    }
     onBack();
   };
 
@@ -945,8 +954,10 @@ const WspolnotaScreen: React.FC<{
       setBaseline(migawka(saved.nip, saved.dane));
       notify.success(t.saved);
       onSaved(saved);
+      return true;
     } catch (err: unknown) {
       notify.error(err instanceof Error ? err.message : String(err), t.saveError);
+      return false;
     } finally {
       setBusy(null);
     }
@@ -1830,13 +1841,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
                     </div>
                   </div>
                 )}
-                <label className="pit-check">
-                  <input type="checkbox" checked={pdfPodpisany} onChange={(e) => setPdfPodpisany(e.target.checked)} />
-                  <span>
-                    {t.signPdfOption}
-                    <small> — {t.signPdfOptionHint}</small>
-                  </span>
-                </label>
+                <PodpiszTezPdf checked={pdfPodpisany} onChange={setPdfPodpisany} label={t.signPdfOption} hint={t.signPdfOptionHint} />
               </FormSection>
             );
           }}

@@ -482,6 +482,38 @@ function zlozPodpis(o: {
 }
 
 /**
+ * Where the enveloped signature of `source` (no BOM) goes — the offset of the
+ * root's closing tag — or, as a sentence, why it cannot go anywhere: the XML
+ * does not parse, already carries a signature, or its root has no separate
+ * closing tag. The one rule both `podpiszXml` and the check made before the
+ * PIN (`przeszkodaPodpisuXml`) apply, so a file let through never fails here.
+ */
+function miejscePodpisu(source: string): { doc: XmlDocument; at: number } | string {
+  let doc: XmlDocument;
+  try {
+    doc = parsujXml(source);
+  } catch (error: unknown) {
+    return error instanceof Error ? error.message : String(error);
+  }
+  if (szukaj(doc.root, NS_DS, 'Signature')) {
+    return 'Ten plik XML ma już podpis — dołożenie drugiego nie jest obsługiwane.';
+  }
+  // The signature goes before the root's closing tag; anything but whitespace and PIs/comments may not follow it.
+  const closing = `</${doc.root.name}`;
+  const at = source.lastIndexOf(closing);
+  if (at < 0 || !/^\s*>/.test(source.slice(at + closing.length))) {
+    return 'Nie da się podpisać tego XML: element główny musi mieć osobny znacznik zamykający.';
+  }
+  return { doc, at };
+}
+
+/** Why `podpiszXml` would refuse this XML — null when it would sign it. Checked before the card is touched. */
+export function przeszkodaPodpisuXml(xml: string): string | null {
+  const miejsce = miejscePodpisu(xml.charCodeAt(0) === 0xfeff ? xml.slice(1) : xml);
+  return typeof miejsce === 'string' ? miejsce : null;
+}
+
+/**
  * Signs a declaration with the card: the ds:Signature goes in as the last child
  * of the root element, right before its closing tag, and the signed XML is
  * returned. The XML must already be in the form to be sent — whitespace
@@ -491,17 +523,11 @@ function zlozPodpis(o: {
  */
 export async function podpiszXml(xml: string, o: PodpisXml): Promise<string> {
   const source = xml.charCodeAt(0) === 0xfeff ? xml.slice(1) : xml;
-  const doc = parsujXml(source);
-  if (szukaj(doc.root, NS_DS, 'Signature')) throw new Error('Deklaracja jest już podpisana.');
+  const miejsce = miejscePodpisu(source);
+  if (typeof miejsce === 'string') throw new Error(miejsce);
+  const { doc, at } = miejsce;
   if (o.cert.klucz === 'inny') throw new Error('Klucz tego certyfikatu nie jest ani RSA, ani EC — nie umiem nim podpisać.');
   const rsa = o.cert.klucz === 'rsa';
-
-  // The signature goes before the root's closing tag; anything but whitespace and PIs/comments may not follow it.
-  const closing = `</${doc.root.name}`;
-  const at = source.lastIndexOf(closing);
-  if (at < 0 || !/^\s*>/.test(source.slice(at + closing.length))) {
-    throw new Error('Nie da się podpisać tego XML: element główny musi mieć osobny znacznik zamykający.');
-  }
 
   const uuid = () => `ID-${randomUUID()}`;
   const id: Identyfikatory = {

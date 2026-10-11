@@ -13,7 +13,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { PDFDocument } from 'pdf-lib';
+import { PDFArray, PDFDict, PDFDocument, PDFHexString, PDFName, PDFString } from 'pdf-lib';
 import { ZebraniePakietRequest } from '../../shared/types';
 import type DatabaseService from '../database';
 import { buildKalendarzContext, formatPolishDate, missingFieldValues } from '../../shared/mailing-template';
@@ -22,7 +22,6 @@ import {
   uchwalaMissing,
   uchwalaTytul,
   uchwalyOf,
-  wersjaLabel,
   zawiadomienieOf,
   zebranieDane,
 } from '../../shared/zebrania';
@@ -49,10 +48,38 @@ interface Czesc {
   plik: string;
 }
 
+/**
+ * What a contents row links to while the cover is HTML. Chromium keeps a link
+ * only to a URL, and the parts are not in that document yet — so the row links
+ * here, and `linkujSpis` turns the link into a jump to the part's first page.
+ */
+const SPIS_URI = 'https://spis.invalid/czesc-';
+
+/** The contents rows' links on the cover pages, pointed at the first page of their part. */
+function linkujSpis(out: PDFDocument, coverPages: number, pierwsze: number[]): void {
+  const pages = out.getPages();
+  for (const page of pages.slice(0, coverPages)) {
+    const annots = page.node.lookupMaybe(PDFName.of('Annots'), PDFArray);
+    if (!annots) continue;
+    for (let i = 0; i < annots.size(); i += 1) {
+      const annot = annots.lookupMaybe(i, PDFDict);
+      const action = annot?.lookupMaybe(PDFName.of('A'), PDFDict);
+      const uri = action?.lookupMaybe(PDFName.of('URI'), PDFString, PDFHexString)?.decodeText() ?? '';
+      if (!annot || !uri.startsWith(SPIS_URI)) continue;
+      const target = pages[pierwsze[Number(uri.slice(SPIS_URI.length))]];
+      annot.delete(PDFName.of('A'));
+      // A part that is not there (it cannot happen, but) keeps no dead link.
+      if (target) annot.set(PDFName.of('Dest'), out.context.obj([target.ref, 'XYZ', null, null, null]));
+    }
+  }
+}
+
 const COVER_CSS = `
   .toc { list-style: none; margin: 0; padding: 0; }
-  .toc li { display: flex; align-items: center; gap: 4mm; margin-bottom: 2mm; padding: 3mm 4mm;
-            border: 1px solid #e3e7ea; border-radius: 6px; background: #fff; break-inside: avoid; }
+  .toc li { margin-bottom: 2mm; break-inside: avoid; }
+  /* The whole row is the link to its part (see \`linkujSpis\`). */
+  .toc a { display: flex; align-items: center; gap: 4mm; padding: 3mm 4mm; color: inherit; text-decoration: none;
+           border: 1px solid #e3e7ea; border-radius: 6px; background: #fff; }
   .toc .nr { display: flex; align-items: center; justify-content: center; flex: 0 0 7mm; height: 7mm;
              border-radius: 50%; background: ${LOGO_BAND_COLOR}; color: #fff; font-weight: 700; font-size: 9pt; }
   .toc .what { flex: 1 1 auto; min-width: 0; }
@@ -65,6 +92,11 @@ const COVER_CSS = `
   .skrot .kpis { margin-bottom: 0; }
   .skrot .notes { margin-top: 3mm; }
   .skrot-sub { margin: -1mm 0 2.5mm 12px; color: #5b6670; font-size: 8.5pt; }
+  /* The summaries together on a page of their own, after the contents; each one
+     whole, so a heading is never left at the foot of a page without its figures. */
+  .skrot-strona { break-before: page; }
+  .skrot-sekcja { break-inside: avoid; }
+  .skrot-sekcja + .skrot-sekcja { margin-top: 8mm; }
   .cover-foot { margin-top: 6mm; color: #5b6670; font-size: 8.5pt; }
   .cover-foot b { color: ${LOGO_ACCENT_COLOR}; }
 `;
@@ -261,18 +293,18 @@ export async function eksportujPakiet(
           const n = docs[i].getPageCount();
           const pages = strony(next, n);
           next += n;
-          return `<li><span class="nr">${i + 1}</span><span class="what"><b>${esc(c.tytul)}</b><span>${esc(c.opis)}</span></span><span class="pages">${pages}</span></li>`;
+          return `<li><a href="${SPIS_URI}${i}"><span class="nr">${i + 1}</span><span class="what"><b>${esc(c.tytul)}</b><span>${esc(c.opis)}</span></span><span class="pages">${pages}</span></a></li>`;
         })
         .join('');
       const sprSkrot = spr
-        ? `<h2><span>Sprawozdanie finansowe w skrócie</span></h2>
+        ? `<section class="skrot-sekcja"><h2><span>Sprawozdanie finansowe w skrócie</span></h2>
 <div class="skrot-sub">Za okres ${esc(okresLabel(spr.dane.okresOd, spr.dane.okresDo))}</div>
-${skrotHtml(sprawozdanieSkrot(spr.dane, spr.wstep))}`
+${skrotHtml(sprawozdanieSkrot(spr.dane, spr.wstep))}</section>`
         : '';
       const planSkrotHtml = plan
-        ? `<h2><span>Plan gospodarczy na ${plan.rok} rok w skrócie</span></h2>
+        ? `<section class="skrot-sekcja"><h2><span>Plan gospodarczy na ${plan.rok} rok w skrócie</span></h2>
 <div class="skrot-sub">Stawki zaliczek za 1 m² powierzchni miesięcznie</div>
-${skrotHtml(planSkrot(plan))}`
+${skrotHtml(planSkrot(plan))}</section>`
         : '';
       const body = `<div class="head">
 <h1>${esc(dane.nazwa || 'Zebranie Wspólnoty Mieszkaniowej')}</h1>
@@ -281,24 +313,23 @@ ${factsStrip(
   [
     ['Termin', termin],
     miejsce ? ['Miejsce', miejsce] : null,
-    ['Wersja materiałów', wersjaLabel(wersja)],
   ].filter((x): x is string[] => !!x),
 )}
 </div>
 <h2><span>Zawartość</span></h2>
 <ul class="toc">${toc}</ul>
-${sprSkrot}
-${planSkrotHtml}
-<p class="cover-foot">Szczegóły — na kolejnych stronach. Prosimy o zapoznanie się z materiałami <b>przed zebraniem</b>.</p>`;
+<p class="cover-foot">Szczegóły — na kolejnych stronach. Prosimy o zapoznanie się z materiałami <b>przed zebraniem</b>.</p>
+${sprSkrot || planSkrotHtml ? `<div class="skrot-strona">${sprSkrot}${planSkrotHtml}</div>` : ''}`;
       return shell(
-        { label: 'Materiały na zebranie', adres, stopka: `Materiały na zebranie · wersja ${wersjaLabel(wersja)}` },
+        { label: 'Materiały na zebranie', adres, stopka: 'Materiały na zebranie' },
         body,
         COVER_CSS,
       );
     };
 
-    // The table of contents needs the cover's own length: one page is the
-    // design, but long figures could push it to two — then render it again.
+    // The table of contents needs the cover's own length: a page for the
+    // contents and one for the summaries, but long figures could push it
+    // further — then render it again.
     const coverPath = path.join(tmp, 'okladka.pdf');
     let coverPages = 1;
     let coverDoc: PDFDocument | null = null;
@@ -316,6 +347,13 @@ ${planSkrotHtml}
       const pages = await out.copyPages(doc, doc.getPageIndices());
       pages.forEach((p) => out.addPage(p));
     }
+    const pierwsze: number[] = [];
+    let start = coverDoc!.getPageCount();
+    for (const doc of docs) {
+      pierwsze.push(start);
+      start += doc.getPageCount();
+    }
+    linkujSpis(out, coverDoc!.getPageCount(), pierwsze);
     const filePath = uniquePath(
       deps.downloadsDir,
       `${nazwaPliku(`Materiały na zebranie - ${adres || dane.nazwa} - ${kalendarz.dataText || formatPolishDate(new Date())}`)}.pdf`,

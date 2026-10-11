@@ -4,7 +4,8 @@
  *
  * The model gets the facts the app computed from the figures (every number in
  * them is one vDom printed, or a difference of two of them), the statement's
- * rows as the meeting shows them (merges and subcategories applied), and what
+ * rows as the meeting groups them (merges applied, a subcategory as its total
+ * only — so it speaks of "przeglądy", not of each inspection), and what
  * the user asked for. Only a draft leaves here: the renderer puts it in the
  * editor, and it is stored once somebody saves it.
  */
@@ -24,8 +25,9 @@ const SYSTEM = `You write the opening paragraph of a Polish housing community's 
 
 WRITE
 - In Polish, plain and factual, in the manager's voice addressing the owners, without greetings or sign-off.
-- 4–7 sentences, as one paragraph (two at most, separated by a blank line). Plain text only: no headings, lists, markdown or quotes.
+- 2–3 short paragraphs separated by a blank line, 2–3 sentences each, every paragraph about one thing — e.g. the period's result (income, costs, result), then the biggest cost items, then the repair fund, loans and cash. Never one block of text. Plain text only: no headings, lists, markdown or quotes.
 - Say what the period came to: income against costs and the result, the biggest cost items, the repair fund, loans if any, cash at the end. Lead with what matters most for this community.
+- Name cost and income items exactly as ROWS groups them. The manager merged or grouped rows on purpose ("Przeglądy" for the lift and intercom inspections): such an item is one item — speak of it by its name and total, never of the rows it was made from.
 
 FACTS — THE HARD RULE
 - Use ONLY the numbers given below (FACTS and ROWS), written exactly as given ("12 345,60 zł"). Never compute a new figure, round, estimate a percentage or guess a cause.
@@ -49,12 +51,14 @@ function wiersze(spr: Sprawozdanie): string {
     const ukryte = ukryteKwotyInterEj(sec);
     for (const [i, w] of sec.wiersze.entries()) {
       if (ukryte.has(i)) continue;
+      // A subcategory is one item to the owners: its total is listed, not its rows.
+      if (w.podkategoria === 'pozycja') continue;
       if (!w.kwoty.some((k) => k != null && Math.abs(k) >= 0.005)) continue;
       const kwoty = sec.kolumny
         .map((k, c) => (w.kwoty[c] != null ? `${k}: ${formatKwota(w.kwoty[c])} zł` : ''))
         .filter(Boolean)
         .join('; ');
-      const prefix = w.podsumowanie ? '= ' : w.podkategoria === 'pozycja' ? '    - ' : w.podkategoria === 'naglowek' ? '+ ' : '- ';
+      const prefix = w.podsumowanie ? '= ' : w.podkategoria === 'naglowek' ? '+ ' : '- ';
       const suffix = w.podkategoria === 'naglowek' ? ' (subcategory total)' : '';
       lines.push(`${prefix}${w.nazwa}${suffix}: ${kwoty}`);
     }
@@ -83,7 +87,7 @@ export async function napiszWstepAi(
     'IMPORTANT NOTES (printed below the paragraph):',
     ...(w.uwagi.length ? w.uwagi.map((u) => `- ${u}`) : ['—']),
     '',
-    'ROWS (as shown at the meeting; "+" a subcategory with its rows indented, "=" a summary row):',
+    'ROWS (as grouped for the meeting; "+" a subcategory\'s total, "=" a summary row):',
     wiersze(spr),
     '',
     'USER GUIDANCE:',

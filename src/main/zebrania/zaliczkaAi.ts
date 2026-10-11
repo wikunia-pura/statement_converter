@@ -16,7 +16,7 @@ import { maxTokensFor, modelRequestFields } from '../../shared/ai-models';
 import { naM2, okresyLabels, planSumy, zaliczkaBilansujaca, ZaliczkaRodzaj } from '../../shared/plan-gospodarczy';
 import { formatData, formatKwota } from '../../shared/sprawozdanie';
 import { INTER_EJ_PROMPT, nazwaInterEj, zakazInterEj } from '../../shared/inter-ej';
-import { PlanGospodarczy, PlanOkresZaliczki, PlanZaliczkaAiPropozycja } from '../../shared/types';
+import { PlanGospodarczy, PlanOkresZaliczki, PlanPozycja, PlanZaliczkaAiPropozycja } from '../../shared/types';
 
 const ANSWER_TOKENS = 1500;
 /** What the user may add to the prompt — a few sentences of guidance, not a document. */
@@ -46,8 +46,9 @@ const ZASADY = `
 - The months of all stretches add up to exactly 12.
 
 JUSTIFICATION
-- In Polish, plain and factual, 3–6 sentences, addressed to the manager. Plain text only: no headings, lists or markdown.
+- In Polish, plain and factual, addressed to the manager. 2–3 short paragraphs separated by a blank line ("\n\n" in the JSON string), 1–3 sentences each, every paragraph about one thing — e.g. what the rate has to cover, then the rate against the current one and why. Never one block of text. Plain text only: no headings, lists or markdown.
 - Say what the rate covers and why: what it pays for, the other inflows, the balance carried over, the change against the current rate.
+- Name items exactly as the plan groups them. The manager grouped rows on purpose ("Przeglądy" for the lift and intercom inspections): such an item is one item — speak of it by its name and total, never of what it was made from.
 - Quote only figures given below, written as given ("12 345,60 zł"), plus the rate(s) you propose. Do not compute other totals — the app shows the totals of your proposal itself. Do not invent causes or events the input does not state.
 
 ${INTER_EJ_PROMPT}
@@ -61,6 +62,42 @@ ANSWER FORMAT — a single JSON object and nothing else:
 const SYSTEM: Record<ZaliczkaRodzaj, string> = { A: WSTEP_A + ZASADY, B: WSTEP_B + ZASADY };
 
 const zl = (n: number) => `${formatKwota(n)} zł`;
+
+/**
+ * The plan's items as the owners see them: a subcategory ("Przeglądy") is one
+ * line with its total, not the positions under it — the model speaks of what
+ * the manager grouped, never of the parts. `zeszly`: with last year's figure
+ * and an item's own growth (the costs).
+ */
+function liniePozycji(pozycje: PlanPozycja[], zeszly: boolean): string[] {
+  type Linia = { nazwa: string; kwota: number; kwotaRoczna: number; zeSprawozdania: boolean; wzrost?: number };
+  const linie: Linia[] = [];
+  const grupy = new Map<string, Linia>();
+  for (const z of pozycje) {
+    const g = z.grupa.trim();
+    const sum = g ? grupy.get(g) : undefined;
+    if (sum) {
+      sum.kwota += z.kwota;
+      sum.kwotaRoczna += z.kwotaRoczna;
+      sum.zeSprawozdania ||= z.wiersze.length > 0;
+      continue;
+    }
+    // A group's line stands where its first position does.
+    const linia: Linia = g
+      ? { nazwa: g, kwota: z.kwota, kwotaRoczna: z.kwotaRoczna, zeSprawozdania: z.wiersze.length > 0 }
+      : { nazwa: z.nazwa || '—', kwota: z.kwota, kwotaRoczna: z.kwotaRoczna, zeSprawozdania: z.wiersze.length > 0, wzrost: z.wzrost };
+    if (g) grupy.set(g, linia);
+    linie.push(linia);
+  }
+  return linie.map((l) => {
+    const extra = !zeszly
+      ? ''
+      : l.zeSprawozdania
+        ? ` (last year ${zl(l.kwotaRoczna)}${l.wzrost != null ? `; own growth ${formatKwota(l.wzrost)}%, not the general one` : ''})`
+        : ' (added by hand)';
+    return `    - ${l.nazwa}: ${zl(l.kwota)}${extra}`;
+  });
+}
 
 /** The facts of the plan the model works from. */
 function fakty(plan: PlanGospodarczy, x: ZaliczkaRodzaj, dataZebrania: string | null): string {
@@ -131,7 +168,7 @@ function fakty(plan: PlanGospodarczy, x: ZaliczkaRodzaj, dataZebrania: string | 
     'PART I — INFLOWS',
     `- Balance of advance "A" on ${formatData(plan.stanNaDzien)}: ${zl(plan.saldoA)}`,
     `- Other income planned: ${zl(s.przychodyRazem)}`,
-    ...przychody.map((z) => `    - ${z.nazwa || '—'}: ${zl(z.kwota)}`),
+    ...liniePozycji(przychody, false),
     `- Transfer from the repair fund covering a loss: ${zl(s.saldoAKoszt)}`,
     ...(s.saldoANaFundusz > 0
       ? [`- The positive balance is moved over to the repair fund: −${zl(s.saldoANaFundusz)} (it does not count towards part I)`]
@@ -140,14 +177,7 @@ function fakty(plan: PlanGospodarczy, x: ZaliczkaRodzaj, dataZebrania: string | 
     'PART I — COSTS PLANNED',
     `- Total: ${zl(s.kosztyA)} (${formatKwota(naM2(plan, s.kosztyA))} zł/m² a month)`,
     `- Last year, the same costs from the statement: ${zl(zeszloroczne)}`,
-    ...koszty.map(
-      (z) =>
-        `    - ${z.nazwa || '—'}: ${zl(z.kwota)}${
-          z.wiersze.length > 0
-            ? ` (last year ${zl(z.kwotaRoczna)}${z.wzrost != null ? `; own growth ${formatKwota(z.wzrost)}%, not the general one` : ''})`
-            : ' (added by hand)'
-        }`,
-    ),
+    ...liniePozycji(koszty, true),
     '',
     ...teraz,
     `- Part I with it: inflows ${zl(s.wplywyA)}, costs ${zl(s.kosztyA)}, difference ${zl(s.roznicaA)}`,

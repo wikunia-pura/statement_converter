@@ -899,6 +899,8 @@ export function normalizePlan(value: unknown): PlanGospodarczy | null {
         opis: String((r as PlanRemontFR).opis ?? ''),
         kwota: num((r as PlanRemontFR).kwota),
       })),
+    ...(typeof v.uzasadnienieA === 'string' && v.uzasadnienieA.trim() ? { uzasadnienieA: v.uzasadnienieA } : {}),
+    ...(typeof v.uzasadnienieB === 'string' && v.uzasadnienieB.trim() ? { uzasadnienieB: v.uzasadnienieB } : {}),
     wskaznik: num(v.wskaznik),
     sprawozdanieOkres: { od: String(okres.od ?? ''), do: String(okres.do ?? '') },
     zmieniono: String(v.zmieniono ?? ''),

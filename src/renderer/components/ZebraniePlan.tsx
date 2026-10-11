@@ -52,6 +52,7 @@ import ZebranieDokumentActions, { DokumentZrodlo } from './ZebranieDokumentActio
 import { bezPrefiksu } from './PodpisKarta';
 import MergedBadge from './MergedBadge';
 import Tip from './Tip';
+import { AiWorking, AiWskazowkiPanel } from './AiPanel';
 
 type T = (typeof translations)['pl'];
 
@@ -237,9 +238,12 @@ const wynikZaliczki = (t: T, plan: PlanGospodarczy, x: ZaliczkaRodzaj): string =
 
 /**
  * An advance on its own — "A" for the running costs, "B" for the repair fund:
- * the year's rates, the rate that balances its part (computed), and a rate
- * proposed by the AI with its reasons — a proposal changes the plan only when
- * applied.
+ * the year's rates, then — right below them, as the statement's introduction
+ * follows its figures — the AI: the guidance box is open while the rates have
+ * no reasons yet, and a proposal changes the plan only when applied. Applied,
+ * its reasons become the plan's (`uzasadnienieA` / `uzasadnienieB`), edited
+ * like any field and stored by the plan's save bar. Then the computed rate
+ * that balances the advance's part.
  */
 const ZaliczkaBox: React.FC<{
   t: T;
@@ -255,14 +259,27 @@ const ZaliczkaBox: React.FC<{
   const bilans = zaliczkaBilansujaca(plan, x);
   const okresy = x === 'A' ? plan.zaliczkaA : plan.zaliczkaB;
   const B = x === 'B';
+  /** The reasons kept with the rates; undefined = none. An empty string is a cleared field still on screen. */
+  const uzasadnienie = B ? plan.uzasadnienieB : plan.uzasadnienieA;
   const [aiOpen, setAiOpen] = useState(false);
   const [wskazowki, setWskazowki] = useState('');
   const [generating, setGenerating] = useState(false);
   const [propozycja, setPropozycja] = useState<PlanZaliczkaAiPropozycja | null>(null);
-  /** The reasons of the proposal last applied, kept on screen next to its rates. */
-  const [uzasadnienie, setUzasadnienie] = useState<string | null>(null);
 
-  const setOkresy = (o: PlanOkresZaliczki[]) => onChange(B ? { ...plan, zaliczkaB: o } : { ...plan, zaliczkaA: o });
+  /** The plan with this advance's rates and reasons (undefined drops the reasons). */
+  const zZaliczka = (o: PlanOkresZaliczki[], u: string | undefined): PlanGospodarczy => {
+    const { uzasadnienieA: _a, uzasadnienieB: _b, ...rest } = plan;
+    const a = B ? plan.uzasadnienieA : u;
+    const b = B ? u : plan.uzasadnienieB;
+    return {
+      ...rest,
+      ...(B ? { zaliczkaB: o } : { zaliczkaA: o }),
+      ...(a != null ? { uzasadnienieA: a } : {}),
+      ...(b != null ? { uzasadnienieB: b } : {}),
+    };
+  };
+  const setOkresy = (o: PlanOkresZaliczki[]) => onChange(zZaliczka(o, uzasadnienie));
+  const setUzasadnienie = (u: string | undefined) => onChange(zZaliczka(okresy, u));
   // A split year stays split: the balancing rate is the last stretch's, the earlier ones keep theirs.
   const last = okresy.length - 1;
   const labels = okresyLabels(okresy, plan.rok);
@@ -282,34 +299,32 @@ const ZaliczkaBox: React.FC<{
     }
   };
 
+  // The rates and their reasons go into the plan together — both editable from then on.
   const apply = () => {
     if (!propozycja) return;
-    setOkresy(propozycja.okresy);
-    setUzasadnienie(propozycja.uzasadnienie);
+    onChange(zZaliczka(propozycja.okresy, propozycja.uzasadnienie));
     setPropozycja(null);
   };
 
   const proposalLabels = propozycja ? okresyLabels(propozycja.okresy, plan.rok) : [];
+  const ai = !readOnly && !!proponuj;
+  // The guidance box: asked for, or offered while the rates have no reasons to read.
+  const showAi = ai && !generating && (aiOpen || (!propozycja && uzasadnienie == null));
+  /** Opens the guidance box again — over a proposal on screen it asks for another one. */
+  const otworzAi = (label: string) =>
+    ai &&
+    !aiOpen &&
+    !generating && (
+      <button type="button" className="button button-small button-ghost" onClick={() => setAiOpen(true)}>
+        <Icon name="sparkles" size={13} /> {label}
+      </button>
+    );
 
   return (
     <FormSection
       icon={B ? 'building' : 'coins'}
       title={(B ? t.zplanAdvBTitle : t.zplanAdvATitle).replace('{rok}', String(plan.rok))}
       description={readOnly ? undefined : B ? t.zplanAdvBHint : t.zplanAdvAHint}
-      aside={
-        !readOnly &&
-        proponuj &&
-        !aiOpen &&
-        !generating && (
-          <button
-            type="button"
-            className="button button-small button-secondary"
-            onClick={() => setAiOpen(true)}
-          >
-            <Icon name="sparkles" size={13} /> {t.zplanAdvAiOpen}
-          </button>
-        )
-      }
     >
       <div className="table-scroll">
         <table className="zfin-table zplan-table">
@@ -339,6 +354,103 @@ const ZaliczkaBox: React.FC<{
           </tbody>
         </table>
       </div>
+
+      {generating && <AiWorking title={t.zplanAdvAiWorking} hint={t.zplanAdvAiWorkingHint} />}
+
+      {propozycja && (
+        <div className="callout callout--info zplan-adv-proposal">
+          <Icon name="sparkles" size={16} />
+          <div className="callout__body">
+            <strong>{t.zplanAdvAiProposal}</strong>
+            <ul>
+              {propozycja.okresy.map((o, i) => (
+                <li key={i}>
+                  {t.zplanPeriod.replace('{label}', proposalLabels[i])} {o.miesiace} {t.zplanMonths} ×{' '}
+                  <strong>{formatKwota(o.stawka)}</strong> {t.zplanRate}
+                </li>
+              ))}
+            </ul>
+            <p>{wynikZaliczki(t, zZaliczka(propozycja.okresy, undefined), x)}</p>
+            <p>
+              <strong>{t.zplanAdvAiReason}</strong>
+              <span className="zplan-ai-text">{propozycja.uzasadnienie}</span>
+            </p>
+            <p className="zeb-muted">{t.zplanAdvAiProposalHint}</p>
+            <div className="callout__actions">
+              {otworzAi(t.zplanAdvAiRegenerate)}
+              <button
+                type="button"
+                className="button button-small button-secondary"
+                onClick={() => setPropozycja(null)}
+                disabled={generating}
+              >
+                {t.zplanAdvAiDismiss}
+              </button>
+              <button type="button" className="button button-small button-primary" onClick={apply} disabled={generating}>
+                <Icon name="check" size={13} /> {t.zplanAdvAiApply}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {uzasadnienie != null &&
+        !propozycja &&
+        (readOnly ? (
+          uzasadnienie.trim() && (
+            <div className="callout callout--info">
+              <Icon name="sparkles" size={16} />
+              <div className="callout__body">
+                <strong>{t.zplanAdvAiReasonLabel}</strong>
+                <span className="zplan-ai-text">{uzasadnienie}</span>
+              </div>
+            </div>
+          )
+        ) : (
+          <FormField
+            label={t.zplanAdvAiReasonLabel}
+            htmlFor={`zplan-uzasadnienie-${x}`}
+            hint={t.zplanAdvAiReasonHint}
+            action={
+              <>
+                {otworzAi(t.zplanAdvAiOpen)}
+                <Tip ariaLabel={t.zplanAdvAiReasonRemove} content={t.zplanAdvAiReasonRemove}>
+                  <button
+                    type="button"
+                    className="button button-icon button-ghost"
+                    onClick={() => setUzasadnienie(undefined)}
+                    aria-label={t.zplanAdvAiReasonRemove}
+                  >
+                    <Icon name="trash" size={13} />
+                  </button>
+                </Tip>
+              </>
+            }
+          >
+            <textarea
+              id={`zplan-uzasadnienie-${x}`}
+              rows={7}
+              value={uzasadnienie}
+              placeholder={t.zplanAdvAiReasonPlaceholder}
+              onChange={(e) => setUzasadnienie(e.target.value)}
+            />
+          </FormField>
+        ))}
+
+      {showAi && (
+        <AiWskazowkiPanel
+          id={`zplan-ai-wskazowki-${x}`}
+          label={t.zfinIntroAiGuidance}
+          hint={t.zplanAdvAiGuidanceHint}
+          placeholder={B ? t.zplanAdvBAiGuidancePlaceholder : t.zplanAdvAiGuidancePlaceholder}
+          value={wskazowki}
+          onChange={setWskazowki}
+          generateLabel={uzasadnienie != null || propozycja ? t.zplanAdvAiRegenerate : t.zplanAdvAiGenerate}
+          onGenerate={() => void generate()}
+          onCancel={aiOpen ? () => setAiOpen(false) : undefined}
+          cancelLabel={t.cancel}
+        />
+      )}
 
       {!readOnly && !(plan.powierzchnia > 0) && (
         <div className="callout callout--warning">
@@ -372,111 +484,12 @@ const ZaliczkaBox: React.FC<{
               <button
                 type="button"
                 className="button button-small button-secondary zplan-balance__btn"
-                onClick={() => {
-                  setOkresy(bilans.okresy);
-                  setUzasadnienie(null);
-                }}
+                // The reasons stay: they may be the manager's own words now — the bin removes them.
+                onClick={() => setOkresy(bilans.okresy)}
               >
                 {t.zplanAdvASetBalance}
               </button>
             )}
-          </div>
-        </div>
-      )}
-
-      {uzasadnienie && !propozycja && (
-        <div className="callout callout--info">
-          <Icon name="sparkles" size={16} />
-          <div className="callout__body">
-            <strong>{t.zplanAdvAiApplied}</strong> {uzasadnienie}
-          </div>
-          <button
-            type="button"
-            className="button button-icon button-ghost"
-            onClick={() => setUzasadnienie(null)}
-            title={t.zplanAdvAiHide}
-            aria-label={t.zplanAdvAiHide}
-          >
-            <Icon name="x" size={13} />
-          </button>
-        </div>
-      )}
-
-      {aiOpen && !generating && (
-        <div className="zfin-ai-panel">
-          <FormField label={t.zfinIntroAiGuidance} htmlFor={`zplan-ai-wskazowki-${x}`} hint={t.zplanAdvAiGuidanceHint}>
-            <textarea
-              id={`zplan-ai-wskazowki-${x}`}
-              rows={3}
-              value={wskazowki}
-              maxLength={2000}
-              placeholder={B ? t.zplanAdvBAiGuidancePlaceholder : t.zplanAdvAiGuidancePlaceholder}
-              onChange={(e) => setWskazowki(e.target.value)}
-            />
-          </FormField>
-          <div className="section-actions">
-            <button type="button" className="button button-small button-secondary" onClick={() => setAiOpen(false)}>
-              {t.cancel}
-            </button>
-            <button type="button" className="button button-small button-primary" onClick={() => void generate()}>
-              <Icon name="sparkles" size={13} /> {t.zplanAdvAiGenerate}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {generating && (
-        <div className="zlacz-ai-working" role="status" aria-live="polite">
-          <div className="zlacz-ai-working__head">
-            <span className="loader-spinner zlacz-ai-working__spinner" aria-hidden="true" />
-            <span className="zlacz-ai-working__text">
-              <strong>{t.zplanAdvAiWorking}</strong>
-              <span>{t.zplanAdvAiWorkingHint}</span>
-            </span>
-          </div>
-          <div className="zlacz-ai-working__skeleton" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </div>
-        </div>
-      )}
-
-      {propozycja && (
-        <div className="callout callout--info zplan-adv-proposal">
-          <Icon name="sparkles" size={16} />
-          <div className="callout__body">
-            <strong>{t.zplanAdvAiProposal}</strong>
-            <ul>
-              {propozycja.okresy.map((o, i) => (
-                <li key={i}>
-                  {t.zplanPeriod.replace('{label}', proposalLabels[i])} {o.miesiace} {t.zplanMonths} ×{' '}
-                  <strong>{formatKwota(o.stawka)}</strong> {t.zplanRate}
-                </li>
-              ))}
-            </ul>
-            <p>
-              {wynikZaliczki(
-                t,
-                B ? { ...plan, zaliczkaB: propozycja.okresy } : { ...plan, zaliczkaA: propozycja.okresy },
-                x
-              )}
-            </p>
-            <p>
-              <strong>{t.zplanAdvAiReason}</strong> {propozycja.uzasadnienie}
-            </p>
-            <div className="callout__actions">
-              <button
-                type="button"
-                className="button button-small button-secondary"
-                onClick={() => setPropozycja(null)}
-              >
-                {t.zplanAdvAiDismiss}
-              </button>
-              <button type="button" className="button button-small button-primary" onClick={apply}>
-                <Icon name="check" size={13} /> {t.zplanAdvAiApply}
-              </button>
-            </div>
           </div>
         </div>
       )}
@@ -591,6 +604,96 @@ export interface PlanOryginal {
 }
 
 /* ================================ The editor ================================ */
+
+/**
+ * "Nagłówek planu": the property, the resolution, the year and the areas. Its
+ * own section above "Założenia planu", which read the areas it holds.
+ */
+const PlanNaglowek: React.FC<{
+  t: T;
+  plan: PlanGospodarczy;
+  onChange: (plan: PlanGospodarczy) => void;
+  readOnly?: boolean;
+}> = ({ t, plan, onChange, readOnly = false }) => {
+  const s = planSumy(plan);
+  const update = (fn: (p: PlanGospodarczy) => PlanGospodarczy) => onChange(fn(plan));
+  return (
+    <FormSection icon="file-text" title={t.zplanHeader}>
+      {readOnly ? (
+        <dl className="facts">
+          <dt>{t.zplanProperty}</dt>
+          <dd>
+            <strong>{plan.nieruchomosc || '—'}</strong>
+          </dd>
+          <dt>{t.zplanResolution}</dt>
+          <dd>{plan.uchwalaNr || '—'}</dd>
+          <dt>{t.zplanYear}</dt>
+          <dd>{plan.rok}</dd>
+          <dt>{t.zplanArea}</dt>
+          <dd>{formatKwota(plan.powierzchnia)}</dd>
+          <dt>{t.zplanCityArea}</dt>
+          <dd>
+            {formatKwota(plan.miastoM2)}{' '}
+            <span className="zeb-muted">({t.zplanShare.replace('{p}', String(s.udzialMiasta))})</span>
+          </dd>
+          <dt>{t.zplanLeaseArea}</dt>
+          <dd>{formatKwota(plan.pozytkiM2)}</dd>
+        </dl>
+      ) : (
+        <>
+          <FormRow>
+            <FormField label={t.zplanProperty} htmlFor="zplan-nier">
+              <input
+                id="zplan-nier"
+                type="text"
+                value={plan.nieruchomosc}
+                onChange={(e) => update((p) => ({ ...p, nieruchomosc: e.target.value }))}
+              />
+            </FormField>
+            <FormField label={t.zplanResolution} htmlFor="zplan-uchw">
+              <input
+                id="zplan-uchw"
+                type="text"
+                value={plan.uchwalaNr}
+                onChange={(e) => update((p) => ({ ...p, uchwalaNr: e.target.value }))}
+              />
+            </FormField>
+            <FormField label={t.zplanYear}>
+              <KwotaInput
+                integer
+                value={plan.rok}
+                onChange={(n) => update((p) => ({ ...p, rok: n }))}
+                ariaLabel={t.zplanYear}
+              />
+            </FormField>
+            <FormField label={t.zplanArea}>
+              <KwotaInput
+                value={plan.powierzchnia}
+                onChange={(n) => update((p) => ({ ...p, powierzchnia: n }))}
+                ariaLabel={t.zplanArea}
+              />
+            </FormField>
+          </FormRow>
+          {/* The cost rise and the ownership split are edited in "Założenia planu" above. */}
+          <dl className="facts">
+            <dt>{t.zplanCityArea}</dt>
+            <dd>
+              {formatKwota(plan.miastoM2)}{' '}
+              <span className="zeb-muted">({t.zplanShare.replace('{p}', String(s.udzialMiasta))})</span>
+            </dd>
+            <dt>{t.zplanLeaseArea}</dt>
+            <dd>{formatKwota(plan.pozytkiM2)}</dd>
+          </dl>
+        </>
+      )}
+      <p className="zeb-muted zplan-private">
+        {t.zplanPrivateArea
+          .replace('{m2}', formatKwota(s.osobyFizyczneM2))
+          .replace('{p}', String(s.udzialOsobFizycznych))}
+      </p>
+    </FormSection>
+  );
+};
 
 const PlanEditor: React.FC<{
   t: T;
@@ -741,81 +844,6 @@ const PlanEditor: React.FC<{
 
   return (
     <>
-      <FormSection icon="file-text" title={t.zplanHeader}>
-        {readOnly ? (
-          <dl className="facts">
-            <dt>{t.zplanProperty}</dt>
-            <dd>
-              <strong>{plan.nieruchomosc || '—'}</strong>
-            </dd>
-            <dt>{t.zplanResolution}</dt>
-            <dd>{plan.uchwalaNr || '—'}</dd>
-            <dt>{t.zplanYear}</dt>
-            <dd>{plan.rok}</dd>
-            <dt>{t.zplanArea}</dt>
-            <dd>{formatKwota(plan.powierzchnia)}</dd>
-            <dt>{t.zplanCityArea}</dt>
-            <dd>
-              {formatKwota(plan.miastoM2)}{' '}
-              <span className="zeb-muted">({t.zplanShare.replace('{p}', String(s.udzialMiasta))})</span>
-            </dd>
-            <dt>{t.zplanLeaseArea}</dt>
-            <dd>{formatKwota(plan.pozytkiM2)}</dd>
-          </dl>
-        ) : (
-          <>
-            <FormRow>
-              <FormField label={t.zplanProperty} htmlFor="zplan-nier">
-                <input
-                  id="zplan-nier"
-                  type="text"
-                  value={plan.nieruchomosc}
-                  onChange={(e) => update((p) => ({ ...p, nieruchomosc: e.target.value }))}
-                />
-              </FormField>
-              <FormField label={t.zplanResolution} htmlFor="zplan-uchw">
-                <input
-                  id="zplan-uchw"
-                  type="text"
-                  value={plan.uchwalaNr}
-                  onChange={(e) => update((p) => ({ ...p, uchwalaNr: e.target.value }))}
-                />
-              </FormField>
-              <FormField label={t.zplanYear}>
-                <KwotaInput
-                  integer
-                  value={plan.rok}
-                  onChange={(n) => update((p) => ({ ...p, rok: n }))}
-                  ariaLabel={t.zplanYear}
-                />
-              </FormField>
-              <FormField label={t.zplanArea}>
-                <KwotaInput
-                  value={plan.powierzchnia}
-                  onChange={(n) => update((p) => ({ ...p, powierzchnia: n }))}
-                  ariaLabel={t.zplanArea}
-                />
-              </FormField>
-            </FormRow>
-            {/* The cost rise and the ownership split are edited in "Założenia planu" above. */}
-            <dl className="facts">
-              <dt>{t.zplanCityArea}</dt>
-              <dd>
-                {formatKwota(plan.miastoM2)}{' '}
-                <span className="zeb-muted">({t.zplanShare.replace('{p}', String(s.udzialMiasta))})</span>
-              </dd>
-              <dt>{t.zplanLeaseArea}</dt>
-              <dd>{formatKwota(plan.pozytkiM2)}</dd>
-            </dl>
-          </>
-        )}
-        <p className="zeb-muted zplan-private">
-          {t.zplanPrivateArea
-            .replace('{m2}', formatKwota(s.osobyFizyczneM2))
-            .replace('{p}', String(s.udzialOsobFizycznych))}
-        </p>
-      </FormSection>
-
       <ZaliczkaBox
         t={t}
         x="A"
@@ -1364,7 +1392,11 @@ export const PlanWorkspace: React.FC<{
     });
   };
 
-  /** The positions laid out anew from the statement — the planned amounts stay. */
+  /**
+   * The positions laid out anew from the statement — the planned amounts stay.
+   * Saved at once: the notice is about the stored plan, and a draft left behind
+   * by switching tabs would bring it back.
+   */
   const regeneratePozycje = async () => {
     if (!spr) return;
     const r = przegenerujPozycje(draft, spr, pogrupowane, ustawienia);
@@ -1373,6 +1405,7 @@ export const PlanWorkspace: React.FC<{
     if (r.usuniete.length) lines.push(t.zplanRegroupGone.replace('{list}', r.usuniete.join(', ')));
     if (!(await notify.confirm(lines.join('\n\n'), { confirmLabel: t.zplanRegroup }))) return;
     setDraft(r.plan);
+    await save(r.plan, t.zplanRegroupSaved);
   };
 
   // The assumptions as typed, applied to the plan only by "Przelicz" — a discard or reload brings the plan's own.
@@ -1496,7 +1529,9 @@ export const PlanWorkspace: React.FC<{
         aside={
           <div className="form-section__actions">
             {actions}
-            {!readOnly && spr && (
+            {/* While the layout notice is up, its "Przegeneruj pozycje" is the one way
+                offered — it lays the positions out anew too, but keeps the amounts. */}
+            {!readOnly && spr && !ukladZmieniony && (
               <button
                 type="button"
                 className="button button-small button-secondary"
@@ -1552,6 +1587,8 @@ export const PlanWorkspace: React.FC<{
           </div>
         )}
       </FormSection>
+
+      <PlanNaglowek t={t} plan={draft} onChange={setDraft} readOnly={readOnly} />
 
       {!readOnly && (
         <FormSection icon="coins" title={t.zplanAssumptions} description={t.zplanAssumptionsHint}>

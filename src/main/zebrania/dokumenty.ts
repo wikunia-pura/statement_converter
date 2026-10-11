@@ -179,7 +179,11 @@ ${INTER_FONT_FACES}
   .neg { color: #b42318; }
   .empty { color: ${MUTED}; font-style: italic; }
   .note { margin-top: 7mm; color: ${MAIL_TEXT_COLOR}; }
-  .sign { margin-top: 12mm; display: flex; justify-content: flex-end; }
+  /* The closing sentence, the signature and the colophon hold on to what is above
+     them: when they do not fit, the last rows of the table come over with them,
+     so no page carries only a signature and a footer. */
+  .closing { break-before: avoid; break-inside: avoid; }
+  .sign { margin-top: 12mm; display: flex; justify-content: flex-end; break-before: avoid; break-inside: avoid; }
   .sign div { width: 260px; text-align: center; color: ${MUTED}; font-size: 9pt; }
   .sign .line { border-top: 1px dotted #7b858c; margin-top: 38px; padding-top: 4px; }
   .balance { margin-top: 6px; padding: 6px 10px; border-radius: 4px; background: #fff4e5;
@@ -202,7 +206,10 @@ ${INTER_FONT_FACES}
   .notes b { display: block; color: #7a4b00; font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
   .notes ul { margin: 1.5mm 0 0 4mm; padding: 0; }
   .notes li { margin: 1mm 0; }
-  .colophon { margin-top: 8mm; padding-top: 3mm; border-top: 1px solid #edf0f2; color: ${MUTED}; font-size: 7.5pt; }
+  /* Never a page of its own: when it does not fit, the end of what precedes it
+     (the last rows of a table) goes over to the next page with it. */
+  .colophon { margin-top: 8mm; padding-top: 3mm; border-top: 1px solid #edf0f2; color: ${MUTED}; font-size: 7.5pt;
+              break-before: avoid; break-inside: avoid; }
 ${extraCss}
 </style>
 </head>
@@ -457,7 +464,7 @@ ${factsStrip([
 </div>
 ${czescI}
 ${czescII}
-<p class="note">Niniejszy plan przyjęto uchwałą nr ${esc(plan.uchwalaNr || '……')} Wspólnoty Mieszkaniowej na zebraniu w dniu ${esc(data)}.</p>
+<p class="note closing">Niniejszy plan przyjęto uchwałą nr ${esc(plan.uchwalaNr || '……')} Wspólnoty Mieszkaniowej na zebraniu w dniu ${esc(data)}.</p>
 <div class="sign"><div><div class="line">Zarząd Wspólnoty Mieszkaniowej</div></div></div>`;
   return shell(
     {

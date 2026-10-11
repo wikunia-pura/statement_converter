@@ -26,6 +26,7 @@ import { useNotify } from './Notifications';
 import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
 import { FormField, FormSection } from './FormSection';
 import Icon from './Icon';
+import { AiWorking, AiWskazowkiPanel } from './AiPanel';
 import ZebranieDokumentActions, { DokumentZrodlo } from './ZebranieDokumentActions';
 import ZebranieSprawozdanieLaczenia from './ZebranieSprawozdanieLaczenia';
 import { bezPrefiksu } from './PodpisKarta';
@@ -141,61 +142,22 @@ export const SprawozdanieWstepSection: React.FC<{
   const showAi = !!onGenerate && !generating && (aiOpen || (!akapit && !draft));
 
   const aiPanel = showAi && (
-    <div className="zfin-ai-panel">
-      <FormField
-        label={t.zfinIntroAiGuidance}
-        htmlFor="zfin-ai-wskazowki"
-        hint={t.zfinIntroAiGuidanceHint}
-      >
-        <textarea
-          id="zfin-ai-wskazowki"
-          rows={3}
-          value={wskazowki}
-          maxLength={2000}
-          placeholder={t.zfinIntroAiGuidancePlaceholder}
-          onChange={(e) => setWskazowki(e.target.value)}
-          disabled={busy}
-        />
-      </FormField>
-      <div className="section-actions">
-        {aiOpen && (
-          <button
-            type="button"
-            className="button button-small button-secondary"
-            onClick={() => setAiOpen(false)}
-            disabled={busy}
-          >
-            {t.cancel}
-          </button>
-        )}
-        <button
-          type="button"
-          className="button button-small button-primary"
-          onClick={() => void generate()}
-          disabled={busy}
-        >
-          <Icon name="sparkles" size={13} /> {akapit || draft?.akapit ? t.zfinIntroAiRegenerate : t.zfinIntroAiGenerate}
-        </button>
-      </div>
-    </div>
+    <AiWskazowkiPanel
+      id="zfin-ai-wskazowki"
+      label={t.zfinIntroAiGuidance}
+      hint={t.zfinIntroAiGuidanceHint}
+      placeholder={t.zfinIntroAiGuidancePlaceholder}
+      value={wskazowki}
+      onChange={setWskazowki}
+      generateLabel={akapit || draft?.akapit ? t.zfinIntroAiRegenerate : t.zfinIntroAiGenerate}
+      onGenerate={() => void generate()}
+      onCancel={aiOpen ? () => setAiOpen(false) : undefined}
+      cancelLabel={t.cancel}
+      disabled={busy}
+    />
   );
 
-  const loader = generating && (
-    <div className="zlacz-ai-working" role="status" aria-live="polite">
-      <div className="zlacz-ai-working__head">
-        <span className="loader-spinner zlacz-ai-working__spinner" aria-hidden="true" />
-        <span className="zlacz-ai-working__text">
-          <strong>{t.zfinIntroAiWorking}</strong>
-          <span>{t.zfinIntroAiWorkingHint}</span>
-        </span>
-      </div>
-      <div className="zlacz-ai-working__skeleton" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-      </div>
-    </div>
-  );
+  const loader = generating && <AiWorking title={t.zfinIntroAiWorking} hint={t.zfinIntroAiWorkingHint} />;
 
   return (
     <FormSection
@@ -280,7 +242,7 @@ export const SprawozdanieWstepSection: React.FC<{
             }
           >
             <textarea
-              rows={6}
+              rows={9}
               value={draft.akapit}
               placeholder={t.zfinIntroTextPlaceholder}
               onChange={(e) => setDraft({ ...draft, akapit: e.target.value })}

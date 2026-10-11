@@ -10,7 +10,6 @@ import {
   KsiegowaniePrzypisanie,
   KsiegowanieUwaga,
   Spotkanie,
-  SpotkanieMailing,
   SpotkanieTyp,
 } from '../../shared/types';
 import { translations, Language } from '../translations';
@@ -23,9 +22,9 @@ import { comparePeople, personColor, personLabel } from '../../shared/app-users'
 import MonthIllustration, { monthAccent } from '../components/MonthIllustration';
 import {
   countAlerts,
+  firstMonthWithState,
   formatStamp,
   hasAnyAlert,
-  sentByMailingIds,
   spotkaniaFromToday,
   SpotkaniaAlerts,
   SpotkanieStateFilter,
@@ -34,6 +33,7 @@ import {
 import MeetingsIllustration from '../components/MeetingsIllustration';
 import OverflowMenu from '../components/OverflowMenu';
 import { NoteEditor, uwagaMeta, uwagaResolvedMeta } from '../components/PostingNotes';
+import { MentionText, mentionLabels } from '../components/MentionEditor';
 import { resolveOutputFilePath } from '../../shared/outputPaths';
 import { joinScanPath } from '../../shared/statement-scan';
 import { generateId } from '../../shared/utils';
@@ -96,8 +96,11 @@ interface Props {
   userEmail?: string;
   /** Jump to the Converter's Historia tab with this text already searched. */
   onShowInHistory?: (query: string) => void;
-  /** Jump to the Kalendarz with one of its "needs doing" filters already on. */
-  onShowInCalendar?: (filter: SpotkanieStateFilter) => void;
+  /**
+   * Jump to the Kalendarz with one of its "needs doing" filters already on, on
+   * `monthKey` — the first month the tile's meetings are in (null: today's).
+   */
+  onShowInCalendar?: (filter: SpotkanieStateFilter, monthKey: string | null) => void;
   /** Show the meetings/calendar area. Off in the Converter's tab — the calendar lives on the dashboard only. */
   showCalendar?: boolean;
   /** A band rendered between the calendar and the bookings — the dashboard's task list. */
@@ -172,7 +175,7 @@ const CalendarAlerts: React.FC<{
 }> = ({ alerts, language, locale, next, upcomingCount, onOpen }) => {
   const t = translations[language];
   const anything = hasAnyAlert(alerts);
-  const outstanding = alerts.overdue + alerts.changed + alerts.noDocs + alerts.tentative;
+  const outstanding = alerts.overdue + alerts.changed + alerts.tentative;
 
   // Two facts, the same shape the month bar uses: how much is waiting, and the
   // one thing that happens next — which is what a dashboard is asked first.
@@ -208,14 +211,6 @@ const CalendarAlerts: React.FC<{
       icon: 'alert-triangle',
       label: t.ksKalChanged,
       hint: t.ksKalChangedHint,
-    },
-    {
-      filter: 'nodocs',
-      count: alerts.noDocs,
-      tone: 'nodocs',
-      icon: 'mail',
-      label: t.ksKalNoDocs,
-      hint: t.ksKalNoDocsHint,
     },
     {
       filter: 'tentative',
@@ -311,7 +306,6 @@ const Ksiegowania: React.FC<Props> = ({
   // section reports, read from the same three sources the Kalendarz reads.
   const [spotkania, setSpotkania] = useState<Spotkanie[]>([]);
   const [spotkaniaTypy, setSpotkaniaTypy] = useState<SpotkanieTyp[]>([]);
-  const [spotkaniaMailingi, setSpotkaniaMailingi] = useState<SpotkanieMailing[]>([]);
   // The month's queue and the notes on communities — see `groupByAddress`.
   const [priorities, setPriorities] = useState<KsiegowaniePriorytet[]>([]);
   const [uwagi, setUwagi] = useState<KsiegowanieUwaga[]>([]);
@@ -374,7 +368,6 @@ const Ksiegowania: React.FC<Props> = ({
         adresyData,
         spotkaniaData,
         typyData,
-        mailingiData,
         priorityData,
         uwagiData,
         plikiData,
@@ -388,7 +381,6 @@ const Ksiegowania: React.FC<Props> = ({
           window.electronAPI.getAdresy(),
           window.electronAPI.getSpotkania(),
           window.electronAPI.getSpotkaniaTypy(),
-          window.electronAPI.getSpotkaniaMailingi(),
           // Priorities and notes are extras: a table that is not there yet (the
           // migration not run) must not take the whole dashboard down with it.
           window.electronAPI.getKsiegowaniaPriorytety().catch(() => [] as KsiegowaniePriorytet[]),
@@ -403,7 +395,6 @@ const Ksiegowania: React.FC<Props> = ({
       setAdresy(adresyData);
       setSpotkania(spotkaniaData);
       setSpotkaniaTypy(typyData);
-      setSpotkaniaMailingi(mailingiData);
       setPriorities(priorityData);
       setUwagi(uwagiData);
       setPliki(plikiData);
@@ -437,11 +428,8 @@ const Ksiegowania: React.FC<Props> = ({
    */
   const kalAlerts: SpotkaniaAlerts = useMemo(
     () =>
-      countAlerts(spotkaniaFromToday(spotkania), {
-        sentByMailing: sentByMailingIds(spotkaniaMailingi),
-        typy: spotkaniaTypy,
-      }),
-    [spotkania, spotkaniaTypy, spotkaniaMailingi],
+      countAlerts(spotkaniaFromToday(spotkania), spotkaniaTypy),
+    [spotkania, spotkaniaTypy],
   );
 
   /** What is next, and how much is ahead — the banner's two facts. */
@@ -679,11 +667,11 @@ const Ksiegowania: React.FC<Props> = ({
         );
       }
     },
-    savePriorityNote: (text) =>
+    savePriorityNote: (text, mentions) =>
       group.priority
         ? runNoteAction(
             group.key,
-            () => window.electronAPI.setKsiegowaniePriorytetNotatka(group.priority!.id, text),
+            () => window.electronAPI.setKsiegowaniePriorytetNotatka(group.priority!.id, text, mentions),
             t.ksPrioNoteError,
           )
         : Promise.resolve(false),
@@ -697,18 +685,22 @@ const Ksiegowania: React.FC<Props> = ({
       if (!ok) return false;
       return runNoteAction(
         group.key,
-        () => window.electronAPI.setKsiegowaniePriorytetNotatka(id, ''),
+        () => window.electronAPI.setKsiegowaniePriorytetNotatka(id, '', []),
         t.ksPrioNoteError,
       );
     },
-    addUwaga: (text) =>
+    addUwaga: (text, mentions) =>
       runNoteAction(
         group.key,
-        () => window.electronAPI.addKsiegowanieUwaga(group.adresId, group.nazwa, text),
+        () => window.electronAPI.addKsiegowanieUwaga(group.adresId, group.nazwa, text, mentions),
         t.ksUwagaError,
       ),
-    updateUwaga: (id, text) =>
-      runNoteAction(group.key, () => window.electronAPI.updateKsiegowanieUwaga(id, text), t.ksUwagaError),
+    updateUwaga: (id, text, mentions) =>
+      runNoteAction(
+        group.key,
+        () => window.electronAPI.updateKsiegowanieUwaga(id, text, mentions),
+        t.ksUwagaError,
+      ),
     setUwagaResolved: (id, resolved) =>
       runNoteAction(
         group.key,
@@ -1122,7 +1114,15 @@ const Ksiegowania: React.FC<Props> = ({
             locale={locale}
             next={kalNext}
             upcomingCount={kalUpcoming.length}
-            onOpen={onShowInCalendar}
+            onOpen={
+              onShowInCalendar &&
+              ((filter) =>
+                onShowInCalendar(
+                  filter,
+                  // Counted from today on, like the tiles themselves.
+                  firstMonthWithState(spotkaniaFromToday(spotkania), filter, spotkaniaTypy),
+                ))
+            }
           />
         )}
 
@@ -1620,9 +1620,15 @@ type MetricTone = 'ok' | 'wait' | 'err';
  * A row's counts as ONE coloured dot, the avatar's shape: the most pressing
  * number inside — errors (red), then files to convert / waiting for DOM (amber),
  * then what is in DOM (green), else a neutral count of files — and the full
- * list (files · in DOM · waiting · to convert · errors) on hover.
+ * list (files · in DOM · waiting · to convert · errors) on hover, under the
+ * row's progress bar (share of its files already in DOM).
  */
-const Metrics: React.FC<{ items: { value: number; label: string; tone?: MetricTone }[] }> = ({ items }) => {
+const Metrics: React.FC<{
+  items: { value: number; label: string; tone?: MetricTone }[];
+  /** Share of the files in DOM, 0–100; `null` when there are no files yet. */
+  progress: number | null;
+  progressLabel: string;
+}> = ({ items, progress, progressLabel }) => {
   const urgency: Record<MetricTone, number> = { err: 0, wait: 1, ok: 2 };
   // Reversed first, so of two amber counts the later one ("do konwersji", the
   // earlier step of the work) wins the stable sort.
@@ -1637,6 +1643,15 @@ const Metrics: React.FC<{ items: { value: number; label: string; tone?: MetricTo
         {lead.value}
       </span>
       <span className="ksieg-stats__pop" role="tooltip">
+        <span className="ksieg-stats__progress">
+          <span className="ksieg-stats__seg">
+            <i>{progressLabel}</i>
+            <b>{progress === null ? '—' : `${progress}%`}</b>
+          </span>
+          <span className="ksieg-stats__bar">
+            <span style={{ width: `${progress ?? 0}%` }} />
+          </span>
+        </span>
         {items.map((m) => (
           <span
             key={m.label}
@@ -1661,11 +1676,11 @@ interface NoteActions {
   busy: boolean;
   /** Flag the community (end of the queue) or take the flag off. */
   togglePriority: () => Promise<void>;
-  savePriorityNote: (text: string) => Promise<boolean>;
+  savePriorityNote: (text: string, mentions: string[]) => Promise<boolean>;
   /** Empty the priority's note (asks first); the flag itself stays. */
   clearPriorityNote: () => Promise<boolean>;
-  addUwaga: (text: string) => Promise<boolean>;
-  updateUwaga: (id: number, text: string) => Promise<boolean>;
+  addUwaga: (text: string, mentions: string[]) => Promise<boolean>;
+  updateUwaga: (id: number, text: string, mentions: string[]) => Promise<boolean>;
   setUwagaResolved: (id: number, resolved: boolean) => Promise<boolean>;
   deleteUwaga: (id: number) => Promise<boolean>;
 }
@@ -1896,12 +1911,6 @@ const CommunityRow: React.FC<{
           </span>
           <span className="ksieg-row__sub">{subtitle}</span>
         </span>
-        <span className="ksieg-row__gauge" aria-hidden="true">
-          <span className="ksieg-row__gauge-bar">
-            <span style={{ width: `${pct}%` }} />
-          </span>
-          <span className="ksieg-row__gauge-val">{group.generated === 0 ? '—' : `${pct}%`}</span>
-        </span>
       </button>
       </div>
 
@@ -1983,6 +1992,8 @@ const CommunityRow: React.FC<{
               ...(group.ready > 0 ? [{ value: group.ready, label: t.ksMetricReady, tone: 'wait' as const }] : []),
               ...(group.errors > 0 ? [{ value: group.errors, label: t.ksMetricErrors, tone: 'err' as const }] : []),
             ]}
+            progress={group.generated === 0 ? null : pct}
+            progressLabel={t.ksProgressLabel}
           />
         </span>
         {group.ready > 0 ? (
@@ -2044,20 +2055,31 @@ const CommunityRow: React.FC<{
               {editingPrioNote ? (
                 <NoteEditor
                   initial={group.priority.notatka}
+                  initialMentions={group.priority.mentions}
+                  users={users}
+                  userEmail={userEmail}
                   placeholder={t.ksPrioNotePlaceholder}
                   saveLabel={t.save}
                   cancelLabel={t.cancel}
+                  noMatchLabel={t.zadNoPersonFound}
                   busy={notes.busy}
                   allowEmpty
-                  onSave={async (text) => {
-                    if (await notes.savePriorityNote(text)) setEditingPrioNote(false);
+                  onSave={async (text, mentions) => {
+                    if (await notes.savePriorityNote(text, mentions)) setEditingPrioNote(false);
                   }}
                   onCancel={() => setEditingPrioNote(false)}
                 />
               ) : (
                 <>
                   <p className={`ksieg-prionote__text${group.priority.notatka ? '' : ' is-empty'}`}>
-                    {group.priority.notatka || t.ksPrioNoteEmpty}
+                    {group.priority.notatka ? (
+                      <MentionText
+                        text={group.priority.notatka}
+                        labels={mentionLabels(group.priority.mentions, users, userEmail)}
+                      />
+                    ) : (
+                      t.ksPrioNoteEmpty
+                    )}
                   </p>
                   {/* The same two controls a posting note has. */}
                   <div className="ksieg-uwaga__actions">
@@ -2101,19 +2123,25 @@ const CommunityRow: React.FC<{
               {editingUwagaId === uwaga.id ? (
                 <NoteEditor
                   initial={uwaga.tresc}
+                  initialMentions={uwaga.mentions}
+                  users={users}
+                  userEmail={userEmail}
                   placeholder={t.ksUwagaPlaceholder}
                   saveLabel={t.save}
                   cancelLabel={t.cancel}
+                  noMatchLabel={t.zadNoPersonFound}
                   busy={notes.busy}
-                  onSave={async (text) => {
-                    if (await notes.updateUwaga(uwaga.id, text)) setEditingUwagaId(null);
+                  onSave={async (text, mentions) => {
+                    if (await notes.updateUwaga(uwaga.id, text, mentions)) setEditingUwagaId(null);
                   }}
                   onCancel={() => setEditingUwagaId(null)}
                 />
               ) : (
                 <>
                   <div className="ksieg-uwaga__main">
-                    <p className="ksieg-uwaga__text">{uwaga.tresc}</p>
+                    <p className="ksieg-uwaga__text">
+                      <MentionText text={uwaga.tresc} labels={mentionLabels(uwaga.mentions, users, userEmail)} />
+                    </p>
                     <span className="ksieg-uwaga__meta">{uwagaMeta(uwaga, language, formatDateTime)}</span>
                     {group.state === 'done' && (
                       <span className="ksieg-uwaga__hint">{t.ksUwagaResolveHint}</span>
@@ -2161,12 +2189,15 @@ const CommunityRow: React.FC<{
                 <Icon name="message-square" size={15} />
               </span>
               <NoteEditor
+                users={users}
+                userEmail={userEmail}
                 placeholder={t.ksUwagaPlaceholder}
                 saveLabel={t.ksUwagaAddSave}
                 cancelLabel={t.cancel}
+                noMatchLabel={t.zadNoPersonFound}
                 busy={notes.busy}
-                onSave={async (text) => {
-                  if (await notes.addUwaga(text)) setComposing(false);
+                onSave={async (text, mentions) => {
+                  if (await notes.addUwaga(text, mentions)) setComposing(false);
                 }}
                 onCancel={() => setComposing(false)}
               />

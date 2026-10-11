@@ -1,6 +1,6 @@
 {
   "name": "statement-converter",
-  "version": "9.5.1",
+  "version": "10.0.0",
   "description": "Bank statement converter for housing communities",
   "main": "dist/main/main/main.js",
   "scripts": {
@@ -21,7 +21,8 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\"",
     "type-check": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
     "zaliczki:eval": "tsx scripts/zaliczki-eval.ts",
-    "lokal:eval": "tsx scripts/lokal-litera-eval.ts"
+    "lokal:eval": "tsx scripts/lokal-litera-eval.ts",
+    "cit:eval": "tsx scripts/cit-ai-eval.ts"
   },
   "build": {
     "appId": "com.filefunky.app",

@@ -10,7 +10,7 @@ import { plural } from '../plural';
 
 type T = (typeof translations)['pl'];
 
-/** One PDF on the Podpis screen. Lives in the app shell, so the list survives a switch of module. */
+/** One PDF or XML on the Podpis screen. Lives in the app shell, so the list survives a switch of module. */
 export interface PodpisPlikEntry {
   filePath: string;
   fileName: string;
@@ -36,6 +36,8 @@ const formatSize = (bytes: number): string => {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
+
+const jestXml = (fileName: string): boolean => /\.xml$/i.test(fileName);
 
 const ileDokumentow = (n: number, language: Language): string =>
   plural(n, language, ['plik', 'pliki', 'plików'], ['file', 'files']);
@@ -180,8 +182,9 @@ const PodsumowaniePodpisow: React.FC<{
 // ------------------------------------------------------------------ screen
 
 /**
- * Podpis kwalifikowany → Podpisywanie: PDFs dropped in, ticked, and signed with
- * the Szafir card on one PIN. The signed copy is written next to the original;
+ * Podpis kwalifikowany → Podpisywanie: PDFs and XMLs dropped in, ticked, and
+ * signed with the Szafir card on one PIN — PAdES for a PDF, XAdES enveloped for
+ * an XML (the signature the PIT and CIT declarations get). The signed copy is written next to the original;
  * what ran lands in the module's Historia tab.
  */
 const PodpisPdf: React.FC<Props> = ({ language, files, setFiles }) => {
@@ -220,10 +223,10 @@ const PodpisPdf: React.FC<Props> = ({ language, files, setFiles }) => {
   };
 
   const addFiles = async (incoming: { fileName: string; filePath: string }[]) => {
-    const pdfs = incoming.filter((f) => /\.pdf$/i.test(f.fileName));
-    setInfo(pdfs.length < incoming.length ? t.podpisPdfOnlyPdf : null);
+    const signable = incoming.filter((f) => /\.(pdf|xml)$/i.test(f.fileName));
+    setInfo(signable.length < incoming.length ? t.podpisPdfOnlyPdf : null);
     const known = new Set(filesRef.current.map((f) => f.filePath));
-    const fresh = pdfs.filter((f) => !known.has(f.filePath));
+    const fresh = signable.filter((f) => !known.has(f.filePath));
     if (fresh.length === 0) return;
     setFiles((prev) => [
       ...prev,
@@ -303,6 +306,8 @@ const PodpisPdf: React.FC<Props> = ({ language, files, setFiles }) => {
     () => (doPodpisu ? files.filter((f) => f.status === 'ready' && doPodpisu.includes(f.filePath)) : []),
     [files, doPodpisu],
   );
+  const zXml = wybrane.some((f) => jestXml(f.fileName));
+  const zPdf = wybrane.some((f) => !jestXml(f.fileName));
 
   const podpiszWybrane = async (wybor: PodpisWybor) => {
     setPostep(null);
@@ -510,16 +515,24 @@ const PodpisPdf: React.FC<Props> = ({ language, files, setFiles }) => {
         <PodpisKartaModal
           language={language}
           title={t.podpisPdfModalTitle}
-          subtitle={t.podpisPdfModalSubtitle}
+          subtitle={zXml && zPdf ? t.podpisPdfModalSubtitleBoth : zXml ? t.podpisPdfModalSubtitleXml : t.podpisPdfModalSubtitle}
           extra={() => (
             <div className="podpis-gotowosc">
               <div className="podpis-gotowosc__count">
                 {t.podpisPdfReadyHead.replace('{n}', ileDokumentow(wybrane.length, language))}
               </div>
-              <div className="callout callout--muted">
-                <Icon name="info" size={16} />
-                <div className="callout__body">{t.podpisPdfInvisibleNote}</div>
-              </div>
+              {zPdf && (
+                <div className="callout callout--muted">
+                  <Icon name="info" size={16} />
+                  <div className="callout__body">{t.podpisPdfInvisibleNote}</div>
+                </div>
+              )}
+              {zXml && (
+                <div className="callout callout--muted">
+                  <Icon name="info" size={16} />
+                  <div className="callout__body">{t.podpisPdfXmlNote}</div>
+                </div>
+              )}
             </div>
           )}
           submitLabel={t.podpisPdfModalSubmit.replace('{n}', ileDokumentow(wybrane.length, language))}

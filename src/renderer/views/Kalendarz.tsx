@@ -12,6 +12,7 @@ import {
   SpotkanieMaterialyStatus,
   SpotkanieMaterialyKrok,
   SPOTKANIE_MATERIALY_KROKI,
+  SPOTKANIE_MATERIALY_STATUSES,
   ZEBRANIE_DOKUMENTY,
   SPOTKANIE_MATERIALY_POPRZEDNI,
   SpotkanieTyp,
@@ -50,13 +51,12 @@ import {
   formatTimeRange,
   groupByDay,
   countAlerts,
-  hasAnyAlert,
   hasUnreadTerminChange,
   isTerminWstepny,
-  sentByMailingIds,
-  SpotkaniaDocsContext,
   lokalizacjaLabel,
   matchesSpotkanieSearch,
+  isMaterialyOverdue,
+  matchesMaterialyFilter,
   matchesStateFilter,
   matchesTypFilter,
   SpotkaniaAlerts,
@@ -130,39 +130,24 @@ interface Props {
 }
 
 /**
- * The four things that can be wrong with a meeting, in the order they matter.
- *
- * One table rather than four copies of the same button: they are the same
- * control four times over, and the dashboard renders the same four from the
- * same shared counts.
+ * The two things that can be wrong with a meeting's date, in the order they
+ * matter — the warning strip above the month. Materials past their deadline are
+ * not here: they are a chip in the materials row, beside the other materials
+ * states, so one state never has two controls.
  */
 const ALERT_KINDS: {
   filter: SpotkanieStateFilter;
   count: (alerts: SpotkaniaAlerts) => number;
-  tone: 'changed' | 'tentative' | 'nodocs' | 'overdue';
+  tone: 'changed' | 'tentative';
   icon: React.ComponentProps<typeof Icon>['name'];
-  label: 'kalWarnOverdue' | 'kalWarnChanged' | 'kalWarnTentative' | 'kalWarnNoDocs';
+  label: 'kalWarnChanged' | 'kalWarnTentative';
 }[] = [
-  {
-    filter: 'overdue',
-    count: (a) => a.overdue,
-    tone: 'overdue',
-    icon: 'alert-circle',
-    label: 'kalWarnOverdue',
-  },
   {
     filter: 'changed',
     count: (a) => a.changed,
     tone: 'changed',
     icon: 'alert-triangle',
     label: 'kalWarnChanged',
-  },
-  {
-    filter: 'nodocs',
-    count: (a) => a.noDocs,
-    tone: 'nodocs',
-    icon: 'mail',
-    label: 'kalWarnNoDocs',
   },
   {
     filter: 'tentative',
@@ -407,6 +392,29 @@ const MATERIALY_TONE: Record<SpotkanieMaterialyStatus, string> = {
   do_przygotowania: 'status-pending',
   przygotowane: 'status-info',
   wyslane: 'status-success',
+};
+
+/** The materials state as a filter chip — the row is already titled "Materiały". */
+function materialyFilterLabel(
+  t: (typeof translations)['pl'],
+  status: SpotkanieMaterialyStatus,
+): string {
+  return {
+    brak: t.kalMatFilterBrak,
+    potrzebne: t.kalMatFilterPotrzebne,
+    do_przygotowania: t.kalMatFilterDo,
+    przygotowane: t.kalMatFilterPrzygotowane,
+    wyslane: t.kalMatFilterWyslane,
+  }[status];
+}
+
+/** A materials filter chip's colour — the tone its badge on the card wears. */
+const MATERIALY_DOT: Record<SpotkanieMaterialyStatus, string> = {
+  brak: 'var(--text-tertiary)',
+  potrzebne: 'var(--text-tertiary)',
+  do_przygotowania: 'var(--warning)',
+  przygotowane: 'var(--info)',
+  wyslane: 'var(--success)',
 };
 
 /** The picker's value for a unit (`j:12`) or a proxy (`p:7`); '' for none. */
@@ -1349,8 +1357,6 @@ const MeetingCard: React.FC<{
   onAckTermin: () => void;
   /** Settle a tentative date, or put a settled one back to tentative. */
   onTerminStatus: (status: SpotkanieTerminStatus) => void;
-  /** Tick or untick "documents sent", with a note of what went out. */
-  onDokumenty: (sent: boolean, opis: string) => void;
   /** Move the materials status: none needed / to prepare / ready. */
   onMaterialy: (status: SpotkanieMaterialyStatus) => void;
   /** The meeting's entry in the Zebrania module, once "Przygotuj materiały" made one. */
@@ -1365,8 +1371,6 @@ const MeetingCard: React.FC<{
   onSendMailing?: () => void;
   /** Open one recorded send in the mailing-details window. */
   onOpenMailing: (mailing: SpotkanieMailing) => void;
-  /** Which meetings a mailing went out for, plus the types that carry deadlines. */
-  docsCtx: SpotkaniaDocsContext;
   /** Tasks linked to this meeting, and what can be done with them. */
   zadania: Zadanie[];
   users: AppUser[];
@@ -2066,6 +2070,7 @@ const Kalendarz: React.FC<Props> = ({
   const [formError, setFormError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [typFilter, setTypFilter] = useState<number | null>(null);
+  const [materialyFilter, setMaterialyFilter] = useState<SpotkanieMaterialyStatus | null>(null);
   /** Meeting id being written to, so its own buttons disable and nothing else does. */
   const [busyId, setBusyId] = useState<number | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
@@ -2227,24 +2232,17 @@ const Kalendarz: React.FC<Props> = ({
     return map;
   }, [zadania]);
 
-  /**
-   * What the document questions need beyond the meeting: which meetings a
-   * mailing actually went out for, and the types that carry the notice periods.
-   */
-  const docsCtx: SpotkaniaDocsContext = useMemo(
-    () => ({ sentByMailing: sentByMailingIds(mailingi), typy }),
-    [mailingi, typy],
-  );
 
   const filtered = useMemo(
     () =>
       spotkania.filter(
         (s) =>
           matchesTypFilter(s, typFilter) &&
-          matchesStateFilter(s, stateFilter, docsCtx) &&
+          matchesMaterialyFilter(s, materialyFilter) &&
+          matchesStateFilter(s, stateFilter, typy) &&
           matchesSpotkanieSearch(s, typy, search),
       ),
-    [spotkania, typy, typFilter, stateFilter, search, docsCtx],
+    [spotkania, typy, typFilter, materialyFilter, stateFilter, search],
   );
 
   /**
@@ -2253,8 +2251,8 @@ const Kalendarz: React.FC<Props> = ({
    * are looking at.
    */
   const alerts = useMemo(
-    () => countAlerts(spotkaniaInMonth(spotkania, monthKey), docsCtx),
-    [spotkania, monthKey, docsCtx],
+    () => countAlerts(spotkaniaInMonth(spotkania, monthKey), typy),
+    [spotkania, monthKey, typy],
   );
 
   const mailingiBySpotkanie = useMemo(() => {
@@ -2297,6 +2295,37 @@ const Kalendarz: React.FC<Props> = ({
     return counts;
   }, [spotkania, monthKey]);
   const countOf = (key: number | null) => typCounts.get(key) ?? { month: 0, year: 0 };
+
+  /** The same month/year figures per materials state — the materials chips' "3/13". */
+  const materialyCounts = useMemo(() => {
+    const yearPrefix = `${monthKey.slice(0, 4)}-`;
+    const counts = new Map<SpotkanieMaterialyStatus, { month: number; year: number }>();
+    for (const s of spotkania) {
+      const day = toDayKey(s.startsAt);
+      if (!day.startsWith(yearPrefix)) continue;
+      const c = counts.get(s.materialyStatus) ?? { month: 0, year: 0 };
+      c.year += 1;
+      if (monthOfDayKey(day) === monthKey) c.month += 1;
+      counts.set(s.materialyStatus, c);
+    }
+    return counts;
+  }, [spotkania, monthKey]);
+  const materialyCountOf = (status: SpotkanieMaterialyStatus) =>
+    materialyCounts.get(status) ?? { month: 0, year: 0 };
+
+  /** Materials past their deadline, month / year — the "Po terminie" chip. */
+  const overdueCounts = useMemo(() => {
+    const yearPrefix = `${monthKey.slice(0, 4)}-`;
+    const now = new Date();
+    const c = { month: 0, year: 0 };
+    for (const s of spotkania) {
+      const day = toDayKey(s.startsAt);
+      if (!day.startsWith(yearPrefix) || !isMaterialyOverdue(s, typy, now)) continue;
+      c.year += 1;
+      if (monthOfDayKey(day) === monthKey) c.month += 1;
+    }
+    return c;
+  }, [spotkania, typy, monthKey]);
 
   const byDay = useMemo(() => groupByDay(filtered, locale), [filtered, locale]);
   /** The list view: the month's filtered meetings, by day, earliest first. */
@@ -2343,6 +2372,7 @@ const Kalendarz: React.FC<Props> = ({
           .map((s) => s.id),
         typId: typFilter,
         stan: stateFilter,
+        materialy: materialyFilter,
         szukaj: search,
       });
       notify.success(t.kalPdfDone.replace('{file}', filePath.split(/[\\/]/).pop() ?? filePath), {
@@ -2388,13 +2418,13 @@ const Kalendarz: React.FC<Props> = ({
     event: React.SyntheticEvent<HTMLElement>,
     label: string,
     color: string | null,
-    key: number | null,
+    counts: { month: number; year: number },
   ) => {
     const rect = event.currentTarget.getBoundingClientRect();
     setCountTip({
       label,
       color,
-      ...countOf(key),
+      ...counts,
       left: Math.max(
         TIP_MARGIN,
         Math.min(rect.left, window.innerWidth - COUNT_TIP_WIDTH - TIP_MARGIN),
@@ -2575,13 +2605,6 @@ const Kalendarz: React.FC<Props> = ({
     onOpenZebranie(created.id);
   };
 
-  const handleDokumenty = (spotkanie: Spotkanie, sent: boolean, opis: string) =>
-    runOnMeeting(
-      spotkanie.id,
-      () => window.electronAPI.setSpotkanieDokumenty(spotkanie.id, sent, opis),
-      sent ? t.kalDocsSavedDone : t.kalDocsUndoneDone,
-    );
-
   /**
    * Hand a meeting to the Mailing module. Only offered for a meeting with a
    * community: a mailing goes to that community's city unit, so without one
@@ -2706,7 +2729,6 @@ const Kalendarz: React.FC<Props> = ({
       onDelete={() => void handleDelete(s)}
       onAckTermin={() => void handleAckTermin(s)}
       onTerminStatus={(status) => void handleTerminStatus(s, status)}
-      onDokumenty={(sent, opis) => void handleDokumenty(s, sent, opis)}
       onMaterialy={(status) => void handleMaterialy(s, status)}
       zebranie={zebranieForSpotkanie(zebrania, s.id)}
       onPrzygotuj={() => void handlePrzygotuj(s)}
@@ -2727,7 +2749,6 @@ const Kalendarz: React.FC<Props> = ({
           : undefined
       }
       onOpenMailing={(m) => void openMailingDetails(m)}
-      docsCtx={docsCtx}
       zadania={zadaniaBySpotkanie.get(s.id) ?? []}
       users={users}
       onAddTask={() => openCardTask(s, null)}
@@ -2742,6 +2763,15 @@ const Kalendarz: React.FC<Props> = ({
   const monthName = monthLabel(monthKey, locale).replace(/\s*\d{4}$/, '');
   const year = monthKey.split('-')[0];
   const searchActive = search.trim().length > 0;
+
+  // The materials row is one choice: a status, or "past the deadline" (which is
+  // the state filter, so the dashboard can send it), or neither — "Wszystkie".
+  const overdueActive = stateFilter === 'overdue';
+  const materialyAll = materialyFilter === null && !overdueActive;
+  const pickMaterialy = (status: SpotkanieMaterialyStatus | null) => {
+    setMaterialyFilter(status);
+    if (overdueActive) setStateFilter('all');
+  };
 
   const facts = [`${t.kalFactsUpcoming}: ${upcoming.length}`];
   if (typy.length > 0) facts.push(`${t.kalFactsTypes}: ${typy.length}`);
@@ -2823,7 +2853,12 @@ const Kalendarz: React.FC<Props> = ({
         <KalendarzPdfModal
           language={language}
           monthKey={monthKey}
-          filtersActive={search.trim().length > 0 || typFilter !== null || stateFilter !== 'all'}
+          filtersActive={
+            search.trim().length > 0 ||
+            typFilter !== null ||
+            materialyFilter !== null ||
+            stateFilter !== 'all'
+          }
           busy={pdfBusy}
           onClose={() => setPdfOpen(false)}
           onSubmit={(od, doDnia) => void downloadPdf(od, doDnia)}
@@ -2984,9 +3019,9 @@ const Kalendarz: React.FC<Props> = ({
               <span
                 className="kal-count-fact"
                 tabIndex={0}
-                onMouseEnter={(e) => showCountTip(e, t.kalAllTypes, null, null)}
+                onMouseEnter={(e) => showCountTip(e, t.kalAllTypes, null, countOf(null))}
                 onMouseLeave={hideCountTip}
-                onFocus={(e) => showCountTip(e, t.kalAllTypes, null, null)}
+                onFocus={(e) => showCountTip(e, t.kalAllTypes, null, countOf(null))}
                 onBlur={hideCountTip}
               >
                 {t.kalFactsCount}:{' '}
@@ -2998,6 +3033,9 @@ const Kalendarz: React.FC<Props> = ({
             </p>
           </div>
 
+          {/* One line: the month navigation, then "Pobierz PDF", and "Nowe
+              spotkanie" last, at the right edge — the banner carries everything
+              that is about the month as a whole. */}
           <div className="ksieg-hero__nav">
             <button
               type="button"
@@ -3043,11 +3081,27 @@ const Kalendarz: React.FC<Props> = ({
             >
               <Icon name="refresh" size={16} />
             </button>
+            <button
+              type="button"
+              className="button button-secondary kal-new"
+              onClick={() => setPdfOpen(true)}
+              disabled={pdfBusy || isLoading}
+              title={t.kalPdfHint}
+            >
+              <Icon name={pdfBusy ? 'loader' : 'download'} size={14} /> {t.kalPdf}
+            </button>
+            <button
+              type="button"
+              className="button button-primary kal-new"
+              onClick={() => openForm(selectedDay)}
+            >
+              <Icon name="plus" size={14} /> {t.kalNewMeeting}
+            </button>
           </div>
         </header>
 
         {/* ------------------------- What needs attention -------------------
-            Four states, one shape each: a tick box that shows whether the
+            The date states, one shape each: a tick box that shows whether the
             filter is on, and the same click turns it off again. This is also
             the only place these filters live — a second set among the type
             filters was two controls for one state, and the strip is where the
@@ -3057,7 +3111,7 @@ const Kalendarz: React.FC<Props> = ({
             arriving here from the dashboard and then paging to a month with
             none of them would otherwise leave the filter on with nothing to
             turn it off with, and an empty calendar as the only clue. */}
-        {(hasAnyAlert(alerts) || stateFilter !== 'all') && (
+        {ALERT_KINDS.some((k) => k.count(alerts) > 0 || stateFilter === k.filter) && (
           <div className="kal-warnings">
             {ALERT_KINDS.map(({ filter, count, tone, icon, label }) =>
               count(alerts) === 0 && stateFilter !== filter ? null : (
@@ -3114,9 +3168,9 @@ const Kalendarz: React.FC<Props> = ({
               className={`kal-filter${typFilter === null ? ' is-active' : ''}`}
               onClick={() => setTypFilter(null)}
               aria-pressed={typFilter === null}
-              onMouseEnter={(e) => showCountTip(e, t.kalAllTypes, null, null)}
+              onMouseEnter={(e) => showCountTip(e, t.kalAllTypes, null, countOf(null))}
               onMouseLeave={hideCountTip}
-              onFocus={(e) => showCountTip(e, t.kalAllTypes, null, null)}
+              onFocus={(e) => showCountTip(e, t.kalAllTypes, null, countOf(null))}
               onBlur={hideCountTip}
             >
               {t.kalAllTypes}
@@ -3133,10 +3187,12 @@ const Kalendarz: React.FC<Props> = ({
                 onClick={() => setTypFilter(typFilter === typ.id ? null : typ.id)}
                 aria-pressed={typFilter === typ.id}
                 onMouseEnter={(e) =>
-                  showCountTip(e, typ.nazwa, normalizeHexColor(typ.kolor), typ.id)
+                  showCountTip(e, typ.nazwa, normalizeHexColor(typ.kolor), countOf(typ.id))
                 }
                 onMouseLeave={hideCountTip}
-                onFocus={(e) => showCountTip(e, typ.nazwa, normalizeHexColor(typ.kolor), typ.id)}
+                onFocus={(e) =>
+                  showCountTip(e, typ.nazwa, normalizeHexColor(typ.kolor), countOf(typ.id))
+                }
                 onBlur={hideCountTip}
               >
                 <span className="kal-chip__dot" />
@@ -3168,22 +3224,89 @@ const Kalendarz: React.FC<Props> = ({
             </button>
           </div>
 
-          <button
-            type="button"
-            className="button button-secondary kal-new"
-            onClick={() => setPdfOpen(true)}
-            disabled={pdfBusy || isLoading}
-            title={t.kalPdfHint}
-          >
-            <Icon name={pdfBusy ? 'loader' : 'download'} size={14} /> {t.kalPdf}
-          </button>
+        </div>
 
+        {/* Materials: one chip per state, in the words of the card's materials
+            badge, so a month can be swept for what is still open. Counted like
+            the type chips: month / year. */}
+        <div
+          className="kal-filters kal-filters--materialy"
+          role="group"
+          aria-label={t.kalMatFilterLabel}
+        >
+          <span className="kal-filters__label">
+            <Icon name="briefcase" size={13} /> {t.kalMatFilterLabel}
+          </span>
           <button
             type="button"
-            className="button button-primary kal-new"
-            onClick={() => openForm(selectedDay)}
+            className={`kal-filter${materialyAll ? ' is-active' : ''}`}
+            onClick={() => pickMaterialy(null)}
+            aria-pressed={materialyAll}
+            onMouseEnter={(e) => showCountTip(e, t.kalMatFilterLabel, null, countOf(null))}
+            onMouseLeave={hideCountTip}
+            onFocus={(e) => showCountTip(e, t.kalMatFilterLabel, null, countOf(null))}
+            onBlur={hideCountTip}
           >
-            <Icon name="plus" size={14} /> {t.kalNewMeeting}
+            {t.kalMatFilterAll}
+            <span className="kal-filter__count">
+              {countOf(null).month}/{countOf(null).year}
+            </span>
+          </button>
+          {SPOTKANIE_MATERIALY_STATUSES.map((status) => {
+            const counts = materialyCountOf(status);
+            const showTip = (e: React.SyntheticEvent<HTMLElement>) =>
+              showCountTip(e, materialyStatusLabel(t, status), MATERIALY_DOT[status], counts);
+            return (
+              <button
+                key={status}
+                type="button"
+                className={`kal-filter${materialyFilter === status ? ' is-active' : ''}`}
+                style={{ ['--chip' as string]: MATERIALY_DOT[status] }}
+                onClick={() => pickMaterialy(materialyFilter === status ? null : status)}
+                aria-pressed={materialyFilter === status}
+                onMouseEnter={showTip}
+                onMouseLeave={hideCountTip}
+                onFocus={showTip}
+                onBlur={hideCountTip}
+              >
+                <span className="kal-chip__dot" />
+                {materialyFilterLabel(t, status)}
+                <span className="kal-filter__count">
+                  {counts.month}/{counts.year}
+                </span>
+              </button>
+            );
+          })}
+          {/* Past the deadline: not a status of its own but a state across the
+              unsent ones, so it sits at the end and is the state filter the
+              dashboard's tile sends here. Red once the month has any. */}
+          <button
+            type="button"
+            className={
+              'kal-filter kal-filter--overdue' +
+              (overdueActive ? ' is-active' : '') +
+              (overdueCounts.month > 0 ? ' is-alert' : '')
+            }
+            style={{ ['--chip' as string]: 'var(--danger)' }}
+            onClick={() => {
+              setMaterialyFilter(null);
+              setStateFilter(overdueActive ? 'all' : 'overdue');
+            }}
+            aria-pressed={overdueActive}
+            onMouseEnter={(e) =>
+              showCountTip(e, t.kalMatFilterOverdueTip, 'var(--danger)', overdueCounts)
+            }
+            onMouseLeave={hideCountTip}
+            onFocus={(e) =>
+              showCountTip(e, t.kalMatFilterOverdueTip, 'var(--danger)', overdueCounts)
+            }
+            onBlur={hideCountTip}
+          >
+            <Icon name="alert-circle" size={13} />
+            {t.kalMatFilterOverdue}
+            <span className="kal-filter__count">
+              {overdueCounts.month}/{overdueCounts.year}
+            </span>
           </button>
         </div>
 
@@ -3194,7 +3317,10 @@ const Kalendarz: React.FC<Props> = ({
               <div className="kal-side__empty">
                 <Icon name="calendar" size={26} />
                 <span>
-                  {searchActive || typFilter !== null || stateFilter !== 'all'
+                  {searchActive ||
+                  typFilter !== null ||
+                  materialyFilter !== null ||
+                  stateFilter !== 'all'
                     ? t.kalNoResults
                     : t.kalMonthEmpty}
                 </span>
@@ -3384,7 +3510,10 @@ const Kalendarz: React.FC<Props> = ({
                   <div className="kal-side__empty">
                     <Icon name="calendar" size={26} />
                     <span>
-                      {searchActive || typFilter !== null || stateFilter !== 'all'
+                      {searchActive ||
+                      typFilter !== null ||
+                      materialyFilter !== null ||
+                      stateFilter !== 'all'
                         ? t.kalNoResults
                         : t.kalDayEmpty}
                     </span>

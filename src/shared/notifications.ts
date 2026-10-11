@@ -10,7 +10,7 @@
  * the list shows them as such. The others can be switched off, and most are
  * opt-in (`defaultOn: false`): a new kind of notification must not start
  * interrupting everyone on update. The exception is one asked for as on by
- * default — the meeting-materials steps: the whole office prepares them. Either way the choice belongs to the person's account
+ * default — the meeting notifications (materials steps, deadlines, moved dates): the whole office prepares them. Either way the choice belongs to the person's account
  * (`notification_prefs`, keyed by mailbox), not to the machine.
  *
  * Adding a notification means adding it here, the two translation keys, and the
@@ -30,10 +30,16 @@ export const NOTIFICATION_DEFS = [
   { id: 'ksiegowaniaPriorytet', group: 'ksiegowania', locked: false, defaultOn: false },
   { id: 'ksiegowaniaPriorytetNotatka', group: 'ksiegowania', locked: false, defaultOn: false },
   { id: 'ksiegowaniaUwaga', group: 'ksiegowania', locked: false, defaultOn: false },
+  // Tagged with @ in a priority's note or a note on a community — personal, like a comment tag.
+  { id: 'ksiegowaniaMention', group: 'ksiegowania', locked: true, defaultOn: true },
   // Kalendarz — the materials of any meeting, for everyone.
   { id: 'spotkanieMaterialyDoPrzygotowania', group: 'kalendarz', locked: false, defaultOn: true },
   { id: 'spotkanieMaterialyPrzygotowane', group: 'kalendarz', locked: false, defaultOn: true },
   { id: 'spotkanieMaterialyWyslane', group: 'kalendarz', locked: false, defaultOn: true },
+  // Kalendarz — deadlines and moved dates, also for everyone; asked for as on.
+  { id: 'spotkanieMaterialyTerminBlisko', group: 'kalendarz', locked: false, defaultOn: true },
+  { id: 'spotkanieMaterialyPoTerminie', group: 'kalendarz', locked: false, defaultOn: true },
+  { id: 'spotkanieTerminZmieniony', group: 'kalendarz', locked: false, defaultOn: true },
 ] as const;
 
 export type NotificationId = (typeof NOTIFICATION_DEFS)[number]['id'];

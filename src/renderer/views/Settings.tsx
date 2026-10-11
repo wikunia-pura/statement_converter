@@ -16,6 +16,7 @@ import UsersCard from '../components/UsersCard';
 import { FormField, FormRow, FormSection } from '../components/FormSection';
 import { PodpisKartaUstawienia } from '../components/PodpisKarta';
 import { AI_MODELS, DEFAULT_AI_MODEL } from '../../shared/ai-models';
+import EDeklaracjeUstawienia from '../components/EDeklaracjeUstawienia';
 
 interface SettingsProps {
   darkMode: boolean;
@@ -218,6 +219,7 @@ const Settings: React.FC<SettingsProps> = ({
       t.notifKsiegowaniaPriorytetNotatkaDesc,
     ],
     ksiegowaniaUwaga: [t.notifKsiegowaniaUwaga, t.notifKsiegowaniaUwagaDesc],
+    ksiegowaniaMention: [t.notifKsiegowaniaMention, t.notifKsiegowaniaMentionDesc],
     spotkanieMaterialyDoPrzygotowania: [
       t.notifSpotkanieMaterialyDo,
       t.notifSpotkanieMaterialyDoDesc,
@@ -229,6 +231,18 @@ const Settings: React.FC<SettingsProps> = ({
     spotkanieMaterialyWyslane: [
       t.notifSpotkanieMaterialyWyslane,
       t.notifSpotkanieMaterialyWyslaneDesc,
+    ],
+    spotkanieMaterialyTerminBlisko: [
+      t.notifSpotkanieMaterialyTerminBlisko,
+      t.notifSpotkanieMaterialyTerminBliskoDesc,
+    ],
+    spotkanieMaterialyPoTerminie: [
+      t.notifSpotkanieMaterialyPoTerminie,
+      t.notifSpotkanieMaterialyPoTerminieDesc,
+    ],
+    spotkanieTerminZmieniony: [
+      t.notifSpotkanieTerminZmieniony,
+      t.notifSpotkanieTerminZmienionyDesc,
     ],
   };
 
@@ -634,22 +648,6 @@ const Settings: React.FC<SettingsProps> = ({
             <div className="settings-row">
               <div className="settings-label">
                 <span className="settings-label-main settings-label-main--icon">
-                  <Icon name="bot" size={14} /> {t.aiModel}
-                </span>
-                <span className="settings-label-sub">{t.aiModelDesc}</span>
-              </div>
-              <Select
-                value={aiModel}
-                onChange={handleAiModelChange}
-                options={AI_MODELS.map((m) => ({ value: m.id, label: m.label }))}
-                ariaLabel={t.aiModel}
-                className="settings-control"
-              />
-            </div>
-
-            <div className="settings-row">
-              <div className="settings-label">
-                <span className="settings-label-main settings-label-main--icon">
                   <Icon name="calendar" size={14} /> {t.calendarHoverCard}
                 </span>
                 <span className="settings-label-sub">{t.calendarHoverCardDesc}</span>
@@ -779,142 +777,8 @@ const Settings: React.FC<SettingsProps> = ({
           )}
         </FormSection>
 
-        {/* Mailing — SMTP of the mailbox we send from (machine-local) */}
-        <FormSection icon="mail" title={t.smtpTitle} description={t.smtpHint}>
-          <FormRow>
-            <FormField label={t.smtpHost} htmlFor="smtp-host">
-              <input
-                id="smtp-host"
-                type="text"
-                value={smtp.host}
-                onChange={(e) => setSmtp({ ...smtp, host: e.target.value })}
-                placeholder="poczta.home.pl"
-              />
-            </FormField>
-            <FormField label={t.smtpPort} htmlFor="smtp-port">
-              <div className="form-inline form-inline--narrow">
-                <input
-                  id="smtp-port"
-                  type="number"
-                  value={smtp.port}
-                  onChange={(e) => setSmtp({ ...smtp, port: Number(e.target.value) })}
-                />
-              </div>
-            </FormField>
-          </FormRow>
-          <label className="switch-row">
-            <span className="switch-row__text">
-              <span className="switch-row__label">{t.smtpSecure}</span>
-              <span className="switch-row__hint">{t.smtpSecureHint}</span>
-            </span>
-            <span className="toggle-switch">
-              <input
-                type="checkbox"
-                checked={smtp.secure}
-                onChange={(e) =>
-                  // Port and TLS mode go together on home.pl; move the port with
-                  // the switch so the pair can't end up mismatched by accident.
-                  setSmtp({
-                    ...smtp,
-                    secure: e.target.checked,
-                    port: e.target.checked ? 465 : 587,
-                  })
-                }
-              />
-              <span className="toggle-slider"></span>
-            </span>
-          </label>
-          <FormRow>
-            <FormField label={t.smtpUser} htmlFor="smtp-user">
-              <div className="input-icon">
-                <Icon name="mail" size={15} />
-                <input
-                  id="smtp-user"
-                  type="email"
-                  value={smtp.user}
-                  onChange={(e) => setSmtp({ ...smtp, user: e.target.value })}
-                  placeholder="np. biuro@twojafirma.pl"
-                />
-              </div>
-            </FormField>
-            <FormField
-              label={t.smtpPassword}
-              htmlFor="smtp-password"
-              hint={smtp.passwordSet ? t.smtpPasswordStored : t.smtpPasswordHint}
-            >
-              <input
-                id="smtp-password"
-                type="password"
-                value={smtpPassword}
-                onChange={(e) => setSmtpPassword(e.target.value)}
-                placeholder={smtp.passwordSet ? t.smtpPasswordPlaceholderStored : t.smtpPasswordPlaceholder}
-                autoComplete="new-password"
-              />
-            </FormField>
-          </FormRow>
-          <FormField label={t.smtpFromName} htmlFor="smtp-from">
-            <input
-              id="smtp-from"
-              type="text"
-              value={smtp.fromName}
-              onChange={(e) => setSmtp({ ...smtp, fromName: e.target.value })}
-              placeholder={t.smtpFromNamePlaceholder}
-            />
-          </FormField>
-          <label className="switch-row">
-            <span className="switch-row__text">
-              <span className="switch-row__label">{t.smtpBccSelf}</span>
-              <span className="switch-row__hint">{t.smtpBccSelfHint}</span>
-            </span>
-            <span className="toggle-switch">
-              <input
-                type="checkbox"
-                checked={smtp.bccSelf}
-                onChange={(e) => setSmtp({ ...smtp, bccSelf: e.target.checked })}
-              />
-              <span className="toggle-slider"></span>
-            </span>
-          </label>
-          <div className="section-actions">
-            <button type="button" className="button button-secondary" onClick={handleTestSmtp} disabled={smtpBusy}>
-              <Icon name="mail" size={14} /> {t.smtpTest}
-            </button>
-            <button type="button" className="button button-success" onClick={handleSaveSmtp} disabled={smtpBusy}>
-              <Icon name={smtpBusy ? 'loader' : 'save'} size={14} className={smtpBusy ? 'icon-spin' : undefined} /> {t.save}
-            </button>
-          </div>
-        </FormSection>
-
         {/* Podpis kwalifikowany — the card's library on this machine */}
         <PodpisKartaUstawienia language={language} />
-
-        <FormSection
-          icon="shield"
-          title={t.backupTitle}
-          description={t.backupDesc}
-          aside={
-            <div className="form-section__actions">
-              <button type="button" className="button button-small button-subtle" onClick={() => window.electronAPI.backupOpenFolder()} disabled={backupBusy}>
-                <Icon name="folder" size={13} /> {t.backupOpenFolder}
-              </button>
-            </div>
-          }
-        >
-          <div className="callout callout--muted">
-            <Icon name="clock" size={16} />
-            <div className="callout__body">
-              {t.backupAutoInfo} {t.backupLastAuto}: <strong>{backupStatus?.lastAutoBackup ?? t.backupNever}</strong>
-            </div>
-          </div>
-          <div className="section-actions section-actions--start">
-            <button type="button" className="button button-export" onClick={handleCreateBackup} disabled={backupBusy}>
-              <Icon name="download" size={14} /> {t.backupCreate}
-            </button>
-            <button type="button" className="button button-import" onClick={handleRestoreBackup} disabled={backupBusy}>
-              <Icon name="upload" size={14} /> {t.backupRestore}
-            </button>
-          </div>
-        </FormSection>
 
         <FormSection icon="settings" title={t.setSectionSettingsIo} description={t.setSectionSettingsIoDesc}>
           <div className="section-actions section-actions--start">
@@ -976,32 +840,180 @@ const Settings: React.FC<SettingsProps> = ({
           <div className="form-field__hint">{t.setUpdatesHint}</div>
         </FormSection>
 
-        <FormSection icon="zap" title={t.availableConverters} description={t.setSectionConvertersDesc} collapsible defaultCollapsed persistKey="settings.converters">
-          <table className="form-table">
-            <thead>
-              <tr>
-                <th>{t.converterName}</th>
-                <th>{t.description}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {converters.filter((c) => c && c.id).map((converter) => (
-                <tr key={converter.id}>
-                  <td className="form-table__label">{converter.name || converter.id}</td>
-                  <td className="form-table__sub">{converter.description || t.setNoDescription}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </FormSection>
-
         {/* ------------------------------ ADMIN -----------------------------
-            Last on the page and shut by default. The user list is edited once
-            per person, and the switch below it is one nobody should be looking
-            for — putting either among the everyday settings invites a stray
-            click on the second one. */}
+            Last on the page and shut by default. Users, the AI model, the
+            mailbox, backups and the converter list are set up or looked up
+            once and then left alone, and the switch at the bottom is one
+            nobody should be looking for — putting any of it among the
+            everyday settings invites a stray click. */}
         <FormSection icon="shield" title={t.setSectionAdmin} description={t.adminSectionHint} collapsible defaultCollapsed>
           <UsersCard language={language} currentEmail={userEmail} onNamesChanged={onUserNamesChanged} />
+
+          <FormSection icon="bot" title={t.aiModel} description={t.aiModelDesc}>
+            <Select
+              value={aiModel}
+              onChange={handleAiModelChange}
+              options={AI_MODELS.map((m) => ({ value: m.id, label: m.label }))}
+              ariaLabel={t.aiModel}
+              className="settings-control"
+            />
+          </FormSection>
+
+          {/* e-Deklaracje — which gateway signed returns go to (machine-local, test by default) */}
+          <EDeklaracjeUstawienia language={language} />
+
+          {/* Mailing — SMTP of the mailbox we send from (machine-local) */}
+          <FormSection icon="mail" title={t.smtpTitle} description={t.smtpHint}>
+            <FormRow>
+              <FormField label={t.smtpHost} htmlFor="smtp-host">
+                <input
+                  id="smtp-host"
+                  type="text"
+                  value={smtp.host}
+                  onChange={(e) => setSmtp({ ...smtp, host: e.target.value })}
+                  placeholder="poczta.home.pl"
+                />
+              </FormField>
+              <FormField label={t.smtpPort} htmlFor="smtp-port">
+                <div className="form-inline form-inline--narrow">
+                  <input
+                    id="smtp-port"
+                    type="number"
+                    value={smtp.port}
+                    onChange={(e) => setSmtp({ ...smtp, port: Number(e.target.value) })}
+                  />
+                </div>
+              </FormField>
+            </FormRow>
+            <label className="switch-row">
+              <span className="switch-row__text">
+                <span className="switch-row__label">{t.smtpSecure}</span>
+                <span className="switch-row__hint">{t.smtpSecureHint}</span>
+              </span>
+              <span className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={smtp.secure}
+                  onChange={(e) =>
+                    // Port and TLS mode go together on home.pl; move the port with
+                    // the switch so the pair can't end up mismatched by accident.
+                    setSmtp({
+                      ...smtp,
+                      secure: e.target.checked,
+                      port: e.target.checked ? 465 : 587,
+                    })
+                  }
+                />
+                <span className="toggle-slider"></span>
+              </span>
+            </label>
+            <FormRow>
+              <FormField label={t.smtpUser} htmlFor="smtp-user">
+                <div className="input-icon">
+                  <Icon name="mail" size={15} />
+                  <input
+                    id="smtp-user"
+                    type="email"
+                    value={smtp.user}
+                    onChange={(e) => setSmtp({ ...smtp, user: e.target.value })}
+                    placeholder="np. biuro@twojafirma.pl"
+                  />
+                </div>
+              </FormField>
+              <FormField
+                label={t.smtpPassword}
+                htmlFor="smtp-password"
+                hint={smtp.passwordSet ? t.smtpPasswordStored : t.smtpPasswordHint}
+              >
+                <input
+                  id="smtp-password"
+                  type="password"
+                  value={smtpPassword}
+                  onChange={(e) => setSmtpPassword(e.target.value)}
+                  placeholder={smtp.passwordSet ? t.smtpPasswordPlaceholderStored : t.smtpPasswordPlaceholder}
+                  autoComplete="new-password"
+                />
+              </FormField>
+            </FormRow>
+            <FormField label={t.smtpFromName} htmlFor="smtp-from">
+              <input
+                id="smtp-from"
+                type="text"
+                value={smtp.fromName}
+                onChange={(e) => setSmtp({ ...smtp, fromName: e.target.value })}
+                placeholder={t.smtpFromNamePlaceholder}
+              />
+            </FormField>
+            <label className="switch-row">
+              <span className="switch-row__text">
+                <span className="switch-row__label">{t.smtpBccSelf}</span>
+                <span className="switch-row__hint">{t.smtpBccSelfHint}</span>
+              </span>
+              <span className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={smtp.bccSelf}
+                  onChange={(e) => setSmtp({ ...smtp, bccSelf: e.target.checked })}
+                />
+                <span className="toggle-slider"></span>
+              </span>
+            </label>
+            <div className="section-actions">
+              <button type="button" className="button button-secondary" onClick={handleTestSmtp} disabled={smtpBusy}>
+                <Icon name="mail" size={14} /> {t.smtpTest}
+              </button>
+              <button type="button" className="button button-success" onClick={handleSaveSmtp} disabled={smtpBusy}>
+                <Icon name={smtpBusy ? 'loader' : 'save'} size={14} className={smtpBusy ? 'icon-spin' : undefined} /> {t.save}
+              </button>
+            </div>
+          </FormSection>
+
+          <FormSection
+            icon="shield"
+            title={t.backupTitle}
+            description={t.backupDesc}
+            aside={
+              <div className="form-section__actions">
+                <button type="button" className="button button-small button-subtle" onClick={() => window.electronAPI.backupOpenFolder()} disabled={backupBusy}>
+                  <Icon name="folder" size={13} /> {t.backupOpenFolder}
+                </button>
+              </div>
+            }
+          >
+            <div className="callout callout--muted">
+              <Icon name="clock" size={16} />
+              <div className="callout__body">
+                {t.backupAutoInfo} {t.backupLastAuto}: <strong>{backupStatus?.lastAutoBackup ?? t.backupNever}</strong>
+              </div>
+            </div>
+            <div className="section-actions section-actions--start">
+              <button type="button" className="button button-export" onClick={handleCreateBackup} disabled={backupBusy}>
+                <Icon name="download" size={14} /> {t.backupCreate}
+              </button>
+              <button type="button" className="button button-import" onClick={handleRestoreBackup} disabled={backupBusy}>
+                <Icon name="upload" size={14} /> {t.backupRestore}
+              </button>
+            </div>
+          </FormSection>
+
+          <FormSection icon="zap" title={t.availableConverters} description={t.setSectionConvertersDesc} collapsible defaultCollapsed persistKey="settings.converters">
+            <table className="form-table">
+              <thead>
+                <tr>
+                  <th>{t.converterName}</th>
+                  <th>{t.description}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {converters.filter((c) => c && c.id).map((converter) => (
+                  <tr key={converter.id}>
+                    <td className="form-table__label">{converter.name || converter.id}</td>
+                    <td className="form-table__sub">{converter.description || t.setNoDescription}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </FormSection>
 
           <div className="danger-zone">
             <div className="callout callout--danger" role="alert">

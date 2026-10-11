@@ -10,6 +10,10 @@
   --bg-surface: #fbfbfd;
   --bg-surface-sunken: #eceef2;
   --bg-surface-hover: #f2f3f6;
+  /* A tile inside a row (the date box of Zebrania, Sprawozdania, Plany, Podatki):
+     a step lighter than the row, neutral, so it stands out without a colour. */
+  --bg-tile: #ffffff;
+  --border-tile: #dcdfe5;
 
   /* Border */
   --border-default: #e3e5ea;
@@ -95,6 +99,8 @@ body.dark-mode {
   --bg-surface: #15171c;
   --bg-surface-sunken: #0f1114;
   --bg-surface-hover: #1b1e24;
+  --bg-tile: #24272f;
+  --border-tile: #333741;
 
   --border-default: #23262d;
   --border-subtle: #1c1f25;
@@ -199,6 +205,19 @@ a:hover { color: var(--accent-hover); }
   border: 2px solid var(--bg-app);
 }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
+/* Once the scrollbar is styled, Chromium paints the corner where both bars
+   meet and a textarea's drag handle plain white — in dark mode a white square.
+   The corner takes the surface; the handle gets two diagonal grip lines. */
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-resizer {
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath d='M9 3L3 9M9 6.5L6.5 9' stroke='%23868a93' stroke-width='1.25' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 1px bottom 1px;
+}
+body.dark-mode ::-webkit-resizer {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath d='M9 3L3 9M9 6.5L6.5 9' stroke='%236b707b' stroke-width='1.25' stroke-linecap='round'/%3E%3C/svg%3E");
+}
 
 /* ==========================================================================
    App shell
@@ -1924,13 +1943,6 @@ body.dark-mode .ks-kal-hero__facts {
 }
 
 .ks-kal-tile--changed:not(.is-empty) .ks-kal-tile__count { color: var(--warning); }
-
-.ks-kal-tile--nodocs:not(.is-empty) .ks-kal-tile__icon {
-  color: var(--accent);
-  background: var(--accent-subtle);
-}
-
-.ks-kal-tile--nodocs:not(.is-empty) .ks-kal-tile__count { color: var(--accent); }
 
 .ks-kal-tile--tentative:not(.is-empty) .ks-kal-tile__icon {
   color: var(--info);
@@ -4799,48 +4811,6 @@ body.dark-mode .footer-piggy-svg {
   color: var(--info);
 }
 
-/* Unsent documents are a different kind of thing from an unsettled date, so
-   they get their own hue — the brand's indigo, which no other state uses. */
-.kal-warning--nodocs {
-  border-color: var(--accent-border);
-  background: var(--accent-subtle);
-  color: var(--accent);
-}
-
-.kal-warning--nodocs:hover { border-color: var(--accent); }
-
-.kal-warning--nodocs.is-active {
-  border-color: var(--accent);
-  box-shadow:
-    inset 0 0 0 1px var(--accent),
-    0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
-}
-
-.kal-warning--nodocs.is-active .kal-warning__box {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-}
-
-/* A deadline that has already run out is the one state here that cannot be
-   fixed by being early, so it is the only one in danger red. */
-.kal-warning--overdue {
-  border-color: var(--danger-border);
-  background: var(--danger-bg);
-  color: var(--danger);
-}
-
-.kal-warning--overdue:hover { border-color: var(--danger); }
-
-.kal-warning--overdue.is-active {
-  border-color: var(--danger);
-  box-shadow:
-    inset 0 0 0 1px var(--danger),
-    0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent);
-}
-
-.kal-warning--overdue.is-active .kal-warning__box {
-  background: color-mix(in srgb, var(--danger) 22%, transparent);
-}
-
 .kal-warning--tentative.is-active {
   border-color: var(--info);
   box-shadow:
@@ -5477,10 +5447,51 @@ body.dark-mode .footer-piggy-svg {
    Checkboxes
    ========================================================================== */
 
-input[type='checkbox'] {
-  accent-color: var(--accent);
+/* Every native checkbox draws like the app's own `.ks-check` box. `:where()`
+   keeps this at zero specificity, so the inputs other components hide and draw
+   over (toggle switch, `.ks-check__input`, picker cards) keep their own rules. */
+:where(input[type='checkbox']) {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 4px;
+  background-color: var(--bg-surface);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 12px;
+  vertical-align: middle;
   cursor: pointer;
+  transition: background-color var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast);
 }
+:where(input[type='checkbox']):hover { border-color: var(--accent); }
+:where(input[type='checkbox']):focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+:where(input[type='checkbox']):checked,
+:where(input[type='checkbox']):indeterminate {
+  background-color: var(--accent);
+  border-color: var(--accent);
+}
+:where(input[type='checkbox']):checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2l2.4 2.3 4.6-5' stroke='%23ffffff' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+:where(input[type='checkbox']):indeterminate {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 6h6' stroke='%23ffffff' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+/* Dark mode's accent is light; the tick takes the surface colour, as on `.ks-check`. */
+body.dark-mode :where(input[type='checkbox']):checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2l2.4 2.3 4.6-5' stroke='%2315171c' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+body.dark-mode :where(input[type='checkbox']):indeterminate {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 6h6' stroke='%2315171c' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+:where(input[type='checkbox']):disabled { opacity: 0.45; cursor: not-allowed; }
+:where(input[type='checkbox']):disabled:hover { border-color: var(--border-strong); }
 
 /* ==========================================================================
    Utility overrides for inline styles baked into views
@@ -7360,7 +7371,7 @@ body.dark-mode .month-art {
 
 .ksieg-row__head {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) 92px;
+  grid-template-columns: 32px minmax(0, 1fr);
   align-items: center;
   gap: var(--s-4);
   padding: var(--s-4) var(--s-3) var(--s-4) var(--s-5);
@@ -7550,7 +7561,7 @@ body.dark-mode .ksieg-stats__dot--err { color: #111318; }
   display: none;
   flex-direction: column;
   gap: 6px;
-  min-width: 150px;
+  min-width: 180px;
   padding: 8px 10px;
   border: 1px solid var(--border-default);
   border-radius: var(--r-md);
@@ -7571,33 +7582,28 @@ body.dark-mode .ksieg-stats__dot--err { color: #111318; }
 .ksieg-stats__seg--err b  { color: var(--danger); }
 .ksieg-stats__seg.is-zero b { color: var(--text-tertiary); font-weight: 600; }
 
-.ksieg-row__gauge {
+/* The row's progress bar heads the hover card: share of the files in DOM. */
+.ksieg-stats__progress {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  width: 92px;
+  padding-bottom: 8px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--border-default);
 }
 
-.ksieg-row__gauge-bar {
+.ksieg-stats__bar {
   height: 6px;
   border-radius: var(--r-pill);
   background: var(--bg-surface-sunken);
   overflow: hidden;
 }
 
-.ksieg-row__gauge-bar > span {
+.ksieg-stats__bar > span {
   display: block;
   height: 100%;
   border-radius: var(--r-pill);
   background: var(--success);
-  transition: width var(--t-base);
-}
-
-.ksieg-row__gauge-val {
-  font-size: var(--fs-xs);
-  text-align: right;
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
 }
 
 /* -------------------------- The DOM action ------------------------------ */
@@ -7989,11 +7995,6 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
   .ksieg-row__name > .status-badge { display: none; }
 }
 
-@container ksieg-rows (max-width: 1000px) {
-  .ksieg-row__head { grid-template-columns: 32px minmax(0, 1fr); }
-  .ksieg-row__gauge { display: none; }
-}
-
 @container ksieg-rows (max-width: 780px) {
   .ksieg-files__head { display: none; }
   .ksieg-file {
@@ -8106,6 +8107,37 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
   font-weight: 550;
   cursor: pointer;
   transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+
+/* "Po terminie" in the materials row: the one chip in danger red once the month
+   has something past its deadline — it is the alert, not just a filter. */
+.kal-filter--overdue.is-alert {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.kal-filter--overdue.is-alert:hover { border-color: var(--danger); }
+
+.kal-filter--overdue.is-alert.is-active {
+  border-color: var(--danger);
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+
+/* The materials row sits under the toolbar, titled like the card's section. */
+.kal-filters--materialy {
+  align-items: center;
+  margin-bottom: var(--s-3);
+}
+
+.kal-filters__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: var(--s-1);
+  color: var(--text-tertiary);
+  font-size: var(--fs-sm);
+  font-weight: 600;
 }
 
 .kal-filter:hover {
@@ -11984,8 +12016,9 @@ body.dark-mode .mve-subject .ff-chip__missing {
   flex-shrink: 0;
   padding: var(--s-1);
   border-radius: var(--r-md);
-  background: var(--bg-surface-sunken);
-  border: 1px solid var(--border-subtle);
+  background: var(--bg-tile);
+  border: 1px solid var(--border-tile);
+  box-shadow: var(--shadow-sm);
   line-height: 1.2;
 }
 
@@ -12058,13 +12091,6 @@ body.dark-mode .mve-subject .ff-chip__missing {
   flex-shrink: 0;
   max-width: 45%;
   color: var(--text-tertiary);
-}
-
-.zeb-row__version {
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  color: var(--text-secondary);
-  white-space: nowrap;
 }
 
 .zeb-empty {
@@ -14063,6 +14089,8 @@ body.dark-mode .ksieg-selbar .ksieg-convert:hover { color: #0d0e24; }
 .podpis-sum__stat.is-danger .podpis-sum__stat-value { color: var(--danger); }
 .podpis-sum__stat.is-neutral .podpis-sum__stat-value { color: var(--text-tertiary); }
 .podpis-sum__folder { font-size: var(--fs-sm); color: var(--text-secondary); overflow-wrap: anywhere; }
+.podpis-pdf-opcja { display: flex; align-items: flex-start; gap: var(--s-2); font-size: var(--fs-sm); cursor: pointer; }
+.podpis-pdf-opcja small { color: var(--text-tertiary); }
 .podpis-sum__list {
   margin: 0;
   padding: 0;
@@ -14172,14 +14200,25 @@ body.dark-mode .ksieg-selbar .ksieg-convert:hover { color: #0d0e24; }
 /* A return whose PDF is made and filed: the tone of its "filed" tick. */
 .pod-row--zlozone { border-left-color: var(--success); }
 .cit-row__dom { gap: var(--s-2); }
+/* CIT-8 → "Wysyłka do e-Deklaracji": one line per send, newest first. */
+.cit-wysylki { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-2); }
+.cit-wysylki li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: var(--fs-sm); }
+.cit-wysylki__ref { font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.cit-wysylki__opis { flex-basis: 100%; color: var(--text-tertiary); }
 
 /* The dictionary's rows carry one more column (the statement's side). */
 .zset-rule.cit-rule { grid-template-columns: 32px minmax(140px, 1fr) 120px minmax(200px, 1.2fr) auto; }
+.cit-rule__fraza { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cit-rule__fraza input { flex: 1; min-width: 0; }
+.cit-rule__fraza > .status-badge { flex-shrink: 0; }
+.cit-rev { max-height: 46vh; overflow-y: auto; }
 
 /* Statement positions: the ones still to decide stand out. */
 .cit-table td.cit-pos__category { min-width: 230px; }
 .cit-pos__name { font-weight: 500; overflow-wrap: anywhere; }
 .cit-pos__meta { font-size: var(--fs-xs); color: var(--text-tertiary); }
+/* The hint of a name the AI's two passes disagreed on: the question, then each answer. */
+.cit-unsure { display: flex; flex-direction: column; gap: 4px; max-width: 320px; }
 .cit-table tr.cit-row--open td { background: var(--warning-bg); }
 
 /* Adresy: the warning icon (what is still missing) sits in a fixed slot before the
@@ -14502,3 +14541,9 @@ body.dark-mode .ksieg-act--book { color: #0b1a12; }
 .ksieg-row.is-reorderable .ksieg-row__head:hover .ksieg-row__glyph-grip { display: inline; }
 .ksieg-row.is-dragging { opacity: 0.45; }
 .ksieg-row.is-drop-target { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+
+/* The "@" box (`MentionEditor`): the list of people opens above it. */
+.mention-editor { position: relative; }
+
+/* The AI's justification of a rate: its paragraphs kept, under its label. */
+.zplan-ai-text { display: block; margin-top: 2px; white-space: pre-line; }

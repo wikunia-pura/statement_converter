@@ -29,7 +29,7 @@ export type ReleaseNotesLanguage = 'pl' | 'en';
 export type LocalizedText = string | { pl: string; en: string };
 
 export function loc(text: LocalizedText, language: ReleaseNotesLanguage): string {
-  return typeof text === 'string' ? text : text[language] ?? text.pl;
+  return typeof text === 'string' ? text : (text[language] ?? text.pl);
 }
 
 /** Drives the badge colour and label on a highlight card. */
@@ -84,19 +84,95 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    // Drafted with the PIT tab; the version string must match whatever package.json is bumped to.
-    // If another feature ships in the same release, merge its highlights into this entry.
-    version: '9.6.0',
-    date: '2026-10-09',
-    title: 'PIT-11 i PIT-4R wspólnot oraz uchwały zebrań',
+    version: '10.0.0',
+    date: '2026-10-11',
+    title: 'CIT-8 z wysyłką do e-Deklaracji, PIT-11 i PIT-4R oraz uchwały zebrań',
     tagline:
-      'Nowa zakładka „PIT” w module „Podatki” przygotowuje PIT-11 wszystkich osób, którym wspólnota coś wypłaciła, i roczny PIT-4R wspólnoty — plik XML dla e-Deklaracji, PDF na oficjalnym wzorze i podpis kwalifikowany kartą Szafir. W „Zebraniach” pojawia się zakładka „Uchwały”: kilka szablonów z Mailingu naraz zamienia się w gotowe uchwały z danymi zebrania z kalendarza.',
+      'Moduł „Podatki” ma dwie nowe zakładki: „CIT” liczy zeznanie CIT-8 każdej wspólnoty ze sprawozdania finansowego i wysyła podpisany XML prosto do e-Deklaracji, a „PIT” przygotowuje PIT-11 i PIT-4R. W „Zebraniach” dochodzą uchwały z szablonów i osobne oznaczanie gotowości każdego dokumentu, a na Pulpicie oznaczysz inną osobę przez @.',
     stats: [
-      { value: '4', label: 'nowe funkcje' },
-      { value: '9', label: 'usprawnień' },
+      { value: '9', label: 'nowych funkcji' },
+      { value: '13', label: 'usprawnień' },
       { value: '1', label: 'poprawka' },
     ],
     highlights: [
+      {
+        id: 'podatki-cit',
+        kind: 'new',
+        icon: 'landmark',
+        title: 'Podatki → CIT: zeznanie CIT-8 wspólnoty ze sprawozdania',
+        summary:
+          'Dla każdej wspólnoty z Adresów powstaje CIT-8 wyliczony ze sprawozdania finansowego z biblioteki Sprawozdań. Gdy wspólnota ma dochód zwolniony, XML i PDF dostają załącznik CIT-8/O.',
+        details: [
+          'Każda pozycja sprawozdania jest przypisana do przychodów lub kosztów — opodatkowanych albo zwolnionych — według słownika pozycji. Pozycje, których słownik nie zna, możesz dopasować przez AI. AI tylko proponuje: dopóki propozycji nie zatwierdzisz, PDF i XML są zablokowane.',
+          'Koszty wspólne aplikacja dzieli proporcją przychodów, a dochód zwolniony odejmuje w zeznaniu. Wyliczenie widzisz krok po kroku w sekcji „Wyliczenie podatku”.',
+          'Dane wspólnoty (NIP, nazwa, siedziba, urząd skarbowy) pochodzą z nowej sekcji „Dane identyfikacyjne (podatkowe)” w Adresach.',
+        ],
+        where: ['Podatki', 'CIT'],
+        steps: [
+          {
+            do: 'Wybierz rok w nagłówku i kliknij „Podepnij sprawozdania z biblioteki”, a potem potwierdź.',
+            then: 'Każda wspólnota dostaje sprawozdanie za ten rok (a gdy pełnego nie ma — najnowsze niepełne), brakujące zeznania się tworzą i od razu zapisują. Pojedynczo zrobisz to w wierszu przyciskiem „Utwórz z <rok>” albo w zeznaniu przez „Wybierz sprawozdanie” → „Dołącz”.',
+          },
+          {
+            do: 'Kliknij wspólnotę na liście.',
+            then: 'Widzisz sekcje „Zeznanie”, „Wspólnota”, „Zaliczki wpłacone w roku”, „Sprawozdanie finansowe”, „Pozycje sprawozdania”, „Wyliczenie podatku” i „Osoba podpisująca”. „Odśwież z Adresów” wpisuje aktualne dane wspólnoty.',
+          },
+          {
+            do: 'Przy „Pozycjach sprawozdania” kliknij „Dopasuj AI”, przejrzyj propozycje i kliknij „Zatwierdź propozycje AI · <liczba>” (albo „Zatwierdź propozycję” przy jednej pozycji).',
+            then: 'Pozycje dostają kategorię, a wyliczenie podatku się przelicza. Gdy AI nie jest pewne, pozycję przypisujesz ręcznie. „Zapisz regułę w słowniku” sprawia, że ta sama nazwa pozycji trafi do tej kategorii we wszystkich zeznaniach.',
+          },
+          {
+            do: 'Kliknij „Zapisz”, a potem „Pobierz PDF”, „Pobierz XML” albo „Podpisz kartą”. Kilka zeznań naraz: zaznacz je na liście i użyj paska na dole („Pobierz XML · <liczba>”, „Podpisz · <liczba>”, „Oznacz jako złożone · <liczba>”).',
+            then: 'Pliki trafiają do podfolderu „CIT-8 <rok>” w „Folderze deklaracji podatkowych” z Ustawień (bez ustawionego folderu — do Pobranych). Podpisany XML to „… (podpisana).xml”; PDF podpiszesz też, zaznaczając „Podpisz też PDF (PAdES)”.',
+          },
+        ],
+        expect: [
+          'Reguły słownika edytujesz przyciskiem „Słownik pozycji CIT”: zakładki „Reguły”, „Przychody bez reguły”, „Koszty bez reguły”, „Bez trafień” i „Sprawdzenie AI”. Zmiany obowiązują po „Zapisz”.',
+          'Filtry „Złożone”, „Bez zeznania” i „Bez sprawozdania” pokazują, co jeszcze zostało do zrobienia.',
+          'Rok w nagłówku to rok podatkowy — zakładka otwiera się na bieżącym roku, więc żeby złożyć zeznanie za 2025, przełącz rok na 2025.',
+        ],
+        note: {
+          type: 'warning',
+          text: 'Sprawozdanie musi obejmować cały rok (01.01–31.12). Niepełny okres blokuje PDF do kliknięcia „Akceptuj niepełny okres” i wtedy zeznanie jest tylko orientacyjne. Wzór CIT-8 (34) jest potwierdzony dla 2025; dla 2026 aplikacja pokazuje ostrzeżenie, a lat sprzed 2025 nie obsługuje.',
+        },
+      },
+      {
+        id: 'e-deklaracje-wysylka',
+        kind: 'new',
+        icon: 'upload',
+        title: 'CIT-8 wysyłany prosto do e-Deklaracji, z UPO',
+        summary:
+          'Podpisane zeznanie CIT-8 nie musi już przechodzić przez e-Formularz — aplikacja wysyła je do bramki e-Deklaracji sama, a potem sama odbiera UPO.',
+        details: [
+          'Domyślnie aplikacja wysyła do bramki testowej Ministerstwa Finansów: nic nie trafia do urzędu, a Ty sprawdzasz, czy plik przechodzi. Na bramkę produkcyjną przełączasz się w Ustawieniach, osobno na każdym komputerze.',
+          'Po wysyłce aplikacja co 30 sekund sama sprawdza UPO w tle, także przy zamkniętej zakładce, i daje znać, gdy przyjdzie. UPO z bramki produkcyjnej od razu oznacza zeznanie jako złożone.',
+        ],
+        where: ['Podatki', 'CIT', 'Podpisz kartą'],
+        steps: [
+          {
+            do: 'Kliknij „Podpisz kartą” w zeznaniu albo „Podpisz · <liczba>” przy zaznaczonych, i zaznacz „Wyślij do e-Deklaracji”.',
+            then: 'Okno pokazuje znaczek „TEST” albo „PRODUKCJA” — przy teście z dopiskiem, że nic nie trafi do urzędu.',
+          },
+          {
+            do: 'Wpisz PIN i podpisz.',
+            then: 'Po podpisaniu wszystkich zeznań XML-e idą do bramki. W sekcji „Wysyłka do e-Deklaracji” zeznania widać numer referencyjny i stan: „W trakcie przetwarzania”, „Przyjęte — UPO”, „Błąd transmisji” albo „Odrzucone” z opisem z bramki.',
+          },
+          {
+            do: 'Gdy UPO przyjdzie, kliknij „Pobierz UPO”.',
+            then: 'Zapisuje się plik „… UPO.xml” (z bramki testowej „… UPO (TEST).xml”). Działa na każdym komputerze, nie tylko na tym, z którego wysłano.',
+          },
+        ],
+        expect: [
+          'Nie chcesz czekać na automat? „Sprawdź UPO” w zeznaniu albo „Sprawdź UPO · <liczba>” na liście pyta bramkę od razu.',
+          'Na produkcji zeznanie z UPO, czekające na UPO albo oznaczone jako złożone nie zostanie wysłane drugi raz — do zmian służy korekta.',
+          'Po błędzie sieci zeznanie trzeba podpisać i wysłać jeszcze raz.',
+          'PIT na razie wczytujesz do e-Deklaracji sam, jak dotąd.',
+        ],
+        note: {
+          type: 'warning',
+          text: 'Bramkę produkcyjną włączysz w Ustawienia → Administracja → „Wysyłka e-Deklaracji” → „Wysyłaj do bramki produkcyjnej”. Zanim to zrobisz, upewnij się, że dla każdej wspólnoty, za którą podpisujesz, jest złożone pełnomocnictwo UPL-1 — bez niego urząd odrzuci zeznanie.',
+        },
+      },
       {
         id: 'podatki-pit',
         kind: 'new',
@@ -132,7 +208,7 @@ export const RELEASES: Release[] = [
             then: 'Jednym PIN-em podpisują się wszystkie zaznaczone. Pliki „… (podpisany).xml” i PDF-y lądują w „PIT <rok>” w folderze z Ustawień, osobny podfolder dla każdej wspólnoty.',
           },
           {
-            do: 'Po wysłaniu do e-Deklaracji kliknij „Oznacz jako złożone” i wpisz numer referencyjny z bramki.',
+            do: 'Wczytaj podpisany XML do e-Deklaracji (bezpośrednia wysyłka z aplikacji jest na razie tylko w zakładce „CIT”), a potem kliknij „Oznacz jako złożone” i wpisz numer referencyjny z bramki.',
             then: 'Dokument dostaje zielone oznaczenie, a pasek postępu na górze liczy złożone.',
           },
         ],
@@ -144,6 +220,60 @@ export const RELEASES: Release[] = [
           type: 'warning',
           text: 'Wzory PIT-11 (29) i PIT-4R (13) są potwierdzone dla 2024 i 2025. Dla 2026 aplikacja zakłada, że się nie zmieniły — przed styczniem 2027 sprawdź, czy MF nie wydał nowych (e-Deklaracje odrzucą plik niezgodny ze schematem).',
         },
+      },
+      {
+        id: 'podpis-pdf-xml',
+        kind: 'new',
+        icon: 'signature',
+        title: 'Podpis kwalifikowany: dowolny PDF lub XML jednym PIN-em',
+        summary:
+          'Nowy moduł „Podpis kwalifikowany” podpisuje kartą Szafir dowolne pliki — nie tylko deklaracje z aplikacji. PDF dostaje podpis PAdES, XML podpis XAdES (ten sam, co PIT i CIT wysyłane do e-Deklaracji). Wiele plików podpiszesz jednym PIN-em.',
+        details: [
+          'Podpisana kopia trafia obok oryginału jako „… (podpisany).pdf” albo „… (podpisany).xml”. Oryginał zostaje bez zmian, a istniejący plik nigdy nie jest nadpisywany.',
+          'W XML-u podpis trafia do środka pliku, jako ostatni element — reszta treści zostaje co do znaku taka sama.',
+          'Plików, których nie da się podpisać, aplikacja nie przepuszcza do karty i od razu podaje powód: plik już podpisany, PDF zabezpieczony hasłem, XML w innym kodowaniu niż UTF-8 albo uszkodzony.',
+        ],
+        where: ['Podpis kwalifikowany', 'Podpisywanie'],
+        steps: [
+          {
+            do: 'Przeciągnij pliki PDF lub XML na pole „Podpisz pliki PDF i XML” albo kliknij je i wybierz pliki.',
+            then: 'Pliki pojawiają się w tabeli „Dodane pliki” ze stanem „Gotowy do podpisu” albo „Nie do podpisania” — wtedy pod nazwą widać powód.',
+          },
+          {
+            do: 'Zaznacz pliki ptaszkami (Shift+klik zaznacza zakres) i na pasku na dole kliknij „Podpisz zaznaczone · <liczba>”. Pojedynczy plik podpiszesz przyciskiem „Podpisz” w jego wierszu.',
+            then: 'Okno pokazuje kartę, certyfikat i liczbę plików do podpisu.',
+          },
+          {
+            do: 'Wpisz PIN raz i kliknij „Podpisz <liczba> plików”.',
+            then: 'Pasek postępu pokazuje podpisywany plik; „Przerwij” zatrzymuje po bieżącym. Na końcu podsumowanie: co podpisano (kliknij nazwę, żeby otworzyć), co pominięto i dlaczego.',
+          },
+        ],
+        expect: [
+          'Każde podpisywanie zapisuje się w zakładce „Historia” modułu: kto, jakim certyfikatem i które pliki.',
+          'Podpisu PDF nie widać na stronie — sprawdzisz go w panelu podpisów czytnika PDF (np. Adobe Acrobat).',
+        ],
+      },
+      {
+        id: 'adresy-dane-identyfikacyjne',
+        kind: 'new',
+        icon: 'building',
+        title: 'Adresy: dane identyfikacyjne wspólnoty do podatków',
+        summary:
+          'Karta adresu ma nową sekcję „Dane identyfikacyjne (podatkowe)”: NIP, REGON, pełna nazwa, siedziba, urząd skarbowy i jego kod, telefon i e-mail. Z tych danych korzystają CIT, PIT i DN-1.',
+        where: ['Adresy', 'Edytuj', 'Dane identyfikacyjne (podatkowe)'],
+        steps: [
+          {
+            do: 'Kliknij „Edytuj” przy adresie i uzupełnij pola w sekcji „Dane identyfikacyjne (podatkowe)”. „Kod urzędu” wybierasz z wyszukiwarki urzędów skarbowych.',
+            then: 'Aplikacja od razu sprawdza sumę kontrolną NIP-u. Po zapisaniu dane są gotowe dla zeznań CIT-8 i PIT-4R.',
+          },
+          {
+            do: 'Raz, na start: kliknij „Zasil danymi z DN-1”, a potem „Zasil dane”.',
+            then: 'Puste pola wypełniają się danymi z deklaracji DN-1 (nic nie jest nadpisywane). Raport pokazuje, które wspólnoty uzupełniono, które już były wypełnione, a których nie udało się dopasować.',
+          },
+        ],
+        expect: [
+          'Filtr „Braki informacji” pokazuje adresy z niepełnymi danymi; podpowiedź na znaczku mówi, czego brakuje.',
+        ],
       },
       {
         id: 'zebrania-uchwaly',
@@ -160,15 +290,15 @@ export const RELEASES: Release[] = [
         where: ['Zebrania', '<wybrane zebranie>', 'Uchwały'],
         steps: [
           {
-            do: 'Kliknij „Dodaj uchwały”, zaznacz szablony (np. z typu „Uchwała”) i kliknij „Dodaj wybrane”.',
-            then: 'Każdy zaznaczony szablon staje się osobną uchwałą; kolejność zaznaczania to kolejność na liście.',
+            do: 'Kliknij „Dodaj uchwały”. Wszystkie szablony typu „Uchwała” są od razu zaznaczone — odznacz te, których nie potrzebujesz, i kliknij „Dodaj wybrane (<liczba>)”.',
+            then: 'Każdy zaznaczony szablon staje się osobną uchwałą na liście.',
           },
           {
             do: 'Kliknij „Podgląd” przy uchwale albo jej tytuł, by ją edytować.',
             then: 'Widzisz uchwałę tak, jak się wydrukuje. Puste pola są oznaczone — kliknij pole i wpisz wartość, potem „Zapisz”.',
           },
           {
-            do: 'Kliknij „PDF” przy uchwale albo „Pobierz wszystkie (PDF)” nad listą.',
+            do: 'Kliknij „Pobierz PDF” przy uchwale albo „Pobierz wszystkie (PDF)” nad listą.',
             then: 'Plik trafia do folderu Pobrane. Uchwała z pustym polem nie wyjdzie — aplikacja mówi, czego brakuje.',
           },
           {
@@ -184,6 +314,113 @@ export const RELEASES: Release[] = [
           type: 'tip',
           text: 'Żeby tytuł uchwały na liście był czytelny, wpisz w temacie szablonu np. „Uchwała nr {{Numer uchwały}} w sprawie …” — temat jest tytułem, a treść pełnym tekstem uchwały.',
         },
+      },
+      {
+        id: 'zebrania-gotowosc-dokumentow',
+        kind: 'improved',
+        icon: 'file-check',
+        title: 'Zebrania: każdy dokument oznaczasz jako gotowy osobno',
+        summary:
+          'Zawiadomienie, sprawozdanie finansowe, plan gospodarczy i uchwały mają własny status. Wersja zebrania jest przygotowana dopiero, gdy wszystkie cztery są gotowe.',
+        where: [
+          'Zebrania',
+          '<wybrane zebranie>',
+          'Zawiadomienie / Sprawozdania finansowe / Plan gospodarczy / Uchwały',
+        ],
+        steps: [
+          {
+            do: 'Na dole zakładki dokumentu, w ramce „Status”, kliknij „Przygotowane”.',
+            then: 'Dokument jest oznaczony jako gotowy. Na liście zebrań podpowiedź przy statusie pokazuje „gotowe <n> z <liczba> dokumentów” i co jeszcze nie jest oznaczone.',
+          },
+          {
+            do: 'Kliknij znaczek „z kalendarza” albo „Niegotowe” na liście zebrań.',
+            then: 'Otwiera się karta spotkania z Kalendarza w osobnym oknie.',
+          },
+        ],
+        expect: [
+          'Zebranie, którego spotkanie w Kalendarzu nie doszło do kroku „Przygotuj”, ma znaczek „Niegotowe” i nie da się go jeszcze otworzyć.',
+          'Nowe przyciski: „Dodaj poprawki” (nowa wersja jako kopia poprzedniej), „Usuń wersję”, „Zmień dane” (szczegóły zebrania edytowane na miejscu) i „Usuń zawiadomienie”.',
+        ],
+      },
+      {
+        id: 'kalendarz-termin-wysylki',
+        kind: 'improved',
+        icon: 'calendar',
+        title: 'Kalendarz: termin wysyłki materiałów i blokada niegotowej wysyłki',
+        summary:
+          'Każde spotkanie ma „Termin wysyłki” materiałów, podpowiadany z typu spotkania. Zawiadomienia nie wyślesz, dopóki wszystkie dokumenty zebrania nie są gotowe.',
+        where: ['Kalendarz', '<spotkanie>', 'Edytuj'],
+        steps: [
+          {
+            do: 'W formularzu spotkania sprawdź pole „Termin wysyłki”.',
+            then: 'Jest wyliczone z typu spotkania („Materiały wysłać X dni przed spotkaniem”). Możesz wpisać inny dzień; „Jak w typie” przywraca podpowiedź.',
+          },
+          {
+            do: 'Użyj nowego filtra „Materiały” nad kalendarzem.',
+            then: 'Widzisz spotkania wg stanu materiałów: „Niepotrzebne”, „Potrzebne”, „Do przygotowania”, „Przygotowane”, „Wysłane”, „Po terminie”.',
+          },
+        ],
+        expect: [
+          'Kafelek wysyłki zawiadomienia oraz kroki „Przygotowane” i „Wysłane” są nieaktywne, dopóki dokumenty nie są gotowe — podpowiedź wymienia, których brakuje.',
+          'Na Pulpicie, w karcie „Spotkania — do zrobienia”, pojawia się „Materiały po terminie”; kliknięcie otwiera Kalendarz na właściwym miesiącu.',
+          'Dodając spotkanie, które już jest w kalendarzu (ten sam typ), dostajesz ostrzeżenie o duplikacie.',
+          'Nowe powiadomienia (domyślnie włączone): „Zbliża się termin materiałów”, „Materiały po terminie” i „Zmiana terminu spotkania” — wyłączysz je w Ustawieniach powiadomień.',
+        ],
+      },
+      {
+        id: 'plan-zaliczki-ai',
+        kind: 'improved',
+        icon: 'coins',
+        title: 'Plan gospodarczy: zaliczki A i B, zmiana stawki w ciągu roku i stawka z AI',
+        summary:
+          'Plan pokazuje bilans zaliczki „A” i zaliczki „B” na fundusz remontowy, pozwala zmienić stawkę od wybranego miesiąca i podpowiada stawkę przez AI.',
+        where: ['Zebrania', '<wybrane zebranie>', 'Plan gospodarczy'],
+        steps: [
+          {
+            do: 'W sekcji zaliczki kliknij „Ustaw tę stawkę”.',
+            then: 'Wpisuje się stawka, przy której część I planu się bilansuje.',
+          },
+          {
+            do: 'Kliknij „Zmiana stawki w ciągu roku” i ustaw „Nowa stawka od:”.',
+            then: 'Plan liczy zaliczki osobno dla każdego okresu.',
+          },
+          {
+            do: 'Kliknij „Zaproponuj z AI”, opcjonalnie wpisz wskazówki i kliknij „Zaproponuj stawkę”.',
+            then: 'Pojawia się „Propozycja AI” z bilansem i uzasadnieniem. „Zastosuj” wpisuje stawkę (plan zmienia się po zapisaniu), „Odrzuć” ją pomija.',
+          },
+        ],
+        expect: [
+          'Przy każdej pozycji kosztu znaczek „+<procent>” ustawia jej własny wzrost (0% = bez wzrostu); pozostałe pozycje dopasowują się tak, żeby wzrost łączny się zgadzał.',
+          'Uzasadnienie AI zostaje w planie, ale nie trafia na wydruk.',
+        ],
+      },
+      {
+        id: 'pulpit-wzmianki',
+        kind: 'new',
+        icon: 'message-square',
+        title: 'Pulpit: oznaczanie osób przez @',
+        summary:
+          'W notatce do priorytetu i w uwadze do księgowania wpisz „@” i wybierz osobę — dostanie powiadomienie.',
+        where: ['Pulpit', 'Dodaj notatkę / Uwaga do księgowania'],
+        steps: [
+          {
+            do: 'Wpisz „@” i pierwsze litery imienia lub nazwiska.',
+            then: 'Pojawia się lista pasujących osób (wielkość liter i polskie znaki nie mają znaczenia). Wybrana osoba wyświetla się w tekście jako znaczek.',
+          },
+          {
+            do: 'Zapisz notatkę.',
+            then: 'Oznaczona osoba dostaje powiadomienie „Oznaczono Cię na Pulpicie” — systemowe i w dzwonku. Oznaczenie dodane przy edycji notatki też wysyła powiadomienie.',
+          },
+        ],
+      },
+      {
+        id: 'ustawienia-administracja',
+        kind: 'improved',
+        icon: 'settings',
+        title: 'Ustawienia: sekcja „Administracja” na końcu',
+        summary:
+          'Model AI, skrzynka pocztowa (SMTP), kopie zapasowe, konwertery i nowa „Wysyłka e-Deklaracji” są w zwiniętej sekcji „Administracja” na końcu Ustawień. Folder na deklaracje nazywa się teraz „Folder deklaracji podatkowych (DN-1, CIT-8, PIT)”.',
+        where: ['Ustawienia', 'Administracja'],
       },
       {
         id: 'mailing-pola-z-zebrania',
@@ -737,9 +974,7 @@ export const RELEASES: Release[] = [
     title: 'Konwerter znowu z tabelą plików',
     tagline:
       'Lista plików w Konwerterze wraca do tabeli sprzed wersji 9.0: każdy plik to jeden wiersz z bankiem, adresem, typem konta, PDF-em, stanem i przyciskami. W oknie konwersji z Pulpitu bank i adres są zablokowane, bo ustalił je już skan folderu.',
-    stats: [
-      { value: '3', label: 'ulepszenia' },
-    ],
+    stats: [{ value: '3', label: 'ulepszenia' }],
     highlights: [
       {
         id: 'konwerter-tabela-plikow',
@@ -899,7 +1134,7 @@ export const RELEASES: Release[] = [
     tagline:
       'Zebranie ma teraz własny ekran z zakładkami. Wgrywasz plik „RozliczenieWsp” z vDom, a każda wspólnota dostaje swoje sprawozdanie z akapitem wstępnym. Z niego powstaje plan gospodarczy na następny rok, a oba dokumenty pobierzesz jako PDF i Excel. Nowe moduły „Sprawozdania” i „Plany gospodarcze” pokazują je dla wszystkich wspólnot naraz. Do tego kalendarz w PDF, „Kto księguje” na Pulpicie i przycisk „Otwórz” przy każdym zapisanym pliku.',
     stats: [
-      { value: '8', label: 'nowych funkcji' },
+      { value: '9', label: 'nowych funkcji' },
       { value: '4', label: 'ulepszenia' },
     ],
     highlights: [
@@ -930,7 +1165,9 @@ export const RELEASES: Release[] = [
             then: 'Nazwa pojawia się na zakładce wersji, obok jej numeru. Esc cofa niezapisaną zmianę.',
           },
         ],
-        expect: ['Nazwa wersji jest nieobowiązkowa i ma do 80 znaków. Pusta oznacza zwykłe „Wersja 1.1”.'],
+        expect: [
+          'Nazwa wersji jest nieobowiązkowa i ma do 80 znaków. Pusta oznacza zwykłe „Wersja 1.1”.',
+        ],
       },
       {
         id: 'zebranie-sprawozdanie',
@@ -1148,7 +1385,9 @@ export const RELEASES: Release[] = [
             then: 'Lista pokazuje tylko te wspólnoty. Aplikacja pamięta wybór na tym komputerze.',
           },
         ],
-        expect: ['„Konwertuj zaznaczone” pojawia się tylko wtedy, gdy wśród zaznaczonych jest coś do konwersji.'],
+        expect: [
+          '„Konwertuj zaznaczone” pojawia się tylko wtedy, gdy wśród zaznaczonych jest coś do konwersji.',
+        ],
       },
       {
         id: 'otworz-plik',
@@ -1179,7 +1418,8 @@ export const RELEASES: Release[] = [
   {
     version: '9.0.0',
     date: '2026-10-04',
-    title: 'Nowy wygląd całej aplikacji, Zebrania, materiały na spotkania i pliki księgowe znajdowane same',
+    title:
+      'Nowy wygląd całej aplikacji, Zebrania, materiały na spotkania i pliki księgowe znajdowane same',
     tagline:
       'Wszystkie okna, formularze i listy mają nowy, uporządkowany wygląd: sekcje z nagłówkami, podpowiedzi pod polami i jednakowe przyciski. Doszedł moduł „Zebrania” z zawiadomieniem o zebraniu prosto z Kalendarza, materiały na spotkania krok po kroku, zadania, zarząd i pełnomocnicy ZGN przy spotkaniach, typy mailingu z domyślnymi adresatami oraz „Znajdź pliki księgowe”, które samo przypisuje wyciągi i PDF-y do wspólnot. Konwersję da się teraz anulować, a wyciąg zaksięgowany inną drogą — oznaczyć bez konwersji.',
     stats: [
@@ -1395,9 +1635,7 @@ export const RELEASES: Release[] = [
             then: 'Otwiera się okno ze szczegółami spotkania, z przyciskami „Edytuj” i „Pokaż spotkanie w Kalendarzu”.',
           },
         ],
-        expect: [
-          'Zadania dodane w formularzu nowego spotkania zapisują się razem z nim.',
-        ],
+        expect: ['Zadania dodane w formularzu nowego spotkania zapisują się razem z nim.'],
       },
       {
         id: 'kalendarz-zgn-zarzad',
@@ -1800,9 +2038,7 @@ export const RELEASES: Release[] = [
             then: 'Tytuł zamienia się w pole. Enter albo kliknięcie obok zapisuje, Esc anuluje. Kliknięcie w resztę karty dalej otwiera podgląd.',
           },
         ],
-        expect: [
-          '„Dodaj notatkę” to teraz mały plus obok nagłówka „Przypięte notatki”.',
-        ],
+        expect: ['„Dodaj notatkę” to teraz mały plus obok nagłówka „Przypięte notatki”.'],
       },
       {
         id: 'powiadomienia-lista',
@@ -1832,8 +2068,7 @@ export const RELEASES: Release[] = [
         kind: 'new',
         icon: 'menu',
         title: 'Własna kolejność menu',
-        summary:
-          'Pozycje menu bocznego ułożysz po swojemu i podzielisz separatorami na sekcje.',
+        summary: 'Pozycje menu bocznego ułożysz po swojemu i podzielisz separatorami na sekcje.',
         where: ['Ustawienia', 'Wygląd i działanie', 'Kolejność menu'],
         steps: [
           {
@@ -1851,7 +2086,8 @@ export const RELEASES: Release[] = [
   {
     version: '8.0.0',
     date: '2026-10-02',
-    title: 'Zadania z komentarzami, priorytetami, filtrami i notatkami; powiadomienia pod Twoją kontrolą',
+    title:
+      'Zadania z komentarzami, priorytetami, filtrami i notatkami; powiadomienia pod Twoją kontrolą',
     tagline:
       'Tablica zadań dostała komentarze z oznaczaniem osób (@), priorytety, filtry po terminie i priorytecie, zmianę kolejności kart przeciąganiem oraz przypięte notatki. W Ustawieniach jest teraz lista powiadomień — część możesz włączać i wyłączać — a powiadomienia nie znikają, dopóki ich nie zamkniesz. Razem z tym wydaniem dochodzi wszystko z poprzedniej wersji: wspólna tablica zadań, priorytety i uwagi w Księgowaniach, nowy Pulpit, praca w tle i kopia zapasowa co 4 godziny.',
     stats: [
@@ -2265,7 +2501,11 @@ export const RELEASES: Release[] = [
         title: 'Uwagi do księgowania',
         summary:
           'Przy wspólnocie można zostawić uwagę dla zespołu („zaksięguj razem z fakturą X”). Aplikacja przypomni o niej w Konwerterze, gdy pojawi się wyciąg tej wspólnoty.',
-        where: ['Pulpit (albo Konwerter → Księgowania)', 'wiersz wspólnoty', 'ikona „Uwaga do księgowania”'],
+        where: [
+          'Pulpit (albo Konwerter → Księgowania)',
+          'wiersz wspólnoty',
+          'ikona „Uwaga do księgowania”',
+        ],
         steps: [
           {
             do: 'Kliknij ikonę uwagi przy wspólnocie, wpisz treść i kliknij „Dodaj uwagę”.',
@@ -2401,7 +2641,8 @@ export const RELEASES: Release[] = [
   {
     version: '7.2.3',
     date: '2026-09-10',
-    title: 'Noty Świadczenia: dokument mówi „Nota”, bez dat „z dnia” i listy „Do:”, z nową linią ceny podgrzania',
+    title:
+      'Noty Świadczenia: dokument mówi „Nota”, bez dat „z dnia” i listy „Do:”, z nową linią ceny podgrzania',
     tagline:
       'Excel generowany z PDF-a korekty czyta się teraz jak nota: słowo „korekta” w każdej odmianie zamienia się na „Nota”, znikają zapisy „z dnia 2026.06.30” i „Do: 1/2026,2/2026,…”, a pod „Do zwrotu” pojawia się linia „Cena m³ podgrzania:”. Do tego drobiazg z wyglądu — przycisk „Otwórz plik” miał dwie ikony obok siebie, została jedna.',
     highlights: [
@@ -2483,7 +2724,8 @@ export const RELEASES: Release[] = [
   {
     version: '7.2.2',
     date: '2026-09-08',
-    title: 'Powrót do księgowania z 7.2.0 dla rozciętego numeru lokalu, plus poprawka kodowania CP852',
+    title:
+      'Powrót do księgowania z 7.2.0 dla rozciętego numeru lokalu, plus poprawka kodowania CP852',
     tagline:
       'Dodatkowe wstrzymywanie wpłat z wersji 7.2.1 zostało wycofane — wpłata z poprawnie rozpoznanym numerem lokalu znów księguje się automatycznie, tak jak w 7.2.0. Do tego poprawiona detekcja kodowania CP852 (DOS Latin-2), które wcześniej bywało mylone z Windows-1250 i psuło polskie znaki.',
     highlights: [
@@ -3202,7 +3444,8 @@ export const RELEASES: Release[] = [
           'Liczba wspólnot bez oznaczenia pojawia się w dwóch miejscach — w podsumowaniu i w zdaniu pod nim. To ta sama liczba: podsumowanie ją pokazuje, zdanie mówi, co z nią zrobić.',
           'To samo jest na zakładce „Księgowania” w Konwerterze, bo to ten sam ekran. Liczby idą za wybranym miesiącem, nie za bieżącym.',
         ],
-      },      {
+      },
+      {
         id: 'kalendarz-scroll-dnia',
         kind: 'fixed',
         icon: 'calendar',
@@ -4874,8 +5117,7 @@ export function findRelease(version: string): Release | undefined {
  */
 export function releaseForVersion(appVersion: string): Release | undefined {
   return (
-    findRelease(appVersion) ??
-    RELEASES.find((r) => compareVersions(r.version, appVersion) <= 0)
+    findRelease(appVersion) ?? RELEASES.find((r) => compareVersions(r.version, appVersion) <= 0)
   );
 }
 

@@ -392,6 +392,25 @@ export const PodpisKartaModal: React.FC<PodpisKartaModalProps> = ({
   );
 };
 
+/**
+ * "Podpisz też PDF" of a signing run that files an XML (PIT, CIT-8): e-Deklaracje take the XML with XAdES,
+ * the PDF is only a copy — signing it too costs a second signature per document, so it is a choice.
+ */
+export const PodpiszTezPdf: React.FC<{
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+  hint: string;
+}> = ({ checked, onChange, label, hint }) => (
+  <label className="podpis-pdf-opcja">
+    <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+    <span>
+      {label}
+      <small> — {hint}</small>
+    </span>
+  </label>
+);
+
 // ------------------------------------------------------------------ settings
 
 /**

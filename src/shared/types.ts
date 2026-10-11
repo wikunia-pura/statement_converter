@@ -2,6 +2,7 @@
 
 import type { NotificationPrefs } from './notifications';
 import type { PodatekPit } from './podatki-pit';
+import type { EDeklaracjeSrodowisko, EDeklaracjeWysylka } from './e-deklaracje';
 
 export interface Bank {
   id: number;
@@ -427,6 +428,11 @@ export interface KsiegowaniePriorytet {
    * the notifications existed.
    */
   notatkaBy?: string;
+  /**
+   * Mailboxes tagged with @ in `notatka` — the text keeps the readable "@Anna
+   * Nowak", this is what the notifier reads. Absent in older backups.
+   */
+  mentions?: string[];
   createdBy: string;
   createdAt: string;
 }
@@ -457,6 +463,8 @@ export interface KsiegowanieUwaga {
   adresId: number | null;
   adresNazwa: string;
   tresc: string;
+  /** Mailboxes tagged with @ in `tresc`, as on a priority's note. Absent in older backups. */
+  mentions?: string[];
   createdBy: string;
   createdAt: string;
   /** Null while the matter is open. */
@@ -1199,13 +1207,8 @@ export interface Spotkanie {
   terminZmienionyBy: string | null;
   terminZmianaOdczytanaAt: string | null;
   terminZmianaOdczytanaBy: string | null;
-  /** Set when someone ticks "documents sent" by hand. */
-  dokumentyWyslaneAt: string | null;
-  dokumentyWyslaneBy: string | null;
-  /** What was sent, in the sender's own words. */
-  dokumentyOpis: string;
   /**
-   * The day the documents have to be out by (`YYYY-MM-DD`), set on this meeting.
+   * The day the materials have to be out by (`YYYY-MM-DD`), set on this meeting.
    * Null means "as the meeting's kind says" — its notice period before the start.
    */
   terminWysylki: string | null;
@@ -1253,9 +1256,6 @@ export type SpotkanieInput = Omit<
   | 'terminZmienionyBy'
   | 'terminZmianaOdczytanaAt'
   | 'terminZmianaOdczytanaBy'
-  | 'dokumentyWyslaneAt'
-  | 'dokumentyWyslaneBy'
-  | 'dokumentyOpis'
   | 'materialyStatus'
   | 'materialyZmienioneAt'
   | 'materialyZmienioneBy'
@@ -1666,6 +1666,13 @@ export interface PlanGospodarczy {
   inneWplywyB: number;
   kredyt: number;
   remontyFR: PlanRemontFR[];
+  /**
+   * The reasons for the advance rates, by advance: an applied AI proposal's,
+   * as the manager then edited them. For the manager only — not printed.
+   * Absent = none (the rates were typed in or balanced by hand).
+   */
+  uzasadnienieA?: string;
+  uzasadnienieB?: string;
   /* Provenance */
   wskaznik: number;
   sprawozdanieOkres: { od: string; do: string };
@@ -1962,7 +1969,8 @@ export type CitZrodloKlasyfikacji = 'regula' | 'ai' | 'reczne';
 
 /** One decision on a statement row, kept in the declaration it was made for. */
 export interface CitKlasyfikacja {
-  kategoria: CitKategoria;
+  /** Null = cleared by hand: the row waits for a decision (or the AI) even though a rule or the default would sort it. */
+  kategoria: CitKategoria | null;
   zrodlo: CitZrodloKlasyfikacji;
   /** False only for an AI suggestion nobody has accepted yet. */
   potwierdzona: boolean;
@@ -1977,6 +1985,10 @@ export interface CitSlownikRegula {
   /** Which column the rule applies to — "Zaliczka A" is income, never a cost. */
   strona: CitStrona;
   kategoria: CitKategoria;
+  /** Who put the rule in — absent on the built-in rules. Stamped by the main process on save. */
+  dodal?: string;
+  /** When it was put in (ISO timestamp); absent on the built-in rules. */
+  dodano?: string;
 }
 
 /** The module's settings — one row for the whole office. */
@@ -2000,6 +2012,8 @@ export interface PodatekCitDane {
   nip: string;
   /** Poz. 6 — the tax office the return is addressed to. */
   urzad: string;
+  /** Poz. 6 as e-Deklaracje knows it — the office's four-digit code ("1433"); the XML carries only this. */
+  kodUrzedu: string;
   /** Poz. 7 — 1 złożenie zeznania, 2 korekta zeznania. */
   cel: 1 | 2;
   /** Poz. 8 — only for a correction: 1 art. 81 Ordynacji, 2 art. 81b § 1a. */
@@ -2031,9 +2045,17 @@ export interface PodatekCitDane {
   reprezentant: { imie: string; nazwisko: string; dataWypelnienia: string | null };
   /** Poz. 328 — that person's phone. */
   telefon: string;
-  /** Every PDF made of this return, oldest first. */
+  /** Every file made of this return (PDF and XML, plain or signed), oldest first. */
   pobrania: PodatekPobranie[];
-  /** Ticked as filed with the tax office — a statement of the user, set from the list, never from the form. */
+  /**
+   * Every sending of the signed XML to the e-Deklaracje gateway (test or production), oldest first — with the
+   * gateway's refId, last status and the UPO. Written by the main process only, like `pobrania`.
+   */
+  wysylki: EDeklaracjeWysylka[];
+  /**
+   * Ticked as filed with the tax office — a statement of the user, set from the list, never from the form; also
+   * set by the app when the production gateway issues the UPO.
+   */
   zlozone: PodatekDom | null;
 }
 
@@ -2055,9 +2077,10 @@ export interface PodatekCit {
   updatedBy: string;
 }
 
-/** "Pobierz wszystkie" of one year's CIT-8s — one PDF per community into one folder. */
-export interface PodatkiCitPdfWszystkieResult {
+/** "Pobierz wszystkie" of one year's CIT-8s — the XML and / or PDF of each community into one folder. */
+export interface PodatkiCitPlikiResult {
   folder: string;
+  /** Returns with at least one file written. */
   zapisane: number;
   pominiete: { nazwa: string; powod: string }[];
 }
@@ -2069,6 +2092,11 @@ export interface CitAiPozycja {
   strona: CitStrona;
   sekcja: 'fundusz' | 'eksploatacja';
   kwota: number;
+  /**
+   * The dictionary's current category for the row — set only by the rules'
+   * check, where the model keeps it unless it is clearly wrong.
+   */
+  regula?: CitKategoria;
 }
 
 /** The AI's suggestion for one row. */
@@ -2076,7 +2104,24 @@ export interface CitAiPropozycja {
   klucz: string;
   kategoria: CitKategoria;
   uzasadnienie: string;
+  /**
+   * The model's two independent passes disagreed, or only one answered: a hint
+   * for the accountant, never a category to apply by itself.
+   */
+  niepewne?: boolean;
+  /** The other pass's answer when the two disagreed. */
+  alternatywa?: { kategoria: CitKategoria; uzasadnienie: string };
 }
+
+/** One classification run: the suggestions, and whether the CIT model itself answered them. */
+export interface CitAiWynik {
+  propozycje: CitAiPropozycja[];
+  /** The CIT model was unavailable and the model picked in Settings answered instead. */
+  zapasowy: boolean;
+}
+
+/** A dictionary rule as the AI sees it: the office's own decision, an example to follow. */
+export type CitAiPrzyklad = Pick<CitSlownikRegula, 'fraza' | 'strona' | 'kategoria'>;
 
 /* ======================= Podpis kwalifikowany (karta Szafir) ======================= */
 
@@ -2158,6 +2203,28 @@ export interface PodpisWybor {
  * "Podpisz zaznaczone" — what one PIN signed, and what it did not, for the
  * summary after the run. Every declaration ticked is in exactly one list.
  */
+/** What happened to one document sent to the e-Deklaracje gateway (or held back from it). */
+export interface PodatkiWysylkaWynik {
+  id: number;
+  nazwa: string;
+  srodowisko: EDeklaracjeSrodowisko;
+  /** Null: the gateway did not take it (network, transmission error) or it was not sent at all. */
+  refId: string | null;
+  /** The gateway's status; null when it was never reached or the document was held back. */
+  status: number | null;
+  opis: string;
+}
+
+/** "Sprawdź UPO": the answer for each send asked about, the UPO files saved, and the returns as they now are. */
+export interface PodatkiCitUpoResult {
+  /** `zmiana`: the status differs from the one stored before this check. */
+  wyniki: (PodatkiWysylkaWynik & { upoSciezka: string | null; zmiana: boolean })[];
+  /** Sends that could not be asked about (network) — with the reason. */
+  bledy: { id: number; nazwa: string; powod: string }[];
+  rekordy: PodatekCit[];
+  folder: string;
+}
+
 export interface PodatkiPodpisWieleResult {
   /** Where the signed files are ('' when none got signed). */
   folder: string;
@@ -2170,6 +2237,8 @@ export interface PodatkiPodpisWieleResult {
   przerwano: string | null;
   /** Left unsigned because the run stopped. */
   niepodpisane: { id: number; nazwa: string }[];
+  /** The CIT-8 run asked to send: one entry per signed return, sent or held back. Absent elsewhere. */
+  wysylki?: PodatkiWysylkaWynik[];
 }
 
 /** Progress of "Podpisz zaznaczone", sent before each declaration. */
@@ -2187,16 +2256,17 @@ export interface PodpisSlad {
   numerSeryjny: string;
 }
 
-/* ---------------- Podpis kwalifikowany — signing any PDF ---------------- */
+/* ---------------- Podpis kwalifikowany — signing any PDF or XML ---------------- */
 
-/** What the module saw in a PDF dropped into it, before the card is touched. */
+/** What the module saw in a PDF or XML dropped into it, before the card is touched (`strony` is null for an XML). */
 export interface PodpisPdfAnaliza {
   rozmiar: number;
   strony: number | null;
   /**
    * Why the file cannot be signed — null when it can. Signing means rewriting
    * the file, which would silently void a signature already on it, so a signed
-   * (or encrypted, or unreadable) PDF is held back, never signed "anyway".
+   * (or encrypted, or unreadable) PDF is held back, never signed "anyway"; so is
+   * an XML that is already signed, not UTF-8, or does not parse.
    */
   blokada: string | null;
 }
@@ -2289,7 +2359,9 @@ export interface KalendarzPdfRequest {
   /** The period's meetings that pass the filters on screen. */
   spotkanieIds: number[];
   typId: number | null;
-  stan: 'all' | 'changed' | 'tentative' | 'nodocs' | 'overdue';
+  stan: 'all' | 'overdue' | 'changed' | 'tentative';
+  /** The materials-state filter; `null` when every state is shown. */
+  materialy: SpotkanieMaterialyStatus | null;
   szukaj: string;
 }
 
@@ -2525,6 +2597,12 @@ export interface AppSettings {
    * another computer that does not exist here is ignored, not used.
    */
   podpisBiblioteka: string;
+
+  /**
+   * Which e-Deklaracje gateway signed returns are sent to: 'test' (the default — answers like the real one,
+   * files nothing) or 'prod'. Settings → Administracja; machine-local, so every computer starts on test.
+   */
+  eDeklaracjeSrodowisko: EDeklaracjeSrodowisko;
 }
 
 /**
@@ -2822,6 +2900,7 @@ export const IPC_CHANNELS = {
   SET_SKIP_USER_APPROVAL: 'settings:set-skip-user-approval',
   SET_ALWAYS_USE_AI: 'settings:set-always-use-ai',
   SET_AI_MODEL: 'settings:set-ai-model',
+  SET_E_DEKLARACJE_SRODOWISKO: 'settings:set-e-deklaracje-srodowisko',
   SET_CONTRACTOR_SORT_ORDER: 'settings:set-contractor-sort-order',
   SET_SIDEBAR_COLLAPSED: 'settings:set-sidebar-collapsed',
   SET_SIDEBAR_ORDER: 'settings:set-sidebar-order',
@@ -2982,14 +3061,17 @@ export const IPC_CHANNELS = {
   PODATKI_CIT_DELETE: 'podatki:cit-delete',
   PODATKI_CIT_PRZENIES: 'podatki:cit-przenies',
   PODATKI_CIT_PDF: 'podatki:cit-pdf',
-  PODATKI_CIT_PDF_WSZYSTKIE: 'podatki:cit-pdf-wszystkie',
+  PODATKI_CIT_XML: 'podatki:cit-xml',
+  PODATKI_CIT_PLIKI: 'podatki:cit-pliki',
   PODATKI_CIT_SET_ZLOZONE: 'podatki:cit-set-zlozone',
-  PODATKI_CIT_PODPISZ: 'podatki:cit-podpisz',
   PODATKI_CIT_PODPISZ_WIELE: 'podatki:cit-podpisz-wiele',
   PODATKI_CIT_PODPISZ_PRZERWIJ: 'podatki:cit-podpisz-przerwij',
+  PODATKI_CIT_UPO: 'podatki:cit-upo',
+  PODATKI_CIT_UPO_POBIERZ: 'podatki:cit-upo-pobierz',
   PODATKI_CIT_USTAWIENIA_GET: 'podatki:cit-ustawienia-get',
   PODATKI_CIT_USTAWIENIA_SET: 'podatki:cit-ustawienia-set',
   PODATKI_CIT_KLASYFIKUJ_AI: 'podatki:cit-klasyfikuj-ai',
+  PODATKI_CIT_PRZEGLAD: 'podatki:cit-przeglad',
 
   // Podatki — PIT (PIT-11 and PIT-4R)
   PODATKI_PIT_LISTA: 'podatki:pit-lista',
@@ -3037,7 +3119,6 @@ export const IPC_CHANNELS = {
   DELETE_SPOTKANIE: 'kalendarz:delete-spotkanie',
   ACK_SPOTKANIE_TERMIN: 'kalendarz:ack-termin',
   SET_SPOTKANIE_TERMIN_STATUS: 'kalendarz:set-termin-status',
-  SET_SPOTKANIE_DOKUMENTY: 'kalendarz:set-dokumenty',
   SET_SPOTKANIE_MATERIALY: 'kalendarz:set-materialy',
   SEND_TEST_MATERIALY_NOTIFICATION: 'notifications:send-test-materialy',
   GET_SPOTKANIA_MAILINGI: 'kalendarz:get-mailingi',

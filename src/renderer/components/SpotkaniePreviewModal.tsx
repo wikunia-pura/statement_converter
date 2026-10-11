@@ -3,7 +3,6 @@ import { Spotkanie, SpotkanieMaterialyStatus, SpotkanieTyp } from '../../shared/
 import {
   DEFAULT_TYP_COLOR,
   formatDayLabel,
-  formatStamp,
   formatTimeRange,
   isTerminWstepny,
   normalizeHexColor,
@@ -151,15 +150,6 @@ const SpotkaniePreviewModal: React.FC<Props> = ({
                 <span className={`status-badge ${materialyTone[s.materialyStatus]}`}>
                   {materialyLabels[s.materialyStatus]}
                 </span>
-              </dd>
-              <dt>{t.kalPreviewDocs}</dt>
-              <dd>
-                <span className={`status-badge ${s.dokumentyWyslaneAt ? 'status-success' : 'status-neutral'}`}>
-                  {s.dokumentyWyslaneAt ? t.kalPreviewDocsSent : t.kalPreviewDocsNotSent}
-                </span>
-                {s.dokumentyWyslaneAt && (
-                  <span className="kal-preview__stamp">{formatStamp(s.dokumentyWyslaneAt, locale)}</span>
-                )}
               </dd>
             </dl>
           </FormSection>

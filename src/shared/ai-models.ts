@@ -1,7 +1,8 @@
 /**
- * The Claude models the person can pick in Settings. One choice drives every
- * Claude call in the app: contractor matching during conversion and reading
- * the scanned PDFs in "Podsumowanie zaliczek".
+ * The Claude models the person can pick in Settings. One choice drives the
+ * app's Claude calls: contractor matching during conversion and reading the
+ * scanned PDFs in "Podsumowanie zaliczek". The CIT classification is the
+ * exception — it goes to `CIT_MODEL` (main/podatki/citAi.ts) and falls back here.
  *
  * The two models differ in more than price, and the call sites must not have to
  * know which one is selected — so every per-model difference lives here.

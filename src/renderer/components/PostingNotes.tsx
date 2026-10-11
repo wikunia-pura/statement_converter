@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { KsiegowanieUwaga } from '../../shared/types';
+import React, { useRef, useState } from 'react';
+import { AppUser, KsiegowanieUwaga } from '../../shared/types';
 import { translations, Language } from '../translations';
 import Icon from './Icon';
+import { MentionEditor, MentionEditorHandle } from './MentionEditor';
 import { FormSection } from './FormSection';
 import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
 
@@ -15,57 +16,67 @@ import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
 /* ------------------------------ Text editor ------------------------------ */
 
 /**
- * A textarea with save / cancel, for a note typed in place. Ctrl/⌘+Enter saves
- * and Escape cancels, so a note can be written without leaving the keyboard.
+ * A text box with save / cancel, for a note typed in place. "@" tags a person,
+ * who gets a notification. Ctrl/⌘+Enter saves and Escape cancels, so a note can
+ * be written without leaving the keyboard.
  */
 export const NoteEditor: React.FC<{
   initial?: string;
+  /** Mailboxes the stored note tags — they come back as pills. */
+  initialMentions?: string[];
+  users: AppUser[];
+  /** The signed-in mailbox — never offered as a tag. */
+  userEmail?: string;
   placeholder: string;
   saveLabel: string;
   cancelLabel: string;
+  noMatchLabel: string;
   busy?: boolean;
   /** An empty note is allowed (a priority without a reason); a posting note is not. */
   allowEmpty?: boolean;
-  onSave: (text: string) => void;
+  onSave: (text: string, mentions: string[]) => void;
   onCancel: () => void;
-}> = ({ initial = '', placeholder, saveLabel, cancelLabel, busy, allowEmpty, onSave, onCancel }) => {
-  const [text, setText] = useState(initial);
-  const ref = useRef<HTMLTextAreaElement>(null);
+}> = ({
+  initial = '',
+  initialMentions = [],
+  users,
+  userEmail,
+  placeholder,
+  saveLabel,
+  cancelLabel,
+  noMatchLabel,
+  busy,
+  allowEmpty,
+  onSave,
+  onCancel,
+}) => {
+  const [length, setLength] = useState(initial.trim().length);
+  const editor = useRef<MentionEditorHandle>(null);
 
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.focus();
-    el.setSelectionRange(el.value.length, el.value.length);
-  }, []);
-
-  const canSave = !busy && (allowEmpty || text.trim().length > 0);
+  const canSave = !busy && (allowEmpty || length > 0);
+  const save = () => {
+    if (!canSave || !editor.current) return;
+    const { text, mentions } = editor.current.value();
+    onSave(text, mentions);
+  };
 
   return (
     <div className="ks-note-editor">
-      <textarea
-        ref={ref}
-        value={text}
-        rows={3}
+      <MentionEditor
+        ref={editor}
+        users={users}
+        userEmail={userEmail}
         placeholder={placeholder}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            e.stopPropagation();
-            onCancel();
-          } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && canSave) {
-            e.preventDefault();
-            onSave(text);
-          }
-        }}
+        ariaLabel={placeholder}
+        noMatchLabel={noMatchLabel}
+        initial={{ text: initial, mentions: initialMentions }}
+        autoFocus
+        onLengthChange={setLength}
+        onSubmit={save}
+        onEscape={onCancel}
       />
       <div className="ks-note-editor__actions">
-        <button
-          type="button"
-          className="button button-small button-primary"
-          disabled={!canSave}
-          onClick={() => onSave(text)}
-        >
+        <button type="button" className="button button-small button-primary" disabled={!canSave} onClick={save}>
           {saveLabel}
         </button>
         <button type="button" className="button button-small button-ghost" disabled={busy} onClick={onCancel}>

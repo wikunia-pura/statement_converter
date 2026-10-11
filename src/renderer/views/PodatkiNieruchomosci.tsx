@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { etapStatusu } from '../../shared/e-deklaracje';
 import {
   Adres,
   GruntRodzaj,
@@ -147,6 +148,27 @@ const Licznik: React.FC<{ value: number; label: string; tone: 'success' | 'warni
  * opening — what was skipped and why, and what a stop left unsigned. Those
  * last two can be ticked in the list in one go, to fix and sign again.
  */
+/**
+ * Where a send to e-Deklaracje stands, in words: by the gateway's status — or "taken, being processed" when it
+ * gave a reference number, "not sent" when the document never got to it.
+ */
+export const etapWysylkiText = (t: T, status: number | null, refId: string | null): string => {
+  if (status === null) return refId ? t.citEtap_w_toku : t.citEtap_brak;
+  return t[`citEtap_${etapStatusu(status)}` as const];
+};
+
+export const klasaEtapu = (status: number | null, refId: string | null): string => {
+  if (status === null) return refId ? 'status-pending' : 'status-neutral';
+  switch (etapStatusu(status)) {
+    case 'przyjeta':
+      return 'status-success';
+    case 'w_toku':
+      return 'status-pending';
+    default:
+      return 'status-error';
+  }
+};
+
 export const PodsumowaniePodpisow: React.FC<{
   t: T;
   rok: number;
@@ -157,7 +179,7 @@ export const PodsumowaniePodpisow: React.FC<{
   onClose: () => void;
 }> = ({ t, rok, wynik, subtitle, onZaznacz, onClose }) => {
   const notify = useNotify();
-  const { folder, podpis, podpisane, pominiete, niepodpisane, przerwano } = wynik;
+  const { folder, podpis, podpisane, pominiete, niepodpisane, przerwano, wysylki } = wynik;
   const reszta = [...pominiete, ...niepodpisane].map((x) => x.id);
   const wszystko = podpisane.length > 0 && reszta.length === 0 && !przerwano;
   const otworz = async (sciezka: string) => {
@@ -181,7 +203,8 @@ export const PodsumowaniePodpisow: React.FC<{
         />
         <div className="modal-body modal-body--sectioned">
           <div className="podpis-sum__stats">
-            <Licznik value={podpisane.length} label={t.podSumSigned} tone="success" />
+            {/* Declarations, not files: a CIT-8 leaves its XML and its PDF. */}
+            <Licznik value={new Set(podpisane.map((p) => p.id)).size} label={t.podSumSigned} tone="success" />
             <Licznik value={pominiete.length} label={t.podSumSkipped} tone="warning" />
             <Licznik value={niepodpisane.length} label={t.podSumUnsigned} tone="danger" />
           </div>
@@ -213,7 +236,8 @@ export const PodsumowaniePodpisow: React.FC<{
               {folder && <div className="podpis-sum__folder">{t.podSumFolder.replace('{folder}', folder)}</div>}
               <ul className="podpis-sum__list">
                 {podpisane.map((p) => (
-                  <li key={p.id}>
+                  // One declaration may leave several files (the CIT-8's XML and PDF) — keyed by file.
+                  <li key={`${p.id}:${p.sciezka}`}>
                     <span className="podpis-sum__name">{p.nazwa}</span>
                     <button type="button" className="podpis-sum__file" onClick={() => void otworz(p.sciezka)}>
                       <Icon name="file-text" size={13} /> {baseName(p.sciezka)}
@@ -235,6 +259,27 @@ export const PodsumowaniePodpisow: React.FC<{
                   <li key={p.id}>
                     <span className="podpis-sum__name">{p.nazwa}</span>
                     <span className="podpis-sum__reason">{p.powod}</span>
+                  </li>
+                ))}
+              </ul>
+            </FormSection>
+          )}
+
+          {wysylki && wysylki.length > 0 && (
+            <FormSection
+              icon="mail"
+              title={t.podSumSentTitle
+                .replace('{env}', wysylki[0].srodowisko === 'prod' ? t.citEnvProd : t.citEnvTest)
+                .replace('{n}', String(wysylki.length))}
+              description={t.podSumSentDesc}
+            >
+              <ul className="podpis-sum__list">
+                {wysylki.map((w) => (
+                  <li key={w.id}>
+                    <span className="podpis-sum__name">{w.nazwa}</span>
+                    <span className={`status-badge ${klasaEtapu(w.status, w.refId)}`}>{etapWysylkiText(t, w.status, w.refId)}</span>
+                    {w.refId && <span className="podpis-sum__reason">{t.citSendRef.replace('{ref}', w.refId)}</span>}
+                    {w.opis && <span className="podpis-sum__reason">{w.opis}</span>}
                   </li>
                 ))}
               </ul>
@@ -716,11 +761,15 @@ const DeklaracjaScreen: React.FC<{
   const removeGrunt = (i: number) => setDane((d) => ({ ...d, grunty: d.grunty.filter((_, j) => j !== i) }));
 
   const back = async () => {
-    if (
-      dirty &&
-      !(await notify.confirm(t.podUnsavedConfirm, { danger: true, confirmLabel: t.podUnsavedDiscard }))
-    ) {
-      return;
+    if (dirty) {
+      const canSave = !!rekord || canAdd;
+      const choice = await notify.unsaved(canSave ? t.podUnsavedConfirm : t.podUnsavedNoSave, {
+        saveLabel: t.podUnsavedSave,
+        discardLabel: t.podUnsavedDiscard,
+        keepLabel: t.podUnsavedKeep,
+        canSave,
+      });
+      if (choice === 'keep' || (choice === 'save' && !(await save()))) return;
     }
     onBack();
   };
@@ -736,8 +785,10 @@ const DeklaracjaScreen: React.FC<{
       setBaseline(snapshot(saved.nip, saved.dane));
       notify.success(t.podSaved);
       onSaved(saved);
+      return true;
     } catch (err: unknown) {
       notify.error(err instanceof Error ? err.message : String(err), t.podSaveError);
+      return false;
     } finally {
       setBusy(null);
     }

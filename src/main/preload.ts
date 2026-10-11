@@ -59,6 +59,7 @@ const IPC_CHANNELS = {
   SET_SKIP_USER_APPROVAL: 'settings:set-skip-user-approval',
   SET_ALWAYS_USE_AI: 'settings:set-always-use-ai',
   SET_AI_MODEL: 'settings:set-ai-model',
+  SET_E_DEKLARACJE_SRODOWISKO: 'settings:set-e-deklaracje-srodowisko',
   SET_CONTRACTOR_SORT_ORDER: 'settings:set-contractor-sort-order',
   SET_SIDEBAR_COLLAPSED: 'settings:set-sidebar-collapsed',
   SET_SIDEBAR_ORDER: 'settings:set-sidebar-order',
@@ -191,14 +192,17 @@ const IPC_CHANNELS = {
   PODATKI_CIT_DELETE: 'podatki:cit-delete',
   PODATKI_CIT_PRZENIES: 'podatki:cit-przenies',
   PODATKI_CIT_PDF: 'podatki:cit-pdf',
-  PODATKI_CIT_PDF_WSZYSTKIE: 'podatki:cit-pdf-wszystkie',
+  PODATKI_CIT_XML: 'podatki:cit-xml',
+  PODATKI_CIT_PLIKI: 'podatki:cit-pliki',
   PODATKI_CIT_SET_ZLOZONE: 'podatki:cit-set-zlozone',
-  PODATKI_CIT_PODPISZ: 'podatki:cit-podpisz',
   PODATKI_CIT_PODPISZ_WIELE: 'podatki:cit-podpisz-wiele',
   PODATKI_CIT_PODPISZ_PRZERWIJ: 'podatki:cit-podpisz-przerwij',
+  PODATKI_CIT_UPO: 'podatki:cit-upo',
+  PODATKI_CIT_UPO_POBIERZ: 'podatki:cit-upo-pobierz',
   PODATKI_CIT_USTAWIENIA_GET: 'podatki:cit-ustawienia-get',
   PODATKI_CIT_USTAWIENIA_SET: 'podatki:cit-ustawienia-set',
   PODATKI_CIT_KLASYFIKUJ_AI: 'podatki:cit-klasyfikuj-ai',
+  PODATKI_CIT_PRZEGLAD: 'podatki:cit-przeglad',
   PODATKI_PIT_LISTA: 'podatki:pit-lista',
   PODATKI_PIT_ADD: 'podatki:pit-add',
   PODATKI_PIT_SET: 'podatki:pit-set',
@@ -246,7 +250,6 @@ const IPC_CHANNELS = {
   DELETE_SPOTKANIE: 'kalendarz:delete-spotkanie',
   ACK_SPOTKANIE_TERMIN: 'kalendarz:ack-termin',
   SET_SPOTKANIE_TERMIN_STATUS: 'kalendarz:set-termin-status',
-  SET_SPOTKANIE_DOKUMENTY: 'kalendarz:set-dokumenty',
   SET_SPOTKANIE_MATERIALY: 'kalendarz:set-materialy',
   SEND_TEST_MATERIALY_NOTIFICATION: 'notifications:send-test-materialy',
   GET_SPOTKANIA_MAILINGI: 'kalendarz:get-mailingi',
@@ -424,6 +427,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.SET_ALWAYS_USE_AI, enabled),
   setAiModel: (model: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_AI_MODEL, model),
+  setEDeklaracjeSrodowisko: (srodowisko: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_E_DEKLARACJE_SRODOWISKO, srodowisko),
   setContractorSortOrder: (sortOrder: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_CONTRACTOR_SORT_ORDER, sortOrder),
   setSidebarCollapsed: (collapsed: boolean) =>
@@ -691,14 +696,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   przeniesCitNaRok: (zRoku: number, naRok: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_PRZENIES, zRoku, naRok),
   exportPodatekCitPdf: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_PDF, id),
-  exportPodatkiCitPdfWszystkie: (rok: number, ids?: number[]) =>
-    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_PDF_WSZYSTKIE, rok, ids),
+  exportPodatekCitXml: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_XML, id),
+  zapiszPodatkiCitPliki: (rok: number, ids: number[] | undefined, tryb: 'xml' | 'pdf' | 'oba') =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_PLIKI, rok, ids, tryb),
   setPodatkiCitZlozone: (ids: number[], filed: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_SET_ZLOZONE, ids, filed),
-  podpiszPodatekCitPdf: (id: number, wybor: unknown) =>
-    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_PODPISZ, id, wybor),
-  podpiszPodatkiCitPdf: (rok: number, ids: number[], wybor: unknown) =>
-    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_PODPISZ_WIELE, rok, ids, wybor),
+  podpiszPodatkiCit: (rok: number, ids: number[], wybor: unknown, opcje: { pdfPodpisany: boolean; wyslij: boolean }) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_PODPISZ_WIELE, rok, ids, wybor, opcje),
+  sprawdzUpoCit: (rok: number, ids?: number[]) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_UPO, rok, ids),
+  pobierzUpoCit: (id: number, refId: string) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_UPO_POBIERZ, id, refId),
+  onCitUpo: (callback: (wynik: any) => void) => {
+    const listener = (_event: unknown, wynik: any) => callback(wynik);
+    ipcRenderer.on('podatki:cit-upo-zmiana', listener);
+    return () => ipcRenderer.off('podatki:cit-upo-zmiana', listener);
+  },
   przerwijPodpisCit: () => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_PODPISZ_PRZERWIJ),
   onPodatkiCitPodpisPostep: (callback: (postep: any) => void) => {
     const listener = (_event: unknown, postep: any) => callback(postep);
@@ -708,7 +719,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getPodatkiCitUstawienia: () => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_USTAWIENIA_GET),
   setPodatkiCitUstawienia: (ustawienia: unknown) =>
     ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_USTAWIENIA_SET, ustawienia),
-  klasyfikujCitAi: (pozycje: unknown) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_KLASYFIKUJ_AI, pozycje),
+  klasyfikujCitAi: (pozycje: unknown, przyklady?: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_KLASYFIKUJ_AI, pozycje, przyklady),
+  przegladPozycjiCit: () => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_PRZEGLAD),
 
   // Podatki — PIT (PIT-11, PIT-4R)
   getPodatkiPit: () => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_PIT_LISTA),
@@ -802,8 +815,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.ACK_SPOTKANIE_TERMIN, id),
   setSpotkanieTerminStatus: (id: number, status: 'potwierdzony' | 'wstepny') =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_SPOTKANIE_TERMIN_STATUS, id, status),
-  setSpotkanieDokumenty: (id: number, sent: boolean, opis: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SET_SPOTKANIE_DOKUMENTY, id, sent, opis),
   setSpotkanieMaterialy: (id: number, status: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_SPOTKANIE_MATERIALY, id, status),
   getSpotkaniaMailingi: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SPOTKANIA_MAILINGI),
@@ -870,16 +881,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.SET_KS_PRZYPISANIE, monthKey, adresId, adresNazwa, email),
   addKsiegowaniePriorytet: (monthKey: string, adresId: number | null, adresNazwa: string, notatka: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.ADD_KS_PRIORYTET, monthKey, adresId, adresNazwa, notatka),
-  setKsiegowaniePriorytetNotatka: (id: number, notatka: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SET_KS_PRIORYTET_NOTATKA, id, notatka),
+  setKsiegowaniePriorytetNotatka: (id: number, notatka: string, mentions: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_KS_PRIORYTET_NOTATKA, id, notatka, mentions),
   removeKsiegowaniePriorytet: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.REMOVE_KS_PRIORYTET, id),
   reorderKsiegowaniaPriorytety: (monthKey: string, orderedIds: number[]) =>
     ipcRenderer.invoke(IPC_CHANNELS.REORDER_KS_PRIORYTETY, monthKey, orderedIds),
   getKsiegowaniaUwagi: () => ipcRenderer.invoke(IPC_CHANNELS.GET_KS_UWAGI),
-  addKsiegowanieUwaga: (adresId: number | null, adresNazwa: string, tresc: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.ADD_KS_UWAGA, adresId, adresNazwa, tresc),
-  updateKsiegowanieUwaga: (id: number, tresc: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_KS_UWAGA, id, tresc),
+  addKsiegowanieUwaga: (adresId: number | null, adresNazwa: string, tresc: string, mentions: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ADD_KS_UWAGA, adresId, adresNazwa, tresc, mentions),
+  updateKsiegowanieUwaga: (id: number, tresc: string, mentions: string[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_KS_UWAGA, id, tresc, mentions),
   setKsiegowanieUwagaResolved: (id: number, resolved: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_KS_UWAGA_RESOLVED, id, resolved),
   deleteKsiegowanieUwaga: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_KS_UWAGA, id),

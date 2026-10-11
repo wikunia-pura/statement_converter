@@ -46,6 +46,15 @@ function szablonMa(zrodlo: ZrodloSzablonu, czesc: Czesc): boolean {
   return zrodlo.plan != null;
 }
 
+/**
+ * Whether the part can be put onto meetings. The notice and the resolutions
+ * always can: a template without them makes the meetings match it — theirs are
+ * removed. A plan cannot: a template without one has no assumptions to give.
+ */
+function czescDostepna(zrodlo: ZrodloSzablonu, czesc: Czesc): boolean {
+  return czesc !== 'plan' || szablonMa(zrodlo, czesc);
+}
+
 function czescLabel(t: T, czesc: Czesc): string {
   if (czesc === 'zawiadomienie') return t.zebSzablonPartNotice;
   if (czesc === 'uchwaly') return t.zebSzablonPartResolutions;
@@ -221,9 +230,9 @@ export const ZebraniaSzablonModal: React.FC<{
   const notify = useNotify();
 
   const [czesci, setCzesci] = useState<Record<Czesc, boolean>>(() => ({
-    zawiadomienie: szablonMa(zrodlo, 'zawiadomienie'),
-    uchwaly: szablonMa(zrodlo, 'uchwaly'),
-    plan: szablonMa(zrodlo, 'plan'),
+    zawiadomienie: czescDostepna(zrodlo, 'zawiadomienie'),
+    uchwaly: czescDostepna(zrodlo, 'uchwaly'),
+    plan: czescDostepna(zrodlo, 'plan'),
   }));
   const aktywne = CZESCI.filter((c) => czesci[c]);
 
@@ -244,7 +253,7 @@ export const ZebraniaSzablonModal: React.FC<{
 
   // Start with the empty ones ticked: filling them overwrites nothing.
   const [wybrane, setWybrane] = useState<Set<number>>(
-    () => new Set(cele.filter((r) => !CZESCI.some((c) => szablonMa(zrodlo, c) && maCzesc(r.wersja, c))).map((r) => r.zebranie.id)),
+    () => new Set(cele.filter((r) => !CZESCI.some((c) => czescDostepna(zrodlo, c) && maCzesc(r.wersja, c))).map((r) => r.zebranie.id)),
   );
   const [widok, setWidok] = useState<Widok>('wszystkie');
   const [saving, setSaving] = useState(false);
@@ -283,14 +292,15 @@ export const ZebraniaSzablonModal: React.FC<{
       try {
         let materialy = wersja.materialy;
         const zmienione: ZebranieDokumentKlucz[] = [];
-        if (czesci.zawiadomienie && tplZaw) {
+        // A part the template lacks is removed: the meeting ends up as the template is.
+        if (czesci.zawiadomienie && (tplZaw || zawiadomienieOf(wersja))) {
           materialy = [
-            ...materialyZeSzablonu([tplZaw], userEmail),
+            ...(tplZaw ? materialyZeSzablonu([tplZaw], userEmail) : []),
             ...materialy.filter((m) => m.rodzaj !== 'zawiadomienie'),
           ];
           zmienione.push('zawiadomienie');
         }
-        if (czesci.uchwaly && tplUchwaly.length > 0) {
+        if (czesci.uchwaly && (tplUchwaly.length > 0 || uchwalyOf(wersja).length > 0)) {
           materialy = withUchwaly(materialy, materialyZeSzablonu(tplUchwaly, userEmail));
           zmienione.push('uchwaly');
         }
@@ -367,7 +377,8 @@ export const ZebraniaSzablonModal: React.FC<{
           <div className="zeb-szb-parts" role="group" aria-label={t.zebSzablonParts}>
             <span className="zeb-szb-parts__label">{t.zebSzablonParts}</span>
             {CZESCI.map((c) => {
-              const dostepna = szablonMa(zrodlo, c);
+              const dostepna = czescDostepna(zrodlo, c);
+              const usuwa = dostepna && !szablonMa(zrodlo, c);
               return (
                 <label key={c} className={`zeb-szb-part${dostepna ? '' : ' is-off'}`}>
                   <input
@@ -378,6 +389,7 @@ export const ZebraniaSzablonModal: React.FC<{
                   />
                   {czescLabel(t, c)}
                   {!dostepna && <span className="zeb-muted"> — {t.zebSzablonPartMissing}</span>}
+                  {usuwa && <span className="zeb-muted"> — {t.zebSzablonPartClears}</span>}
                 </label>
               );
             })}

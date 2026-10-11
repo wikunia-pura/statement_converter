@@ -1,0 +1,758 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:czbr="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2024/02/05/eD/CITBR/" xmlns:etd="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/09/13/eD/DefinicjeTypy/" xmlns:kk="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2023/09/06/eD/KodyKrajow/" targetNamespace="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2024/02/05/eD/CITBR/" elementFormDefault="qualified" attributeFormDefault="unqualified" xml:lang="pl">
+	<xsd:import namespace="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2023/09/06/eD/KodyKrajow/" schemaLocation="../../../../../2023/09/06/eD/KodyKrajow/KodyKrajow_v13-0E.xsd"/>
+	<xsd:import namespace="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/09/13/eD/DefinicjeTypy/" schemaLocation="../../../../../2022/09/13/eD/DefinicjeTypy/StrukturyDanych_v12-0E.xsd"/>
+	<!--Załącznik do zeznań: CIT-8 i CIT-8AB.-->
+	<!-- -->
+	<!--Wypełniają podatnicy korzystający z odliczenia od podstawy opodatkowania kosztów uzyskania przychodów poniesionych na działalność badawczo-rozwojową, zwanych dalej „kosztami kwalifikowanymi”, na zasadach określonych w art. 18d ustawy oraz podatnicy, którym przysługuje kwota do zwrotu na podstawie art. 18da ustawy.-->
+	<xsd:complexType name="TNaglowek_CIT_BR">
+		<xsd:annotation>
+			<xsd:documentation>Nagłówek deklaracji</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="KodFormularza">
+				<xsd:complexType>
+					<xsd:simpleContent>
+						<xsd:extension base="czbr:TKodFormularza_CIT_BR">
+							<xsd:attribute name="kodSystemowy" type="xsd:string" use="required" fixed="CIT/BR (10)"/>
+							<xsd:attribute name="wersjaSchemy" type="xsd:string" use="required" fixed="2-0E"/>
+						</xsd:extension>
+					</xsd:simpleContent>
+				</xsd:complexType>
+			</xsd:element>
+			<xsd:element name="WariantFormularza" type="xsd:byte" fixed="10"/>
+			<xsd:element name="OkresOd">
+				<xsd:complexType>
+					<xsd:simpleContent>
+						<xsd:extension base="czbr:TLData">
+							<xsd:attribute name="poz" type="xsd:string" use="required" fixed="P_4"/>
+						</xsd:extension>
+					</xsd:simpleContent>
+				</xsd:complexType>
+			</xsd:element>
+			<xsd:element name="OkresDo">
+				<xsd:complexType>
+					<xsd:simpleContent>
+						<xsd:extension base="czbr:TLData">
+							<xsd:attribute name="poz" type="xsd:string" use="required" fixed="P_5"/>
+						</xsd:extension>
+					</xsd:simpleContent>
+				</xsd:complexType>
+			</xsd:element>
+		</xsd:sequence>
+	</xsd:complexType>
+	<xsd:simpleType name="TLData1">
+		<xsd:annotation>
+			<xsd:documentation>Ograniczenie dla dat dot. kosztów kwalifikowanych nieodliczonych w poprzednich latach</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="etd:TData">
+			<xsd:minInclusive value="2017-01-01"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<xsd:simpleType name="TLData">
+		<xsd:annotation>
+			<xsd:documentation>Ograniczenie dla daty</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="etd:TData">
+			<xsd:minInclusive value="2022-01-01"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<xsd:simpleType name="TKwotaKosztow">
+		<xsd:annotation>
+			<xsd:documentation>Typ kwotowy dot. kosztów kwalifikowanych nieodliczonych w poprzednich latach</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="etd:TKwota2Nieujemna">
+			<xsd:minExclusive value="0"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<xsd:simpleType name="TKodFormularza_CIT_BR">
+		<xsd:annotation>
+			<xsd:documentation>Symbol wzoru formularza</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string">
+			<xsd:enumeration value="CIT/BR"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<xsd:element name="Zalacznik_CIT_BR">
+		<xsd:annotation>
+			<xsd:documentation>INFORMACJA O ODLICZENIACH OD PODSTAWY OPODATKOWANIA KOSZTÓW UZYSKANIA PRZYCHODÓW PONIESIONYCH NA DZIAŁALNOŚĆ BADAWCZO-ROZWOJOWĄ</xsd:documentation>
+		</xsd:annotation>
+		<xsd:complexType>
+			<xsd:sequence>
+				<xsd:element name="Naglowek" type="czbr:TNaglowek_CIT_BR"/>
+				<xsd:element name="PozycjeSzczegolowe">
+					<xsd:annotation>
+						<xsd:documentation>Odliczenie od podstawy opodatkowania kosztów kwalifikowanych oraz obliczenie kwoty przysługującej podatnikowi, o której mowa w art. 18da ustawy, rodzaje działalności badawczo-rozwojowej, w ramach których są ponoszone koszty kwalifikowane, dane jednostki naukowej</xsd:documentation>
+					</xsd:annotation>
+					<xsd:complexType>
+						<xsd:sequence>
+							<xsd:sequence>
+								<xsd:element name="P_8" type="etd:TWybor1_2">
+									<xsd:annotation>
+										<xsd:documentation>Podatnik posiadał w roku podatkowym status centrum badawczo-rozwojowego w rozumieniu art. 17 ustawy z dnia 30 maja 2008 r. o niektórych
+formach wspierania działalności innowacyjnej (Dz. U. z 2022 r. poz. 2474, z poźn. zm.). Wybór: 1 - tak, 2 - nie</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:sequence minOccurs="0">
+									<xsd:element name="P_9" type="czbr:TLData">
+										<xsd:annotation>
+											<xsd:documentation>Podatnik w roku podatkowym posiadał status centrum badawczo-rozwojowego w okresie - Od</xsd:documentation>
+										</xsd:annotation>
+									</xsd:element>
+									<xsd:element name="P_10" type="czbr:TLData">
+										<xsd:annotation>
+											<xsd:documentation>Podatnik w roku podatkowym posiadał status centrum badawczo-rozwojowego w okresie - Do</xsd:documentation>
+										</xsd:annotation>
+									</xsd:element>
+								</xsd:sequence>
+								<xsd:element name="P_11" type="etd:TWybor1_2" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Podatnik był w roku podatkowym mikroprzedsiębiorcą, małym lub średnim przedsiębiorcą w rozumieniu odrębnych przepisów. Wybór: 1 - tak, 2 - nie</xsd:documentation>
+									</xsd:annotation>
+									<!--(wypełniają podatnicy, którzy zaznaczyli kwadrat nr 1 w poz. 8)-->
+								</xsd:element>
+							</xsd:sequence>
+							<!--B. ODLICZENIE OD PODSTAWY OPODATKOWANIA KOSZTÓW KWALIFIKOWANYCH ORAZ OBLICZENIE KWOTY PRZYSŁUGUJĄCEJ PODATNIKOWI, O KTÓREJ MOWA W ART. 18DA USTAWY-->
+							<!-- -->
+							<!--B.1. KOSZTY KWALIFIKOWANE, O KTÓRYCH MOWA W ART. 18D UST. 2-3 USTAW-->
+							<!-- -->
+							<!--W przypadku gdy uzyskanie lub utrata statusu centrum badawczo-rozwojowego nastąpiła w ciągu roku podatkowego, którego dotyczy zeznanie, należy wykazać koszty kwalifikowane podlegające odliczeniu w podziale na koszty poniesione w okresie posiadania statusu centrum badawczo-rozwojowego oraz w pozostałym okresie.-->
+							<xsd:sequence minOccurs="0">
+								<xsd:annotation>
+									<xsd:documentation>Koszty kwalifikowane, o których mowa w art. 18d ust. 2-3 ustawy</xsd:documentation>
+								</xsd:annotation>
+								<xsd:element name="P_12" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Koszty kwalifikowane dotyczące należności i składek, o których mowa w art. 18d ust. 2 pkt 1 i 1a ustawy. Koszty kwalifikowane przypadające na podatnika nieposiadającego statusu centrum badawczo-rozwojowego</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_13" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Koszty kwalifikowane dotyczące należności i składek, o których mowa w art. 18d ust. 2 pkt 1 i 1a ustawy. Koszty kwalifikowane przypadające na podatnika posiadającego status centrum badawczo-rozwojowego</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_14" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Koszty kwalifikowane dotyczące nabycia materiałów i surowców, o których mowa w art. 18d ust. 2 pkt 2 ustawy. Koszty kwalifikowane przypadające na podatnika nieposiadającego statusu centrum badawczo-rozwojowego</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_15" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Koszty kwalifikowane dotyczące nabycia materiałów i surowców, o których mowa w art. 18d ust. 2 pkt 2 ustawy. Koszty kwalifikowane przypadające na podatnika posiadającego status centrum badawczo-rozwojowego</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_16" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Koszty kwalifikowane dotyczące nabycia niebędącego środkami trwałymi sprzętu specjalistycznego, o którym mowa w art. 18d ust. 2 pkt 2a ustawy. Koszty kwalifikowane przypadające na podatnika nieposiadającego statusu centrum badawczo-rozwojowego</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_17" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Koszty kwalifikowane dotyczące nabycia niebędącego środkami trwałymi sprzętu specjalistycznego, o którym mowa w art. 18d ust. 2 pkt 2a ustawy. Koszty kwalifikowane przypadające na podatnika posiadającego status centrum badawczo-rozwojowego</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_18" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Koszty kwalifikowane dotyczące m.in. ekspertyz, opinii, usług doradczych, o których mowa w art. 18d ust. 2 pkt 3 ustawy. Koszty kwalifikowane przypadające na podatnika nieposiadającego statusu centrum badawczo-rozwojowego</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_19" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Koszty kwalifikowane dotyczące m.in. ekspertyz, opinii, usług doradczych, o których mowa w art. 18d ust. 2 pkt 3 ustawy. Koszty kwalifikowane przypadające na podatnika posiadającego status centrum badawczo-rozwojowego</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_20" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Koszty kwalifikowane dotyczące odpłatnego korzystania z aparatury naukowo-badawczej, o których mowa w art. 18d ust. 2 pkt 4 ustawy. Koszty kwalifikowane przypadające na podatnika nieposiadającego statusu centrum badawczo-rozwojowego</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_21" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Koszty kwalifikowane dotyczące odpłatnego korzystania z aparatury naukowo-badawczej, o których mowa w art. 18d ust. 2 pkt 4 ustawy. Koszty kwalifikowane przypadające na podatnika posiadającego status centrum badawczo-rozwojowego</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_22" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Koszty kwalifikowane dotyczące nabycia usługi wykorzystania aparatury naukowo- -badawczej, o których mowa w art. 18d ust. 2 pkt 4a ustawy. Koszty kwalifikowane przypadające na podatnika nieposiadającego statusu centrum badawczo-rozwojowego</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_23" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Koszty kwalifikowane dotyczące nabycia usługi wykorzystania aparatury naukowo-badawczej, o których mowa w art. 18d ust. 2 pkt 4a ustawy. Koszty kwalifikowane przypadające na podatnika posiadającego status centrum badawczo-rozwojowego</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_24" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Koszty kwalifikowane dotyczące uzyskania i utrzymania patentu, prawa ochronnego na wzór użytkowy, prawa z rejestracji wzoru przemysłowego, o których mowa w art. 18d ust. 2 pkt 5 ustawy. Koszty kwalifikowane przypadające na podatnika nieposiadającego statusu centrum badawczo-rozwojowego</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_25" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Koszty kwalifikowane dotyczące uzyskania i utrzymania patentu, prawa ochronnego na wzór użytkowy, prawa z rejestracji wzoru przemysłowego, o których mowa w art. 18d ust. 2 pkt 5 ustawy. Koszty kwalifikowane przypadające na podatnika posiadającego status centrum badawczo-rozwojowego</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_26" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Koszty kwalifikowane dotyczące odpisów amortyzacyjnych od kosztów prac rozwojowych, o których mowa w art. 18d ust. 2a ustawy. Koszty kwalifikowane przypadające na podatnika nieposiadającego statusu centrum badawczo-rozwojowego</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_27" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Koszty kwalifikowane dotyczące odpisów amortyzacyjnych od kosztów prac rozwojowych, o których mowa w art. 18d ust. 2a ustawy. Koszty kwalifikowane przypadające na podatnika posiadającego status centrum badawczo-rozwojowego</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_28" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Koszty kwalifikowane dotyczące odpisów amortyzacyjnych, o których mowa w art. 18d ust. 3 ustawy. Koszty kwalifikowane przypadające na podatnika nieposiadającego statusu centrum badawczo-rozwojowego</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_29" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Koszty kwalifikowane dotyczące odpisów amortyzacyjnych, o których mowa w art. 18d ust. 3 ustawy. Koszty kwalifikowane przypadające na podatnika posiadającego status centrum badawczo-rozwojowego</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_30" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Razem koszty kwalifikowane. Koszty kwalifikowane przypadające na podatnika nieposiadającego statusu centrum badawczo-rozwojowego</xsd:documentation>
+									</xsd:annotation>
+									<!--W poz. 30 należy wpisać sumę kwot z poz. 12, 14, 16, 18, 20, 22, 24, 26 i 28.-->
+								</xsd:element>
+								<xsd:element name="P_31" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Razem koszty kwalifikowane. Koszty kwalifikowane przypadające na podatnika posiadającego status centrum badawczo-rozwojowego</xsd:documentation>
+									</xsd:annotation>
+									<!--W poz. 31 należy wpisać sumę kwot z poz. 13, 15, 17, 19, 21, 23, 25, 27 i 29.-->
+								</xsd:element>
+							</xsd:sequence>
+							<!--B.2. DODATKOWE ODLICZENIA PRZYSŁUGUJĄCE PODATNIKOWI POSIADAJĄCEMU STATUS CENTRUM BADAWCZO-ROZWOJOWEGO, O KTÓRYM MOWA W ART. 18D UST. 3A USTAWY, LUB PODATNIKOWI, KTÓRY JEST WSPÓLNIKIEM SPÓŁKI NIEBĘDĄCEJ OSOBĄ PRAWNĄ, POSIADAJĄCEJ STATUS CENTRUM BADAWCZO-ROZWOJOWEGO-->
+							<!-- -->
+							<!--wypełniają podatnicy, którzy zaznaczyli kwadrat nr 1 w poz. 8 lub wypełnili część D-->
+							<xsd:sequence minOccurs="0">
+								<xsd:annotation>
+									<xsd:documentation>Dodatkowe odliczenia przysługujące podatnikowi posiadającemu status centrum badawczo-rozwojowego, o którym mowa w art. 18d ust. 3a ustawy, lub podatnikowi, który jest wspólnikiem spółki niebędącej osobą prawną, posiadającej status centrum badawczo-rozwojowego</xsd:documentation>
+								</xsd:annotation>
+								<xsd:element name="P_32" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Dodatkowe odliczenia na podstawie art. 18d ust. 7 pkt 1 ustawy</xsd:documentation>
+									</xsd:annotation>
+									<!--Kwota odliczenia nie może przekroczyć 100% kwoty wykazanej w poz. 31.-->
+								</xsd:element>
+								<xsd:element name="P_33" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Dodatkowe odliczenia na podstawie art. 18d ust. 7 pkt 2 ustawy</xsd:documentation>
+									</xsd:annotation>
+									<!--Kwota odliczenia nie może przekroczyć 100% sumy kosztów z poz. 13, 15, 17, 19, 21, 23, 27 i 29.-->
+								</xsd:element>
+								<xsd:element name="P_34" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Dodatkowe koszty kwalifikowane w zakresie odpisów amortyzacyjnych od budowli, budynków i lokali na podstawie art. 18d ust. 3a pkt 1 ustawy</xsd:documentation>
+									</xsd:annotation>
+									<!--Kwota odliczenia nie może przekroczyć 200% poniesionych kosztów, o których mowa w art. 18d ust. 3a pkt 1 ustawy.-->
+									<!-- -->
+									<!--Wysokość dodatkowych kosztów kwalifikowanych, o których mowa w art. 18d ust. 3a ustawy, przysługujących podatnikowi posiadającemu status centrum badawczo-rozwojowego, nie może przekroczyć 10% przychodów (osiągniętych w roku podatkowym).-->
+								</xsd:element>
+								<xsd:element name="P_35" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Dodatkowe koszty kwalifikowane dot. m.in. ekspertyz, opinii, usług doradczych i usług równorzędnych, badań wykonywanych na podstawie umowy, wiedzy technicznej i patentów lub licencji na chroniony wynalazek, uzyskanych od podmiotów innych niż jednostki naukowe na podstawie art. 18d ust. 3a pkt 2 ustawy</xsd:documentation>
+									</xsd:annotation>
+									<!--Kwota odliczenia nie może przekroczyć 200% poniesionych kosztów, o których mowa w art. 18d ust. 3a pkt 2 ustawy.-->
+									<!-- -->
+									<!--Wysokość dodatkowych kosztów kwalifikowanych, o których mowa w art. 18d ust. 3a ustawy, przysługujących podatnikowi posiadającemu status centrum badawczo-rozwojowego, nie może przekroczyć 10% przychodów (osiągniętych w roku podatkowym).-->
+								</xsd:element>
+								<xsd:element name="P_36" type="etd:TKwota2Nieujemna">
+									<xsd:annotation>
+										<xsd:documentation>Razem dodatkowe odliczenia</xsd:documentation>
+									</xsd:annotation>
+									<!--Suma kwot z poz. 32-35.-->
+								</xsd:element>
+							</xsd:sequence>
+							<!--B.3. ŁĄCZNE ODLICZENIA, NA PODSTAWIE ART. 18D UST. 7 USTAWY-->
+							<xsd:sequence>
+								<xsd:sequence>
+									<xsd:element name="P_37" type="etd:TKwota2Nieujemna" minOccurs="0">
+										<xsd:annotation>
+											<xsd:documentation>Łączne odliczenia na podstawie art. 18d ust. 7 pkt 3 ustawy</xsd:documentation>
+										</xsd:annotation>
+										<!--Kwota z poz. 30.-->
+									</xsd:element>
+									<xsd:element name="P_38" type="etd:TKwota2Nieujemna" minOccurs="0">
+										<xsd:annotation>
+											<xsd:documentation>Łączne odliczenia na podstawie art. 18d ust. 7 pkt 1 i 2 ustawy</xsd:documentation>
+										</xsd:annotation>
+										<!--Suma kwot z poz. 31 i 36.-->
+									</xsd:element>
+									<xsd:sequence minOccurs="0">
+										<!--Odliczenie przysługuje w kolejnych następujących po sobie sześciu latach podatkowych, następujących bezpośrednio po roku, w którym podatnik poniósł koszty kwalifikowane które nie zostały odliczone w poprzednich latach podatkowych.-->
+										<xsd:element name="P_39" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 12-29) - Data Od</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_40" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 12-29) - Data Do</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_41" type="czbr:TKwotaKosztow">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 12-29) - Kwota</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+									</xsd:sequence>
+									<xsd:sequence minOccurs="0">
+										<!--Odliczenie przysługuje w kolejnych następujących po sobie sześciu latach podatkowych, następujących bezpośrednio po roku, w którym podatnik poniósł koszty kwalifikowane i skorzystał lub miał prawo skorzystać z odliczenia.-->
+										<xsd:element name="P_42" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 12-29) - Data Od</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_43" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 12-29) - Data Do</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_44" type="czbr:TKwotaKosztow">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 12-29) - Kwota</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+									</xsd:sequence>
+									<xsd:sequence minOccurs="0">
+										<!--Odliczenie przysługuje w kolejnych następujących po sobie sześciu latach podatkowych, następujących bezpośrednio po roku, w którym podatnik poniósł koszty kwalifikowane i skorzystał lub miał prawo skorzystać z odliczenia.-->
+										<xsd:element name="P_45" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 12-29) - Data Od</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_46" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 12-29) - Data Do</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_47" type="czbr:TKwotaKosztow">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 12-29) - Kwota</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+									</xsd:sequence>
+									<xsd:sequence minOccurs="0">
+										<!--Odliczenie przysługuje w kolejnych następujących po sobie sześciu latach podatkowych, następujących bezpośrednio po roku, w którym podatnik poniósł koszty kwalifikowane i skorzystał lub miał prawo skorzystać z odliczenia.-->
+										<xsd:element name="P_48" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 12-29) - Data Od</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_49" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 12-29) - Data Do</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_50" type="czbr:TKwotaKosztow">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 12-29) - Kwota</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+									</xsd:sequence>
+									<xsd:sequence minOccurs="0">
+										<!--Odliczenie przysługuje w kolejnych następujących po sobie sześciu latach podatkowych, następujących bezpośrednio po roku, w którym podatnik poniósł koszty kwalifikowane i skorzystał lub miał prawo skorzystać z odliczenia.-->
+										<xsd:element name="P_51" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 12-29) - Data Od</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_52" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 12-29) - Data Do</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_53" type="czbr:TKwotaKosztow">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 12-29) - Kwota</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+									</xsd:sequence>
+									<xsd:sequence minOccurs="0">
+										<!--Odliczenie przysługuje w kolejnych następujących po sobie sześciu latach podatkowych, następujących bezpośrednio po roku, w którym podatnik poniósł koszty kwalifikowane i skorzystał lub miał prawo skorzystać z odliczenia.-->
+										<xsd:element name="P_54" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 12-29) - Data Od</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_55" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 12-29) - Data Do</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_56" type="czbr:TKwotaKosztow">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 12-29) - Kwota</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+									</xsd:sequence>
+									<xsd:sequence minOccurs="0">
+										<!--Odliczenie przysługuje w kolejnych następujących po sobie sześciu latach podatkowych, następujących bezpośrednio po roku, w którym podatnik poniósł koszty kwalifikowane które nie zostały odliczone w poprzednich latach podatkowych.-->
+										<xsd:element name="P_57" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 32-35) - Data Od</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_58" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 32-35) - Data Do</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_59" type="czbr:TKwotaKosztow">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 32-35) - Kwota</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+									</xsd:sequence>
+									<xsd:sequence minOccurs="0">
+										<!--Odliczenie przysługuje w kolejnych następujących po sobie sześciu latach podatkowych, następujących bezpośrednio po roku, w którym podatnik poniósł koszty kwalifikowane i skorzystał lub miał prawo skorzystać z odliczenia.-->
+										<xsd:element name="P_60" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 32-35) - Data Od</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_61" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 32-35) - Data Do</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_62" type="czbr:TKwotaKosztow">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 32-35) - Kwota</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+									</xsd:sequence>
+									<xsd:sequence minOccurs="0">
+										<!--Odliczenie przysługuje w kolejnych następujących po sobie sześciu latach podatkowych, następujących bezpośrednio po roku, w którym podatnik poniósł koszty kwalifikowane i skorzystał lub miał prawo skorzystać z odliczenia.-->
+										<xsd:element name="P_63" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 32-35) - Data Od</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_64" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 32-35) - Data Do</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_65" type="czbr:TKwotaKosztow">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 32-35) - Kwota</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+									</xsd:sequence>
+									<xsd:sequence minOccurs="0">
+										<!--Odliczenie przysługuje w kolejnych następujących po sobie sześciu latach podatkowych, następujących bezpośrednio po roku, w którym podatnik poniósł koszty kwalifikowane i skorzystał lub miał prawo skorzystać z odliczenia.-->
+										<xsd:element name="P_66" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 32-35) - Data Od</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_67" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 32-35) - Data Do</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_68" type="czbr:TKwotaKosztow">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 32-35) - Kwota</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+									</xsd:sequence>
+									<xsd:sequence minOccurs="0">
+										<!--Odliczenie przysługuje w kolejnych następujących po sobie sześciu latach podatkowych, następujących bezpośrednio po roku, w którym podatnik poniósł koszty kwalifikowane i skorzystał lub miał prawo skorzystać z odliczenia.-->
+										<xsd:element name="P_69" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 32-35) - Data Od</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_70" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 32-35) - Data Do</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_71" type="czbr:TKwotaKosztow">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 32-35) - Kwota</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+									</xsd:sequence>
+									<xsd:sequence minOccurs="0">
+										<!--Odliczenie przysługuje w kolejnych następujących po sobie sześciu latach podatkowych, następujących bezpośrednio po roku, w którym podatnik poniósł koszty kwalifikowane i skorzystał lub miał prawo skorzystać z odliczenia.-->
+										<xsd:element name="P_72" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 32-35) - Data Od</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_73" type="czbr:TLData1">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 32-35) - Data Do</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_74" type="czbr:TKwotaKosztow">
+											<xsd:annotation>
+												<xsd:documentation>Koszty kwalifikowane nieodliczone w poprzednich latach podlegające odliczeniu w roku podatkowym na podstawie art. 18d ust. 8 ustawy (obejmuje rodzaje kosztów wykazanych w poz. 32-35) - Kwota</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+									</xsd:sequence>
+									<xsd:element name="P_75" type="etd:TKwota2Nieujemna">
+										<xsd:annotation>
+											<xsd:documentation>Razem łączne odliczenia</xsd:documentation>
+										</xsd:annotation>
+										<!--Suma kwot z poz. 37-74.-->
+									</xsd:element>
+								</xsd:sequence>
+								<xsd:element name="P_76" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Koszty kwalifikowane do odliczenia w roku podatkowym</xsd:documentation>
+									</xsd:annotation>
+									<!--Kwota odliczenia (poz. 75) nie może przekroczyć kwoty z odpowiedniej pozycji CIT-8 oraz z odpowiedniej pozycji CIT-8AB.-->
+								</xsd:element>
+								<xsd:element name="P_77" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Kwota, o której mowa w art. 18d ust. 5a ustawy zwiększająca podstawę opodatkowania / zmniejszająca stratę</xsd:documentation>
+									</xsd:annotation>
+									<!--Jeżeli koszty kwalifikowane zostały podatnikowi zwrócone w jakiejkolwiek formie lub zostały odliczone od podstawy opodatkowania podatkiem dochodowym, podatnik jest obowiązany w zeznaniu składanym za rok podatkowy, w którym wystąpiły te okoliczności, do zwiększenia podstawy opodatkowania o kwotę dokonanych odliczeń, które zostały mu zwrócone, a w razie poniesienia straty - do jej zmniejszenia o tę kwotę.-->
+								</xsd:element>
+								<xsd:element name="P_78" type="etd:TKwota2Nieujemna">
+									<xsd:annotation>
+										<xsd:documentation>Kwota przysługująca podatnikowi na podstawie art. 18da ust. 1 i 2 ustawy</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_79" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Kwota podlegająca zwrotowi do urzędu skarbowego na podstawie art. 18da ust. 5a ustawy</xsd:documentation>
+									</xsd:annotation>
+									<!--Podatnik jest obowiązany do zwrotu wykazanej w zeznaniu kwoty przysługującej mu na podstawie art. 18da ust. 1 lub 2 ustawy, jeżeli przed upływem trzech lat podatkowych, licząc od końca roku podatkowego, za który złożył to zeznanie, zostanie postawiony w stan upadłości lub likwidacji. Podatnik jest obowiązany w zeznaniu, o którym mowa w art. 27 ustawy, składanym za rok podatkowy, w którym wystąpiły te okoliczności, do zwiększenia podatku o kwotę zwrotu, a w razie wystąpienia nadpłaty - do jej zmniejszenia o tę kwotę.-->
+								</xsd:element>
+							</xsd:sequence>
+							<!--C. RODZAJE DZIAŁALNOŚCI BADAWCZO-ROZWOJOWEJ, W RAMACH KTÓRYCH SĄ PONOSZONE KOSZTY KWALIFIKOWANE PRZYSŁUGUJĄCE PODATNIKOWI, POSIADAJĄCEMU STATUS CENTRUM BADAWCZO-ROZWOJOWEGO, O KTÓRYM MOWA W ART. 18D UST. 3A USTAWY-->
+							<!-- -->
+							<!--(wypełniają podatnicy, którzy zaznaczyli kwadrat nr 1 w poz. 8)-->
+							<!-- -->
+							<!--C.1. ODLICZENIA WEDŁUG PROWADZONYCH BADAŃ NAUKOWYCH, PRAC ROZWOJOWYCH LUB PONIESIONYCH WYDATKÓW, O KTÓRYCH MOWA W ART. 18D UST. 2 PKT 5 USTAWY-->
+							<!-- -->
+							<!--(kwota odliczeń wykazanych w poz. 80-83 nie może przekroczyć sumy kwot z poz. 36 i 59-74)-->
+							<xsd:sequence minOccurs="0">
+								<xsd:annotation>
+									<xsd:documentation>C.1. Odliczenia według prowadzonych badań naukowych, prac rozwojowych lub poniesionych wydatków, o których mowa w art. 18d ust. 2 pkt 5 ustawy</xsd:documentation>
+								</xsd:annotation>
+								<xsd:element name="P_80" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Odliczenia z tytułu prac rozwojowych</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:sequence minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Odliczenia z tytułu badań naukowych prowadzonych na:</xsd:documentation>
+									</xsd:annotation>
+									<xsd:element name="P_81" type="etd:TKwota2Nieujemna" minOccurs="0">
+										<xsd:annotation>
+											<xsd:documentation>Badania podstawowe</xsd:documentation>
+										</xsd:annotation>
+									</xsd:element>
+									<xsd:element name="P_82" type="etd:TKwota2Nieujemna" minOccurs="0">
+										<xsd:annotation>
+											<xsd:documentation>Badania aplikacyjne</xsd:documentation>
+										</xsd:annotation>
+										<!--Należy wypełnić również w przypadku prowadzonych badań stosowanych lub badań przemysłowych, które funkcjonowały do dnia 30 września 2018 r.-->
+									</xsd:element>
+								</xsd:sequence>
+								<xsd:element name="P_83" type="etd:TKwota2Nieujemna" minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Odliczenia z tytułu uzyskania i utrzymania patentu, prawa ochronnego na wzór użytkowy, prawa z rejestracji wzoru przemysłowego</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+							</xsd:sequence>
+							<!--D. DANE SPÓŁKI NIEBĘDĄCEJ OSOBĄ PRAWNĄ (POSIADAJĄCEJ STATUS CENTRUM BADAWCZO-ROZWOJOWEGO), KTÓREJ PODATNIK JEST WSPÓLNIKIEM, ORAZ ODLICZENIA WEDŁUG PROWADZONYCH BADAŃ NAUKOWYCH, PRAC ROZWOJOWYCH LUB PONIESIONYCH WYDATKÓW, O KTÓRYCH MOWA W ART. 18D UST. 2 PKT 5 USTAWY-->
+							<!-- -->
+							<!--Wypełnia podatnik, który jest wspólnikiem spółki niebędącej osobą prawną posiadającej status centrum badawczo-rozwojowego, o którym mowa w art. 18d ust. 3a ustawy, która w roku podatkowym poniosła koszty kwalifikowane odliczane w roku podatkowym przez podatnika.-->
+							<!-- -->
+							<!--D.1. DANE SPÓŁKI-->
+							<xsd:sequence minOccurs="0">
+								<xsd:annotation>
+									<xsd:documentation>D. Dane spółki niebędącej osobą prawną (posiadającej status centrum badawczo-rozwojowego), której podatnik jest wspólnikiem, oraz odliczenia według prowadzonych badań naukowych, prac rozwojowych lub poniesionych wydatków, o których mowa w art. 18d ust. 2 pkt 5</xsd:documentation>
+								</xsd:annotation>
+								<xsd:sequence>
+									<xsd:annotation>
+										<xsd:documentation>D.1. Dane spółki</xsd:documentation>
+									</xsd:annotation>
+									<xsd:element name="P_84">
+										<xsd:annotation>
+											<xsd:documentation>Nazwa pełna</xsd:documentation>
+										</xsd:annotation>
+										<xsd:simpleType>
+											<xsd:restriction base="xsd:token">
+												<xsd:minLength value="1"/>
+												<xsd:maxLength value="240"/>
+											</xsd:restriction>
+										</xsd:simpleType>
+									</xsd:element>
+									<xsd:element name="P_85" type="etd:TNrNIP">
+										<xsd:annotation>
+											<xsd:documentation>Identyfikator podatkowy NIP</xsd:documentation>
+										</xsd:annotation>
+									</xsd:element>
+									<xsd:element name="P_86" type="etd:TWybor1_2">
+										<xsd:annotation>
+											<xsd:documentation>Spółka jest mikroprzedsiębiorcą, małym lub średnim przedsiębiorcą w rozumieniu odrębnych przepisów: 1 - tak, 2 - nie</xsd:documentation>
+										</xsd:annotation>
+									</xsd:element>
+								</xsd:sequence>
+								<!---D.2. ODLICZENIA WEDŁUG PROWADZONYCH BADAŃ NAUKOWYCH, PRAC ROZWOJOWYCH LUB PONIESIONYCH WYDATKÓW, O KTÓRYCH MOWA W ART. 18D UST. 2 PKT 5 USTAWY-->
+								<!-- -->
+								<!--(kwota odliczeń wykazanych w poz. 87-90 nie może przekroczyć sumy kwot z poz. 36 i 59-74)-->
+								<!-- -->
+								<!--W przypadku wykazania kwot w poz. 80-83 oraz poz. 87-90, ogólna kwota odliczeń nie może przekroczyć sumy kwot z poz. 36 i 59-74.-->
+								<xsd:sequence minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>D.2. Odliczenia według prowadzonych badań naukowych, prac rozwojowych lub poniesionych wydatków, o których mowa w art. 18d ust. 2 pkt 5 ustawy</xsd:documentation>
+									</xsd:annotation>
+									<xsd:element name="P_87" type="etd:TKwota2Nieujemna" minOccurs="0">
+										<xsd:annotation>
+											<xsd:documentation>Odliczenia z tytułu prac rozwojowych</xsd:documentation>
+										</xsd:annotation>
+									</xsd:element>
+									<xsd:sequence minOccurs="0">
+										<xsd:annotation>
+											<xsd:documentation>Odliczenia z tytułu badań naukowych prowadzonych na:</xsd:documentation>
+										</xsd:annotation>
+										<xsd:element name="P_88" type="etd:TKwota2Nieujemna" minOccurs="0">
+											<xsd:annotation>
+												<xsd:documentation>Badania podstawowe</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_89" type="etd:TKwota2Nieujemna" minOccurs="0">
+											<xsd:annotation>
+												<xsd:documentation>Badania aplikacyjne</xsd:documentation>
+											</xsd:annotation>
+											<!--Należy wypełnić również w przypadku prowadzonych badań stosowanych lub badań przemysłowych, które funkcjonowały do dnia 30 września 2018 r.-->
+										</xsd:element>
+									</xsd:sequence>
+									<xsd:element name="P_90" type="etd:TKwota2Nieujemna" minOccurs="0">
+										<xsd:annotation>
+											<xsd:documentation>Odliczenia z tytułu uzyskania i utrzymania patentu, prawa ochronnego na wzór użytkowy, prawa z rejestracji wzoru przemysłowego</xsd:documentation>
+										</xsd:annotation>
+									</xsd:element>
+								</xsd:sequence>
+							</xsd:sequence>
+							<!--E. RODZAJE DZIAŁALNOŚCI BADAWCZO-ROZWOJOWEJ, W RAMACH KTÓRYCH SĄ PONOSZONE KOSZTY KWALIFIKOWANE-->
+							<xsd:sequence>
+								<xsd:annotation>
+									<xsd:documentation>E. Rodzaje działalności badawczo-rozwojowej, w ramach których są ponoszone koszty kwalifikowane</xsd:documentation>
+								</xsd:annotation>
+								<xsd:element name="P_91" type="etd:TWybor1_2">
+									<xsd:annotation>
+										<xsd:documentation>Badania naukowe: 1 - tak, 2 - nie</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<xsd:element name="P_92" type="etd:TWybor1_2">
+									<xsd:annotation>
+										<xsd:documentation>Prace rozwojowe: 1 - tak, 2 - nie</xsd:documentation>
+									</xsd:annotation>
+								</xsd:element>
+								<!--E.1. RODZAJE PROWADZONYCH BADAŃ NAUKOWYCH-->
+								<!-- -->
+								<!--(wypełniają podatnicy, którzy zaznaczyli kwadrat nr 2 w poz. 8 oraz kwadrat nr 1 w poz. 91)-->
+								<xsd:sequence minOccurs="0">
+									<xsd:annotation>
+										<xsd:documentation>Rodzaje prowadzonych badań naukowych. Wypełniają podatnicy, którzy wybrali wartość 2 - nie w poz. 8 oraz wartość 1 - tak w poz. 91</xsd:documentation>
+									</xsd:annotation>
+									<!--Należy wypełnić również w przypadku prowadzonych badań stosowanych lub badań przemysłowych, które funkcjonowały do dnia 30 września 2018 r.-->
+									<xsd:element name="P_93_1" type="etd:TWybor1" minOccurs="0">
+										<xsd:annotation>
+											<xsd:documentation>Rodzaj badań naukowych: 1 - badania podstawowe</xsd:documentation>
+										</xsd:annotation>
+									</xsd:element>
+									<xsd:element name="P_93_2" type="etd:TWybor1" minOccurs="0">
+										<xsd:annotation>
+											<xsd:documentation>Rodzaj badań naukowych: 1 - badania aplikacyjne</xsd:documentation>
+										</xsd:annotation>
+									</xsd:element>
+								</xsd:sequence>
+							</xsd:sequence>
+							<!--F. DANE JEDNOSTKI NAUKOWEJ-->
+							<!-- -->
+							<!--Jednostka naukowa w rozumieniu ustawy z dnia 30 kwietnia 2010 r. o zasadach finansowania nauki (Dz. U. z 2018 r. poz. 87), w brzmieniu obowiązującym do dnia 30 września 2018 r., z którą podatnik zawarł umowę lub porozumienie, na podstawie której(ego) są prowadzone badania podstawowe. W przypadku gdy część F jest niewystarczająca do podania danych o wszystkich jednostkach naukowych, z którymi podatnik zawarł umowę lub porozumienie, należy wypełnić kolejny(e) załącznik(i) CIT/BR, podając w nim(nich) tylko identyfikator podatkowy NIP podatnika oraz brakujące dane w części F. Przez jednostkę naukową rozumie się również podmiot, o którym mowa w art. 7 ust. 1 pkt 1, 2 i 4-8 ustawy z dnia 20 lipca 2018 r. - Prawo o szkolnictwie wyższym i nauce (Dz. U. z 2023 r. poz. 742, z późn. zm.).-->
+							<!-- -->
+							<!--Wypełniają podatnicy, którzy zaznaczyli kwadrat nr 1 w poz. 91_1.-->
+							<!-- -->
+							<!--F.1. DANE JEDNOSTKI NAUKOWEJ-->
+							<xsd:element name="P_F" minOccurs="0" maxOccurs="unbounded">
+								<xsd:annotation>
+									<xsd:documentation>F. Dane jednostki naukowej</xsd:documentation>
+								</xsd:annotation>
+								<xsd:complexType>
+									<xsd:sequence>
+										<xsd:annotation>
+											<xsd:documentation>F.1. i F.2. Dane identyfikacyjne i adres siedziby</xsd:documentation>
+										</xsd:annotation>
+										<xsd:element name="P_F94">
+											<xsd:annotation>
+												<xsd:documentation>Nazwa pełna</xsd:documentation>
+											</xsd:annotation>
+											<xsd:simpleType>
+												<xsd:restriction base="xsd:token">
+													<xsd:minLength value="1"/>
+													<xsd:maxLength value="240"/>
+												</xsd:restriction>
+											</xsd:simpleType>
+										</xsd:element>
+										<xsd:element name="P_F95A" type="kk:TKodKraju">
+											<xsd:annotation>
+												<xsd:documentation>Kod kraju</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_F96" type="etd:TJednAdmin" minOccurs="0">
+											<xsd:annotation>
+												<xsd:documentation>Województwo</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_F97" type="etd:TJednAdmin" minOccurs="0">
+											<xsd:annotation>
+												<xsd:documentation>Powiat</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_F98" type="etd:TJednAdmin" minOccurs="0">
+											<xsd:annotation>
+												<xsd:documentation>Gmina</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_F99" type="etd:TUlica" minOccurs="0">
+											<xsd:annotation>
+												<xsd:documentation>Ulica</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_F100" type="etd:TNrBudynku" minOccurs="0">
+											<xsd:annotation>
+												<xsd:documentation>Nr domu</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_F101" type="etd:TNrLokalu" minOccurs="0">
+											<xsd:annotation>
+												<xsd:documentation>Nr lokalu</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_F102" type="etd:TMiejscowosc">
+											<xsd:annotation>
+												<xsd:documentation>Miejscowość</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+										<xsd:element name="P_F103" type="etd:TKodPocztowy" minOccurs="0">
+											<xsd:annotation>
+												<xsd:documentation>Kod pocztowy</xsd:documentation>
+											</xsd:annotation>
+										</xsd:element>
+									</xsd:sequence>
+									<xsd:attribute name="typ" use="required" fixed="G"/>
+								</xsd:complexType>
+							</xsd:element>
+						</xsd:sequence>
+					</xsd:complexType>
+				</xsd:element>
+			</xsd:sequence>
+		</xsd:complexType>
+	</xsd:element>
+</xsd:schema>

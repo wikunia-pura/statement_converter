@@ -96,7 +96,7 @@ import {
 } from '../shared/types';
 import { normalizePlan, normalizePobrania, normalizeUstawienia } from '../shared/plan-gospodarczy';
 import { daneNaKolejnyRok, normalizeDane, normalizeStawki, tylkoCyfry } from '../shared/podatki';
-import { daneCitNaKolejnyRok, normalizeCitUstawienia, normalizeDaneCit } from '../shared/podatki-cit';
+import { daneCitNaKolejnyRok, normalizeCitUstawienia, normalizeDaneCit, oznaczAutorowRegul } from '../shared/podatki-cit';
 import { normalizeIdentyfikacja, zasilZDn1 } from '../shared/adres-identyfikacja';
 import {
   PitDane,
@@ -143,6 +143,7 @@ import type { NotificationId, NotificationPrefs } from '../shared/notifications'
 import { normalizeAccount } from '../shared/account-extractor';
 import { buildApartmentMapping, mappingTargets } from '../shared/apartment-mapping';
 import { DEFAULT_AI_MODEL, resolveAiModel } from '../shared/ai-models';
+import { EDeklaracjeSrodowisko, EDeklaracjeWysylka, normalizeSrodowisko } from '../shared/e-deklaracje';
 
 // Settings remain machine-local: dark mode, folder paths, language, etc. are
 // per-user-machine UI prefs that shouldn't sync across installs.
@@ -179,6 +180,8 @@ interface SettingsStoreSchema {
     podatkiFolder: string;
     /** Podpis kwalifikowany: the card's PKCS#11 library picked by hand ('' = next to Szafir). */
     podpisBiblioteka: string;
+    /** The e-Deklaracje gateway signed returns go to ('test' unless switched in Administracja). */
+    eDeklaracjeSrodowisko: EDeklaracjeSrodowisko;
   };
 }
 
@@ -234,8 +237,6 @@ const SPOTKANIE_COLS =
   'terminZmienionyBy:termin_zmieniony_by, ' +
   'terminZmianaOdczytanaAt:termin_zmiana_odczytana_at, ' +
   'terminZmianaOdczytanaBy:termin_zmiana_odczytana_by, ' +
-  'dokumentyWyslaneAt:dokumenty_wyslane_at, dokumentyWyslaneBy:dokumenty_wyslane_by, ' +
-  'dokumentyOpis:dokumenty_opis, ' +
   'materialyStatus:materialy_status, materialyZmienioneAt:materialy_zmienione_at, ' +
   'materialyZmienioneBy:materialy_zmienione_by, ' +
   'zgnJednostkaId:zgn_jednostka_id, zgnPelnomocnikId:zgn_pelnomocnik_id, zgnNazwa:zgn_nazwa, ' +
@@ -247,7 +248,7 @@ const SPOTKANIE_MAILING_COLS =
   'errorMessage:error_message, adresNazwa:adres_nazwa, jednostkaNazwa:jednostka_nazwa, ' +
   'jednostkaEmail:jednostka_email, subject, attachments, sentFrom:sent_from, sentAt:sent_at';
 const KS_PRIORYTET_COLS =
-  'id, monthKey:month_key, adresId:adres_id, adresNazwa:adres_nazwa, position, notatka, notatkaBy:notatka_by, createdBy:created_by, createdAt:created_at';
+  'id, monthKey:month_key, adresId:adres_id, adresNazwa:adres_nazwa, position, notatka, notatkaBy:notatka_by, mentions, createdBy:created_by, createdAt:created_at';
 const KS_PRZYPISANIE_COLS =
   'id, monthKey:month_key, adresId:adres_id, adresNazwa:adres_nazwa, email, assignedBy:assigned_by, assignedAt:assigned_at';
 const KS_PLIK_COLS =
@@ -257,7 +258,7 @@ const KS_PLIK_COLS =
   'fileMtime:file_mtime, fileHash:file_hash, ignoredHashes:ignored_hashes, periodFrom:period_from, periodTo:period_to, scannedAt:scanned_at, ' +
   'scannedBy:scanned_by';
 const KS_UWAGA_COLS =
-  'id, adresId:adres_id, adresNazwa:adres_nazwa, tresc, createdBy:created_by, createdAt:created_at, resolvedAt:resolved_at, resolvedBy:resolved_by';
+  'id, adresId:adres_id, adresNazwa:adres_nazwa, tresc, mentions, createdBy:created_by, createdAt:created_at, resolvedAt:resolved_at, resolvedBy:resolved_by';
 const ZADANIE_COLS =
   'id, tytul, opis, status, priorytet, pozycja, przypisanyEmail:przypisany_email, termin, zalaczniki, zarchiwizowane, ' +
   'spotkanieId:spotkanie_id, ' +
@@ -382,6 +383,7 @@ class DatabaseService {
           smtpBccSelf: false,
           podatkiFolder: '',
           podpisBiblioteka: '',
+          eDeklaracjeSrodowisko: 'test',
         },
       },
     });
@@ -2237,7 +2239,8 @@ class DatabaseService {
    * only things that look like a mailbox — the notifier matches them literally,
    * so a stray value must not become a tag nobody can ever see.
    */
-  private static komentarzMentions(value: unknown): string[] {
+  /** Tagged mailboxes as stored — task comments and the dashboard's notes alike. */
+  static komentarzMentions(value: unknown): string[] {
     if (!Array.isArray(value)) return [];
     const seen = new Set<string>();
     for (const raw of value) {
@@ -2454,9 +2457,6 @@ class DatabaseService {
       terminZmienionyBy: r.terminZmienionyBy ?? null,
       terminZmianaOdczytanaAt: r.terminZmianaOdczytanaAt ?? null,
       terminZmianaOdczytanaBy: r.terminZmianaOdczytanaBy ?? null,
-      dokumentyWyslaneAt: r.dokumentyWyslaneAt ?? null,
-      dokumentyWyslaneBy: r.dokumentyWyslaneBy ?? null,
-      dokumentyOpis: r.dokumentyOpis ?? '',
       zgnJednostkaId: r.zgnJednostkaId != null ? Number(r.zgnJednostkaId) : null,
       zgnPelnomocnikId: r.zgnPelnomocnikId != null ? Number(r.zgnPelnomocnikId) : null,
       zgnNazwa: r.zgnNazwa ?? '',
@@ -2652,37 +2652,6 @@ class DatabaseService {
       })
       .eq('id', id);
     if (error) throw new Error(`setSpotkanieTerminStatus: ${error.message}`);
-  }
-
-  /**
-   * Tick (or untick) "documents sent", with a note of what went out.
-   *
-   * Unticking clears the note as well: keeping the description of a send that
-   * has been withdrawn would leave the meeting claiming something happened.
-   */
-  async setSpotkanieDokumenty(
-    id: number,
-    sent: boolean,
-    opis: string,
-    who: string,
-  ): Promise<void> {
-    const { error } = await getSupabase()
-      .from('spotkania')
-      .update(
-        sent
-          ? {
-              dokumenty_wyslane_at: new Date().toISOString(),
-              dokumenty_wyslane_by: who,
-              dokumenty_opis: opis.trim(),
-            }
-          : {
-              dokumenty_wyslane_at: null,
-              dokumenty_wyslane_by: null,
-              dokumenty_opis: '',
-            },
-      )
-      .eq('id', id);
-    if (error) throw new Error(`setSpotkanieDokumenty: ${error.message}`);
   }
 
   /**
@@ -4189,7 +4158,13 @@ class DatabaseService {
     const { data, error } = await getSupabase()
       .from('podatki_cit')
       .update({
-        dane: { ...normalizeDaneCit(value), pobrania: stored.dane.pobrania, zlozone: stored.dane.zlozone },
+        // What the main process records (files, sends, the filed tick) is never the form's to overwrite.
+        dane: {
+          ...normalizeDaneCit(value),
+          pobrania: stored.dane.pobrania,
+          wysylki: stored.dane.wysylki,
+          zlozone: stored.dane.zlozone,
+        },
         updated_at: new Date().toISOString(),
         updated_by: who,
       })
@@ -4215,6 +4190,41 @@ class DatabaseService {
       .update({ dane: { ...stored.dane, pobrania: [...stored.dane.pobrania, entry] } })
       .eq('id', id);
     if (error) throw new Error(`recordPodatekCitPobranie: ${error.message}`);
+  }
+
+  /** Note a sending of the return to the e-Deklaracje gateway. */
+  async recordPodatekCitWysylka(id: number, wysylka: EDeklaracjeWysylka): Promise<void> {
+    const stored = await this.getPodatekCit(id);
+    if (!stored) return;
+    const { error } = await getSupabase()
+      .from('podatki_cit')
+      .update({ dane: { ...stored.dane, wysylki: [...stored.dane.wysylki, wysylka] } })
+      .eq('id', id);
+    if (error) throw new Error(`recordPodatekCitWysylka: ${error.message}`);
+  }
+
+  /**
+   * The gateway's later answer about a send (found by its refId): status, and the UPO once there is one. A
+   * production UPO also ticks the return as filed — the office has it, by the gateway's own receipt.
+   */
+  async updatePodatekCitWysylka(
+    id: number,
+    refId: string,
+    zmiana: Pick<EDeklaracjeWysylka, 'status' | 'opis' | 'sprawdzono' | 'upo'>,
+    who: string,
+  ): Promise<PodatekCit | null> {
+    const stored = await this.getPodatekCit(id);
+    if (!stored) return null;
+    const wysylki = stored.dane.wysylki.map((w) => (w.refId === refId ? { ...w, ...zmiana } : w));
+    const wyslana = wysylki.find((w) => w.refId === refId);
+    const zlozone =
+      wyslana?.srodowisko === 'prod' && zmiana.status === 200 && !stored.dane.zlozone
+        ? { at: new Date().toISOString(), by: who }
+        : stored.dane.zlozone;
+    const dane = { ...stored.dane, wysylki, zlozone };
+    const { error } = await getSupabase().from('podatki_cit').update({ dane }).eq('id', id);
+    if (error) throw new Error(`updatePodatekCitWysylka: ${error.message}`);
+    return { ...stored, dane };
   }
 
   /**
@@ -4284,6 +4294,8 @@ class DatabaseService {
 
   async setPodatkiCitUstawienia(value: PodatkiCitUstawienia, who: string): Promise<PodatkiCitUstawienia> {
     const dane = normalizeCitUstawienia(value);
+    const poprzedni = (await this.getPodatkiCitUstawieniaRow())?.slownik ?? [];
+    dane.slownik = oznaczAutorowRegul(dane.slownik, poprzedni, who, new Date().toISOString());
     const { error } = await getSupabase()
       .from('podatki_cit_ustawienia')
       .upsert({ id: 1, dane, updated_at: new Date().toISOString(), updated_by: who });
@@ -4291,8 +4303,8 @@ class DatabaseService {
     return dane;
   }
 
-  /** Every library row with its statement — for the backup. */
-  private async getSprawozdaniaFull(): Promise<SprawozdanieZapisane[]> {
+  /** Every library row with its statement — for the backup and the CIT dictionary review. */
+  async getSprawozdaniaFull(): Promise<SprawozdanieZapisane[]> {
     const rows = await fetchAllPaged<any>('getSprawozdaniaFull', (from, to) =>
       getSupabase()
         .from('zebrania_sprawozdania')
@@ -4389,6 +4401,7 @@ class DatabaseService {
       adresId: r.adresId ?? null,
       notatka: r.notatka ?? '',
       notatkaBy: r.notatkaBy ?? '',
+      mentions: DatabaseService.komentarzMentions(r.mentions),
       createdBy: r.createdBy ?? '',
     })) as KsiegowaniePriorytet[];
   }
@@ -4512,10 +4525,22 @@ class DatabaseService {
    * `by` is the mailbox of whoever wrote the note: the notifier skips a note its
    * own author wrote. `updated_at` is not enough for that — a reorder bumps it too.
    */
-  async setKsiegowaniePriorytetNotatka(id: number, notatka: string, by: string): Promise<void> {
+  async setKsiegowaniePriorytetNotatka(
+    id: number,
+    notatka: string,
+    mentions: string[],
+    by: string,
+  ): Promise<void> {
+    const text = notatka.trim();
     const { error } = await getSupabase()
       .from('ksiegowania_priorytety')
-      .update({ notatka: notatka.trim(), notatka_by: by, updated_at: new Date().toISOString() })
+      .update({
+        notatka: text,
+        // An emptied note tags nobody.
+        mentions: text ? DatabaseService.komentarzMentions(mentions) : [],
+        notatka_by: by,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', id);
     if (error) throw new Error(`setKsiegowaniePriorytetNotatka: ${error.message}`);
   }
@@ -4555,6 +4580,7 @@ class DatabaseService {
     return rows.map(r => ({
       ...r,
       adresId: r.adresId ?? null,
+      mentions: DatabaseService.komentarzMentions(r.mentions),
       createdBy: r.createdBy ?? '',
       resolvedAt: r.resolvedAt ?? null,
       resolvedBy: r.resolvedBy ?? null,
@@ -4565,6 +4591,7 @@ class DatabaseService {
     adresId: number | null,
     adresNazwa: string,
     tresc: string,
+    mentions: string[],
     createdBy: string,
   ): Promise<KsiegowanieUwaga> {
     const nazwa = adresNazwa.trim();
@@ -4573,16 +4600,26 @@ class DatabaseService {
     if (!text) throw new Error('Uwaga nie może być pusta.');
     const { data, error } = await getSupabase()
       .from('ksiegowania_uwagi')
-      .insert({ adres_id: adresId, adres_nazwa: nazwa, tresc: text, created_by: createdBy })
+      .insert({
+        adres_id: adresId,
+        adres_nazwa: nazwa,
+        tresc: text,
+        mentions: DatabaseService.komentarzMentions(mentions),
+        created_by: createdBy,
+      })
       .select(KS_UWAGA_COLS)
       .single();
-    return unwrap(data, error, 'addKsiegowanieUwaga') as unknown as KsiegowanieUwaga;
+    const row = unwrap(data, error, 'addKsiegowanieUwaga') as any;
+    return { ...row, mentions: DatabaseService.komentarzMentions(row.mentions) } as KsiegowanieUwaga;
   }
 
-  async updateKsiegowanieUwaga(id: number, tresc: string): Promise<void> {
+  async updateKsiegowanieUwaga(id: number, tresc: string, mentions: string[]): Promise<void> {
     const text = tresc.trim();
     if (!text) throw new Error('Uwaga nie może być pusta.');
-    const { error } = await getSupabase().from('ksiegowania_uwagi').update({ tresc: text }).eq('id', id);
+    const { error } = await getSupabase()
+      .from('ksiegowania_uwagi')
+      .update({ tresc: text, mentions: DatabaseService.komentarzMentions(mentions) })
+      .eq('id', id);
     if (error) throw new Error(`updateKsiegowanieUwaga: ${error.message}`);
   }
 
@@ -4779,6 +4816,11 @@ class DatabaseService {
    */
   getAiModel(): string {
     return resolveAiModel(this.getSetting('aiModel'));
+  }
+
+  /** The gateway to send to — an install that predates the setting, or any odd value, is on test. */
+  getEDeklaracjeSrodowisko(): EDeklaracjeSrodowisko {
+    return normalizeSrodowisko(this.getSetting('eDeklaracjeSrodowisko'));
   }
 
   setSetting(key: string, value: string): void {
@@ -5409,9 +5451,6 @@ class DatabaseService {
             termin_zmieniony_by: m.terminZmienionyBy ?? null,
             termin_zmiana_odczytana_at: m.terminZmianaOdczytanaAt ?? null,
             termin_zmiana_odczytana_by: m.terminZmianaOdczytanaBy ?? null,
-            dokumenty_wyslane_at: m.dokumentyWyslaneAt ?? null,
-            dokumenty_wyslane_by: m.dokumentyWyslaneBy ?? null,
-            dokumenty_opis: m.dokumentyOpis ?? '',
             // Re-pointed through the units and proxies restored above; the name
             // travels regardless. All absent in backups written before meetings
             // could be assigned a city unit.
@@ -5782,6 +5821,8 @@ class DatabaseService {
           notatka: p.notatka ?? '',
           // Absent in backups written before notes had an author.
           notatka_by: p.notatkaBy || null,
+          // Absent in backups written before notes could tag people.
+          mentions: DatabaseService.komentarzMentions(p.mentions),
           created_by: p.createdBy ?? '',
           created_at: p.createdAt,
         })),
@@ -5824,6 +5865,7 @@ class DatabaseService {
             : null,
           adres_nazwa: u.adresNazwa,
           tresc: u.tresc,
+          mentions: DatabaseService.komentarzMentions(u.mentions),
           created_by: u.createdBy ?? '',
           created_at: u.createdAt,
           resolved_at: u.resolvedAt ?? null,

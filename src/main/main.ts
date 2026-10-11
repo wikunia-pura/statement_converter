@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, nativeImage } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, nativeImage, net } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 import path from 'path';
@@ -46,11 +46,15 @@ import {
   PodatkiStawkiDane,
   PodatkiPodpisWieleResult,
   PodpisWybor,
+  PodpisSlad,
   PodatekCit,
   PodatekCitDane,
-  PodatkiCitPdfWszystkieResult,
+  PodatkiCitPlikiResult,
+  PodatkiCitUpoResult,
+  PodatkiWysylkaWynik,
   PodatkiCitUstawienia,
   CitAiPozycja,
+  CitAiPrzyklad,
   PodpisPdfAnaliza,
   PodpisPdfWynik,
   PodpisHistoriaPlik,
@@ -125,6 +129,7 @@ import { eksportujPakiet } from './zebrania/pakiet';
 import { wersjaLabel } from '../shared/zebrania';
 import { dn1Pdf } from './podatki/dn1Pdf';
 import { cit8Pdf } from './podatki/cit8Pdf';
+import { cit8Xml } from './podatki/citXml';
 import { klasyfikujCitAi } from './podatki/citAi';
 import { proponujLaczeniaAi } from './zebrania/laczeniaAi';
 import { napiszWstepAi } from './zebrania/wstepAi';
@@ -132,12 +137,23 @@ import { proponujZaliczkeAi } from './zebrania/zaliczkaAi';
 import { BladKarty, stanKarty, zamknijKarte, zKartaDoPodpisu } from './podpis/karta';
 import { downloadLatestInstaller } from './installerDownload';
 import { podpiszPdf } from './podpis/pades';
-import { analizujPdf } from './podpis/pdfAnaliza';
-import { podpiszPliki } from './podpis/podpiszPliki';
+import { podpiszXml } from './podpis/xades';
+import {
+  EDeklaracjeSrodowisko,
+  EDeklaracjeWysylka,
+  czekaNaUpo,
+  statusKoncowy,
+  swiezaWysylka,
+  normalizeSrodowisko,
+  ostatniaWysylka,
+  przyjetaProdukcyjnie,
+} from '../shared/e-deklaracje';
+import { FetchLike, pobierzUpo, wyslijDokument } from './podatki/eDeklaracjeBramka';
+import { analizujPlik, podpiszPliki } from './podpis/podpiszPliki';
 import { parsePodatkiXlsx } from './podatki/importXlsx';
 import { registerPitHandlers } from './podatki/pitHandlers';
 import { opisProblemu, problemyDN1, zDataPodpisu } from '../shared/podatki';
-import { opisProblemuCit, problemyCIT8 } from '../shared/podatki-cit';
+import { opisProblemuCit, przegladPozycjiCit, problemyCIT8Xml } from '../shared/podatki-cit';
 
 // Log environment variable for testing
 log.debug('[MAIN] TEST_AI_BILLING_ERROR =', process.env.TEST_AI_BILLING_ERROR);
@@ -2467,6 +2483,13 @@ function setupIpcHandlers() {
     return true;
   });
 
+  ipcMain.handle(IPC_CHANNELS.SET_E_DEKLARACJE_SRODOWISKO, async (_, srodowisko: unknown) => {
+    const wybrane = normalizeSrodowisko(srodowisko);
+    database.setSetting('eDeklaracjeSrodowisko', wybrane);
+    log.info(`[e-Deklaracje] gateway switched to ${wybrane}`);
+    return wybrane;
+  });
+
   ipcMain.handle(IPC_CHANNELS.SET_CONTRACTOR_SORT_ORDER, async (_, sortOrder: string) => {
     database.setSetting('contractorSortOrder', sortOrder);
     return true;
@@ -4004,7 +4027,12 @@ function setupIpcHandlers() {
 
   // ---- Podatki: CIT-8 ----
 
-  ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_LISTA, async () => database.getPodatkiCit());
+  ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_LISTA, async () => {
+    const lista = await database.getPodatkiCit();
+    // Someone is looking at the returns: if a send still waits, the 30-second automat must be running.
+    if (lista.some((r) => r.dane.wysylki.some((w) => czekaNaUpo(w) && swiezaWysylka(w)))) citUpoAutomat();
+    return lista;
+  });
 
   ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_ADD, async (_, adresNazwa: string, rok: number, dane: PodatekCitDane) =>
     database.addPodatekCit(adresNazwa, rok, dane, await zebraniaWho()),
@@ -4036,24 +4064,46 @@ function setupIpcHandlers() {
   /**
    * Suggestions of the AI for statement rows no dictionary rule covers. Needs the
    * Anthropic key; nothing is stored here — the renderer keeps them as
-   * unconfirmed suggestions in the return.
+   * unconfirmed suggestions in the return. `przyklady` is the dictionary the
+   * model follows: the modal's unsaved rules, `[]` for the rules' own check, and
+   * the saved dictionary when left out.
    */
-  ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_KLASYFIKUJ_AI, async (_, pozycje: CitAiPozycja[]) => {
-    const apiKey = converterRegistry.getAnthropicApiKey();
-    if (!apiKey) throw new Error('AI nie jest skonfigurowane — brak klucza API Anthropic.');
-    const lista = (Array.isArray(pozycje) ? pozycje : []).filter(
-      (p) => p && typeof p.klucz === 'string' && typeof p.nazwa === 'string' && (p.strona === 'przychod' || p.strona === 'koszt'),
-    );
-    return klasyfikujCitAi(lista, apiKey, database.getAiModel());
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.PODATKI_CIT_KLASYFIKUJ_AI,
+    async (_, pozycje: CitAiPozycja[], przyklady?: CitAiPrzyklad[]) => {
+      const apiKey = converterRegistry.getAnthropicApiKey();
+      if (!apiKey) throw new Error('AI nie jest skonfigurowane — brak klucza API Anthropic.');
+      const lista = (Array.isArray(pozycje) ? pozycje : []).filter(
+        (p) => p && typeof p.klucz === 'string' && typeof p.nazwa === 'string' && (p.strona === 'przychod' || p.strona === 'koszt'),
+      );
+      const slownik = Array.isArray(przyklady) ? przyklady : (await database.getPodatkiCitUstawienia()).slownik;
+      const wzory = slownik.filter(
+        (r) => r && typeof r.fraza === 'string' && (r.strona === 'przychod' || r.strona === 'koszt') && typeof r.kategoria === 'string',
+      );
+      return klasyfikujCitAi(lista, apiKey, database.getAiModel(), wzory);
+    },
+  );
 
-  /** A return's file name: "CIT-8 2026 - Wspólnota Mieszkaniowa Testowa 1.pdf" (+ " (podpisana)"). */
-  const citPlik = (rek: PodatekCit, dopisek = '') =>
-    `${nazwaPliku(`CIT-8 ${rek.rok} - ${rek.dane.nazwaPelna || rek.adresNazwa}`)}${dopisek}.pdf`;
+  /** The statement library's row names, grouped — the CIT dictionary's review of what it does and does not cover. */
+  ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_PRZEGLAD, async () => przegladPozycjiCit(await database.getSprawozdaniaFull()));
+
+  /** A return's file name: "CIT-8 2026 - Wspólnota Mieszkaniowa Testowa 1.pdf" (+ " (podpisana)", or .xml). */
+  const citPlik = (rek: PodatekCit, dopisek = '', rozszerzenie: 'pdf' | 'xml' = 'pdf') =>
+    `${nazwaPliku(`CIT-8 ${rek.rok} - ${rek.dane.nazwaPelna || rek.adresNazwa}`)}${dopisek}.${rozszerzenie}`;
+
+  const citSlownik = async () => (await database.getPodatkiCitUstawienia()).slownik;
 
   /** The PDF of a stored return — read from the saved data, never from the screen. */
   const citBytes = async (rek: PodatekCit, dane = rek.dane) =>
-    cit8Pdf({ rok: rek.rok, dane, slownik: (await database.getPodatkiCitUstawienia()).slownik });
+    cit8Pdf({ rok: rek.rok, dane, slownik: await citSlownik() });
+
+  const citZapiszPobranie = async (rek: PodatekCit, plik: string, who: string, podpis?: PodpisSlad) => {
+    try {
+      await database.recordPodatekCitPobranie(rek.id, plik, who, podpis);
+    } catch (error: unknown) {
+      log.warn('[CIT] download not recorded:', error instanceof Error ? error.message : error);
+    }
+  };
 
   ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_PDF, async (_, id: number) => {
     const rek = await database.getPodatekCit(id);
@@ -4061,38 +4111,204 @@ function setupIpcHandlers() {
     const bytes = await citBytes(rek);
     const filePath = uniquePath(podatkiRokFolder(rek.rok, 'CIT-8') ?? app.getPath('downloads'), citPlik(rek));
     fs.writeFileSync(filePath, bytes);
-    try {
-      await database.recordPodatekCitPobranie(rek.id, path.basename(filePath), await zebraniaWho());
-    } catch (error: unknown) {
-      log.warn('[CIT] download not recorded:', error instanceof Error ? error.message : error);
-    }
+    await citZapiszPobranie(rek, path.basename(filePath), await zebraniaWho());
     return { filePath };
   });
 
-  /**
-   * One return made and signed with the card (PAdES), as "… (podpisana).pdf" next
-   * to its PDF (Settings folder) or in Downloads. An empty poz. 327 gets the
-   * signing date. The PIN goes straight to the card and is never logged.
-   */
-  ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_PODPISZ, async (_, id: number, wybor: PodpisWybor) => {
+  /** The XML of one return as e-Deklaracje takes it, unsigned — next to its PDF. */
+  ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_XML, async (_, id: number) => {
     const rek = await database.getPodatekCit(id);
     if (!rek) throw new Error('Tego zeznania już nie ma — mogło zostać usunięte.');
-    // Before the PIN: a missing folder must not cost a signature.
-    const dir = podatkiRokFolder(rek.rok, 'CIT-8') ?? app.getPath('downloads');
-    const bytes = await citBytes(rek, zDataPodpisu(rek.dane, dzisIso()));
-    const { pdf, podpis } = await zKartaDoPodpisu(database.getSettings().podpisBiblioteka ?? '', wybor, async (sesja) => ({
-      pdf: await podpiszPdf(bytes, { ...sesja, powod: `Zeznanie CIT-8 za ${rek.rok} r.` }),
-      podpis: { podmiot: sesja.cert.podmiot, wystawca: sesja.cert.wystawca, numerSeryjny: sesja.cert.numerSeryjny },
-    }));
-    const filePath = uniquePath(dir, citPlik(rek, ' (podpisana)'));
-    fs.writeFileSync(filePath, pdf);
-    log.info(`[CIT] return ${rek.id} signed with certificate ${podpis.numerSeryjny}`);
-    try {
-      await database.recordPodatekCitPobranie(rek.id, path.basename(filePath), await zebraniaWho(), podpis);
-    } catch (error: unknown) {
-      log.warn('[CIT] download not recorded:', error instanceof Error ? error.message : error);
+    const xml = cit8Xml({ rok: rek.rok, dane: rek.dane, slownik: await citSlownik() });
+    const filePath = uniquePath(podatkiRokFolder(rek.rok, 'CIT-8') ?? app.getPath('downloads'), citPlik(rek, '', 'xml'));
+    fs.writeFileSync(filePath, xml, 'utf8');
+    await citZapiszPobranie(rek, path.basename(filePath), await zebraniaWho());
+    return { filePath };
+  });
+
+  /** The gateway is reached through Electron's network stack, so the system proxy applies. */
+  const bramkaFetch: FetchLike = (url, init) => net.fetch(url, init);
+
+  /**
+   * One signed return to the gateway, recorded on the return whatever the answer. Held back on production
+   * when the return is filed already (or its last send still waits) and it is not a correction.
+   */
+  const citWyslij = async (
+    rek: PodatekCit,
+    xml: string,
+    plik: string,
+    srodowisko: EDeklaracjeSrodowisko,
+    who: string,
+    nazwa: string,
+  ): Promise<PodatkiWysylkaWynik> => {
+    const wynik = (refId: string | null, status: number | null, opis: string): PodatkiWysylkaWynik => ({
+      id: rek.id,
+      nazwa,
+      srodowisko,
+      refId,
+      status,
+      opis,
+    });
+    if (srodowisko === 'prod' && rek.dane.cel !== 2) {
+      const przyjeta = przyjetaProdukcyjnie(rek.dane.wysylki);
+      const czeka = ostatniaWysylka(rek.dane.wysylki, 'prod');
+      if (przyjeta) return wynik(null, null, `Nie wysłano: to zeznanie ma już UPO (nr ${przyjeta.refId}). Zmianę złóż jako korektę.`);
+      if (czeka && czekaNaUpo(czeka)) {
+        return wynik(null, null, `Nie wysłano: poprzednia wysyłka (nr ${czeka.refId}) czeka jeszcze na UPO — sprawdź UPO.`);
+      }
+      if (rek.dane.zlozone) return wynik(null, null, 'Nie wysłano: zeznanie jest oznaczone jako złożone. Zmianę złóż jako korektę.');
     }
-    return { filePath, podpis };
+    const teraz = new Date().toISOString();
+    let odp: PodatkiWysylkaWynik;
+    try {
+      const r = await wyslijDokument(bramkaFetch, srodowisko, xml);
+      odp = wynik(r.refId, r.status, r.opis);
+    } catch (error: unknown) {
+      odp = wynik(null, null, error instanceof Error ? error.message : String(error));
+    }
+    await database
+      .recordPodatekCitWysylka(rek.id, {
+        at: teraz,
+        by: who,
+        srodowisko,
+        plik,
+        refId: odp.refId,
+        status: odp.status,
+        opis: odp.opis,
+        sprawdzono: null,
+        upo: null,
+      })
+      .catch((error: unknown) => log.warn('[CIT] send not recorded:', error instanceof Error ? error.message : error));
+    log.info(`[CIT] return ${rek.id} sent to ${srodowisko}: ${odp.refId ?? '—'} ${odp.status ?? ''} ${odp.opis}`);
+    return odp;
+  };
+
+  /** The UPO file of a send: "CIT-8 2026 - … UPO.xml", "(TEST)" from the test gateway. */
+  const upoPlik = (rek: PodatekCit, w: EDeklaracjeWysylka) => citPlik(rek, w.srodowisko === 'test' ? ' UPO (TEST)' : ' UPO', 'xml');
+
+  /** Writes a UPO into the year's folder — or finds it there already, same name and same bytes. */
+  const zapiszUpoPlik = (rek: PodatekCit, w: EDeklaracjeWysylka, tresc: string): string => {
+    const folder = podatkiRokFolder(rek.rok, 'CIT-8') ?? app.getPath('downloads');
+    const nazwa = upoPlik(rek, w);
+    const juz = path.join(folder, nazwa);
+    if (fs.existsSync(juz) && fs.readFileSync(juz, 'utf8') === tresc) return juz;
+    const sciezka = uniquePath(folder, nazwa);
+    fs.writeFileSync(sciezka, tresc, 'utf8');
+    return sciezka;
+  };
+
+  /**
+   * Asks the gateway about every send of the given returns it took and has not answered for good — each on
+   * the gateway it went to, whatever the switch says now. A UPO is kept on the send (so any computer can
+   * download it) and saved into the year's folder; a production UPO ticks the return as filed. One check at a
+   * time: the 30-second automat and the button share this queue.
+   */
+  let citUpoKolejka: Promise<unknown> = Promise.resolve();
+  const citSprawdzUpo = (
+    filtr: (rek: PodatekCit) => boolean,
+    wysylka: (w: EDeklaracjeWysylka) => boolean = czekaNaUpo,
+  ): Promise<PodatkiCitUpoResult> => {
+    const praca = citUpoKolejka.then(async (): Promise<PodatkiCitUpoResult> => {
+      const rekordy = (await database.getPodatkiCit()).filter(filtr);
+      const who = await zebraniaWho();
+      const wyniki: PodatkiCitUpoResult['wyniki'] = [];
+      const bledy: PodatkiCitUpoResult['bledy'] = [];
+      const zmienione = new Map<number, PodatekCit>();
+      let folder = '';
+      for (const rek of rekordy) {
+        const nazwa = rek.dane.nazwaPelna || rek.adresNazwa;
+        for (const w of rek.dane.wysylki.filter(wysylka)) {
+          const refId = w.refId!;
+          try {
+            const odp = await pobierzUpo(bramkaFetch, w.srodowisko, refId);
+            let upoSciezka: string | null = null;
+            const teraz = new Date().toISOString();
+            if (odp.status === 200 && odp.upo) {
+              upoSciezka = zapiszUpoPlik(rek, w, odp.upo);
+              folder = path.dirname(upoSciezka);
+            }
+            const po = await database.updatePodatekCitWysylka(
+              rek.id,
+              refId,
+              {
+                status: odp.status,
+                opis: odp.opis,
+                sprawdzono: teraz,
+                upo: odp.status === 200 && odp.upo ? { at: teraz, plik: path.basename(upoSciezka!), tresc: odp.upo } : w.upo,
+              },
+              who,
+            );
+            if (po) zmienione.set(rek.id, po);
+            wyniki.push({
+              id: rek.id,
+              nazwa,
+              srodowisko: w.srodowisko,
+              refId,
+              status: odp.status,
+              opis: odp.opis,
+              upoSciezka,
+              zmiana: odp.status !== w.status,
+            });
+          } catch (error: unknown) {
+            bledy.push({ id: rek.id, nazwa, powod: error instanceof Error ? error.message : String(error) });
+          }
+        }
+      }
+      if (wyniki.length + bledy.length > 0) {
+        log.info(`[CIT] UPO asked for ${wyniki.length + bledy.length} sends: ${wyniki.filter((w) => w.upoSciezka).length} UPO`);
+      }
+      return { wyniki, bledy, rekordy: [...zmienione.values()], folder };
+    });
+    citUpoKolejka = praca.catch(() => undefined);
+    return praca;
+  };
+
+  /**
+   * The automat: while any send waits for its answer, the gateway is asked every 30 seconds — in the
+   * background, whether or not the CIT tab is open — and stops by itself once nothing waits. Kicked at start,
+   * after a send, after "Sprawdź UPO" and whenever the CIT list is read. What changed is pushed to the window
+   * ("podatki:cit-upo"), which reloads and says it.
+   */
+  const UPO_CO_MS = 30_000;
+  let citUpoTimer: NodeJS.Timeout | null = null;
+  const citUpoAutomat = (zaMs = UPO_CO_MS) => {
+    if (citUpoTimer) return;
+    citUpoTimer = setTimeout(async () => {
+      let dalej = false;
+      try {
+        const czeka = (w: EDeklaracjeWysylka) => czekaNaUpo(w) && swiezaWysylka(w);
+        const wynik = await citSprawdzUpo((rek) => rek.dane.wysylki.some(czeka), czeka);
+        const zmiany = wynik.wyniki.filter((w) => w.zmiana);
+        if (zmiany.length > 0 && mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('podatki:cit-upo-zmiana', { ...wynik, wyniki: zmiany });
+        }
+        // Still waiting, or the gateway could not be reached this time — try again in 30 s.
+        dalej = wynik.wyniki.some((w) => !statusKoncowy(w.status)) || wynik.bledy.length > 0;
+      } catch (error: unknown) {
+        // Not signed in yet, no network to the database: the next kick starts it again.
+        log.debug('[CIT] UPO automat paused:', error instanceof Error ? error.message : error);
+      }
+      citUpoTimer = null;
+      if (dalej) citUpoAutomat();
+    }, zaMs);
+  };
+  citUpoAutomat(15_000);
+
+  /** "Sprawdź UPO" by hand: the year's waiting sends, or those of `ids` — then the automat carries on if needed. */
+  ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_UPO, async (_, rok: number, ids?: number[]): Promise<PodatkiCitUpoResult> => {
+    const only = ids && ids.length > 0 ? new Set(ids) : null;
+    const wynik = await citSprawdzUpo((p) => p.rok === rok && (!only || only.has(p.id)));
+    if (wynik.wyniki.some((w) => !statusKoncowy(w.status))) citUpoAutomat();
+    return wynik;
+  });
+
+  /** "Pobierz UPO": the UPO kept on a send, written into the year's folder (or found there) — its path. */
+  ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_UPO_POBIERZ, async (_, id: number, refId: string) => {
+    const rek = await database.getPodatekCit(id);
+    if (!rek) throw new Error('Tego zeznania już nie ma — mogło zostać usunięte.');
+    const w = rek.dane.wysylki.find((x) => x.refId === refId);
+    if (!w?.upo?.tresc) throw new Error('Ta wysyłka nie ma jeszcze UPO.');
+    return { filePath: zapiszUpoPlik(rek, w, w.upo.tresc) };
   });
 
   /** "Przerwij" of a signing run: it stops after the return in hand. */
@@ -4103,24 +4319,37 @@ function setupIpcHandlers() {
   });
 
   /**
-   * The ticked returns of a year signed one by one under a single login — one
-   * PIN for all — into the Settings folder's "CIT-8 <rok>", else a new "CIT-8
-   * <rok> podpisane" in Downloads. Same contract as the DN-1 run: a return that
-   * cannot be printed yet is skipped with the reason before the card is touched;
-   * a card failure stops the run (rejecting when nothing is signed yet, so the
-   * window can ask for the PIN again).
+   * The ticked returns of a year (or the one open on its screen) signed one by one under a single login — one
+   * PIN for all — into the Settings folder's "CIT-8 <rok>", else a new "CIT-8 <rok> podpisane" in Downloads.
+   * The contract of the PIT run: the XML gets the XAdES signature e-Deklaracje wants ("… (podpisana).xml"),
+   * the PDF is the community's copy, signed with PAdES only when asked. A return whose XML cannot be made yet
+   * is skipped with the reason before the card is touched; a card failure stops the run (rejecting when
+   * nothing is signed yet, so the window can ask for the PIN again). Every file written is one entry of
+   * `podpisane`, so a return shows up with its XML and its PDF.
+   *
+   * With `wyslij` each signed XML then goes to the e-Deklaracje gateway of Settings → Administracja (test
+   * unless switched) — after the card session has closed, so no network wait holds the card. A send that
+   * fails is noted for that return and the rest go on. On the production gateway a return already filed
+   * (UPO, the filed tick, or a send still waiting for its UPO) is held back unless it is a correction.
    */
   ipcMain.handle(
     IPC_CHANNELS.PODATKI_CIT_PODPISZ_WIELE,
-    async (event, rok: number, ids: number[], wybor: PodpisWybor): Promise<PodatkiPodpisWieleResult> => {
+    async (
+      event,
+      rok: number,
+      ids: number[],
+      wybor: PodpisWybor,
+      opcje: { pdfPodpisany: boolean; wyslij?: boolean },
+    ): Promise<PodatkiPodpisWieleResult> => {
       citPodpisyPrzerwane = false;
+      const srodowisko = database.getEDeklaracjeSrodowisko();
       const only = new Set(ids);
       const rekordy = (await database.getPodatkiCit()).filter((p) => p.rok === rok && only.has(p.id));
-      const slownik = (await database.getPodatkiCitUstawienia()).slownik;
+      const slownik = await citSlownik();
       const nazwa = (rek: PodatekCit) => rek.dane.nazwaPelna || rek.adresNazwa;
       const pominiete: PodatkiPodpisWieleResult['pominiete'] = [];
       const gotowe = rekordy.filter((rek) => {
-        const problemy = problemyCIT8(rek, slownik);
+        const problemy = problemyCIT8Xml(rek, slownik);
         if (problemy.length > 0) {
           pominiete.push({ id: rek.id, nazwa: nazwa(rek), powod: problemy.map((p) => opisProblemuCit(p, rok)).join('; ') });
         }
@@ -4140,6 +4369,9 @@ function setupIpcHandlers() {
         }
       };
       const podpisane: PodatkiPodpisWieleResult['podpisane'] = [];
+      /** The signed XMLs to send once the card is let go. */
+      const doWyslania: { rek: PodatekCit; xml: string; plik: string }[] = [];
+      let podpisaneZeznania = 0;
       let przetworzone = 0;
       let przerwano: string | null = null;
       let slad: PodatkiPodpisWieleResult['podpis'] = null;
@@ -4154,18 +4386,29 @@ function setupIpcHandlers() {
           }
           postep(przetworzone, nazwa(rek));
           try {
-            const bytes = await cit8Pdf({ rok, dane: zDataPodpisu(rek.dane, dzis), slownik });
-            const pdf = await podpiszPdf(bytes, { ...sesja, powod: `Zeznanie CIT-8 za ${rok} r.` });
-            if (podpisane.length === 0) fs.mkdirSync(folder, { recursive: true });
-            const filePath = uniquePath(folder, citPlik(rek, ' (podpisana)'));
-            fs.writeFileSync(filePath, pdf);
-            podpisane.push({ id: rek.id, nazwa: nazwa(rek), sciezka: filePath });
-            await database.recordPodatekCitPobranie(rek.id, path.basename(filePath), who, podpis).catch((error: unknown) => {
-              log.warn('[CIT] download not recorded:', error instanceof Error ? error.message : error);
-            });
+            // Everything that can fail without the card is made first: a signature must never be spent on a
+            // return whose other half cannot be made.
+            const xml = cit8Xml({ rok, dane: rek.dane, slownik });
+            const pdf = await cit8Pdf({ rok, dane: zDataPodpisu(rek.dane, dzis), slownik });
+            const podpisanyXml = await podpiszXml(xml, sesja);
+            if (podpisaneZeznania === 0) fs.mkdirSync(folder, { recursive: true });
+            const sciezkaXml = uniquePath(folder, citPlik(rek, ' (podpisana)', 'xml'));
+            fs.writeFileSync(sciezkaXml, podpisanyXml, 'utf8');
+            podpisane.push({ id: rek.id, nazwa: nazwa(rek), sciezka: sciezkaXml });
+            podpisaneZeznania += 1;
+            await citZapiszPobranie(rek, path.basename(sciezkaXml), who, podpis);
+            doWyslania.push({ rek, xml: podpisanyXml, plik: path.basename(sciezkaXml) });
+
+            const bytes = opcje?.pdfPodpisany
+              ? await podpiszPdf(pdf, { ...sesja, powod: `Zeznanie CIT-8 za ${rok} r.` })
+              : pdf;
+            const sciezkaPdf = uniquePath(folder, citPlik(rek, opcje?.pdfPodpisany ? ' (podpisana)' : ''));
+            fs.writeFileSync(sciezkaPdf, bytes);
+            podpisane.push({ id: rek.id, nazwa: nazwa(rek), sciezka: sciezkaPdf });
+            await citZapiszPobranie(rek, path.basename(sciezkaPdf), who, opcje?.pdfPodpisany ? podpis : undefined);
           } catch (error: unknown) {
             if (error instanceof BladKarty) {
-              if (podpisane.length === 0) throw error;
+              if (podpisaneZeznania === 0) throw error;
               przerwano = error.message;
               break;
             }
@@ -4177,59 +4420,87 @@ function setupIpcHandlers() {
       });
 
       log.info(
-        `[CIT] ${podpisane.length}/${gotowe.length} returns of ${rok} signed with one login` +
+        `[CIT] ${podpisaneZeznania}/${gotowe.length} returns of ${rok} signed with one login` +
           (przerwano ? ` — stopped: ${przerwano}` : ''),
       );
+
+      const wysylki: PodatkiWysylkaWynik[] = [];
+      if (opcje?.wyslij) {
+        for (const [i, { rek, xml, plik }] of doWyslania.entries()) {
+          if (citPodpisyPrzerwane) {
+            const opis = 'Nie wysłano: przerwane na Twoje polecenie. Podpisany plik jest zapisany.';
+            wysylki.push({ id: rek.id, nazwa: nazwa(rek), srodowisko, refId: null, status: null, opis });
+            continue;
+          }
+          postep(i, `${nazwa(rek)} — e-Deklaracje`);
+          wysylki.push(await citWyslij(rek, xml, plik, srodowisko, who, nazwa(rek)));
+        }
+        postep(doWyslania.length, '');
+        log.info(`[CIT] ${wysylki.filter((w) => w.refId).length}/${doWyslania.length} returns of ${rok} sent (${srodowisko})`);
+        if (wysylki.some((w) => w.refId)) citUpoAutomat();
+      }
       return {
-        folder: podpisane.length > 0 ? folder : '',
+        folder: podpisaneZeznania > 0 ? folder : '',
         podpis: slad,
         podpisane,
         pominiete,
         przerwano,
         // The run stopped at `przetworzone`: that one and the rest are left.
         niepodpisane: gotowe.slice(przetworzone).map((rek) => ({ id: rek.id, nazwa: nazwa(rek) })),
+        ...(opcje?.wyslij ? { wysylki } : {}),
       };
     },
   );
 
   /**
-   * Every return of a year — or only the ticked ones — one PDF each, into the
-   * Settings folder's "CIT-8 <rok>", else a new "CIT-8 <rok>" in Downloads. A
-   * community whose return cannot be printed yet is skipped and named with the
-   * reason, rather than stopping the rest.
+   * Every return of a year — or only the ticked ones — as XML, PDF or both, into the Settings folder's
+   * "CIT-8 <rok>", else a new "CIT-8 <rok>" in Downloads. A community whose file cannot be made yet is
+   * skipped and named with the reason, rather than stopping the rest; the XML asks more of the data than
+   * the PDF (office code, full seat address), so a return may come out as a PDF alone.
    */
   ipcMain.handle(
-    IPC_CHANNELS.PODATKI_CIT_PDF_WSZYSTKIE,
-    async (_, rok: number, ids?: number[]): Promise<PodatkiCitPdfWszystkieResult> => {
+    IPC_CHANNELS.PODATKI_CIT_PLIKI,
+    async (_, rok: number, ids: number[] | undefined, tryb: 'xml' | 'pdf' | 'oba' = 'pdf'): Promise<PodatkiCitPlikiResult> => {
       const only = ids && ids.length > 0 ? new Set(ids) : null;
       const rekordy = (await database.getPodatkiCit()).filter((p) => p.rok === rok && (!only || only.has(p.id)));
-      const slownik = (await database.getPodatkiCitUstawienia()).slownik;
+      const slownik = await citSlownik();
       const folder = podatkiRokFolder(rok, 'CIT-8') ?? uniquePath(app.getPath('downloads'), `CIT-8 ${rok}`);
       const who = await zebraniaWho();
-      const pominiete: PodatkiCitPdfWszystkieResult['pominiete'] = [];
+      const pominiete: PodatkiCitPlikiResult['pominiete'] = [];
       let zapisane = 0;
+      let plikow = 0;
+      const zapisz = async (rek: PodatekCit, plik: string, tresc: Uint8Array | string) => {
+        if (plikow === 0) fs.mkdirSync(folder, { recursive: true });
+        const filePath = uniquePath(folder, plik);
+        fs.writeFileSync(filePath, tresc);
+        plikow += 1;
+        await citZapiszPobranie(rek, path.basename(filePath), who);
+      };
       for (const rek of rekordy) {
         const nazwa = rek.dane.nazwaPelna || rek.adresNazwa;
-        const problemy = problemyCIT8(rek, slownik);
-        if (problemy.length > 0) {
-          pominiete.push({ nazwa, powod: problemy.map((p) => opisProblemuCit(p, rok)).join('; ') });
-          continue;
+        const powody: string[] = [];
+        let cos = false;
+        if (tryb !== 'xml') {
+          try {
+            await zapisz(rek, citPlik(rek), await cit8Pdf({ rok, dane: rek.dane, slownik }));
+            cos = true;
+          } catch (error: unknown) {
+            powody.push(error instanceof Error ? error.message : String(error));
+          }
         }
-        try {
-          const bytes = await cit8Pdf({ rok, dane: rek.dane, slownik });
-          if (zapisane === 0) fs.mkdirSync(folder, { recursive: true });
-          const filePath = uniquePath(folder, citPlik(rek));
-          fs.writeFileSync(filePath, bytes);
-          zapisane += 1;
-          await database.recordPodatekCitPobranie(rek.id, path.basename(filePath), who).catch((error: unknown) => {
-            log.warn('[CIT] download not recorded:', error instanceof Error ? error.message : error);
-          });
-        } catch (error: unknown) {
-          pominiete.push({ nazwa, powod: error instanceof Error ? error.message : String(error) });
+        if (tryb !== 'pdf') {
+          try {
+            await zapisz(rek, citPlik(rek, '', 'xml'), cit8Xml({ rok, dane: rek.dane, slownik }));
+            cos = true;
+          } catch (error: unknown) {
+            powody.push(error instanceof Error ? error.message : String(error));
+          }
         }
+        if (cos) zapisane += 1;
+        if (powody.length > 0) pominiete.push({ nazwa, powod: powody.join(' ') });
       }
-      log.info(`[CIT] ${zapisane}/${rekordy.length} returns of ${rok} saved to ${folder}`);
-      return { folder: zapisane > 0 ? folder : '', zapisane, pominiete };
+      log.info(`[CIT] ${zapisane}/${rekordy.length} returns of ${rok} (${tryb}, ${plikow} files) saved to ${folder}`);
+      return { folder: plikow > 0 ? folder : '', zapisane, pominiete };
     },
   );
 
@@ -4258,13 +4529,13 @@ function setupIpcHandlers() {
     return stanKarty('');
   });
 
-  // ---- Podpis kwalifikowany: any PDF signed with the card ----
+  // ---- Podpis kwalifikowany: any PDF or XML signed with the card ----
 
   ipcMain.handle(IPC_CHANNELS.PODPIS_PDF_WYBIERZ, async () => {
     const result = await dialog.showOpenDialog(mainWindow!, {
-      title: 'Pliki PDF do podpisania',
+      title: 'Pliki PDF i XML do podpisania',
       properties: ['openFile', 'multiSelections'],
-      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      filters: [{ name: 'PDF, XML', extensions: ['pdf', 'xml'] }],
     });
     if (result.canceled) return [];
     return result.filePaths.map((p) => ({ fileName: path.basename(p), filePath: p }));
@@ -4273,7 +4544,7 @@ function setupIpcHandlers() {
   /** What the screen shows about a dropped file — and whether it can be signed at all. */
   ipcMain.handle(IPC_CHANNELS.PODPIS_PDF_ANALIZA, async (_, filePath: string): Promise<PodpisPdfAnaliza> => {
     try {
-      return await analizujPdf(fs.readFileSync(filePath));
+      return await analizujPlik(filePath, fs.readFileSync(filePath));
     } catch (error: unknown) {
       const brak = (error as NodeJS.ErrnoException).code === 'ENOENT';
       return {
@@ -4292,12 +4563,12 @@ function setupIpcHandlers() {
   });
 
   /**
-   * The given PDFs signed one by one under a single card login, each into
-   * "<name> (podpisany).pdf" next to its original. Files the app cannot sign
-   * (already signed, encrypted, unreadable) are named with the reason before the
-   * card is touched. A card failure with nothing signed yet rejects, so the
-   * window asks for the PIN again; later it stops the run and returns the rest
-   * as unsigned. A run that reached the card goes to the history.
+   * The given PDFs and XMLs signed one by one under a single card login, each
+   * into "<name> (podpisany).<ext>" next to its original (PAdES / XAdES). Files
+   * the app cannot sign (already signed, encrypted, not UTF-8, unreadable) are
+   * named with the reason before the card is touched. A card failure with
+   * nothing signed yet rejects, so the window asks for the PIN again; later it
+   * stops the run and returns the rest as unsigned. A run that reached the card goes to the history.
    */
   ipcMain.handle(
     IPC_CHANNELS.PODPIS_PDF_PODPISZ,
@@ -4314,7 +4585,7 @@ function setupIpcHandlers() {
         wolnaSciezka: uniquePath,
       });
       log.info(
-        `[PODPIS] ${wynik.podpisane.length}/${filePaths.length} PDF files signed, ${wynik.pominiete.length} skipped` +
+        `[PODPIS] ${wynik.podpisane.length}/${filePaths.length} files signed, ${wynik.pominiete.length} skipped` +
           (wynik.przerwano ? ` — stopped: ${wynik.przerwano}` : ''),
       );
 
@@ -4684,15 +4955,6 @@ function setupIpcHandlers() {
     },
   );
 
-  ipcMain.handle(
-    IPC_CHANNELS.SET_SPOTKANIE_DOKUMENTY,
-    async (_, id: number, sent: boolean, opis: string) => {
-      const session = await authService.getSession();
-      await database.setSpotkanieDokumenty(id, sent, opis, session?.email ?? '');
-      return true;
-    },
-  );
-
   ipcMain.handle(IPC_CHANNELS.GET_SPOTKANIA_MAILINGI, async () => {
     try {
       return await database.getSpotkaniaMailingi();
@@ -4744,10 +5006,13 @@ function setupIpcHandlers() {
       database.addKsiegowaniePriorytet(monthKey, adresId, adresNazwa, notatka ?? '', await sessionEmail()),
   );
 
-  ipcMain.handle(IPC_CHANNELS.SET_KS_PRIORYTET_NOTATKA, async (_, id: number, notatka: string) => {
-    await database.setKsiegowaniePriorytetNotatka(id, notatka ?? '', await sessionEmail());
-    return true;
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.SET_KS_PRIORYTET_NOTATKA,
+    async (_, id: number, notatka: string, mentions: string[]) => {
+      await database.setKsiegowaniePriorytetNotatka(id, notatka ?? '', mentions ?? [], await sessionEmail());
+      return true;
+    },
+  );
 
   ipcMain.handle(IPC_CHANNELS.REMOVE_KS_PRIORYTET, async (_, id: number) => {
     await database.removeKsiegowaniePriorytet(id);
@@ -4781,12 +5046,12 @@ function setupIpcHandlers() {
 
   ipcMain.handle(
     IPC_CHANNELS.ADD_KS_UWAGA,
-    async (_, adresId: number | null, adresNazwa: string, tresc: string) =>
-      database.addKsiegowanieUwaga(adresId, adresNazwa, tresc, await sessionEmail()),
+    async (_, adresId: number | null, adresNazwa: string, tresc: string, mentions: string[]) =>
+      database.addKsiegowanieUwaga(adresId, adresNazwa, tresc, mentions ?? [], await sessionEmail()),
   );
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_KS_UWAGA, async (_, id: number, tresc: string) => {
-    await database.updateKsiegowanieUwaga(id, tresc);
+  ipcMain.handle(IPC_CHANNELS.UPDATE_KS_UWAGA, async (_, id: number, tresc: string, mentions: string[]) => {
+    await database.updateKsiegowanieUwaga(id, tresc, mentions ?? []);
     return true;
   });
 
@@ -5182,6 +5447,7 @@ app.whenReady().then(() => {
     getPriorytety: () => database.getKsiegowaniaPriorytety(),
     getUwagi: () => database.getKsiegowaniaUwagi(),
     getSpotkania: () => database.getSpotkania(),
+    getSpotkaniaTypy: () => database.getSpotkaniaTypy(),
     getNotificationPrefs: (email) => database.getNotificationPrefs(email),
     resolveName: async (email) => {
       try {

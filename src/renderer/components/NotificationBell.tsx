@@ -184,7 +184,7 @@ const NotificationBell: React.FC<Props> = ({ language, onOpenTarget }) => {
                         aria-label={t.inboxDelete}
                         onClick={() => remove([n.id])}
                       >
-                        <Icon name="x" size={15} />
+                        <Icon name="trash" size={15} />
                       </button>
                     </span>
                   </li>

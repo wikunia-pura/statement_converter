@@ -1041,11 +1041,12 @@ const App: React.FC = () => {
               setHistorySearchSeed(query);
               navigate('converter', 'history');
             }}
-            onShowInCalendar={(filter) => {
+            onShowInCalendar={(filter, monthKey) => {
               setKalStateFilter(filter);
-              // The month too: the tiles count from today on, and the calendar
-              // would otherwise open on whatever month it was last left at.
-              setKalMonth(currentMonthKey());
+              // The month too: the first one holding what the tile counted — the
+              // tiles count from today on, and the calendar would otherwise open
+              // on whatever month it was last left at, maybe showing none of them.
+              setKalMonth(monthKey ?? currentMonthKey());
               navigate('kalendarz', 'calendar');
             }}
           />
@@ -1089,9 +1090,9 @@ const App: React.FC = () => {
                   setHistorySearchSeed(query);
                   navigate('converter', 'history');
                 }}
-                onShowInCalendar={(filter) => {
+                onShowInCalendar={(filter, monthKey) => {
                   setKalStateFilter(filter);
-                  setKalMonth(currentMonthKey());
+                  setKalMonth(monthKey ?? currentMonthKey());
                   navigate('kalendarz', 'calendar');
                 }}
               />

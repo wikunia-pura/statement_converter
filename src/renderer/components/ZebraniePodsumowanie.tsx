@@ -19,6 +19,7 @@ import { Skrot, planSkrot, sprawozdanieSkrot } from '../../shared/zebranie-podsu
 import { formatStamp } from '../../shared/calendar';
 import { translations, Language } from '../translations';
 import { useNotify } from './Notifications';
+import { ipcErrorMessage } from '../ipcError';
 import { FormSection } from './FormSection';
 import Icon from './Icon';
 
@@ -293,7 +294,7 @@ const ZebraniePodsumowanie: React.FC<{
       setLastFile(filePath);
       notify.success(t.zfinDownloaded.replace('{file}', baseName(filePath)), { file: filePath });
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.zfinDownloadError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.zfinDownloadError);
     } finally {
       setBusy(false);
     }

@@ -6,6 +6,7 @@
 import AdmZip from 'adm-zip';
 import iconv from 'iconv-lite';
 import { PKOBiznesTransaction, PKOBiznesStatement } from './types';
+import { DroppedStatementLine } from '../../shared/types';
 
 export class PKOBiznesParser {
   /**
@@ -35,6 +36,7 @@ export class PKOBiznesParser {
       
       // Parse all CSV files
       const allTransactions: PKOBiznesTransaction[] = [];
+      const dropped: DroppedStatementLine[] = [];
       const accountNumbers = new Set<string>();
       
       for (const entry of csvFiles) {
@@ -45,23 +47,25 @@ export class PKOBiznesParser {
         
         console.log(`[PKO Biznes Parser] Parsing file: ${fileName} (${text.length} bytes)`);
         
-        const transactions = this.parseCSVContent(text, fileName);
+        const transactions = this.parseCSVContent(text, fileName, dropped);
         allTransactions.push(...transactions);
         
         // Collect account numbers
         transactions.forEach(t => accountNumbers.add(t.ownAccountNumber));
       }
       
-      if (allTransactions.length === 0) {
+      // Nothing read and nothing rejected: not an ELIXIR archive at all. With
+      // rejected lines the conversion goes on, so they reach the review screen.
+      if (allTransactions.length === 0 && dropped.length === 0) {
         throw new Error('No transactions found in any CSV file');
       }
-      
+
       // Sort transactions by date
       allTransactions.sort((a, b) => a.date.localeCompare(b.date));
-      
+
       // Determine date range
-      const startDate = allTransactions[0].date;
-      const endDate = allTransactions[allTransactions.length - 1].date;
+      const startDate = allTransactions[0]?.date ?? '';
+      const endDate = allTransactions[allTransactions.length - 1]?.date ?? '';
       
       console.log(`[PKO Biznes Parser] Successfully parsed ${allTransactions.length} transactions from ${csvFiles.length} files`);
       console.log(`[PKO Biznes Parser] Date range: ${this.formatDate(startDate)} - ${this.formatDate(endDate)}`);
@@ -73,6 +77,7 @@ export class PKOBiznesParser {
         startDate,
         endDate,
         transactions: allTransactions,
+        dropped,
       };
     } catch (error) {
       console.error('[PKO Biznes Parser] Error parsing ZIP:', error);
@@ -83,26 +88,35 @@ export class PKOBiznesParser {
   /**
    * Parse CSV content from a single file
    */
-  private parseCSVContent(content: string, sourceFile: string): PKOBiznesTransaction[] {
+  private parseCSVContent(
+    content: string,
+    sourceFile: string,
+    dropped: DroppedStatementLine[]
+  ): PKOBiznesTransaction[] {
     const transactions: PKOBiznesTransaction[] = [];
-    const lines = content.split('\n').filter(line => line.trim().length > 0);
-    
+    const lines = content.split('\n');
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) continue;
-      
+      // A line that cannot be read is reported with its file and line number —
+      // the ZIP holds several files, so the number alone would not find it.
+      const reject = (reason: DroppedStatementLine['reason'], detail = '') =>
+        dropped.push({ excerpt: `${sourceFile}${detail ? ` ${detail}` : ''}`, reason, line: i + 1 });
+
       try {
-        const transaction = this.parseCSVLine(line, sourceFile);
+        const transaction = this.parseCSVLine(line, sourceFile, reject);
         if (transaction) {
           transactions.push(transaction);
         }
       } catch (error) {
         console.warn(`[PKO Biznes Parser] Error parsing line ${i + 1} in ${sourceFile}:`, error);
         console.warn(`[PKO Biznes Parser] Line content: ${line.substring(0, 100)}...`);
+        reject('error');
         // Continue parsing other lines
       }
     }
-    
+
     return transactions;
   }
   
@@ -113,12 +127,17 @@ export class PKOBiznesParser {
    *         counterpartyName,counterpartyNameExtra,generalCode,bankCode,description,
    *         emptyField,referenceNumber,emptyField,emptyField
    */
-  private parseCSVLine(line: string, sourceFile: string): PKOBiznesTransaction | null {
+  private parseCSVLine(
+    line: string,
+    sourceFile: string,
+    reject: (reason: DroppedStatementLine['reason'], detail?: string) => void
+  ): PKOBiznesTransaction | null {
     // Parse CSV with quoted fields
     const fields = this.parseCSVFields(line);
-    
+
     if (fields.length < 15) {
       console.warn(`[PKO Biznes Parser] Line has too few fields (${fields.length}), skipping`);
+      reject('structure');
       return null;
     }
     
@@ -128,7 +147,10 @@ export class PKOBiznesParser {
     //         emptyField,referenceNumber,emptyField,emptyField
     const operationType = fields[0].trim() as '111' | '222';
     const date = fields[1].trim();
-    const amountGroszy = parseInt(fields[2].trim(), 10);
+    const amountText = fields[2].trim();
+    // Grosze as a bare integer. parseInt("123,45") is 123 and parseInt("") NaN —
+    // both used to go through as if they were amounts.
+    const amountGroszy = /^\d+$/.test(amountText) ? Number(amountText) : NaN;
     const code1 = fields[3].trim();
     const code2 = fields[4].trim();
     const counterpartyIBAN = fields[5].trim().replace(/["']/g, '');
@@ -143,12 +165,20 @@ export class PKOBiznesParser {
     // Validate operation type
     if (operationType !== '111' && operationType !== '222') {
       console.warn(`[PKO Biznes Parser] Invalid operation type: ${operationType}`);
+      reject('direction', operationType);
       return null;
     }
-    
+
     // Validate date format (YYYYMMDD)
     if (!/^\d{8}$/.test(date)) {
       console.warn(`[PKO Biznes Parser] Invalid date format: ${date}`);
+      reject('date', date);
+      return null;
+    }
+
+    if (!Number.isFinite(amountGroszy)) {
+      console.warn(`[PKO Biznes Parser] Invalid amount: ${amountText}`);
+      reject('amount', `${date} ${amountText}`.trim());
       return null;
     }
     

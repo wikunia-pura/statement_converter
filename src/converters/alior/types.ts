@@ -13,7 +13,7 @@ import { Kontrahent, Adres } from '../../shared/types';
  *   - :86: subfield delimiter is `<` instead of `~`
  *   - :61: field contains optional funds code after D/C indicator
  *   - Counterparty: <27>+<28> = name, <29> = address, <32> = short name
- *   - Bank fees: transaction type `NCHG` / code `8090`
+ *   - Bank fees: transaction type `NCHG` / code `8090` — ordinary expenses, not filtered
  *   - ASCII encoding (no Polish diacritics)
  */
 export interface AliorTransaction {
@@ -21,6 +21,8 @@ export interface AliorTransaction {
   valueDate: string;          // YYMMDD format (e.g., "260202")
   entryDate: string;          // MMDD format (e.g., "0202")
   debitCredit: 'D' | 'C';    // D = debit (expense), C = credit (income)
+  /** Storno ("RC"/"RD"): debitCredit is already turned over; the row is held for review. */
+  reversal?: boolean;
   amount: number;             // Transaction amount (always positive)
   transactionType: string;    // e.g., "NTRF", "NCHG"
   reference: string;          // Reference number after NONREF// (e.g., "17929")
@@ -69,6 +71,8 @@ export interface AliorStatement {
     amount: number;
   };
   transactions: AliorTransaction[];
+  /** :61: lines that could not be read (see shared/mt940). */
+  dropped?: import('../../shared/types').DroppedStatementLine[];
 }
 
 /**

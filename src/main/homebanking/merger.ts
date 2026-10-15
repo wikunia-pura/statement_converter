@@ -17,6 +17,12 @@
  * Lines without an account number keep the old "contains" scan of the whole
  * line. Files without any matching bank are flagged and skipped during merge.
  *
+ * A line that cannot be routed (no bank, or more than one) is a payment order
+ * that would reach no bank. Such lines are listed by the analysis
+ * (`unroutedLines`), shown to the user, and the merge refuses to write anything
+ * while a file has more of them than the user acknowledged — so none can go
+ * missing with only a difference in the line counts to show for it.
+ *
  * Address split (optional): when enabled, each "position" (line) in the
  * input is run through the shared AddressMatcher (same logic as the
  * Converter module). Lines are then grouped by the first matched address.
@@ -48,6 +54,16 @@ export interface BankHit {
   lineCount: number;
 }
 
+/** A line of a Homebanking file that no bank can be chosen for. */
+export interface UnroutedLine {
+  /** 1-based line number in the file. */
+  lineNumber: number;
+  /** The start of the line, so the user can find the payment. */
+  excerpt: string;
+  /** No configured bank matches the line, or more than one does. */
+  reason: 'no-bank' | 'ambiguous';
+}
+
 export interface AnalyzedFile {
   filePath: string;
   fileName: string;
@@ -59,6 +75,8 @@ export interface AnalyzedFile {
   /** First-line preview of address detections (one entry per known address that matched any line). */
   addressHits: AnalyzedAddressHit[];
   lineCount: number;
+  /** Lines no bank can be chosen for; they are not written to any merged file. */
+  unroutedLines: UnroutedLine[];
 }
 
 export interface MergeFileInput {
@@ -71,6 +89,11 @@ export interface MergeFileInput {
    * buckets; lines without a confident address fall back to the bank's
    * default bucket. */
   splitByAddress: boolean;
+  /**
+   * How many unrouted lines (see UnroutedLine) the user saw and confirmed for
+   * this file. The merge refuses to write anything when the file has more.
+   */
+  acknowledgedUnrouted?: number;
 }
 
 export interface MergeGroupResult {
@@ -152,8 +175,18 @@ export function detectBankForLine(
   banks: Bank[],
   accountBanks: Map<string, Bank>,
 ): DetectedBank | null {
+  const routed = routeLine(line, banks, accountBanks);
+  return 'bankId' in routed ? routed : null;
+}
+
+/** detectBankForLine, telling apart why a line has no bank. */
+function routeLine(
+  line: string,
+  banks: Bank[],
+  accountBanks: Map<string, Bank>,
+): DetectedBank | { reason: UnroutedLine['reason'] } {
   const account = extractSenderAccount(line);
-  if (!account) return detectBankByContains(line, banks);
+  if (!account) return detectBankByContains(line, banks) ?? { reason: 'no-bank' };
 
   const fromAddress = accountBanks.get(account);
   if (fromAddress) return { bankId: fromAddress.id, bankName: fromAddress.name };
@@ -162,8 +195,15 @@ export function detectBankForLine(
   const matching = banks.filter((bank) =>
     (bank.accountPrefixes ?? []).some((p) => prefixMatchesSortCode(p, sortCode)),
   );
-  if (matching.length !== 1) return null;
+  if (matching.length === 0) return { reason: 'no-bank' };
+  if (matching.length > 1) return { reason: 'ambiguous' };
   return { bankId: matching[0].id, bankName: matching[0].name };
+}
+
+/** How an unrouted line is shown: its start, enough to find the payment. */
+function lineExcerpt(line: string): string {
+  const trimmed = line.trim();
+  return trimmed.length > 120 ? `${trimmed.slice(0, 117)}...` : trimmed;
 }
 
 /**
@@ -231,22 +271,25 @@ export function analyzeFile(
 
   const bankCounts = new Map<number, { bankName: string; lineCount: number }>();
   const addressCounts = new Map<string, number>();
+  const unroutedLines: UnroutedLine[] = [];
   let nonEmpty = 0;
-  for (const line of lines) {
-    if (!line.trim()) continue;
+  lines.forEach((line, index) => {
+    if (!line.trim()) return;
     nonEmpty += 1;
 
     // Per-line bank detection — supports multi-bank files like .PLI.
-    const bank = detectBankForLine(line, banks, accountBanks);
-    if (bank) {
-      const prev = bankCounts.get(bank.bankId);
+    const routed = routeLine(line, banks, accountBanks);
+    if ('bankId' in routed) {
+      const prev = bankCounts.get(routed.bankId);
       if (prev) prev.lineCount += 1;
-      else bankCounts.set(bank.bankId, { bankName: bank.bankName, lineCount: 1 });
+      else bankCounts.set(routed.bankId, { bankName: routed.bankName, lineCount: 1 });
+    } else {
+      unroutedLines.push({ lineNumber: index + 1, excerpt: lineExcerpt(line), reason: routed.reason });
     }
 
     const label = detectAddressLabel(line, matcher);
     if (label) addressCounts.set(label, (addressCounts.get(label) ?? 0) + 1);
-  }
+  });
 
   const bankHits: BankHit[] = Array.from(bankCounts.entries())
     .map(([bankId, v]) => ({ bankId, bankName: v.bankName, lineCount: v.lineCount }))
@@ -263,6 +306,7 @@ export function analyzeFile(
     bankHits,
     addressHits,
     lineCount: nonEmpty,
+    unroutedLines,
   };
 }
 
@@ -336,9 +380,10 @@ function makeBucketKey(k: BucketKey): string {
 /**
  * Walk every line of every input, route each line to its bank (per-line
  * detection), then bucket by per-file `splitByAddress`. Lines whose detected
- * bank isn't in the input's selected `bankIds` are dropped. Lines that don't
- * match any configured bank are also dropped — the file's selected bank set
- * is the routing whitelist.
+ * bank isn't in the input's selected `bankIds` are left out — the user
+ * deselected that bank. Lines that match no bank (or several) cannot go
+ * anywhere; they are counted, and a file with more of them than the user
+ * acknowledged stops the merge before anything is written.
  */
 function bucketLines(
   inputs: MergeFileInput[],
@@ -362,12 +407,18 @@ function bucketLines(
     if (input.bankIds.length === 0) continue;
     const allowed = new Set(input.bankIds);
     const { lineBuffers } = readLinesBytes(input.filePath);
+    let unrouted = 0;
     for (const lineBuf of lineBuffers) {
       // empty lines: skip — they'd add stray separators on join
       if (lineBuf.length === 0) continue;
       const lineText = decodeBuffer(lineBuf);
+      if (!lineText.trim()) continue;
       const bank = detectBankForLine(lineText, banks, accountBanks);
-      if (!bank || !allowed.has(bank.bankId)) continue;
+      if (!bank) {
+        unrouted += 1;
+        continue;
+      }
+      if (!allowed.has(bank.bankId)) continue;
 
       let addressLabel = '';
       if (input.splitByAddress) {
@@ -382,6 +433,15 @@ function bucketLines(
       const entry = buckets.get(id) ?? { key, lines: [] };
       entry.lines.push({ date: input.date, bytes: lineBuf });
       buckets.set(id, entry);
+    }
+    // Checked per file, before any output is written: the analysis the user
+    // confirmed may be stale (banks or addresses edited since), and a payment
+    // order no bank receives must never disappear unconfirmed.
+    if (unrouted > (input.acknowledgedUnrouted ?? 0)) {
+      throw new Error(
+        `${path.basename(input.filePath)}: ${unrouted} linii nie da się przypisać do żadnego banku ` +
+          `(potwierdzono ${input.acknowledgedUnrouted ?? 0}). Przeanalizuj plik ponownie i potwierdź pominięcie.`,
+      );
     }
   }
 

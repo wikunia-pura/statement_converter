@@ -5,7 +5,8 @@ import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
 import { FormSection } from '../components/FormSection';
 import Icon from '../components/Icon';
-import MailingDetailsModal, { formatDateTime } from '../components/MailingDetailsModal';
+import MailingDetailsModal from '../components/MailingDetailsModal';
+import { formatDateTime } from '../../shared/format';
 import { MailingOdbiorcyList } from '../components/MailingRecipientsEditor';
 
 function formatBytes(bytes: number): string {
@@ -47,6 +48,9 @@ const MailingHistoria: React.FC<Props> = ({ language }) => {
       setHistory(historyData);
       setFilesInfo(info);
       setTypy(typyData);
+    } catch (error) {
+      console.error('Error loading mailing history:', error);
+      notify.error(t.mailingLoadError);
     } finally {
       setIsLoading(false);
     }
@@ -128,7 +132,7 @@ const MailingHistoria: React.FC<Props> = ({ language }) => {
               <button
                 className="button button-secondary"
                 onClick={handleCleanupFiles}
-                title={t.mailingFilesLocation.replace('{dir}', filesInfo.dir)}
+                data-tip={t.mailingFilesLocation.replace('{dir}', filesInfo.dir)}
               >
                 <Icon name="paperclip" size={14} /> {t.mailingCleanupFiles} ({filesInfo.fileCount} · {formatBytes(filesInfo.totalBytes)})
               </button>
@@ -187,7 +191,7 @@ const MailingHistoria: React.FC<Props> = ({ language }) => {
                     </td>
                     <td>
                       {h.attachments.length > 0 ? (
-                        <span className="cell-icon-count" title={h.attachments.map((a) => a.fileName).join('\n')}>
+                        <span className="cell-icon-count" data-tip={h.attachments.map((a) => a.fileName).join('\n')}>
                           <Icon name="paperclip" size={13} /> {h.attachments.length}
                         </span>
                       ) : (
@@ -195,12 +199,15 @@ const MailingHistoria: React.FC<Props> = ({ language }) => {
                       )}
                     </td>
                     <td>
-                      {h.status === 'success' ? (
+                      {h.status === 'success' && h.odbiorcy?.some((o) => o.odrzucony) ? (
+                        // Partly sent: the server refused some recipients — named in the row's recipients and its details.
+                        <span className="status-badge status-pending">{t.mailingStatusPartial}</span>
+                      ) : h.status === 'success' ? (
                         <span className="result-status is-ok">
                           <Icon name="check-circle" size={14} /> {t.mailingStatusSent}
                         </span>
                       ) : (
-                        <span className="result-status is-error" title={h.errorMessage}>
+                        <span className="result-status is-error" data-tip={h.errorMessage}>
                           <Icon name="x-circle" size={14} /> {t.mailingStatusError}
                         </span>
                       )}

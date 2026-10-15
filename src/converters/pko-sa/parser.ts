@@ -5,6 +5,10 @@
 
 import iconv from 'iconv-lite';
 import { PKOSATransaction, PKOSAStatement } from './types';
+import { DroppedStatementLine } from '../../shared/types';
+
+/** An EXP amount: optional sign, digits, optional dot and decimals ("-123.45"). */
+const AMOUNT = /^[+-]?\d+(?:\.\d+)?$/;
 
 export class PKOSAParser {
   /**
@@ -20,7 +24,11 @@ export class PKOSAParser {
         ? content 
         : iconv.decode(content, 'windows-1250');
       
-      const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+      // Line numbers are kept so a line that cannot be read can be pointed at.
+      const lines = text
+        .split('\n')
+        .map((line, i) => ({ line: line.trim(), number: i + 1 }))
+        .filter(({ line }) => line.length > 0);
       
       console.log(`[PKO SA Parser] Processing ${lines.length} lines`);
       
@@ -32,10 +40,11 @@ export class PKOSAParser {
       let closingBalance: number | undefined;
       let currency: string | undefined;
       const transactions: PKOSATransaction[] = [];
-      
+      const dropped: DroppedStatementLine[] = [];
+
       for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        
+        const { line, number } = lines[i];
+
         if (line.startsWith('#DATA#')) {
           // Parse date line
           const dateMatch = line.match(/#DATA#\s+"([^"]+)"/);
@@ -60,7 +69,7 @@ export class PKOSAParser {
         } else if (line.startsWith('#OPERACJA#')) {
           // Parse transaction line
           // Format: #OPERACJA# "amount" "description" "counterparty" "currency" "date" "account" "code"
-          const transaction = this.parseTransaction(line);
+          const transaction = this.parseTransaction(line, number, dropped);
           if (transaction) {
             transactions.push(transaction);
           }
@@ -82,6 +91,7 @@ export class PKOSAParser {
         closingBalance,
         currency,
         transactions,
+        dropped,
       };
     } catch (error) {
       console.error('[PKO SA Parser] Error parsing file:', error);
@@ -93,12 +103,17 @@ export class PKOSAParser {
    * Parse a single transaction line
    * Format: #OPERACJA# "amount" "description" "counterparty" "currency" "date" "account" "code"
    */
-  private parseTransaction(line: string): PKOSATransaction | null {
+  private parseTransaction(
+    line: string,
+    lineNumber: number,
+    dropped: DroppedStatementLine[]
+  ): PKOSATransaction | null {
     try {
       const fields = this.extractQuotedFields(line);
-      
+
       if (fields.length < 7) {
         console.warn(`[PKO SA Parser] Transaction line has too few fields (${fields.length}), skipping`);
+        dropped.push({ excerpt: '#OPERACJA#', reason: 'structure', line: lineNumber });
         return null;
       }
       
@@ -111,10 +126,11 @@ export class PKOSAParser {
       const accountNumber = fields[5].trim();
       const code = fields[6].trim();
       
-      // Parse amount
-      const amount = parseFloat(amountStr);
+      // Parse amount — strictly: parseFloat read "1234,56" as 1234 without a word.
+      const amount = AMOUNT.test(amountStr) ? Number(amountStr) : NaN;
       if (isNaN(amount)) {
         console.warn(`[PKO SA Parser] Invalid amount: ${amountStr}`);
+        dropped.push({ excerpt: `${amountStr} ${date}`.trim(), reason: 'amount', line: lineNumber });
         return null;
       }
       
@@ -143,6 +159,7 @@ export class PKOSAParser {
     } catch (error) {
       console.warn(`[PKO SA Parser] Error parsing transaction line:`, error);
       console.warn(`[PKO SA Parser] Line: ${line.substring(0, 100)}...`);
+      dropped.push({ excerpt: '#OPERACJA#', reason: 'error', line: lineNumber });
       return null;
     }
   }

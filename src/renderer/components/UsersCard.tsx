@@ -9,6 +9,7 @@ import {
 } from '../../shared/app-users';
 import { translations, Language } from '../translations';
 import { useNotify } from './Notifications';
+import { ipcErrorMessage } from '../ipcError';
 import { FormSection } from './FormSection';
 import Icon from './Icon';
 import Loader from './Loader';
@@ -90,14 +91,14 @@ const ColorSwatch: React.FC<ColorSwatchProps> = ({
         value={value}
         disabled={disabled}
         aria-label={`${label} — ${user.email}`}
-        title={label}
+        data-tip={label}
         onChange={(e) => setValue(e.target.value)}
       />
       {isHexColor(user.color) && (
         <button
           type="button"
           className="users-color__reset"
-          title={resetLabel}
+          data-tip={resetLabel}
           aria-label={`${resetLabel} — ${user.email}`}
           disabled={disabled}
           onClick={() => onCommit(null)}
@@ -132,7 +133,7 @@ const UsersCard: React.FC<Props> = ({ language, currentEmail, onNamesChanged }) 
       setUsers(list);
       setDrafts(Object.fromEntries(list.map((u) => [u.id, draftOf(u)])));
     } catch (error) {
-      notify.error(error instanceof Error ? error.message : t.usersLoadFailed);
+      notify.error(ipcErrorMessage(error, t.usersLoadFailed));
     } finally {
       setIsLoading(false);
     }
@@ -163,7 +164,7 @@ const UsersCard: React.FC<Props> = ({ language, currentEmail, onNamesChanged }) 
       notify.success(t.usersSaved.replace('{name}', personLabel({ ...user, ...draft })));
       onNamesChanged?.();
     } catch (error) {
-      notify.error(error instanceof Error ? error.message : t.usersSaveFailed);
+      notify.error(ipcErrorMessage(error, t.usersSaveFailed));
     } finally {
       setSavingId(null);
     }
@@ -180,7 +181,7 @@ const UsersCard: React.FC<Props> = ({ language, currentEmail, onNamesChanged }) 
       await window.electronAPI.setAppUserColor(user.id, color);
       await load();
     } catch (error) {
-      notify.error(error instanceof Error ? error.message : t.usersSaveFailed);
+      notify.error(ipcErrorMessage(error, t.usersSaveFailed));
     } finally {
       setSavingId(null);
     }
@@ -275,7 +276,7 @@ const UsersCard: React.FC<Props> = ({ language, currentEmail, onNamesChanged }) 
                           className="button button-small button-secondary"
                           onClick={() => void save(user)}
                           disabled={!dirty || savingId === user.id}
-                          title={dirty ? t.save : t.usersNothingToSave}
+                          data-tip={dirty ? t.save : t.usersNothingToSave}
                         >
                           <Icon name={savingId === user.id ? 'loader' : 'save'} size={13} className={savingId === user.id ? 'icon-spin' : undefined} />{' '}
                           {t.save}

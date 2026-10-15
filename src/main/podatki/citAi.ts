@@ -22,7 +22,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import logger from '../../shared/logger';
 import { maxTokensFor, modelRequestFields } from '../../shared/ai-models';
 import { kategorieDlaStrony } from '../../shared/podatki-cit';
-import { nazwaInterEj } from '../../shared/inter-ej';
+import { nazwaInterEj, wspominaInterEj } from '../../shared/inter-ej';
 import { CitAiPozycja, CitAiPropozycja, CitAiPrzyklad, CitAiWynik, CitKategoria } from '../../shared/types';
 
 /** Rows per request: ~25 tokens a row in, ~40 out, so a batch stays far from any limit. */
@@ -71,7 +71,7 @@ RULES
 - Use only the categories valid for the row's strona.
 - If a row is ambiguous, still pick the more cautious reading for tax (an income row that could be taxed → "przychod_opodatkowany"; a cost row you cannot place → "koszt_wspolny") and say in the reason that it is uncertain.
 - CHECKING THE DICTIONARY: a row may carry the dictionary's current category ("current" column). Then the accountant has already decided it: answer that same category unless it is clearly wrong under the law above. A defensible reading, an ambiguous name or a merely more cautious alternative is NOT a reason to change it — change it only when you could name the rule of law it breaks, and say so in the reason.
-- "uzasadnienie": one short Polish sentence (max 15 words) saying why; write it before the category.
+- "uzasadnienie": one short Polish sentence (max 15 words) saying why; write it before the category. Never name INTER-EJ (the managing company) or any amount of its rows in it — call such a row "wynagrodzenie zarządcy".
 
 ANSWER FORMAT — a single JSON object and nothing else:
 {"wyniki":[{"id":1,"uzasadnienie":"Najem pomieszczenia wspólnego.","kategoria":"przychod_opodatkowany"}, ...]}
@@ -83,11 +83,13 @@ interface Wiersz {
 }
 
 function prompt(batch: Wiersz[]): string {
-  // An INTER-EJ row is classified by its name alone — its amount never reaches the model (shared/inter-ej).
+  // An INTER-EJ row is classified by its name alone — its amount never reaches the model (shared/inter-ej),
+  // nor does the amount of a row merged with one or of a heading over one (`ukryta`, from ukryteKwotyInterEj).
   const lines = batch.map(({ id, pozycja: p }) => {
     // A current category the row's column does not allow is no decision to keep.
     const current = p.regula && kategorieDlaStrony(p.strona).includes(p.regula) ? p.regula : '-';
-    return `${id}\t${p.strona}\t${p.sekcja === 'fundusz' ? 'Fundusz remontowy' : 'Koszty eksploatacji'}\t${nazwaInterEj(p.nazwa) ? '-' : p.kwota.toFixed(2)}\t${current}\t${p.nazwa}`;
+    const kwota = p.ukryta || nazwaInterEj(p.nazwa) ? '-' : p.kwota.toFixed(2);
+    return `${id}\t${p.strona}\t${p.sekcja === 'fundusz' ? 'Fundusz remontowy' : 'Koszty eksploatacji'}\t${kwota}\t${current}\t${p.nazwa}`;
   });
   return `Rows to classify (tab-separated: id, strona, section, amount in zł or "-" when withheld, current dictionary category or "-", name):\n${lines.join('\n')}`;
 }
@@ -145,10 +147,13 @@ async function zapytaj(client: Anthropic, model: string, slownik: string, batch:
     const row = batch.find((b) => b.id === Number(r.id));
     // A category the row's column does not allow is a wrong answer, not a suggestion.
     if (!row || !kategorieDlaStrony(row.pozycja.strona).includes(r.kategoria as CitKategoria)) continue;
+    const uzasadnienie = typeof r.uzasadnienie === 'string' ? r.uzasadnienie.trim() : '';
     out.push({
       klucz: row.pozycja.klucz,
       kategoria: r.kategoria as CitKategoria,
-      uzasadnienie: typeof r.uzasadnienie === 'string' ? r.uzasadnienie.trim() : '',
+      // A reason that brings INTER-EJ up is refused (shared/inter-ej); the category, a decision about the
+      // row's name the accountant still confirms, stays.
+      uzasadnienie: wspominaInterEj(uzasadnienie) ? '' : uzasadnienie,
     });
   }
   return out;

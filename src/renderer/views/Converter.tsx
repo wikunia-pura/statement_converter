@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { FileEntry, Bank, Adres, KontoTyp, ConversionReviewData, ReviewDecision, ConversionHistory, KsiegowanieUwaga } from '../../shared/types';
+import { FileEntry, Bank, Adres, KontoTyp, ConversionHistory, KsiegowanieUwaga } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { generateId, formatDate } from '../../shared/utils';
 import { TransactionReviewScreen } from '../components/TransactionReviewScreen';
@@ -17,6 +17,7 @@ import ConversionHistoryTimeline from '../components/ConversionHistoryTimeline';
 import { PostingNoteNotice, PostingNoteNoticeItem, uwagaMeta } from '../components/PostingNotes';
 import { openUwagiByAdresId } from '../../shared/bookings';
 import { plural } from '../plural';
+import { useConversionSession } from '../conversionSession';
 
 interface SearchableAdresSelectProps {
   adresy: Adres[];
@@ -102,19 +103,19 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   // The dashboard's conversion records — what "already processed" is judged by.
   // Not the history log: clearing that must not switch the warning off.
   const [conversionRecords, setConversionRecords] = useState<ConversionHistory[]>([]);
+  // The records could not be read: "already processed" cannot be judged, and the
+  // log is no stand-in for them — the files say so instead of staying silent.
+  const [recordsUnavailable, setRecordsUnavailable] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showDuplicatesModal, setShowDuplicatesModal] = useState(false);
   const [duplicateFiles, setDuplicateFiles] = useState<string[]>([]);
-  const [reviewData, setReviewData] = useState<ConversionReviewData | null>(null);
-  const [conversionQueue, setConversionQueue] = useState<string[]>([]);
-  const [skipUserApproval, setSkipUserApproval] = useState(false);
-  // Whether conversions call the AI. Read once from settings; the whole queue
-  // runs on the same value, so a file can no longer silently fall back to the
-  // non-AI path just because it wasn't first in line.
-  const [alwaysUseAI, setAlwaysUseAI] = useState(true);
+  // The run of conversions and its review screen live with the file list's
+  // owner, not here — see `ConversionSessionProvider`. Leaving this view no
+  // longer stops a batch; coming back shows it where it got to.
+  const session = useConversionSession();
+  const reviewData = session.reviewData;
   const [outputFolder, setOutputFolder] = useState('');
-  const [, setIsProcessingQueue] = useState(false);
   // Files whose "Anuluj" was pressed and whose conversion has not stopped yet.
   const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
   const [progressByFile, setProgressByFile] = useState<Record<string, { label: string; percent: number }>>({});
@@ -127,32 +128,6 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   // Notes already announced in a message this session; the message is shown once
   // per note, while the callout under the address stays as long as it is open.
   const announcedUwagiRef = useRef<Set<number>>(new Set());
-  const filesRef = useRef<FileEntry[]>(files);
-  // Read from the queue callback, which outlives the render that scheduled it.
-  const alwaysUseAIRef = useRef(alwaysUseAI);
-
-  // Keep ref in sync with state
-  useEffect(() => {
-    filesRef.current = files;
-  }, [files]);
-
-  useEffect(() => {
-    alwaysUseAIRef.current = alwaysUseAI;
-  }, [alwaysUseAI]);
-
-  // Heartbeat: while a review screen is open, keep its pending conversion alive
-  // in the main-process cache (sliding expiration) so a long or interrupted
-  // review never expires and loses the user's work.
-  useEffect(() => {
-    if (!reviewData?.tempConversionId || !window.electronAPI?.touchConversion) return;
-    const id = reviewData.tempConversionId;
-    // Touch immediately, then every 60s. TTL is hours, so this is comfortably frequent.
-    window.electronAPI.touchConversion(id).catch(() => { /* ignore */ });
-    const interval = setInterval(() => {
-      window.electronAPI.touchConversion(id).catch(() => { /* ignore */ });
-    }, 60 * 1000);
-    return () => clearInterval(interval);
-  }, [reviewData?.tempConversionId]);
 
   // Subscribe to conversion progress events from main process
   useEffect(() => {
@@ -183,36 +158,55 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
   }, [files]);
 
   useEffect(() => {
-    loadBanks();
-    loadAdresy();
+    // One message for whatever failed: an empty bank list or community picker
+    // with no word why reads as "there is nothing", not as "it did not load".
+    void Promise.all([loadBanks(), loadAdresy(), loadKontoTypy(), loadSettings(), loadHistory()]).then(
+      (loaded) => {
+        if (loaded.includes(false)) notify.error(t.convLoadError);
+      },
+    );
     void loadUwagi();
-    loadKontoTypy();
-    loadSettings();
-    loadHistory();
   }, []);
 
-  const loadHistory = async () => {
-    try {
-      const [data, records] = await Promise.all([
-        window.electronAPI.getHistory(),
-        window.electronAPI.getKsiegowaniaKonwersje().catch(() => null),
-      ]);
-      setConversionHistory(data);
-      setConversionRecords(records ?? data);
-    } catch (error) {
-      console.error('Error loading history:', error);
-    }
+  /** Both conversion lists; false when the history log could not be read (the records say so on the files). */
+  const loadHistory = async (): Promise<boolean> => {
+    // Apart from each other: the records decide "already processed", the log only
+    // feeds the recent-activity panel, and neither stands in for the other.
+    const [, historyLoaded] = await Promise.all([
+      window.electronAPI.getKsiegowaniaKonwersje().then(
+        (records) => {
+          setConversionRecords(records);
+          setRecordsUnavailable(false);
+        },
+        (error) => {
+          console.error('Error loading conversion records:', error);
+          setRecordsUnavailable(true);
+        }
+      ),
+      window.electronAPI.getHistory().then(
+        (history) => {
+          setConversionHistory(history);
+          return true;
+        },
+        (error) => {
+          console.error('Error loading history:', error);
+          return false;
+        },
+      ),
+    ]);
+    return historyLoaded;
   };
 
   // Keep the recent-activity panel in sync: every conversion (success or error)
-  // is written to history server-side, so reload whenever a file finishes.
-  const completedFileCount = useMemo(
-    () => files.filter((f) => f.status === 'success' || f.status === 'error').length,
-    [files]
-  );
+  // is written to history server-side. Reloaded once a run is over rather than
+  // after every file — a batch of twenty used to re-read the whole history
+  // twenty times. Coming back to the view mid-batch is covered by the mount load.
+  const seenRuns = useRef(session.runsFinished);
   useEffect(() => {
-    if (completedFileCount > 0) loadHistory();
-  }, [completedFileCount]);
+    if (seenRuns.current === session.runsFinished) return;
+    seenRuns.current = session.runsFinished;
+    void loadHistory();
+  }, [session.runsFinished]);
 
   // Map of previously-processed input files → most recent successful conversion date.
   // Keyed by lowercased file name so an uploaded file can be flagged if it was already
@@ -237,12 +231,14 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     return conversionHistory.filter((entry) => new Date(entry.convertedAt).getTime() >= cutoff);
   }, [conversionHistory]);
 
-  const loadKontoTypy = async () => {
+  const loadKontoTypy = async (): Promise<boolean> => {
     try {
       const data = await window.electronAPI.getKontoTypy();
       setKontoTypy(data);
+      return true;
     } catch (error) {
       console.error('Error loading konto typy:', error);
+      return false;
     }
   };
 
@@ -266,23 +262,29 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     return typeId ?? defaultTypeId;
   };
 
-  const loadSettings = async () => {
+  // The AI and auto-approve settings are read by the conversion session when a
+  // run starts; the view only needs the output folder.
+  const loadSettings = async (): Promise<boolean> => {
     try {
       const settings = await window.electronAPI.getSettings();
-      setSkipUserApproval(settings.skipUserApproval ?? false);
-      setAlwaysUseAI(settings.alwaysUseAI !== false);
       setOutputFolder(settings.outputFolder ?? '');
+      return true;
     } catch (error) {
       console.error('Error loading settings:', error);
+      return false;
     }
   };
 
-  const loadBanks = async () => {
+  const loadBanks = async (): Promise<boolean> => {
     setIsLoading(true);
     try {
       const banksData = await window.electronAPI.getBanks();
       // Konwersja działa tylko dla banków z przypisanym konwerterem — banki używane wyłącznie w Homebankingu nie powinny pojawiać się tu w dropdownach.
       setBanks(banksData.filter((b) => !!b.converterId));
+      return true;
+    } catch (error) {
+      console.error('Error loading banks:', error);
+      return false;
     } finally {
       setIsLoading(false);
     }
@@ -339,12 +341,14 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
       minute: '2-digit',
     });
 
-  const loadAdresy = async () => {
+  const loadAdresy = async (): Promise<boolean> => {
     try {
       const adresyData = await window.electronAPI.getAdresy();
       setAdresy(adresyData);
+      return true;
     } catch (error) {
       console.error('Error loading addresses:', error);
+      return false;
     }
   };
 
@@ -476,7 +480,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
 
     const droppedFiles = Array.from(e.dataTransfer.files).map((file) => ({
       fileName: file.name,
-      filePath: (file as any).path,
+      filePath: window.electronAPI.getPathForFile(file),
     }));
 
     const { duplicates, uniqueFiles } = checkForDuplicates(droppedFiles);
@@ -567,387 +571,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     );
   };
 
-  const handleConvert = async (fileId: string) => {
-    // Get file from ref to ensure we have latest state
-    const currentFile = filesRef.current.find((f) => f.id === fileId);
-
-    if (!currentFile || !currentFile.bankId || !currentFile.adresId) return;
-
-    // No pre-analysis pass here: it only ever existed to populate the AI prompt
-    // modal, and its result is not reused by the AI conversion path (see the
-    // memo note in converterRegistry), so running it would parse and match the
-    // file a second time for nothing.
-    await performConversion(fileId, alwaysUseAIRef.current);
-  };
-
-  // A pending conversion that expired/was lost from the main-process cache is
-  // NOT a bank/converter misconfiguration — the file is fine, the review
-  // session is just gone. Tell the user plainly and let them re-run the file.
-  const isExpiredConversionError = (err?: string) =>
-    !!err && err.includes('not found or expired');
-
-  const reportFinalizeFailure = (fileName: string, rawError?: string) => {
-    const expired = isExpiredConversionError(rawError);
-    const isBillingError = rawError?.includes('💸') || rawError?.includes('Brak kasiory');
-    const errorMsg = expired
-      ? `${t.conversionFailed}: ${t.reviewSessionExpired}`
-      : isBillingError
-        ? `${t.conversionFailed}: ${rawError}`
-        : `${t.conversionFailed}: ${rawError}\n${t.checkBankConverter}`;
-    notify.error(errorMsg);
-    setFiles((prevFiles) =>
-      prevFiles.map((f) =>
-        f.fileName === fileName
-          ? {
-              // Expired sessions are recoverable by re-running, so leave the
-              // file selectable (pending) rather than marking it failed.
-              ...f,
-              status: expired ? ('pending' as const) : ('error' as const),
-              errorMessage: expired ? undefined : rawError,
-            }
-          : f
-      )
-    );
-  };
-
-  const handleFinalizeAndNext = async (decisions: ReviewDecision[]) => {
-    if (!reviewData) return;
-
-    try {
-      const result = await window.electronAPI.finalizeConversion(
-        reviewData.tempConversionId,
-        decisions
-      );
-
-      if (result.success) {
-        setFiles((prevFiles) =>
-          prevFiles.map((f) =>
-            f.fileName === reviewData.fileName
-              ? {
-                  ...f,
-                  status: 'success' as const,
-                  outputPath: result.outputPath,
-                  errorMessage: result.duplicateWarning
-                    ? t.fileExistsTimestamp
-                    : undefined,
-                }
-              : f
-          )
-        );
-        setReviewData(null);
-        processNextInQueue();
-      } else {
-        reportFinalizeFailure(reviewData.fileName, result.error);
-        setReviewData(null);
-        processNextInQueue();
-      }
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      reportFinalizeFailure(reviewData.fileName, errorMessage);
-      setReviewData(null);
-      processNextInQueue();
-    }
-  };
-
-  const handleFinalizeAndStop = async (decisions: ReviewDecision[]) => {
-    if (!reviewData) return;
-    
-    try {
-      const result = await window.electronAPI.finalizeConversion(
-        reviewData.tempConversionId,
-        decisions
-      );
-
-      if (result.success) {
-        setFiles((prevFiles) =>
-          prevFiles.map((f) =>
-            f.fileName === reviewData.fileName
-              ? {
-                  ...f,
-                  status: 'success' as const,
-                  outputPath: result.outputPath,
-                  errorMessage: result.duplicateWarning
-                    ? t.fileExistsTimestamp
-                    : undefined,
-                }
-              : f
-          )
-        );
-        setReviewData(null);
-        // Stop processing - clear queue
-        setConversionQueue([]);
-        setIsProcessingQueue(false);
-      } else {
-        reportFinalizeFailure(reviewData.fileName, result.error);
-        setReviewData(null);
-        setConversionQueue([]);
-        setIsProcessingQueue(false);
-      }
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      reportFinalizeFailure(reviewData.fileName, errorMessage);
-      setReviewData(null);
-      setConversionQueue([]);
-      setIsProcessingQueue(false);
-    }
-  };
-
-  const handleSkipFile = () => {
-    if (!reviewData) return;
-    
-    // Mark file as pending so user can try again later
-    setFiles((prevFiles) =>
-      prevFiles.map((f) =>
-        f.fileName === reviewData.fileName
-          ? { ...f, status: 'pending' as const, errorMessage: undefined }
-          : f
-      )
-    );
-    
-    setReviewData(null);
-    processNextInQueue();
-  };
-
-  const handleCancelReview = () => {
-    if (!reviewData) return;
-    
-    // Revert file status back to pending so user can try again
-    setFiles((prevFiles) =>
-      prevFiles.map((f) =>
-        f.fileName === reviewData.fileName
-          ? { ...f, status: 'pending' as const, errorMessage: undefined }
-          : f
-      )
-    );
-    
-    setReviewData(null);
-    
-    // Clear queue and stop processing
-    setConversionQueue([]);
-    setIsProcessingQueue(false);
-  };
-
-  const processNextInQueue = () => {
-    setConversionQueue((prevQueue) => {
-      if (prevQueue.length === 0) {
-        setIsProcessingQueue(false);
-        return [];
-      }
-      
-      const [nextFileId, ...remainingQueue] = prevQueue;
-
-      // Every queued file uses the same AI setting as the first one. This used
-      // to be hard-coded to false, so in a multi-file batch only the first file
-      // actually reached the AI — the rest silently converted without it.
-      setTimeout(() => {
-        performConversion(nextFileId, alwaysUseAIRef.current);
-      }, 100);
-
-      return remainingQueue;
-    });
-  };
-
-  const performConversion = async (fileId: string, useAI: boolean) => {
-    // Get file from ref to ensure we have latest state
-    const currentFile = filesRef.current.find((f) => f.id === fileId);
-    
-    if (!currentFile || !currentFile.bankId || !currentFile.adresId) return;
-
-    // Update status to processing
-    setFiles((prevFiles) =>
-      prevFiles.map((f) => (f.id === fileId ? { ...f, status: 'processing' as const } : f))
-    );
-
-    const startTime = Date.now();
-
-    try {
-      const result = useAI
-        ? await window.electronAPI.convertFileWithAI(
-            currentFile.filePath,
-            currentFile.bankId,
-            currentFile.fileName,
-            currentFile.adresId,
-            currentFile.accountTypeId
-          )
-        : await window.electronAPI.convertFile(
-            currentFile.filePath,
-            currentFile.bankId,
-            currentFile.fileName,
-            currentFile.adresId,
-            currentFile.accountTypeId
-          );
-
-      // Cancelled: the file is waiting again, as before it was started, and the
-      // rest of a "Konwertuj wszystkie" run stops with it — the user stopped
-      // the operation, not one file of it.
-      if (result.cancelled) {
-        setFiles((prevFiles) =>
-          prevFiles.map((f) =>
-            f.id === fileId ? { ...f, status: 'pending' as const, errorMessage: undefined } : f
-          )
-        );
-        setProgressByFile((prev) => {
-          const next = { ...prev };
-          delete next[currentFile.fileName];
-          return next;
-        });
-        setConversionQueue([]);
-        setIsProcessingQueue(false);
-        notify.info(t.convCancelled);
-        return;
-      }
-
-      // Ensure minimum 1 second display time for loader
-      const elapsed = Date.now() - startTime;
-      const remainingTime = Math.max(0, 1000 - elapsed);
-      if (remainingTime > 0) {
-        await new Promise(resolve => setTimeout(resolve, remainingTime));
-      }
-
-      // Check if review is needed
-      if (result.needsReview && result.reviewData) {
-        // Show warning message if AI fallback occurred (before review)
-        if (result.warningMessage) {
-          notify.warning(`${result.warningMessage}`);
-        }
-        
-        // If skipUserApproval is enabled, auto-finalize without showing review screen
-        if (skipUserApproval) {
-          // Auto-approve all transactions
-          const autoDecisions: ReviewDecision[] = result.reviewData.transactions.map(tx => ({
-            index: tx.index,
-            action: 'accept' as const,
-          }));
-          
-          try {
-            const finalizeResult = await window.electronAPI.finalizeConversion(
-              result.reviewData.tempConversionId,
-              autoDecisions
-            );
-            
-            if (finalizeResult.success) {
-              setFiles((prevFiles) =>
-                prevFiles.map((f) =>
-                  f.id === fileId
-                    ? {
-                        ...f,
-                        status: 'success' as const,
-                        outputPath: finalizeResult.outputPath,
-                        errorMessage: finalizeResult.duplicateWarning
-                          ? t.fileExistsTimestamp
-                          : undefined,
-                      }
-                    : f
-                )
-              );
-            } else {
-              setFiles((prevFiles) =>
-                prevFiles.map((f) =>
-                  f.id === fileId
-                    ? { ...f, status: 'error' as const, errorMessage: finalizeResult.error }
-                    : f
-                )
-              );
-            }
-            processNextInQueue();
-            return;
-          } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-            setFiles((prevFiles) =>
-              prevFiles.map((f) =>
-                f.id === fileId
-                  ? { ...f, status: 'error' as const, errorMessage }
-                  : f
-              )
-            );
-            processNextInQueue();
-            return;
-          }
-        }
-        
-        // Show review screen if skipUserApproval is disabled
-        // If file has PDF attached, extract text and include in reviewData
-        const currentFileForPdf = filesRef.current.find(f => f.id === fileId);
-        if (currentFileForPdf?.pdfPath) {
-          // The file itself goes along even when its text cannot be read.
-          result.reviewData.pdfPath = currentFileForPdf.pdfPath;
-          try {
-            const pdfResult = await window.electronAPI.extractPdfText(currentFileForPdf.pdfPath);
-            if (pdfResult && pdfResult.lines.length > 0) {
-              result.reviewData.pdfLines = pdfResult.lines;
-            }
-          } catch (err) {
-            console.error('Error extracting PDF text:', err);
-          }
-        }
-        setReviewData(result.reviewData);
-        // Keep status as processing to show file is being handled
-        return;
-      }
-
-      if (result.success) {
-        setFiles((prevFiles) =>
-          prevFiles.map((f) =>
-            f.id === fileId
-              ? {
-                  ...f,
-                  status: 'success' as const,
-                  outputPath: result.outputPath,
-                  errorMessage: result.duplicateWarning
-                    ? t.fileExistsTimestamp
-                    : undefined,
-                }
-              : f
-          )
-        );
-        
-        // Show warning message if AI fallback occurred
-        if (result.warningMessage) {
-          notify.warning(`${result.warningMessage}`);
-        }
-        
-        // Process next file in queue if no review was needed
-        processNextInQueue();
-      } else {
-        setFiles((prevFiles) =>
-          prevFiles.map((f) =>
-            f.id === fileId
-              ? { ...f, status: 'error' as const, errorMessage: result.error }
-              : f
-          )
-        );
-        // Don't show "check bank/converter" for billing errors
-        const isBillingError = result.error?.includes('💸') || result.error?.includes('Brak kasiory');
-        const errorMsg = isBillingError 
-          ? `${t.conversionFailed}: ${result.error}`
-          : `${t.conversionFailed}: ${result.error}\n${t.checkBankConverter}`;
-        notify.error(errorMsg);
-        
-        // Process next file even on error
-        processNextInQueue();
-      }
-    } catch (error: unknown) {
-      // Ensure minimum 1 second display time for loader even on error
-      const elapsed = Date.now() - startTime;
-      const remainingTime = Math.max(0, 1000 - elapsed);
-      if (remainingTime > 0) {
-        await new Promise(resolve => setTimeout(resolve, remainingTime));
-      }
-
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      setFiles((prevFiles) =>
-        prevFiles.map((f) =>
-          f.id === fileId
-            ? { ...f, status: 'error' as const, errorMessage }
-            : f
-        )
-      );
-      notify.error(`${t.conversionFailed}: ${errorMessage}`);
-      
-      // Process next file even on error
-      processNextInQueue();
-    }
-  };
+  const handleConvert = (fileId: string) => session.convert(fileId);
 
   // A file that left "processing" is no longer being cancelled.
   useEffect(() => {
@@ -972,19 +596,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     }
   };
 
-  const handleConvertAll = async () => {
-    // Get files that need conversion from current ref state
-    const filesToConvert = filesRef.current
-      .filter((f) => (f.status === 'pending' || f.status === 'error') && f.bankId);
-    
-    if (filesToConvert.length === 0) return;
-
-    // Convert files sequentially - start with first, rest go to queue
-    setIsProcessingQueue(true);
-    const [firstFile, ...restFiles] = filesToConvert;
-    setConversionQueue(restFiles.map(f => f.id));
-    await performConversion(firstFile.id, alwaysUseAIRef.current);
-  };
+  const handleConvertAll = () => session.convertAll();
 
   const handleRemoveFile = (fileId: string) => {
     setFiles(files.filter((f) => f.id !== fileId));
@@ -1079,7 +691,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                   className="button button-secondary"
                   onClick={() => outputFolder && window.electronAPI.openFile(outputFolder)}
                   disabled={!outputFolder}
-                  title={outputFolder || t.convOutputFolderMissing}
+                  data-tip={outputFolder || t.convOutputFolderMissing}
                 >
                   <Icon name="folder" size={14} /> {t.openOutputFolder}
                 </button>
@@ -1087,7 +699,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                   className="button button-success" 
                   onClick={handleConvertAll}
                   disabled={files.every(f => f.status === 'success') || files.some(f => !f.adresId)}
-                  title={
+                  data-tip={
                     files.every(f => f.status === 'success')
                       ? t.convAllConverted
                       : files.some(f => !f.adresId)
@@ -1171,7 +783,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                             className="button button-small button-secondary"
                             onClick={() => void handleCancelConversion(file)}
                             disabled={cancellingIds.has(file.id)}
-                            title={t.convCancelHint}
+                            data-tip={t.convCancelHint}
                           >
                             <Icon name="x" size={13} />{' '}
                             {cancellingIds.has(file.id) ? t.convCancelling : t.cancel}
@@ -1182,11 +794,34 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                       <>
                         <td>{index + 1}</td>
                         <td>
-                          <div className="conv-table__name" title={file.filePath}>{file.fileName}</div>
+                          <div className="conv-table__name" data-tip={file.filePath}>{file.fileName}</div>
                           {(() => {
-                            const processedAt = processedFileDates.get(file.fileName.toLowerCase());
                             // Not on a file converted just now: it is the one in the records.
-                            if (!processedAt || file.status === 'success') return null;
+                            if (file.status === 'success') return null;
+                            if (recordsUnavailable) {
+                              return (
+                                <div
+                                  style={{
+                                    marginTop: '6px',
+                                    padding: '3px 8px',
+                                    background: 'var(--warning-bg)',
+                                    color: 'var(--warning)',
+                                    border: '1px solid var(--warning-border)',
+                                    borderRadius: '4px',
+                                    fontSize: '12px',
+                                    fontWeight: 600,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    lineHeight: 1.3,
+                                    maxWidth: '100%',
+                                  }}
+                                >
+                                  <span>{t.alreadyProcessedUnknown}</span>
+                                </div>
+                              );
+                            }
+                            const processedAt = processedFileDates.get(file.fileName.toLowerCase());
+                            if (!processedAt) return null;
                             return (
                               <div
                                 style={{
@@ -1211,7 +846,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                             );
                           })()}
                         </td>
-                        <td title={lockBank ? t.convLockedFromScan : undefined}>
+                        <td data-tip={lockBank ? t.convLockedFromScan : undefined}>
                           <Select
                             overlay
                             disabled={lockBank}
@@ -1222,7 +857,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                           />
                         </td>
                         <td>
-                          <div title={lockAdres ? t.convLockedFromScan : undefined}>
+                          <div data-tip={lockAdres ? t.convLockedFromScan : undefined}>
                           <SearchableAdresSelect
                             adresy={adresy}
                             selectedAdresId={file.adresId}
@@ -1263,7 +898,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                                 alignItems: 'center',
                                 gap: '4px',
                               }}
-                              title={file.detectedAccounts?.join(', ')}
+                              data-tip={file.detectedAccounts?.join(', ')}
                             >
                               <Icon name="check" size={11} /> {t.autoMatchedFromAccount}
                             </div>
@@ -1275,13 +910,13 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                               </span>
                               {uwagiByAdres.get(file.adresId)!.map((uwaga) => (
                                 <div key={uwaga.id} className="conv-note__item">
-                                  <p className="conv-note__text" title={uwagaMeta(uwaga, language, formatNoteDate)}>
+                                  <p className="conv-note__text" data-tip={uwagaMeta(uwaga, language, formatNoteDate)}>
                                     {uwaga.tresc}
                                   </p>
                                   <button
                                     type="button"
                                     className="button button-small button-secondary"
-                                    title={t.ksUwagaResolveTip}
+                                    data-tip={t.ksUwagaResolveTip}
                                     onClick={() => void resolveUwaga(uwaga.id)}
                                   >
                                     <Icon name="check-circle" size={13} /> {t.ksUwagaResolve}
@@ -1317,14 +952,14 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                         </td>
                         <td>
                           {file.pdfPath ? (
-                            <span className="pdf-chip" title={file.pdfPath}>
+                            <span className="pdf-chip" data-tip={file.pdfPath}>
                               <Icon name="file-text" size={13} />
                               <span className="pdf-chip__name">{file.pdfPath.split(/[\\/]/).pop() || 'PDF'}</span>
                               <button
                                 type="button"
                                 className="pdf-chip__remove"
                                 onClick={() => handlePdfRemove(file.id)}
-                                title={t.convPdfRemove}
+                                data-tip={t.convPdfRemove}
                                 aria-label={t.convPdfRemove}
                               >
                                 <Icon name="x" size={12} />
@@ -1335,7 +970,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                               type="button"
                               className="button button-small button-secondary"
                               onClick={() => handlePdfUpload(file.id)}
-                              title={t.convPdfAdd}
+                              data-tip={t.convPdfAdd}
                             >
                               <Icon name="plus" size={13} /> {t.convPdfAddShort}
                             </button>
@@ -1402,7 +1037,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                                 type="button"
                                 className="button button-ghost button-icon icon-danger"
                                 onClick={() => handleRemoveFile(file.id)}
-                                title={t.remove}
+                                data-tip={t.remove}
                                 aria-label={`${t.remove}: ${file.fileName}`}
                               >
                                 <Icon name="trash" size={15} />
@@ -1413,7 +1048,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                                 className="button button-small button-success"
                                 onClick={() => handleConvert(file.id)}
                                 disabled={!file.bankId || !file.adresId}
-                                title={!file.bankId ? t.convPickBankFirst : !file.adresId ? t.convPickAdresFirst : undefined}
+                                data-tip={!file.bankId ? t.convPickBankFirst : !file.adresId ? t.convPickAdresFirst : undefined}
                                 style={(!file.bankId || !file.adresId) ? { 
                                   opacity: 0.5, 
                                   cursor: 'not-allowed' 
@@ -1441,7 +1076,7 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                               navigator.clipboard.writeText(file.errorMessage || '');
                               notify.success(t.convErrorCopied);
                             }}
-                            title={t.convErrorCopy}
+                            data-tip={t.convErrorCopy}
                           >
                             <Icon name="copy" size={13} /> {t.convCopy}
                           </button>
@@ -1482,14 +1117,15 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
         {/* Transaction Review Screen */}
         {reviewData && (
           <TransactionReviewScreen
+            key={reviewData.tempConversionId}
             reviewData={reviewData}
             language={language}
-            hasMoreFiles={conversionQueue.length > 0}
-            remainingCount={conversionQueue.length}
-            onFinalizeAndNext={handleFinalizeAndNext}
-            onFinalizeAndStop={handleFinalizeAndStop}
-            onSkip={handleSkipFile}
-            onCancel={handleCancelReview}
+            hasMoreFiles={session.queueLength > 0}
+            remainingCount={session.queueLength}
+            onFinalizeAndNext={session.finalizeAndNext}
+            onFinalizeAndStop={session.finalizeAndStop}
+            onSkip={session.skip}
+            onCancel={session.cancelReview}
           />
         )}
 

@@ -262,13 +262,25 @@ export interface ObliczenieDN1 {
   raty: (number | null)[];
 }
 
-/** Spread `kwota` (whole złoty) over `ile` monthly rates; the last one evens out. */
-function rozloz(kwota: number, ile: number): number[] {
+/**
+ * Spread `kwota` (whole złoty, never negative) over `ile` monthly rates: every
+ * rate is the equal share rounded to whole złoty, and the last one evens out —
+ * the split DN-1 has always printed (1000 zł in 12 rates: 11 × 83 and 87).
+ *
+ * Only when that would make the last rate negative — a small sum over many
+ * months, where rounding the share up overshoots (9 zł in 6 rates: 5 × 2 and −1)
+ * — the share is rounded down instead and the złoty left over go one by one to
+ * the first months (2, 2, 2, 1, 1, 1). Either way the rates add up to `kwota`.
+ */
+export function rozloz(kwota: number, ile: number): number[] {
   if (ile <= 0) return [];
   const rata = doZlotych(kwota / ile);
   const out = Array<number>(ile).fill(rata);
   out[ile - 1] = kwota - rata * (ile - 1);
-  return out;
+  if (out[ile - 1] >= 0) return out;
+  const nizsza = Math.floor(kwota / ile);
+  const reszta = Math.round(kwota - nizsza * ile);
+  return Array.from({ length: ile }, (_, i) => nizsza + (i < reszta ? 1 : 0));
 }
 
 /** The DN-1's figures — part D.1 and part E — for one declaration and its year's rates. */

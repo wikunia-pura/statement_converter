@@ -9,11 +9,13 @@ import {
 } from '../../shared/types';
 import { bezLaczenia, formatKwota, laczenieAktualne } from '../../shared/sprawozdanie';
 import { translations } from '../translations';
+import { ipcErrorMessage } from '../ipcError';
 import { useNotify } from './Notifications';
 import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
 import { FormField, FormSection } from './FormSection';
 import Icon from './Icon';
-import { bezPrefiksu } from './PodpisKarta';
+import Select from './Select';
+import { AiWorking } from './AiPanel';
 
 type T = (typeof translations)['pl'];
 
@@ -91,31 +93,34 @@ const LaczenieModal: React.FC<{
 
   return (
     <div className="modal-overlay" onClick={() => !busy && onClose()}>
-      <div className="modal modal--lg" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal modal--lg"
+        role="dialog"
+        aria-modal="true"
+        aria-label={poczatek ? tx('EditTitle') : tx('NewTitle')}
+        onClick={(e) => e.stopPropagation()}
+      >
         <ModalDismiss onClose={onClose} ariaLabel={t.close} />
         <ModalHeader
           icon={icon}
           title={poczatek ? tx('EditTitle') : tx('NewTitle')}
           subtitle={tx('ModalHint')}
         />
-        <div className="modal-body">
+        <div className="modal-body modal-body--sectioned">
           <FormSection icon="table" title={t.zlaczRowsTitle}>
-            <FormField label={t.zlaczSection} htmlFor="zlacz-sekcja">
-              <select
-                id="zlacz-sekcja"
+            {/* The app's dropdown has no input for the label to point at: `ariaLabel` names it. */}
+            <FormField label={t.zlaczSection}>
+              <Select
+                overlay
                 value={sekcja}
+                options={sekcje.map((s) => ({ value: s.tytul, label: s.tytul }))}
                 disabled={busy}
-                onChange={(e) => {
-                  setSekcja(e.target.value);
+                ariaLabel={t.zlaczSection}
+                onChange={(value) => {
+                  setSekcja(value);
                   setWiersze([]);
                 }}
-              >
-                {sekcje.map((s) => (
-                  <option key={s.tytul} value={s.tytul}>
-                    {s.tytul}
-                  </option>
-                ))}
-              </select>
+              />
             </FormField>
             <ul className="zlacz-pick-list">
               {pozycje(sec, rodzaj).map((n) => {
@@ -227,7 +232,7 @@ const ZebranieSprawozdanieLaczenia: React.FC<{
       setPropozycje((p) => p && p.filter((x) => !next.some((l) => nachodza(l, x))));
       return true;
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err));
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
       return false;
     } finally {
       setSaving(false);
@@ -242,7 +247,7 @@ const ZebranieSprawozdanieLaczenia: React.FC<{
       if (found.length === 0) notify.info(tx('AiNone'));
       else notify.success(tx('AiDone').replace('{n}', String(found.length)));
     } catch (err: unknown) {
-      notify.error(bezPrefiksu(err), t.zlaczAiError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.zlaczAiError);
     } finally {
       setAiBusy(false);
     }
@@ -324,7 +329,7 @@ const ZebranieSprawozdanieLaczenia: React.FC<{
                 className="button button-small button-secondary"
                 onClick={() => void propose()}
                 disabled={busy}
-                title={tx('AiHint')}
+                data-tip={tx('AiHint')}
               >
                 <Icon name={aiBusy ? 'loader' : 'sparkles'} size={13} /> {t.zlaczAi}
               </button>
@@ -342,20 +347,7 @@ const ZebranieSprawozdanieLaczenia: React.FC<{
       >
         {aiBusy && (
           // The AI takes a while over a long statement: say what is going on, where the answer will appear.
-          <div className="zlacz-ai-working" role="status" aria-live="polite">
-            <div className="zlacz-ai-working__head">
-              <span className="loader-spinner zlacz-ai-working__spinner" aria-hidden="true" />
-              <span className="zlacz-ai-working__text">
-                <strong>{tx('AiWorking')}</strong>
-                <span>{t.zlaczAiWorkingHint}</span>
-              </span>
-            </div>
-            <div className="zlacz-ai-working__skeleton" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </div>
-          </div>
+          <AiWorking title={tx('AiWorking')} hint={t.zlaczAiWorkingHint} />
         )}
 
         {!aiBusy && propozycje && propozycje.length > 0 && (
@@ -440,7 +432,7 @@ const ZebranieSprawozdanieLaczenia: React.FC<{
                       <strong>{l.nazwa}</strong>
                       <span className="zeb-muted">{l.sekcja}</span>
                       {!ok && (
-                        <span className="status-badge status-pending" title={tx('StaleHint')}>
+                        <span className="status-badge status-pending" data-tip={tx('StaleHint')}>
                           {t.zlaczStale}
                         </span>
                       )}

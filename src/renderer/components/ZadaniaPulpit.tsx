@@ -245,10 +245,10 @@ const ZadaniaPulpit: React.FC<Props> = ({ language, userEmail, onOpen }) => {
               onOpen(tile.seed);
             }}
             disabled={tile.count === 0}
-            // A tile with something behind it gets the hover card instead of the
-            // native tooltip; an empty one is disabled, never fires hover, and
-            // keeps the plain hint.
-            title={tile.count === 0 ? tile.hint : undefined}
+            // A tile with something behind it gets the hover card instead of a
+            // plain hint; an empty one is disabled, never fires hover, and keeps
+            // the plain hint (TipLayer still reaches a disabled button).
+            data-tip={tile.count === 0 ? tile.hint : undefined}
             onMouseEnter={tile.count > 0 ? (e) => showTip(e, tile.key) : undefined}
             onMouseLeave={() => setTip(null)}
             onFocus={tile.count > 0 ? (e) => showTip(e, tile.key) : undefined}

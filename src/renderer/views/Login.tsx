@@ -2,14 +2,19 @@ import React, { useState } from 'react';
 import { FormField } from '../components/FormSection';
 import Icon from '../components/Icon';
 import Logo from '../components/Logo';
+import { translations, Language } from '../translations';
+import { ipcErrorMessage } from '../ipcError';
 
 interface LoginProps {
   onSignedIn: () => void;
   /** Why the user is looking at this screen — e.g. the session expired. */
   notice?: string | null;
+  /** The language saved on this computer — App reads it before anyone signs in. */
+  language?: Language;
 }
 
-const Login: React.FC<LoginProps> = ({ onSignedIn, notice }) => {
+const Login: React.FC<LoginProps> = ({ onSignedIn, notice, language = 'pl' }) => {
+  const t = translations[language];
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +32,7 @@ const Login: React.FC<LoginProps> = ({ onSignedIn, notice }) => {
         setError(result.error);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Nieznany błąd logowania.');
+      setError(ipcErrorMessage(err, t.loginUnknownError));
     } finally {
       setSubmitting(false);
     }
@@ -40,8 +45,8 @@ const Login: React.FC<LoginProps> = ({ onSignedIn, notice }) => {
           <Logo />
         </div>
         <div className="login-card__head">
-          <h2 className="login-card__title">Zaloguj się</h2>
-          <p className="login-card__text">Użyj adresu e-mail i hasła swojego konta.</p>
+          <h2 className="login-card__title">{t.loginTitle}</h2>
+          <p className="login-card__text">{t.loginText}</p>
         </div>
         {notice && (
           <div className="callout callout--warning" role="status">
@@ -49,7 +54,7 @@ const Login: React.FC<LoginProps> = ({ onSignedIn, notice }) => {
             <div className="callout__body">{notice}</div>
           </div>
         )}
-        <FormField label="E-mail" htmlFor="login-email">
+        <FormField label={t.loginEmail} htmlFor="login-email">
           <div className="input-icon">
             <Icon name="mail" size={15} />
             <input
@@ -63,7 +68,7 @@ const Login: React.FC<LoginProps> = ({ onSignedIn, notice }) => {
             />
           </div>
         </FormField>
-        <FormField label="Hasło" htmlFor="login-password" error={error}>
+        <FormField label={t.loginPassword} htmlFor="login-password" error={error}>
           <div className="input-icon">
             <Icon name="shield" size={15} />
             <input
@@ -78,7 +83,7 @@ const Login: React.FC<LoginProps> = ({ onSignedIn, notice }) => {
         </FormField>
         <button type="submit" className="button button-success login-card__submit" disabled={submitting}>
           <Icon name={submitting ? 'loader' : 'arrow-right'} size={14} className={submitting ? 'icon-spin' : undefined} />{' '}
-          {submitting ? 'Logowanie…' : 'Zaloguj'}
+          {submitting ? t.loginSubmitting : t.loginSubmit}
         </button>
       </form>
     </div>

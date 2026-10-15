@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { memo, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Adres,
@@ -23,8 +23,12 @@ import {
   ZgnPelnomocnik,
   SpotkanieZarzadOsoba,
   Zebranie,
+  ZADANIE_CONFLICT_MESSAGE,
+  ZebranieStatusRow,
 } from '../../shared/types';
-import { latestWersja, zebranieForSpotkanie } from '../../shared/zebrania';
+import { latestWersja } from '../../shared/zebrania';
+import { useRequestSeq } from '../hooks/useRequestSeq';
+import { useStableCallback } from '../hooks/useStableCallback';
 import { comparePeople, personLabel, personName } from '../../shared/app-users';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
@@ -47,7 +51,6 @@ import {
   currentMonthKey,
   formatDayLabel,
   formatStamp,
-  formatTime,
   formatTimeRange,
   groupByDay,
   countAlerts,
@@ -126,8 +129,98 @@ interface Props {
    * Show just one meeting's card, in a window — the same card, with the same
    * buttons, as the day panel — for a screen that is not the calendar (Zebrania).
    */
-  cardOnly?: { spotkanieId: number; onClose: () => void };
+  cardOnly?: {
+    spotkanieId: number;
+    onClose: () => void;
+    /**
+     * What the host screen already holds, so the one card does not load the
+     * whole calendar to show itself: Zebrania has the meetings, places,
+     * communities, city units and its own entries at hand.
+     */
+    preloaded?: KalendarzPreloaded;
+  };
 }
+
+/** Data a host screen hands the one-card mode instead of it being fetched again. */
+export interface KalendarzPreloaded {
+  spotkania: Spotkanie[];
+  lokalizacje: SpotkanieLokalizacja[];
+  adresy: Adres[];
+  zgnJednostki: ZgnJednostka[];
+  zebrania: Zebranie[];
+}
+
+/** A full Zebrania entry as the calendar keeps it — see `ZebranieStatusRow`. */
+const zebranieStatusOf = (z: Zebranie): ZebranieStatusRow => {
+  const w = latestWersja(z);
+  return {
+    id: z.id,
+    spotkanieId: z.spotkanieId,
+    wersja: w ? { id: w.id, major: w.major, minor: w.minor, status: w.status, gotowe: w.gotowe } : null,
+  };
+};
+
+/**
+ * One formatter per locale and pattern, for the month grid: its 42 cells and
+ * their chips are labelled on every render of the grid, and building a fresh
+ * `Intl.DateTimeFormat` behind every `toLocale…String` call was most of that
+ * cost. Same output as `formatDayLabel` / `formatTime` in shared/calendar.
+ */
+const gridFormats = new Map<string, Intl.DateTimeFormat>();
+function gridFormat(locale: string, kind: 'day' | 'time'): Intl.DateTimeFormat {
+  const key = `${locale}|${kind}`;
+  let format = gridFormats.get(key);
+  if (!format) {
+    format = new Intl.DateTimeFormat(
+      locale,
+      kind === 'day' ? { weekday: 'long', day: 'numeric', month: 'long' } : { hour: '2-digit', minute: '2-digit' },
+    );
+    gridFormats.set(key, format);
+  }
+  return format;
+}
+const gridDayLabel = (dayKey: string, locale: string): string => {
+  const [y, m, d] = dayKey.split('-').map(Number);
+  if (!y || !m || !d) return dayKey;
+  return gridFormat(locale, 'day').format(new Date(y, m - 1, d));
+};
+const gridTime = (iso: string, locale: string): string => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return gridFormat(locale, 'time').format(d);
+};
+const gridTimeRange = (spotkanie: Spotkanie, locale: string): string => {
+  const start = gridTime(spotkanie.startsAt, locale);
+  return spotkanie.endsAt ? `${start} – ${gridTime(spotkanie.endsAt, locale)}` : start;
+};
+
+/**
+ * A hover card's state, kept outside React state on purpose: a card shown on
+ * every chip the pointer crosses must not re-render the whole calendar each
+ * time — only the card itself, which subscribes here.
+ */
+interface HoverStore<T> {
+  get: () => T | null;
+  set: (value: T | null) => void;
+  subscribe: (listener: () => void) => () => void;
+}
+function createHoverStore<T>(): HoverStore<T> {
+  let value: T | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => value,
+    set: (next) => {
+      if (next === value) return;
+      value = next;
+      listeners.forEach((l) => l());
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+const useHover = <T,>(store: HoverStore<T>): T | null => useSyncExternalStore(store.subscribe, store.get);
 
 /**
  * The two things that can be wrong with a meeting's date, in the order they
@@ -266,7 +359,7 @@ const SpotkanieZadania: React.FC<{
           className="button button-small button-subtle"
           onClick={onAdd}
           disabled={disabled}
-          title={t.kalAddTaskHint}
+          data-tip={t.kalAddTaskHint}
         >
           <Icon name="plus" size={13} /> {t.kalAddTask}
         </button>
@@ -277,12 +370,12 @@ const SpotkanieZadania: React.FC<{
         <ul className="kal-tasks__list">
           {zadania.map((z) => (
             <li key={z.id} className={`kal-task kal-task--${z.status}`}>
-              <span className="kal-task__dot" title={statusLabel[z.status]} />
+              <span className="kal-task__dot" data-tip={statusLabel[z.status]} aria-label={statusLabel[z.status]} />
               <button
                 type="button"
                 className="kal-task__body kal-task__body--open"
                 onClick={() => onPreview(z)}
-                title={t.kalTaskPreview}
+                data-tip={t.kalTaskPreview}
               >
                 <span className="kal-task__name">{z.tytul}</span>
                 <span className="kal-task__meta">
@@ -295,7 +388,7 @@ const SpotkanieZadania: React.FC<{
                   <button
                     type="button"
                     onClick={() => onOpenBoard(z)}
-                    title={t.kalTaskOpenBoard}
+                    data-tip={t.kalTaskOpenBoard}
                     aria-label={t.kalTaskOpenBoard}
                   >
                     <Icon name="arrow-right" size={13} />
@@ -305,7 +398,7 @@ const SpotkanieZadania: React.FC<{
                   type="button"
                   onClick={() => onEdit(z)}
                   disabled={disabled}
-                  title={t.edit}
+                  data-tip={t.edit}
                   aria-label={t.edit}
                 >
                   <Icon name="edit" size={13} />
@@ -315,7 +408,7 @@ const SpotkanieZadania: React.FC<{
                   className="is-danger"
                   onClick={() => onDelete(z)}
                   disabled={disabled}
-                  title={t.delete}
+                  data-tip={t.delete}
                   aria-label={t.delete}
                 >
                   <Icon name="trash" size={13} />
@@ -340,7 +433,7 @@ const SpotkanieZadania: React.FC<{
                     className="is-danger"
                     onClick={() => onRemovePending(i)}
                     disabled={disabled}
-                    title={t.kalTaskRemovePending}
+                    data-tip={t.kalTaskRemovePending}
                     aria-label={t.kalTaskRemovePending}
                   >
                     <Icon name="x" size={13} />
@@ -603,7 +696,18 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
       closeTask();
       onZadaniaChanged();
     } catch (err: unknown) {
-      setTaskError(err instanceof Error ? err.message : t.zadSaveError);
+      const message = err instanceof Error ? err.message : '';
+      if (taskForm?.editing && message.includes(ZADANIE_CONFLICT_MESSAGE)) {
+        // Saved elsewhere meanwhile: the form keeps the edits and is rebased on
+        // the card as it now is (ZadanieFormModal), so the next save goes through.
+        setTaskError(t.zadConflict);
+        const id = taskForm.editing.id;
+        const card = (await window.electronAPI.getZadania().catch(() => [])).find((z) => z.id === id);
+        if (card) setTaskForm((prev) => (prev?.editing?.id === id ? { editing: card } : prev));
+        onZadaniaChanged();
+      } else {
+        setTaskError(message || t.zadSaveError);
+      }
     } finally {
       setTaskSaving(false);
     }
@@ -1113,7 +1217,7 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
                       <button
                         type="button"
                         onClick={() => setUczestnicy((prev) => prev.filter((p) => p.userId !== person.userId))}
-                        title={t.kalParticipantRemove}
+                        data-tip={t.kalParticipantRemove}
                         aria-label={t.kalParticipantRemove}
                       >
                         <Icon name="x" size={12} />
@@ -1163,13 +1267,13 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
                 {zarzad.length > 0 && (
                   <div className="kal-people">
                     {zarzad.map((m) => (
-                      <span key={m.imieNazwisko} className="kal-person kal-person--board" title={m.email || undefined}>
+                      <span key={m.imieNazwisko} className="kal-person kal-person--board" data-tip={m.email || undefined}>
                         <Icon name="home" size={12} />
                         <span className="kal-person__label">{m.imieNazwisko}</span>
                         <button
                           type="button"
                           onClick={() => setZarzad((prev) => prev.filter((p) => p.imieNazwisko !== m.imieNazwisko))}
-                          title={t.kalParticipantRemove}
+                          data-tip={t.kalParticipantRemove}
                           aria-label={t.kalParticipantRemove}
                         >
                           <Icon name="x" size={12} />
@@ -1271,7 +1375,7 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
                 className="button button-small button-subtle"
                 onClick={onClone}
                 disabled={isSaving}
-                title={t.kalCloneHint}
+                data-tip={t.kalCloneHint}
               >
                 <Icon name="copy" size={13} /> {t.kalClone}
               </button>
@@ -1360,7 +1464,7 @@ const MeetingCard: React.FC<{
   /** Move the materials status: none needed / to prepare / ready. */
   onMaterialy: (status: SpotkanieMaterialyStatus) => void;
   /** The meeting's entry in the Zebrania module, once "Przygotuj materiały" made one. */
-  zebranie?: Zebranie;
+  zebranie?: ZebranieStatusRow;
   /** "Przygotuj materiały": create the meeting's Zebrania entry. */
   onPrzygotuj?: () => void;
   /** Open the meeting's entry in the Zebrania module. */
@@ -1419,7 +1523,7 @@ const MeetingCard: React.FC<{
     const user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
     return user ? personLabel(user) : email;
   };
-  const zebranieWersja = zebranie ? latestWersja(zebranie) : null;
+  const zebranieWersja = zebranie?.wersja ?? null;
   // "Przygotowane" (and "Wysłane", which implies it) only once every document of
   // the newest version is marked ready in Zebrania — these are what is not yet.
   const notReady = ZEBRANIE_DOKUMENTY.filter((d) => zebranieWersja?.gotowe[d] !== true).map((d) =>
@@ -1448,7 +1552,7 @@ const MeetingCard: React.FC<{
       className={`kal-action kal-action--${tone}`}
       onClick={onClick}
       disabled={busy || blocked}
-      title={title}
+      data-tip={title}
     >
       <span className="kal-action__icon">
         <Icon name={icon} size={15} />
@@ -1495,7 +1599,7 @@ const MeetingCard: React.FC<{
             className="button button-ghost button-icon"
             onClick={onEdit}
             disabled={busy}
-            title={t.edit}
+            data-tip={t.edit}
             aria-label={`${t.edit}: ${spotkanie.nazwa}`}
           >
             <Icon name="edit" size={15} />
@@ -1505,7 +1609,7 @@ const MeetingCard: React.FC<{
             className="button button-ghost button-icon"
             onClick={onClone}
             disabled={busy}
-            title={t.kalCloneHint}
+            data-tip={t.kalCloneHint}
             aria-label={`${t.kalClone}: ${spotkanie.nazwa}`}
           >
             <Icon name="copy" size={15} />
@@ -1515,7 +1619,7 @@ const MeetingCard: React.FC<{
             className="button button-ghost button-icon icon-danger"
             onClick={onDelete}
             disabled={busy}
-            title={t.delete}
+            data-tip={t.delete}
             aria-label={`${t.delete}: ${spotkanie.nazwa}`}
           >
             <Icon name="trash" size={15} />
@@ -1572,7 +1676,7 @@ const MeetingCard: React.FC<{
             className="button button-small button-info"
             onClick={() => onTerminStatus('potwierdzony')}
             disabled={busy}
-            title={t.kalTerminConfirmHint}
+            data-tip={t.kalTerminConfirmHint}
           >
             <Icon name="check-circle" size={13} /> {t.kalTerminConfirm}
           </button>
@@ -1593,7 +1697,7 @@ const MeetingCard: React.FC<{
                 className="button button-small button-subtle"
                 onClick={() => onTerminStatus('wstepny')}
                 disabled={busy}
-                title={t.kalTerminUnconfirmHint}
+                data-tip={t.kalTerminUnconfirmHint}
               >
                 <Icon name="clock" size={13} /> {t.kalTerminUnconfirm}
               </button>
@@ -1637,7 +1741,7 @@ const MeetingCard: React.FC<{
               <span className="kal-card__label">{t.kalPeopleOffice}</span>
               <div className="kal-people">
                 {spotkanie.uczestnicy.map((person) => (
-                  <span key={person.userId} className="kal-person kal-person--static" title={person.email}>
+                  <span key={person.userId} className="kal-person kal-person--static" data-tip={person.email}>
                     <Icon name="users" size={12} />
                     <span className="kal-person__label">{personLabel(person)}</span>
                   </span>
@@ -1653,7 +1757,7 @@ const MeetingCard: React.FC<{
                   <span
                     key={`z-${m.imieNazwisko}`}
                     className="kal-person kal-person--static kal-person--board"
-                    title={m.email ?? undefined}
+                    data-tip={m.email ?? undefined}
                   >
                     <Icon name="home" size={12} />
                     <span className="kal-person__label">{m.imieNazwisko}</span>
@@ -1684,7 +1788,7 @@ const MeetingCard: React.FC<{
                   className="button button-small button-subtle"
                   onClick={() => onMaterialy(materialyPrev)}
                   disabled={busy}
-                  title={t.kalMatUndoHint.replace('{step}', materialyStatusLabel(t, materialyPrev))}
+                  data-tip={t.kalMatUndoHint.replace('{step}', materialyStatusLabel(t, materialyPrev))}
                 >
                   <Icon name="undo" size={13} /> {t.kalMatUndo}
                 </button>
@@ -1704,7 +1808,7 @@ const MeetingCard: React.FC<{
                   onClick={() => onMaterialy(krok)}
                   disabled={busy || current || blocked}
                   aria-pressed={current}
-                  title={current || blocked ? undefined : materialyMark[krok]}
+                  data-tip={current || blocked ? undefined : materialyMark[krok]}
                 >
                   <span className="kal-step__dot">
                     {done || current ? <Icon name="check" size={11} /> : i + 1}
@@ -1833,6 +1937,331 @@ const MeetingCard: React.FC<{
   );
 };
 
+/**
+ * The hover card for a chip in the grid. A native `title` waits about a second
+ * before it appears, and a cell is exactly where the user is scanning quickly —
+ * so this is drawn here, positioned in the viewport, and therefore never clipped
+ * by the grid's rounded overflow. Subscribed to its own store: the pointer
+ * crossing chips re-renders this card, not the calendar.
+ */
+const MeetingHoverCard: React.FC<{
+  store: HoverStore<TipState>;
+  typy: SpotkanieTyp[];
+  lokalizacje: SpotkanieLokalizacja[];
+  language: Language;
+  locale: string;
+}> = ({ store, typy, lokalizacje, language, locale }) => {
+  const t = translations[language];
+  const tip = useHover(store);
+  if (!tip) return null;
+  return (
+      <div
+        className="kal-tip"
+        role="tooltip"
+        style={{ left: tip.left, top: tip.top, bottom: tip.bottom }}
+      >
+        <div className="kal-tip__time">
+          <Icon name="clock" size={12} /> {formatTimeRange(tip.spotkanie, locale)}
+        </div>
+        <div className="kal-tip__name">{tip.spotkanie.nazwa}</div>
+        <div className="kal-tip__meta">
+          <span
+            className="kal-chip"
+            style={{
+              ['--chip' as string]: normalizeHexColor(
+                typOf(tip.spotkanie, typy)?.kolor ?? DEFAULT_TYP_COLOR,
+              ),
+            }}
+          >
+            <span className="kal-chip__dot" />
+            <span className="kal-chip__name">
+              {typOf(tip.spotkanie, typy)?.nazwa ?? t.kalNoType}
+            </span>
+          </span>
+        </div>
+        {tip.spotkanie.materialyStatus !== 'brak' && (
+          <div className="kal-tip__line">
+            <span className={`kal-chip__mat kal-chip__mat--${tip.spotkanie.materialyStatus}`}>
+              <Icon name="briefcase" size={12} />
+              {materialyStatusLabel(t, tip.spotkanie.materialyStatus)}
+            </span>
+          </div>
+        )}
+        {tip.spotkanie.adresNazwa && (
+          <div className="kal-tip__line">
+            <Icon name="map-pin" size={12} /> {tip.spotkanie.adresNazwa}
+          </div>
+        )}
+        {tip.spotkanie.uczestnicy.length > 0 && (
+          <div className="kal-tip__line">
+            <Icon name="users" size={12} />{' '}
+            {tip.spotkanie.uczestnicy.map((person) => personLabel(person)).join(', ')}
+          </div>
+        )}
+        {lokalizacjaLabel(tip.spotkanie, lokalizacje) && (
+          <div className="kal-tip__line">
+            <Icon name="map-pin" size={12} />
+            {lokalizacjaLabel(tip.spotkanie, lokalizacje)}
+          </div>
+        )}
+        {isTerminWstepny(tip.spotkanie) && (
+          <div className="kal-tip__line kal-tip__line--warn">
+            <Icon name="clock" size={12} /> {t.kalTerminTentative}
+          </div>
+        )}
+        {hasUnreadTerminChange(tip.spotkanie) && (
+          <div className="kal-tip__line kal-tip__line--warn">
+            <Icon name="alert-triangle" size={12} />
+            {tip.spotkanie.terminZmienionyZ
+              ? t.kalTerminChangedFrom.replace(
+                  '{from}',
+                  formatStamp(tip.spotkanie.terminZmienionyZ, locale),
+                )
+              : t.kalTerminChangedTitle}
+          </div>
+        )}
+        {tip.spotkanie.opis && <p className="kal-tip__desc">{tip.spotkanie.opis}</p>}
+        <div className="kal-tip__hint">{t.kalChipDoubleClick}</div>
+      </div>
+  );
+};
+
+/** The month/year count card under a filter chip — its own subscriber, like the hover card. */
+const CountHoverCard: React.FC<{
+  store: HoverStore<CountTipState>;
+  monthKey: string;
+  language: Language;
+  locale: string;
+}> = ({ store, monthKey, language, locale }) => {
+  const t = translations[language];
+  const countTip = useHover(store);
+  if (!countTip) return null;
+  const year = monthKey.split('-')[0];
+  return (
+      <div
+        className="kal-count-tip"
+        role="tooltip"
+        style={{
+          left: countTip.left,
+          top: countTip.top,
+          ['--chip' as string]: countTip.color ?? 'var(--accent)',
+        }}
+      >
+        <div className="kal-count-tip__head">
+          <span className="kal-chip__dot" />
+          {countTip.label}
+        </div>
+        <div className="kal-count-tip__row">
+          <span>
+            {t.kalCountTipMonth} · {monthLabel(monthKey, locale)}
+          </span>
+          <strong>{meetingsCount(countTip.month, language)}</strong>
+        </div>
+        <div className="kal-count-tip__row">
+          <span>{t.kalCountTipYear.replace('{year}', year)}</span>
+          <strong>{meetingsCount(countTip.year, language)}</strong>
+        </div>
+        {countTip.year > 0 && (
+          <>
+            <div className="kal-count-tip__bar">
+              <span
+                style={{ width: `${Math.round((countTip.month / countTip.year) * 100)}%` }}
+              />
+            </div>
+            <div className="kal-count-tip__share">
+              {t.kalCountTipShare.replace(
+                '{pct}',
+                String(Math.round((countTip.month / countTip.year) * 100)),
+              )}
+            </div>
+          </>
+        )}
+      </div>
+  );
+};
+
+/**
+ * The month as a grid of days, each with its first few meetings. Memoized: it
+ * is the heaviest part of the calendar (42 cells, their chips and labels), and
+ * it only has to change with the month, the filter's result or the selected
+ * day — not with a hover card, a form being typed in, or a meeting card's
+ * buttons. Its handlers come from the view with stable identities.
+ */
+const MonthGrid = memo(function MonthGrid({
+  cells,
+  weekdays,
+  byDay,
+  selectedDay,
+  typy,
+  hoverCard,
+  language,
+  locale,
+  onSelectDay,
+  onOpenForm,
+  onShowTip,
+  onHideTip,
+}: {
+  cells: ReturnType<typeof buildMonthGrid>;
+  weekdays: string[];
+  byDay: Map<string, Spotkanie[]>;
+  selectedDay: string;
+  typy: SpotkanieTyp[];
+  hoverCard: boolean;
+  language: Language;
+  locale: string;
+  onSelectDay: (dayKey: string, highlight?: number | null) => void;
+  onOpenForm: (day: string, editing?: Spotkanie | null) => void;
+  onShowTip: (event: React.MouseEvent<HTMLElement>, spotkanie: Spotkanie) => void;
+  onHideTip: () => void;
+}) {
+  const t = translations[language];
+  return (
+    <div className="kal-grid">
+      {/* Head and body scroll together in one container so their seven
+          columns stay aligned when a scrollbar appears, and the head is
+          sticky so it stays readable while they do. */}
+      <div className="kal-grid__scroll" onScroll={onHideTip}>
+        <div className="kal-grid__head">
+          {weekdays.map((label) => (
+            <span key={label}>{label}</span>
+          ))}
+        </div>
+        <div className="kal-grid__body">
+          {cells.map((cell) => {
+            const meetings = byDay.get(cell.dayKey) ?? [];
+            const shown = meetings.slice(0, CHIPS_PER_CELL);
+            const more = meetings.length - shown.length;
+            const dayLabel = gridDayLabel(cell.dayKey, locale);
+            return (
+              <div
+                key={cell.dayKey}
+                className={
+                  'kal-cell' +
+                  (cell.inMonth ? '' : ' kal-cell--outside') +
+                  (cell.isWeekend ? ' kal-cell--weekend' : '') +
+                  (cell.isToday ? ' kal-cell--today' : '') +
+                  (cell.dayKey === selectedDay ? ' is-selected' : '')
+                }
+                role="button"
+                tabIndex={0}
+                aria-label={dayLabel}
+                data-tip={`${dayLabel} — ${t.kalDayDoubleClick}`}
+                onClick={() => onSelectDay(cell.dayKey)}
+                // One click reads the day, two write to it — the same
+                // convention as every other calendar. The hover "+" stays,
+                // because a double-click is a gesture nobody can see.
+                onDoubleClick={() => {
+                  onSelectDay(cell.dayKey);
+                  onOpenForm(cell.dayKey);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelectDay(cell.dayKey);
+                  }
+                }}
+              >
+                <div className="kal-cell__head">
+                  <span className="kal-cell__num">{cell.dayOfMonth}</span>
+                  <button
+                    type="button"
+                    className="kal-cell__add"
+                    data-tip={t.kalDayAdd}
+                    aria-label={t.kalDayAdd}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectDay(cell.dayKey);
+                      onOpenForm(cell.dayKey);
+                    }}
+                    onDoubleClick={(e) => e.stopPropagation()}
+                  >
+                    <Icon name="plus" size={12} />
+                  </button>
+                </div>
+                <div className="kal-cell__chips">
+                  {shown.map((s) => {
+                    const typ = typOf(s, typy);
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className={
+                          'kal-chip kal-chip--button' +
+                          (hasUnreadTerminChange(s) ? ' is-changed' : '') +
+                          (isTerminWstepny(s) ? ' is-tentative' : '')
+                        }
+                        style={{
+                          ['--chip' as string]: normalizeHexColor(
+                            typ?.kolor ?? DEFAULT_TYP_COLOR,
+                          ),
+                        }}
+                        /* With the card on, the hint must be empty —
+                         not absent: an empty hint on the chip stops the
+                         cell's own hint (the day) from showing over the
+                         card. With the card off, the hint is the
+                         fallback, so the full name is still reachable. */
+                      data-tip={
+                        hoverCard
+                          ? ''
+                          : `${gridTimeRange(s, locale)} — ${s.nazwa}\n${t.kalChipDoubleClick}`
+                      }
+                      onMouseEnter={(e) => onShowTip(e, s)}
+                      onMouseLeave={onHideTip}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectDay(cell.dayKey, s.id);
+                        }}
+                        // Stopped from bubbling, or the cell underneath
+                        // would open a *new* meeting over this edit.
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          onSelectDay(cell.dayKey, s.id);
+                          onOpenForm(toDayKey(s.startsAt), s);
+                        }}
+                      >
+                        <span className="kal-chip__dot" />
+                        {hasUnreadTerminChange(s) && (
+                          <Icon name="alert-triangle" size={11} />
+                        )}
+                        {isTerminWstepny(s) && <Icon name="clock" size={11} />}
+                        {s.materialyStatus !== 'brak' && (
+                          <span
+                            className={`kal-chip__mat kal-chip__mat--${s.materialyStatus}`}
+                            aria-label={materialyStatusLabel(t, s.materialyStatus)}
+                          >
+                            <Icon name="briefcase" size={11} />
+                          </span>
+                        )}
+                        <span className="kal-chip__time">
+                          {gridTime(s.startsAt, locale)}
+                        </span>
+                        <span className="kal-chip__name">{s.nazwa}</span>
+                      </button>
+                    );
+                  })}
+                  {more > 0 && (
+                    <button
+                      type="button"
+                      className="kal-cell__more"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectDay(cell.dayKey);
+                      }}
+                      onDoubleClick={(e) => e.stopPropagation()}
+                    >
+                      {t.kalMore.replace('{count}', String(more))}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+});
+
 /* ================================ The view ================================= */
 
 /**
@@ -1845,7 +2274,9 @@ export const SpotkanieKartaModal: React.FC<{
   spotkanieId: number;
   onClose: () => void;
   onOpenSzablony?: () => void;
-}> = ({ language, userEmail, spotkanieId, onClose, onOpenSzablony }) => {
+  /** What the host already holds — see `KalendarzPreloaded`. */
+  preloaded?: KalendarzPreloaded;
+}> = ({ language, userEmail, spotkanieId, onClose, onOpenSzablony, preloaded }) => {
   const [monthKey, setMonthKey] = useState(() => monthOfDayKey(todayKey()));
   const [stateFilter, setStateFilter] = useState<SpotkanieStateFilter>('all');
   return (
@@ -1857,7 +2288,7 @@ export const SpotkanieKartaModal: React.FC<{
       setStateFilter={setStateFilter}
       userEmail={userEmail}
       onOpenSzablony={onOpenSzablony}
-      cardOnly={{ spotkanieId, onClose }}
+      cardOnly={{ spotkanieId, onClose, preloaded }}
     />
   );
 };
@@ -1873,7 +2304,9 @@ export const SpotkanieEditModal: React.FC<{
   spotkanie: Spotkanie;
   onSaved: () => void;
   onCancel: () => void;
-}> = ({ language, userEmail, spotkanie, onSaved, onCancel }) => {
+  /** What the host already holds — the form then only loads the rest. */
+  preloaded?: Omit<KalendarzPreloaded, 'zebrania'>;
+}> = ({ language, userEmail, spotkanie, onSaved, onCancel, preloaded }) => {
   const t = translations[language];
   const notify = useNotify();
   const [typy, setTypy] = useState<SpotkanieTyp[]>([]);
@@ -1903,10 +2336,10 @@ export const SpotkanieEditModal: React.FC<{
       try {
         const [typyData, lokalizacjeData, adresyData, usersData, spotkaniaData] = await Promise.all([
           window.electronAPI.getSpotkaniaTypy(),
-          window.electronAPI.getSpotkaniaLokalizacje(),
-          window.electronAPI.getAdresy(),
+          preloaded?.lokalizacje ?? window.electronAPI.getSpotkaniaLokalizacje(),
+          preloaded?.adresy ?? window.electronAPI.getAdresy(),
           window.electronAPI.getAppUsers(),
-          window.electronAPI.getSpotkania(),
+          preloaded?.spotkania ?? window.electronAPI.getSpotkania(),
         ]);
         if (cancelled) return;
         setWszystkie(spotkaniaData);
@@ -1919,7 +2352,7 @@ export const SpotkanieEditModal: React.FC<{
       }
       try {
         const [jednostki, pelnomocnicy] = await Promise.all([
-          window.electronAPI.mailingGetZgn(),
+          preloaded?.zgnJednostki ?? window.electronAPI.mailingGetZgn(),
           window.electronAPI.getZgnPelnomocnicy(),
         ]);
         if (cancelled) return;
@@ -2040,7 +2473,7 @@ const Kalendarz: React.FC<Props> = ({
 
   const [spotkania, setSpotkania] = useState<Spotkanie[]>([]);
   /** Zebrania entries — which meetings already have one, and at which version. */
-  const [zebrania, setZebrania] = useState<Zebranie[]>([]);
+  const [zebrania, setZebrania] = useState<ZebranieStatusRow[]>([]);
   /** The meeting whose notice is open in the full-screen editor. */
   const [zawiadomienieFor, setZawiadomienieFor] = useState<number | null>(null);
   const [typy, setTypy] = useState<SpotkanieTyp[]>([]);
@@ -2097,8 +2530,14 @@ const Kalendarz: React.FC<Props> = ({
     day: string;
     template?: Spotkanie;
   } | null>(null);
-  const [tip, setTip] = useState<TipState | null>(null);
-  const [countTip, setCountTip] = useState<CountTipState | null>(null);
+  // The two hover cards live in stores of their own, so showing one re-renders
+  // the card and not the calendar — see `HoverStore`.
+  const [tipStore] = useState(() => createHoverStore<TipState>());
+  const [countTipStore] = useState(() => createHoverStore<CountTipState>());
+  const setTip = tipStore.set;
+  const setCountTip = countTipStore.set;
+  /** Overlapping reloads: only the newest one's answer lands (see useRequestSeq). */
+  const loadSeq = useRequestSeq();
   /**
    * The month as a grid with one day open beside it, or every meeting of the
    * month as full cards, one after another. Remembered on this computer only — a
@@ -2146,8 +2585,12 @@ const Kalendarz: React.FC<Props> = ({
   useEffect(() => setTip(null), [monthKey]);
 
   const load = async (silent = false) => {
+    const ticket = loadSeq.next();
     if (silent) setIsRefreshing(true);
     else setIsLoading(true);
+    // The one-card mode opened from Zebrania starts from what that screen holds;
+    // a later full refresh reads everything again.
+    const pre = !silent ? cardOnly?.preloaded : undefined;
     try {
       const [
         spotkaniaData,
@@ -2158,48 +2601,59 @@ const Kalendarz: React.FC<Props> = ({
         mailingiData,
         settings,
       ] = await Promise.all([
-        window.electronAPI.getSpotkania(),
+        pre?.spotkania ?? window.electronAPI.getSpotkania(),
         window.electronAPI.getSpotkaniaTypy(),
-        window.electronAPI.getSpotkaniaLokalizacje(),
-        window.electronAPI.getAdresy(),
+        pre?.lokalizacje ?? window.electronAPI.getSpotkaniaLokalizacje(),
+        pre?.adresy ?? window.electronAPI.getAdresy(),
         window.electronAPI.getAppUsers(),
         window.electronAPI.getSpotkaniaMailingi(),
-        window.electronAPI.getSettings(),
+        // The hover card belongs to the month grid, which one card does not show.
+        cardOnly ? null : window.electronAPI.getSettings(),
       ]);
+      if (!loadSeq.isLatest(ticket)) return;
       setSpotkania(spotkaniaData);
       setTypy(typyData);
       setLokalizacje(lokalizacjeData);
       setAdresy(adresyData);
       setUsers(usersData);
       setMailingi(mailingiData);
-      setHoverCard(settings.calendarHoverCard ?? false);
+      if (settings) setHoverCard(settings.calendarHoverCard ?? false);
     } catch (err) {
-      notify.error(t.kalLoadError);
+      if (loadSeq.isLatest(ticket)) notify.error(t.kalLoadError);
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      // An older load ending must not end the newer one's loader.
+      if (loadSeq.isLatest(ticket)) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
     }
-    await Promise.all([loadZadania(), loadZgn(), loadZebrania()]);
+    if (!loadSeq.isLatest(ticket)) return;
+    await Promise.all([
+      loadZadania(),
+      loadZgn(pre?.zgnJednostki),
+      pre ? setZebrania(pre.zebrania.map(zebranieStatusOf)) : loadZebrania(),
+    ]);
   };
 
   /**
    * Apart as well: without the entries the cards only lose their Zebrania line.
-   * Reloaded with everything else after every write on a card — a materials
-   * status moved here has moved the newest version with it (main process).
+   * Reloaded after every write that can move them — a materials status moved
+   * here has moved the newest version with it (main process). Only what the
+   * cards show: which meeting, and the newest version's state.
    */
   const loadZebrania = async () => {
     try {
-      setZebrania(await window.electronAPI.getZebrania());
+      setZebrania(await window.electronAPI.getZebraniaStatus());
     } catch {
       setZebrania([]);
     }
   };
 
   /** Apart too: without the units the picker is only empty, the calendar still works. */
-  const loadZgn = async () => {
+  const loadZgn = async (jednostkiPreloaded?: ZgnJednostka[]) => {
     try {
       const [jednostki, pelnomocnicy] = await Promise.all([
-        window.electronAPI.mailingGetZgn(),
+        jednostkiPreloaded ?? window.electronAPI.mailingGetZgn(),
         window.electronAPI.getZgnPelnomocnicy(),
       ]);
       setZgnJednostki(jednostki);
@@ -2207,6 +2661,40 @@ const Kalendarz: React.FC<Props> = ({
     } catch {
       setZgnPelnomocnicy([]);
     }
+  };
+
+  /** The meetings' sends, after one was made from here. */
+  const loadMailingi = async () => {
+    try {
+      setMailingi(await window.electronAPI.getSpotkaniaMailingi());
+    } catch {
+      // The card keeps the list it had; a full refresh reads it again.
+    }
+  };
+
+  /**
+   * Re-read one meeting after a write to it, rather than the whole calendar —
+   * the row may have moved under us (shared data), so it is read back, not
+   * patched from what was sent. Gone (deleted elsewhere) = taken off the list.
+   */
+  const refreshSpotkanie = async (id: number) => {
+    let fresh: Spotkanie | null;
+    try {
+      fresh = await window.electronAPI.getSpotkanie(id);
+    } catch {
+      // The write itself went through; only reading it back failed — as with a
+      // failed reload, the calendar says so and keeps what it shows.
+      notify.error(t.kalLoadError);
+      return;
+    }
+    setSpotkania((prev) => {
+      const rest = prev.filter((s) => s.id !== id);
+      if (!fresh) return rest;
+      // Same order as the table hands them over: newest first, then by id.
+      return [...rest, fresh].sort(
+        (a, b) => Date.parse(b.startsAt) - Date.parse(a.startsAt) || a.id - b.id,
+      );
+    });
   };
 
   /** Apart from the calendar: a board that fails to load only hides the meetings' tasks. */
@@ -2219,6 +2707,13 @@ const Kalendarz: React.FC<Props> = ({
   };
 
   /* ------------------------------ Derived data ----------------------------- */
+
+  /** Each meeting's Zebrania entry, by meeting. */
+  const zebranieBySpotkanie = useMemo(() => {
+    const map = new Map<number, ZebranieStatusRow>();
+    for (const z of zebrania) if (z.spotkanieId !== null && !map.has(z.spotkanieId)) map.set(z.spotkanieId, z);
+    return map;
+  }, [zebrania]);
 
   /** Each meeting's tasks, archived ones left out — they are off the board too. */
   const zadaniaBySpotkanie = useMemo(() => {
@@ -2456,6 +2951,12 @@ const Kalendarz: React.FC<Props> = ({
     });
   };
 
+  // For the memoized grid: one identity each for the view's whole life.
+  const selectDayStable = useStableCallback(selectDay);
+  const openFormStable = useStableCallback(openForm);
+  const showTipStable = useStableCallback(showTip);
+  const hideTip = useStableCallback(() => setTip(null));
+
   /**
    * A meeting that needs materials gets its entry in Zebrania as soon as it is
    * saved — that is where the materials are prepared. Unticking materials later
@@ -2466,7 +2967,7 @@ const Kalendarz: React.FC<Props> = ({
    * create the entry later.
    */
   const ensureZebranie = async (spotkanieId: number) => {
-    const had = !!zebranieForSpotkanie(zebrania, spotkanieId);
+    const had = zebranieBySpotkanie.has(spotkanieId);
     try {
       await window.electronAPI.ensureZebranieForSpotkanie(spotkanieId);
       if (!had) notify.success(t.zebraniaAutoCreated);
@@ -2485,7 +2986,9 @@ const Kalendarz: React.FC<Props> = ({
     setIsSaving(true);
     setFormError(null);
     try {
+      let savedId: number;
       if (form?.editing) {
+        savedId = form.editing.id;
         await window.electronAPI.updateSpotkanie(form.editing.id, input);
         // The form only says needed or not: unticking drops the materials,
         // ticking a meeting that had none makes them needed, and a meeting
@@ -2499,6 +3002,7 @@ const Kalendarz: React.FC<Props> = ({
         if (materialyPotrzebne) await ensureZebranie(form.editing.id);
       } else {
         const created = await window.electronAPI.addSpotkanie(input);
+        savedId = created.id;
         if (materialyPotrzebne) {
           await window.electronAPI.setSpotkanieMaterialy(created.id, 'potrzebne');
           await ensureZebranie(created.id);
@@ -2514,7 +3018,13 @@ const Kalendarz: React.FC<Props> = ({
         }
       }
       setForm(null);
-      await load(true);
+      // Only what the save can have changed: the meeting itself, its Zebrania
+      // entry (when it needs materials) and its tasks (a new meeting's).
+      await Promise.all([
+        refreshSpotkanie(savedId),
+        materialyPotrzebne ? loadZebrania() : null,
+        !form?.editing && pendingZadania.length > 0 ? loadZadania() : null,
+      ]);
       // Land on the meeting that was just saved, even when it was moved into
       // another month — otherwise saving looks like it did nothing.
       selectDay(toDayKey(input.startsAt));
@@ -2531,11 +3041,13 @@ const Kalendarz: React.FC<Props> = ({
       t.kalConfirmDelete
         .replace('{name}', spotkanie.nazwa)
         .replace('{when}', formatStamp(spotkanie.startsAt, locale)) +
-      (zebranieForSpotkanie(zebrania, spotkanie.id) ? t.kalConfirmDeleteZebranie : '');
+      (zebranieBySpotkanie.has(spotkanie.id) ? t.kalConfirmDeleteZebranie : '');
     if (!(await notify.confirm(message, { danger: true }))) return;
     try {
       await window.electronAPI.deleteSpotkanie(spotkanie.id);
-      await load(true);
+      // The meeting goes from the list; its entry and its tasks' links went with it.
+      setSpotkania((prev) => prev.filter((s) => s.id !== spotkanie.id));
+      await Promise.all([loadZebrania(), loadZadania()]);
       notify.success(t.kalDeleted);
     } catch (err: unknown) {
       notify.error(err instanceof Error ? err.message : 'Unknown error');
@@ -2544,15 +3056,22 @@ const Kalendarz: React.FC<Props> = ({
 
   /**
    * One wrapper for the small per-meeting writes: they all set the same busy
-   * flag, reload the same way, and report the same failure. Reloads rather than
-   * patching state in place — the meetings are shared, and the row may have
-   * moved under us while the card was on screen.
+   * flag, reload the same way, and report the same failure. Reads the meeting
+   * back rather than patching state in place — the meetings are shared, and the
+   * row may have moved under us while the card was on screen — but only that
+   * meeting, not the eleven lists the calendar holds. `zebrania`: the write can
+   * move the meeting's Zebrania entry too (the materials status does).
    */
-  const runOnMeeting = async (id: number, action: () => Promise<unknown>, done: string) => {
+  const runOnMeeting = async (
+    id: number,
+    action: () => Promise<unknown>,
+    done: string,
+    zebraniaToo = false,
+  ) => {
     setBusyId(id);
     try {
       await action();
-      await load(true);
+      await Promise.all([refreshSpotkanie(id), zebraniaToo ? loadZebrania() : null]);
       notify.success(done);
     } catch (err: unknown) {
       notify.error(err instanceof Error ? err.message : 'Unknown error');
@@ -2580,6 +3099,7 @@ const Kalendarz: React.FC<Props> = ({
       spotkanie.id,
       () => window.electronAPI.setSpotkanieMaterialy(spotkanie.id, status),
       t.kalMaterialsSavedDone,
+      true,
     );
 
   /**
@@ -2591,7 +3111,7 @@ const Kalendarz: React.FC<Props> = ({
     let created: Zebranie | null = null;
     try {
       created = await window.electronAPI.zebranieFromSpotkanie(spotkanie.id);
-      await load(true);
+      await Promise.all([refreshSpotkanie(spotkanie.id), loadZebrania()]);
     } catch (err: unknown) {
       notify.error(err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -2669,7 +3189,17 @@ const Kalendarz: React.FC<Props> = ({
       setCardTask(null);
       await loadZadania();
     } catch (err: unknown) {
-      setCardTaskError(err instanceof Error ? err.message : t.zadSaveError);
+      const message = err instanceof Error ? err.message : '';
+      if (cardTask.editing && message.includes(ZADANIE_CONFLICT_MESSAGE)) {
+        // As in the meeting form above: keep the edits, rebase on the fresh card.
+        setCardTaskError(t.zadConflict);
+        const id = cardTask.editing.id;
+        const card = (await window.electronAPI.getZadania().catch(() => [])).find((z) => z.id === id);
+        if (card) setCardTask((prev) => (prev?.editing?.id === id ? { ...prev, editing: card } : prev));
+        await loadZadania();
+      } else {
+        setCardTaskError(message || t.zadSaveError);
+      }
     } finally {
       setCardTaskSaving(false);
     }
@@ -2730,12 +3260,12 @@ const Kalendarz: React.FC<Props> = ({
       onAckTermin={() => void handleAckTermin(s)}
       onTerminStatus={(status) => void handleTerminStatus(s, status)}
       onMaterialy={(status) => void handleMaterialy(s, status)}
-      zebranie={zebranieForSpotkanie(zebrania, s.id)}
+      zebranie={zebranieBySpotkanie.get(s.id)}
       onPrzygotuj={() => void handlePrzygotuj(s)}
       onOpenZebranie={
         onOpenZebranie
           ? () => {
-              const z = zebranieForSpotkanie(zebrania, s.id);
+              const z = zebranieBySpotkanie.get(s.id);
               if (z) onOpenZebranie(z.id);
             }
           : undefined
@@ -2778,76 +3308,7 @@ const Kalendarz: React.FC<Props> = ({
 
   const overlays = (
     <>
-      {tip && (
-        <div
-          className="kal-tip"
-          role="tooltip"
-          style={{ left: tip.left, top: tip.top, bottom: tip.bottom }}
-        >
-          <div className="kal-tip__time">
-            <Icon name="clock" size={12} /> {formatTimeRange(tip.spotkanie, locale)}
-          </div>
-          <div className="kal-tip__name">{tip.spotkanie.nazwa}</div>
-          <div className="kal-tip__meta">
-            <span
-              className="kal-chip"
-              style={{
-                ['--chip' as string]: normalizeHexColor(
-                  typOf(tip.spotkanie, typy)?.kolor ?? DEFAULT_TYP_COLOR,
-                ),
-              }}
-            >
-              <span className="kal-chip__dot" />
-              <span className="kal-chip__name">
-                {typOf(tip.spotkanie, typy)?.nazwa ?? t.kalNoType}
-              </span>
-            </span>
-          </div>
-          {tip.spotkanie.materialyStatus !== 'brak' && (
-            <div className="kal-tip__line">
-              <span className={`kal-chip__mat kal-chip__mat--${tip.spotkanie.materialyStatus}`}>
-                <Icon name="briefcase" size={12} />
-                {materialyStatusLabel(t, tip.spotkanie.materialyStatus)}
-              </span>
-            </div>
-          )}
-          {tip.spotkanie.adresNazwa && (
-            <div className="kal-tip__line">
-              <Icon name="map-pin" size={12} /> {tip.spotkanie.adresNazwa}
-            </div>
-          )}
-          {tip.spotkanie.uczestnicy.length > 0 && (
-            <div className="kal-tip__line">
-              <Icon name="users" size={12} />{' '}
-              {tip.spotkanie.uczestnicy.map((person) => personLabel(person)).join(', ')}
-            </div>
-          )}
-          {lokalizacjaLabel(tip.spotkanie, lokalizacje) && (
-            <div className="kal-tip__line">
-              <Icon name="map-pin" size={12} />
-              {lokalizacjaLabel(tip.spotkanie, lokalizacje)}
-            </div>
-          )}
-          {isTerminWstepny(tip.spotkanie) && (
-            <div className="kal-tip__line kal-tip__line--warn">
-              <Icon name="clock" size={12} /> {t.kalTerminTentative}
-            </div>
-          )}
-          {hasUnreadTerminChange(tip.spotkanie) && (
-            <div className="kal-tip__line kal-tip__line--warn">
-              <Icon name="alert-triangle" size={12} />
-              {tip.spotkanie.terminZmienionyZ
-                ? t.kalTerminChangedFrom.replace(
-                    '{from}',
-                    formatStamp(tip.spotkanie.terminZmienionyZ, locale),
-                  )
-                : t.kalTerminChangedTitle}
-            </div>
-          )}
-          {tip.spotkanie.opis && <p className="kal-tip__desc">{tip.spotkanie.opis}</p>}
-          <div className="kal-tip__hint">{t.kalChipDoubleClick}</div>
-        </div>
-      )}
+      <MeetingHoverCard store={tipStore} typy={typy} lokalizacje={lokalizacje} language={language} locale={locale} />
 
       {pdfOpen && (
         <KalendarzPdfModal
@@ -2872,7 +3333,12 @@ const Kalendarz: React.FC<Props> = ({
           userEmail={userEmail ?? ''}
           spotkanieId={zawiadomienieFor}
           onClose={() => setZawiadomienieFor(null)}
-          onChanged={() => void load(true)}
+          // A notice saved or sent moves its meeting, its Zebrania entry and the
+          // meeting's sends — those three, not the whole calendar.
+          onChanged={() => {
+            const id = zawiadomienieFor;
+            void Promise.all([refreshSpotkanie(id), loadZebrania(), loadMailingi()]);
+          }}
           onOpenSzablony={onOpenSzablony}
           sending
         />
@@ -3041,7 +3507,7 @@ const Kalendarz: React.FC<Props> = ({
               type="button"
               className="ksieg-nav-arrow"
               onClick={() => setMonthKey(shiftMonthKey(monthKey, -1))}
-              title={t.kalMonthPrev}
+              data-tip={t.kalMonthPrev}
               aria-label={t.kalMonthPrev}
             >
               <Icon name="chevron-left" size={17} />
@@ -3058,7 +3524,7 @@ const Kalendarz: React.FC<Props> = ({
               type="button"
               className="ksieg-nav-arrow"
               onClick={() => setMonthKey(shiftMonthKey(monthKey, 1))}
-              title={t.kalMonthNext}
+              data-tip={t.kalMonthNext}
               aria-label={t.kalMonthNext}
             >
               <Icon name="chevron-right" size={17} />
@@ -3076,7 +3542,7 @@ const Kalendarz: React.FC<Props> = ({
               className="ksieg-nav-arrow"
               onClick={() => void load(true)}
               disabled={isRefreshing}
-              title={t.kalRefresh}
+              data-tip={t.kalRefresh}
               aria-label={t.kalRefresh}
             >
               <Icon name="refresh" size={16} />
@@ -3086,7 +3552,7 @@ const Kalendarz: React.FC<Props> = ({
               className="button button-secondary kal-new"
               onClick={() => setPdfOpen(true)}
               disabled={pdfBusy || isLoading}
-              title={t.kalPdfHint}
+              data-tip={t.kalPdfHint}
             >
               <Icon name={pdfBusy ? 'loader' : 'download'} size={14} /> {t.kalPdf}
             </button>
@@ -3125,7 +3591,7 @@ const Kalendarz: React.FC<Props> = ({
                   }
                   onClick={() => setStateFilter(stateFilter === filter ? 'all' : filter)}
                   aria-pressed={stateFilter === filter}
-                  title={stateFilter === filter ? t.kalFilterOnHint : t.kalFilterOffHint}
+                  data-tip={stateFilter === filter ? t.kalFilterOnHint : t.kalFilterOffHint}
                 >
                   <span className="kal-warning__box" aria-hidden="true">
                     {stateFilter === filter && <Icon name="check" size={12} />}
@@ -3154,7 +3620,7 @@ const Kalendarz: React.FC<Props> = ({
               <button
                 type="button"
                 onClick={() => setSearch('')}
-                title={t.close}
+                data-tip={t.close}
                 aria-label={t.close}
               >
                 <Icon name="x" size={14} />
@@ -3349,150 +3815,20 @@ const Kalendarz: React.FC<Props> = ({
         {/* ---------------------- The month and the day --------------------- */}
         {viewMode === 'month' && (
           <div className="kal-layout">
-            <div className="kal-grid">
-              {/* Head and body scroll together in one container so their seven
-                  columns stay aligned when a scrollbar appears, and the head is
-                  sticky so it stays readable while they do. */}
-              <div className="kal-grid__scroll" onScroll={() => setTip(null)}>
-                <div className="kal-grid__head">
-                  {weekdays.map((label) => (
-                    <span key={label}>{label}</span>
-                  ))}
-                </div>
-                <div className="kal-grid__body">
-                  {cells.map((cell) => {
-                    const meetings = byDay.get(cell.dayKey) ?? [];
-                    const shown = meetings.slice(0, CHIPS_PER_CELL);
-                    const more = meetings.length - shown.length;
-                    return (
-                      <div
-                        key={cell.dayKey}
-                        className={
-                          'kal-cell' +
-                          (cell.inMonth ? '' : ' kal-cell--outside') +
-                          (cell.isWeekend ? ' kal-cell--weekend' : '') +
-                          (cell.isToday ? ' kal-cell--today' : '') +
-                          (cell.dayKey === selectedDay ? ' is-selected' : '')
-                        }
-                        role="button"
-                        tabIndex={0}
-                        aria-label={formatDayLabel(cell.dayKey, locale)}
-                        title={`${formatDayLabel(cell.dayKey, locale)} — ${t.kalDayDoubleClick}`}
-                        onClick={() => selectDay(cell.dayKey)}
-                        // One click reads the day, two write to it — the same
-                        // convention as every other calendar. The hover "+" stays,
-                        // because a double-click is a gesture nobody can see.
-                        onDoubleClick={() => {
-                          selectDay(cell.dayKey);
-                          openForm(cell.dayKey);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            selectDay(cell.dayKey);
-                          }
-                        }}
-                      >
-                        <div className="kal-cell__head">
-                          <span className="kal-cell__num">{cell.dayOfMonth}</span>
-                          <button
-                            type="button"
-                            className="kal-cell__add"
-                            title={t.kalDayAdd}
-                            aria-label={t.kalDayAdd}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              selectDay(cell.dayKey);
-                              openForm(cell.dayKey);
-                            }}
-                            onDoubleClick={(e) => e.stopPropagation()}
-                          >
-                            <Icon name="plus" size={12} />
-                          </button>
-                        </div>
-                        <div className="kal-cell__chips">
-                          {shown.map((s) => {
-                            const typ = typOf(s, typy);
-                            return (
-                              <button
-                                key={s.id}
-                                type="button"
-                                className={
-                                  'kal-chip kal-chip--button' +
-                                  (hasUnreadTerminChange(s) ? ' is-changed' : '') +
-                                  (isTerminWstepny(s) ? ' is-tentative' : '')
-                                }
-                                style={{
-                                  ['--chip' as string]: normalizeHexColor(
-                                    typ?.kolor ?? DEFAULT_TYP_COLOR,
-                                  ),
-                                }}
-                                /* With the card on, the title must be empty —
-                                 not absent: that suppresses the native tooltip
-                                 AND stops the browser falling back to the cell's
-                                 title, which would otherwise arrive a second
-                                 later on top of the card. With the card off, the
-                                 native tooltip is the fallback, so the full name
-                                 is still reachable. */
-                              title={
-                                hoverCard
-                                  ? ''
-                                  : `${formatTimeRange(s, locale)} — ${s.nazwa}\n${t.kalChipDoubleClick}`
-                              }
-                              onMouseEnter={(e) => showTip(e, s)}
-                              onMouseLeave={() => setTip(null)}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  selectDay(cell.dayKey, s.id);
-                                }}
-                                // Stopped from bubbling, or the cell underneath
-                                // would open a *new* meeting over this edit.
-                                onDoubleClick={(e) => {
-                                  e.stopPropagation();
-                                  selectDay(cell.dayKey, s.id);
-                                  openForm(toDayKey(s.startsAt), s);
-                                }}
-                              >
-                                <span className="kal-chip__dot" />
-                                {hasUnreadTerminChange(s) && (
-                                  <Icon name="alert-triangle" size={11} />
-                                )}
-                                {isTerminWstepny(s) && <Icon name="clock" size={11} />}
-                                {s.materialyStatus !== 'brak' && (
-                                  <span
-                                    className={`kal-chip__mat kal-chip__mat--${s.materialyStatus}`}
-                                    aria-label={materialyStatusLabel(t, s.materialyStatus)}
-                                  >
-                                    <Icon name="briefcase" size={11} />
-                                  </span>
-                                )}
-                                <span className="kal-chip__time">
-                                  {formatTime(s.startsAt, locale)}
-                                </span>
-                                <span className="kal-chip__name">{s.nazwa}</span>
-                              </button>
-                            );
-                          })}
-                          {more > 0 && (
-                            <button
-                              type="button"
-                              className="kal-cell__more"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                selectDay(cell.dayKey);
-                              }}
-                              onDoubleClick={(e) => e.stopPropagation()}
-                            >
-                              {t.kalMore.replace('{count}', String(more))}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
+            <MonthGrid
+              cells={cells}
+              weekdays={weekdays}
+              byDay={byDay}
+              selectedDay={selectedDay}
+              typy={typy}
+              hoverCard={hoverCard}
+              language={language}
+              locale={locale}
+              onSelectDay={selectDayStable}
+              onOpenForm={openFormStable}
+              onShowTip={showTipStable}
+              onHideTip={hideTip}
+            />
 
             <aside className="kal-side">
               <div className="kal-side__block kal-side__block--day">
@@ -3529,51 +3865,8 @@ const Kalendarz: React.FC<Props> = ({
         )}
       </div>
 
-      {/* Hover card for a chip in the grid. A native `title` waits about a
-          second before it appears, and a cell is exactly where the user is
-          scanning quickly — so this is rendered here, positioned in the
-          viewport, and therefore never clipped by the grid's rounded overflow. */}
-      {countTip && (
-        <div
-          className="kal-count-tip"
-          role="tooltip"
-          style={{
-            left: countTip.left,
-            top: countTip.top,
-            ['--chip' as string]: countTip.color ?? 'var(--accent)',
-          }}
-        >
-          <div className="kal-count-tip__head">
-            <span className="kal-chip__dot" />
-            {countTip.label}
-          </div>
-          <div className="kal-count-tip__row">
-            <span>
-              {t.kalCountTipMonth} · {monthLabel(monthKey, locale)}
-            </span>
-            <strong>{meetingsCount(countTip.month, language)}</strong>
-          </div>
-          <div className="kal-count-tip__row">
-            <span>{t.kalCountTipYear.replace('{year}', year)}</span>
-            <strong>{meetingsCount(countTip.year, language)}</strong>
-          </div>
-          {countTip.year > 0 && (
-            <>
-              <div className="kal-count-tip__bar">
-                <span
-                  style={{ width: `${Math.round((countTip.month / countTip.year) * 100)}%` }}
-                />
-              </div>
-              <div className="kal-count-tip__share">
-                {t.kalCountTipShare.replace(
-                  '{pct}',
-                  String(Math.round((countTip.month / countTip.year) * 100)),
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      )}
+      {/* The month/year count card of the filter chips — see CountHoverCard. */}
+      <CountHoverCard store={countTipStore} monthKey={monthKey} language={language} locale={locale} />
 
       {overlays}
     </div>

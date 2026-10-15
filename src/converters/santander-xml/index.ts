@@ -52,6 +52,7 @@ export class SantanderXmlConverter extends BaseConverter<XmlTransaction> {
     const statement = await this.parser.parse(content);
     return {
       transactions: statement.transactions,
+      dropped: statement.dropped,
     };
   }
 

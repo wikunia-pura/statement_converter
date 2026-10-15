@@ -30,9 +30,27 @@ const NavigationContext = createContext<NavigationContextValue | null>(null);
 
 export const NavigationProvider: React.FC<
   NavigationContextValue & { children: React.ReactNode }
-> = ({ children, ...value }) => (
-  <NavigationContext.Provider value={value}>{children}</NavigationContext.Provider>
-);
+> = ({
+  children,
+  canGoBack,
+  canGoForward,
+  goBack,
+  goForward,
+  backLabel,
+  forwardLabel,
+  labels,
+  item,
+  openItem,
+  closeItem,
+}) => {
+  // One value per actual change: a fresh object on every render of the shell
+  // would re-render every view reading it (`useNavItem`), keystroke by keystroke.
+  const value = useMemo<NavigationContextValue>(
+    () => ({ canGoBack, canGoForward, goBack, goForward, backLabel, forwardLabel, labels, item, openItem, closeItem }),
+    [canGoBack, canGoForward, goBack, goForward, backLabel, forwardLabel, labels, item, openItem, closeItem],
+  );
+  return <NavigationContext.Provider value={value}>{children}</NavigationContext.Provider>;
+};
 
 export const useNavigation = (): NavigationContextValue | null => useContext(NavigationContext);
 
@@ -86,7 +104,7 @@ export const HeaderNav: React.FC = () => {
         className="header-nav__btn"
         onClick={goBack}
         disabled={!canGoBack}
-        title={title(labels.back, backLabel, 'Alt+←')}
+        data-tip={title(labels.back, backLabel, 'Alt+←')}
         aria-label={labels.back}
       >
         <Icon name="chevron-left" size={16} />
@@ -96,7 +114,7 @@ export const HeaderNav: React.FC = () => {
         className="header-nav__btn"
         onClick={goForward}
         disabled={!canGoForward}
-        title={title(labels.forward, forwardLabel, 'Alt+→')}
+        data-tip={title(labels.forward, forwardLabel, 'Alt+→')}
         aria-label={labels.forward}
       >
         <Icon name="chevron-right" size={16} />

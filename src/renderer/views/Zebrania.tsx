@@ -54,6 +54,7 @@ import ZebraniaUstawieniaModal from '../components/ZebraniaUstawieniaModal';
 import { ZebraniaSzablonModal, ZebraniaSzablonSekcja } from '../components/ZebraniaSzablon';
 import ScreenTitle from '../components/ScreenTitle';
 import { useNavItem } from '../navigation';
+import { useRequestSeq } from '../hooks/useRequestSeq';
 import { defaultUstawienia, foldText } from '../../shared/plan-gospodarczy';
 
 type T = (typeof translations)['pl'];
@@ -401,6 +402,8 @@ const ZebranieScreen: React.FC<{
   ustawienia: ZebraniaUstawienia;
   /** The template meeting's plan, for a plan not yet drafted; null when there is none to start from. */
   szablonPlan: PlanSzablonu | null;
+  /** Every entry, as this screen already holds them — the plan's previous-plan lookup reads them. */
+  zebrania: Zebranie[];
   onReload: () => Promise<void>;
   onOpenUstawienia: () => void;
   onBack: () => void;
@@ -432,6 +435,7 @@ const ZebranieScreen: React.FC<{
   wspolnoty,
   ustawienia,
   szablonPlan,
+  zebrania,
   onReload,
   onOpenUstawienia,
   onBack,
@@ -484,7 +488,7 @@ const ZebranieScreen: React.FC<{
       const s = await window.electronAPI.getSprawozdanie(sprawozdanieId);
       if (!s?.dane) return;
       const rok = Number(s.dane.okresDo.slice(0, 4)) + 1;
-      const udzialy = await udzialyNaStart(s.dane.nrWsp ?? wspolnota?.vdomNr ?? null, rok, wspolnota);
+      const udzialy = await udzialyNaStart(s.dane.nrWsp ?? wspolnota?.vdomNr ?? null, rok, wspolnota, zebrania);
       const plan = planNaStart(s.dane, ustawienia, { wskaznik: szablonPlan.plan.wskaznik, ...udzialy }, null, szablonPlan);
       await window.electronAPI.setZebranieWersjaPlan(w.id, plan);
       await zapamietajUdzialy(dane.adresNazwa, wspolnota, plan);
@@ -604,12 +608,12 @@ const ZebranieScreen: React.FC<{
                   className="status-badge zeb-link zeb-link--kal zeb-link--button"
                   onClick={onShowSpotkanie}
                   disabled={!spotkanie}
-                  title={t.zebraniaLinkedOpenHint}
+                  data-tip={t.zebraniaLinkedOpenHint}
                 >
                   <Icon name="calendar" size={11} /> {t.zebraniaLinked}
                 </button>
               ) : (
-                <span className="status-badge zeb-link" title={t.zebraniaStandaloneHint}>
+                <span className="status-badge zeb-link" data-tip={t.zebraniaStandaloneHint}>
                   {t.zebraniaStandalone}
                 </span>
               )}
@@ -648,7 +652,7 @@ const ZebranieScreen: React.FC<{
                 role="tab"
                 aria-selected={wersja?.id === w.id}
                 className={`zeb-vtab${wersja?.id === w.id ? ' is-active' : ''}`}
-                title={`${wersjaTitle(t, w)} — ${zebranieStatusLabel(t, w.status)}`}
+                data-tip={`${wersjaTitle(t, w)} — ${zebranieStatusLabel(t, w.status)}`}
                 onClick={() => setWersjaId(w.id)}
               >
                 <span className={`zeb-vtab__dot zeb-vtab__dot--${w.status}`} aria-hidden="true" />
@@ -665,7 +669,7 @@ const ZebranieScreen: React.FC<{
             className="button button-small button-secondary"
             onClick={onAddRevision}
             disabled={busy || !current}
-            title={
+            data-tip={
               current
                 ? t.zebraniaAddRevisionHint
                     .replace('{v}', `${next.major}.${next.minor}`)
@@ -681,7 +685,7 @@ const ZebranieScreen: React.FC<{
               className="button button-small button-ghost icon-danger"
               onClick={() => onDeleteWersja(wersja)}
               disabled={busy || wersje.length <= 1}
-              title={wersje.length <= 1 ? t.zebraniaDeleteVersionOnly : undefined}
+              data-tip={wersje.length <= 1 ? t.zebraniaDeleteVersionOnly : undefined}
             >
               <Icon name="trash" size={13} />{' '}
               {t.zebraniaDeleteVersion.replace('{v}', wersjaLabel(wersja))}
@@ -733,6 +737,7 @@ const ZebranieScreen: React.FC<{
             onGoToSprawozdania={() => onTab('sprawozdania')}
             onOpenUstawienia={onOpenUstawienia}
             szablon={szablonPlan}
+            zebrania={zebrania}
           />
         ) : activeTab.id === 'uchwaly' && wersja ? (
           <ZebranieUchwaly
@@ -823,7 +828,17 @@ const Zebrania: React.FC<Props> = ({
     setDetailTab('podsumowanie');
   };
 
+  /**
+   * Overlapping reloads: the newest answer wins. `coreSeq` is the entries and
+   * meetings' own — a small write reloads only those two (`reloadCore`), and a
+   * full load that started before it must not put the older lists back.
+   */
+  const loadSeq = useRequestSeq();
+  const coreSeq = useRequestSeq();
+
   const load = async (silent = false) => {
+    const ticket = loadSeq.next();
+    const coreTicket = coreSeq.next();
     if (silent) setIsRefreshing(true);
     else setIsLoading(true);
     try {
@@ -837,8 +852,11 @@ const Zebrania: React.FC<Props> = ({
         window.electronAPI.getZebraniaUstawienia(),
         window.electronAPI.mailingGetZgn().catch(() => [] as ZgnJednostka[]),
       ]);
-      setZebrania(z);
-      setSpotkania(s);
+      if (!loadSeq.isLatest(ticket)) return;
+      if (coreSeq.isLatest(coreTicket)) {
+        setZebrania(z);
+        setSpotkania(s);
+      }
       setLokalizacje(l);
       setAdresy(a);
       setLista(sp);
@@ -846,10 +864,31 @@ const Zebrania: React.FC<Props> = ({
       setUstawienia(u);
       setJednostki(j);
     } catch {
-      notify.error(t.zebraniaLoadError);
+      if (loadSeq.isLatest(ticket)) notify.error(t.zebraniaLoadError);
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      // An older load ending must not end the newer one's loader.
+      if (loadSeq.isLatest(ticket)) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    }
+  };
+
+  /**
+   * After a write that can only have moved entries and their meetings — a
+   * document marked ready, a version added or deleted, a meeting edited from
+   * here (main keeps the meeting's materials status and the newest version in
+   * step) — those two lists, not all eight.
+   */
+  const reloadCore = async () => {
+    const ticket = coreSeq.next();
+    try {
+      const [z, s] = await Promise.all([window.electronAPI.getZebrania(), window.electronAPI.getSpotkania()]);
+      if (!coreSeq.isLatest(ticket)) return;
+      setZebrania(z);
+      setSpotkania(s);
+    } catch {
+      if (coreSeq.isLatest(ticket)) notify.error(t.zebraniaLoadError);
     }
   };
 
@@ -949,7 +988,7 @@ const Zebrania: React.FC<Props> = ({
         notify.success(t.zebraniaCreated);
       }
       setForm(null);
-      await load(true);
+      await reloadCore();
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : t.zebraniaSaveError);
     } finally {
@@ -962,7 +1001,7 @@ const Zebrania: React.FC<Props> = ({
     setBusy(true);
     try {
       await action();
-      await load(true);
+      await reloadCore();
       notify.success(done);
     } catch (err: unknown) {
       notify.error(err instanceof Error ? err.message : String(err));
@@ -1104,7 +1143,7 @@ const Zebrania: React.FC<Props> = ({
               <button
                 type="button"
                 className="status-badge zeb-link zeb-link--kal zeb-link--button"
-                title={t.zebraniaLinkedOpenHint}
+                data-tip={t.zebraniaLinkedOpenHint}
                 onClick={(e) => {
                   e.stopPropagation();
                   setSzczegoly(spotkanie);
@@ -1117,7 +1156,7 @@ const Zebrania: React.FC<Props> = ({
                 <Icon name="calendar" size={11} /> {t.zebraniaLinked}
               </span>
             ) : (
-              <span className="status-badge zeb-link" title={t.zebraniaStandaloneHint}>
+              <span className="status-badge zeb-link" data-tip={t.zebraniaStandaloneHint}>
                 {t.zebraniaStandalone}
               </span>
             )}
@@ -1194,10 +1233,12 @@ const Zebrania: React.FC<Props> = ({
           userEmail={userEmail}
           spotkanieId={szczegoly.id}
           onOpenSzablony={onOpenSzablony}
+          // The card starts from what this screen holds instead of loading the calendar.
+          preloaded={{ spotkania, lokalizacje, adresy, zgnJednostki: jednostki, zebrania }}
           onClose={() => {
             setSzczegoly(null);
-            // Whatever was clicked on the card (materials step, date, tasks) shows here too.
-            void load(true);
+            // Whatever was clicked on the card (materials step, date) shows here too.
+            void reloadCore();
           }}
         />
       )}
@@ -1208,9 +1249,10 @@ const Zebrania: React.FC<Props> = ({
           language={language}
           userEmail={userEmail}
           spotkanie={editSpotkanie}
+          preloaded={{ spotkania, lokalizacje, adresy, zgnJednostki: jednostki }}
           onSaved={() => {
             setEditSpotkanie(null);
-            void load(true);
+            void reloadCore();
           }}
           onCancel={() => setEditSpotkanie(null)}
         />
@@ -1241,7 +1283,7 @@ const Zebrania: React.FC<Props> = ({
           zebranie={notice.zebranie}
           wersjaId={notice.wersjaId}
           onClose={() => setNotice(null)}
-          onChanged={() => void load(true)}
+          onChanged={() => void reloadCore()}
           onOpenSzablony={onOpenSzablony}
         />
       )}
@@ -1292,6 +1334,7 @@ const Zebrania: React.FC<Props> = ({
           wspolnoty={wspolnoty}
           ustawienia={ustawienia}
           szablonPlan={zrodlo?.plan ? { plan: zrodlo.plan, nazwa: zrodlo.dane.adresNazwa } : null}
+          zebrania={zebrania}
           onReload={() => load(true)}
           onOpenUstawienia={() => setUstawieniaOpen(true)}
           onBack={() => navItem.close()}
@@ -1344,7 +1387,7 @@ const Zebrania: React.FC<Props> = ({
             className="ksieg-nav-arrow"
             onClick={() => void load(true)}
             disabled={isRefreshing}
-            title={t.zebraniaRefresh}
+            data-tip={t.zebraniaRefresh}
             aria-label={t.zebraniaRefresh}
           >
             <Icon name="refresh" size={16} />
@@ -1413,7 +1456,7 @@ const Zebrania: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={() => setSearch('')}
-                  title={t.close}
+                  data-tip={t.close}
                   aria-label={t.close}
                 >
                   <Icon name="x" size={14} />

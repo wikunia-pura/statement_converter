@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Bank, Converter } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { ipcErrorMessage } from '../ipcError';
 import { useNotify } from '../components/Notifications';
 import { FormField, FormRow, FormSection, RequiredNote } from '../components/FormSection';
 import Icon from '../components/Icon';
@@ -35,12 +36,19 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
   }, []);
 
   const loadData = async () => {
-    const [banksData, convertersData] = await Promise.all([
-      window.electronAPI.getBanks(),
-      window.electronAPI.getConverters(),
-    ]);
-    setBanks(banksData);
-    setConverters(convertersData);
+    // Caught here rather than by the callers: a failed read must not leave the
+    // loader spinning or the list silently empty after a save.
+    try {
+      const [banksData, convertersData] = await Promise.all([
+        window.electronAPI.getBanks(),
+        window.electronAPI.getConverters(),
+      ]);
+      setBanks(banksData);
+      setConverters(convertersData);
+    } catch (error) {
+      console.error('Error loading banks:', error);
+      notify.error(t.bankiLoadError);
+    }
   };
 
   const resetForm = () => {
@@ -66,7 +74,7 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
       resetForm();
       loadData();
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Unknown error';
+      const msg = ipcErrorMessage(error, t.errorUnexpected);
       notify.error(`${t.errorAddingBank}: ${msg}`);
     }
   };
@@ -88,7 +96,7 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
       resetForm();
       loadData();
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Unknown error';
+      const msg = ipcErrorMessage(error, t.errorUnexpected);
       notify.error(`${t.errorUpdatingBank}: ${msg}`);
     }
   };
@@ -99,7 +107,7 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
       await window.electronAPI.deleteBank(id);
       loadData();
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Unknown error';
+      const msg = ipcErrorMessage(error, t.errorUnexpected);
       notify.error(`${t.errorDeletingBank}: ${msg}`);
     }
   };
@@ -110,7 +118,7 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
       await window.electronAPI.deleteAllBanks();
       loadData();
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Unknown error';
+      const msg = ipcErrorMessage(error, t.errorUnexpected);
       notify.error(`${t.errorDeletingBank}: ${msg}`);
     }
   };
@@ -230,7 +238,7 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        placeholder="np. ING Bank"
+                        placeholder={t.bankNamePlaceholder}
                         autoFocus={!editing}
                       />
                     </FormField>
@@ -314,7 +322,7 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
                         {converter ? (
                           converter.name
                         ) : converterMissing ? (
-                          <span className="cell-warning is-danger" title={t.bankConverterMissing}>
+                          <span className="cell-warning is-danger" data-tip={t.bankConverterMissing}>
                             <Icon name="alert-triangle" size={13} />
                             {bank.converterId}
                           </span>
@@ -340,7 +348,7 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
                             type="button"
                             className="button button-ghost button-icon icon-danger"
                             onClick={() => handleDelete(bank.id)}
-                            title={t.delete}
+                            data-tip={t.delete}
                             aria-label={`${t.delete}: ${bank.name}`}
                           >
                             <Icon name="trash" size={15} />

@@ -1,6 +1,7 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { AppUser } from '../../shared/types';
 import { comparePeople, personColor, personLabel } from '../../shared/app-users';
+import { foldText } from '../../shared/text';
 
 /**
  * A text box that can tag people with "@" — the task comments and the
@@ -18,14 +19,6 @@ const same = (a: string | null | undefined, b: string | null | undefined): boole
   (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase() && (a ?? '').trim() !== '';
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-/** Case- and diacritic-blind, so "lukasz" finds "Łukasz". */
-const fold = (value: string): string =>
-  value
-    .toLocaleLowerCase('pl')
-    .replace(/ł/g, 'l')
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '');
 
 /**
  * `@Name` as a whole word: preceded by the start or a space/bracket, and not
@@ -269,10 +262,11 @@ export const MentionEditor = forwardRef<MentionEditorHandle, Props>(
 
     const candidates = useMemo(() => {
       if (!suggest) return [];
-      const q = fold(suggest.query);
+      // Case- and diacritic-blind, so "lukasz" finds "Łukasz".
+      const q = foldText(suggest.query);
       return [...users]
         .filter((u) => !same(u.email, userEmail))
-        .filter((u) => q === '' || fold(`${personLabel(u)} ${u.email}`).includes(q))
+        .filter((u) => q === '' || foldText(`${personLabel(u)} ${u.email}`).includes(q))
         .sort(comparePeople)
         .slice(0, MAX_SUGGESTIONS);
     }, [suggest, users, userEmail]);

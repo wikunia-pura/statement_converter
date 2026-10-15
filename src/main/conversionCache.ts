@@ -46,6 +46,12 @@ class ConversionCache {
   // expiration keeps an actively-reviewed entry alive regardless; this TTL is
   // only the ceiling for an abandoned entry.
   private readonly CACHE_EXPIRY_MS = 6 * 60 * 60 * 1000; // 6 hours
+  // A heartbeat only moves `lastAccessedAt`; writing the whole cache (every
+  // pending review's transactions) to disk for that once a minute is wasted
+  // I/O. The disk copy of the clock may lag this much — a restart then loses at
+  // most this much of a 6-hour slide.
+  private readonly TOUCH_PERSIST_MS = 15 * 60 * 1000;
+  private lastPersistAt = 0;
   private loaded = false;
 
   constructor() {
@@ -92,21 +98,57 @@ class ConversionCache {
     }
   }
 
-  /** Write the current cache to disk (best-effort; failures are non-fatal). */
+  /**
+   * Write the current cache to disk (best-effort; failures are non-fatal).
+   * Through a temp file and a rename, so a crash mid-write leaves the previous
+   * snapshot whole instead of a truncated file that would lose every pending
+   * review on the next start.
+   */
   private persist(): void {
     const file = this.storePath();
     if (!file) return;
 
+    const tmp = `${file}.tmp`;
     try {
       const entries = Array.from(this.cache.values()).map((c) => ({
         ...c,
         createdAt: c.createdAt.toISOString(),
         lastAccessedAt: c.lastAccessedAt.toISOString(),
       }));
-      fs.writeFileSync(file, JSON.stringify(entries), 'utf8');
+      fs.writeFileSync(tmp, JSON.stringify(entries), 'utf8');
+      ConversionCache.renameWithRetry(tmp, file);
+      this.lastPersistAt = Date.now();
     } catch (err) {
       log.warn(`[ConversionCache] Failed to persist to disk: ${err instanceof Error ? err.message : err}`);
+      try {
+        fs.rmSync(tmp, { force: true });
+      } catch {
+        // nothing left to clean up
+      }
     }
+  }
+
+  /**
+   * `renameSync`, tried a few times: on Windows an antivirus or the indexer can
+   * hold the target for a moment and the rename fails with EPERM/EBUSY/EACCES —
+   * a short wait is enough. Synchronous on purpose (persist runs on app quit).
+   */
+  private static renameWithRetry(from: string, to: string): void {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        fs.renameSync(from, to);
+        return;
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (attempt >= 4 || !['EPERM', 'EBUSY', 'EACCES'].includes(code ?? '')) throw err;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 40 * (attempt + 1));
+      }
+    }
+  }
+
+  /** Persist a clock-only change at most every TOUCH_PERSIST_MS — see there. */
+  private persistClock(): void {
+    if (Date.now() - this.lastPersistAt >= this.TOUCH_PERSIST_MS) this.persist();
   }
 
   /**
@@ -176,7 +218,7 @@ class ConversionCache {
     }
 
     cached.lastAccessedAt = new Date();
-    this.persist();
+    this.persistClock();
     return cached;
   }
 
@@ -198,7 +240,7 @@ class ConversionCache {
     }
 
     cached.lastAccessedAt = new Date();
-    this.persist();
+    this.persistClock();
     return true;
   }
 

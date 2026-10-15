@@ -10,6 +10,7 @@ import {
   ZebraniaWspolnota,
   ZebranieWersja,
 } from '../../shared/types';
+import type { Zebranie } from '../../shared/types';
 import {
   miesiaceOkresu,
   naM2,
@@ -29,6 +30,7 @@ import {
   wzrostyPlanu,
   zachowajWzrosty,
   liczbaWlasnychWzrostow,
+  miesiacZebraniaWRoku,
   planZeSprawozdania,
   pozycjePlanu,
   przegenerujPozycje,
@@ -125,7 +127,7 @@ const OkresyEditor: React.FC<{
             type="button"
             className="button button-icon button-ghost"
             onClick={() => remove(i)}
-            title={t.zplanRemovePeriod}
+            data-tip={t.zplanRemovePeriod}
             aria-label={t.zplanRemovePeriod}
           >
             <Icon name="x" size={13} />
@@ -135,8 +137,8 @@ const OkresyEditor: React.FC<{
     );
   };
 
-  const poZebraniu =
-    nowy != null && dataZebrania?.startsWith(String(rok)) && Number(dataZebrania.slice(5, 7)) + 1 === nowy;
+  const miesiacZebrania = miesiacZebraniaWRoku(dataZebrania, rok);
+  const poZebraniu = nowy != null && miesiacZebrania !== null && miesiacZebrania + 1 === nowy;
 
   return (
     <>
@@ -781,7 +783,7 @@ const PlanEditor: React.FC<{
                   type="button"
                   className="button button-icon button-ghost icon-danger"
                   onClick={() => update((p) => ({ ...p, pozycje: p.pozycje.filter((x) => x.id !== z.id) }))}
-                  title={t.zplanRemoveItem}
+                  data-tip={t.zplanRemoveItem}
                   aria-label={t.zplanRemoveItem}
                 >
                   <Icon name="trash" size={13} />
@@ -1110,7 +1112,7 @@ const PlanEditor: React.FC<{
                               remontyFR: p.remontyFR.filter((x) => x.id !== r.id),
                             }))
                           }
-                          title={t.zplanRemoveRepair}
+                          data-tip={t.zplanRemoveRepair}
                           aria-label={t.zplanRemoveRepair}
                         >
                           <Icon name="trash" size={13} />
@@ -1271,12 +1273,17 @@ export const planNaStart = (
 export async function udzialyNaStart(
   nrWsp: number | null,
   rok: number,
-  wspolnota: ZebraniaWspolnota | null
+  wspolnota: ZebraniaWspolnota | null,
+  /** The entries, when the caller already holds them — otherwise they are read here. */
+  zebraniaHeld?: Zebranie[]
 ): Promise<AdresUdzialy> {
   let plany: { nrWsp: number | null; plan: PlanGospodarczy }[] = [];
   if (nrWsp != null) {
     try {
-      const [zebrania, wlasne] = await Promise.all([window.electronAPI.getZebrania(), window.electronAPI.getPlanyWlasne()]);
+      const [zebrania, wlasne] = await Promise.all([
+        zebraniaHeld ?? window.electronAPI.getZebrania(),
+        window.electronAPI.getPlanyWlasne(),
+      ]);
       plany = [...planyZZebran(zebrania, wspolnota ? [wspolnota] : []), ...wlasne];
     } catch {
       // The remembered split stays as the default.
@@ -1693,6 +1700,12 @@ const ZebraniePlan: React.FC<{
    * cost rise and its costs' own growth. Absent = no template, or it has no plan.
    */
   szablon?: PlanSzablonu | null;
+  /**
+   * Every Zebrania entry, when the host already holds them: the previous plan
+   * the areas carry over from is looked up among them instead of reading the
+   * whole module (statements and plans included) once more.
+   */
+  zebrania?: Zebranie[];
 }> = ({
   language,
   locale,
@@ -1706,6 +1719,7 @@ const ZebraniePlan: React.FC<{
   onGoToSprawozdania,
   onOpenUstawienia,
   szablon = null,
+  zebrania: zebraniaHeld,
 }) => {
   const t = translations[language];
   const notify = useNotify();
@@ -1740,7 +1754,7 @@ const ZebraniePlan: React.FC<{
     };
     fill([]);
     if (nrWsp != null) {
-      Promise.all([window.electronAPI.getZebrania(), window.electronAPI.getPlanyWlasne()])
+      Promise.all([zebraniaHeld ?? window.electronAPI.getZebrania(), window.electronAPI.getPlanyWlasne()])
         .then(([zebrania, wlasne]) =>
           fill([...planyZZebran(zebrania, wspolnota ? [wspolnota] : []), ...wlasne])
         )

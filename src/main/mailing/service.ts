@@ -59,6 +59,7 @@ import {
 import DatabaseService from '../database';
 import { MailingSender, SmtpCredentials, validateSmtp } from './sender';
 import { renderHtmlToPdf } from './pdf';
+import { safeFileName } from '../pathGuards';
 
 export interface MailingSendRequest {
   typ: MailingTyp;
@@ -172,17 +173,20 @@ function archiveAttachments(
   const archived: MailingAttachment[] = [];
   const errors: string[] = [];
   for (const attachment of attachments) {
+    // The name comes from the renderer: only its last part, cleaned, may name the
+    // copy — "../../x" must not write outside the archive folder.
+    const fileName = safeFileName(attachment.fileName, path.basename(attachment.filePath) || 'zalacznik');
     try {
-      if (!fs.existsSync(attachment.filePath)) {
-        errors.push(`Załącznik nie istnieje: ${attachment.fileName}`);
+      if (!fs.statSync(attachment.filePath, { throwIfNoEntry: false })?.isFile()) {
+        errors.push(`Załącznik nie istnieje: ${fileName}`);
         continue;
       }
-      const target = uniquePath(dir, attachment.fileName);
+      const target = uniquePath(dir, fileName);
       fs.copyFileSync(attachment.filePath, target);
-      archived.push({ fileName: attachment.fileName, filePath: target, kind: 'custom' });
+      archived.push({ fileName, filePath: target, kind: 'custom' });
     } catch (error: unknown) {
       errors.push(
-        `Nie udało się skopiować załącznika ${attachment.fileName}: ${
+        `Nie udało się skopiować załącznika ${fileName}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -381,7 +385,7 @@ export async function sendMailing(
           });
         }
 
-        await sender.send({
+        const { rejected } = await sender.send({
           to: odbiorcy.map(formatAddressHeader).join(', '),
           subject,
           html: bodyHtml,
@@ -397,16 +401,34 @@ export async function sendMailing(
           ],
         });
 
+        // The server may take the mail for some recipients and refuse the others. The history's status
+        // allows only success/error (a CHECK constraint), so a partial send is a success whose refused
+        // recipients carry `odrzucony` and are named in the message; nobody of the community taken (only
+        // the sender's own copy) is an error.
+        const odrzucone = new Set(rejected);
+        const oznaczeni = odbiorcy.map((o) => (odrzucone.has(o.email.trim().toLowerCase()) ? { ...o, odrzucony: true } : o));
+        const odrzuceni = [
+          ...oznaczeni.filter((o) => o.odrzucony).map((o) => o.email),
+          ...rejected.filter((a) => !odbiorcy.some((o) => o.email.trim().toLowerCase() === a)),
+        ];
+        const nikt = oznaczeni.every((o) => o.odrzucony);
+        if (odrzuceni.length > 0) log.warn(`[MAILING] ${adres.nazwa}: recipients refused by the server: ${odrzuceni.length}`);
+        const komunikaty = [
+          ...(odrzuceni.length > 0
+            ? [`Serwer pocztowy odrzucił adresy: ${odrzuceni.join(', ')} — do nich wiadomość nie dotarła.`]
+            : []),
+          // Surfaced even on success: the mail went out, but the user should
+          // know one of the files they picked never made it in.
+          ...attachmentErrors,
+        ];
         await record(
           {
-            status: 'success',
-            // Surfaced even on success: the mail went out, but the user should
-            // know one of the files they picked never made it in.
-            errorMessage: attachmentErrors.length > 0 ? attachmentErrors.join('\n') : undefined,
+            status: nikt ? 'error' : 'success',
+            errorMessage: komunikaty.length > 0 ? komunikaty.join('\n') : undefined,
             ...summary,
             subject,
             attachments,
-            odbiorcy,
+            odbiorcy: oznaczeni,
           },
           fieldValues,
           renderedBody,

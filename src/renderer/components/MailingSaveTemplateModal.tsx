@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { MailingSzablon, MailingTyp } from '../../shared/types';
 import { translations, Language } from '../translations';
 import { useNotify } from './Notifications';
+import { ipcErrorMessage } from '../ipcError';
 import { FormField, FormSection, RequiredNote } from './FormSection';
 import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
 import Icon from './Icon';
@@ -113,7 +114,7 @@ const MailingSaveTemplateModal: React.FC<MailingSaveTemplateModalProps> = ({
       }
       onClose();
     } catch (err) {
-      const message = err instanceof Error ? err.message : '';
+      const message = ipcErrorMessage(err, '');
       setError(message ? `${t.mailingSaveTplError} ${message}` : t.mailingSaveTplError);
     } finally {
       setIsSaving(false);

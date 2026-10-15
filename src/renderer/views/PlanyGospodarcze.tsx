@@ -22,7 +22,9 @@ import { defaultUstawienia, foldText, nazwaNieruchomosci } from '../../shared/pl
 import { okresLabel, sprawozdanieDlaPlanu, sprawozdanieWersji } from '../../shared/sprawozdanie';
 import { wersjaLabel, zebranieDane } from '../../shared/zebrania';
 import { formatStamp } from '../../shared/calendar';
+import { localeOf } from '../../shared/format';
 import { translations, Language } from '../translations';
+import { ipcErrorMessage } from '../ipcError';
 import { useNotify } from '../components/Notifications';
 import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
 import { FormField, FormSection } from '../components/FormSection';
@@ -81,15 +83,15 @@ const byNazwa = (a: { nazwa: string }, b: { nazwa: string }) =>
 /** Where a plan came from, as a badge — the same look as Sprawozdania's. */
 const ZrodloBadge: React.FC<{ t: T; wpis: Wpis }> = ({ t, wpis }) =>
   wpis.kind === 'zebrania' ? (
-    <span className="status-badge zeb-link zeb-link--kal" title={t.planyZrodloZebraniaHint}>
+    <span className="status-badge zeb-link zeb-link--kal" data-tip={t.planyZrodloZebraniaHint}>
       <Icon name="file-check" size={11} /> {t.sprawZrodloZebrania}
     </span>
   ) : wpis.zastapiony ? (
-    <span className="status-badge status-pending" title={t.planyZastapionyHint}>
+    <span className="status-badge status-pending" data-tip={t.planyZastapionyHint}>
       {t.planyZastapiony}
     </span>
   ) : (
-    <span className="status-badge zeb-link" title={t.planyZrodloWlasneHint}>
+    <span className="status-badge zeb-link" data-tip={t.planyZrodloWlasneHint}>
       {t.sprawZrodloWlasne}
     </span>
   );
@@ -175,7 +177,7 @@ const NowyPlanModal: React.FC<{
       notify.success(t.zplanCreated);
       onCreated(created);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err));
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
     } finally {
       setBusy(false);
     }
@@ -401,7 +403,7 @@ const PlanScreen: React.FC<{
       onBack();
       await onReload();
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err));
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
     } finally {
       setBusy(false);
     }
@@ -629,7 +631,7 @@ const PlanyGospodarcze: React.FC<{
 }> = ({ language, onOpenZebranie }) => {
   const t = translations[language];
   const notify = useNotify();
-  const locale = language === 'en' ? 'en-GB' : 'pl-PL';
+  const locale = localeOf(language);
 
   const [zebrania, setZebrania] = useState<Zebranie[]>([]);
   const [spotkania, setSpotkania] = useState<Spotkanie[]>([]);
@@ -902,7 +904,7 @@ const PlanyGospodarcze: React.FC<{
             className="ksieg-nav-arrow"
             onClick={() => void load(true)}
             disabled={isRefreshing}
-            title={t.zebraniaRefresh}
+            data-tip={t.zebraniaRefresh}
             aria-label={t.zebraniaRefresh}
           >
             <Icon name="refresh" size={16} />
@@ -947,7 +949,7 @@ const PlanyGospodarcze: React.FC<{
                 onChange={(e) => setSearch(e.target.value)}
               />
               {search.trim() && (
-                <button type="button" onClick={() => setSearch('')} title={t.close} aria-label={t.close}>
+                <button type="button" onClick={() => setSearch('')} data-tip={t.close} aria-label={t.close}>
                   <Icon name="x" size={14} />
                 </button>
               )}

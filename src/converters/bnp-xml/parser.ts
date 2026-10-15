@@ -9,6 +9,8 @@
 
 import { parseStringPromise, processors } from 'xml2js';
 import { BnpStatement, BnpTransaction } from './types';
+import { DroppedStatementLine } from '../../shared/types';
+import { asArray, entryExcerpt, isReversalEntry, readAmount, readEntryDetails, splitByAccount } from '../shared/camt';
 
 export class BnpXmlParser {
   /**
@@ -70,8 +72,16 @@ export class BnpXmlParser {
       const bkToCstmrStmt = doc.bktocstmrstmt;
       if (!bkToCstmrStmt) throw new Error('Missing <BkToCstmrStmt> element');
 
-      const stmt = bkToCstmrStmt.stmt;
-      if (!stmt) throw new Error('Missing <Stmt> element');
+      // A file may carry several <Stmt> (xml2js then gives an array, which used
+      // to read as zero transactions). Account info comes from the first; the
+      // entries from every statement of that same account. A statement for
+      // another account is not merged in — its entries go to `dropped` (see
+      // splitByAccount).
+      const allStmts = asArray(bkToCstmrStmt.stmt);
+      if (allStmts.length === 0) throw new Error('Missing <Stmt> element');
+      const stmt = allStmts[0];
+      const dropped: DroppedStatementLine[] = [];
+      const stmts = splitByAccount(allStmts, dropped);
 
       const grpHdr = bkToCstmrStmt.grphdr || {};
 
@@ -94,20 +104,20 @@ export class BnpXmlParser {
       const periodStart = this.get(frTodt, 'frdttm');
       const periodEnd = this.get(frTodt, 'todttm');
 
-      // Balances
+      // Balances (for the log): opening of the first statement, closing of the last.
       let openingBalance = 0;
       let closingBalance = 0;
-      const balNodes = stmt.bal ? (Array.isArray(stmt.bal) ? stmt.bal : [stmt.bal]) : [];
-      for (const bal of balNodes) {
-        const code = this.get(bal, 'tp', 'cdorprtry', 'cd');
-        const amtNode = bal.amt;
-        const amtVal = amtNode ? (typeof amtNode === 'object' && '_' in amtNode ? parseFloat(amtNode._) : parseFloat(String(amtNode))) : 0;
-        if (code === 'OPBD') openingBalance = amtVal;
-        if (code === 'CLBD') closingBalance = amtVal;
-      }
+      stmts.forEach((s: any, i: number) => {
+        for (const bal of asArray(s.bal)) {
+          const code = this.get(bal, 'tp', 'cdorprtry', 'cd');
+          const amtVal = readAmount(bal.amt).amount ?? 0;
+          if (code === 'OPBD' && i === 0) openingBalance = amtVal;
+          if (code === 'CLBD' && i === stmts.length - 1) closingBalance = amtVal;
+        }
+      });
 
       // Transactions
-      const transactions = this.parseEntries(stmt.ntry);
+      const transactions = stmts.flatMap((s: any) => this.parseEntries(s.ntry, dropped));
 
       return {
         messageId: this.get(grpHdr, 'msgid'),
@@ -123,6 +133,7 @@ export class BnpXmlParser {
         openingBalance,
         closingBalance,
         transactions,
+        dropped,
       };
     } catch (error) {
       throw new Error(`Failed to parse BNP XML: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -130,96 +141,55 @@ export class BnpXmlParser {
   }
 
   /**
-   * Parse <Ntry> elements into BnpTransaction[]
+   * Parse <Ntry> elements into BnpTransaction[]. An entry whose amount or
+   * direction cannot be read is recorded in `dropped`, never booked as 0,00 or
+   * guessed onto a side.
    */
-  private parseEntries(ntryNode: any): BnpTransaction[] {
-    if (!ntryNode) return [];
+  private parseEntries(ntryNode: any, dropped: DroppedStatementLine[]): BnpTransaction[] {
+    const transactions: BnpTransaction[] = [];
 
-    const entries = Array.isArray(ntryNode) ? ntryNode : [ntryNode];
-
-    return entries.map((ntry: any) => {
-      // Amount
-      const amtNode = ntry.amt;
-      let amount = 0;
-      let currency = 'PLN';
-      if (amtNode) {
-        if (typeof amtNode === 'object' && '_' in amtNode) {
-          amount = parseFloat(amtNode._);
-          currency = amtNode.$?.ccy || 'PLN';
-        } else {
-          amount = parseFloat(String(amtNode));
-        }
-      }
-
-      const creditDebitIndicator = this.get(ntry, 'cdtdbtind') as 'CRDT' | 'DBIT';
+    for (const ntry of asArray(ntryNode)) {
+      const { amount, currency, text: amountText } = readAmount(ntry.amt);
+      const indicator = this.get(ntry, 'cdtdbtind');
       const status = this.get(ntry, 'sts');
       const bookingDate = this.get(ntry, 'bookgdt', 'dt');
       const valueDate = this.get(ntry, 'valdt', 'dt');
       const txCode = this.get(ntry, 'bktxcd', 'domn', 'cd');
 
-      // Transaction details
-      const txDtls = ntry.ntrydtls?.txdtls || {};
-
-      // References
-      const refs = txDtls.refs || {};
-      const instrId = this.get(refs, 'instrid');
-      const endToEndId = this.get(refs, 'endtoendid');
-
-      // Related parties — for CRDT the counterparty is in Dbtr, for DBIT in Cdtr
-      const rltdPties = txDtls.rltdpties || {};
-      let counterpartyName = '';
-      let counterpartyAddress = '';
-      let counterpartyCountry = '';
-      let counterpartyAccount = '';
-
-      if (creditDebitIndicator === 'CRDT') {
-        // Money coming in → the sender (debtor) is the counterparty
-        const dbtr = rltdPties.dbtr || {};
-        counterpartyName = this.get(dbtr, 'nm');
-        const pstlAdr = dbtr.pstladr || {};
-        counterpartyCountry = this.get(pstlAdr, 'ctry');
-        const addrLines = pstlAdr.adrline
-          ? (Array.isArray(pstlAdr.adrline) ? pstlAdr.adrline : [pstlAdr.adrline])
-          : [];
-        counterpartyAddress = addrLines.map(String).join(' ').trim();
-
-        const dbtrAcct = rltdPties.dbtracct?.id?.othr?.id || '';
-        counterpartyAccount = typeof dbtrAcct === 'object' ? '' : String(dbtrAcct);
-      } else {
-        // Money going out → the recipient (creditor) is the counterparty
-        const cdtr = rltdPties.cdtr || {};
-        counterpartyName = this.get(cdtr, 'nm');
-        const pstlAdr = cdtr.pstladr || {};
-        counterpartyCountry = this.get(pstlAdr, 'ctry');
-        const addrLines = pstlAdr.adrline
-          ? (Array.isArray(pstlAdr.adrline) ? pstlAdr.adrline : [pstlAdr.adrline])
-          : [];
-        counterpartyAddress = addrLines.map(String).join(' ').trim();
-
-        const cdtrAcct = rltdPties.cdtracct?.id?.othr?.id || '';
-        counterpartyAccount = typeof cdtrAcct === 'object' ? '' : String(cdtrAcct);
+      if (indicator !== 'CRDT' && indicator !== 'DBIT') {
+        dropped.push({ excerpt: entryExcerpt(bookingDate, indicator, amountText), reason: 'direction' });
+        continue;
+      }
+      if (amount === null) {
+        dropped.push({ excerpt: entryExcerpt(bookingDate, indicator, amountText), reason: 'amount' });
+        continue;
       }
 
-      // Description (remittance info)
-      const description = this.get(txDtls, 'rmtinf', 'ustrd');
+      // Related parties (Dbtr for CRDT, Cdtr for DBIT) and remittance info, read
+      // from every <TxDtls> of the entry — see readEntryDetails.
+      const details = readEntryDetails(ntry, indicator);
 
-      return {
+      transactions.push({
         amount,
         currency,
-        creditDebitIndicator,
+        creditDebitIndicator: indicator,
         status,
         bookingDate,
         valueDate,
         txCode,
-        instrId,
-        endToEndId,
-        counterpartyName,
-        counterpartyAddress,
-        counterpartyCountry,
-        counterpartyAccount,
-        description,
-      };
-    });
+        instrId: details.instrId,
+        endToEndId: details.endToEndId,
+        counterpartyName: details.counterpartyName,
+        counterpartyAddress: details.counterpartyAddress,
+        counterpartyCountry: details.counterpartyCountry,
+        counterpartyAccount: details.counterpartyAccount,
+        description: details.description,
+        ...(details.batchCounterparties ? { batchCounterparties: true } : {}),
+        ...(isReversalEntry(ntry) ? { reversal: true } : {}),
+      });
+    }
+
+    return transactions;
   }
 
   /**

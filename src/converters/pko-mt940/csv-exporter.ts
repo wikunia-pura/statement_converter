@@ -5,6 +5,7 @@
 
 import { ProcessedTransaction } from './types';
 import { resolveApartmentAccount } from '../../shared/apartment-account';
+import { bankDocNumber, yearMonthOf } from '../shared/export-text';
 
 export interface CsvExportOptions {
   separator?: string;
@@ -38,9 +39,9 @@ export class CsvExporter {
     // Header
     lines.push(this.createHeader());
 
-    // Get current month for document number (BNK/XXXX)
-    const currentMonth = new Date().getMonth() + 1; // 1-12
-    const docNumber = `BNK/${String(currentMonth).padStart(4, '0')}`;
+    // Document number (BNK/00MM): the month of the statement itself, not the
+    // month the file happens to be converted in — see bankDocNumber.
+    const docNumber = bankDocNumber(transactions.map(t => yearMonthOf(t.original.valueDate, 'YYMMDD')));
 
     let position = 1;
 

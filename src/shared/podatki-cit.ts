@@ -41,6 +41,7 @@ import { foldText } from './plan-gospodarczy';
 import { normalizeSprawozdanieDane, sprawozdaniaDlaWspolnoty } from './sprawozdanie';
 import { kluczNazwy } from './adres-identyfikacja';
 import { normalizeWysylki } from './e-deklaracje';
+import { nazwaInterEj, ukryteKwotyInterEj } from './inter-ej';
 
 /* ============================ The e-Deklaracje form ============================ */
 
@@ -306,6 +307,11 @@ export interface PozycjaCit {
   kwota: number;
   /** How many printed rows the sum covers. */
   wierszy: number;
+  /**
+   * The amount is INTER-EJ's or holds it (shared/inter-ej `ukryteKwotyInterEj`): an INTER-EJ row, a row
+   * merged with one, a subcategory heading over one. It never reaches the AI.
+   */
+  kwotaUkryta?: boolean;
 }
 
 const kolumnaIdx = (sek: SprawozdanieSekcja, re: RegExp): number =>
@@ -333,10 +339,12 @@ export function pozycjeSprawozdania(spr: Sprawozdanie): PozycjaCit[] {
       ['przychod', kolumnaIdx(sek, /przych/)],
       ['koszt', kolumnaIdx(sek, /koszt/)],
     ];
-    for (const w of sek.wiersze) {
+    const ukryte = ukryteKwotyInterEj(sek);
+    for (const [i, w] of sek.wiersze.entries()) {
       const nazwa = czysc(w.nazwa);
       const folded = foldText(nazwa);
       if (!nazwa || w.podsumowanie || WIERSZ_SUMUJACY.test(folded)) continue;
+      const ukryta = ukryte.has(i) || nazwaInterEj(nazwa);
       for (const [strona, col] of kolumny) {
         const kwota = col >= 0 ? w.kwoty[col] ?? null : null;
         if (kwota === null || Math.abs(kwota) < 0.005) continue;
@@ -345,8 +353,9 @@ export function pozycjeSprawozdania(spr: Sprawozdanie): PozycjaCit[] {
         if (have) {
           have.kwota = doGroszy(have.kwota + kwota);
           have.wierszy += 1;
+          if (ukryta) have.kwotaUkryta = true;
         } else {
-          out.set(klucz, { klucz, sekcja: id, nazwa, strona, kwota, wierszy: 1 });
+          out.set(klucz, { klucz, sekcja: id, nazwa, strona, kwota, wierszy: 1, ...(ukryta ? { kwotaUkryta: true } : {}) });
         }
       }
     }
@@ -427,6 +436,8 @@ export interface CitPrzegladPozycja {
   sprawozdan: number;
   /** Sum over every statement, for weighing what matters; never shown for an INTER-EJ name. */
   kwota: number;
+  /** Somewhere in the library the amount was INTER-EJ's or held it — it never reaches the AI. */
+  kwotaUkryta?: boolean;
   /** A few of the communities, for the tooltip. */
   przyklady: string[];
 }
@@ -442,6 +453,7 @@ export function przegladPozycjiCit(sprawozdania: SprawozdanieZapisane[]): CitPrz
     sprawozdan: number;
     kwota: number;
     strona: CitStrona;
+    ukryta: boolean;
   }
   const out = new Map<string, Zbior>();
   for (const spr of sprawozdania) {
@@ -451,7 +463,7 @@ export function przegladPozycjiCit(sprawozdania: SprawozdanieZapisane[]): CitPrz
       const klucz = `${p.strona}|${foldText(p.nazwa)}`;
       let z = out.get(klucz);
       if (!z) {
-        z = { pisownie: new Map(), sekcje: new Map(), wspolnoty: new Map(), sprawozdan: 0, kwota: 0, strona: p.strona };
+        z = { pisownie: new Map(), sekcje: new Map(), wspolnoty: new Map(), sprawozdan: 0, kwota: 0, strona: p.strona, ukryta: false };
         out.set(klucz, z);
       }
       z.pisownie.set(p.nazwa, (z.pisownie.get(p.nazwa) ?? 0) + 1);
@@ -459,6 +471,7 @@ export function przegladPozycjiCit(sprawozdania: SprawozdanieZapisane[]): CitPrz
       if (!z.wspolnoty.has(wspolnota)) z.wspolnoty.set(wspolnota, spr.nazwa);
       z.sprawozdan += 1;
       z.kwota = doGroszy(z.kwota + p.kwota);
+      if (p.kwotaUkryta) z.ukryta = true;
     }
   }
   const najczestszy = <K>(m: Map<K, number>): K => [...m.entries()].sort((a, b) => b[1] - a[1])[0][0];
@@ -471,17 +484,35 @@ export function przegladPozycjiCit(sprawozdania: SprawozdanieZapisane[]): CitPrz
       wspolnot: z.wspolnoty.size,
       sprawozdan: z.sprawozdan,
       kwota: z.kwota,
+      ...(z.ukryta ? { kwotaUkryta: true } : {}),
       przyklady: [...z.wspolnoty.values()].slice(0, PRZYKLADY),
     }))
     .sort((a, b) => b.wspolnot - a.wspolnot || Math.abs(b.kwota) - Math.abs(a.kwota));
 }
 
+/**
+ * Each rule's phrase, folded once. Classifying a statement asks every rule
+ * about every row, so folding the phrases there meant rows × rules runs of
+ * `foldText` — on every keystroke of the return's form. Kept per rule object
+ * and checked against the phrase it was folded from, so an edited rule is
+ * folded again.
+ */
+const FOLDED_FRAZY = new WeakMap<CitSlownikRegula, { fraza: string; folded: string }>();
+const foldedFraza = (r: CitSlownikRegula): string => {
+  const have = FOLDED_FRAZY.get(r);
+  if (have && have.fraza === r.fraza) return have.folded;
+  const folded = foldText(r.fraza);
+  FOLDED_FRAZY.set(r, { fraza: r.fraza, folded });
+  return folded;
+};
+
 /** The rule a row name falls under — the first match, as `kategoriaZeSlownika` takes it — or null. */
 export function regulaDlaNazwy(nazwa: string, strona: CitStrona, slownik: CitSlownikRegula[]): CitSlownikRegula | null {
   const name = foldText(nazwa);
   for (const r of slownik) {
-    const phrase = foldText(r.fraza);
-    if (phrase && r.strona === strona && name.includes(phrase)) return r;
+    if (r.strona !== strona) continue;
+    const phrase = foldedFraza(r);
+    if (phrase && name.includes(phrase)) return r;
   }
   return null;
 }
@@ -835,6 +866,12 @@ export type ProblemCit8 =
   /** AI suggestions waiting for a decision. */
   | { kod: 'niepotwierdzone'; ile: number }
   | { kod: 'korekta' }
+  /**
+   * Amounts the form takes only as zero or more came out below zero — negative statement rows (a
+   * reversal booked as a minus) pushing a total under zero. Both the PDF and the XML wait for the rows to
+   * be sorted so they do not: the PDF prints the figure without its sign, and the schema refuses it.
+   */
+  | { kod: 'ujemna'; pozycje: number[] }
   /* What only the XML needs — the PDF prints without it. */
   /** No e-Deklaracje form for the year (before 2025). */
   | { kod: 'wzor' }
@@ -858,9 +895,15 @@ export const okresPelny = (spr: Sprawozdanie, rok: number): boolean =>
 export const pozycjeZeSprawozdania = (d: PodatekCitDane, slownik: CitSlownikRegula[]): PozycjaCitOcena[] =>
   d.sprawozdanie ? ocenPozycje(pozycjeSprawozdania(d.sprawozdanie.dane), slownik, d.klasyfikacja) : [];
 
+/**
+ * `oceny`: the return's rows already classified (`pozycjeZeSprawozdania`) when
+ * the caller has them — a screen that shows the figures too need not classify
+ * the statement a second and third time just to list what is missing.
+ */
 export function problemyCIT8(
   rek: Pick<PodatekCit, 'rok' | 'dane'>,
   slownik: CitSlownikRegula[],
+  oceny?: PozycjaCitOcena[],
 ): ProblemCit8[] {
   const out: ProblemCit8[] = [];
   const d = rek.dane;
@@ -876,11 +919,21 @@ export function problemyCIT8(
   if (!okresPelny(spr, rek.rok) && d.zaakceptowanyOkres !== okresKlucz(spr)) {
     out.push({ kod: 'okres', od: spr.okresOd, do: spr.okresDo });
   }
-  const oceny = pozycjeZeSprawozdania(d, slownik);
-  const bez = oceny.filter((p) => p.kategoria === null).length;
+  const ocenione = oceny ?? pozycjeZeSprawozdania(d, slownik);
+  const bez = ocenione.filter((p) => p.kategoria === null).length;
   if (bez > 0) out.push({ kod: 'nieposortowane', ile: bez });
-  const ai = oceny.filter((p) => p.zrodlo === 'ai' && !p.potwierdzona).length;
+  const ai = ocenione.filter((p) => p.zrodlo === 'ai' && !p.potwierdzona).length;
   if (ai > 0) out.push({ kod: 'niepotwierdzone', ile: ai });
+  if (bez === 0 && ai === 0) {
+    // Every amount position of the CIT-8 and the CIT-8/O is a non-negative type; compared as the files
+    // write them (to the grosz), so a -0.004 that prints as 0.00 is no problem.
+    const w = obliczCIT8(d, ocenione);
+    const ujemne = Object.entries(w.poz)
+      .filter(([, v]) => Math.round(v * 100 + 1e-7) < 0)
+      .map(([n]) => Number(n));
+    if (Math.round(w.dochodZwolniony * 100 + 1e-7) < 0) ujemne.push(97);
+    if (ujemne.length > 0) out.push({ kod: 'ujemna', pozycje: [...new Set(ujemne)].sort((a, b) => a - b) });
+  }
   return out;
 }
 
@@ -898,8 +951,14 @@ const KOD_POCZTOWY = /^\d{2}-\d{3}$/;
 export function problemyCIT8Xml(
   rek: Pick<PodatekCit, 'rok' | 'dane'>,
   slownik: CitSlownikRegula[],
+  oceny?: PozycjaCitOcena[],
 ): ProblemCit8[] {
-  const out = problemyCIT8(rek, slownik);
+  return [...problemyCIT8(rek, slownik, oceny), ...problemyTylkoXmlCIT8(rek)];
+}
+
+/** Only the XML's own problems — for a caller that already has `problemyCIT8`. */
+export function problemyTylkoXmlCIT8(rek: Pick<PodatekCit, 'rok' | 'dane'>): ProblemCit8[] {
+  const out: ProblemCit8[] = [];
   const d = rek.dane;
   if (!citWzor(rek.rok)) out.push({ kod: 'wzor' });
   if (/^\d{10}$/.test(d.nip) && !nipPoprawny(d.nip)) out.push({ kod: 'nipXml' });
@@ -933,6 +992,8 @@ export function opisProblemuCit(p: ProblemCit8, rok: number): string {
       return 'brak urzędu skarbowego (poz. 6)';
     case 'korekta':
       return 'brak rodzaju korekty (poz. 8)';
+    case 'ujemna':
+      return `kwota poniżej zera w poz. ${p.pozycje.join(', ')} — formularz przyjmuje tylko kwoty nieujemne; sprawdź ujemne pozycje sprawozdania i ich kategorie`;
     case 'sprawozdanie':
       return `brak sprawozdania finansowego za ${rok} r.`;
     case 'okres':
@@ -960,10 +1021,15 @@ export function opisProblemuCit(p: ProblemCit8, rok: number): string {
  */
 export type StanCit = 'zlozone' | 'braki' | 'pobrana' | 'gotowa';
 
-export function stanCit(rek: Pick<PodatekCit, 'rok' | 'dane'>, slownik: CitSlownikRegula[]): StanCit {
+/** `problemyXml`: the return's `problemyCIT8Xml`, when the caller has worked them out already. */
+export function stanCit(
+  rek: Pick<PodatekCit, 'rok' | 'dane'>,
+  slownik: CitSlownikRegula[],
+  problemyXml?: ProblemCit8[],
+): StanCit {
   if (rek.dane.zlozone) return 'zlozone';
   // Filed through e-Deklaracje: a return whose XML cannot be made yet is not ready, whatever its PDF.
-  if (problemyCIT8Xml(rek, slownik).length > 0) return 'braki';
+  if ((problemyXml ?? problemyCIT8Xml(rek, slownik)).length > 0) return 'braki';
   return rek.dane.pobrania.length > 0 ? 'pobrana' : 'gotowa';
 }
 

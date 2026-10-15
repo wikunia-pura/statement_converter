@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { OdczytyHistoryEntry } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { localeOf } from '../../shared/format';
 import { useNotify } from './Notifications';
 import Icon from './Icon';
 import OdczytySkippedModal, { OdczytySkippedGroup } from './OdczytySkippedModal';
@@ -55,7 +56,7 @@ const OdczytyHistoryTimeline: React.FC<Props> = ({
   const [expandedSuppliers, setExpandedSuppliers] = useState<Set<string>>(new Set());
   const [skippedModal, setSkippedModal] = useState<OdczytySkippedGroup[] | null>(null);
 
-  const locale = language === 'en' ? 'en-US' : 'pl-PL';
+  const locale = localeOf(language);
   const searchActive = searchTerm.trim().length > 0;
 
   const filtered = useMemo(() => {
@@ -323,7 +324,7 @@ const OdczytyHistoryTimeline: React.FC<Props> = ({
                                       type="button"
                                       className="button button-small button-subtle"
                                       onClick={() => openPath(entry.outputDir)}
-                                      title={entry.outputDir}
+                                      data-tip={entry.outputDir}
                                     >
                                       <Icon name="folder" size={13} /> {t.openOutputFolder}
                                     </button>
@@ -339,7 +340,7 @@ const OdczytyHistoryTimeline: React.FC<Props> = ({
                                         type="button"
                                         className="link-button"
                                         onClick={() => openPath(s.filePath)}
-                                        title={s.filePath}
+                                        data-tip={s.filePath}
                                       >
                                         {s.fileName}
                                       </button>
@@ -373,7 +374,7 @@ const OdczytyHistoryTimeline: React.FC<Props> = ({
                                                 type="button"
                                                 className="button button-small button-secondary"
                                                 onClick={() => openPath(o.outputPath)}
-                                                title={o.outputPath}
+                                                data-tip={o.outputPath}
                                               >
                                                 <Icon name="folder" size={13} /> {t.openFile}
                                               </button>

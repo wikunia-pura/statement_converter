@@ -7,6 +7,7 @@ import {
   MailingTypDef,
 } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { ipcErrorMessage } from '../ipcError';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
 import { FormField, FormRow, FormSection, RequiredNote } from '../components/FormSection';
@@ -120,7 +121,7 @@ const FieldTablePicker: React.FC<FieldTablePickerProps> = ({
                     className="button button-ghost button-icon"
                     onClick={() => move(index, -1)}
                     disabled={index === 0}
-                    title={t.mailingTemplateTableFieldUp}
+                    data-tip={t.mailingTemplateTableFieldUp}
                     aria-label={t.mailingTemplateTableFieldUp}
                   >
                     <Icon name="arrow-up" size={14} />
@@ -130,7 +131,7 @@ const FieldTablePicker: React.FC<FieldTablePickerProps> = ({
                     className="button button-ghost button-icon"
                     onClick={() => move(index, 1)}
                     disabled={index === selected.length - 1}
-                    title={t.mailingTemplateTableFieldDown}
+                    data-tip={t.mailingTemplateTableFieldDown}
                     aria-label={t.mailingTemplateTableFieldDown}
                   >
                     <Icon name="arrow-down" size={14} />
@@ -141,7 +142,7 @@ const FieldTablePicker: React.FC<FieldTablePickerProps> = ({
                     onClick={() =>
                       onChange(selected.filter((name) => normalizeFieldName(name) !== normalizeFieldName(nazwa)))
                     }
-                    title={t.delete}
+                    data-tip={t.delete}
                     aria-label={`${t.delete}: ${nazwa}`}
                   >
                     <Icon name="trash" size={14} />
@@ -321,7 +322,7 @@ const MailingSzablony: React.FC<Props> = ({ language }) => {
       await load();
       notify.success(t.mailingTemplateSaved);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(ipcErrorMessage(err, t.errorUnexpected));
     } finally {
       setIsSaving(false);
     }
@@ -334,7 +335,7 @@ const MailingSzablony: React.FC<Props> = ({ language }) => {
       if (editing?.id === szablon.id) setEditing(null);
       await load();
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : 'Unknown error');
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
     }
   };
 
@@ -357,7 +358,7 @@ const MailingSzablony: React.FC<Props> = ({ language }) => {
       startEdit(created);
       notify.success(t.mailingTemplateCopySaved);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(ipcErrorMessage(err, t.errorUnexpected));
     } finally {
       setIsSaving(false);
     }
@@ -375,7 +376,7 @@ const MailingSzablony: React.FC<Props> = ({ language }) => {
       });
       await load();
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : 'Unknown error');
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
     }
   };
 
@@ -452,7 +453,7 @@ const MailingSzablony: React.FC<Props> = ({ language }) => {
                   </td>
                   <td>
                     {typName(s.typ) ?? (
-                      <span className="cell-warning" title={t.mailingTypyUnknownHint}>
+                      <span className="cell-warning" data-tip={t.mailingTypyUnknownHint}>
                         <Icon name="alert-triangle" size={13} /> {s.typ}
                       </span>
                     )}
@@ -473,7 +474,7 @@ const MailingSzablony: React.FC<Props> = ({ language }) => {
                         type="button"
                         className="button button-small button-subtle"
                         onClick={() => handleDuplicate(s)}
-                        title={t.mailingTemplateDuplicate}
+                        data-tip={t.mailingTemplateDuplicate}
                       >
                         <Icon name="copy" size={13} /> {t.mailingTemplateDuplicate}
                       </button>
@@ -481,7 +482,7 @@ const MailingSzablony: React.FC<Props> = ({ language }) => {
                         type="button"
                         className="button button-ghost button-icon icon-danger"
                         onClick={() => handleDelete(s)}
-                        title={t.delete}
+                        data-tip={t.delete}
                         aria-label={`${t.delete}: ${s.nazwa}`}
                       >
                         <Icon name="trash" size={15} />

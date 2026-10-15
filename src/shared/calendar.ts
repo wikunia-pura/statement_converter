@@ -17,8 +17,17 @@ function pad(value: number): string {
   return String(value).padStart(2, '0');
 }
 
-/** Local `YYYY-MM-DD` key. Empty string for a value that isn't a date. */
+/**
+ * Local `YYYY-MM-DD` key. Empty string for a value that isn't a date.
+ *
+ * The one way to get a calendar day out of a stored instant: a meeting with no
+ * hour is local midnight, which `toISOString()` writes as 22:00/23:00 of the day
+ * BEFORE — so `iso.slice(0, 10)` (or `startsWith(year)`) prints the wrong day.
+ * A bare day key is already a day and comes back as it is (`new Date()` would
+ * read it as UTC midnight).
+ */
 export function toDayKey(value: string | Date): string {
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return '';
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -250,23 +259,29 @@ export function defaultTerminWysylki(
   return `${due.getFullYear()}-${pad(due.getMonth() + 1)}-${pad(due.getDate())}`;
 }
 
+/** The last moment of a local calendar day (`YYYY-MM-DD`); null for a key that is no day. */
+function koniecDnia(dayKey: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayKey);
+  if (!m) return null;
+  const end = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 23, 59, 59, 999);
+  return Number.isNaN(end.getTime()) ? null : end;
+}
+
 /**
  * The moment this meeting's materials are due to go out, or null when its kind
  * has no notice period — which is what switches the whole deadline idea off.
+ *
+ * Always the end of a calendar day: the day set on the meeting, else the day the
+ * form offers (`defaultTerminWysylki` — the meeting's day less the kind's notice,
+ * counted in calendar days). Counting 24-hour blocks back from the meeting's hour
+ * made the alert and the form disagree (due at 10:00 vs the day shown) and slip an
+ * hour across a DST change.
  */
 export function terminWysylkiDeadline(spotkanie: Spotkanie, typy: SpotkanieTyp[]): Date | null {
   // A day set on the meeting itself wins: due by the end of that day.
-  if (spotkanie.terminWysylki) {
-    const [y, m, d] = spotkanie.terminWysylki.split('-').map(Number);
-    const end = new Date(y, m - 1, d, 23, 59, 59, 999);
-    return Number.isNaN(end.getTime()) ? null : end;
-  }
-  const typ = typOf(spotkanie, typy);
-  const days = typ?.dniNaDokumenty ?? null;
-  if (days === null || days <= 0) return null;
-  const start = new Date(spotkanie.startsAt).getTime();
-  if (Number.isNaN(start)) return null;
-  return new Date(start - days * 24 * 60 * 60 * 1000);
+  if (spotkanie.terminWysylki) return koniecDnia(spotkanie.terminWysylki);
+  const dzien = defaultTerminWysylki(spotkanie.startsAt, typOf(spotkanie, typy));
+  return dzien ? koniecDnia(dzien) : null;
 }
 
 /**

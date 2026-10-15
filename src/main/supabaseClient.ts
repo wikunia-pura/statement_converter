@@ -2,6 +2,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import Store from 'electron-store';
 import WebSocket from 'ws';
 import log from 'electron-log';
+import { openSecret, sealSecret } from './secretStorage';
 
 // Electron 28 ships Node 18, which has no global WebSocket. Supabase's realtime
 // module initializes eagerly even though we don't use realtime, and dies without
@@ -18,6 +19,8 @@ const SUPABASE_ANON_KEY =
 
 // Supabase's JS client expects a Web-Storage-like API for session persistence.
 // In the Electron main process there's no localStorage, so back it with electron-store.
+// Values are sealed with DPAPI on Windows (see secretStorage for why not on macOS);
+// a session saved before that is sealed on its first read.
 const sessionStore = new Store<{ session: Record<string, string> }>({
   name: 'supabase-session',
   defaults: { session: {} },
@@ -25,12 +28,19 @@ const sessionStore = new Store<{ session: Record<string, string> }>({
 
 const electronStorageAdapter = {
   getItem: (key: string): string | null => {
-    const session = sessionStore.get('session', {});
-    return session[key] ?? null;
+    const stored = sessionStore.get('session', {})[key];
+    if (stored == null) return null;
+    // Unreadable comes back as null, which supabase-js reads as "logged out";
+    // the next sign-in overwrites the entry.
+    return openSecret(stored, (sealed) => {
+      const session = sessionStore.get('session', {});
+      session[key] = sealed;
+      sessionStore.set('session', session);
+    });
   },
   setItem: (key: string, value: string): void => {
     const session = sessionStore.get('session', {});
-    session[key] = value;
+    session[key] = sealSecret(value);
     sessionStore.set('session', session);
   },
   removeItem: (key: string): void => {

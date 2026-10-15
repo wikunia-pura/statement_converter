@@ -3,6 +3,7 @@ import { DokumentPobranie, ZebranieDokument, ZebranieDokumentFormat } from '../.
 import { formatStamp } from '../../shared/calendar';
 import { translations, Language } from '../translations';
 import { useNotify } from './Notifications';
+import { ipcErrorMessage } from '../ipcError';
 import Icon from './Icon';
 
 const baseName = (p: string) => p.split(/[\\/]/).pop() ?? p;
@@ -51,7 +52,7 @@ const ZebranieDokumentActions: React.FC<{
       notify.success(t.zfinDownloaded.replace('{file}', baseName(filePath)), { file: filePath });
       onDownloaded?.();
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.zfinDownloadError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.zfinDownloadError);
     } finally {
       setBusy(null);
     }

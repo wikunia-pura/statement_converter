@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AppUser, ZadanieNotatka, ZADANIE_NOTATKA_MAX_LENGTH } from '../../shared/types';
 import { personColor, personLabel } from '../../shared/app-users';
 import { translations, Language } from '../translations';
+import { pollWhileVisible } from '../hooks/pollWhileVisible';
 import { useNotify } from './Notifications';
 import Icon from './Icon';
 
@@ -70,10 +71,11 @@ const ZadaniaNotatki: React.FC<Props> = ({ language, users, userEmail }) => {
       }
     };
     void load();
-    const timer = setInterval(() => void load(), REFRESH_MS);
+    // Paused while the window is hidden; refreshed the moment it is back.
+    const stopPolling = pollWhileVisible(() => void load(), REFRESH_MS);
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      stopPolling();
     };
   }, []);
 
@@ -161,7 +163,7 @@ const ZadaniaNotatki: React.FC<Props> = ({ language, users, userEmail }) => {
           className="zad-notes__title"
           onClick={toggleCollapsed}
           aria-expanded={!collapsed}
-          title={collapsed ? t.zadNotesExpand : t.zadNotesCollapse}
+          data-tip={collapsed ? t.zadNotesExpand : t.zadNotesCollapse}
           disabled={!hasNotes}
         >
           <Icon name="pin" size={14} />
@@ -177,7 +179,7 @@ const ZadaniaNotatki: React.FC<Props> = ({ language, users, userEmail }) => {
             type="button"
             className="zad-icon-btn zad-notes__add"
             onClick={() => setAdding(true)}
-            title={t.zadNoteAdd}
+            data-tip={t.zadNoteAdd}
             aria-label={t.zadNoteAdd}
           >
             <Icon name="plus" size={14} />
@@ -330,7 +332,7 @@ const ZadaniaNotatki: React.FC<Props> = ({ language, users, userEmail }) => {
                           <button
                             type="button"
                             className="zad-icon-btn"
-                            title={t.edit}
+                            data-tip={t.edit}
                             aria-label={t.edit}
                             onClick={() => {
                               setConfirmId(null);
@@ -343,7 +345,7 @@ const ZadaniaNotatki: React.FC<Props> = ({ language, users, userEmail }) => {
                           <button
                             type="button"
                             className="zad-icon-btn zad-icon-btn--danger"
-                            title={t.zadNoteDelete}
+                            data-tip={t.zadNoteDelete}
                             aria-label={t.zadNoteDelete}
                             onClick={() => setConfirmId(n.id)}
                           >

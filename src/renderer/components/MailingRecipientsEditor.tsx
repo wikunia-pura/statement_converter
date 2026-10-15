@@ -119,6 +119,8 @@ export const MailingOdbiorcyList: React.FC<MailingOdbiorcyListProps> = ({
           <span style={{ opacity: o.nazwa ? 0.7 : 1, wordBreak: 'break-all' }}>
             {o.nazwa ? `<${o.email}>` : o.email}
           </span>
+          {/* On a sent mail: the server refused this address — the mail did not reach it. */}
+          {o.odrzucony && <span className="status-badge status-error">{t.mailingRejectedTag}</span>}
         </div>
       ))}
       {rest > 0 && (
@@ -263,7 +265,7 @@ const MailingRecipientsEditor: React.FC<MailingRecipientsEditorProps> = ({
               <span
                 key={email}
                 className={`tag-input__chip${invalid ? ' tag-input__chip--invalid' : ''}`}
-                title={invalid ? t.mailingAdresaciWlasneInvalidChip : email}
+                data-tip={invalid ? t.mailingAdresaciWlasneInvalidChip : email}
               >
                 {invalid && <Icon name="alert-triangle" size={12} />}
                 <span className="tag-input__chip-text">{email}</span>
@@ -272,7 +274,7 @@ const MailingRecipientsEditor: React.FC<MailingRecipientsEditorProps> = ({
                   className="tag-input__chip-remove"
                   onClick={() => removeWlasny(email)}
                   disabled={disabled}
-                  title={t.mailingAdresaciWlasneRemove}
+                  data-tip={t.mailingAdresaciWlasneRemove}
                   aria-label={`${t.mailingAdresaciWlasneRemove}: ${email}`}
                 >
                   <Icon name="x" size={12} />

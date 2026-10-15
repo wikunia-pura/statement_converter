@@ -9,9 +9,10 @@ import type {
   PodatkiPitPlikiResult,
   PodatkiPitPostep,
 } from '../shared/types';
+import type { ZebranieStatusRow } from '../shared/types';
 import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, ZgnPelnomocnik, ZarzadOsoba, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent, AppUser, SpotkanieTyp, SpotkanieLokalizacja, Spotkanie, SpotkanieInput, KalendarzPdfRequest, SpotkanieMailing, SpotkanieTerminStatus, SpotkanieMaterialyStatus, SpotkanieMaterialyKrok, KsiegowaniePriorytet,
   KsiegowaniePrzypisanie, KsiegowanieUwaga, KsiegowaniePlik, ScanDecision, ScanProgress, ScanReport, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik, ZadanieKomentarz, ZadanieKomentarzInput, ZadanieKomentarzPodsumowanie, ZadanieNotatka, MailingAdresaci, MailingTypDef, MailingKalendarzContext, MailingZebranieContext, MailingExportRequest, MailingExportResult, Zebranie, ZebranieInput, ZebranieDokumentKlucz, ZebranieWersja, ZebranieWersjaInput, SprawozdaniaImportResult, SprawozdanieExportRequest, PlanWlasny, PlanWlasnyExportRequest, PodatekNieruchomosci, PodatekNieruchomosciDane, PodatkiImportResult, PodatkiPdfWszystkieResult, PodatkiPodpisPostep, PodatkiPodpisWieleResult, PodatkiStawki, PodatkiStawkiDane, AdresIdentyfikacja, AdresyZasilenieResult, PodatekCit, PodatekCitDane, PodatkiCitPlikiResult, PodatkiCitUpoResult, PodatkiCitUstawienia, CitAiPozycja, CitAiPrzyklad, CitAiWynik, PodpisKartaStan, PodpisSlad, PodpisWybor, PodpisPdfAnaliza, PodpisPdfWynik, PodpisHistoriaEntry, ZebraniePakietRequest, SprawozdanieZapisane, SprawozdanieWstepTekst, SprawozdanieLaczenie, SprawozdanieLaczeniePropozycja, SprawozdanieGrupowanie, SprawozdanieCel, PlanGospodarczy, PlanZaliczkaAiPropozycja, ZebraniaWspolnota, AdresUdzialy, ZebraniaUstawienia, ZebranieDokumentRequest } from '../shared/types';
-import type { MailingRecipientsResolved } from '../shared/mailing-recipients';
+import type { BackupSectionKey, ZadaniePatch } from '../shared/types';
 
 // Zaliczki shared types (referenced by the main-process helpers)
 export type ZaliczkiCategory =
@@ -110,6 +111,8 @@ export interface HomebankingAnalyzedFile {
   bankHits: HomebankingBankHit[];
   addressHits: HomebankingAddressHit[];
   lineCount: number;
+  /** Lines no bank can be chosen for (none matches, or several do). */
+  unroutedLines: { lineNumber: number; excerpt: string; reason: 'no-bank' | 'ambiguous' }[];
 }
 
 export interface HomebankingMergeFileInput {
@@ -117,6 +120,8 @@ export interface HomebankingMergeFileInput {
   bankIds: number[];
   date: string | null;
   splitByAddress: boolean;
+  /** Unrouted lines the user confirmed leaving out; the merge refuses more. */
+  acknowledgedUnrouted?: number;
 }
 
 export interface HomebankingMergeGroupResult {
@@ -182,6 +187,11 @@ interface ConversionResult {
   duplicateWarning?: boolean;
   error?: string;
   warningMessage?: string;  // Info message (not an error, but user should know)
+  /**
+   * The output file was written, but its record (the dashboard's, or the history
+   * log line) was not — the raw reason. The conversion still counts as done.
+   */
+  recordError?: string;
   /** Stopped by "Anuluj": nothing was written or recorded. */
   cancelled?: boolean;
   // Review flow
@@ -254,7 +264,6 @@ interface ElectronAPI {
   extractPdfText: (filePath: string) => Promise<{ text: string; lines: string[]; numPages: number } | null>;
   selectOutputFolder: () => Promise<string | null>;
   convertFile: (inputPath: string, bankId: number, fileName: string, adresId?: number | null, accountTypeId?: number | null) => Promise<ConversionResult>;
-  analyzeFile: (inputPath: string, bankId: number, adresId?: number | null) => Promise<ConversionSummary>;
   detectAccountNumbers: (inputPath: string, bankId?: number | null) => Promise<string[]>;
   convertFileWithAI: (inputPath: string, bankId: number, fileName: string, adresId?: number | null, accountTypeId?: number | null) => Promise<ConversionResult>;
   /** Stop the conversion of this input file; it resolves with `cancelled: true`. */
@@ -273,6 +282,8 @@ interface ElectronAPI {
   }>;
   touchConversion: (tempConversionId: string) => Promise<boolean>;
   openFile: (filePath: string) => Promise<boolean>;
+  /** Path of a dropped `File` (`webUtils.getPathForFile`); empty when it has no file on disk. */
+  getPathForFile: (file: File) => string;
 
   // Settings
   getSettings: () => Promise<AppSettings>;
@@ -318,7 +329,8 @@ interface ElectronAPI {
   setNotificationPref: (id: string, enabled: boolean) => Promise<boolean>;
   setLastSeenVersion: (version: string) => Promise<boolean>;
   exportSettings: () => Promise<{ success: boolean; filePath?: string }>;
-  importSettings: () => Promise<{ success: boolean; error?: string }>;
+  /** `imported`: how many portable settings the file gave (folders, SMTP and the like never travel). */
+  importSettings: () => Promise<{ success: boolean; error?: string; imported?: number }>;
 
   // History
   getHistory: () => Promise<ConversionHistory[]>;
@@ -341,8 +353,27 @@ interface ElectronAPI {
   undoKsiegowanieManual: (id: number) => Promise<{ success: boolean; error?: string }>;
 
   // Backup
-  backupExport: () => Promise<{ success: boolean; filePath?: string; counts?: BackupCounts; error?: string }>;
-  backupRestore: () => Promise<{ success: boolean; counts?: BackupCounts; createdAt?: string; error?: string }>;
+  /** `skippedSections`: left out because their table does not exist yet (a migration not run). */
+  backupExport: () => Promise<{
+    success: boolean;
+    filePath?: string;
+    counts?: BackupCounts;
+    skippedSections?: BackupSectionKey[];
+    error?: string;
+  }>;
+  /**
+   * `skippedSections`: what the restored FILE left out (those live rows were kept).
+   * `missingSections`: the restore was stopped before touching anything, because
+   * the safety copy of the current data would have lacked these sections.
+   */
+  backupRestore: () => Promise<{
+    success: boolean;
+    counts?: BackupCounts;
+    createdAt?: string;
+    skippedSections?: BackupSectionKey[];
+    missingSections?: BackupSectionKey[];
+    error?: string;
+  }>;
   backupGetStatus: () => Promise<{ folder: string; lastAutoBackup: string | null; autoBackupCount: number }>;
   backupOpenFolder: () => Promise<{ success: boolean }>;
   
@@ -514,13 +545,6 @@ interface ElectronAPI {
   mailingExport: (
     request: MailingExportRequest,
   ) => Promise<({ success: true } & MailingExportResult) | { success?: undefined; error: string }>;
-  /** Who a letter would go to — same resolution as a send. */
-  mailingResolveOdbiorcy: (request: {
-    adresId: number | null;
-    spotkanieId?: number | null;
-    adresaci: MailingAdresaci;
-    wykluczeni?: string[];
-  }) => Promise<MailingRecipientsResolved>;
   /** Reveal a file in Finder / Explorer. False when it no longer exists. */
   mailingShowInFolder: (filePath: string) => Promise<boolean>;
   /** Reveal a file in Finder / Explorer, selected. False when it is not there. */
@@ -542,12 +566,14 @@ interface ElectronAPI {
   addZebranieWersja: (zebranieId: number) => Promise<ZebranieWersja>;
   /** Delete one version; the only version of an entry cannot be deleted. */
   deleteZebranieWersja: (id: number) => Promise<boolean>;
-  updateZebranieWersja: (id: number, input: ZebranieWersjaInput) => Promise<boolean>;
+  /**
+   * `expectedUpdatedAt`: the version's `updatedAt` as loaded; a version saved
+   * since by somebody else is then refused instead of overwritten.
+   */
+  updateZebranieWersja: (id: number, input: ZebranieWersjaInput, expectedUpdatedAt?: string | null) => Promise<boolean>;
   /** The newest version of a linked entry moves the meeting's materials status with it. */
   /** Mark one document of a version ready or not; the version's status is derived from all of them. */
   setZebranieDokumentGotowe: (id: number, dokument: ZebranieDokumentKlucz, gotowe: boolean) => Promise<boolean>;
-  /** Rename a revision; an empty name falls back to its number. */
-  setZebranieWersjaNazwa: (id: number, nazwa: string) => Promise<boolean>;
   /** The statement library, without the statements themselves. */
   getSprawozdaniaLista: () => Promise<SprawozdanieZapisane[]>;
   getSprawozdanie: (id: number) => Promise<SprawozdanieZapisane | null>;
@@ -577,7 +603,12 @@ interface ElectronAPI {
     dataZebrania: string | null
   ) => Promise<PlanZaliczkaAiPropozycja>;
   /** Save (or with null remove) a version's budget plan. */
-  setZebranieWersjaPlan: (wersjaId: number, plan: PlanGospodarczy | null) => Promise<boolean>;
+  /** `expectedUpdatedAt`: as for `updateZebranieWersja`. */
+  setZebranieWersjaPlan: (
+    wersjaId: number,
+    plan: PlanGospodarczy | null,
+    expectedUpdatedAt?: string | null,
+  ) => Promise<boolean>;
   getZebraniaWspolnoty: () => Promise<ZebraniaWspolnota[]>;
   setZebraniaWspolnota: (
     adresNazwa: string,
@@ -604,7 +635,8 @@ interface ElectronAPI {
   /** Refused when Zebrania has a plan of this community (vDom number) and year. */
   addPlanWlasny: (nrWsp: number, nazwa: string, plan: PlanGospodarczy) => Promise<PlanWlasny>;
   /** Refused when the (changed) year is one Zebrania has a plan for. */
-  setPlanWlasny: (id: number, plan: PlanGospodarczy) => Promise<boolean>;
+  /** `expectedUpdatedAt`: the plan's `updatedAt` as loaded; a plan saved since by somebody else is refused. */
+  setPlanWlasny: (id: number, plan: PlanGospodarczy, expectedUpdatedAt?: string | null) => Promise<boolean>;
   deletePlanWlasny: (id: number) => Promise<boolean>;
   /** Write a module plan to Downloads as PDF or Excel; the path of the file. */
   exportPlanWlasny: (request: PlanWlasnyExportRequest) => Promise<{ filePath: string }>;
@@ -687,12 +719,15 @@ interface ElectronAPI {
     rok: number,
     ids: number[],
     wybor: PodpisWybor,
-    opcje: { pdfPodpisany: boolean; wyslij: boolean },
+    /** `potwierdzoneKorekty`: corrections the user confirmed sending although an earlier send holds them back. */
+    opcje: { pdfPodpisany: boolean; wyslij: boolean; potwierdzoneKorekty?: number[] },
   ) => Promise<PodatkiPodpisWieleResult>;
   /** Ask the e-Deklaracje gateway for the UPO of every send of the year still waiting (or of `ids` only). */
   sprawdzUpoCit: (rok: number, ids?: number[]) => Promise<PodatkiCitUpoResult>;
   /** Write the UPO kept on a send into the year's folder (or find it there); its path. */
   pobierzUpoCit: (id: number, refId: string) => Promise<{ filePath: string }>;
+  /** Settle a send by its `at`: an uncertain one did not / did reach the gateway, or a stuck one is given up; the return as it now is. */
+  rozstrzygnijWysylkeCit: (id: number, at: string, jak: 'nie_dotarla' | 'dotarla' | 'porzucona') => Promise<PodatekCit>;
   /** What the 30-second UPO automat found changed (sends whose status moved); returns the unsubscribe. */
   onCitUpo: (callback: (wynik: PodatkiCitUpoResult) => void) => () => void;
   /** Stop the signing run after the return in hand. */
@@ -778,7 +813,8 @@ interface ElectronAPI {
   exportKalendarzPdf: (request: KalendarzPdfRequest) => Promise<{ filePath: string }>;
   /** `createdBy` is filled in by the main process from the session. */
   addSpotkanie: (input: SpotkanieInput) => Promise<Spotkanie>;
-  updateSpotkanie: (id: number, input: SpotkanieInput) => Promise<boolean>;
+  /** `expectedUpdatedAt`: the meeting's `updatedAt` as loaded; a meeting saved since by somebody else is refused. */
+  updateSpotkanie: (id: number, input: SpotkanieInput, expectedUpdatedAt?: string | null) => Promise<boolean>;
   deleteSpotkanie: (id: number) => Promise<boolean>;
   /** "I have seen that this moved" — stops the meeting being marked as changed. */
   ackSpotkanieTermin: (id: number) => Promise<boolean>;
@@ -793,16 +829,24 @@ interface ElectronAPI {
   getZadania: () => Promise<Zadanie[]>;
   /** `createdBy` is filled in by the main process from the session. */
   addZadanie: (input: ZadanieInput) => Promise<Zadanie>;
+  /**
+   * The form's full save. Refused with `ZADANIE_CONFLICT_MESSAGE` when the card
+   * changed after `input.expectedUpdatedAt`; deletes from storage only the files
+   * in `input.removedAttachments`.
+   */
   updateZadanie: (id: number, input: ZadanieInput) => Promise<boolean>;
+  /** A quick edit on the board: writes only the fields given. Returns the card as it now is. */
+  patchZadanie: (id: number, patch: ZadaniePatch) => Promise<Zadanie>;
   /**
    * Put a card in a column: its status, and the order of that whole column
    * (`orderedIds`, top first). Reordering touches neither `updatedAt` nor
-   * `updatedBy`, so it never counts as a change to notify about.
+   * `updatedBy`, so it never counts as a change to notify about. Returns the
+   * card's new `updatedAt` when the column changed (null when only the order did).
    */
-  moveZadanie: (id: number, status: ZadanieStatus, orderedIds: number[]) => Promise<boolean>;
+  moveZadanie: (id: number, status: ZadanieStatus, orderedIds: number[]) => Promise<string | null>;
   deleteZadanie: (id: number) => Promise<boolean>;
-  /** Hide a card from the board (kept in the archive) or bring it back. */
-  archiveZadanie: (id: number, archived: boolean) => Promise<boolean>;
+  /** Hide a card from the board (kept in the archive) or bring it back. Returns the card as it now is. */
+  archiveZadanie: (id: number, archived: boolean) => Promise<Zadanie>;
   /** Opens the file dialog. null = cancelled; a refusal carries a code, not wording. */
   zadaniaPickAttachment: () => Promise<
     | { ok: true; token: string; nazwa: string; rozmiar: number }
@@ -941,7 +985,6 @@ interface ElectronAPI {
   /** Whole percents of a running downloadInstaller(). */
   onInstallerDownloadProgress: (callback: (percent: number) => void) => () => void;
   openLogsFolder: () => Promise<{ success: boolean; logPath?: string }>;
-  getLogPath: () => Promise<{ path: string }>;
   onUpdateAvailable: (callback: (info: any) => void) => () => void;
   onUpdateDownloaded: (callback: (info: any) => void) => () => void;
   onUpdateError: (callback: (error: string) => void) => () => void;
@@ -949,6 +992,11 @@ interface ElectronAPI {
   onConversionProgress: (callback: (progress: ConversionProgressEvent) => void) => () => void;
   onScanProgress: (callback: (progress: ScanProgress) => void) => () => void;
   onBackupCreated: (callback: (info: { filePath: string; date: string; upload: 'uploaded' | 'failed' | 'disabled'; trigger: 'startup' | 'scheduled' | 'quit' }) => void) => () => void;
+  // E-perf
+  /** One meeting, or null when it is gone. */
+  getSpotkanie: (id: number) => Promise<Spotkanie | null>;
+  /** Every Zebrania entry with its newest version's status and ready marks — no statement or plan JSON. */
+  getZebraniaStatus: () => Promise<ZebranieStatusRow[]>;
 }
 
 export interface ConversionProgressEvent {

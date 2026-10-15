@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
-import { titleIfTruncated, useMenuInViewport } from '../hooks/useMenuInViewport';
+import { tipIfTruncated, useMenuInViewport } from '../hooks/useMenuInViewport';
 
 export interface SelectOption {
   /** Option value. Numbers should be pre-stringified by the caller. */
@@ -186,7 +186,7 @@ const Select: React.FC<SelectProps> = ({
           onClick={() => pick(opt.value)}
           onMouseEnter={(e) => {
             setActiveIndex(i);
-            titleIfTruncated(e.currentTarget);
+            tipIfTruncated(e.currentTarget);
           }}
         >
           {opt.label}
@@ -207,9 +207,9 @@ const Select: React.FC<SelectProps> = ({
         onClick={() => (isOpen ? close() : open())}
         onKeyDown={handleKeyDown}
         disabled={disabled}
-        title={title}
+        data-tip={title}
         // A value cut with an ellipsis shows in full on hover.
-        onMouseEnter={title ? undefined : (e) => titleIfTruncated(e.currentTarget)}
+        onMouseEnter={title ? undefined : (e) => tipIfTruncated(e.currentTarget)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-label={ariaLabel}

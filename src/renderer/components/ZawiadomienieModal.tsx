@@ -30,9 +30,12 @@ import {
 } from '../../shared/mailing-template';
 import { MailingRecipientLookup, resolveOdbiorcy } from '../../shared/mailing-recipients';
 import { formatStamp } from '../../shared/calendar';
+import { localeOf } from '../../shared/format';
 import { translations, Language } from '../translations';
+import { ipcErrorMessage } from '../ipcError';
 import { useNotify } from './Notifications';
 import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
+import { FormSection } from './FormSection';
 import Icon from './Icon';
 import Loader from './Loader';
 import MailingVisualEditor from './MailingVisualEditor';
@@ -123,7 +126,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
 }) => {
   const t = translations[language];
   const notify = useNotify();
-  const locale = language === 'en' ? 'en-GB' : 'pl-PL';
+  const locale = localeOf(language);
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [loadError, setLoadError] = useState('');
@@ -300,7 +303,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
       }
       setPhase('pick');
     } catch (err: unknown) {
-      setLoadError(err instanceof Error ? err.message : String(err));
+      setLoadError(ipcErrorMessage(err, t.errorUnexpected));
       setPhase('error');
     }
   };
@@ -361,9 +364,9 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
       setRestarting(false);
       setPhase('edit');
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.zawSaveError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.zawSaveError);
       if (!saved) {
-        setLoadError(err instanceof Error ? err.message : String(err));
+        setLoadError(ipcErrorMessage(err, t.errorUnexpected));
         setPhase('error');
       }
     } finally {
@@ -387,7 +390,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
       await saveIfDirty();
       notify.success(t.zawSaved);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.zawSaveError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.zawSaveError);
     } finally {
       setBusy(null);
     }
@@ -451,7 +454,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
       }
       notify.success(t.zawDownloaded, { file: result.files[0]?.filePath });
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.zawDownloadError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.zawDownloadError);
     } finally {
       setBusy(null);
     }
@@ -514,7 +517,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
       );
       onChanged?.();
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.mailingSendError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.mailingSendError);
     } finally {
       setBusy(null);
     }
@@ -563,7 +566,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
       notify.success(t.zawDeleted);
       onClose();
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.zawSaveError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.zawSaveError);
     } finally {
       setBusy(null);
     }
@@ -622,14 +625,20 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
   if (phase === 'loading' || phase === 'error' || phase === 'pick') {
     return (
       <div className="modal-overlay" onClick={() => void handleClose()}>
-        <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="modal modal--md"
+          role="dialog"
+          aria-modal="true"
+          aria-label={phase === 'pick' ? t.zawPickTitle : t.zawTitle}
+          onClick={(e) => e.stopPropagation()}
+        >
           <ModalDismiss onClose={() => void handleClose()} ariaLabel={t.close} />
           <ModalHeader
             icon="mail"
             title={phase === 'pick' ? t.zawPickTitle : t.zawTitle}
             subtitle={contextLine}
           />
-          <div className="modal-body">
+          <div className="modal-body modal-body--sectioned">
             {phase === 'loading' && <Loader label={t.zawLoading} />}
 
             {phase === 'error' && (
@@ -641,7 +650,17 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
             )}
 
             {phase === 'pick' && (
-              <>
+              <FormSection
+                icon="file-text"
+                title={t.zawPickList}
+                description={
+                  zawSzablony.length === 0
+                    ? undefined
+                    : restarting
+                      ? t.zawPickRestartHint
+                      : t.zawPickHint
+                }
+              >
                 {zawSzablony.length === 0 ? (
                   <div className="zaw-empty">
                     <Icon name="file-text" size={28} />
@@ -661,30 +680,27 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
                     )}
                   </div>
                 ) : (
-                  <>
-                    <p className="zaw-hint">{restarting ? t.zawPickRestartHint : t.zawPickHint}</p>
-                    <ul className="zaw-templates">
-                      {zawSzablony.map((s) => (
-                        <li key={s.id}>
-                          <button
-                            type="button"
-                            className="zaw-template"
-                            onClick={() => void startFrom(s)}
-                            disabled={busy !== null}
-                          >
-                            <Icon name="file-text" size={18} />
-                            <span className="zaw-template__text">
-                              <strong>{s.nazwa}</strong>
-                              {s.temat && <span>{s.temat}</span>}
-                            </span>
-                            <Icon name="chevron-right" size={16} />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
+                  <ul className="zaw-templates">
+                    {zawSzablony.map((s) => (
+                      <li key={s.id}>
+                        <button
+                          type="button"
+                          className="zaw-template"
+                          onClick={() => void startFrom(s)}
+                          disabled={busy !== null}
+                        >
+                          <Icon name="file-text" size={18} />
+                          <span className="zaw-template__text">
+                            <strong>{s.nazwa}</strong>
+                            {s.temat && <span>{s.temat}</span>}
+                          </span>
+                          <Icon name="chevron-right" size={16} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
                 )}
-              </>
+              </FormSection>
             )}
           </div>
           <ModalFooter
@@ -720,12 +736,14 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
 
   return (
     <div className="modal-overlay zaw-overlay">
-      <div className="modal zaw-modal" role="dialog" aria-label={t.zawTitle}>
+      <div className="modal zaw-modal" role="dialog" aria-modal="true" aria-label={t.zawTitle}>
         <ModalDismiss onClose={() => void handleClose()} ariaLabel={t.close} />
         <ModalHeader icon="mail" title={t.zawTitle} subtitle={contextLine} />
 
+        {/* The window's own grid: the letter and, when sending, its side panel beside it —
+            each column is a sectioned body. */}
         <div className={`zaw-body${sending ? ' zaw-body--side' : ''}`}>
-          <div className="zaw-main">
+          <div className="modal-body modal-body--sectioned zaw-main">
             {isOlder && newest && (
               <div className="callout callout--info" role="status">
                 <Icon name="info" size={16} />
@@ -734,53 +752,54 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
                 </div>
               </div>
             )}
-            <MailingVisualEditor
-              language={language}
-              temat={draft.temat}
-              onTematChange={(temat) => patchDraft({ temat })}
-              tresc={draft.tresc}
-              onTrescChange={(tresc) => patchDraft({ tresc })}
-              values={draft.values}
-              onValuesChange={(values) => patchDraft({ values })}
-              pola={pola}
-              adresNazwa={dane.adresNazwa}
-              kalendarz={kalendarz}
-              zebranie={zebranieCtx}
-              typ={draft.typ}
-              tableFields={draft.tableFields}
-              tablePool={tablePool}
-              onTableFieldsChange={(tableFields) => patchDraft({ tableFields })}
-              onSaveAsTemplate={() => setSaveTemplateOpen(true)}
-              hideHint
-            />
+            <FormSection icon="mail" title={t.zawLetterTitle}>
+              <MailingVisualEditor
+                language={language}
+                temat={draft.temat}
+                onTematChange={(temat) => patchDraft({ temat })}
+                tresc={draft.tresc}
+                onTrescChange={(tresc) => patchDraft({ tresc })}
+                values={draft.values}
+                onValuesChange={(values) => patchDraft({ values })}
+                pola={pola}
+                adresNazwa={dane.adresNazwa}
+                kalendarz={kalendarz}
+                zebranie={zebranieCtx}
+                typ={draft.typ}
+                tableFields={draft.tableFields}
+                tablePool={tablePool}
+                onTableFieldsChange={(tableFields) => patchDraft({ tableFields })}
+                onSaveAsTemplate={() => setSaveTemplateOpen(true)}
+                hideHint
+              />
+            </FormSection>
           </div>
 
           {sending && (
-            <aside className="zaw-side">
-              <section className={`zaw-panel${missing.length > 0 ? ' is-warning' : ' is-ok'}`}>
-                <h4 className="zaw-panel__title">
-                  <Icon name={missing.length > 0 ? 'alert-triangle' : 'check-circle'} size={15} />
-                  {t.zawStepText}
-                </h4>
+            <aside className="modal-body modal-body--sectioned zaw-side">
+              {/* The card has no tone of its own: the callout says whether anything is blank. */}
+              <FormSection icon="clipboard" title={t.zawStepText}>
                 {missing.length === 0 ? (
-                  <p>{t.zawMissingNone}</p>
+                  <div className="callout callout--success">
+                    <Icon name="check-circle" size={16} />
+                    <div className="callout__body">{t.zawMissingNone}</div>
+                  </div>
                 ) : (
-                  <>
-                    <p>{t.zawMissingList}</p>
-                    <ul className="zaw-missing">
-                      {missing.map((m) => (
-                        <li key={m}>{m}</li>
-                      ))}
-                    </ul>
-                  </>
+                  <div className="callout callout--warning">
+                    <Icon name="alert-triangle" size={16} />
+                    <div className="callout__body">
+                      <p>{t.zawMissingList}</p>
+                      <ul className="zaw-missing">
+                        {missing.map((m) => (
+                          <li key={m}>{m}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
                 )}
-              </section>
+              </FormSection>
 
-              <section className="zaw-panel">
-                <h4 className="zaw-panel__title">
-                  <Icon name="users" size={15} /> {t.zawRecipients}
-                </h4>
-                <p className="zaw-panel__hint">{t.zawRecipientsHint}</p>
+              <FormSection icon="users" title={t.zawRecipients} description={t.zawRecipientsHint}>
                 <MailingRecipientsEditor
                   language={language}
                   adresaci={draft.adresaci}
@@ -791,13 +810,9 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
                   contextLabel={dane.adresNazwa || undefined}
                   disabled={busy !== null}
                 />
-              </section>
+              </FormSection>
 
-              <section className="zaw-panel">
-                <h4 className="zaw-panel__title">
-                  <Icon name="download" size={15} /> {t.zawDownload}
-                </h4>
-                <p className="zaw-panel__hint">{t.zawDownloadHint}</p>
+              <FormSection icon="download" title={t.zawDownload} description={t.zawDownloadHint}>
                 <div className="zaw-downloads">
                   <button
                     type="button"
@@ -824,7 +839,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
                     {lastFiles.map((f) => (
                       <li key={f.filePath} className="zaw-file">
                         <Icon name={f.format === 'pdf' ? 'file-check' : 'mail'} size={14} />
-                        <span className="zaw-file__name" title={f.filePath}>
+                        <span className="zaw-file__name" data-tip={f.filePath}>
                           {baseName(f.filePath)}
                         </span>
                         <span className="zaw-file__actions">
@@ -865,7 +880,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
                     </ul>
                   </div>
                 )}
-              </section>
+              </FormSection>
             </aside>
           )}
         </div>
@@ -903,7 +918,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
                     className="button button-secondary"
                     onClick={() => void handleSave()}
                     disabled={busy !== null || !dirty}
-                    title={!dirty ? t.noChangesToSave : undefined}
+                    data-tip={!dirty ? t.noChangesToSave : undefined}
                   >
                     <Icon name="save" size={14} /> {t.zawSave}
                   </button>

@@ -108,7 +108,7 @@ const NotificationBell: React.FC<Props> = ({ language, onOpenTarget }) => {
         ref={button}
         type="button"
         className={`bell${at ? ' is-open' : ''}`}
-        title={unread > 0 ? t.inboxUnreadTitle.replace('{count}', String(unread)) : t.inboxTitle}
+        data-tip={unread > 0 ? t.inboxUnreadTitle.replace('{count}', String(unread)) : t.inboxTitle}
         aria-label={t.inboxTitle}
         aria-haspopup="dialog"
         aria-expanded={at !== null}
@@ -132,7 +132,7 @@ const NotificationBell: React.FC<Props> = ({ language, onOpenTarget }) => {
                 <button
                   type="button"
                   className="inbox__icon"
-                  title={t.inboxMarkAllRead}
+                  data-tip={t.inboxMarkAllRead}
                   aria-label={t.inboxMarkAllRead}
                   disabled={unread === 0}
                   onClick={() => markRead(null)}
@@ -142,7 +142,7 @@ const NotificationBell: React.FC<Props> = ({ language, onOpenTarget }) => {
                 <button
                   type="button"
                   className="inbox__icon"
-                  title={t.inboxDeleteAll}
+                  data-tip={t.inboxDeleteAll}
                   aria-label={t.inboxDeleteAll}
                   disabled={items.length === 0}
                   onClick={() => remove(null)}
@@ -170,7 +170,7 @@ const NotificationBell: React.FC<Props> = ({ language, onOpenTarget }) => {
                         <button
                           type="button"
                           className="inbox__icon"
-                          title={t.inboxMarkRead}
+                          data-tip={t.inboxMarkRead}
                           aria-label={t.inboxMarkRead}
                           onClick={() => markRead([n.id])}
                         >
@@ -180,7 +180,7 @@ const NotificationBell: React.FC<Props> = ({ language, onOpenTarget }) => {
                       <button
                         type="button"
                         className="inbox__icon"
-                        title={t.inboxDelete}
+                        data-tip={t.inboxDelete}
                         aria-label={t.inboxDelete}
                         onClick={() => remove([n.id])}
                       >

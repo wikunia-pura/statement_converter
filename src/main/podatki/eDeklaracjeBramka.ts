@@ -25,7 +25,32 @@ export interface OdpowiedzBramki {
   opis: string;
 }
 
-const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/**
+ * A failed call whose request certainly did not get into the gateway: the connection never opened (no
+ * network, no DNS, refused, a TLS failure) or the gateway answered with a SOAP fault. Every other failure of
+ * a `sendDocument` — a timeout, a connection dropped mid-way, an answer that cannot be read — leaves it
+ * unknown whether the document was taken, and the caller must treat it so.
+ */
+export class BramkaNiePrzyjela extends Error {}
+
+/** Chromium's (`net::ERR_…`) and Node's codes of a connection that never carried the request. */
+const PRZED_POLACZENIEM =
+  /ERR_(NAME_NOT_RESOLVED|NAME_RESOLUTION_FAILED|INTERNET_DISCONNECTED|CONNECTION_REFUSED|CONNECTION_TIMED_OUT|ADDRESS_UNREACHABLE|ADDRESS_INVALID|PROXY_CONNECTION_FAILED|TUNNEL_CONNECTION_FAILED|NETWORK_ACCESS_DENIED|CERT_|SSL_)|ENOTFOUND|ECONNREFUSED|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH/;
+
+const bezPolaczenia = (error: unknown): boolean => {
+  const cause = (error as { cause?: { code?: unknown; message?: unknown } } | null)?.cause;
+  const tekst = `${error instanceof Error ? error.message : String(error)} ${String(cause?.code ?? '')} ${String(cause?.message ?? '')}`;
+  return PRZED_POLACZENIEM.test(tekst);
+};
+
+/** Text of a SOAP field; the C0 controls XML 1.0 forbids (all but tab, LF, CR) are dropped. */
+const esc = (s: string): string =>
+  s
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 
 const odEsc = (s: string): string =>
   s
@@ -57,7 +82,7 @@ export function pole(xml: string, nazwa: string): string | null {
 /** Status and description of an answer; a fault or an answer without a status is an error. */
 export function odczytajOdpowiedz(xml: string, http: number): OdpowiedzBramki {
   const fault = pole(xml, 'faultstring');
-  if (fault !== null) throw new Error(`Bramka e-Deklaracji odrzuciła żądanie: ${fault.trim() || `HTTP ${http}`}`);
+  if (fault !== null) throw new BramkaNiePrzyjela(`Bramka e-Deklaracji odrzuciła żądanie: ${fault.trim() || `HTTP ${http}`}`);
   const status = pole(xml, 'status');
   if (status === null || !/^\d+$/.test(status.trim())) {
     throw new Error(`Bramka e-Deklaracji odpowiedziała nieoczekiwanie (HTTP ${http}).`);
@@ -88,9 +113,9 @@ async function wywolaj(
     return text;
   } catch (error: unknown) {
     if (ctrl.signal.aborted) throw new Error('Bramka e-Deklaracji nie odpowiedziała w ciągu minuty.');
-    throw error instanceof Error && error.message.startsWith('Bramka')
-      ? error
-      : new Error(`Nie udało się połączyć z bramką e-Deklaracji: ${error instanceof Error ? error.message : String(error)}`);
+    if (error instanceof Error && error.message.startsWith('Bramka')) throw error;
+    const tekst = `Nie udało się połączyć z bramką e-Deklaracji: ${error instanceof Error ? error.message : String(error)}`;
+    throw bezPolaczenia(error) ? new BramkaNiePrzyjela(tekst) : new Error(tekst);
   } finally {
     clearTimeout(timer);
   }

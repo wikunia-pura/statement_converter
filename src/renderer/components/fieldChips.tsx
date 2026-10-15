@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import SearchableSelect, { SearchableOption } from './SearchableSelect';
 import {
   MailingFieldPart,
@@ -11,6 +11,7 @@ import {
   parseFieldRef,
   placeholderRegExp,
 } from '../../shared/mailing-template';
+import { sanitizeHtml } from '../sanitize';
 
 /**
  * Dynamic fields as pills.
@@ -173,7 +174,8 @@ function buildChip(nazwa: string, part: MailingFieldPart, ctx: ChipContext): HTM
   // The pill is one atom: the caret cannot land inside it, Backspace removes the
   // whole placeholder, and no keystroke can leave half a `{{`.
   el.contentEditable = 'false';
-  el.title = !known
+  // A hover hint drawn by TipLayer, never a native title.
+  el.dataset.tip = !known
     ? ctx.labels.chipUnknown
     : builtin
       ? ctx.labels.chipBuiltinHint
@@ -211,9 +213,10 @@ function buildValueChip(nazwa: string, part: MailingFieldPart, display: ChipDisp
   el.setAttribute(FIELD_ATTR, nazwa);
   el.setAttribute(PART_ATTR, part);
   el.contentEditable = 'false';
-  el.title = display.title;
+  el.dataset.tip = display.title;
   if (display.html) {
-    el.innerHTML = display.html;
+    // Escaped by the shared renderer already; sanitized anyway, as every HTML sink is.
+    el.innerHTML = sanitizeHtml(display.html);
     return el;
   }
   if (display.text) el.appendChild(document.createTextNode(display.text));
@@ -351,6 +354,15 @@ function pasteHtml(text: string, ctx: ChipContext, mode: ChipEditorMode): string
  */
 export type ChipEditorMode = 'html' | 'text';
 
+/**
+ * How long typing may pause before the content is published. Serializing means
+ * cloning the editor's DOM and taking the pills off the clone, and publishing
+ * re-renders whatever holds the value (the mailing view and its live preview) —
+ * once per pause in typing is plenty for both. Anything that is not plain typing
+ * (a pill, a paste, a command, leaving the editor) publishes at once.
+ */
+const INPUT_EMIT_DELAY_MS = 200;
+
 export interface PlaceholderChipsOptions {
   /** Stored value, with `{{…}}` placeholders: HTML or plain text per `mode`. */
   value: string;
@@ -472,21 +484,77 @@ export function usePlaceholderChips({
     [mode],
   );
 
+  /** Typing waiting to be published, and the editor it was typed into. */
+  const pendingEmitRef = useRef<{ timer: ReturnType<typeof setTimeout>; el: HTMLElement } | null>(null);
+  const cancelPendingEmit = () => {
+    if (pendingEmitRef.current) clearTimeout(pendingEmitRef.current.timer);
+    pendingEmitRef.current = null;
+  };
+
+  const emitFrom = useCallback(
+    (el: HTMLElement) => {
+      const next = readValue(el);
+      if (skipUnchanged && next === publishedRef.current) return;
+      publishedRef.current = next;
+      lastValueRef.current = next;
+      onChange(next);
+    },
+    [onChange, readValue, skipUnchanged],
+  );
+
   const emit = useCallback(() => {
+    // Whatever was waiting is part of what is published now.
+    cancelPendingEmit();
     const el = elementRef.current;
     if (!el) return;
-    const next = readValue(el);
-    if (skipUnchanged && next === publishedRef.current) return;
-    publishedRef.current = next;
-    lastValueRef.current = next;
-    onChange(next);
-  }, [onChange, readValue, skipUnchanged]);
+    emitFrom(el);
+  }, [emitFrom]);
+
+  /** Plain typing: publish once the user pauses — see INPUT_EMIT_DELAY_MS. */
+  const emitSoon = useCallback(() => {
+    const el = elementRef.current;
+    if (!el) return;
+    // Going from empty to typed (or back) publishes at once: the editors draw
+    // their placeholder from the published value, and it must not linger over
+    // the first letter typed — or stay away once everything is deleted.
+    const nowEmpty = !el.textContent && !el.querySelector(`.${CHIP_CLASS}`);
+    const wasEmpty = !(lastValueRef.current ?? '').replace(/<br\s*\/?>|<\/?p>|&nbsp;|\s/g, '');
+    if (nowEmpty !== wasEmpty) {
+      emit();
+      return;
+    }
+    cancelPendingEmit();
+    pendingEmitRef.current = { el, timer: setTimeout(() => emit(), INPUT_EMIT_DELAY_MS) };
+  }, [emit]);
+
+  // Closing the editor publishes what was typed last. A layout cleanup on
+  // purpose: it runs before any passive cleanup of the views around it, so a
+  // view that hands its state on when it closes already holds this text.
+  const emitFromRef = useRef(emitFrom);
+  emitFromRef.current = emitFrom;
+  useLayoutEffect(
+    () => () => {
+      const pending = pendingEmitRef.current;
+      if (!pending) return;
+      clearTimeout(pending.timer);
+      pendingEmitRef.current = null;
+      emitFromRef.current(pending.el);
+    },
+    [],
+  );
 
   useEffect(() => {
     const el = elementRef.current;
     if (!el) return;
     if (value === lastValueRef.current) return;
-    el.innerHTML = mode === 'text' ? escapeHtml(value || '') : value || '';
+    // A value set from outside (a template loaded) replaces the content: typing
+    // that had not been published yet is gone with it, and must not be
+    // published over the new value a moment later.
+    cancelPendingEmit();
+    // Stored HTML is data anyone on the team could have written: sanitized before
+    // it becomes DOM. The pills are not in it — they are built from the `{{…}}`
+    // text right after — so nothing they need is stripped.
+    el.innerHTML = mode === 'text' ? escapeHtml(value || '') : sanitizeHtml(value);
     decorateChips(el, ctxRef.current);
     lastValueRef.current = value;
     publishedRef.current = readValue(el);
@@ -646,7 +714,7 @@ export function usePlaceholderChips({
   );
 
   const handlers = {
-    onInput: emit,
+    onInput: emitSoon,
 
     /**
      * Placeholders typed by hand (or arriving with a paste into an older

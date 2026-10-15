@@ -295,6 +295,8 @@ export interface TransactionForReview {
      * user supplies one. Drives the review screen's warning.
      */
     needsAccount?: boolean;
+    /** Why the row was held for review although it may look matched; shown on its card. */
+    holdReason?: ReviewHoldReason | null;
   };
   // For expenses
   matchedContractor?: {
@@ -311,6 +313,41 @@ export interface TransactionForReview {
  * instead of being left unrecognized.
  */
 export const CLARIFICATION_ACCOUNT = '235-1';
+
+/**
+ * Why a transaction is held for review even though it may carry a match:
+ *  - reversal: a storno — MT940 RC/RD, or a camt entry with RvslInd — the bank
+ *    took a booking back;
+ *  - batch-booking: one camt entry carrying several payments with different
+ *    counterparties, so no single counterparty can be named;
+ *  - invalid-account: the matched "Pozostałe przychody" entry has an account that
+ *    is not a chart-of-accounts symbol;
+ *  - ai-answer-missing: the AI reply had no usable answer for this transaction;
+ *  - glued-name: the contractor was found only as a long name glued to the next
+ *    word of the bank text — very likely right, but the text is damaged;
+ *  - virtual-account-debit: a PKO MT940 debit marked as a virtual-account (SWRK)
+ *    movement — money leaving such an account, e.g. a returned payment.
+ */
+export type ReviewHoldReason =
+  | 'reversal'
+  | 'batch-booking'
+  | 'invalid-account'
+  | 'ai-answer-missing'
+  | 'glued-name'
+  | 'virtual-account-debit';
+
+/**
+ * A statement line the parser could not turn into a transaction. Such a line is
+ * never dropped silently: the conversion goes to the review screen, which lists
+ * it and asks for an explicit acknowledgement before the file is written.
+ */
+export interface DroppedStatementLine {
+  /** Enough of the line to find it in the bank file (the :61: field, the amount column…). */
+  excerpt: string;
+  reason: 'amount' | 'structure' | 'direction' | 'date' | 'error';
+  /** 1-based line number in the bank file, when the format is line-based. */
+  line?: number;
+}
 
 export interface ReviewDecision {
   index: number; // Matches TransactionForReview.index
@@ -351,6 +388,8 @@ export interface ConversionReviewData {
    * sees the exact symbol that will land in the accounting file.
    */
   apartmentPrefix?: string;
+  /** Statement lines the parser could not read; the user must acknowledge them. */
+  droppedLines?: DroppedStatementLine[];
 }
 
 export interface ConversionHistory {
@@ -740,6 +779,11 @@ export interface MailingOdbiorca {
   /** Unit name, person's name — empty for a bare custom address. */
   nazwa: string;
   email: string;
+  /**
+   * On a sent mail: the SMTP server refused this address, the rest of the mail went out (a partly sent
+   * mail — stored as a success, `mailing_history.status` allows nothing else). Absent = taken.
+   */
+  odrzucony?: boolean;
 }
 
 /** A kind of mailing, as defined in Mailing → Typy mailingu. */
@@ -2092,6 +2136,8 @@ export interface CitAiPozycja {
   strona: CitStrona;
   sekcja: 'fundusz' | 'eksploatacja';
   kwota: number;
+  /** The amount is INTER-EJ's or holds it (`PozycjaCit.kwotaUkryta`) — the model gets the name only. */
+  ukryta?: boolean;
   /**
    * The dictionary's current category for the row — set only by the rules'
    * check, where the model keeps it unless it is clearly wrong.
@@ -2213,6 +2259,13 @@ export interface PodatkiWysylkaWynik {
   /** The gateway's status; null when it was never reached or the document was held back. */
   status: number | null;
   opis: string;
+  /** No answer after the request went out — the gateway may have taken it; recorded as uncertain. */
+  niepewna?: boolean;
+  /**
+   * The send happened but its record could not be saved on the return — `opis` says so with the refId,
+   * the one trace of it the office then has. Shown as an error, never as a success.
+   */
+  niezapisana?: boolean;
 }
 
 /** "Sprawdź UPO": the answer for each send asked about, the UPO files saved, and the returns as they now are. */
@@ -2465,7 +2518,30 @@ export type ZadanieInput = Pick<
   | 'termin'
   | 'zalaczniki'
   | 'spotkanieId'
->;
+> & {
+  /**
+   * Edit only: the storage paths of the files the person took off the card in
+   * this edit. Only these are deleted from the bucket after the save — never a
+   * file merely missing from a list that may be older than the card.
+   */
+  removedAttachments?: string[];
+  /**
+   * Edit only: the card's `updatedAt` as the form was opened on it. A save over
+   * a card changed since is refused with `ZADANIE_CONFLICT_MESSAGE`.
+   */
+  expectedUpdatedAt?: string | null;
+};
+
+/** A quick edit on the board: only the fields given are written. */
+export type ZadaniePatch = Partial<Pick<ZadanieInput, 'tytul' | 'przypisanyEmail' | 'termin' | 'priorytet'>>;
+
+/**
+ * Why a full save of a card was refused: somebody saved the card after the form
+ * was opened. The renderer recognises it by this exact text, words it in the
+ * user's language and reloads the board.
+ */
+export const ZADANIE_CONFLICT_MESSAGE =
+  'To zadanie zmieniło się w międzyczasie (ktoś inny je zapisał). Otwórz je ponownie, żeby zobaczyć aktualną wersję.';
 
 /**
  * One comment in a task's conversation.
@@ -2606,6 +2682,43 @@ export interface AppSettings {
 }
 
 /**
+ * The settings that may travel to another computer — through "Eksportuj
+ * ustawienia", a backup, and back in through their import or restore. The list
+ * is the rule on both ends: whatever a file carries beyond it is ignored, so
+ * an old backup holding the full settings cannot bring them back either.
+ *
+ * Only how a person likes the app to look and behave belongs here. Everything
+ * else is machine-local and never travels: folder paths (another computer
+ * mounts the shared folder elsewhere), the PKCS#11 library (a native library
+ * loaded into the main process), the e-Deklaracje gateway (restoring a
+ * colleague's backup must not switch this computer to the production gateway),
+ * the whole SMTP account (a mailbox's host, user and password belong to the
+ * machine that sends from it), `lastSeenVersion` (what THIS machine was shown)
+ * and `bookingsMonth` (where this screen was last left).
+ *
+ * A new `AppSettings` field is machine-local until it is added here.
+ */
+export const PORTABLE_SETTINGS = [
+  'darkMode',
+  'language',
+  'aiConfidenceThreshold',
+  'alwaysUseAI',
+  'aiModel',
+  'skipUserApproval',
+  'contractorSortOrder',
+  'sidebarCollapsed',
+  'sidebarOrder',
+  'bookingsCollapsed',
+  'bookingsTileOrder',
+  'calendarHoverCard',
+] as const satisfies readonly (keyof AppSettings)[];
+
+export type PortableSettingKey = (typeof PORTABLE_SETTINGS)[number];
+
+/** Settings as a backup or a settings file carries them. */
+export type PortableSettings = Partial<Pick<AppSettings, PortableSettingKey>>;
+
+/**
  * A full snapshot of everything the app persists: the shared Supabase tables
  * (banks, kontrahenci, adresy, konto typy, history) plus this machine's local
  * settings. Written as a single JSON file by manual export and by the daily
@@ -2627,8 +2740,15 @@ export interface AppSettings {
  *   4. `DatabaseService.importFullBackup` — restore them, in an order that
  *      keeps foreign keys valid (see the insert/remap dance for adresy).
  *   5. `backupCounts` in renderer/translations.ts (pl + en).
- * `AppSettings` needs none of this — it is spread whole — but a secret added
- * there must be blanked in `settingsForExport`, like `smtpPass`.
+ * A table that a migration may not have created yet is read through
+ * `optionalSection` in `exportFullBackup`: a missing table is then left out and
+ * named in `meta.skippedSections` (shown in the backup summary) — any other
+ * read error fails the backup instead of leaving a silent hole in it.
+ *
+ * `AppSettings` needs none of this: a new field stays on its machine until it
+ * is added to `PORTABLE_SETTINGS`, the only settings a backup carries and the
+ * only ones a restore or a settings import writes. A secret, a path or anything
+ * tied to one computer must never be added there.
  *
  * Out of scope on purpose: `app_config` (infrastructure, not user data), the
  * ROWS of `app_users` (a trigger-maintained mirror of the Supabase auth
@@ -2648,12 +2768,23 @@ export interface AppSettings {
  * rebuilt from those PDFs, and it is invalidated wholesale whenever the
  * extraction prompt changes. Losing it costs one re-run's money and minutes,
  * never information — so it is excluded deliberately, not by omission.
+ *
+ * Also per machine and excluded on purpose, each a record of what THIS computer
+ * did or showed rather than the team's data: the `zadania-notifier` store (the
+ * notifier's picture of what each person was already told about), the
+ * `notification-inbox` store (the bell's list), the `tray` store (whether the
+ * tray hint was shown), `userData/pending-conversions.json` (reviews in
+ * progress — tied to input files on this disk, and gone within hours anyway),
+ * the `supabase-session` store (a login, never to be copied), and the
+ * renderer's localStorage (folded sections, view modes, filters).
  */
 export interface BackupData {
   format: 'filefunky-backup';
   formatVersion: 1;
   appVersion: string;
   createdAt: string;
+  /** Absent in backups written before it existed. */
+  meta?: BackupMeta;
   data: {
     banks: Bank[];
     kontrahenci: Kontrahent[];
@@ -2741,10 +2872,26 @@ export interface BackupData {
     podatkiCitUstawienia?: PodatkiCitUstawienia | null;
     /** Runs of the Podpis module (signing any PDF). Absent in backups written before it existed. */
     podpisHistoria?: PodpisHistoriaEntry[];
-    /** Never carries `smtpPass` — the SMTP password stays on the machine. */
-    settings: AppSettings;
+    /**
+     * Only the `PORTABLE_SETTINGS`. Backups written before the list existed carry
+     * every setting, the machine-local ones too — a restore ignores those.
+     */
+    settings: PortableSettings;
   };
 }
+
+/** What a backup file says about itself, beyond the data. */
+export interface BackupMeta {
+  /**
+   * Sections left out because their table (or a column of it) does not exist in
+   * this database yet — a migration not run. Their key is absent from `data`, so
+   * a restore of this file leaves those live rows alone.
+   */
+  skippedSections: BackupSectionKey[];
+}
+
+/** A section of `BackupData.data`. */
+export type BackupSectionKey = Exclude<keyof BackupData['data'], 'settings'>;
 
 /** Row counts of a backup / restore, for user-facing summaries. */
 export interface BackupCounts {
@@ -2872,6 +3019,17 @@ export const IPC_CHANNELS = {
 
   // Converters
   GET_CONVERTERS: 'converters:get-all',
+
+  // App shell: version, zoom, updates, logs (names kept as they always were)
+  GET_APP_VERSION: 'app:get-version',
+  ZOOM_IN: 'app:zoom-in',
+  ZOOM_OUT: 'app:zoom-out',
+  ZOOM_RESET: 'app:zoom-reset',
+  CHECK_FOR_UPDATES: 'check-for-updates',
+  DOWNLOAD_UPDATE: 'download-update',
+  DOWNLOAD_INSTALLER: 'download-installer',
+  OPEN_DOWNLOADS_FOLDER: 'open-downloads-folder',
+  OPEN_LOGS_FOLDER: 'open-logs-folder',
   
   // File operations
   SELECT_FILES: 'files:select',
@@ -2884,7 +3042,6 @@ export const IPC_CHANNELS = {
   FINALIZE_CONVERSION: 'files:finalize-conversion',
   RERUN_EXPENSE_AI: 'files:rerun-expense-ai',
   TOUCH_CONVERSION: 'files:touch-conversion',
-  CONVERT_ALL: 'files:convert-all',
   OPEN_FILE: 'files:open',
   DETECT_ACCOUNT_NUMBERS: 'files:detect-account-numbers',
   
@@ -3068,6 +3225,7 @@ export const IPC_CHANNELS = {
   PODATKI_CIT_PODPISZ_PRZERWIJ: 'podatki:cit-podpisz-przerwij',
   PODATKI_CIT_UPO: 'podatki:cit-upo',
   PODATKI_CIT_UPO_POBIERZ: 'podatki:cit-upo-pobierz',
+  PODATKI_CIT_WYSYLKA_ROZSTRZYGNIJ: 'podatki:cit-wysylka-rozstrzygnij',
   PODATKI_CIT_USTAWIENIA_GET: 'podatki:cit-ustawienia-get',
   PODATKI_CIT_USTAWIENIA_SET: 'podatki:cit-ustawienia-set',
   PODATKI_CIT_KLASYFIKUJ_AI: 'podatki:cit-klasyfikuj-ai',
@@ -3127,6 +3285,7 @@ export const IPC_CHANNELS = {
   GET_ZADANIA: 'zadania:get',
   ADD_ZADANIE: 'zadania:add',
   UPDATE_ZADANIE: 'zadania:update',
+  PATCH_ZADANIE: 'zadania:patch',
   MOVE_ZADANIE: 'zadania:move',
   DELETE_ZADANIE: 'zadania:delete',
   ARCHIVE_ZADANIE: 'zadania:archive',
@@ -3167,4 +3326,20 @@ export const IPC_CHANNELS = {
   AUTH_SIGN_OUT: 'auth:sign-out',
   AUTH_GET_SESSION: 'auth:get-session',
   AUTH_CONSUME_EXPIRY_NOTICE: 'auth:consume-expiry-notice',
+
+  // E-perf: lighter reads for views that need one row or one column
+  GET_SPOTKANIE: 'kalendarz:get-spotkanie',
+  GET_ZEBRANIA_STATUS: 'zebrania:get-status',
 } as const;
+
+/**
+ * A Zebrania entry as the calendar needs it: which meeting it belongs to and
+ * where its newest version stands. `getZebrania` carries every version's
+ * statement and plan JSON; the calendar only ever reads this much of it.
+ */
+export interface ZebranieStatusRow {
+  id: number;
+  spotkanieId: number | null;
+  /** The newest version (highest number) — null for an entry with none. */
+  wersja: Pick<ZebranieWersja, 'id' | 'major' | 'minor' | 'status' | 'gotowe'> | null;
+}

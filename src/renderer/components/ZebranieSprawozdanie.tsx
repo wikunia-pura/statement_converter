@@ -22,6 +22,7 @@ import { foldText, nazwaNieruchomosci } from '../../shared/plan-gospodarczy';
 import { wersjaLabel } from '../../shared/zebrania';
 import { formatStamp } from '../../shared/calendar';
 import { translations, Language } from '../translations';
+import { ipcErrorMessage } from '../ipcError';
 import { useNotify } from './Notifications';
 import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
 import { FormField, FormSection } from './FormSection';
@@ -29,7 +30,6 @@ import Icon from './Icon';
 import { AiWorking, AiWskazowkiPanel } from './AiPanel';
 import ZebranieDokumentActions, { DokumentZrodlo } from './ZebranieDokumentActions';
 import ZebranieSprawozdanieLaczenia from './ZebranieSprawozdanieLaczenia';
-import { bezPrefiksu } from './PodpisKarta';
 import MergedBadge from './MergedBadge';
 
 type T = (typeof translations)['pl'];
@@ -176,7 +176,7 @@ export const SprawozdanieWstepSection: React.FC<{
                 className="button button-small button-ghost"
                 onClick={() => void save(null)}
                 disabled={busy}
-                title={t.zfinIntroResetHint}
+                data-tip={t.zfinIntroResetHint}
               >
                 <Icon name="refresh" size={13} /> {t.zfinIntroReset}
               </button>
@@ -273,7 +273,7 @@ export const SprawozdanieWstepSection: React.FC<{
                     }
                     disabled={busy}
                     aria-label={t.zfinIntroNoteRemove}
-                    title={t.zfinIntroNoteRemove}
+                    data-tip={t.zfinIntroNoteRemove}
                   >
                     <Icon name="trash" size={13} />
                   </button>
@@ -647,54 +647,63 @@ const SprawozdaniePickerModal: React.FC<{
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal--lg" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal modal--lg"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t.zfinPickTitle}
+        onClick={(e) => e.stopPropagation()}
+      >
         <ModalDismiss onClose={onClose} ariaLabel={t.close} />
         <ModalHeader
           icon="bar-chart"
           title={t.zfinPickTitle}
           subtitle={adresNazwa ? t.zfinPickHint.replace('{name}', adresNazwa) : t.zfinNoAdres}
         />
-        <div className="modal-body">
-          <div className="ksieg-search zfin-pick-search">
-            <Icon name="search" size={15} />
-            <input
-              type="text"
-              autoFocus
-              placeholder={t.zfinPickSearch}
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-            />
-          </div>
-          {lista.length === 0 ? (
-            <p className="zeb-muted">{t.zfinPickEmpty}</p>
-          ) : shown.length === 0 ? (
-            <p className="zeb-muted">{t.zfinNoMatch}</p>
-          ) : (
-            <ul className="zfin-pick-list">
-              {shown.map((s) => (
-                <li key={s.id}>
-                  <button
-                    type="button"
-                    className="zfin-pick-item"
-                    onClick={() => onPick(s)}
-                    disabled={busy}
-                  >
-                    <span className="zfin-pick-item__nr">{s.nrWsp ?? '—'}</span>
-                    <span className="zfin-pick-item__main">
-                      <strong>{s.nazwa}</strong>
-                      <span className="zeb-muted">
-                        {okresLabel(s.okresOd, s.okresDo)} · {s.plikNazwa} ·{' '}
-                        {t.zfinImportedBy
-                          .replace('{when}', formatStamp(s.importedAt, locale))
-                          .replace('{who}', s.importedBy || '—')}
+        <div className="modal-body modal-body--sectioned">
+          <FormSection icon="book" title={t.zfinPickAll}>
+            <div className="ksieg-search zfin-pick-search">
+              <Icon name="search" size={15} />
+              <input
+                type="text"
+                autoFocus
+                placeholder={t.zfinPickSearch}
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                aria-label={t.zfinPickSearch}
+              />
+            </div>
+            {lista.length === 0 ? (
+              <p className="zeb-muted">{t.zfinPickEmpty}</p>
+            ) : shown.length === 0 ? (
+              <p className="zeb-muted">{t.zfinNoMatch}</p>
+            ) : (
+              <ul className="zfin-pick-list">
+                {shown.map((s) => (
+                  <li key={s.id}>
+                    <button
+                      type="button"
+                      className="zfin-pick-item"
+                      onClick={() => onPick(s)}
+                      disabled={busy}
+                    >
+                      <span className="zfin-pick-item__nr">{s.nrWsp ?? '—'}</span>
+                      <span className="zfin-pick-item__main">
+                        <strong>{s.nazwa}</strong>
+                        <span className="zeb-muted">
+                          {okresLabel(s.okresOd, s.okresDo)} · {s.plikNazwa} ·{' '}
+                          {t.zfinImportedBy
+                            .replace('{when}', formatStamp(s.importedAt, locale))
+                            .replace('{who}', s.importedBy || '—')}
+                        </span>
                       </span>
-                    </span>
-                    <Icon name="chevron-right" size={15} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+                      <Icon name="chevron-right" size={15} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </FormSection>
         </div>
         <ModalFooter onCancel={onClose} cancelLabel={t.cancel} />
       </div>
@@ -746,7 +755,7 @@ export const SprawozdanieRobocze: React.FC<{
       notify.success(value ? t.zfinIntroSaved : t.zfinIntroResetDone);
       return true;
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err));
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
       return false;
     } finally {
       setSaving(false);
@@ -758,7 +767,7 @@ export const SprawozdanieRobocze: React.FC<{
     try {
       return await window.electronAPI.napiszWstepSprawozdaniaAi(cel, wskazowki);
     } catch (err: unknown) {
-      notify.error(bezPrefiksu(err), t.zfinIntroAiError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.zfinIntroAiError);
       return null;
     }
   };
@@ -914,7 +923,7 @@ const ZebranieSprawozdanie: React.FC<{
       await onLinked?.(s.id);
       await onChanged();
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err));
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
     } finally {
       setBusy(false);
     }
@@ -947,7 +956,7 @@ const ZebranieSprawozdanie: React.FC<{
       await onChanged();
       notify.success(t.zfinRemoved);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err));
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
     } finally {
       setBusy(false);
     }

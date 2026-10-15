@@ -798,7 +798,7 @@ function polishMonthNameToNumber(v: unknown): number | null {
   const key = v
     .toLowerCase()
     .normalize('NFKD')
-    .replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/ł/g, 'l')
     .replace(/[^a-z]/g, '');
   return POLISH_MONTH_NAMES[key] ?? null;

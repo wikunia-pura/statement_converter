@@ -55,7 +55,7 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
       prev.map((f) => {
         if (f.filePath !== filePath) return f;
         if (res.error || !res.data) {
-          return { ...f, status: 'error' as const, error: res.error ?? 'Unknown error' };
+          return { ...f, status: 'error' as const, error: res.error ?? t.errorUnexpected };
         }
         return applyAnalyzed(f, res.data);
       }),
@@ -93,7 +93,7 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
     const dropped = Array.from(e.dataTransfer.files)
       .map((file) => ({
         fileName: file.name,
-        filePath: (file as unknown as { path: string }).path,
+        filePath: window.electronAPI.getPathForFile(file),
       }))
       .filter((f) => f.filePath);
     if (dropped.length > 0) await addFiles(dropped);
@@ -158,7 +158,7 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
     const res = await window.electronAPI.scalanieMerge(payload, outputDir);
     setIsProcessing(false);
     if (res.error || !res.result) {
-      setStatusMessage(`${t.scalanieMergeError}: ${res.error ?? 'unknown'}`);
+      setStatusMessage(`${t.scalanieMergeError}: ${res.error ?? t.errorUnexpected}`);
       setStatusIsError(true);
       return;
     }
@@ -229,7 +229,7 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
                           className="button button-ghost button-icon icon-danger"
                           onClick={() => removeFile(f.filePath)}
                           disabled={isProcessing}
-                          title={t.remove}
+                          data-tip={t.remove}
                           aria-label={`${t.remove}: ${f.fileName}`}
                         >
                           <Icon name="trash" size={15} />
@@ -265,7 +265,7 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
                   type="button"
                   className="button button-small button-subtle"
                   onClick={() => openOutput(lastOutputDir)}
-                  title={lastOutputDir}
+                  data-tip={lastOutputDir}
                 >
                   <Icon name="folder" size={13} /> {t.openOutputFolder}
                 </button>

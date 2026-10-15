@@ -26,6 +26,7 @@ import {
   ParseResult,
   ICsvExporter,
 } from '../../shared/base-converter';
+import type { ReviewHoldReason } from '../../shared/types';
 
 export class BnpXmlConverter extends BaseConverter<BnpTransaction> {
   private parser: BnpXmlParser;
@@ -52,6 +53,7 @@ export class BnpXmlConverter extends BaseConverter<BnpTransaction> {
     const statement = await this.parser.parse(content);
     return {
       transactions: statement.transactions,
+      dropped: statement.dropped,
       logExtra: `IBAN: ${statement.iban}, Period: ${statement.periodStart} – ${statement.periodEnd}, ` +
         `Opening: ${statement.openingBalance} ${statement.currency}, Closing: ${statement.closingBalance} ${statement.currency}`,
     };
@@ -64,6 +66,13 @@ export class BnpXmlConverter extends BaseConverter<BnpTransaction> {
     return this.parser.filterTransactions(transactions, {
       skipNegative: opts.skipNegative,
     });
+  }
+
+  /** A storno (RvslInd) or a batch entry naming several counterparties is held for review. */
+  protected holdReason(transaction: BnpTransaction): ReviewHoldReason | null {
+    return transaction.reversal
+      ? 'reversal'
+      : transaction.batchCounterparties ? 'batch-booking' : null;
   }
 
   protected isIncome(transaction: BnpTransaction): boolean {

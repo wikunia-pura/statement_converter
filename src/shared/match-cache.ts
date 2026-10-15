@@ -16,8 +16,19 @@
  *  - Negative results (AI found no match) are **not** cached. A "no match" is
  *    precisely the case the user fixes by adding the missing contractor, and a
  *    cached null would keep hiding that new entry until the TTL expired.
+ *
+ * An entry the user overrules in the acceptance screen (rejected, or replaced by
+ * another contractor) is deleted when the conversion is finalized, so the same
+ * wrong answer is not served again next month.
+ *
+ * Each entry also carries a fingerprint of the contractor it names (see
+ * contractorFingerprint), and stops being served once that contractor's
+ * matching data changed. Other entries are untouched: editing one contractor
+ * used to throw the whole cache away, and every recurring vendor went back to
+ * the AI the next month.
  */
 
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -28,19 +39,46 @@ export interface MatchCacheValue {
   reasoning?: string;
 }
 
+/** What the cache needs to know of a contractor. */
+export type MatchCacheContractor = {
+  id: number;
+  nazwa?: string;
+  alternativeNames?: string[];
+  typy?: string[];
+  nip?: string;
+};
+
 /**
- * Cheap identity of the contractor set, stored with the cache so the cache can
- * drop itself when the set changed.
+ * Identity of one contractor as far as matching reads it: name, alternative
+ * names, roles (`typy`) and NIP. An entry naming this contractor is served only
+ * while it is unchanged — renamed, given another alternative name or NIP, or
+ * moved between expense and income roles, the description may no longer be its.
+ * An account change needs no detecting: reads re-resolve the id, so the current
+ * account is booked anyway.
  *
- * Only **additions** need detecting: a rename or an account change is already
- * handled (reads re-resolve the id), and a deletion degrades to a miss. An
- * addition is the one case a cached entry cannot notice on its own — the newly
- * added contractor might have been the better match for a description that is
- * already cached against someone else. Count plus highest id catches every
- * addition, including an add-and-delete that leaves the count unchanged, because
- * Postgres ids are monotonic.
+ * Deliberately not covered: a contractor *added* after an entry was written, who
+ * might have been the better match for it. That is the price of not discarding
+ * the whole cache on every edit, and it is small — the deterministic matcher runs
+ * before the cache, so a new contractor whose name is in the text wins at once;
+ * only a match that only the AI could make stays as cached, until the user
+ * overrules it in the review (which deletes it) or it expires.
  */
-export function contractorSetFingerprint(contractors: Array<{ id: number }>): string {
+export function contractorFingerprint(c: MatchCacheContractor): string {
+  const canonical = [
+    c.nazwa ?? '',
+    [...(c.alternativeNames ?? [])].sort(),
+    [...(c.typy ?? [])].sort(),
+    c.nip ?? '',
+  ];
+  return crypto.createHash('sha1').update(JSON.stringify(canonical)).digest('hex').slice(0, 16);
+}
+
+/**
+ * The whole-set fingerprint files written before per-entry fingerprints carried
+ * (count and highest id: it changed whenever a contractor was added). Read only
+ * to decide whether such a file's entries are still as valid as they were.
+ */
+function legacySetFingerprint(contractors: MatchCacheContractor[]): string {
   let maxId = 0;
   for (const c of contractors) if (c.id > maxId) maxId = c.id;
   return `${contractors.length}:${maxId}`;
@@ -50,6 +88,8 @@ interface MatchCacheEntry extends MatchCacheValue {
   key: string;
   timestamp: Date;
   usageCount: number;
+  /** contractorFingerprint of the contractor when the entry was written. */
+  fp?: string;
 }
 
 export class MatchCache {
@@ -67,18 +107,23 @@ export class MatchCache {
   private maxAge: number = 180 * 24 * 60 * 60 * 1000;
   private persistPath?: string;
   private saveTimer?: NodeJS.Timeout;
-  private fingerprint?: string;
+  /** contractorFingerprint by contractor id; undefined when no list was given. */
+  private fingerprints?: Map<number, string>;
+  private legacyFingerprint?: string;
+  /** The whole-set fingerprint the file was read with (see legacySetFingerprint). */
+  private storedLegacyFingerprint?: string;
 
   /**
-   * @param fingerprint Identity of the contractor set this cache may be used
-   *   with (see contractorSetFingerprint). When it differs from the one stored
-   *   on disk, the cached entries are discarded instead of loaded — contractors
-   *   were added since they were written, and one of them may be a better match
-   *   than what a cached entry holds. Pass undefined to skip the check.
+   * @param contractors The current contractor list. An entry is served only while
+   *   its contractor is on it with the fingerprint the entry was written with.
+   *   Omit it to skip the check (a cache opened only to delete entries).
    */
-  constructor(persistPath?: string, fingerprint?: string) {
+  constructor(persistPath?: string, contractors?: MatchCacheContractor[]) {
     this.persistPath = persistPath;
-    this.fingerprint = fingerprint;
+    if (contractors) {
+      this.fingerprints = new Map(contractors.map((c) => [c.id, contractorFingerprint(c)]));
+      this.legacyFingerprint = legacySetFingerprint(contractors);
+    }
     if (persistPath) {
       this.loadFromDisk();
     }
@@ -100,6 +145,20 @@ export class MatchCache {
       return null;
     }
 
+    if (this.fingerprints) {
+      const current = this.fingerprints.get(entry.contractorId);
+      // Contractor gone (or not in this list): a miss, but the entry stays — a
+      // list that came back incomplete must not cost the cache its entries, and
+      // a deleted contractor's entry expires on its own.
+      if (current === undefined) return null;
+      // Its matching data changed since: this answer is stale for good.
+      if (entry.fp !== current) {
+        this.cache.delete(key);
+        this.scheduleSave();
+        return null;
+      }
+    }
+
     entry.usageCount++;
     return {
       contractorId: entry.contractorId,
@@ -110,14 +169,32 @@ export class MatchCache {
   }
 
   set(descBase: string, descOpt: string, value: MatchCacheValue): void {
+    // A contractor missing from the list could never be served back.
+    if (this.fingerprints && !this.fingerprints.has(value.contractorId)) return;
     const key = this.getCacheKey(descBase, descOpt);
     this.cache.set(key, {
       key,
       ...value,
       timestamp: new Date(),
       usageCount: 1,
+      fp: this.fingerprints?.get(value.contractorId),
     });
     this.scheduleSave();
+  }
+
+  /** Forget the match cached for this description. True when there was one. */
+  delete(descBase: string, descOpt: string): boolean {
+    const removed = this.cache.delete(this.getCacheKey(descBase, descOpt));
+    if (removed) this.scheduleSave();
+    return removed;
+  }
+
+  /** Write pending changes now instead of after the debounce. */
+  flush(): void {
+    if (!this.saveTimer) return;
+    clearTimeout(this.saveTimer);
+    this.saveTimer = undefined;
+    this.saveToDisk();
   }
 
   get size(): number {
@@ -142,27 +219,34 @@ export class MatchCache {
         : parsed;
       const entries = stored.entries;
       if (!Array.isArray(entries)) return;
+      this.storedLegacyFingerprint = stored.fingerprint;
 
-      if (this.fingerprint && stored.fingerprint !== this.fingerprint) {
-        // Contractor set changed since these were written — start clean rather
-        // than serve a match that a newly added contractor may have won.
-        console.log(
-          `📦 MatchCache: lista kontrahentów zmieniła się (${stored.fingerprint ?? 'brak odcisku'} → ${this.fingerprint}), ` +
-            `odrzucono ${entries.length} wpisów`,
-        );
-        this.scheduleSave();
-        return;
-      }
+      // Entries written before per-entry fingerprints (no `fp`) were valid as long
+      // as the file's whole-set fingerprint matched — no contractor added since.
+      // When it still does, they are adopted with their contractor's current
+      // fingerprint; otherwise only they are dropped, as that version would have
+      // dropped them. Without a contractor list nothing can be decided, and they
+      // are kept as they are.
+      const adoptLegacy = !!this.fingerprints && stored.fingerprint === this.legacyFingerprint;
 
       const now = Date.now();
       let loaded = 0;
       let expired = 0;
+      let legacyDropped = 0;
       for (const entry of entries) {
         if (!entry?.key || typeof entry.contractorId !== 'number' || !entry?.timestamp) continue;
         const ts = new Date(entry.timestamp);
         if (now - ts.getTime() > this.maxAge) {
           expired++;
           continue;
+        }
+        let fp: string | undefined = typeof entry.fp === 'string' ? entry.fp : undefined;
+        if (fp === undefined && this.fingerprints) {
+          fp = adoptLegacy ? this.fingerprints.get(entry.contractorId) : undefined;
+          if (fp === undefined) {
+            legacyDropped++;
+            continue;
+          }
         }
         this.cache.set(entry.key, {
           key: entry.key,
@@ -172,11 +256,16 @@ export class MatchCache {
           reasoning: entry.reasoning,
           timestamp: ts,
           usageCount: entry.usageCount ?? 1,
+          fp,
         });
         loaded++;
       }
-      if (loaded > 0 || expired > 0) {
-        console.log(`📦 MatchCache loaded ${loaded} entries from disk (${expired} expired skipped)`);
+      if (legacyDropped > 0) this.scheduleSave();
+      if (loaded > 0 || expired > 0 || legacyDropped > 0) {
+        console.log(
+          `📦 MatchCache loaded ${loaded} entries from disk (${expired} expired, ` +
+            `${legacyDropped} unverifiable old-format entries skipped)`,
+        );
       }
     } catch (e) {
       console.warn('MatchCache: failed to load from disk:', e);
@@ -206,12 +295,23 @@ export class MatchCache {
         reasoning: e.reasoning,
         timestamp: e.timestamp.toISOString(),
         usageCount: e.usageCount,
+        fp: e.fp,
       }));
+      // Temp file + rename, like ExtractionCache: a crash mid-write must not
+      // leave a truncated file behind.
+      const tmp = `${this.persistPath}.tmp`;
       fs.writeFileSync(
-        this.persistPath,
-        JSON.stringify({ fingerprint: this.fingerprint, entries }, null, 2),
+        tmp,
+        // `fingerprint` is the legacy whole-set one, kept only for entries still
+        // without `fp` — which only a cache opened without a contractor list has.
+        JSON.stringify(
+          { fingerprint: this.fingerprints ? undefined : this.storedLegacyFingerprint, entries },
+          null,
+          2,
+        ),
         'utf-8',
       );
+      fs.renameSync(tmp, this.persistPath);
     } catch (e) {
       console.warn('MatchCache: failed to save to disk:', e);
     }

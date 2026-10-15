@@ -49,6 +49,8 @@
 
 import * as iconv from 'iconv-lite';
 import { PocztowyStatement, PocztowyTransaction } from './types';
+import { DroppedStatementLine } from '../../shared/types';
+import { line61Excerpt, parseLine61 } from '../shared/mt940';
 
 /** Width of the `<20`..`<26` description and `<32`/`<33` counterparty chunks. */
 const TEXT_CHUNK_WIDTH = 27;
@@ -59,11 +61,6 @@ const OWNER_CHUNK_WIDTH = 35;
 const SUBFIELD_LINE = /^<(\d{2})(.*)$/;
 /** MT940 tag line, e.g. ":61:" or ":28C:". */
 const TAG_LINE = /^:(\d{2,3}[A-Z]?):/;
-/**
- * :61: without a transaction-type code: value date, optional entry date,
- * optional reversal flag + D/C, amount. Pocztowy leaves the rest empty.
- */
-const FIELD_61 = /^(\d{6})(\d{4})?(R?)([DC])([\d,.]+)(.*)$/;
 
 export class PocztowyMT940Parser {
   /**
@@ -77,6 +74,7 @@ export class PocztowyMT940Parser {
 
     const lines = cleaned.split('\n');
     const fields = this.parseFields(lines);
+    const dropped: DroppedStatementLine[] = [];
 
     return {
       reference: this.getFieldValue(fields, ':20:'),
@@ -88,7 +86,8 @@ export class PocztowyMT940Parser {
         ? this.parseBalance(this.getFieldValue(fields, ':64:'))
         : undefined,
       accountOwner: this.parseAccountOwner(fields),
-      transactions: this.parseTransactions(lines),
+      transactions: this.parseTransactions(lines, dropped),
+      dropped,
     };
   }
 
@@ -182,7 +181,7 @@ export class PocztowyMT940Parser {
    * subfield line that follows it. Any other tag (`:62F:`, the trailing `:86:`)
    * closes the current transaction.
    */
-  private parseTransactions(lines: string[]): PocztowyTransaction[] {
+  private parseTransactions(lines: string[], dropped: DroppedStatementLine[]): PocztowyTransaction[] {
     const transactions: PocztowyTransaction[] = [];
 
     let field61: string | null = null;
@@ -190,7 +189,7 @@ export class PocztowyMT940Parser {
 
     const flush = () => {
       if (field61 === null) return;
-      const transaction = this.parseTransaction(field61, subfieldLines);
+      const transaction = this.parseTransaction(field61, subfieldLines, dropped);
       if (transaction) transactions.push(transaction);
       field61 = null;
       subfieldLines = [];
@@ -219,22 +218,30 @@ export class PocztowyMT940Parser {
    *   260701 = value date (YYMMDD), 0701 = entry date (MMDD),
    *   C = credit, 653,00 = amount. No type code and no reference follow.
    */
-  private parseTransaction(field61: string, subfieldLines: string[]): PocztowyTransaction | null {
-    const match = field61.trim().match(FIELD_61);
-    if (!match) {
-      console.error('Pocztowy: unrecognized :61: field:', field61);
+  private parseTransaction(
+    field61: string,
+    subfieldLines: string[],
+    dropped: DroppedStatementLine[]
+  ): PocztowyTransaction | null {
+    // Shared reader (shared/mt940): a funds code such as "CN653,00" no longer
+    // makes the line unreadable, and an amount that does not read is recorded
+    // as dropped instead of disappearing.
+    const line61 = parseLine61(field61);
+    if (!line61) {
+      console.error('Pocztowy: unrecognized :61: field:', line61Excerpt(field61));
+      dropped.push({ excerpt: line61Excerpt(field61), reason: 'structure' });
+      return null;
+    }
+    if (line61.amount === null) {
+      dropped.push({ excerpt: line61Excerpt(field61), reason: 'amount' });
       return null;
     }
 
-    const [, valueDate, entryDate, reversal, mark, amountStr, rest] = match;
-
     // MT940 marks a reversal as "RC"/"RD": a reversed credit takes the money back
-    // out of the account, so the row belongs on the opposite side. Pocztowy has
-    // not been seen sending one, but reading it the other way round would book a
-    // returned payment as income.
-    const debitCredit: 'D' | 'C' = reversal
-      ? (mark === 'C' ? 'D' : 'C')
-      : (mark as 'D' | 'C');
+    // out of the account, so the row belongs on the opposite side — parseLine61
+    // has already turned the mark over. Pocztowy has not been seen sending one;
+    // should it, the row is held for review rather than booked.
+    const { valueDate, entryDate, debitCredit, reversal, amount, rest } = line61;
 
     const subfields = this.parseSubfields(subfieldLines);
 
@@ -261,7 +268,8 @@ export class PocztowyMT940Parser {
       valueDate,
       entryDate: entryDate || '',
       debitCredit,
-      amount: this.parseAmount(amountStr),
+      ...(reversal ? { reversal } : {}),
+      amount,
       // Pocztowy sends no transaction-type code; `rest` is empty in every known
       // file and is passed through rather than dropped, in case one appears.
       transactionType: rest.trim(),

@@ -33,11 +33,11 @@ import {
   problemyPit4R,
 } from '../../shared/podatki-pit';
 import { nazwaUrzedu } from '../../shared/pit-urzedy';
-import { doGroszy } from '../../shared/podatki';
+import { doGroszy, tylkoCyfry } from '../../shared/podatki';
 import { PIT11_PDF_BASE64, PIT4R_PDF_BASE64 } from './pitWzory';
 import { ARIMO_TTF_BASE64 } from './dn1Font';
 import { Komorka, PIT11, PIT4R, ZNAK_KRATKI_PIT11, ZNAK_KRATKI_PIT4R, pit4rKomorka } from './pitLayout';
-import { ROZMIAR, Strona, dataNaKratki, duze } from './formularz';
+import { ROZMIAR, Strona, dataNaKratki, duze, sprawdzZnaki } from './formularz';
 
 export interface Pit11Wejscie {
   rok: number;
@@ -60,13 +60,11 @@ const ROZMIAR_GROSZE = 9;
 
 /* ------------------------------ shared helpers ------------------------------ */
 
-const cyfry = (s: string): string => s.replace(/\D/g, '');
-
 /** The office as the e-Formularz prints it: its code and name ("1433 URZĄD SKARBOWY WARSZAWA-MOKOTÓW"). */
 const urzadDoDruku = (kod: string): string => `${kod} ${nazwaUrzedu(kod)}`.trim();
 
 function sprawdzPlatnika(p: { nip: string; nazwa: string }): string {
-  const nip = cyfry(p.nip);
+  const nip = tylkoCyfry(p.nip);
   if (!nipPoprawny(nip)) {
     throw new Error(`NIP płatnika „${p.nip}” jest nieprawidłowy — formularza nie da się wydrukować.`);
   }
@@ -181,6 +179,10 @@ function stronaUzasadnienia(
 ) {
   const przyczyna = we.przyczyna.trim();
   if (!przyczyna) throw new Error('Korekta wymaga uzasadnienia przyczyn (ORD-ZU) — brak tekstu.');
+  // Drawn straight onto the page, past `Strona`'s check — a character the font lacks would be a blank box.
+  sprawdzZnaki(font, przyczyna, 'Uzasadnienie korekty (ORD-ZU)');
+  sprawdzZnaki(font, duze(we.platnik.nazwa), 'Nazwa płatnika');
+  if (we.podatnik) sprawdzZnaki(font, duze(we.podatnik), 'Podatnik');
   const page: PDFPage = out.addPage([595.44, 841.68]);
   const czarny = rgb(0, 0, 0);
   const szary = rgb(0.35, 0.35, 0.35);
@@ -207,7 +209,7 @@ function stronaUzasadnienia(
   const fakty: [string, string][] = [
     ['Dotyczy:', `${we.dotyczy} za rok ${we.rok}`],
     ['Płatnik:', duze(we.platnik.nazwa)],
-    ['NIP płatnika:', cyfry(we.platnik.nip)],
+    ['NIP płatnika:', tylkoCyfry(we.platnik.nip)],
     ...(we.podatnik ? ([['Podatnik:', duze(we.podatnik)]] as [string, string][]) : []),
   ];
   const kolumna = MARGINES + 90;

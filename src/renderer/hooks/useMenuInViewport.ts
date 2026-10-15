@@ -36,8 +36,13 @@ export function useMenuInViewport(
   return shift;
 }
 
-/** Hover title for an element whose text is cut with an ellipsis — and only then. */
-export function titleIfTruncated(el: HTMLElement): void {
+/**
+ * The full text as a hover hint (`data-tip`, drawn by TipLayer) for an element
+ * whose text is cut with an ellipsis — and only then. Measured on hover, since
+ * only layout knows whether it is cut; call it from `onMouseEnter`.
+ */
+export function tipIfTruncated(el: HTMLElement): void {
   const target = (el.querySelector('.ui-select__value, .ui-select__option-label') as HTMLElement | null) ?? el;
-  el.title = target.scrollWidth > target.clientWidth ? (target.textContent ?? '') : '';
+  if (target.scrollWidth > target.clientWidth && target.textContent) el.dataset.tip = target.textContent;
+  else delete el.dataset.tip;
 }

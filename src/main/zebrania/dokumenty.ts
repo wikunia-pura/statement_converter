@@ -42,6 +42,7 @@ import {
   okresLabel,
   sprawozdanieWstep,
 } from '../../shared/sprawozdanie';
+import { toDayKey } from '../../shared/calendar';
 import { renderHtmlToPdf } from '../mailing/pdf';
 import { INTER_FONT_FACES } from './pdfFont';
 
@@ -235,7 +236,7 @@ ${body}
 const DOC_PRINT = {
   pageSize: 'A4' as const,
   printBackground: true,
-  margins: { marginType: 'custom' as const, top: 0, bottom: 0, left: 0, right: 0 },
+  margins: { top: 0, bottom: 0, left: 0, right: 0 },
 };
 
 /** Characters the PDF's built-in Helvetica can write. */
@@ -450,7 +451,7 @@ ${remonty.map((r) => row('', r.opis || '—', '', r.kwota, 'subrow')).join('')}
 ${row('4.', 'RAZEM: 1+2+3', '', s.kosztyB, 'sum')}
 </tbody></table>`;
 
-  const data = ctx.dataZebrania ? formatData(ctx.dataZebrania.slice(0, 10)) : '……………………';
+  const data = ctx.dataZebrania ? formatData(toDayKey(ctx.dataZebrania)) : '……………………';
   const body = `<div class="head">
 <h1>Plan gospodarczy na ${plan.rok} rok</h1>
 <div class="sub">Nieruchomość: ${esc(plan.nieruchomosc)}</div>
@@ -873,7 +874,7 @@ export async function planXlsx(plan: PlanGospodarczy, ctx: DokumentKontekst, out
   sumStyle(razemKB, COLS);
 
   ws.addRow([]);
-  const data = ctx.dataZebrania ? formatData(ctx.dataZebrania.slice(0, 10)) : '……………………';
+  const data = ctx.dataZebrania ? formatData(toDayKey(ctx.dataZebrania)) : '……………………';
   const note = ws.addRow([
     '',
     `Niniejszy plan przyjęto uchwałą nr ${plan.uchwalaNr || '……'} Wspólnoty Mieszkaniowej na zebraniu w dniu ${data}.`,

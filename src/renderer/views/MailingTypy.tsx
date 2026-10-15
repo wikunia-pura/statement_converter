@@ -6,7 +6,9 @@ import {
   MailingTypDef,
 } from '../../shared/types';
 import { isValidEmail } from '../../shared/mailing-recipients';
+import { normalizeName } from '../../shared/text';
 import { translations, Language } from '../translations';
+import { ipcErrorMessage } from '../ipcError';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
 import { FormField, FormSection, RequiredNote } from '../components/FormSection';
@@ -23,11 +25,6 @@ interface TypFormData {
   nazwa: string;
   opis: string;
   adresaci: MailingAdresaci;
-}
-
-/** Case- and whitespace-insensitive, so "Ogłoszenie" and "ogłoszenie " clash. */
-function normalizeName(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 interface TypFormModalProps {
@@ -102,7 +99,7 @@ const TypFormModal: React.FC<TypFormModalProps> = ({
             description={t.mailingTypySectionDesc}
             badge={
               builtin ? (
-                <span title={t.mailingTypyBuiltinHint}>
+                <span data-tip={t.mailingTypyBuiltinHint}>
                   <Icon name="shield" size={11} /> {t.mailingTypyBuiltin}
                 </span>
               ) : undefined
@@ -246,7 +243,7 @@ const MailingTypy: React.FC<Props> = ({ language }) => {
       notify.success(t.mailingTypySaved);
       await load();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(ipcErrorMessage(err, t.errorUnexpected));
     } finally {
       setIsSaving(false);
     }
@@ -267,7 +264,7 @@ const MailingTypy: React.FC<Props> = ({ language }) => {
       notify.success(t.mailingTypyDeleted);
       await load();
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : 'Unknown error');
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
     }
   };
 
@@ -316,7 +313,7 @@ const MailingTypy: React.FC<Props> = ({ language }) => {
                     <span className="cell-with-badge cell-with-badge--nowrap">
                       <span className="cell-title">{typ.nazwa}</span>
                       {typ.systemowy && (
-                        <span className="form-section__badge is-accent" title={t.mailingTypyBuiltinHint}>
+                        <span className="form-section__badge is-accent" data-tip={t.mailingTypyBuiltinHint}>
                           <Icon name="shield" size={11} /> {t.mailingTypyBuiltin}
                         </span>
                       )}
@@ -349,7 +346,7 @@ const MailingTypy: React.FC<Props> = ({ language }) => {
                           className="button button-ghost button-icon icon-danger"
                           onClick={() => handleDelete(typ)}
                           disabled={isSaving}
-                          title={t.delete}
+                          data-tip={t.delete}
                           aria-label={`${t.delete}: ${typ.nazwa}`}
                         >
                           <Icon name="trash" size={15} />

@@ -538,7 +538,7 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
                   <Icon name="check" size={12} strokeWidth={3} />
                 </span>
               </label>
-              <span className="mve-table__label" title={p.nazwa}>
+              <span className="mve-table__label" data-tip={p.nazwa}>
                 {p.tekst || p.nazwa}
               </span>
               <input
@@ -639,7 +639,7 @@ const MailingVisualEditor: React.FC<MailingVisualEditorProps> = ({
                   className="mve-missing__item"
                   onClick={(e) => jumpToField(nazwa, e.currentTarget)}
                   disabled={readOnly}
-                  title={t.mveChipClickToFill}
+                  data-tip={t.mveChipClickToFill}
                 >
                   {nazwa}
                 </button>

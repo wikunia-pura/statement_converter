@@ -21,6 +21,10 @@ const PodpisHistoria: React.FC<Props> = ({ language }) => {
   const loadHistory = async () => {
     try {
       setHistory(await window.electronAPI.podpisGetHistoria());
+    } catch (error) {
+      // Without this the view would just show "no history" for a list that failed to load.
+      console.error('Error loading signing history:', error);
+      notify.error(t.podpisHistoryLoadError);
     } finally {
       setIsLoading(false);
     }

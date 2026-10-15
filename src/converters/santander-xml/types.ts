@@ -25,6 +25,8 @@ export interface XmlStatement {
   beginValue: number;
   endValue: number;
   transactions: XmlTransaction[];
+  /** <trn> elements that could not be read. */
+  dropped?: import('../../shared/types').DroppedStatementLine[];
 }
 
 export interface ExtractedData {

@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { translations, Language } from '../translations';
 import Icon from './Icon';
 import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
+import { FormSection } from './FormSection';
 
 /** The id a separator has in a saved order. Views appear once; separators as often as wanted. */
 export const SIDEBAR_DIVIDER = 'divider';
@@ -114,119 +115,127 @@ const SidebarOrderModal: React.FC<{
 
   return (
     <div className="modal-overlay" onClick={saving ? undefined : onClose}>
-      <div className="modal ks-prio-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal ks-prio-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title ?? t.sidebarOrderTitle}
+        onClick={(e) => e.stopPropagation()}
+      >
         <ModalDismiss onClose={onClose} ariaLabel={t.close} />
         <ModalHeader icon={icon} title={title ?? t.sidebarOrderTitle} subtitle={subtitle ?? t.sidebarOrderHint} />
-        <div className="modal-body">
-          <ol className="ks-prio-list">
-            {order.map((item, index) => (
-              <li
-                key={item.key}
-                className={`ks-prio-item${item.id === SIDEBAR_DIVIDER ? ' ks-prio-item--divider' : ''}${
-                  item.hidden ? ' is-hidden' : ''
-                }${dragFrom === index ? ' is-dragging' : ''}${
-                  dragOver === index && dragFrom !== null && dragFrom !== index ? ' is-over' : ''
-                }`}
-                draggable={!saving}
-                onDragStart={(e) => {
-                  setDragFrom(index);
-                  e.dataTransfer.effectAllowed = 'move';
-                  // Some engines refuse a drag that carries no payload.
-                  e.dataTransfer.setData('text/plain', item.id);
-                }}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  if (dragOver !== index) setDragOver(index);
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  if (dragFrom !== null) move(dragFrom, index);
-                  setDragFrom(null);
-                  setDragOver(null);
-                }}
-                onDragEnd={() => {
-                  setDragFrom(null);
-                  setDragOver(null);
-                }}
-              >
-                <span className="ks-prio-item__grip" aria-hidden="true">
-                  <Icon name="grip" size={16} />
-                </span>
-                {item.id === SIDEBAR_DIVIDER ? (
-                  <span className="ks-prio-item__text">
-                    <span className="ks-prio-item__rule" aria-hidden="true" />
-                    <span className="ks-prio-item__note">{item.label}</span>
+        <div className="modal-body modal-body--sectioned">
+          <FormSection icon={icon} title={t.sidebarOrderItems}>
+            <ol className="ks-prio-list">
+              {order.map((item, index) => (
+                <li
+                  key={item.key}
+                  className={`ks-prio-item${item.id === SIDEBAR_DIVIDER ? ' ks-prio-item--divider' : ''}${
+                    item.hidden ? ' is-hidden' : ''
+                  }${dragFrom === index ? ' is-dragging' : ''}${
+                    dragOver === index && dragFrom !== null && dragFrom !== index ? ' is-over' : ''
+                  }`}
+                  draggable={!saving}
+                  onDragStart={(e) => {
+                    setDragFrom(index);
+                    e.dataTransfer.effectAllowed = 'move';
+                    // Some engines refuse a drag that carries no payload.
+                    e.dataTransfer.setData('text/plain', item.id);
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (dragOver !== index) setDragOver(index);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (dragFrom !== null) move(dragFrom, index);
+                    setDragFrom(null);
+                    setDragOver(null);
+                  }}
+                  onDragEnd={() => {
+                    setDragFrom(null);
+                    setDragOver(null);
+                  }}
+                >
+                  <span className="ks-prio-item__grip" aria-hidden="true">
+                    <Icon name="grip" size={16} />
                   </span>
-                ) : (
-                  <>
-                    <span className="ks-prio-item__grip" aria-hidden="true">
-                      <Icon name={item.icon} size={16} />
-                    </span>
+                  {item.id === SIDEBAR_DIVIDER ? (
                     <span className="ks-prio-item__text">
-                      <span className="ks-prio-item__name">{item.label}</span>
-                      {item.hidden && <span className="ks-prio-item__note">{t.sidebarOrderHiddenNote}</span>}
+                      <span className="ks-prio-item__rule" aria-hidden="true" />
+                      <span className="ks-prio-item__note">{item.label}</span>
                     </span>
-                  </>
-                )}
-                <span className="ks-prio-item__moves">
-                  {allowHide && item.id !== SIDEBAR_DIVIDER && !unhideableIds.includes(item.id) && (
+                  ) : (
+                    <>
+                      <span className="ks-prio-item__grip" aria-hidden="true">
+                        <Icon name={item.icon} size={16} />
+                      </span>
+                      <span className="ks-prio-item__text">
+                        <span className="ks-prio-item__name">{item.label}</span>
+                        {item.hidden && <span className="ks-prio-item__note">{t.sidebarOrderHiddenNote}</span>}
+                      </span>
+                    </>
+                  )}
+                  <span className="ks-prio-item__moves">
+                    {allowHide && item.id !== SIDEBAR_DIVIDER && !unhideableIds.includes(item.id) && (
+                      <button
+                        type="button"
+                        className={item.hidden ? 'is-off' : undefined}
+                        onClick={() => toggleHidden(index)}
+                        disabled={saving}
+                        data-tip={item.hidden ? t.sidebarOrderShow : t.sidebarOrderHide}
+                        aria-label={`${item.hidden ? t.sidebarOrderShow : t.sidebarOrderHide}: ${item.label}`}
+                        aria-pressed={item.hidden === true}
+                      >
+                        <Icon name={item.hidden ? 'eye-off' : 'eye'} size={15} />
+                      </button>
+                    )}
                     <button
                       type="button"
-                      className={item.hidden ? 'is-off' : undefined}
-                      onClick={() => toggleHidden(index)}
-                      disabled={saving}
-                      title={item.hidden ? t.sidebarOrderShow : t.sidebarOrderHide}
-                      aria-label={`${item.hidden ? t.sidebarOrderShow : t.sidebarOrderHide}: ${item.label}`}
-                      aria-pressed={item.hidden === true}
+                      onClick={() => move(index, index - 1)}
+                      disabled={saving || index === 0}
+                      data-tip={t.sidebarMoveUp}
+                      aria-label={`${t.sidebarMoveUp}: ${item.label}`}
                     >
-                      <Icon name={item.hidden ? 'eye-off' : 'eye'} size={15} />
+                      <Icon name="arrow-up" size={15} />
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => move(index, index - 1)}
-                    disabled={saving || index === 0}
-                    title={t.sidebarMoveUp}
-                    aria-label={`${t.sidebarMoveUp}: ${item.label}`}
-                  >
-                    <Icon name="arrow-up" size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => move(index, index + 1)}
-                    disabled={saving || index === order.length - 1}
-                    title={t.sidebarMoveDown}
-                    aria-label={`${t.sidebarMoveDown}: ${item.label}`}
-                  >
-                    <Icon name="arrow-down" size={15} />
-                  </button>
-                  {item.id === SIDEBAR_DIVIDER && (
                     <button
                       type="button"
-                      onClick={() => removeAt(index)}
-                      disabled={saving}
-                      title={t.sidebarOrderRemoveDivider}
-                      aria-label={t.sidebarOrderRemoveDivider}
+                      onClick={() => move(index, index + 1)}
+                      disabled={saving || index === order.length - 1}
+                      data-tip={t.sidebarMoveDown}
+                      aria-label={`${t.sidebarMoveDown}: ${item.label}`}
                     >
-                      <Icon name="x" size={15} />
+                      <Icon name="arrow-down" size={15} />
                     </button>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ol>
-          {allowDividers && (
-          <div className="list-after">
-            <button
-              type="button"
-              className="button button-small button-subtle"
-              disabled={saving}
-              onClick={() => setOrder((prev) => [...prev, newDivider()])}
-            >
-              <Icon name="plus" size={13} /> {t.sidebarOrderAddDivider}
-            </button>
-          </div>
-          )}
+                    {item.id === SIDEBAR_DIVIDER && (
+                      <button
+                        type="button"
+                        onClick={() => removeAt(index)}
+                        disabled={saving}
+                        data-tip={t.sidebarOrderRemoveDivider}
+                        aria-label={t.sidebarOrderRemoveDivider}
+                      >
+                        <Icon name="x" size={15} />
+                      </button>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ol>
+            {allowDividers && (
+            <div className="list-after">
+              <button
+                type="button"
+                className="button button-small button-subtle"
+                disabled={saving}
+                onClick={() => setOrder((prev) => [...prev, newDivider()])}
+              >
+                <Icon name="plus" size={13} /> {t.sidebarOrderAddDivider}
+              </button>
+            </div>
+            )}
+          </FormSection>
         </div>
         <ModalFooter
           note={

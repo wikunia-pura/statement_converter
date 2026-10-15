@@ -17,6 +17,7 @@ import { FormField, FormRow, FormSection } from '../components/FormSection';
 import { PodpisKartaUstawienia } from '../components/PodpisKarta';
 import { AI_MODELS, DEFAULT_AI_MODEL } from '../../shared/ai-models';
 import EDeklaracjeUstawienia from '../components/EDeklaracjeUstawienia';
+import { ipcErrorMessage } from '../ipcError';
 
 interface SettingsProps {
   darkMode: boolean;
@@ -116,6 +117,7 @@ const Settings: React.FC<SettingsProps> = ({
       setContractorSortOrder(settings.contractorSortOrder ?? 'name-asc');
     } catch (error) {
       console.error('Error loading data:', error);
+      notify.error(t.setLoadError);
     } finally {
       setIsLoading(false);
     }
@@ -174,7 +176,7 @@ const Settings: React.FC<SettingsProps> = ({
     if (newValue) {
       // First warning
       const firstConfirm = await notify.confirm(
-        `${t.skipApprovalWarningTitle}\n\n${t.skipApprovalWarningMessage}\n\nKliknij OK aby kontynuować lub Anuluj aby wrócić.`
+        `${t.skipApprovalWarningTitle}\n\n${t.skipApprovalWarningMessage}`
       );
       
       if (!firstConfirm) {
@@ -320,7 +322,9 @@ const Settings: React.FC<SettingsProps> = ({
     if (await notify.confirm(t.importConfirm)) {
       try {
         const result = await window.electronAPI.importSettings();
-        if (result.success) {
+        if (result.success && result.imported === 0) {
+          notify.warning(t.importNothing);
+        } else if (result.success) {
           notify.success(t.importSuccess);
           
           // Reload all data and settings
@@ -372,7 +376,10 @@ const Settings: React.FC<SettingsProps> = ({
       // cannot wipe a password the renderer was never shown.
       ...(smtpPassword ? { pass: smtpPassword } : {}),
     });
-    setSmtp((prev) => ({ ...prev, passwordSet: prev.passwordSet || smtpPassword.length > 0 }));
+    // Read back rather than assumed: a new server or login without a new
+    // password clears the stored one, and the field must stop saying "zapisane".
+    const stored = await window.electronAPI.mailingGetSmtp();
+    setSmtp((prev) => ({ ...prev, passwordSet: stored.passwordSet }));
     setSmtpPassword('');
   };
 
@@ -382,7 +389,7 @@ const Settings: React.FC<SettingsProps> = ({
       await persistSmtp();
       notify.success(t.smtpSaved);
     } catch (error: unknown) {
-      notify.error(error instanceof Error ? error.message : t.smtpSaveError);
+      notify.error(ipcErrorMessage(error, t.smtpSaveError));
     } finally {
       setSmtpBusy(false);
     }
@@ -398,7 +405,7 @@ const Settings: React.FC<SettingsProps> = ({
       if (result.ok) notify.success(t.smtpTestOk);
       else notify.error(`${t.smtpTestFailed}: ${result.error}`);
     } catch (error: unknown) {
-      notify.error(error instanceof Error ? error.message : t.smtpTestFailed);
+      notify.error(ipcErrorMessage(error, t.smtpTestFailed));
     } finally {
       setSmtpBusy(false);
     }
@@ -463,7 +470,7 @@ const Settings: React.FC<SettingsProps> = ({
         notify.error(`${t.setInstallerError}: ${result.error}`);
       }
     } catch (error) {
-      notify.error(`${t.setInstallerError}: ${error instanceof Error ? error.message : String(error)}`);
+      notify.error(`${t.setInstallerError}: ${ipcErrorMessage(error, t.errorUnexpected)}`);
     } finally {
       unsubscribe?.();
       setInstallerProgress(null);
@@ -478,6 +485,11 @@ const Settings: React.FC<SettingsProps> = ({
         notify.success(`${t.backupCreated} (${formatBackupCounts(result.counts)})`, {
           file: result.filePath,
         });
+        // Left out because their table does not exist yet — said out loud, so
+        // nobody takes the file for a full copy of those modules.
+        if (result.skippedSections?.length) {
+          notify.warning(t.backupSkippedSections.replace('{sections}', result.skippedSections.join(', ')));
+        }
       } else if (result.error) {
         notify.error(`${t.backupError}: ${result.error}`);
       }
@@ -496,12 +508,17 @@ const Settings: React.FC<SettingsProps> = ({
       const result = await window.electronAPI.backupRestore();
       if (result.success) {
         notify.success(`${t.backupRestored} (${formatBackupCounts(result.counts)})`);
+        if (result.skippedSections?.length) {
+          notify.warning(t.backupRestoreSkippedSections.replace('{sections}', result.skippedSections.join(', ')));
+        }
         // Restored settings may change theme/language/folders — re-sync like settings import.
         await loadData();
         const settings = await window.electronAPI.getSettings();
         if (settings.darkMode !== darkMode) onDarkModeChange(settings.darkMode);
         if (settings.language !== language) onLanguageChange(settings.language);
         onSettingsRestored?.();
+      } else if (result.missingSections?.length) {
+        notify.error(t.backupRestoreSafetyIncomplete.replace('{sections}', result.missingSections.join(', ')));
       } else if (result.error) {
         notify.error(`${t.backupError}: ${result.error}`);
       }
@@ -544,7 +561,7 @@ const Settings: React.FC<SettingsProps> = ({
             type="button"
             className="button button-ghost button-icon icon-danger"
             onClick={onClear}
-            title={clearTitle}
+            data-tip={clearTitle}
             aria-label={clearTitle}
           >
             <Icon name="x" size={15} />
@@ -671,7 +688,7 @@ const Settings: React.FC<SettingsProps> = ({
           title={t.notifTitle}
           description={t.notifIntro}
           aside={
-            <button type="button" className="button button-small button-subtle" onClick={() => void handleSendTestNotification()} title={t.notifTestDesc}>
+            <button type="button" className="button button-small button-subtle" onClick={() => void handleSendTestNotification()} data-tip={t.notifTestDesc}>
               <Icon name="bell" size={13} /> {t.notifTestButton}
             </button>
           }
@@ -699,14 +716,14 @@ const Settings: React.FC<SettingsProps> = ({
                           <button
                             type="button"
                             className="button button-small button-subtle"
-                            title={t.notifTestMaterialyHint}
+                            data-tip={t.notifTestMaterialyHint}
                             onClick={() => void handleSendTestMaterialy(materialyTestKrok[def.id]!)}
                           >
                             <Icon name="bell" size={13} /> {t.notifTestButton}
                           </button>
                         )}
                         {def.locked && <span className="form-section__badge is-neutral">{t.notifAlwaysOn}</span>}
-                        <label className="toggle-switch" title={def.locked ? t.notifAlwaysOn : undefined}>
+                        <label className="toggle-switch" data-tip={def.locked ? t.notifAlwaysOn : undefined}>
                           <input
                             type="checkbox"
                             checked={isNotificationEnabled(notificationPrefs, def.id)}
@@ -816,7 +833,7 @@ const Settings: React.FC<SettingsProps> = ({
               className="button button-secondary"
               onClick={handleDownloadInstaller}
               disabled={installerProgress !== null}
-              title={t.setDownloadInstallerHint}
+              data-tip={t.setDownloadInstallerHint}
             >
               <Icon name="download" size={14} />{' '}
               {installerProgress !== null
@@ -832,7 +849,7 @@ const Settings: React.FC<SettingsProps> = ({
                   console.log('Log file:', result.logPath);
                 }
               }}
-              title={t.setShowLogsHint}
+              data-tip={t.setShowLogsHint}
             >
               <Icon name="clipboard" size={14} /> {t.setShowLogs}
             </button>
@@ -916,7 +933,7 @@ const Settings: React.FC<SettingsProps> = ({
                     type="email"
                     value={smtp.user}
                     onChange={(e) => setSmtp({ ...smtp, user: e.target.value })}
-                    placeholder="np. biuro@twojafirma.pl"
+                    placeholder={t.smtpUserPlaceholder}
                   />
                 </div>
               </FormField>

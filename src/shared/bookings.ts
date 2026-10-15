@@ -18,6 +18,7 @@
 import { Adres, ConversionHistory, KsiegowaniePlik, KsiegowaniePriorytet, KsiegowanieUwaga } from './types';
 import { adresPartOfOutputPath, sanitizeForFilename } from './outputPaths';
 import { pdfForStatement } from './statement-scan';
+import { normalizeName } from './text';
 
 /* ------------------------------- Months -------------------------------- */
 
@@ -52,11 +53,6 @@ export function monthLabel(key: string, locale: string): string {
 }
 
 /* ---------------------- Attributing rows to addresses ------------------- */
-
-/** Case- and whitespace-insensitive; diacritics are kept (they distinguish names). */
-function normalizeName(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ');
-}
 
 interface AdresIndex {
   byId: Map<number, Adres>;

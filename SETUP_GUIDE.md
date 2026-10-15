@@ -85,29 +85,22 @@ config/
   converters.yml         # Available converters
 
 src/converters/santander-xml/
-  index.ts              # Main orchestrator
+  index.ts              # Converter (extends BaseConverter)
   parser.ts             # XML parser
   regex-extractor.ts    # Pattern matching
-  ai-extractor.ts       # AI extraction
-  cache.ts              # Caching system
+  csv-exporter.ts       # Accounting output
   types.ts              # TypeScript interfaces
 
-examples/
-  quick-test.ts         # Test without AI
-  santander-converter-example.ts  # Full example
-  debug-regex.ts        # Debug patterns
+src/shared/
+  ai-extractor.ts       # AI extraction (all converters)
+  extraction-cache.ts   # Caching system
 ```
 
 ## 🧪 Testing
 
-**Test without AI (free):**
 ```bash
-npx ts-node examples/quick-test.ts
-```
-
-**Test with AI:**
-```bash
-npx ts-node examples/santander-converter-example.ts
+npm test                    # unit tests (synthetic data, no AI, no network)
+npm run eval:lokal-cases    # apartment-number regression cases
 ```
 
 ## 💰 Cost Optimization

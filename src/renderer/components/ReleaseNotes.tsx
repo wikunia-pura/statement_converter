@@ -8,6 +8,7 @@ import {
   ReleaseHighlight,
   loc,
 } from '../../shared/release-notes';
+import { localeOf } from '../../shared/format';
 
 type IconName = React.ComponentProps<typeof Icon>['name'];
 
@@ -30,7 +31,7 @@ function kindLabel(kind: HighlightKind, language: Language): string {
 function formatDate(iso: string, language: Language): string {
   const d = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(language === 'pl' ? 'pl-PL' : 'en-GB', {
+  return d.toLocaleDateString(localeOf(language), {
     day: 'numeric',
     month: 'long',
     year: 'numeric',

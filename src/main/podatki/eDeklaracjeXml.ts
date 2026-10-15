@@ -5,14 +5,42 @@
  * positions appear, in which order — live in pitXml.ts and citXml.ts.
  */
 
+/**
+ * Text for an element or an attribute. The C0 control characters XML 1.0 forbids (all but tab, LF, CR) are
+ * dropped: one pasted into a name would make the file unparseable — after the card has signed it.
+ */
 const esc = (s: string): string =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  s
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+/**
+ * Every amount position of the forms filed here (CIT-8, PIT-11, PIT-4R) is a non-negative type. A negative
+ * one is refused here, before the signing: the forms' own checks (`problemyCIT8Xml`) name the position first.
+ */
+const nieujemna = (grosze: number, x: number): void => {
+  if (grosze < 0) {
+    throw new Error(`Kwota ${x.toFixed(2)} zł jest ujemna, a pola kwot e-Deklaracji przyjmują tylko kwoty nieujemne.`);
+  }
+};
 
 /** Two decimals, a dot: "1234.50" ("TKwota2Nieujemna"). */
-export const kwota2 = (x: number): string => (Math.round(x * 100 + 1e-7) / 100).toFixed(2);
+export const kwota2 = (x: number): string => {
+  const grosze = Math.round(x * 100 + 1e-7);
+  nieujemna(grosze, x);
+  return (grosze / 100).toFixed(2);
+};
 
 /** Whole złoty: "77" ("TKwotaCNieujemna"). */
-export const kwotaC = (x: number): string => String(Math.round(x));
+export const kwotaC = (x: number): string => {
+  const zl = Math.round(x);
+  nieujemna(zl, x);
+  return String(zl);
+};
 
 export interface Wezel {
   nazwa: string;

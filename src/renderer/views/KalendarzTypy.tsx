@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Spotkanie, SpotkanieTyp } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { ipcErrorMessage } from '../ipcError';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
 import { FormField, FormSection, RequiredNote } from '../components/FormSection';
@@ -11,6 +12,7 @@ import {
   TYP_COLORS,
   normalizeHexColor,
 } from '../../shared/calendar';
+import { normalizeName } from '../../shared/text';
 
 interface Props {
   language: Language;
@@ -23,11 +25,6 @@ interface TypFormData {
   opis: string;
   /** Days before the meeting its documents are due; null = this kind has no rule. */
   dniNaDokumenty: number | null;
-}
-
-/** Case- and whitespace-insensitive, so "Zebranie" and "zebranie " clash. */
-function normalizeName(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 interface TypFormModalProps {
@@ -146,7 +143,7 @@ const TypFormModal: React.FC<TypFormModalProps> = ({
                     onClick={() => setKolor(option)}
                     aria-pressed={kolor === option}
                     aria-label={option}
-                    title={option}
+                    data-tip={option}
                   />
                 ))}
                 {/* The palette covers the common case; the native picker is there
@@ -157,7 +154,7 @@ const TypFormModal: React.FC<TypFormModalProps> = ({
                   value={kolor}
                   onChange={(e) => setKolor(e.target.value)}
                   aria-label={t.kalTypColorCustom}
-                  title={t.kalTypColorCustom}
+                  data-tip={t.kalTypColorCustom}
                 />
               </div>
             </FormField>
@@ -289,7 +286,7 @@ const KalendarzTypy: React.FC<Props> = ({ language }) => {
       setFormState(null);
       await load();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(ipcErrorMessage(err, t.errorUnexpected));
     } finally {
       setIsSaving(false);
     }
@@ -307,7 +304,7 @@ const KalendarzTypy: React.FC<Props> = ({ language }) => {
       if (formState?.editing?.id === typ.id) setFormState(null);
       await load();
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : 'Unknown error');
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
     }
   };
 
@@ -398,7 +395,7 @@ const KalendarzTypy: React.FC<Props> = ({ language }) => {
                         className="button button-ghost button-icon icon-danger"
                         onClick={() => handleDelete(typ)}
                         disabled={isSaving}
-                        title={t.delete}
+                        data-tip={t.delete}
                         aria-label={`${t.delete}: ${typ.nazwa}`}
                       >
                         <Icon name="trash" size={15} />

@@ -8,6 +8,8 @@
 
 import * as iconv from 'iconv-lite';
 import { MT940Statement, MT940Transaction } from './types';
+import { DroppedStatementLine } from '../../shared/types';
+import { line61Excerpt, parseLine61, walkMt940Entries } from '../shared/mt940';
 
 export class PKOBPMT940Parser {
   /**
@@ -46,9 +48,10 @@ export class PKOBPMT940Parser {
     const closingBalance = this.parseBalance(closingBalanceStr);
     const availableBalance = availableBalanceStr ? this.parseBalance(availableBalanceStr) : undefined;
     
-    // Parse transactions
-    const transactions = this.parseTransactions(fields);
-    
+    // Parse transactions — walked in file order, see shared/mt940
+    const dropped: DroppedStatementLine[] = [];
+    const transactions = this.parseTransactions(cleanedContent, dropped);
+
     return {
       reference,
       accountIBAN,
@@ -57,6 +60,7 @@ export class PKOBPMT940Parser {
       closingBalance,
       availableBalance,
       transactions,
+      dropped,
     };
   }
 
@@ -155,24 +159,19 @@ export class PKOBPMT940Parser {
   }
 
   /**
-   * Parse transactions from :61: and :86: fields
+   * Parse transactions: each :61: with the :86: that follows it in the file. A
+   * line that cannot be read is recorded in `dropped`, never skipped silently.
    */
-  private parseTransactions(fields: Map<string, string[]>): MT940Transaction[] {
-    const field61s = fields.get(':61:') || [];
-    const field86s = fields.get(':86:') || [];
-    
+  private parseTransactions(content: string, dropped: DroppedStatementLine[]): MT940Transaction[] {
     const transactions: MT940Transaction[] = [];
-    
-    for (let i = 0; i < field61s.length; i++) {
-      const field61 = field61s[i];
-      const field86 = i < field86s.length ? field86s[i] : '';
-      
-      const transaction = this.parseTransaction(field61, field86);
+
+    for (const entry of walkMt940Entries(content)) {
+      const transaction = this.parseTransaction(entry.field61, entry.field86s.join('\n'), dropped);
       if (transaction) {
         transactions.push(transaction);
       }
     }
-    
+
     return transactions;
   }
 
@@ -184,31 +183,28 @@ export class PKOBPMT940Parser {
    * 
    * :86: format: Multiple lines with ~ prefixes
    */
-  private parseTransaction(field61: string, field86: string): MT940Transaction | null {
+  private parseTransaction(
+    field61: string,
+    field86: string,
+    dropped: DroppedStatementLine[]
+  ): MT940Transaction | null {
     try {
-      // Parse :61: field
-      const valueDate = field61.substring(0, 6); // YYMMDD
-      const entryDate = field61.substring(6, 10); // MMDD
-      const debitCredit = field61[10] as 'D' | 'C';
-      
-      // Find amount (ends before transaction type code - usually starts with 'N')
-      let amountEndPos = 11;
-      while (amountEndPos < field61.length && !/[A-Z]/.test(field61[amountEndPos])) {
-        amountEndPos++;
+      // Parse :61: field (shared reader: funds code, storno mark, strict amount)
+      const line61 = parseLine61(field61);
+      if (!line61) {
+        dropped.push({ excerpt: line61Excerpt(field61), reason: 'structure' });
+        return null;
       }
-      const amountStr = field61.substring(11, amountEndPos);
-      const amount = this.parseAmount(amountStr);
-      
-      // Transaction type (e.g., "NU13", "NG04", "N188")
-      let typeEndPos = amountEndPos;
-      while (typeEndPos < field61.length && field61[typeEndPos] !== 'N') {
-        typeEndPos++;
+      if (line61.amount === null) {
+        dropped.push({ excerpt: line61Excerpt(field61), reason: 'amount' });
+        return null;
       }
-      if (typeEndPos === field61.length) typeEndPos = amountEndPos;
-      typeEndPos += 4; // Usually 4 chars (e.g., "NU13")
-      if (typeEndPos > field61.length) typeEndPos = field61.length;
-      
-      const transactionType = field61.substring(amountEndPos, Math.min(typeEndPos, field61.length));
+      const { valueDate, entryDate, debitCredit, reversal, amount, rest } = line61;
+
+      // Transaction type (e.g., "NU13", "NG04", "N188"): from the amount to the
+      // first 'N', plus the 4 characters it starts.
+      const nPos = rest.indexOf('N');
+      const transactionType = rest.substring(0, Math.min((nPos === -1 ? 0 : nPos) + 4, rest.length));
       
       // Reference (after "NONREF//")
       const refMatch = field61.match(/NONREF\/\/(.+)/);
@@ -221,6 +217,7 @@ export class PKOBPMT940Parser {
         valueDate,
         entryDate,
         debitCredit,
+        ...(reversal ? { reversal } : {}),
         amount,
         transactionType,
         reference,
@@ -232,6 +229,7 @@ export class PKOBPMT940Parser {
       };
     } catch (error) {
       console.error('Error parsing transaction:', error);
+      dropped.push({ excerpt: line61Excerpt(field61), reason: 'error' });
       return null;
     }
   }
@@ -282,6 +280,7 @@ export class PKOBPMT940Parser {
       bankCode: details['30'] || '',
       accountNumber: details['31'] || '',
       counterpartyName: counterpartyParts.join(''), // No space between ~32 and ~33
+      counterpartyNameParts: counterpartyParts,
       counterpartyIBAN: details['38'] || '',
       transactionDate: details['60'] || '',
       additionalInfo: details['63'] || '',
@@ -310,11 +309,20 @@ export class PKOBPMT940Parser {
         return false;
       }
 
-      // Skip transfers into an individual virtual sub-account (~63 field starts with
-      // "SWRK ..."). These are reconciled through a separate track outside this app.
+      // Skip residents' payments into their individual virtual sub-accounts (~63
+      // field starts with "SWRK ..."). Those credits are booked from the bank's
+      // SWRK deposit files, which the Scalanie wpłat module merges (a byte-for-byte
+      // concatenation of inbound-payment files — it reads no debits). Credits
+      // only, as the filter was introduced for (7.2.0: "wpłaty na indywidualne
+      // rachunki wirtualne"): a debit is money leaving the community's account,
+      // no deposit file carries it, and skipping it would leave a hole in the
+      // books that nothing fills. Such a debit is kept and held for review
+      // instead (see PKOBPMT940Converter.holdReason), so it is neither silent
+      // nor booked unseen.
       // Default on: omitting the option (or passing anything but `false`) still filters.
       if (
         options.skipVirtualAccountTransfers !== false &&
+        trn.debitCredit === 'C' &&
         trn.details.additionalInfo.trim().toUpperCase().startsWith('SWRK')
       ) {
         return false;

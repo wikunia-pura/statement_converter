@@ -5,6 +5,10 @@
 
 import { parseStringPromise } from 'xml2js';
 import { XmlStatement, XmlTransaction } from './types';
+import { DroppedStatementLine } from '../../shared/types';
+
+/** A Santander amount: optional minus, digits, optional dot and decimals. */
+const AMOUNT = /^-?\d+(?:\.\d+)?$/;
 
 export class SantanderXmlParser {
   /**
@@ -45,6 +49,7 @@ export class SantanderXmlParser {
       });
 
       const statement = result.statement;
+      const dropped: DroppedStatementLine[] = [];
 
       return {
         bankName: statement['bank-unit']?.['bank-name'] || '',
@@ -54,7 +59,8 @@ export class SantanderXmlParser {
         endDate: statement.stmt?.end || '',
         beginValue: parseFloat(statement.stmt?.['begin-value'] || '0'),
         endValue: parseFloat(statement.stmt?.['end-value'] || '0'),
-        transactions: this.parseTransactions(statement.transactions),
+        transactions: this.parseTransactions(statement.transactions, dropped),
+        dropped,
       };
     } catch (error) {
       throw new Error(`Failed to parse XML: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -64,7 +70,7 @@ export class SantanderXmlParser {
   /**
    * Parse transactions array from XML
    */
-  private parseTransactions(transactionsNode: any): XmlTransaction[] {
+  private parseTransactions(transactionsNode: any, dropped: DroppedStatementLine[]): XmlTransaction[] {
     if (!transactionsNode || !transactionsNode.trn) {
       return [];
     }
@@ -73,16 +79,28 @@ export class SantanderXmlParser {
       ? transactionsNode.trn
       : [transactionsNode.trn];
 
-    return trnArray.map((trn: any) => ({
-      trnCode: trn['trn-code'] || '',
-      exeDate: trn['exe-date'] || '',
-      creatDate: trn['creat-date'] || '',
-      value: parseFloat(trn.value || '0'),
-      accValue: parseFloat(trn['acc-value'] || '0'),
-      realValue: parseFloat(trn['real-value'] || '0'),
-      descBase: trn['desc-base'] || '',
-      descOpt: trn['desc-opt'] || '',
-    }));
+    const transactions: XmlTransaction[] = [];
+    for (const trn of trnArray) {
+      // `value` is the booked amount and decides income vs. expense, so it must
+      // read exactly: parseFloat turned a missing value into 0,00 and "12,50"
+      // into 12. Such a <trn> is reported instead.
+      const valueText = String(trn.value ?? '').trim();
+      if (!AMOUNT.test(valueText)) {
+        dropped.push({ excerpt: `${trn['exe-date'] || ''} ${valueText}`.trim() || '<trn>', reason: 'amount' });
+        continue;
+      }
+      transactions.push({
+        trnCode: trn['trn-code'] || '',
+        exeDate: trn['exe-date'] || '',
+        creatDate: trn['creat-date'] || '',
+        value: Number(valueText),
+        accValue: parseFloat(trn['acc-value'] || '0'),
+        realValue: parseFloat(trn['real-value'] || '0'),
+        descBase: trn['desc-base'] || '',
+        descOpt: trn['desc-opt'] || '',
+      });
+    }
+    return transactions;
   }
 
   /**

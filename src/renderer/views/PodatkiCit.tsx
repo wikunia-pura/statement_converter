@@ -38,6 +38,7 @@ import {
   problemTylkoXml,
   problemyCIT8,
   problemyCIT8Xml,
+  problemyTylkoXmlCIT8,
   pozycjeZeSprawozdania,
   regulaDlaNazwy,
   uzupelnijDomyslne,
@@ -58,12 +59,18 @@ import { formatStamp } from '../../shared/calendar';
 import { nazwaUrzedu, urzedyOpcje } from '../../shared/pit-urzedy';
 import SearchableSelect from '../components/SearchableSelect';
 import {
+  BlokadaWysylki,
   EDeklaracjeSrodowisko,
   EDeklaracjeWysylka,
+  blokadaDoPotwierdzenia,
+  blokadyWysylkiProd,
   czekaNaUpo,
+  moznaPorzucic,
+  niepewnaOtwarta,
   normalizeSrodowisko,
   ostatniaWysylka,
   swiezaWysylka,
+  wTrakcieWysylania,
 } from '../../shared/e-deklaracje';
 import Tip from '../components/Tip';
 import { AiWorking } from '../components/AiPanel';
@@ -77,6 +84,8 @@ import { PodpisKartaModal, PodpiszTezPdf, bezPrefiksu } from '../components/Podp
 import { SprawozdaniePodglad } from '../components/ZebranieSprawozdanie';
 import ScreenTitle from '../components/ScreenTitle';
 import { useNavItem } from '../navigation';
+import { structuralEqual } from '../structuralEqual';
+import { useRequestSeq } from '../hooks/useRequestSeq';
 import Icon from '../components/Icon';
 import Loader, { BusyOverlay } from '../components/Loader';
 import Select from '../components/Select';
@@ -145,6 +154,8 @@ function problemText(t: T, p: ProblemCit8, rok: number): string {
       return t.citProblem_urzad;
     case 'korekta':
       return t.citProblem_korekta;
+    case 'ujemna':
+      return t.citProblem_ujemna.replace('{poz}', p.pozycje.join(', '));
     case 'sprawozdanie':
       return t.citProblem_sprawozdanie.replace('{rok}', String(rok));
     case 'okres':
@@ -195,14 +206,30 @@ const WyslijOpcja: React.FC<{ t: T; checked: boolean; onChange: (v: boolean) => 
   );
 };
 
-/** The return's sends to the gateway, newest first — a send with its UPO offers it for download. */
-const WysylkiLista: React.FC<{ t: T; locale: string; id: number; wysylki: EDeklaracjeWysylka[] }> = ({
+/** A send's state badge: the gateway's stage, or what the app could not settle and a person did. */
+function etapWysylki(t: T, w: EDeklaracjeWysylka): { text: string; klasa: string } {
+  if (w.rozstrzygnieta?.jak === 'nie_dotarla') return { text: t.citEtap_nieDotarla, klasa: 'status-neutral' };
+  if (w.rozstrzygnieta?.jak === 'dotarla') return { text: t.citEtap_dotarla, klasa: 'status-success' };
+  if (w.rozstrzygnieta?.jak === 'porzucona') return { text: t.citEtap_porzucona, klasa: 'status-neutral' };
+  if (wTrakcieWysylania(w)) return { text: t.citEtap_wysylanie, klasa: 'status-pending' };
+  const niepewna = niepewnaOtwarta(w);
+  return { text: etapWysylkiText(t, w.status, w.refId, niepewna), klasa: klasaEtapu(w.status, w.refId, niepewna) };
+}
+
+/**
+ * The return's sends to the gateway, newest first — a send with its UPO offers it for download. A send the
+ * app could not settle offers the person's decision: an uncertain one (no answer — it may have been filed)
+ * did not or did reach the gateway; one stuck "in progress" is no longer waited for.
+ */
+const WysylkiLista: React.FC<{ t: T; locale: string; id: number; wysylki: EDeklaracjeWysylka[]; onZmiana: () => void }> = ({
   t,
   locale,
   id,
   wysylki,
+  onZmiana,
 }) => {
   const notify = useNotify();
+  const [busy, setBusy] = useState<string | null>(null);
   const pobierz = async (refId: string) => {
     try {
       const { filePath } = await window.electronAPI.pobierzUpoCit(id, refId);
@@ -211,14 +238,37 @@ const WysylkiLista: React.FC<{ t: T; locale: string; id: number; wysylki: EDekla
       notify.error(bezPrefiksu(err), t.citUpoError);
     }
   };
+  const rozstrzygnij = async (w: EDeklaracjeWysylka, jak: 'nie_dotarla' | 'dotarla' | 'porzucona') => {
+    const pytanie =
+      jak === 'nie_dotarla'
+        ? t.citResolveNotArrivedConfirm
+        : jak === 'dotarla'
+          ? t.citResolveArrivedConfirm
+          : t.citResolveAbandonConfirm.replace('{ref}', w.refId ?? '—');
+    if (!(await notify.confirm(pytanie, { danger: jak !== 'dotarla' }))) return;
+    setBusy(w.at);
+    try {
+      await window.electronAPI.rozstrzygnijWysylkeCit(id, w.at, jak);
+      notify.success(t.citResolveDone);
+      onZmiana();
+    } catch (err: unknown) {
+      notify.error(bezPrefiksu(err), t.citResolveError);
+    } finally {
+      setBusy(null);
+    }
+  };
   return (
   <ul className="cit-wysylki">
-    {[...wysylki].reverse().slice(0, 6).map((w, i) => (
+    {/* The six newest — and every unsettled uncertain one: it may block the return, its buttons must show. */}
+    {[...wysylki].reverse().filter((w, i) => i < 6 || niepewnaOtwarta(w)).map((w, i) => {
+      const etap = etapWysylki(t, w);
+      const doRozstrzygniecia = niepewnaOtwarta(w) && !wTrakcieWysylania(w);
+      return (
       <li key={`${w.at}${i}`}>
         <span className={`status-badge ${w.srodowisko === 'prod' ? 'status-accent' : 'status-info'}`}>
           {w.srodowisko === 'prod' ? t.citEnvProd : t.citEnvTest}
         </span>
-        <span className={`status-badge ${klasaEtapu(w.status, w.refId)}`}>{etapWysylkiText(t, w.status, w.refId)}</span>
+        <span className={`status-badge ${etap.klasa}`}>{etap.text}</span>
         <span>{formatStamp(w.at, locale)} · {w.by || '—'}</span>
         <span className="cit-wysylki__ref">{w.refId ? t.citSendRef.replace('{ref}', w.refId) : t.citSendNoRef}</span>
         {w.upo && w.refId && (
@@ -226,11 +276,48 @@ const WysylkiLista: React.FC<{ t: T; locale: string; id: number; wysylki: EDekla
             <Icon name="download" size={13} /> {t.citUpoDownload}
           </button>
         )}
+        {doRozstrzygniecia && (
+          <>
+            <button
+              type="button"
+              className="button button-small button-secondary"
+              disabled={busy !== null}
+              onClick={() => void rozstrzygnij(w, 'nie_dotarla')}
+            >
+              <Icon name="refresh" size={13} /> {t.citResolveNotArrived}
+            </button>
+            <button
+              type="button"
+              className="button button-small button-secondary"
+              disabled={busy !== null}
+              onClick={() => void rozstrzygnij(w, 'dotarla')}
+            >
+              <Icon name="check" size={13} /> {t.citResolveArrived}
+            </button>
+          </>
+        )}
+        {moznaPorzucic(w) && (
+          <button
+            type="button"
+            className="button button-small button-ghost"
+            disabled={busy !== null}
+            onClick={() => void rozstrzygnij(w, 'porzucona')}
+          >
+            <Icon name="x" size={13} /> {t.citResolveAbandon}
+          </button>
+        )}
+        {doRozstrzygniecia && <span className="cit-wysylki__opis">{t.citResolveHint}</span>}
         {czekaNaUpo(w) && swiezaWysylka(w) && <span className="cit-wysylki__opis">{t.citUpoAuto}</span>}
         {w.opis && <span className="cit-wysylki__opis">{w.opis}</span>}
         {w.sprawdzono && <span className="cit-wysylki__opis">{t.citSendChecked.replace('{when}', formatStamp(w.sprawdzono, locale))}</span>}
+        {w.rozstrzygnieta && (
+          <span className="cit-wysylki__opis">
+            {t.citSettledBy.replace('{who}', w.rozstrzygnieta.by || '—').replace('{when}', formatStamp(w.rozstrzygnieta.at, locale))}
+          </span>
+        )}
       </li>
-    ))}
+      );
+    })}
   </ul>
   );
 };
@@ -264,6 +351,42 @@ async function sprawdzUpo(
     notify.error(bezPrefiksu(err), t.citUpoError);
     return null;
   }
+}
+
+/** A correction's hold-up in the window's words. */
+const blokadaText = (t: T, b: BlokadaWysylki): string =>
+  b.kod === 'korektaCzeka'
+    ? t.citBlokada_korektaCzeka.replace('{ref}', 'refId' in b ? b.refId : '—')
+    : t.citBlokada_korektaPrzyjeta.replace('{ref}', 'refId' in b ? b.refId : '—');
+
+/**
+ * Before a signing run that sends: the corrections an earlier production send holds back — one still waiting
+ * for its UPO, or an earlier correction that reached the gateway — are named and the person decides, before
+ * anything is signed. Only for the production gateway (the test one files nothing). The ids confirmed go to
+ * the run; a correction left unconfirmed is signed but not sent, and the summary says why.
+ */
+async function potwierdzKorekty(
+  t: T,
+  notify: ReturnType<typeof useNotify>,
+  rekordy: PodatekCit[],
+  wyslij: boolean,
+): Promise<number[]> {
+  if (!wyslij) return [];
+  const doPotwierdzenia = rekordy
+    .filter((r) => r.dane.cel === 2)
+    .map((r) => ({ r, blokady: blokadyWysylkiProd(r.dane).filter(blokadaDoPotwierdzenia) }))
+    .filter((x) => x.blokady.length > 0);
+  if (doPotwierdzenia.length === 0) return [];
+  const settings = await window.electronAPI.getSettings();
+  if (normalizeSrodowisko(settings.eDeklaracjeSrodowisko) !== 'prod') return [];
+  const lista = doPotwierdzenia
+    .map(({ r, blokady }) => `${r.adresNazwa}: ${blokady.map((b) => blokadaText(t, b)).join('; ')}`)
+    .join('\n');
+  const ok = await notify.confirm(t.citCorrectionConfirm.replace('{list}', lista), {
+    title: t.citCorrectionConfirmTitle,
+    confirmLabel: t.citCorrectionConfirmYes,
+  });
+  return ok ? doPotwierdzenia.map(({ r }) => r.id) : [];
 }
 
 /** A button's hover hint in the app's own tooltip — none when there is nothing to say. */
@@ -572,7 +695,7 @@ const PrzegladSlownika: React.FC<{
                         </Tip>
                       </div>
                     </td>
-                    <td className="zfin-num">{nazwaInterEj(p.nazwa) ? '—' : formatKwota(p.kwota)}</td>
+                    <td className="zfin-num">{p.kwotaUkryta || nazwaInterEj(p.nazwa) ? '—' : formatKwota(p.kwota)}</td>
                     <td className="cit-pos__category">
                       <Select
                         overlay
@@ -697,6 +820,7 @@ const SlownikModal: React.FC<{
           strona: p.strona,
           sekcja: p.sekcja,
           kwota: p.kwota,
+          ukryta: p.kwotaUkryta,
           regula: regulaDlaNazwy(p.nazwa, p.strona, aktywne)?.kategoria,
         })),
         // No dictionary as examples: the rules are what is being checked.
@@ -791,7 +915,7 @@ const SlownikModal: React.FC<{
     try {
       // The modal's rules as they stand, unsaved ones included, are the examples to follow.
       const { propozycje, zapasowy } = await window.electronAPI.klasyfikujCitAi(
-        cele.map((p) => ({ klucz: p.klucz, nazwa: p.nazwa, strona: p.strona, sekcja: p.sekcja, kwota: p.kwota })),
+        cele.map((p) => ({ klucz: p.klucz, nazwa: p.nazwa, strona: p.strona, sekcja: p.sekcja, kwota: p.kwota, ukryta: p.kwotaUkryta })),
         aktywne,
       );
       if (zapasowy) notify.warning(t.citAiFallback);
@@ -1078,7 +1202,7 @@ const SlownikModal: React.FC<{
                       className="button button-icon button-ghost"
                       onClick={() => move(index, -1)}
                       disabled={index === 0 || tab === 'bez'}
-                      title={t.citDictMoveUp}
+                      data-tip={t.citDictMoveUp}
                       aria-label={t.citDictMoveUp}
                     >
                       <Icon name="arrow-up" size={13} />
@@ -1088,7 +1212,7 @@ const SlownikModal: React.FC<{
                       className="button button-icon button-ghost"
                       onClick={() => move(index, 1)}
                       disabled={index === rules.length - 1 || tab === 'bez'}
-                      title={t.citDictMoveDown}
+                      data-tip={t.citDictMoveDown}
                       aria-label={t.citDictMoveDown}
                     >
                       <Icon name="arrow-down" size={13} />
@@ -1097,7 +1221,7 @@ const SlownikModal: React.FC<{
                       type="button"
                       className="button button-icon button-ghost icon-danger"
                       onClick={() => setRules((prev) => prev.filter((x) => x.id !== r.id))}
-                      title={t.citDictRemove}
+                      data-tip={t.citDictRemove}
                       aria-label={t.citDictRemove}
                     >
                       <Icon name="trash" size={13} />
@@ -1425,7 +1549,7 @@ const PozycjeSekcja: React.FC<{
     setAiBusy(true);
     try {
       const { propozycje, zapasowy } = await window.electronAPI.klasyfikujCitAi(
-        cele.map((p) => ({ klucz: p.klucz, nazwa: p.nazwa, strona: p.strona, sekcja: p.sekcja, kwota: p.kwota })),
+        cele.map((p) => ({ klucz: p.klucz, nazwa: p.nazwa, strona: p.strona, sekcja: p.sekcja, kwota: p.kwota, ukryta: p.kwotaUkryta })),
         slownik,
       );
       if (zapasowy) notify.warning(t.citAiFallback);
@@ -1604,7 +1728,7 @@ const PozycjeSekcja: React.FC<{
                   return (
                     <tr key={p.klucz} className={open ? 'cit-row--open' : undefined}>
                       <td>
-                        <div className="cit-pos__name" title={p.wierszy > 1 ? t.citRowMerged.replace('{n}', String(p.wierszy)) : undefined}>
+                        <div className="cit-pos__name" data-tip={p.wierszy > 1 ? t.citRowMerged.replace('{n}', String(p.wierszy)) : undefined}>
                           {p.nazwa}
                         </div>
                         <div className="cit-pos__meta">
@@ -1644,7 +1768,7 @@ const PozycjeSekcja: React.FC<{
                               type="button"
                               className="button button-icon button-ghost"
                               onClick={() => zatwierdz([p])}
-                              title={t.citAiAccept}
+                              data-tip={t.citAiAccept}
                               aria-label={`${t.citAiAccept}: ${p.nazwa}`}
                             >
                               <Icon name="check" size={13} />
@@ -1680,7 +1804,7 @@ const PozycjeSekcja: React.FC<{
                               className="button button-icon button-ghost"
                               onClick={() => void zapiszRegule(p)}
                               disabled={ruleBusy !== null}
-                              title={t.citRuleSave}
+                              data-tip={t.citRuleSave}
                               aria-label={`${t.citRuleSave}: ${p.nazwa}`}
                             >
                               <Icon name={ruleBusy === p.klucz ? 'loader' : 'book'} size={13} />
@@ -1793,7 +1917,13 @@ const WyliczenieSekcja: React.FC<{
 
 /* ================================ One return ================================ */
 
-const snapshot = (d: PodatekCitDane) => JSON.stringify({ ...d, pobrania: [], zlozone: null });
+/**
+ * What "unsaved changes" ignores: downloads and the filing mark are written at
+ * once by their own calls, so they never make the form dirty.
+ */
+const CIT_NIE_EDYCJA = ['pobrania', 'zlozone'] as const;
+/** Whether the form holds what was last loaded or saved — see structuralEqual. */
+const sameDane = (a: PodatekCitDane, b: PodatekCitDane) => structuralEqual(a, b, CIT_NIE_EDYCJA);
 
 /** Months that end a quarter — the only ones quarterly advances use. */
 const KONIEC_KWARTALU = [2, 5, 8, 11];
@@ -1851,7 +1981,7 @@ const ZeznanieScreen: React.FC<{
   const notify = useNotify();
   const [dane, setDane] = useState<PodatekCitDane>(rekord?.dane ?? szkic.dane);
   // A draft counts as unchanged until it is edited, but it can still be saved as it is.
-  const [baseline, setBaseline] = useState(() => snapshot(rekord?.dane ?? szkic.dane));
+  const [baseline, setBaseline] = useState<PodatekCitDane>(() => rekord?.dane ?? szkic.dane);
   const [busy, setBusy] = useState<null | 'save' | 'pdf' | 'xml' | 'delete'>(null);
   const [podpisOpen, setPodpisOpen] = useState(false);
   const [pdfPodpisany, setPdfPodpisany] = useState(false);
@@ -1859,13 +1989,20 @@ const ZeznanieScreen: React.FC<{
   const [upoBusy, setUpoBusy] = useState(false);
   const [podgladOpen, setPodgladOpen] = useState(false);
 
-  const aktualny = useMemo(() => snapshot(dane), [dane]);
-  const dirty = aktualny !== baseline;
-  const pozycje = useMemo(() => pozycjeZeSprawozdania(dane, slownik), [dane, slownik]);
+  // Walks only what an edit replaced — no serializing of the whole return
+  // (attached statement included) on every key pressed.
+  const dirty = useMemo(() => !sameDane(dane, baseline), [dane, baseline]);
+  // The statement's rows and their categories depend on the statement, the
+  // return's own decisions and the dictionary — not on the NIP being typed.
+  const pozycje = useMemo(
+    () => pozycjeZeSprawozdania(dane, slownik),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dane.sprawozdanie, dane.klasyfikacja, slownik],
+  );
   const wynik = useMemo(() => obliczCIT8(dane, pozycje), [dane, pozycje]);
-  const problemy = useMemo(() => problemyCIT8({ rok, dane }, slownik), [rok, dane, slownik]);
+  const problemy = useMemo(() => problemyCIT8({ rok, dane }, slownik, pozycje), [rok, dane, slownik, pozycje]);
   /** The PDF's problems and those only the XML has — the XML is what is filed, and what gets signed. */
-  const problemyXml = useMemo(() => problemyCIT8Xml({ rok, dane }, slownik), [rok, dane, slownik]);
+  const problemyXml = useMemo(() => [...problemy, ...problemyTylkoXmlCIT8({ rok, dane })], [problemy, rok, dane]);
   const wzor = citWzor(rok);
   const canAdd = dane.nip.length === 10 && dane.nazwaPelna.trim() !== '';
   const odswiez = () => {
@@ -1945,7 +2082,7 @@ const ZeznanieScreen: React.FC<{
         ? await window.electronAPI.setPodatekCit(rekord.id, dane)
         : await window.electronAPI.addPodatekCit(adresNazwa, rok, dane);
       setDane(saved.dane);
-      setBaseline(snapshot(saved.dane));
+      setBaseline(saved.dane);
       notify.success(t.podSaved);
       onSaved(saved);
       return true;
@@ -1991,17 +2128,20 @@ const ZeznanieScreen: React.FC<{
    */
   const podpisz = async (wybor: PodpisWybor) => {
     if (!rekord) return;
-    const wynik = await window.electronAPI.podpiszPodatkiCit(rok, [rekord.id], wybor, { pdfPodpisany, wyslij });
+    const potwierdzoneKorekty = await potwierdzKorekty(t, notify, [rekord], wyslij);
+    const wynik = await window.electronAPI.podpiszPodatkiCit(rok, [rekord.id], wybor, { pdfPodpisany, wyslij, potwierdzoneKorekty });
     setPodpisOpen(false);
     const xml = wynik.podpisane.find((p) => p.sciezka.endsWith('.xml'));
     if (xml) {
       notify.success(t.citSigned.replace('{file}', baseName(xml.sciezka)), { file: xml.sciezka });
       const w = wynik.wysylki?.[0];
       if (w) {
-        const tekst = `${t.citSendOption} (${w.srodowisko === 'prod' ? t.citEnvProd : t.citEnvTest}): ${etapWysylkiText(t, w.status, w.refId)}${
+        const tekst = `${t.citSendOption} (${w.srodowisko === 'prod' ? t.citEnvProd : t.citEnvTest}): ${etapWysylkiText(t, w.status, w.refId, w.niepewna)}${
           w.refId ? ` — ${t.citSendRef.replace('{ref}', w.refId)}` : ''
         }${w.opis ? `. ${w.opis}` : ''}`;
-        if (w.refId) notify.success(tekst);
+        // A send whose record was lost, or with no answer at all, is never reported as a success.
+        if (w.niezapisana) notify.error(tekst, t.citSendNotRecordedTitle);
+        else if (w.refId && !w.niepewna) notify.success(tekst);
         else notify.warning(tekst);
       }
       onDownloaded();
@@ -2440,7 +2580,7 @@ const ZeznanieScreen: React.FC<{
               {rekord.dane.wysylki.length === 0 ? (
                 <div className="form-empty">{t.citSendNone}</div>
               ) : (
-                <WysylkiLista t={t} locale={locale} id={rekord.id} wysylki={rekord.dane.wysylki} />
+                <WysylkiLista t={t} locale={locale} id={rekord.id} wysylki={rekord.dane.wysylki} onZmiana={onDownloaded} />
               )}
             </FormSection>
           )}
@@ -2459,7 +2599,7 @@ const ZeznanieScreen: React.FC<{
                     .reverse()
                     .slice(0, 3)
                     .map((p, i) => (
-                      <li key={i} title={p.plik}>
+                      <li key={i} data-tip={p.plik}>
                         {(p.podpis ? t.podPdfHistorySigned.replace('{signer}', p.podpis.podmiot) : t.podPdfHistoryItem)
                           .replace('{when}', formatStamp(p.at, locale))
                           .replace('{who}', p.by || '—')}
@@ -2609,7 +2749,10 @@ const PodatkiCit: React.FC<{ language: Language }> = ({ language }) => {
   /** The row ticked last — the start of a Shift+click range. */
   const lastTickedRef = useRef<number | null>(null);
 
+  /** Overlapping reloads (a save, the UPO automat): only the newest answer lands. */
+  const loadSeq = useRequestSeq();
   const load = async (silent = false) => {
+    const ticket = loadSeq.next();
     if (silent) setIsRefreshing(true);
     else setIsLoading(true);
     try {
@@ -2621,16 +2764,20 @@ const PodatkiCit: React.FC<{ language: Language }> = ({ language }) => {
         window.electronAPI.getZebraniaWspolnoty(),
         window.electronAPI.authGetSession().catch(() => null),
       ]);
+      if (!loadSeq.isLatest(ticket)) return;
       setKto(session?.email ?? '');
       setLista(rows);
       setUstawienia(settings);
       setAdresy(addresses);
       setWspolnoty(communities);
     } catch (err: unknown) {
-      notify.error(bezPrefiksu(err), t.podLoadError);
+      if (loadSeq.isLatest(ticket)) notify.error(bezPrefiksu(err), t.podLoadError);
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      // An older load ending must not end the newer one's loader.
+      if (loadSeq.isLatest(ticket)) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
     }
   };
 
@@ -2670,10 +2817,13 @@ const PodatkiCit: React.FC<{ language: Language }> = ({ language }) => {
   const ocena = useMemo(() => {
     const m = new Map<number, { stan: StanCit; problemy: ProblemCit8[]; wynik: ObliczenieCIT8 }>();
     for (const rek of wRoku) {
+      // One classification of the statement per return, shared by all three.
+      const oceny = pozycjeZeSprawozdania(rek.dane, slownik);
+      const problemy = problemyCIT8Xml(rek, slownik, oceny);
       m.set(rek.id, {
-        stan: stanCit(rek, slownik),
-        problemy: problemyCIT8Xml(rek, slownik),
-        wynik: obliczCIT8(rek.dane, pozycjeZeSprawozdania(rek.dane, slownik)),
+        stan: stanCit(rek, slownik, problemy),
+        problemy,
+        wynik: obliczCIT8(rek.dane, oceny),
       });
     }
     return m;
@@ -3038,7 +3188,8 @@ const PodatkiCit: React.FC<{ language: Language }> = ({ language }) => {
   const podpiszWiele = async (wybor: PodpisWybor) => {
     if (!podpisWiele) return;
     setPostepPodpisu(null);
-    const wynik = await window.electronAPI.podpiszPodatkiCit(rok, podpisWiele, wybor, { pdfPodpisany, wyslij });
+    const potwierdzoneKorekty = await potwierdzKorekty(t, notify, doPodpisu, wyslij);
+    const wynik = await window.electronAPI.podpiszPodatkiCit(rok, podpisWiele, wybor, { pdfPodpisany, wyslij, potwierdzoneKorekty });
     setPodpisWiele(null);
     setPostepPodpisu(null);
     setPodsumowanie({ rok, wynik });
@@ -3168,7 +3319,7 @@ const PodatkiCit: React.FC<{ language: Language }> = ({ language }) => {
                 className="button button-small button-secondary"
                 onClick={() => void utworzZPoprzedniego(w)}
                 disabled={busy !== null}
-                title={t.citRowCarryHint.replace('{rok}', String(wczesniej.rok))}
+                data-tip={t.citRowCarryHint.replace('{rok}', String(wczesniej.rok))}
               >
                 <Icon name="copy" size={13} /> {t.citRowCarry.replace('{rok}', String(wczesniej.rok))}
               </button>
@@ -3201,7 +3352,7 @@ const PodatkiCit: React.FC<{ language: Language }> = ({ language }) => {
         <span className="ksieg-row__select">
           <label
             className={`ks-check${isSelected ? ' is-on' : ''}`}
-            title={t.podSelectFor}
+            data-tip={t.podSelectFor}
             // Shift+click selects a range; without this it also selects text.
             onMouseDown={(e) => {
               if (e.shiftKey) e.preventDefault();
@@ -3232,7 +3383,7 @@ const PodatkiCit: React.FC<{ language: Language }> = ({ language }) => {
               }
             }}
           >
-            <div className="zeb-date pod-kwota" title={t.citSumTax}>
+            <div className="zeb-date pod-kwota" data-tip={t.citSumTax}>
               <span className="pod-kwota__label">{t.podRowTax}</span>
               {kwota ? (
                 <span className={`pod-kwota__value${kwota.size}`}>
@@ -3258,7 +3409,7 @@ const PodatkiCit: React.FC<{ language: Language }> = ({ language }) => {
                 )}
                 {spr ? (
                   <>
-                    <span title={spr.plikNazwa}>
+                    <span data-tip={spr.plikNazwa}>
                       <Icon name="table" size={13} />{' '}
                       {t.citRowStatement
                         .replace('{okres}', okresLabel(spr.dane.okresOd, spr.dane.okresDo))
@@ -3276,13 +3427,13 @@ const PodatkiCit: React.FC<{ language: Language }> = ({ language }) => {
                   rek.dane.zaakceptowanyOkres === okresKlucz(spr.dane) ? (
                     <span className="status-badge status-neutral">{t.citRowPartialAccepted}</span>
                   ) : (
-                    <span className="status-badge status-pending" title={t.citStmtPartial.replace('{rok}', String(rek.rok))}>
+                    <span className="status-badge status-pending" data-tip={t.citStmtPartial.replace('{rok}', String(rek.rok))}>
                       {t.citRowPartial}
                     </span>
                   )
                 )}
                 {!w.adres && (
-                  <span className="pod-meta-warning" title={t.citOrphanHint}>
+                  <span className="pod-meta-warning" data-tip={t.citOrphanHint}>
                     <Icon name="alert-triangle" size={13} /> {t.citOrphanBadge}
                   </span>
                 )}
@@ -3295,11 +3446,11 @@ const PodatkiCit: React.FC<{ language: Language }> = ({ language }) => {
                   </span>
                 )}
                 {wyslana && (
-                  <Tip content={wyslana.opis || etapWysylkiText(t, wyslana.status, wyslana.refId)}>
-                    <span className={`status-badge ${klasaEtapu(wyslana.status, wyslana.refId)}`}>
+                  <Tip content={wyslana.opis || etapWysylki(t, wyslana).text}>
+                    <span className={`status-badge ${etapWysylki(t, wyslana).klasa}`}>
                       {t.citRowSent
                         .replace('{env}', wyslana.srodowisko === 'test' ? ` (${t.citEnvTest})` : '')
-                        .replace('{etap}', etapWysylkiText(t, wyslana.status, wyslana.refId))}
+                        .replace('{etap}', etapWysylki(t, wyslana).text)}
                     </span>
                   </Tip>
                 )}
@@ -3312,7 +3463,7 @@ const PodatkiCit: React.FC<{ language: Language }> = ({ language }) => {
                   className={`status-badge ${
                     stan === 'braki' ? 'status-pending' : stan === 'pobrana' ? 'status-info' : 'status-neutral'
                   }`}
-                  title={problemy.map((p) => problemText(t, p, rek.rok)).join('\n') || undefined}
+                  data-tip={problemy.map((p) => problemText(t, p, rek.rok)).join('\n') || undefined}
                 >
                   {stan === 'braki' ? t.podStatusMissing : stan === 'pobrana' ? t.podStatusDownloaded : t.podStatusReady}
                 </span>
@@ -3325,7 +3476,7 @@ const PodatkiCit: React.FC<{ language: Language }> = ({ language }) => {
                 type="button"
                 className="button button-icon button-ghost"
                 onClick={() => setPodglad(rek)}
-                title={t.citRowPreview}
+                data-tip={t.citRowPreview}
                 aria-label={`${t.citRowPreview}: ${rek.adresNazwa}`}
               >
                 <Icon name="eye" size={14} />
@@ -3412,7 +3563,7 @@ const PodatkiCit: React.FC<{ language: Language }> = ({ language }) => {
             className="ksieg-nav-arrow"
             onClick={() => zmienRok(rok - 1)}
             disabled={rok <= minRok}
-            title={t.podYearPrev}
+            data-tip={t.podYearPrev}
             aria-label={t.podYearPrev}
           >
             <Icon name="chevron-left" size={17} />
@@ -3433,7 +3584,7 @@ const PodatkiCit: React.FC<{ language: Language }> = ({ language }) => {
             className="ksieg-nav-arrow"
             onClick={() => zmienRok(rok + 1)}
             disabled={rok >= maxRok}
-            title={t.podYearNext}
+            data-tip={t.podYearNext}
             aria-label={t.podYearNext}
           >
             <Icon name="chevron-right" size={17} />
@@ -3443,7 +3594,7 @@ const PodatkiCit: React.FC<{ language: Language }> = ({ language }) => {
             className="ksieg-scan-btn"
             onClick={() => void downloadAll(undefined, 'oba')}
             disabled={busy !== null || wRoku.length === 0}
-            title={t.citDownloadAllHint.replace('{rok}', String(rok))}
+            data-tip={t.citDownloadAllHint.replace('{rok}', String(rok))}
           >
             <Icon name={busy === 'all' ? 'loader' : 'download'} size={15} />
             <span>{t.citDownloadAll}</span>
@@ -3461,7 +3612,7 @@ const PodatkiCit: React.FC<{ language: Language }> = ({ language }) => {
             className="ksieg-scan-btn"
             onClick={() => void podepnijZBiblioteki()}
             disabled={busy !== null || wiersze.length === 0}
-            title={t.citStmtBulkHint.replace('{rok}', String(rok))}
+            data-tip={t.citStmtBulkHint.replace('{rok}', String(rok))}
           >
             <Icon name={busy === 'stmt' ? 'loader' : 'paperclip'} size={15} />
             <span>{t.citStmtBulk}</span>
@@ -3471,7 +3622,7 @@ const PodatkiCit: React.FC<{ language: Language }> = ({ language }) => {
             className="ksieg-nav-arrow"
             onClick={() => void load(true)}
             disabled={isRefreshing}
-            title={t.zebraniaRefresh}
+            data-tip={t.zebraniaRefresh}
             aria-label={t.zebraniaRefresh}
           >
             <Icon name="refresh" size={16} />
@@ -3499,7 +3650,7 @@ const PodatkiCit: React.FC<{ language: Language }> = ({ language }) => {
           <Icon name="search" size={15} />
           <input type="text" placeholder={t.podSearch} value={search} onChange={(e) => setSearch(e.target.value)} />
           {search.trim() && (
-            <button type="button" onClick={() => setSearch('')} title={t.close} aria-label={t.close}>
+            <button type="button" onClick={() => setSearch('')} data-tip={t.close} aria-label={t.close}>
               <Icon name="x" size={14} />
             </button>
           )}

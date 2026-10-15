@@ -21,6 +21,7 @@ import {
 } from '../../shared/zebrania';
 import { translations, Language } from '../translations';
 import { useNotify } from './Notifications';
+import { ipcErrorMessage } from '../ipcError';
 import { FormSection } from './FormSection';
 import Icon from './Icon';
 import Loader from './Loader';
@@ -151,7 +152,7 @@ const ZebranieUchwaly: React.FC<{
       await action();
       if (done) notify.success(done);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.uchWriteError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.uchWriteError);
     } finally {
       setBusy(null);
     }
@@ -245,7 +246,7 @@ const ZebranieUchwaly: React.FC<{
       );
       await onChanged();
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.zfinDownloadError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.zfinDownloadError);
     } finally {
       setBusy(null);
     }
@@ -279,7 +280,7 @@ const ZebranieUchwaly: React.FC<{
         file: filePath,
       });
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.zfinDownloadError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.zfinDownloadError);
     } finally {
       setBusy(null);
     }
@@ -303,7 +304,7 @@ const ZebranieUchwaly: React.FC<{
                 className="button button-small button-secondary"
                 onClick={() => void handleDownloadAll()}
                 disabled={busy !== null}
-                title={t.uchDownloadAllHint}
+                data-tip={t.uchDownloadAllHint}
               >
                 <Icon name={busy === 'all' ? 'loader' : 'download'} size={13} /> {t.uchDownloadAll}
               </button>
@@ -312,7 +313,7 @@ const ZebranieUchwaly: React.FC<{
                 className="button button-small button-primary"
                 onClick={() => setPickerOpen(true)}
                 disabled={busy !== null || loadFailed}
-                title={t.uchAddHint}
+                data-tip={t.uchAddHint}
               >
                 <Icon name="plus" size={13} /> {t.uchAdd}
               </button>
@@ -390,7 +391,7 @@ const ZebranieUchwaly: React.FC<{
                       setDrop(null);
                     }}
                   >
-                    <span className="uch-card__grip" aria-hidden="true" title={t.uchDragHint}>
+                    <span className="uch-card__grip" aria-hidden="true" data-tip={t.uchDragHint}>
                       <Icon name="grip" size={16} />
                     </span>
                     <span className="uch-card__lp" aria-hidden="true">
@@ -400,7 +401,7 @@ const ZebranieUchwaly: React.FC<{
                       type="button"
                       className="uch-card__main"
                       onClick={() => setEditingId(r.u.id)}
-                      title={t.uchEdit}
+                      data-tip={t.uchEdit}
                     >
                       <strong className="uch-card__title">{r.tytul}</strong>
                       {r.missing.length > 0 && (
@@ -432,7 +433,7 @@ const ZebranieUchwaly: React.FC<{
                         className="button button-small button-primary"
                         onClick={() => void handlePdf(r)}
                         disabled={rowBusy || busy !== null}
-                        title={
+                        data-tip={
                           r.missing.length > 0
                             ? t.uchMissingFields.replace('{fields}', r.missing.join(', '))
                             : undefined

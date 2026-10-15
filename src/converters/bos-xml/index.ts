@@ -18,6 +18,7 @@ import {
   ParseResult,
   ICsvExporter,
 } from '../../shared/base-converter';
+import type { ReviewHoldReason } from '../../shared/types';
 
 export class BosXmlConverter extends BaseConverter<BosTransaction> {
   private parser: BosXmlParser;
@@ -42,6 +43,7 @@ export class BosXmlConverter extends BaseConverter<BosTransaction> {
     const statement = await this.parser.parse(content);
     return {
       transactions: statement.transactions,
+      dropped: statement.dropped,
       logExtra:
         `IBAN: ${statement.iban}, Period: ${statement.periodStart} – ${statement.periodEnd}, ` +
         `Currency: ${statement.currency}, Entries: ${statement.transactions.length}`,
@@ -55,6 +57,13 @@ export class BosXmlConverter extends BaseConverter<BosTransaction> {
     return this.parser.filterTransactions(transactions, {
       skipNegative: opts.skipNegative,
     });
+  }
+
+  /** A storno (RvslInd) or a batch entry naming several counterparties is held for review. */
+  protected holdReason(transaction: BosTransaction): ReviewHoldReason | null {
+    return transaction.reversal
+      ? 'reversal'
+      : transaction.batchCounterparties ? 'batch-booking' : null;
   }
 
   protected isIncome(transaction: BosTransaction): boolean {

@@ -8,6 +8,7 @@
 
 import { ProcessedTransaction } from './types';
 import { resolveApartmentAccount } from '../../shared/apartment-account';
+import { bankDocNumber, toWin1250Text, yearMonthOf } from '../shared/export-text';
 
 export interface CsvExportOptions {
   separator?: string;
@@ -38,8 +39,9 @@ export class CsvExporter {
     const lines: string[] = [];
     lines.push(this.createHeader());
 
-    const currentMonth = new Date().getMonth() + 1;
-    const docNumber = `BNK/${String(currentMonth).padStart(4, '0')}`;
+    // Document number (BNK/00MM): the month of the statement itself, not the
+    // month the file happens to be converted in — see bankDocNumber.
+    const docNumber = bankDocNumber(transactions.map(t => yearMonthOf(t.original.bookingDate, 'YYYY-MM-DD')));
 
     let position = 1;
 
@@ -369,6 +371,8 @@ export class CsvExporter {
   }
 
   private cleanDescription(description: string): string {
-    return description.trim().replace(/\s+/g, ' ');
+    // Remove extra whitespace and normalize; characters Windows-1250 lacks get
+    // an ASCII spelling instead of the encoder's "?" (see toWin1250Text).
+    return toWin1250Text(description.trim().replace(/\s+/g, ' '));
   }
 }

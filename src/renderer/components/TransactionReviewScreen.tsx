@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { ConversionReviewData, ReviewDecision, TransactionForReview, Kontrahent, KontrahentTyp, ApartmentMapping, ApartmentMappingTarget, ContractorSortOrder, DEFAULT_ACCOUNT_CONFIG } from '../../shared/types';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { ConversionReviewData, ReviewDecision, TransactionForReview, Kontrahent, KontrahentTyp, ApartmentMapping, ApartmentMappingTarget, ContractorSortOrder, DEFAULT_ACCOUNT_CONFIG, DroppedStatementLine, ReviewHoldReason } from '../../shared/types';
 import { composeApartmentAccount, isLetteredApartment, resolveApartmentAccount } from '../../shared/apartment-account';
 import { buildApartmentMapping, mappingTargets } from '../../shared/apartment-mapping';
 import ApartmentTargetsEditor, {
@@ -12,9 +12,28 @@ import { translations, Language } from '../translations';
 import { searchTransactionInPdf, PdfSearchMatch } from '../../shared/pdf-search';
 import { useNotify } from './Notifications';
 import Icon from './Icon';
-import SearchableSelect from './SearchableSelect';
+import SearchableSelect, { SearchableOption } from './SearchableSelect';
 import { ModalFooter, ModalHeader } from './Modal';
 import { FormField, FormRow, FormSection } from './FormSection';
+
+/** Card text for a row held for review whatever it matched. */
+const HOLD_REASON_KEYS = {
+  'reversal': 'revHoldReversal',
+  'batch-booking': 'revHoldBatch',
+  'invalid-account': 'revHoldInvalidAccount',
+  'ai-answer-missing': 'revHoldAiMissing',
+  'glued-name': 'revHoldGluedName',
+  'virtual-account-debit': 'revHoldVirtualAccountDebit',
+} as const satisfies Record<ReviewHoldReason, string>;
+
+/** Why a statement line could not be read, as listed above the review. */
+const DROPPED_REASON_KEYS = {
+  amount: 'revDroppedReasonAmount',
+  structure: 'revDroppedReasonStructure',
+  direction: 'revDroppedReasonDirection',
+  date: 'revDroppedReasonDate',
+  error: 'revDroppedReasonError',
+} as const satisfies Record<DroppedStatementLine['reason'], string>;
 
 // Normalize like AddressMatcher (lowercase + strip Polish diacritics) so we can
 // find which apartment-mapping rule produced a match in the acceptance view.
@@ -51,9 +70,24 @@ const sortKontrahenci = (list: Kontrahent[], order: ContractorSortOrder): Kontra
   }
 };
 
+/** A contractor as a pick-list option, searchable by name, alternative spellings, NIP and account. */
+const contractorOption = (k: Kontrahent): SearchableOption => ({
+  value: String(k.id),
+  label: k.kontoKontrahenta ? `${k.nazwa} (${k.kontoKontrahenta})` : k.nazwa,
+  hint:
+    [k.nip ? `NIP: ${k.nip}` : '', (k.alternativeNames ?? []).join(', ')].filter(Boolean).join(' · ') ||
+    undefined,
+  keywords: [k.nip ?? '', k.kontoKontrahenta ?? '', ...(k.alternativeNames ?? [])].join(' '),
+});
+
 // SearchableContractorSelect component
 interface SearchableContractorSelectProps {
-  kontrahenci: Kontrahent[];
+  /**
+   * The list's options, built once by the review screen: every card has one to
+   * three of these pickers, and each used to map the whole contractor list
+   * itself — hundreds of cards times hundreds of contractors on opening.
+   */
+  options: SearchableOption[];
   selectedContractorId: number | null;
   onChange: (contractorId: number | null) => void;
   placeholder: string;
@@ -68,7 +102,7 @@ interface SearchableContractorSelectProps {
  * in the order the list was sorted by the user's preference.
  */
 const SearchableContractorSelect: React.FC<SearchableContractorSelectProps> = ({
-  kontrahenci,
+  options,
   selectedContractorId,
   onChange,
   placeholder,
@@ -76,25 +110,12 @@ const SearchableContractorSelect: React.FC<SearchableContractorSelectProps> = ({
   emptyText,
   disabled = false,
 }) => {
-  const options = useMemo(
-    () => [
-      { value: '', label: placeholder },
-      ...kontrahenci.map((k) => ({
-        value: String(k.id),
-        label: k.kontoKontrahenta ? `${k.nazwa} (${k.kontoKontrahenta})` : k.nazwa,
-        hint:
-          [k.nip ? `NIP: ${k.nip}` : '', (k.alternativeNames ?? []).join(', ')].filter(Boolean).join(' · ') ||
-          undefined,
-        keywords: [k.nip ?? '', k.kontoKontrahenta ?? '', ...(k.alternativeNames ?? [])].join(' '),
-      })),
-    ],
-    [kontrahenci, placeholder],
-  );
+  const withNone = useMemo(() => [{ value: '', label: placeholder }, ...options], [options, placeholder]);
   return (
     <SearchableSelect
       overlay
       value={selectedContractorId != null ? String(selectedContractorId) : ''}
-      options={options}
+      options={withNone}
       onChange={(v) => onChange(v ? Number(v) : null)}
       placeholder={placeholder}
       searchPlaceholder={searchPlaceholder}
@@ -123,7 +144,7 @@ const PdfPanel: React.FC<PdfPanelProps> = ({ language, searchResult, searching, 
       type="button"
       className="button button-ghost button-icon pdf-panel__close"
       onClick={onClose}
-      title={t.close}
+      data-tip={t.close}
       aria-label={t.close}
     >
       <Icon name="x" size={14} />
@@ -315,7 +336,7 @@ const ApartmentChoicePanel: React.FC<ApartmentChoicePanelProps> = ({
               className={`mapping-choice__option${isSelected ? ' is-selected' : ''}`}
               onClick={() => onSelect(isSelected ? null : target)}
               disabled={!account}
-              title={account ? `${target.apartmentNumber} → ${account}` : t.mappingChoiceNoAccountHint}
+              data-tip={account ? `${target.apartmentNumber} → ${account}` : t.mappingChoiceNoAccountHint}
             >
               <span className="mapping-choice__number">{target.apartmentNumber}</span>
               <span className="mapping-choice__account">{account || t.mappingChoiceNoAccount}</span>
@@ -368,6 +389,10 @@ interface TransactionCardProps {
   kontrahenci: Kontrahent[];
   remainingIncomeEntries: Kontrahent[];
   remainingCostEntries: Kontrahent[];
+  /** The three lists above as pick-list options — built once by the screen. */
+  contractorOptions: SearchableOption[];
+  incomeOptions: SearchableOption[];
+  costOptions: SearchableOption[];
   handleDecision: (index: number, action: 'accept' | 'reject' | 'clarify') => void;
   handleManualInput: (index: number, value: string) => void;
   handleManualAccountInput: (index: number, value: string) => void;
@@ -397,7 +422,12 @@ interface TransactionCardProps {
   onSaveAlternativeName: (index: number, contractorId: number, alternativeName: string) => Promise<void>;
 }
 
-const TransactionCard: React.FC<TransactionCardProps> = ({
+/**
+ * One transaction. Memoized, and fed only stable handlers and per-row values by
+ * the screen, so a keystroke in one card's field re-renders that card — not the
+ * two hundred others of a long statement.
+ */
+const TransactionCard = React.memo(function TransactionCard({
   trn,
   idx,
   currentDecision,
@@ -410,6 +440,9 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
   kontrahenci,
   remainingIncomeEntries,
   remainingCostEntries,
+  contractorOptions,
+  incomeOptions,
+  costOptions,
   handleDecision,
   handleManualInput,
   handleManualAccountInput,
@@ -424,7 +457,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
   mappingChoice,
   onChooseMappingTarget,
   onSaveAlternativeName,
-}) => {
+}: TransactionCardProps) {
   const [pdfResult, setPdfResult] = useState<PdfSearchMatch | null>(null);
   const [pdfSearching, setPdfSearching] = useState(false);
   const [pdfVisible, setPdfVisible] = useState(false);
@@ -622,7 +655,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
         type="button"
         className={`pdf-lookup${pdfVisible && pdfSearchField === field ? ' is-active' : ''}`}
         onClick={() => handlePdfLookup(field)}
-        title={t.revPdfLookupTitle}
+        data-tip={t.revPdfLookupTitle}
       >
         {text}
       </button>
@@ -729,6 +762,15 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
         <Icon name="sparkles" size={16} />
         <div className="callout__body">
           <span className="callout__title">{t.revAiReasoning}:</span> {trn.extracted.reasoning}
+        </div>
+      </div>
+    )}
+
+    {trn.extracted.holdReason && (
+      <div className="callout callout--warning review-card__reasoning" role="note">
+        <Icon name="alert-triangle" size={16} />
+        <div className="callout__body">
+          <span className="callout__title">{t.revHoldTitle}:</span> {t[HOLD_REASON_KEYS[trn.extracted.holdReason]]}
         </div>
       </div>
     )}
@@ -887,7 +929,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
               onClick={() => handleDecision(trn.index, 'clarify')}
               disabled={hasManualOverride}
               className={`button button-warning${currentDecision?.action === 'clarify' ? ' is-selected' : ''}`}
-              title={t.revClarifyHint}
+              data-tip={t.revClarifyHint}
             >
               <Icon name="info" size={14} /> {t.revClarify}
             </button>
@@ -897,7 +939,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
                 onClick={() => (ruleFormOpen ? setRuleFormOpen(false) : openRuleForm())}
                 disabled={adresId == null}
                 className={`button button-info${ruleFormOpen ? ' is-selected' : ''}`}
-                title={adresId == null ? t.apartmentMappingNeedsAddress : (existingRule ? t.editApartmentLink : t.saveApartmentMappingRule)}
+                data-tip={adresId == null ? t.apartmentMappingNeedsAddress : (existingRule ? t.editApartmentLink : t.saveApartmentMappingRule)}
               >
                 <Icon name={existingRule ? 'edit' : 'map-pin'} size={14} /> {existingRule ? t.editApartmentLink : t.linkApartment}
               </button>
@@ -907,7 +949,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
                 type="button"
                 onClick={() => (altFormOpen ? setAltFormOpen(false) : openAltForm())}
                 className={`button button-info${altFormOpen ? ' is-selected' : ''}`}
-                title={t.addAlternativeNameTooltip}
+                data-tip={t.addAlternativeNameTooltip}
               >
                 <Icon name="edit" size={14} /> {t.addAlternativeNameAction}
               </button>
@@ -970,7 +1012,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
               <div className="review-card__manual-field review-card__manual-field--wide">
                 <label className="review-card__manual-label">{t.revOtherIncome}</label>
                 <SearchableContractorSelect
-                  kontrahenci={remainingIncomeEntries}
+                  options={incomeOptions}
                   selectedContractorId={manualRemainingIncomeId !== undefined ? manualRemainingIncomeId : null}
                   onChange={(entryId) => handleManualRemainingIncomeSelect(trn.index, entryId)}
                   placeholder={t.revOtherIncomePick}
@@ -1043,7 +1085,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
                   {trn.matchedContractor?.contractorName ? t.revContractorChange : t.revContractorPick}
                 </label>
                 <SearchableContractorSelect
-                  kontrahenci={kontrahenci}
+                  options={contractorOptions}
                   selectedContractorId={manualContractorId !== undefined ? manualContractorId : null}
                   onChange={(contractorId) => handleManualContractorSelect(trn.index, contractorId)}
                   placeholder={t.revContractorNone}
@@ -1055,7 +1097,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
               <div className="review-card__manual-field">
                 <label className="review-card__manual-label">{t.revOtherCosts}</label>
                 <SearchableContractorSelect
-                  kontrahenci={remainingCostEntries}
+                  options={costOptions}
                   selectedContractorId={manualRemainingCostId !== undefined ? manualRemainingCostId : null}
                   onChange={(entryId) => handleManualRemainingCostSelect(trn.index, entryId)}
                   placeholder={t.revOtherCostsPick}
@@ -1075,7 +1117,7 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
               <FormRow>
                 <FormField label={t.addAlternativeNameContractor}>
                   <SearchableContractorSelect
-                    kontrahenci={kontrahenci}
+                    options={contractorOptions}
                     selectedContractorId={altContractorId}
                     onChange={(contractorId) => { setAltContractorId(contractorId); if (altError) setAltError(null); }}
                     placeholder={t.addAlternativeNameContractorPlaceholder}
@@ -1171,7 +1213,25 @@ const TransactionCard: React.FC<TransactionCardProps> = ({
     })()}
   </article>
   );
-};
+});
+
+/** `map` without `key` — the same map when there was nothing to drop, so nothing re-renders. */
+function withoutKey<V>(map: Map<number, V>, key: number): Map<number, V> {
+  if (!map.has(key)) return map;
+  const next = new Map(map);
+  next.delete(key);
+  return next;
+}
+
+/**
+ * How many cards are put on screen at once. A statement of several hundred
+ * rows used to mount every card in one go before the screen showed at all; now
+ * the first ones appear at once and the rest follow a batch per tick. Every row
+ * is still there within a moment, and the decisions the footer counts never
+ * depended on what is drawn.
+ */
+const CARDS_FIRST = 40;
+const CARDS_STEP = 40;
 
 interface TransactionReviewScreenProps {
   reviewData: ConversionReviewData;
@@ -1196,6 +1256,13 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
 }) => {
   const t = translations[language];
   const notify = useNotify();
+  /**
+   * The rows as this screen shows them. A copy, replaced row by row — never the
+   * props edited in place: the AI re-match and a newly saved apartment rule both
+   * change rows, and writing into `reviewData` behind React's back left the
+   * memoized counts and search results showing the rows as they were before.
+   */
+  const [transactions, setTransactions] = useState<TransactionForReview[]>(reviewData.transactions);
   const [decisions, setDecisions] = useState<Map<number, ReviewDecision>>(new Map());
   
   // Manual inputs start empty - extracted values are shown in the input field as default
@@ -1230,6 +1297,11 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   const [filter, setFilter] = useState<'all' | 'income' | 'expense' | 'undecided'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [addressMappings, setAddressMappings] = useState<ApartmentMapping[]>([]);
+  // Statement lines the parser could not read are not in the file; it is written
+  // only once the user has said they saw that.
+  const droppedLines = reviewData.droppedLines ?? [];
+  const [droppedAcknowledged, setDroppedAcknowledged] = useState(false);
+  const droppedOk = droppedLines.length === 0 || droppedAcknowledged;
 
   // Fixed part of every apartment account in this conversion, decided by the
   // account type of the community account the file belongs to.
@@ -1251,6 +1323,10 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
     () => sortKontrahenci(kontrahenci.filter(k => hasTyp(k, 'Pozostałe koszty')), contractorSortOrder),
     [kontrahenci, contractorSortOrder],
   );
+  // The same lists as pick-list options, once for every card.
+  const contractorOptions = useMemo(() => contractorEntries.map(contractorOption), [contractorEntries]);
+  const incomeOptions = useMemo(() => remainingIncomeEntries.map(contractorOption), [remainingIncomeEntries]);
+  const costOptions = useMemo(() => remainingCostEntries.map(contractorOption), [remainingCostEntries]);
 
   // Load kontrahenci + sort preference on mount
   useEffect(() => {
@@ -1308,7 +1384,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
       !manualContractorIds.has(index) &&
       !manualRemainingCostIds.has(index) &&
       !manualInputs.has(index);
-    return reviewData.transactions
+    return transactions
       .filter(
         (trn) =>
           trn.transactionType === 'expense' &&
@@ -1316,7 +1392,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
           untouched(trn.index),
       )
       .map((trn) => trn.index);
-  }, [reviewData.transactions, decisions, manualContractorIds, manualRemainingCostIds, manualInputs]);
+  }, [transactions, decisions, manualContractorIds, manualRemainingCostIds, manualInputs]);
 
   const handleRerunExpenseAI = async () => {
     if (isRerunningExpenseAI || expenseRerunIndices.length === 0) return;
@@ -1336,15 +1412,19 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
         return;
       }
 
-      // Merge the refreshed rows in place, matching how the apartment-mapping
-      // rule flow updates this screen. Indices are stable, so all per-row local
-      // state (decisions, manual picks) stays aligned.
-      for (const updated of result.updated ?? []) {
-        const target = reviewData.transactions.find((trn) => trn.index === updated.index);
-        if (target) {
-          target.extracted = updated.extracted;
-          target.matchedContractor = updated.matchedContractor;
-        }
+      // Merge the refreshed rows as new row objects, matching how the
+      // apartment-mapping rule flow updates this screen. Indices are stable, so
+      // all per-row local state (decisions, manual picks) stays aligned.
+      const updatedByIndex = new Map((result.updated ?? []).map((u) => [u.index, u]));
+      if (updatedByIndex.size > 0) {
+        setTransactions((prev) =>
+          prev.map((trn) => {
+            const updated = updatedByIndex.get(trn.index);
+            return updated
+              ? { ...trn, extracted: updated.extracted, matchedContractor: updated.matchedContractor }
+              : trn;
+          }),
+        );
       }
 
       const matched = result.matchedCount ?? 0;
@@ -1389,20 +1469,21 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
 
   // Stable position of each transaction in the original list — built once so the
   // render loops below don't do an O(n) indexOf per row (was O(n²) per render).
+  // By the row's index, not its object: a refreshed row is a new object.
   const transactionPosition = useMemo(() => {
-    const m = new Map<TransactionForReview, number>();
-    reviewData.transactions.forEach((trn, i) => m.set(trn, i));
+    const m = new Map<number, number>();
+    transactions.forEach((trn, i) => m.set(trn.index, i));
     return m;
-  }, [reviewData.transactions]);
+  }, [transactions]);
 
   // Filter transactions based on selected filter + search term. Memoized so a
   // keystroke/decision doesn't re-scan every transaction five times per render.
-  const filteredTransactions = useMemo(() => reviewData.transactions.filter(trn => {
+  const filteredTransactions = useMemo(() => transactions.filter(trn => {
     if (!matchesSearch(trn)) return false;
     if (filter === 'all') return true;
     if (filter === 'undecided') return !decisions.has(trn.index);
     return trn.transactionType === filter;
-  }), [reviewData.transactions, filter, decisions, searchTerm]);
+  }), [transactions, filter, decisions, searchTerm]);
 
   // Group transactions by type
   const incomeTransactions = useMemo(
@@ -1416,69 +1497,44 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
 
   // Count totals for filter badges
   const { totalIncome, totalExpense } = useMemo(() => ({
-    totalIncome: reviewData.transactions.filter(trn => trn.transactionType === 'income').length,
-    totalExpense: reviewData.transactions.filter(trn => trn.transactionType === 'expense').length,
-  }), [reviewData.transactions]);
+    totalIncome: transactions.filter(trn => trn.transactionType === 'income').length,
+    totalExpense: transactions.filter(trn => trn.transactionType === 'expense').length,
+  }), [transactions]);
   const totalUndecided = useMemo(
-    () => reviewData.transactions.filter(trn => !decisions.has(trn.index)).length,
-    [reviewData.transactions, decisions],
+    () => transactions.filter(trn => !decisions.has(trn.index)).length,
+    [transactions, decisions],
   );
 
-  const handleDecision = (index: number, action: 'accept' | 'reject' | 'clarify') => {
-    const newDecisions = new Map(decisions);
-    newDecisions.set(index, { index, action });
-    setDecisions(newDecisions);
-    
-    // Clear manual input if switching away from manual
-    if (manualInputs.has(index)) {
-      const newManualInputs = new Map(manualInputs);
-      newManualInputs.delete(index);
-      setManualInputs(newManualInputs);
-    }
+  // Cards go on screen in batches — see CARDS_FIRST. Only what is drawn is
+  // staggered; filters, counts and the decisions work on every row.
+  const [cardLimit, setCardLimit] = useState(CARDS_FIRST);
+  useEffect(() => {
+    if (cardLimit >= filteredTransactions.length) return;
+    const timer = setTimeout(() => setCardLimit((n) => n + CARDS_STEP), 16);
+    return () => clearTimeout(timer);
+  }, [cardLimit, filteredTransactions.length]);
 
+  // Every handler below is handed to the memoized cards, so each keeps one
+  // identity for the screen's life and reads state only through updaters.
+  const handleDecision = useCallback((index: number, action: 'accept' | 'reject' | 'clarify') => {
+    setDecisions(prev => new Map(prev).set(index, { index, action }));
+    // Clear manual input if switching away from manual
+    setManualInputs(prev => withoutKey(prev, index));
     // Accept/reject/clarify replace the destination outright, so a pick from a
     // multi-apartment rule must not stay highlighted as if it still applied.
-    if (mappingChoices.has(index)) {
-      const next = new Map(mappingChoices);
-      next.delete(index);
-      setMappingChoices(next);
-    }
-
-    if (manualAccounts.has(index)) {
-      const newManualAccounts = new Map(manualAccounts);
-      newManualAccounts.delete(index);
-      setManualAccounts(newManualAccounts);
-    }
-
+    setMappingChoices(prev => withoutKey(prev, index));
+    setManualAccounts(prev => withoutKey(prev, index));
     // Clear manual contractor selection if switching away from manual
-    if (manualContractorIds.has(index)) {
-      const newManualContractorIds = new Map(manualContractorIds);
-      newManualContractorIds.delete(index);
-      setManualContractorIds(newManualContractorIds);
-    }
-    
+    setManualContractorIds(prev => withoutKey(prev, index));
     // Clear remaining income/cost selections
-    if (manualRemainingIncomeIds.has(index)) {
-      const newIds = new Map(manualRemainingIncomeIds);
-      newIds.delete(index);
-      setManualRemainingIncomeIds(newIds);
-    }
-    if (manualRemainingCostIds.has(index)) {
-      const newIds = new Map(manualRemainingCostIds);
-      newIds.delete(index);
-      setManualRemainingCostIds(newIds);
-    }
-  };
+    setManualRemainingIncomeIds(prev => withoutKey(prev, index));
+    setManualRemainingCostIds(prev => withoutKey(prev, index));
+  }, []);
 
   /** Forget a rule pick for this row — used whenever a competing assignment wins. */
-  const clearMappingChoice = (index: number) => {
-    setMappingChoices(prev => {
-      if (!prev.has(index)) return prev;
-      const next = new Map(prev);
-      next.delete(index);
-      return next;
-    });
-  };
+  const clearMappingChoice = useCallback((index: number) => {
+    setMappingChoices(prev => withoutKey(prev, index));
+  }, []);
 
   /**
    * Book this row onto one of the apartments its rule names (null clears the pick).
@@ -1489,17 +1545,18 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
    * A lettered apartment with no account on the rule is not offered at all — there
    * would be nothing to book it to — so `resolveApartmentAccount` never fails here.
    */
-  const handleMappingChoice = (index: number, target: ApartmentMappingTarget | null) => {
-    const newDecisions = new Map(decisions);
-
+  const handleMappingChoice = useCallback((index: number, target: ApartmentMappingTarget | null) => {
     if (!target) {
       setMappingChoices(prev => {
         const next = new Map(prev);
         next.delete(index);
         return next;
       });
-      newDecisions.delete(index);
-      setDecisions(newDecisions);
+      setDecisions(prev => {
+        const next = new Map(prev);
+        next.delete(index);
+        return next;
+      });
       return;
     }
 
@@ -1515,44 +1572,42 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
     setManualInputs(prev => { const m = new Map(prev); m.delete(index); return m; });
     setManualAccounts(prev => { const m = new Map(prev); m.delete(index); return m; });
     setManualRemainingIncomeIds(prev => { const m = new Map(prev); m.delete(index); return m; });
-    newDecisions.set(index, {
+    setDecisions(prev => new Map(prev).set(index, {
       index,
       action: 'manual',
       manualApartmentNumber: target.apartmentNumber,
       manualApartmentAccount: account,
-    });
-    setDecisions(newDecisions);
-  };
+    }));
+  }, [apartmentPrefix]);
 
-  const handleManualInput = (index: number, value: string) => {
-    const newManualInputs = new Map(manualInputs);
-    const newDecisions = new Map(decisions);
+  const handleManualInput = useCallback((index: number, value: string) => {
     clearMappingChoice(index);
-
     // If value is empty or only whitespace, remove from manual inputs and clear decision
-    if (!value || value.trim().length === 0) {
-      newManualInputs.delete(index);
-      newDecisions.delete(index);
-    } else {
-      // Set manual input and create manual decision
-      newManualInputs.set(index, value);
+    const empty = !value || value.trim().length === 0;
+    setManualInputs(prev => {
+      const next = new Map(prev);
+      if (empty) next.delete(index);
+      else next.set(index, value);
+      return next;
+    });
+    setDecisions(prev => {
+      const next = new Map(prev);
       // A lettered number ("17A") names the apartment but not its account, and the
       // app must not invent one — the row stays undecided until the user uses
       // "Konto lokalu" instead. The field shows why.
-      if (isLetteredApartment(value.trim())) {
-        newDecisions.delete(index);
+      if (empty || isLetteredApartment(value.trim())) {
+        next.delete(index);
       } else {
-        newDecisions.set(index, {
+        // Set manual input and create manual decision
+        next.set(index, {
           index,
           action: 'manual',
           manualApartmentNumber: value,
         });
       }
-    }
-
-    setManualInputs(newManualInputs);
-    setDecisions(newDecisions);
-  };
+      return next;
+    });
+  }, [clearMappingChoice]);
 
   /**
    * "Konto lokalu": the user states the account symbol outright. Used for lettered
@@ -1560,96 +1615,80 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
    * resolveApartmentAccount. The value stored is the suffix; the prefix is fixed by
    * the account type and only shown.
    */
-  const handleManualAccountInput = (index: number, value: string) => {
-    const newManualAccounts = new Map(manualAccounts);
-    const newDecisions = new Map(decisions);
+  const handleManualAccountInput = useCallback((index: number, value: string) => {
     clearMappingChoice(index);
-
     const account = composeApartmentAccount(apartmentPrefix, value);
-    if (!value || value.trim().length === 0) {
-      newManualAccounts.delete(index);
-      newDecisions.delete(index);
-    } else {
-      newManualAccounts.set(index, value);
+    const empty = !value || value.trim().length === 0;
+    setManualAccounts(prev => {
+      const next = new Map(prev);
+      if (empty) next.delete(index);
+      else next.set(index, value);
+      return next;
+    });
+    setDecisions(prev => {
+      const next = new Map(prev);
       // While the symbol is still incomplete there is nothing to book yet, so no
       // decision is recorded — the row stays undecided rather than half-decided.
-      if (account) {
-        newDecisions.set(index, {
+      if (!empty && account) {
+        next.set(index, {
           index,
           action: 'manual',
           manualApartmentAccount: account,
         });
       } else {
-        newDecisions.delete(index);
+        next.delete(index);
       }
-    }
+      return next;
+    });
+  }, [apartmentPrefix, clearMappingChoice]);
 
-    setManualAccounts(newManualAccounts);
-    setDecisions(newDecisions);
-  };
+  const handleManualContractorSelect = useCallback((index: number, contractorId: number | null) => {
+    // If contractorId is null, remove from manual selections and clear decision;
+    // otherwise set manual contractor selection and create manual decision.
+    setManualContractorIds(prev => {
+      const next = new Map(prev);
+      if (contractorId === null) next.delete(index);
+      else next.set(index, contractorId);
+      return next;
+    });
+    setDecisions(prev => {
+      const next = new Map(prev);
+      if (contractorId === null) next.delete(index);
+      else next.set(index, { index, action: 'manual', manualContractorId: contractorId });
+      return next;
+    });
+  }, []);
 
-  const handleManualContractorSelect = (index: number, contractorId: number | null) => {
-    const newManualContractorIds = new Map(manualContractorIds);
-    const newDecisions = new Map(decisions);
-    
-    // If contractorId is null, remove from manual selections and clear decision
-    if (contractorId === null) {
-      newManualContractorIds.delete(index);
-      newDecisions.delete(index);
-    } else {
-      // Set manual contractor selection and create manual decision
-      newManualContractorIds.set(index, contractorId);
-      newDecisions.set(index, {
-        index,
-        action: 'manual',
-        manualContractorId: contractorId,
-      });
-    }
-    
-    setManualContractorIds(newManualContractorIds);
-    setDecisions(newDecisions);
-  };
-
-  const handleManualRemainingIncomeSelect = (index: number, entryId: number | null) => {
-    const newIds = new Map(manualRemainingIncomeIds);
-    const newDecisions = new Map(decisions);
+  const handleManualRemainingIncomeSelect = useCallback((index: number, entryId: number | null) => {
     clearMappingChoice(index);
-    
-    if (entryId === null) {
-      newIds.delete(index);
-      newDecisions.delete(index);
-    } else {
-      newIds.set(index, entryId);
-      newDecisions.set(index, {
-        index,
-        action: 'manual',
-        manualRemainingIncomeId: entryId,
-      });
-    }
-    
-    setManualRemainingIncomeIds(newIds);
-    setDecisions(newDecisions);
-  };
+    setManualRemainingIncomeIds(prev => {
+      const next = new Map(prev);
+      if (entryId === null) next.delete(index);
+      else next.set(index, entryId);
+      return next;
+    });
+    setDecisions(prev => {
+      const next = new Map(prev);
+      if (entryId === null) next.delete(index);
+      else next.set(index, { index, action: 'manual', manualRemainingIncomeId: entryId });
+      return next;
+    });
+  }, [clearMappingChoice]);
 
-  const handleManualRemainingCostSelect = (index: number, entryId: number | null) => {
-    const newIds = new Map(manualRemainingCostIds);
-    const newDecisions = new Map(decisions);
-    
-    if (entryId === null) {
-      newIds.delete(index);
-      newDecisions.delete(index);
-    } else {
-      newIds.set(index, entryId);
-      newDecisions.set(index, {
-        index,
-        action: 'manual',
-        manualRemainingCostId: entryId,
-      });
-    }
-    
-    setManualRemainingCostIds(newIds);
-    setDecisions(newDecisions);
-  };
+  const handleManualRemainingCostSelect = useCallback((index: number, entryId: number | null) => {
+    setManualRemainingCostIds(prev => {
+      const next = new Map(prev);
+      if (entryId === null) next.delete(index);
+      else next.set(index, entryId);
+      return next;
+    });
+    setDecisions(prev => {
+      const next = new Map(prev);
+      if (entryId === null) next.delete(index);
+      else next.set(index, { index, action: 'manual', manualRemainingCostId: entryId });
+      return next;
+    });
+  }, []);
 
   // Save a new apartment-mapping rule under the address this acceptance concerns.
   // The rule is auto-attached to reviewData.adresId (no address picker needed).
@@ -1660,7 +1699,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
    * matcher resolves this vendor on every future statement without an AI call.
    * The expense-side twin of handleSaveApartmentMapping.
    */
-  const handleSaveAlternativeName = async (index: number, contractorId: number, alternativeName: string) => {
+  const handleSaveAlternativeName = useCallback(async (index: number, contractorId: number, alternativeName: string) => {
     const phrase = alternativeName.trim();
     if (!phrase) throw new Error(t.fillAllFields);
 
@@ -1697,9 +1736,9 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
     // after deciding which contractor it is, so assign it instead of making the
     // user pick the same contractor a second time in the dropdown.
     handleManualContractorSelect(index, contractorId);
-  };
+  }, [t, handleManualContractorSelect]);
 
-  const handleSaveApartmentMapping = async (
+  const handleSaveApartmentMapping = useCallback(async (
     index: number,
     matchText: string,
     targets: ApartmentMappingTarget[],
@@ -1749,17 +1788,26 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
     // match (flagged, apartment filled), just like it would on the next run.
     const ruleTargets = mappingTargets(mapping);
     const single = ruleTargets.length === 1 ? ruleTargets[0] : null;
-    const trn = reviewData.transactions.find(t => t.index === index);
-    if (trn) {
-      trn.extracted.matchedByManualMapping = true;
-      trn.extracted.confidence = 95;
-      // Several apartments ⇒ the row has a shortlist, not an answer: exactly the
-      // state the matcher produces for such a rule, so this screen behaves the same
-      // whether the rule was written now or before the conversion ran.
-      trn.extracted.apartmentNumber = single ? single.apartmentNumber : null;
-      trn.extracted.accountOverride = single?.kontoLokalu ?? null;
-      trn.extracted.needsAccount = false;
-    }
+    setTransactions(prev =>
+      prev.map(trn =>
+        trn.index === index
+          ? {
+              ...trn,
+              extracted: {
+                ...trn.extracted,
+                matchedByManualMapping: true,
+                confidence: 95,
+                // Several apartments ⇒ the row has a shortlist, not an answer: exactly the
+                // state the matcher produces for such a rule, so this screen behaves the same
+                // whether the rule was written now or before the conversion ran.
+                apartmentNumber: single ? single.apartmentNumber : null,
+                accountOverride: single?.kontoLokalu ?? null,
+                needsAccount: false,
+              },
+            }
+          : trn,
+      ),
+    );
     // Clear any manual override for this transaction, then book it.
     setManualInputs(prev => { const m = new Map(prev); m.delete(index); return m; });
     setManualAccounts(prev => { const m = new Map(prev); m.delete(index); return m; });
@@ -1782,9 +1830,10 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
         : { index, action: 'manual', manualApartmentNumber: single.apartmentNumber });
       return m;
     });
-  };
+  }, [reviewData.adresId, t, clearMappingChoice]);
 
   const handleFinalizeAndNext = async () => {
+    if (!droppedOk) return;
     setIsProcessing(true);
     try {
       const decisionsArray = Array.from(decisions.values());
@@ -1795,6 +1844,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
   };
 
   const handleFinalizeAndStop = async () => {
+    if (!droppedOk) return;
     setIsProcessing(true);
     try {
       const decisionsArray = Array.from(decisions.values());
@@ -1806,7 +1856,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
 
   const handleMarkAllExpensesAsUnrecognized = () => {
     const newDecisions = new Map(decisions);
-    const expenseTransactionsAll = reviewData.transactions.filter(trn => trn.transactionType === 'expense');
+    const expenseTransactionsAll = transactions.filter(trn => trn.transactionType === 'expense');
     
     expenseTransactionsAll.forEach(trn => {
       newDecisions.set(trn.index, {
@@ -1825,10 +1875,10 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
     setManualInputs(newManualInputs);
   };
 
-  const allDecided = decisions.size === reviewData.transactions.length;
+  const allDecided = decisions.size === transactions.length;
 
   const filterOptions: { key: typeof filter; label: string; count: number; icon?: React.ComponentProps<typeof Icon>['name'] }[] = [
-    { key: 'all', label: t.revFilterAll, count: reviewData.transactions.length },
+    { key: 'all', label: t.revFilterAll, count: transactions.length },
     { key: 'income', label: t.revFilterIncome, count: totalIncome, icon: 'coins' },
     { key: 'expense', label: t.revFilterExpense, count: totalExpense, icon: 'arrow-right' },
     { key: 'undecided', label: t.revFilterUndecided, count: totalUndecided, icon: 'alert-circle' },
@@ -1840,7 +1890,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
       <TransactionCard
         key={trn.index}
         trn={trn}
-        idx={transactionPosition.get(trn) ?? -1}
+        idx={transactionPosition.get(trn.index) ?? -1}
         currentDecision={decisions.get(trn.index)}
         manualInput={manualInputs.get(trn.index)}
         manualAccount={manualAccounts.get(trn.index)}
@@ -1851,6 +1901,9 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
         kontrahenci={contractorEntries}
         remainingIncomeEntries={remainingIncomeEntries}
         remainingCostEntries={remainingCostEntries}
+        contractorOptions={contractorOptions}
+        incomeOptions={incomeOptions}
+        costOptions={costOptions}
         handleDecision={handleDecision}
         handleManualInput={handleManualInput}
         handleManualAccountInput={handleManualAccountInput}
@@ -1881,7 +1934,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
               <span>{t.revFile}: <strong>{reviewData.fileName}</strong></span>
               <span>{t.revBank}: <strong>{reviewData.bankName}</strong></span>
               <span className="form-section__badge">
-                {t.revToReview}: {reviewData.transactions.length}
+                {t.revToReview}: {transactions.length}
               </span>
               {/* The attached statement PDF, opened in the system's PDF viewer —
                   beside the in-screen lookup, for reading it whole. */}
@@ -1889,7 +1942,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                 <button
                   type="button"
                   className="button button-small button-secondary review-screen__pdf"
-                  title={reviewData.pdfPath}
+                  data-tip={reviewData.pdfPath}
                   onClick={async () => {
                     const ok = await window.electronAPI.openFile(reviewData.pdfPath!);
                     if (!ok) notify.error(t.fileNotFound);
@@ -1901,7 +1954,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
             </span>
           }
         />
-        <button type="button" className="modal-close" onClick={onCancel} title={t.close} aria-label={t.close}>
+        <button type="button" className="modal-close" onClick={onCancel} data-tip={t.close} aria-label={t.close}>
           <Icon name="x" size={18} />
         </button>
       </header>
@@ -1919,12 +1972,12 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
           />
           {searchTerm && (
             <span className="review-screen__search-meta">
-              {filteredTransactions.length} / {reviewData.transactions.length}
+              {filteredTransactions.length} / {transactions.length}
               <button
                 type="button"
                 className="button button-ghost button-icon"
                 onClick={() => setSearchTerm('')}
-                title={t.revSearchClear}
+                data-tip={t.revSearchClear}
                 aria-label={t.revSearchClear}
               >
                 <Icon name="x" size={14} />
@@ -1952,9 +2005,43 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
       {/* Transactions list */}
       <div className="review-screen__body">
         <div className="page-form review-screen__list">
+          {droppedLines.length > 0 && (
+            <div className="callout callout--danger" role="alert">
+              <Icon name="alert-triangle" size={16} />
+              <div className="callout__body">
+                <span className="callout__title">
+                  {t.revDroppedTitle.replace('{n}', String(droppedLines.length))}
+                </span>{' '}
+                {t.revDroppedBody}
+                <ul className="callout__list">
+                  {droppedLines.map((d, i) => (
+                    <li key={i}>
+                      {d.line ? `${t.revDroppedLine} ${d.line}: ` : ''}
+                      <span className="cell-mono">{d.excerpt}</span> — {t[DROPPED_REASON_KEYS[d.reason]]}
+                    </li>
+                  ))}
+                </ul>
+                <label className="cell-check">
+                  <span className={`ks-check ks-check--sm${droppedAcknowledged ? ' is-on' : ''}`}>
+                    <input
+                      type="checkbox"
+                      className="ks-check__input"
+                      checked={droppedAcknowledged}
+                      onChange={(e) => setDroppedAcknowledged(e.target.checked)}
+                    />
+                    <span className="ks-check__box" aria-hidden="true">
+                      <Icon name="check" size={10} strokeWidth={3} />
+                    </span>
+                  </span>
+                  <span>{t.revDroppedAck}</span>
+                </label>
+              </div>
+            </div>
+          )}
+
           {(filter === 'all' || filter === 'income' || filter === 'undecided') && incomeTransactions.length > 0 && (
             <FormSection icon="coins" title={t.revIncomeTitle} description={t.revIncomeDesc}>
-              {incomeTransactions.map(renderCard)}
+              {incomeTransactions.slice(0, cardLimit).map(renderCard)}
             </FormSection>
           )}
 
@@ -1978,7 +2065,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                     onClick={handleRerunExpenseAI}
                     className="button button-small button-secondary"
                     disabled={isRerunningExpenseAI || expenseRerunIndices.length === 0}
-                    title={expenseRerunIndices.length === 0 ? t.rerunExpenseAINothingToDo : t.rerunExpenseAITooltip}
+                    data-tip={expenseRerunIndices.length === 0 ? t.rerunExpenseAINothingToDo : t.rerunExpenseAITooltip}
                   >
                     <Icon name="bot" size={13} />{' '}
                     {isRerunningExpenseAI ? t.rerunExpenseAIRunning : `${t.rerunExpenseAI} (${expenseRerunIndices.length})`}
@@ -2008,7 +2095,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
                   </div>
                 </div>
               )}
-              {expenseTransactions.map(renderCard)}
+              {expenseTransactions.slice(0, Math.max(0, cardLimit - incomeTransactions.length)).map(renderCard)}
             </FormSection>
           )}
         </div>
@@ -2021,7 +2108,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
           <span className="review-screen__progress">
             <span className={`action-note${allDecided ? ' action-note--success' : ' action-note--warning'}`}>
               <Icon name={allDecided ? 'check-circle' : 'loader'} size={14} />
-              {allDecided ? t.revAllDecided : t.revDecisions}: {decisions.size}/{reviewData.transactions.length}
+              {allDecided ? t.revAllDecided : t.revDecisions}: {decisions.size}/{transactions.length}
             </span>
             {hasMoreFiles && (
               <span className="action-note">
@@ -2038,7 +2125,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
               type="button"
               className="button button-secondary"
               onClick={handleFinalizeAndStop}
-              disabled={!allDecided || isProcessing}
+              disabled={!allDecided || !droppedOk || isProcessing}
             >
               {isProcessing ? t.revProcessing : t.finalizeAndStop}
             </button>
@@ -2047,8 +2134,8 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
         onSubmit={handleFinalizeAndNext}
         submitLabel={isProcessing ? t.revProcessing : hasMoreFiles ? t.finalizeAndNext : t.finalizeFile}
         submitIcon={hasMoreFiles ? 'arrow-right' : 'check'}
-        submitDisabled={!allDecided}
-        submitTitle={`${t.revDecisions}: ${decisions.size}/${reviewData.transactions.length}`}
+        submitDisabled={!allDecided || !droppedOk}
+        submitTitle={droppedOk ? `${t.revDecisions}: ${decisions.size}/${transactions.length}` : t.revDroppedAckRequired}
         busy={isProcessing}
       />
     </div>

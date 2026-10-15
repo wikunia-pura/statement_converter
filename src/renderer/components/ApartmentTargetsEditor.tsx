@@ -160,7 +160,7 @@ const ApartmentTargetsEditor: React.FC<ApartmentTargetsEditorProps> = ({
               className="button button-ghost button-icon icon-danger"
               onClick={() => remove(draft.key)}
               disabled={disabled || (drafts.length === 1 && !draft.apartmentNumber && !draft.kontoLokalu)}
-              title={t.apartmentMappingRemoveApartment}
+              data-tip={t.apartmentMappingRemoveApartment}
               aria-label={t.apartmentMappingRemoveApartment}
             >
               <Icon name="trash" size={15} />

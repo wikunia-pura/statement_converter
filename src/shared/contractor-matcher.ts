@@ -9,20 +9,65 @@
  * every transaction. Type-filtered pools are memoized. This turns the hot path
  * from O(transactions · contractors · nameLength) of regex re-normalization into
  * O(contractors) of one-time setup + cheap substring/Set lookups per transaction.
+ *
+ * Names match only as whole words of the normalized text (see normalizeText and
+ * containsWords). A bare substring test used to let an alternative name "-",
+ * which normalizes to nothing, match every description, and "FV" match inside
+ * "FVSERWIS" — each at 95%, straight into the books.
  */
 
 import { AITransaction, MatchedContractor } from './ai-types';
 import { Kontrahent, KontrahentTyp } from './types';
+import { foldText } from './text';
 
 export type { MatchedContractor } from './ai-types';
 
+/**
+ * Shortest normalized name the matcher will look for. Below this a name is an
+ * abbreviation ("FV", "SA") that occurs as a word in unrelated titles far too
+ * often to book money on.
+ */
+const MIN_NAME_LENGTH = 3;
+
+/**
+ * A long name the bank glued to the word after it ("…SP Z O OUL LIPOWA" — fixed-
+ * width fields often lose the space after a name). Found at the start of a word,
+ * it is very likely that contractor, but the text is damaged, so the row is held
+ * for review with this contractor already picked: one click to confirm, never
+ * booked unseen. Kept below the review threshold (70) on purpose, and the
+ * expense pipeline also gives such a row the 'glued-name' hold — the confidence
+ * alone would not stop the Converter's "skip approval" mode, which accepts every
+ * row it is handed as it stands.
+ */
+export const GLUED_MATCH_CONFIDENCE = 65;
+
+/** Shortest name (letters and digits, spaces removed) trusted as a glued-on prefix. */
+const GLUED_MIN_LENGTH = 12;
+
 /** Precomputed, transaction-independent derived data for one alternative name. */
 interface DerivedAlt {
-  /** normalizeText(altName.toLowerCase()) */
+  /** normalizeText(altName); '' when too short to match on (see MIN_NAME_LENGTH) */
   norm: string;
   /** norm with all whitespace removed */
   noSpace: string;
-  /** altName.toLowerCase() split into words of length > 2 (for fuzzy matching) */
+  /** norm split into words of length > 2 (for fuzzy matching) */
+  words: string[];
+}
+
+/**
+ * One description, normalized once and shared by every contractor it is
+ * compared against.
+ */
+interface PreparedText {
+  /** normalizeText(text), padded with a space on both ends for whole-word tests. */
+  padded: string;
+  /** normalizeText(text) with all whitespace removed. */
+  noSpace: string;
+  /** Offsets in `noSpace` where a word of the normalized text starts. */
+  wordStarts: Set<number>;
+  /** Offsets in `noSpace` just past the end of a word of the normalized text. */
+  wordEnds: Set<number>;
+  /** Words of length > 2 (for fuzzy matching). */
   words: string[];
 }
 
@@ -32,11 +77,11 @@ interface DerivedContractor {
   typy: KontrahentTyp[];
   /** contractor.nip with spaces/hyphens stripped; '' when no NIP. */
   nipDigits: string;
-  /** normalizeText(nazwa.toLowerCase()) */
+  /** normalizeText(nazwa); '' when too short to match on (see MIN_NAME_LENGTH) */
   nameNorm: string;
   /** nameNorm with all whitespace removed */
   nameNoSpace: string;
-  /** nazwa.toLowerCase() split into words of length > 2 (for fuzzy matching) */
+  /** nameNorm split into words of length > 2 (for fuzzy matching) */
   nameWords: string[];
   alts: DerivedAlt[];
 }
@@ -51,15 +96,13 @@ export class ContractorMatcher {
   }
 
   private deriveContractor(contractor: Kontrahent): DerivedContractor {
-    const nameLower = contractor.nazwa.toLowerCase();
-    const nameNorm = this.normalizeText(nameLower);
+    const nameNorm = this.matchableName(contractor.nazwa);
     const alts: DerivedAlt[] = (contractor.alternativeNames ?? []).map(altName => {
-      const altLower = altName.toLowerCase();
-      const norm = this.normalizeText(altLower);
+      const norm = this.matchableName(altName);
       return {
         norm,
         noSpace: norm.replace(/\s/g, ''),
-        words: altLower.split(/\s+/).filter(w => w.length > 2),
+        words: this.fuzzyWords(norm),
       };
     });
     return {
@@ -68,9 +111,88 @@ export class ContractorMatcher {
       nipDigits: contractor.nip && contractor.nip.trim() ? contractor.nip.replace(/[\s-]/g, '') : '',
       nameNorm,
       nameNoSpace: nameNorm.replace(/\s/g, ''),
-      nameWords: nameLower.split(/\s+/).filter(w => w.length > 2),
+      nameWords: this.fuzzyWords(nameNorm),
       alts,
     };
+  }
+
+  /**
+   * A name normalized for matching, or '' when it is too short to be trusted —
+   * which includes a name that is nothing but punctuation ("-") and therefore
+   * normalizes to nothing. Every match test skips an empty name.
+   */
+  private matchableName(name: string): string {
+    const norm = this.normalizeText(name ?? '');
+    return norm.replace(/\s/g, '').length >= MIN_NAME_LENGTH ? norm : '';
+  }
+
+  /** Words of length > 2, as fuzzy matching compares them. */
+  private fuzzyWords(norm: string): string[] {
+    return norm ? norm.split(' ').filter(w => w.length > 2) : [];
+  }
+
+  /**
+   * Normalize one description once for all the contractors it is compared against.
+   *
+   * `parts` are the bank subfields the text was glued from (see
+   * AITransaction.descBaseParts). Where a format joins them with no separator, a
+   * name that ends exactly where a subfield ends ("…SP Z O O" + "UL. KRUCZA")
+   * runs into the next word and no whole-word test can find it. Joined with a
+   * space here, the seam is a word boundary; the letters and digits are the same,
+   * so the space-insensitive test still finds a name the bank wrapped mid-word.
+   */
+  private prepareText(text: string, parts?: string[]): PreparedText {
+    const source = parts && parts.length > 0 ? parts.join(' ') : text;
+    const norm = this.normalizeText(source ?? '');
+    const wordStarts = new Set<number>();
+    const wordEnds = new Set<number>();
+    let noSpace = '';
+    for (const word of norm ? norm.split(' ') : []) {
+      wordStarts.add(noSpace.length);
+      noSpace += word;
+      wordEnds.add(noSpace.length);
+    }
+    return { padded: ` ${norm} `, noSpace, wordStarts, wordEnds, words: this.fuzzyWords(norm) };
+  }
+
+  /** True when `name` (normalized, non-empty) occurs in `text` as whole words. */
+  private containsWords(text: PreparedText, name: string): boolean {
+    return name !== '' && text.padded.includes(` ${name} `);
+  }
+
+  /**
+   * True when `noSpaceName` occurs in the whitespace-stripped text starting at the
+   * start of a word and ending at the end of one — so a name the bank's line
+   * wrapping cut in two ("Dud ziński") still matches, but one glued into a longer
+   * word does not. Keeps the 8-character floor, below which a space-insensitive
+   * hit is too likely to be an accident.
+   */
+  private containsWithoutSpaces(text: PreparedText, noSpaceName: string): boolean {
+    if (noSpaceName.length < 8) return false;
+    let from = 0;
+    while (true) {
+      const at = text.noSpace.indexOf(noSpaceName, from);
+      if (at === -1) return false;
+      if (text.wordStarts.has(at) && text.wordEnds.has(at + noSpaceName.length)) return true;
+      from = at + 1;
+    }
+  }
+
+  /**
+   * True when `noSpaceName` occurs in the whitespace-stripped text starting at the
+   * start of a word but running into the next one — the glued case described at
+   * GLUED_MATCH_CONFIDENCE. Long names only; the start must still be a word start,
+   * so a name inside a longer word ("XPKOBP") never counts.
+   */
+  private startsAtWord(text: PreparedText, noSpaceName: string): boolean {
+    if (noSpaceName.length < GLUED_MIN_LENGTH) return false;
+    let from = 0;
+    while (true) {
+      const at = text.noSpace.indexOf(noSpaceName, from);
+      if (at === -1) return false;
+      if (text.wordStarts.has(at)) return true;
+      from = at + 1;
+    }
   }
 
   /**
@@ -92,14 +214,16 @@ export class ContractorMatcher {
   }
 
   /**
-   * Normalize text for fuzzy matching
-   * Removes punctuation and normalizes whitespace
+   * Normalize text for matching: lower-case, Polish diacritics folded (the shared
+   * foldText, so "Usługi" and "USLUGI" are the same name), and every character
+   * that is not a letter or digit turned into a word separator. Word boundaries
+   * are what the match tests rely on, so "FV/123" is the words "fv" and "123",
+   * while "FVSERWIS" stays one word.
    */
   private normalizeText(text: string): string {
-    return text
-      .replace(/[.,;:\-_]/g, ' ')  // Replace punctuation with spaces
-      .replace(/\s+/g, ' ')          // Normalize multiple spaces to single space
-      .trim();                        // Remove leading/trailing spaces
+    return foldText(text)
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
   }
 
   /**
@@ -174,22 +298,31 @@ export class ContractorMatcher {
     const pool = this.filterByTypes(allowedTypes);
 
     // Try desc-opt first (higher priority)
+    let heldOpt: Omit<MatchedContractor, 'matchedIn'> | null = null;
     if (transaction.descOpt && transaction.descOpt.trim() !== '') {
-      const match = this.findBestMatch(transaction.descOpt, pool);
-      if (match.contractor) {
+      const match = this.findBestMatch(transaction.descOpt, transaction.descOptParts, pool);
+      if (match.contractor && match.confidence > GLUED_MATCH_CONFIDENCE) {
         return {
           ...match,
           matchedIn: 'desc-opt',
         };
       }
+      // Only a glued (held) name in desc-opt: a clean match in desc-base wins.
+      if (match.contractor) heldOpt = match;
     }
 
     // Try desc-base
-    const match = this.findBestMatch(transaction.descBase, pool);
-    if (match.contractor) {
+    const match = this.findBestMatch(transaction.descBase, transaction.descBaseParts, pool);
+    if (match.contractor && (!heldOpt || match.confidence > heldOpt.confidence)) {
       return {
         ...match,
         matchedIn: 'desc-base',
+      };
+    }
+    if (heldOpt) {
+      return {
+        ...heldOpt,
+        matchedIn: 'desc-opt',
       };
     }
 
@@ -234,12 +367,14 @@ export class ContractorMatcher {
     const pool = this.filterByTypes(allowedTypes);
 
     // Combine desc-opt and desc-base for searching. All of these depend only on
-    // the transaction, so compute them ONCE (not per contractor).
+    // the transaction, so compute them ONCE (not per contractor). Subfields are
+    // kept apart the same way match() keeps them (see prepareText).
     const searchText = `${transaction.descOpt || ''} ${transaction.descBase}`.toLowerCase();
-    const searchTextNormalized = this.normalizeText(searchText);
-    const searchNoSpace = searchTextNormalized.replace(/\s/g, '');
+    const search = this.prepareText(searchText, [
+      ...(transaction.descOptParts?.length ? transaction.descOptParts : [transaction.descOpt || '']),
+      ...(transaction.descBaseParts?.length ? transaction.descBaseParts : [transaction.descBase]),
+    ]);
     const searchNipNormalized = searchText.replace(/[\s-]/g, '');
-    const searchWords = searchText.split(/\s+/).filter(w => w.length > 2);
 
     // Score all contractors
     const scored = pool.map(d => {
@@ -254,7 +389,7 @@ export class ContractorMatcher {
 
       // If NIP not matched, check main name - Score: 100
       if (score === 0) {
-        if (searchTextNormalized.includes(d.nameNorm)) {
+        if (this.containsWords(search, d.nameNorm)) {
           score = 100;
         }
       }
@@ -262,7 +397,7 @@ export class ContractorMatcher {
       // If main name not matched, check alternative names - Score: 100 (SAME as main name!)
       if (score === 0 && d.alts.length > 0) {
         for (const alt of d.alts) {
-          if (searchTextNormalized.includes(alt.norm)) {
+          if (this.containsWords(search, alt.norm)) {
             score = 100;
             break;
           }
@@ -274,12 +409,12 @@ export class ContractorMatcher {
       // "Dudziński"→"Dud ziński"). Stricter than fuzzy: requires the whole name
       // contiguous once whitespace is removed.
       if (score === 0) {
-        if (d.nameNoSpace.length >= 8 && searchNoSpace.includes(d.nameNoSpace)) {
+        if (this.containsWithoutSpaces(search, d.nameNoSpace)) {
           score = 98;
         }
         if (score === 0 && d.alts.length > 0) {
           for (const alt of d.alts) {
-            if (alt.noSpace.length >= 8 && searchNoSpace.includes(alt.noSpace)) {
+            if (this.containsWithoutSpaces(search, alt.noSpace)) {
               score = 98;
               break;
             }
@@ -287,16 +422,24 @@ export class ContractorMatcher {
         }
       }
 
+      // A long name glued to the next word - Score: 96 (the model sees the
+      // whole text and can confirm it).
+      if (score === 0) {
+        if (this.startsAtWord(search, d.nameNoSpace) || d.alts.some(alt => this.startsAtWord(search, alt.noSpace))) {
+          score = 96;
+        }
+      }
+
       // If exact match not found, try fuzzy matching - Score: 85-95
       // This catches typos and similar names (e.g., "Gontarek" vs "Guntarek")
       if (score === 0) {
         // Try fuzzy match on main name
-        score = this.fuzzyMatchWords(d.nameWords, searchWords);
+        score = this.fuzzyMatchWords(d.nameWords, search.words);
 
         // If main name fuzzy match weak, try alternative names
         if (score < 90 && d.alts.length > 0) {
           for (const alt of d.alts) {
-            const altScore = this.fuzzyMatchWords(alt.words, searchWords);
+            const altScore = this.fuzzyMatchWords(alt.words, search.words);
             score = Math.max(score, altScore);
             if (score >= 90) break; // Good enough, stop checking
           }
@@ -320,13 +463,13 @@ export class ContractorMatcher {
    */
   private findBestMatch(
     description: string,
+    parts: string[] | undefined,
     pool: DerivedContractor[],
   ): Omit<MatchedContractor, 'matchedIn'> {
     const descLower = description.toLowerCase();
-    const descNormalizedText = this.normalizeText(descLower);
-    // Whitespace-stripped variant, for matching names mangled by fixed-width
-    // line wrapping that injects spaces mid-word (see FOURTH check below).
-    const descNoSpace = descNormalizedText.replace(/\s/g, '');
+    // Normalized once, with the word positions that the whole-word tests and the
+    // space-insensitive one (FOURTH check below) need.
+    const desc = this.prepareText(description, parts);
     // NIP comparison strips only spaces/hyphens (keeps other chars) — computed
     // once here, not per contractor.
     const descNipNormalized = descLower.replace(/[\s-]/g, '');
@@ -350,9 +493,9 @@ export class ContractorMatcher {
         }
       }
 
-      // SECOND: Check main name (with normalization)
-      if (descNormalizedText.includes(d.nameNorm)) {
-        const confidence = this.calculateConfidence(d.nameNorm, descNormalizedText);
+      // SECOND: Check main name (with normalization), as whole words only
+      if (this.containsWords(desc, d.nameNorm)) {
+        const confidence = this.calculateConfidence(d.nameNorm, desc);
 
         if (confidence > bestConfidence) {
           bestMatch = contractor;
@@ -365,8 +508,8 @@ export class ContractorMatcher {
       if (d.alts.length > 0) {
         for (let i = 0; i < d.alts.length; i++) {
           const alt = d.alts[i];
-          if (descNormalizedText.includes(alt.norm)) {
-            const confidence = this.calculateConfidence(alt.norm, descNormalizedText);
+          if (this.containsWords(desc, alt.norm)) {
+            const confidence = this.calculateConfidence(alt.norm, desc);
 
             if (confidence > bestConfidence) {
               bestMatch = contractor;
@@ -380,10 +523,11 @@ export class ContractorMatcher {
       // FOURTH: space-insensitive match — handles names mangled by fixed-width
       // line wrapping that injects spaces mid-word (e.g. "Sp"→"S p",
       // "Dudziński"→"Dud ziński"). Match the full name as a contiguous substring
-      // with all whitespace removed. The min-length guard avoids short-name false
-      // positives; requiring the whole name contiguous makes this stricter than fuzzy.
+      // with all whitespace removed, starting and ending on word boundaries. The
+      // min-length guard avoids short-name false positives; requiring the whole
+      // name contiguous makes this stricter than fuzzy.
       if (bestConfidence < 88) {
-        if (d.nameNoSpace.length >= 8 && descNoSpace.includes(d.nameNoSpace)) {
+        if (this.containsWithoutSpaces(desc, d.nameNoSpace)) {
           bestMatch = contractor;
           bestConfidence = 88;
           matchedText = contractor.nazwa;
@@ -392,11 +536,30 @@ export class ContractorMatcher {
       if (bestConfidence < 88 && d.alts.length > 0) {
         for (let i = 0; i < d.alts.length; i++) {
           const alt = d.alts[i];
-          if (alt.noSpace.length >= 8 && descNoSpace.includes(alt.noSpace)) {
+          if (this.containsWithoutSpaces(desc, alt.noSpace)) {
             bestMatch = contractor;
             bestConfidence = 88;
             matchedText = contractor.alternativeNames![i];
             break;
+          }
+        }
+      }
+
+      // FIFTH: a long name glued to the word after it — held for review with
+      // this contractor picked (see GLUED_MATCH_CONFIDENCE).
+      if (bestConfidence < GLUED_MATCH_CONFIDENCE) {
+        if (this.startsAtWord(desc, d.nameNoSpace)) {
+          bestMatch = contractor;
+          bestConfidence = GLUED_MATCH_CONFIDENCE;
+          matchedText = contractor.nazwa;
+        } else {
+          for (let i = 0; i < d.alts.length; i++) {
+            if (this.startsAtWord(desc, d.alts[i].noSpace)) {
+              bestMatch = contractor;
+              bestConfidence = GLUED_MATCH_CONFIDENCE;
+              matchedText = contractor.alternativeNames![i];
+              break;
+            }
           }
         }
       }
@@ -413,13 +576,14 @@ export class ContractorMatcher {
   }
 
   /**
-   * Calculate confidence score for a match
+   * Calculate confidence score for a whole-word match
    * Used for BOTH main name and alternative names (ensures EQUAL confidence)
    */
-  private calculateConfidence(contractorName: string, description: string): number {
+  private calculateConfidence(contractorName: string, text: PreparedText): number {
+    const description = text.padded.trim();
     if (description === contractorName) return 100;
-    if (description.startsWith(contractorName)) return 95;
-    if (description.endsWith(contractorName)) return 90;
+    if (text.padded.startsWith(` ${contractorName} `)) return 95;
+    if (text.padded.endsWith(` ${contractorName} `)) return 90;
 
     const ratio = contractorName.length / description.length;
     if (ratio > 0.8) return 85;

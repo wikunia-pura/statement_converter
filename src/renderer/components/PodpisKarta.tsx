@@ -5,6 +5,8 @@ import { FormField, FormSection } from './FormSection';
 import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
 import { useNotify } from './Notifications';
 import Icon from './Icon';
+import { ipcErrorMessage } from '../ipcError';
+import { localeOf } from '../../shared/format';
 
 /*
  * The signing card as the app sees it — Szafir's PKCS#11 library, the readers,
@@ -15,9 +17,13 @@ import Icon from './Icon';
 
 type T = (typeof translations)['pl'];
 
-/** An IPC rejection carries "Error invoking remote method '…': Error: " before the main process's message. */
+/**
+ * An IPC rejection without Electron's "Error invoking remote method '…': Error: ".
+ * Kept for the views that still import it from here; new code calls
+ * `ipcErrorMessage` (renderer/ipcError.ts) with a translated fallback.
+ */
 export const bezPrefiksu = (err: unknown): string =>
-  (err instanceof Error ? err.message : String(err)).replace(/^Error invoking remote method '[^']*': (?:Error: )?/, '');
+  err instanceof Error || typeof err === 'string' ? ipcErrorMessage(err, '') : String(err);
 
 type Waznosc = 'ok' | 'wygasl' | 'jeszcze';
 
@@ -153,7 +159,7 @@ export const PodpisKartaModal: React.FC<PodpisKartaModalProps> = ({
   onPrzerwij,
 }) => {
   const t = translations[language];
-  const locale = language === 'en' ? 'en-GB' : 'pl-PL';
+  const locale = localeOf(language);
   const [stan, setStan] = useState<PodpisKartaStan | null>(null);
   const [checking, setChecking] = useState(false);
   const [wybrany, setWybrany] = useState<string | null>(null);
@@ -179,12 +185,12 @@ export const PodpisKartaModal: React.FC<PodpisKartaModalProps> = ({
       try {
         pokaz(await window.electronAPI.getPodpisKarta());
       } catch (err: unknown) {
-        setError(bezPrefiksu(err));
+        setError(ipcErrorMessage(err, t.errorUnexpected));
       } finally {
         setChecking(false);
       }
     },
-    [pokaz],
+    [pokaz, t],
   );
 
   useEffect(() => {
@@ -198,7 +204,7 @@ export const PodpisKartaModal: React.FC<PodpisKartaModalProps> = ({
       const s = await window.electronAPI.wskazPodpisBiblioteke();
       if (s) pokaz(s);
     } catch (err: unknown) {
-      setError(bezPrefiksu(err));
+      setError(ipcErrorMessage(err, t.errorUnexpected));
     } finally {
       setChecking(false);
     }
@@ -231,7 +237,7 @@ export const PodpisKartaModal: React.FC<PodpisKartaModalProps> = ({
       setPin('');
     } catch (err: unknown) {
       setPin('');
-      setError(bezPrefiksu(err));
+      setError(ipcErrorMessage(err, t.errorUnexpected));
       // Fresh PIN counters: a wrong PIN may have brought the card to its last try.
       await sprawdz(true);
       pinRef.current?.focus();
@@ -420,7 +426,7 @@ export const PodpiszTezPdf: React.FC<{
  */
 export const PodpisKartaUstawienia: React.FC<{ language: Language }> = ({ language }) => {
   const t = translations[language];
-  const locale = language === 'en' ? 'en-GB' : 'pl-PL';
+  const locale = localeOf(language);
   const notify = useNotify();
   const [stan, setStan] = useState<PodpisKartaStan | null>(null);
   const [busy, setBusy] = useState(false);
@@ -431,7 +437,7 @@ export const PodpisKartaUstawienia: React.FC<{ language: Language }> = ({ langua
       const s = await call();
       if (s) setStan(s);
     } catch (err: unknown) {
-      notify.error(bezPrefiksu(err), t.podpisTitle);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.podpisTitle);
     } finally {
       setBusy(false);
     }
@@ -499,7 +505,7 @@ export const PodpisKartaUstawienia: React.FC<{ language: Language }> = ({ langua
                     </span>
                     <span className={`podpis-cert__line${waznosc(cert) === 'ok' ? '' : ' is-danger'}`}>
                       {t.podpisCertIssuer.replace('{issuer}', cert.wystawca)} · {waznoscText(t, cert, locale)} ·{' '}
-                      {cert.klucz.toUpperCase()} · nr {cert.numerSeryjny}
+                      {cert.klucz.toUpperCase()} · {t.podpisCertSerial.replace('{serial}', cert.numerSeryjny)}
                     </span>
                   </div>
                 ))}

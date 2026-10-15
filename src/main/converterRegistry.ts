@@ -1,11 +1,14 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
 import { app } from 'electron';
-import { Converter, TransactionForReview, ConversionReviewData, CLARIFICATION_ACCOUNT, DEFAULT_ACCOUNT_CONFIG } from '../shared/types';
+import { Converter, TransactionForReview, ConversionReviewData, CLARIFICATION_ACCOUNT, DEFAULT_ACCOUNT_CONFIG, DroppedStatementLine } from '../shared/types';
 import { readFileWithEncoding, readStatementText, writeFileWin1250 } from '../shared/encoding';
 import { isAccountSymbol, isLetteredApartment, needsExplicitAccount } from '../shared/apartment-account';
 import type { ConversionProgressCallback } from '../shared/base-converter';
+import { incomeGateConfidence } from '../shared/base-converter';
+import { ExtractionCache } from '../shared/extraction-cache';
 import { SantanderXmlConverter } from '../converters/santander-xml';
 import { PKOBPMT940Converter } from '../converters/pko-mt940';
 import { BnpXmlConverter } from '../converters/bnp-xml';
@@ -17,7 +20,7 @@ import { INGConverter } from '../converters/ing';
 import { PocztowyConverter } from '../converters/pocztowy';
 import { AIExtractor } from '../shared/ai-extractor';
 import { ContractorMatcher } from '../shared/contractor-matcher';
-import { MatchCache, contractorSetFingerprint } from '../shared/match-cache';
+import { MatchCache } from '../shared/match-cache';
 import { matchExpensesWithAI } from '../shared/expense-ai-matcher';
 import DatabaseService from './database';
 import { conversionCache } from './conversionCache';
@@ -148,15 +151,50 @@ class ConverterRegistry {
    * santander_xml is intentionally excluded: its analyzeWithoutAI ignores adresId
    * (matches against ALL addresses) while its convert filters by adresId, so their
    * results can differ — reusing the memo there would change convert's output.
+   *
+   * The key also carries a fingerprint of the contractors and addresses the
+   * result was matched against. Without it, "analyze, then add the missing
+   * contractor (or an apartment rule), then convert" handed back the result from
+   * before the change for up to five minutes.
    */
-  private fileMemoKey(converterId: string, inputPath: string, adresId?: number | null): string | null {
+  private async fileMemoKey(converterId: string, inputPath: string, adresId?: number | null): Promise<string | null> {
     if (converterId === 'santander_xml') return null;
     try {
       const mtime = fs.statSync(inputPath).mtimeMs;
-      return `${converterId}|${inputPath}|${mtime}|${adresId ?? 'all'}`;
+      const contractors = dbInstance ? await dbInstance.getAllKontrahenci() : [];
+      const addresses = dbInstance ? await dbInstance.getAllAdresy() : [];
+      const matchingData = JSON.stringify([
+        contractors.map((k) => [k.id, k.nazwa, k.kontoKontrahenta, k.nip ?? '', k.alternativeNames ?? [], k.typy ?? []]),
+        addresses.map((a) => [a.id, a.nazwa, a.alternativeNames ?? [], a.apartmentMappings ?? []]),
+      ]);
+      const fingerprint = crypto.createHash('sha1').update(matchingData).digest('hex').slice(0, 16);
+      return `${converterId}|${inputPath}|${mtime}|${adresId ?? 'all'}|${fingerprint}`;
     } catch {
       return null;
     }
+  }
+
+  /**
+   * The preview-file section listing statement lines the parser could not read,
+   * or '' when there are none. Written into the preview so the record of what was
+   * left out survives the review screen.
+   */
+  private droppedLinesSection(dropped: DroppedStatementLine[]): string {
+    if (dropped.length === 0) return '';
+    const reasons: Record<DroppedStatementLine['reason'], string> = {
+      amount: 'nieczytelna kwota',
+      structure: 'nierozpoznany układ linii',
+      direction: 'nierozpoznany kierunek (uznanie/obciążenie)',
+      date: 'nieczytelna data',
+      error: 'błąd odczytu',
+    };
+    let section = '\n' + '='.repeat(80) + '\n';
+    section += '=== ⚠️ LINIE WYCIĄGU POMINIĘTE PRZY ODCZYCIE (NIE MA ICH W PLIKU KSIĘGOWYM) ===\n';
+    section += '='.repeat(80) + '\n\n';
+    for (const d of dropped) {
+      section += `- ${d.line ? `linia ${d.line}: ` : ''}${d.excerpt} — ${reasons[d.reason]}\n`;
+    }
+    return section + '\n';
   }
 
   /** Take (read + remove) a memoized non-AI result if present and unexpired. */
@@ -353,7 +391,7 @@ class ConverterRegistry {
   ): Promise<{ totalTransactions: number; lowConfidenceCount: number; averageConfidence: number; needsAI: boolean }> {
     // Memo the parse+match result so the subsequent non-AI convert of this same
     // file reuses it instead of re-running the whole pipeline.
-    const memoKey = this.fileMemoKey(converterId, inputPath, adresId);
+    const memoKey = await this.fileMemoKey(converterId, inputPath, adresId);
     if (converterId === 'santander_xml') {
       // Fetch contractors from database
       const contractors = (dbInstance ? await dbInstance.getAllKontrahenci() : []);
@@ -383,13 +421,13 @@ class ConverterRegistry {
       // Count all transactions that will need AI (both income and expenses < 70%)
       const lowConfidenceTransactions = result.processed.filter(trn => {
         if (trn.transactionType === 'income') {
-          return trn.extracted.confidence.overall < 70;
+          return incomeGateConfidence(trn.extracted) < 70;
         } else {
           return (trn.matchedContractor?.confidence || 0) < 70;
         }
       });
 
-      const incomeCount = result.processed.filter(t => t.transactionType === 'income' && t.extracted.confidence.overall < 70).length;
+      const incomeCount = result.processed.filter(t => t.transactionType === 'income' && incomeGateConfidence(t.extracted) < 70).length;
       const expenseCount = result.processed.filter(t => t.transactionType === 'expense' && (t.matchedContractor?.confidence || 0) < 70).length;
       console.log(`[Santander] Total: ${result.processed.length}, Low confidence (<70%): ${lowConfidenceTransactions.length} (income: ${incomeCount}, expenses: ${expenseCount})`);
 
@@ -434,13 +472,13 @@ class ConverterRegistry {
       // Count all transactions that will need AI (both income and expenses < 70%)
       const lowConfidenceTransactions = result.processed.filter(trn => {
         if (trn.transactionType === 'income') {
-          return trn.extracted.confidence.overall < 70;
+          return incomeGateConfidence(trn.extracted) < 70;
         } else {
           return (trn.matchedContractor?.confidence || 0) < 70;
         }
       });
 
-      const incomeCount = result.processed.filter(t => t.transactionType === 'income' && t.extracted.confidence.overall < 70).length;
+      const incomeCount = result.processed.filter(t => t.transactionType === 'income' && incomeGateConfidence(t.extracted) < 70).length;
       const expenseCount = result.processed.filter(t => t.transactionType === 'expense' && (t.matchedContractor?.confidence || 0) < 70).length;
       console.log(`[PKO BP] Total: ${result.processed.length}, Low confidence (<70%): ${lowConfidenceTransactions.length} (income: ${incomeCount}, expenses: ${expenseCount})`);
 
@@ -475,13 +513,13 @@ class ConverterRegistry {
 
       const lowConfidenceTransactions = result.processed.filter(trn => {
         if (trn.transactionType === 'income') {
-          return trn.extracted.confidence.overall < 70;
+          return incomeGateConfidence(trn.extracted) < 70;
         } else {
           return (trn.matchedContractor?.confidence || 0) < 70;
         }
       });
 
-      const incomeCount = result.processed.filter(t => t.transactionType === 'income' && t.extracted.confidence.overall < 70).length;
+      const incomeCount = result.processed.filter(t => t.transactionType === 'income' && incomeGateConfidence(t.extracted) < 70).length;
       const expenseCount = result.processed.filter(t => t.transactionType === 'expense' && (t.matchedContractor?.confidence || 0) < 70).length;
       console.log(`[BNP] Total: ${result.processed.length}, Low confidence (<70%): ${lowConfidenceTransactions.length} (income: ${incomeCount}, expenses: ${expenseCount})`);
 
@@ -519,13 +557,13 @@ class ConverterRegistry {
 
       const lowConfidenceTransactions = result.processed.filter(trn => {
         if (trn.transactionType === 'income') {
-          return trn.extracted.confidence.overall < 70;
+          return incomeGateConfidence(trn.extracted) < 70;
         } else {
           return (trn.matchedContractor?.confidence || 0) < 70;
         }
       });
 
-      const incomeCount = result.processed.filter(t => t.transactionType === 'income' && t.extracted.confidence.overall < 70).length;
+      const incomeCount = result.processed.filter(t => t.transactionType === 'income' && incomeGateConfidence(t.extracted) < 70).length;
       const expenseCount = result.processed.filter(t => t.transactionType === 'expense' && (t.matchedContractor?.confidence || 0) < 70).length;
       console.log(`[Alior] Total: ${result.processed.length}, Low confidence (<70%): ${lowConfidenceTransactions.length} (income: ${incomeCount}, expenses: ${expenseCount})`);
 
@@ -560,13 +598,13 @@ class ConverterRegistry {
 
       const lowConfidenceTransactions = result.processed.filter((trn: any) => {
         if (trn.transactionType === 'income') {
-          return trn.extracted.confidence.overall < 70;
+          return incomeGateConfidence(trn.extracted) < 70;
         } else {
           return (trn.matchedContractor?.confidence || 0) < 70;
         }
       });
 
-      const incomeCount = result.processed.filter((t: any) => t.transactionType === 'income' && t.extracted.confidence.overall < 70).length;
+      const incomeCount = result.processed.filter((t: any) => t.transactionType === 'income' && incomeGateConfidence(t.extracted) < 70).length;
       const expenseCount = result.processed.filter((t: any) => t.transactionType === 'expense' && (t.matchedContractor?.confidence || 0) < 70).length;
       console.log(`[PKO Biznes] Total: ${result.processed.length}, Low confidence (<70%): ${lowConfidenceTransactions.length} (income: ${incomeCount}, expenses: ${expenseCount})`);
 
@@ -601,13 +639,13 @@ class ConverterRegistry {
 
       const lowConfidenceTransactions = result.processed.filter((trn: any) => {
         if (trn.transactionType === 'income') {
-          return trn.extracted.confidence.overall < 70;
+          return incomeGateConfidence(trn.extracted) < 70;
         } else {
           return (trn.matchedContractor?.confidence || 0) < 70;
         }
       });
 
-      const incomeCount = result.processed.filter((t: any) => t.transactionType === 'income' && t.extracted.confidence.overall < 70).length;
+      const incomeCount = result.processed.filter((t: any) => t.transactionType === 'income' && incomeGateConfidence(t.extracted) < 70).length;
       const expenseCount = result.processed.filter((t: any) => t.transactionType === 'expense' && (t.matchedContractor?.confidence || 0) < 70).length;
       console.log(`[PKO SA] Total: ${result.processed.length}, Low confidence (<70%): ${lowConfidenceTransactions.length} (income: ${incomeCount}, expenses: ${expenseCount})`);
 
@@ -642,13 +680,13 @@ class ConverterRegistry {
 
       const lowConfidenceTransactions = result.processed.filter(trn => {
         if (trn.transactionType === 'income') {
-          return trn.extracted.confidence.overall < 70;
+          return incomeGateConfidence(trn.extracted) < 70;
         } else {
           return (trn.matchedContractor?.confidence || 0) < 70;
         }
       });
 
-      const incomeCount = result.processed.filter(t => t.transactionType === 'income' && t.extracted.confidence.overall < 70).length;
+      const incomeCount = result.processed.filter(t => t.transactionType === 'income' && incomeGateConfidence(t.extracted) < 70).length;
       const expenseCount = result.processed.filter(t => t.transactionType === 'expense' && (t.matchedContractor?.confidence || 0) < 70).length;
       console.log(`[ING] Total: ${result.processed.length}, Low confidence (<70%): ${lowConfidenceTransactions.length} (income: ${incomeCount}, expenses: ${expenseCount})`);
 
@@ -683,13 +721,13 @@ class ConverterRegistry {
 
       const lowConfidenceTransactions = result.processed.filter(trn => {
         if (trn.transactionType === 'income') {
-          return trn.extracted.confidence.overall < 70;
+          return incomeGateConfidence(trn.extracted) < 70;
         } else {
           return (trn.matchedContractor?.confidence || 0) < 70;
         }
       });
 
-      const incomeCount = result.processed.filter(t => t.transactionType === 'income' && t.extracted.confidence.overall < 70).length;
+      const incomeCount = result.processed.filter(t => t.transactionType === 'income' && incomeGateConfidence(t.extracted) < 70).length;
       const expenseCount = result.processed.filter(t => t.transactionType === 'expense' && (t.matchedContractor?.confidence || 0) < 70).length;
       console.log(`[BOŚ] Total: ${result.processed.length}, Low confidence (<70%): ${lowConfidenceTransactions.length} (income: ${incomeCount}, expenses: ${expenseCount})`);
 
@@ -724,13 +762,13 @@ class ConverterRegistry {
 
       const lowConfidenceTransactions = result.processed.filter(trn => {
         if (trn.transactionType === 'income') {
-          return trn.extracted.confidence.overall < 70;
+          return incomeGateConfidence(trn.extracted) < 70;
         } else {
           return (trn.matchedContractor?.confidence || 0) < 70;
         }
       });
 
-      const incomeCount = result.processed.filter(t => t.transactionType === 'income' && t.extracted.confidence.overall < 70).length;
+      const incomeCount = result.processed.filter(t => t.transactionType === 'income' && incomeGateConfidence(t.extracted) < 70).length;
       const expenseCount = result.processed.filter(t => t.transactionType === 'expense' && (t.matchedContractor?.confidence || 0) < 70).length;
       console.log(`[Pocztowy] Total: ${result.processed.length}, Low confidence (<70%): ${lowConfidenceTransactions.length} (income: ${incomeCount}, expenses: ${expenseCount})`);
 
@@ -746,21 +784,21 @@ class ConverterRegistry {
   }
 
   /**
-   * Extract transactions that need review (confidence < 70%)
+   * Extract transactions that need review: everything not auto-approved.
    */
   private extractReviewTransactions(
     transactions: any[], // ProcessedTransaction from either converter
     converterId: string
   ): TransactionForReview[] {
     const reviewTransactions: TransactionForReview[] = [];
-    
+
     transactions.forEach((trn, index) => {
-      const confidence = trn.transactionType === 'income' 
-        ? trn.extracted.confidence.overall 
-        : (trn.matchedContractor?.confidence || 0);
-      
       // Include in review if:
-      // 1. Confidence below threshold (<70%), OR
+      // 1. The row is not auto-approved. Only `confidence < 70` used to count, so
+      //    a 70–84 "needs-review" row — an AI apartment guess averaged up by a
+      //    confident address, a partial contractor-name match — was booked
+      //    without anyone seeing it. The status already folds in the apartment
+      //    gate (incomeGateConfidence) and every hold (storno, batch entry…), OR
       // 2. Income transaction without apartment number (regardless of confidence), OR
       // 3. Apartment number came from a user-defined mapping rule — always shown
       //    for confirmation ("assign, but show for acceptance"), OR
@@ -768,7 +806,7 @@ class ConverterRegistry {
       //    symbol to book it to (17A). Checked independently of confidence because
       //    the AI can return such a number with a high score of its own, and the
       //    alternative to asking the user is booking onto the wrong apartment.
-      const needsReview = confidence < 70
+      const needsReview = trn.status !== 'auto-approved'
         || (trn.transactionType === 'income' && !trn.extracted.apartmentNumber)
         || trn.extracted.matchedByManualMapping === true
         || (trn.transactionType === 'income' && this.needsAccountDecision(trn));
@@ -820,8 +858,9 @@ class ConverterRegistry {
     index: number,
     converterId: string
   ): TransactionForReview {
+    // The same figure the review gate reads, so the card shows why it is here.
     const confidence = trn.transactionType === 'income'
-      ? trn.extracted.confidence.overall
+      ? incomeGateConfidence(trn.extracted)
       : (trn.matchedContractor?.confidence || 0);
 
     // For Santander, use 'value' (transaction amount) not 'realValue' (account balance)
@@ -850,6 +889,7 @@ class ConverterRegistry {
         matchedByManualMapping: trn.extracted.matchedByManualMapping === true,
         accountOverride: trn.extracted.accountOverride ?? null,
         needsAccount: this.needsAccountDecision(trn),
+        holdReason: trn.extracted.holdReason ?? null,
       },
     };
 
@@ -921,7 +961,7 @@ class ConverterRegistry {
     });
     const matchCache = new MatchCache(
       path.join(app.getPath('userData'), 'match-cache.json'),
-      contractorSetFingerprint(contractors)
+      contractors
     );
 
     let total = 0;
@@ -955,9 +995,10 @@ class ConverterRegistry {
         warnings: match?.contractor ? [] : ['AI could not match contractor'],
       };
       // Mirror createProcessedTransaction's thresholds so the finalize-time
-      // summary counts a re-matched row the same as one matched during conversion.
+      // summary counts a re-matched row the same as one matched during conversion
+      // — a held row (storno, batch entry) included: it stays held.
       const confidence = match?.confidence || 0;
-      trn.status = confidence >= 85
+      trn.status = confidence >= 85 && !trn.extracted?.holdReason
         ? 'auto-approved'
         : confidence >= 70
           ? 'needs-review'
@@ -994,41 +1035,35 @@ class ConverterRegistry {
       const originalApartmentNumber = trn.extracted.apartmentNumber;
       
       if (decision.action === 'accept') {
-        // User accepts the extracted data
-        // If apartmentNumber is null but we have fullAddress, try to extract it
-        if (!trn.extracted.apartmentNumber && trn.extracted.fullAddress) {
-          // Try to extract apartment number from fullAddress
-          // Patterns: "Street 81/48", "Street 81 m. 48", "Street 81 lok. 48", "ZGN"
-          // Each keeps an optional trailing letter so "Street 5/17A" yields "17A"
-          // and not "17" — the two are different apartments.
-          const patterns = [
-            /\/(\d+[A-Za-z]?)$/,  // "/48", "/17A" at end
-            /m\.?\s*(\d+[A-Za-z]?)$/i,  // "m. 48" or "m.48" at end
-            /lok\.?\s*(\d+[A-Za-z]?)$/i,  // "lok. 48" or "lok.48" at end
-            /mieszkanie\s*(\d+[A-Za-z]?)$/i,  // "mieszkanie 48" at end
-          ];
-          
-          for (const pattern of patterns) {
-            const match = trn.extracted.fullAddress.match(pattern);
-            if (match && match[1]) {
-              trn.extracted.apartmentNumber = match[1];
-              break;
-            }
-          }
-          
-          // Special case: "ZGN" in fullAddress
-          if (!trn.extracted.apartmentNumber && /zgn/i.test(trn.extracted.fullAddress)) {
-            trn.extracted.apartmentNumber = 'ZGN';
-          }
-        }
-        
-        // Mark as reviewed by user
+        // User accepts the extracted data as it is. A row without an apartment
+        // stays unrecognized: the review screen offers no "Akceptuj" for one, and
+        // the auto-accept of "skip approval" must not invent the number either —
+        // it used to be pattern-matched out of the free-text address ("Plac Bem 5"
+        // read as apartment 5). Only the user names an apartment that was not found.
         trn.reviewedByUser = {
           action: 'accept',
           originalValue: originalApartmentNumber,
-          extractedFrom: 'fullAddress'
         };
       } else if (decision.action === 'reject') {
+        if (trn.transactionType === 'expense') {
+          // An expense is booked by its contractor, so rejecting it must clear the
+          // contractor — clearing the apartment fields only left the rejected
+          // guess in place, and the accounting file booked it on the contractor's
+          // account while the preview said "NIEROZPOZNANY".
+          const originalContractorName = trn.matchedContractor?.contractor?.nazwa || null;
+          const originalContractorAccount = trn.matchedContractor?.contractor?.kontoKontrahenta || null;
+          trn.matchedContractor = { contractor: null, confidence: 0, matchedIn: 'none' };
+
+          trn.reviewedByUser = {
+            action: 'reject',
+            originalContractorValue: {
+              name: originalContractorName,
+              account: originalContractorAccount
+            }
+          };
+          return;
+        }
+
         // Clear apartmentNumber - mark as unrecognized. The account override goes
         // with it: it belongs to the apartment that was just rejected, and left
         // behind it would still decide where the money lands.
@@ -1048,7 +1083,9 @@ class ConverterRegistry {
           // "Wyjaśnij" replaces the destination outright, so any override from an
           // apartment rule must not keep pointing somewhere else, and the
           // lettered-apartment hold no longer applies — the user just decided.
-          trn.extracted.accountOverride = null;
+          // The clarification account is itself the override: an account travels
+          // as one (see needsExplicitAccount).
+          trn.extracted.accountOverride = CLARIFICATION_ACCOUNT;
           trn.extracted.needsAccount = false;
           if (trn.extracted.confidence) {
             trn.extracted.confidence.overall = 100;
@@ -1092,9 +1129,12 @@ class ConverterRegistry {
           const selectedEntry = contractors.find(k => k.id === decision.manualRemainingIncomeId);
           if (selectedEntry) {
             // Set apartment number to the account of the remaining income entry.
-            // The entry's own account is the destination now, so drop any override.
+            // The entry's own account is the destination now, and it travels as the
+            // override: used only when it is a real account symbol, so an entry
+            // typed as a bare "760" stays unrecognized instead of landing on
+            // apartment 760 (204-000760).
             trn.extracted.apartmentNumber = selectedEntry.kontoKontrahenta;
-            trn.extracted.accountOverride = null;
+            trn.extracted.accountOverride = selectedEntry.kontoKontrahenta;
             trn.extracted.needsAccount = false;
             trn.extracted.confidence.overall = 100;
             trn.extracted.confidence.apartment = 100;
@@ -1226,7 +1266,7 @@ class ConverterRegistry {
       try {
         // Reuse the non-AI result computed during analyzeWithoutAI for this file
         // (only valid for non-AI conversions; the AI path recomputes).
-        const memoKey = useAI ? null : this.fileMemoKey(converterId, inputPath, adresId);
+        const memoKey = useAI ? null : await this.fileMemoKey(converterId, inputPath, adresId);
         if (converterId === 'santander_xml') {
           let provider: 'none' | 'anthropic' | 'openai' = 'none';
           let apiKey = '';
@@ -1425,15 +1465,12 @@ class ConverterRegistry {
           // Check if transactions need review
           const reviewTransactions = this.extractReviewTransactions(result.processed, 'santander_xml');
           
-          if (reviewTransactions.length > 0) {
-            // Check if any transactions have AI failure warnings
-            const hasAIFailures = result.processed.some(trn => 
-              trn.extracted.warnings?.some(w => 
-                w.includes('AI extraction failed') || 
-                w.includes('AI matching failed')
-              )
-            );
-            
+          // Lines the parser could not read force the review screen too: the
+          // file must not be written before the user has seen them.
+          const dropped = result.dropped ?? [];
+          if (reviewTransactions.length > 0 || dropped.length > 0) {
+            output += this.droppedLinesSection(dropped);
+
             // Store in cache and return review data
             const tempConversionId = conversionCache.store(
               fileName || path.basename(inputPath),
@@ -1468,13 +1505,9 @@ class ConverterRegistry {
                 adresName,
                 transactions: reviewTransactions,
                 apartmentPrefix: this.apartmentPrefixOf(accountConfig),
+                droppedLines: dropped,
               },
             };
-            
-            // Add warning message if AI failed
-            if (hasAIFailures) {
-              convertResult.warningMessage = 'Nie udało się użyć AI. Przeprowadzono standardową konwersję.';
-            }
             
             resolve(convertResult);
             return;
@@ -1693,15 +1726,12 @@ class ConverterRegistry {
           // Check if transactions need review
           const reviewTransactions = this.extractReviewTransactions(result.processed, 'pko_mt940');
           
-          if (reviewTransactions.length > 0) {
-            // Check if any transactions have AI failure warnings
-            const hasAIFailures = result.processed.some(trn => 
-              trn.extracted.warnings?.some(w => 
-                w.includes('AI extraction failed') || 
-                w.includes('AI matching failed')
-              )
-            );
-            
+          // Lines the parser could not read force the review screen too: the
+          // file must not be written before the user has seen them.
+          const dropped = result.dropped ?? [];
+          if (reviewTransactions.length > 0 || dropped.length > 0) {
+            output += this.droppedLinesSection(dropped);
+
             // Store in cache and return review data
             const tempConversionId = conversionCache.store(
               fileName || path.basename(inputPath),
@@ -1736,13 +1766,9 @@ class ConverterRegistry {
                 adresName,
                 transactions: reviewTransactions,
                 apartmentPrefix: this.apartmentPrefixOf(accountConfig),
+                droppedLines: dropped,
               },
             };
-            
-            // Add warning message if AI failed
-            if (hasAIFailures) {
-              convertResult.warningMessage = 'Nie udało się użyć AI. Przeprowadzono standardową konwersję.';
-            }
             
             resolve(convertResult);
             return;
@@ -1934,13 +1960,11 @@ class ConverterRegistry {
           // Check if transactions need review
           const reviewTransactions = this.extractReviewTransactions(result.processed, 'bnp_xml');
 
-          if (reviewTransactions.length > 0) {
-            const hasAIFailures = result.processed.some(trn =>
-              trn.extracted.warnings?.some(w =>
-                w.includes('AI extraction failed') ||
-                w.includes('AI matching failed')
-              )
-            );
+          // Lines the parser could not read force the review screen too: the
+          // file must not be written before the user has seen them.
+          const dropped = result.dropped ?? [];
+          if (reviewTransactions.length > 0 || dropped.length > 0) {
+            output += this.droppedLinesSection(dropped);
 
             const tempConversionId = conversionCache.store(
               fileName || path.basename(inputPath),
@@ -1974,12 +1998,9 @@ class ConverterRegistry {
                 adresName,
                 transactions: reviewTransactions,
                 apartmentPrefix: this.apartmentPrefixOf(accountConfig),
+                droppedLines: dropped,
               },
             };
-
-            if (hasAIFailures) {
-              convertResult.warningMessage = 'Nie udało się użyć AI. Przeprowadzono standardową konwersję.';
-            }
 
             resolve(convertResult);
             return;
@@ -2175,13 +2196,11 @@ class ConverterRegistry {
           // Check if transactions need review
           const reviewTransactions = this.extractReviewTransactions(result.processed, 'alior');
 
-          if (reviewTransactions.length > 0) {
-            const hasAIFailures = result.processed.some(trn =>
-              trn.extracted.warnings?.some(w =>
-                w.includes('AI extraction failed') ||
-                w.includes('AI matching failed')
-              )
-            );
+          // Lines the parser could not read force the review screen too: the
+          // file must not be written before the user has seen them.
+          const dropped = result.dropped ?? [];
+          if (reviewTransactions.length > 0 || dropped.length > 0) {
+            output += this.droppedLinesSection(dropped);
 
             const tempConversionId = conversionCache.store(
               fileName || path.basename(inputPath),
@@ -2215,12 +2234,9 @@ class ConverterRegistry {
                 adresName,
                 transactions: reviewTransactions,
                 apartmentPrefix: this.apartmentPrefixOf(accountConfig),
+                droppedLines: dropped,
               },
             };
-
-            if (hasAIFailures) {
-              convertResult.warningMessage = 'Nie udało się użyć AI. Przeprowadzono standardową konwersję.';
-            }
 
             resolve(convertResult);
             return;
@@ -2413,13 +2429,11 @@ class ConverterRegistry {
           // Check if transactions need review
           const reviewTransactions = this.extractReviewTransactions(result.processed, 'pko_biznes');
 
-          if (reviewTransactions.length > 0) {
-            const hasAIFailures = result.processed.some((trn: any) =>
-              trn.extracted.warnings?.some((w: string) =>
-                w.includes('AI extraction failed') ||
-                w.includes('AI matching failed')
-              )
-            );
+          // Lines the parser could not read force the review screen too: the
+          // file must not be written before the user has seen them.
+          const dropped = result.dropped ?? [];
+          if (reviewTransactions.length > 0 || dropped.length > 0) {
+            output += this.droppedLinesSection(dropped);
 
             const tempConversionId = conversionCache.store(
               fileName || path.basename(inputPath),
@@ -2453,12 +2467,9 @@ class ConverterRegistry {
                 adresName,
                 transactions: reviewTransactions,
                 apartmentPrefix: this.apartmentPrefixOf(accountConfig),
+                droppedLines: dropped,
               },
             };
-
-            if (hasAIFailures) {
-              convertResult.warningMessage = 'Nie udało się użyć AI. Przeprowadzono standardową konwersję.';
-            }
 
             resolve(convertResult);
             return;
@@ -2635,13 +2646,11 @@ class ConverterRegistry {
           // Check if transactions need review
           const reviewTransactions = this.extractReviewTransactions(result.processed, 'pko_sa');
 
-          if (reviewTransactions.length > 0) {
-            const hasAIFailures = result.processed.some((trn: any) =>
-              trn.extracted.warnings?.some((w: string) =>
-                w.includes('AI extraction failed') ||
-                w.includes('AI matching failed')
-              )
-            );
+          // Lines the parser could not read force the review screen too: the
+          // file must not be written before the user has seen them.
+          const dropped = result.dropped ?? [];
+          if (reviewTransactions.length > 0 || dropped.length > 0) {
+            output += this.droppedLinesSection(dropped);
 
             const tempConversionId = conversionCache.store(
               fileName || path.basename(inputPath),
@@ -2675,12 +2684,9 @@ class ConverterRegistry {
                 adresName,
                 transactions: reviewTransactions,
                 apartmentPrefix: this.apartmentPrefixOf(accountConfig),
+                droppedLines: dropped,
               },
             };
-
-            if (hasAIFailures) {
-              convertResult.warningMessage = 'Nie udało się użyć AI. Przeprowadzono standardową konwersję.';
-            }
 
             resolve(convertResult);
             return;
@@ -2873,13 +2879,11 @@ class ConverterRegistry {
           // Check if transactions need review
           const reviewTransactions = this.extractReviewTransactions(result.processed, 'ing');
 
-          if (reviewTransactions.length > 0) {
-            const hasAIFailures = result.processed.some(trn =>
-              trn.extracted.warnings?.some(w =>
-                w.includes('AI extraction failed') ||
-                w.includes('AI matching failed')
-              )
-            );
+          // Lines the parser could not read force the review screen too: the
+          // file must not be written before the user has seen them.
+          const dropped = result.dropped ?? [];
+          if (reviewTransactions.length > 0 || dropped.length > 0) {
+            output += this.droppedLinesSection(dropped);
 
             const tempConversionId = conversionCache.store(
               fileName || path.basename(inputPath),
@@ -2913,12 +2917,9 @@ class ConverterRegistry {
                 adresName,
                 transactions: reviewTransactions,
                 apartmentPrefix: this.apartmentPrefixOf(accountConfig),
+                droppedLines: dropped,
               },
             };
-
-            if (hasAIFailures) {
-              convertResult.warningMessage = 'Nie udało się użyć AI. Przeprowadzono standardową konwersję.';
-            }
 
             resolve(convertResult);
             return;
@@ -3103,13 +3104,11 @@ class ConverterRegistry {
           // Check if transactions need review
           const reviewTransactions = this.extractReviewTransactions(result.processed, 'bos_xml');
 
-          if (reviewTransactions.length > 0) {
-            const hasAIFailures = result.processed.some(trn =>
-              trn.extracted.warnings?.some(w =>
-                w.includes('AI extraction failed') ||
-                w.includes('AI matching failed')
-              )
-            );
+          // Lines the parser could not read force the review screen too: the
+          // file must not be written before the user has seen them.
+          const dropped = result.dropped ?? [];
+          if (reviewTransactions.length > 0 || dropped.length > 0) {
+            output += this.droppedLinesSection(dropped);
 
             const tempConversionId = conversionCache.store(
               fileName || path.basename(inputPath),
@@ -3143,12 +3142,9 @@ class ConverterRegistry {
                 adresName,
                 transactions: reviewTransactions,
                 apartmentPrefix: this.apartmentPrefixOf(accountConfig),
+                droppedLines: dropped,
               },
             };
-
-            if (hasAIFailures) {
-              convertResult.warningMessage = 'Nie udało się użyć AI. Przeprowadzono standardową konwersję.';
-            }
 
             resolve(convertResult);
             return;
@@ -3345,13 +3341,11 @@ class ConverterRegistry {
           // Check if transactions need review
           const reviewTransactions = this.extractReviewTransactions(result.processed, 'pocztowy');
 
-          if (reviewTransactions.length > 0) {
-            const hasAIFailures = result.processed.some(trn =>
-              trn.extracted.warnings?.some(w =>
-                w.includes('AI extraction failed') ||
-                w.includes('AI matching failed')
-              )
-            );
+          // Lines the parser could not read force the review screen too: the
+          // file must not be written before the user has seen them.
+          const dropped = result.dropped ?? [];
+          if (reviewTransactions.length > 0 || dropped.length > 0) {
+            output += this.droppedLinesSection(dropped);
 
             const tempConversionId = conversionCache.store(
               fileName || path.basename(inputPath),
@@ -3385,12 +3379,9 @@ class ConverterRegistry {
                 adresName,
                 transactions: reviewTransactions,
                 apartmentPrefix: this.apartmentPrefixOf(accountConfig),
+                droppedLines: dropped,
               },
             };
-
-            if (hasAIFailures) {
-              convertResult.warningMessage = 'Nie udało się użyć AI. Przeprowadzono standardową konwersję.';
-            }
 
             resolve(convertResult);
             return;
@@ -3438,6 +3429,10 @@ class ConverterRegistry {
       
       // Apply user decisions to transactions
       const updatedTransactions = this.applyReviewDecisions(cached.processedTransactions, decisions, kontrahenci);
+
+      // Forget the cached answers the user overruled, so next month's statement
+      // asks again instead of serving the same wrong apartment or contractor.
+      this.forgetOverruledAnswers(updatedTransactions, decisions);
       
       // Now generate files with updated transactions
       const converter = cached.converterId === 'santander_xml' 
@@ -3659,6 +3654,43 @@ class ConverterRegistry {
       };
     } catch (error) {
       throw error;
+    }
+  }
+
+  /**
+   * Drop the extraction-cache entry (income) or match-cache entry (expense) of
+   * every row the user did not simply accept — rejected, sent to clarification,
+   * or resolved by hand. Those caches answer before the matcher next time; a
+   * corrected answer left in them would come back with the next statement.
+   * Best-effort: a cache that cannot be written must not fail the finalize.
+   */
+  private forgetOverruledAnswers(
+    transactions: any[],
+    decisions: import('../shared/types').ReviewDecision[]
+  ): void {
+    const overruled = decisions
+      .filter((d) => d.action !== 'accept')
+      .map((d) => transactions[d.index])
+      .filter((trn) => trn?.normalized);
+    if (overruled.length === 0) return;
+
+    try {
+      const userData = app.getPath('userData');
+      const extractionCache = new ExtractionCache(path.join(userData, 'extraction-cache.json'));
+      // Opened without the contractor list: it only deletes, and must not judge
+      // (or drop) the entries it was not asked about.
+      const matchCache = new MatchCache(path.join(userData, 'match-cache.json'));
+      let removed = 0;
+      for (const trn of overruled) {
+        const { descBase, descOpt } = trn.normalized;
+        if (trn.transactionType === 'income') removed += extractionCache.delete(descBase, descOpt);
+        else if (matchCache.delete(descBase, descOpt)) removed++;
+      }
+      extractionCache.flush();
+      matchCache.flush();
+      if (removed > 0) console.log(`🧹 Removed ${removed} cached answer(s) the user overruled`);
+    } catch (error) {
+      console.warn('Could not update the AI caches after review:', error);
     }
   }
 

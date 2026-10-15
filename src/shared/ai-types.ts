@@ -11,6 +11,14 @@ import { Kontrahent, Adres } from './types';
 export interface AITransaction {
   descBase: string;     // Main description (e.g., Santander desc-base, PKO description fields joined)
   descOpt: string;      // Secondary description (e.g., Santander desc-opt, PKO counterparty name)
+  /**
+   * The bank subfields descBase / descOpt were glued from, when the format joins
+   * them with no separator (MT940 ~20…~25, ~32+~33). Only contractor matching
+   * reads them — see ContractorMatcher.prepareText; everything else keeps the
+   * glued text, which the apartment regexes and their guards depend on.
+   */
+  descBaseParts?: string[];
+  descOptParts?: string[];
   exeDate: string;      // Execution date
   value: number;        // Transaction amount
   // Optional fields - only used for preview/pass-through, not by AI logic

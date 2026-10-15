@@ -76,6 +76,33 @@ export const ZNAK_KRATKI_DN1 = 3.2479;
 
 export const duze = (s: string) => s.toLocaleUpperCase('pl-PL');
 
+/** The characters each embedded font can draw — read once per font. */
+const znakiCzcionki = new WeakMap<PDFFont, Set<number>>();
+
+/**
+ * Refuses a value with a character the form's font cannot draw. pdf-lib would put the font's empty
+ * glyph there without a word — "ОЛЕГ" in Cyrillic came out as four blank boxes in the PDF while the XML
+ * was right — so the error names the field and the character instead, for the value to be typed in
+ * Latin letters. Whitespace is drawn as a plain space (see `Strona.tekst`), so it never fails.
+ */
+export function sprawdzZnaki(font: PDFFont, text: string, nazwa: string): void {
+  let znaki = znakiCzcionki.get(font);
+  if (!znaki) {
+    znaki = new Set(font.getCharacterSet());
+    znakiCzcionki.set(font, znaki);
+  }
+  for (const ch of text) {
+    if (/\s/.test(ch)) continue;
+    const cp = ch.codePointAt(0)!;
+    if (!znaki.has(cp)) {
+      throw new Error(
+        `Pole „${nazwa}” zawiera znak „${ch}” (U+${cp.toString(16).toUpperCase().padStart(4, '0')}), ` +
+          'którego czcionka formularza nie ma — usuń go albo wpisz wartość literami alfabetu łacińskiego.',
+      );
+    }
+  }
+}
+
 /**
  * One page, drawn in the coordinates the layout map uses: as displayed, origin
  * top-left. The landscape ZDN-1 is a portrait page turned 90° clockwise, so a
@@ -103,9 +130,11 @@ export class Strona {
     return this.font.widthOfTextAtSize(text, size);
   }
 
-  tekst(text: string, x: number, y: number, size = ROZMIAR) {
+  tekst(text: string, x: number, y: number, size = ROZMIAR, nazwa = 'wartość na formularzu') {
     if (!text) return;
-    this.page.drawText(text, {
+    sprawdzZnaki(this.font, text, nazwa);
+    // Any whitespace (a pasted no-break space, a tab) as a plain space — the one the font surely has.
+    this.page.drawText(text.replace(/\s/g, ' '), {
       ...this.pdf(x, y),
       size,
       font: this.font,
@@ -125,6 +154,8 @@ export class Strona {
 
   /** The largest size, down to the floor, at which `text` fits `width`. */
   rozmiar(text: string, width: number, nazwa: string, size = ROZMIAR, min = ROZMIAR_MIN): number {
+    // Before measuring: a glyph the font lacks is measured as its empty box and "fits".
+    sprawdzZnaki(this.font, text, nazwa);
     let s = size;
     while (s > min && this.szerokosc(text, s) > width) s -= 0.25;
     if (this.szerokosc(text, s) > width) {
@@ -213,6 +244,7 @@ export class Strona {
       const value = parts[s] ?? '';
       if (value.length > cells)
         throw new Error(`Pole „${nazwa}” ma więcej znaków niż kratek w formularzu.`);
+      sprawdzZnaki(this.font, value, nazwa);
       [...value].forEach((ch, i) => {
         if (ch === ' ') return;
         const cx = x + 3 * w + 5 * w * i;

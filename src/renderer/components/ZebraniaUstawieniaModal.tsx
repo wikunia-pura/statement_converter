@@ -3,6 +3,7 @@ import { ZebraniaUstawienia } from '../../shared/types';
 import { uchwalaNr } from '../../shared/plan-gospodarczy';
 import { translations, Language } from '../translations';
 import { useNotify } from './Notifications';
+import { ipcErrorMessage } from '../ipcError';
 import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
 import { FormField, FormRow, FormSection } from './FormSection';
 import Select from './Select';
@@ -38,7 +39,7 @@ const ZebraniaUstawieniaModal: React.FC<{
       notify.success(t.zsetSaved);
       onSaved(next);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err));
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
     } finally {
       setSaving(false);
     }

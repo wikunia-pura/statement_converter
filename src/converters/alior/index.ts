@@ -26,6 +26,7 @@ import {
   ParseResult,
   ICsvExporter,
 } from '../../shared/base-converter';
+import type { ReviewHoldReason } from '../../shared/types';
 
 export class AliorConverter extends BaseConverter<AliorTransaction> {
   private parser: AliorMT940Parser;
@@ -52,6 +53,7 @@ export class AliorConverter extends BaseConverter<AliorTransaction> {
     const statement = this.parser.parse(content);
     return {
       transactions: statement.transactions,
+      dropped: statement.dropped,
       logExtra: `IBAN: ${statement.accountIBAN}, Opening: ${statement.openingBalance.amount} ${statement.openingBalance.debitCredit}, Closing: ${statement.closingBalance.amount} ${statement.closingBalance.debitCredit}`,
     };
   }
@@ -63,6 +65,11 @@ export class AliorConverter extends BaseConverter<AliorTransaction> {
     return this.parser.filterTransactions(transactions, {
       skipNegative: opts.skipNegative,
     });
+  }
+
+  /** A storno (RC/RD) is held for review, never booked automatically. */
+  protected holdReason(transaction: AliorTransaction): ReviewHoldReason | null {
+    return transaction.reversal ? 'reversal' : null;
   }
 
   protected isIncome(transaction: AliorTransaction): boolean {

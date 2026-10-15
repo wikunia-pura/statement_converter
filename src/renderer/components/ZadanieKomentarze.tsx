@@ -3,6 +3,7 @@ import { AppUser, ZadanieKomentarz, ZADANIE_KOMENTARZ_MAX_LENGTH } from '../../s
 import { personColor, personLabel } from '../../shared/app-users';
 import { MentionEditor, MentionEditorHandle, MentionText } from './MentionEditor';
 import { translations, Language } from '../translations';
+import { pollWhileVisible } from '../hooks/pollWhileVisible';
 import { useNotify } from './Notifications';
 import Icon from './Icon';
 
@@ -81,10 +82,11 @@ const ZadanieKomentarze: React.FC<Props> = ({
       }
     };
     void load(true);
-    const timer = setInterval(() => void load(false), REFRESH_MS);
+    // Paused while the window is hidden; refreshed the moment it is back.
+    const stopPolling = pollWhileVisible(() => void load(false), REFRESH_MS);
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      stopPolling();
     };
   }, [zadanieId]);
 
@@ -206,7 +208,7 @@ const ZadanieKomentarze: React.FC<Props> = ({
                         <button
                           type="button"
                           className="zad-icon-btn zad-icon-btn--danger zad-comment__delete"
-                          title={t.zadCommentDelete}
+                          data-tip={t.zadCommentDelete}
                           aria-label={t.zadCommentDelete}
                           onClick={() => setConfirmId(k.id)}
                         >

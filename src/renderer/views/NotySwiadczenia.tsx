@@ -56,7 +56,7 @@ const NotySwiadczenia: React.FC<Props> = ({ language, files, setFiles }) => {
       .filter((file) => file.name.toLowerCase().endsWith('.pdf'))
       .map((file) => ({
         fileName: file.name,
-        filePath: (file as unknown as { path: string }).path,
+        filePath: window.electronAPI.getPathForFile(file),
       }))
       .filter((f) => f.filePath);
     if (dropped.length > 0) addFiles(dropped);
@@ -225,7 +225,7 @@ const NotySwiadczenia: React.FC<Props> = ({ language, files, setFiles }) => {
                               type="button"
                               className="cell-error-detail"
                               onClick={() => navigator.clipboard.writeText(f.error || '')}
-                              title={`${t.convErrorCopy}\n\n${f.error}`}
+                              data-tip={`${t.convErrorCopy}\n\n${f.error}`}
                             >
                               {f.error.slice(0, 120)}
                             </button>
@@ -266,7 +266,7 @@ const NotySwiadczenia: React.FC<Props> = ({ language, files, setFiles }) => {
                               className="button button-ghost button-icon icon-danger"
                               onClick={() => removeFile(f.filePath)}
                               disabled={isProcessing}
-                              title={t.remove}
+                              data-tip={t.remove}
                               aria-label={`${t.remove}: ${f.fileName}`}
                             >
                               <Icon name="trash" size={15} />

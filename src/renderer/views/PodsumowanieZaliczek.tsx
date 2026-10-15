@@ -4,6 +4,7 @@ import { FormSection } from '../components/FormSection';
 import Icon from '../components/Icon';
 import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
 import Select from '../components/Select';
+import { localeOf } from '../../shared/format';
 import type {
   ZaliczkiCategory,
   ZaliczkiEditedFile,
@@ -43,8 +44,9 @@ const CATEGORIES: ZaliczkiCategory[] = [
   'razem_total',
 ];
 
-const MONTH_SHORT = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze',
-                     'lip', 'sie', 'wrz', 'paź', 'lis', 'gru'];
+/** A month's short name in the UI's language: "paź" / "Oct" — pl-PL's own abbreviations. */
+const monthShort = (month: number, language: Language): string =>
+  new Date(2000, month - 1, 1).toLocaleString(localeOf(language), { month: 'short' });
 
 /**
  * Files handled at once. Pages within a file are dispatched by the main process,
@@ -148,7 +150,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
       .filter((file) => file.name.toLowerCase().endsWith('.pdf'))
       .map((file) => ({
         fileName: file.name,
-        filePath: (file as unknown as { path: string }).path,
+        filePath: window.electronAPI.getPathForFile(file),
       }))
       .filter((f) => f.filePath);
     if (dropped.length > 0) addFiles(dropped);
@@ -393,7 +395,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                   className="button button-secondary"
                   onClick={runOcrAll}
                   disabled={isProcessing || !anyPending}
-                  title={!anyPending ? t.zaliczkiNothingToProcess : undefined}
+                  data-tip={!anyPending ? t.zaliczkiNothingToProcess : undefined}
                 >
                   <Icon name={isProcessing ? 'loader' : 'search'} size={14} className={isProcessing ? 'icon-spin' : undefined} />{' '}
                   {isProcessing ? t.zaliczkiOcrRunning : t.zaliczkiRunOcrAll}
@@ -454,9 +456,10 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                                 onMonthChange={(m) => updateFileMonthYear(f.filePath, { month: m })}
                                 onYearChange={(y) => updateFileMonthYear(f.filePath, { year: y })}
                                 missingLabel={t.zaliczkiMissingMonth}
+                                language={language}
                               />
                             ) : month ? (
-                              `${MONTH_SHORT[month - 1]} ${fy}`
+                              `${monthShort(month, language)} ${fy}`
                             ) : (
                               <span className="cell-empty">—</span>
                             )}
@@ -468,7 +471,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                                 type="button"
                                 className="cell-error-detail"
                                 onClick={() => navigator.clipboard.writeText(f.error || '')}
-                                title={`${t.convErrorCopy}\n\n${f.error}`}
+                                data-tip={`${t.convErrorCopy}\n\n${f.error}`}
                               >
                                 {f.error.slice(0, 80)}
                               </button>
@@ -501,7 +504,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                                 className="button button-ghost button-icon icon-danger"
                                 onClick={() => removeFile(f.filePath)}
                                 disabled={isProcessing}
-                                title={t.remove}
+                                data-tip={t.remove}
                                 aria-label={`${t.remove}: ${f.fileName}`}
                               >
                                 <Icon name="trash" size={15} />
@@ -544,7 +547,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
             <FormSection
               key={`edit-${f.filePath}`}
               icon="table"
-              title={`${f.fileName}${f.result?.month ? ` — ${MONTH_SHORT[f.result.month - 1]} ${f.result.year}` : ''}`}
+              title={`${f.fileName}${f.result?.month ? ` — ${monthShort(f.result.month, language)} ${f.result.year}` : ''}`}
               description={
                 stats
                   ? [
@@ -584,8 +587,8 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                     <tr>
                       <th className="zaliczki-edit-table__property">{t.zaliczkiProperty}</th>
                       {CATEGORIES.map((c) => (
-                        <th key={c} className="zaliczki-edit-table__value" title={c}>
-                          {shortCat(c)}
+                        <th key={c} className="zaliczki-edit-table__value" data-tip={c}>
+                          {shortCat(c, t)}
                         </th>
                       ))}
                       <th className="zaliczki-edit-table__remove" aria-hidden="true"></th>
@@ -600,7 +603,8 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                             value={p.property}
                             onChange={(e) => updateProperty(f.filePath, idx, 'property', e.target.value)}
                             aria-invalid={flagged.has(p.property) ? true : undefined}
-                            title={
+                            aria-label={t.zaliczkiProperty}
+                            data-tip={
                               flagged.has(p.property)
                                 ? errors.find((w) => w.property === p.property)?.message
                                 : undefined
@@ -614,7 +618,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                               step="0.01"
                               value={p.values[c] ?? ''}
                               onChange={(e) => updateProperty(f.filePath, idx, c, e.target.value)}
-                              aria-label={`${p.property}: ${shortCat(c)}`}
+                              aria-label={`${p.property}: ${shortCat(c, t)}`}
                             />
                           </td>
                         ))}
@@ -623,7 +627,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
                             type="button"
                             className="button button-ghost button-icon icon-danger"
                             onClick={() => deletePropertyRow(f.filePath, idx)}
-                            title={t.remove}
+                            data-tip={t.remove}
                             aria-label={`${t.remove}: ${p.property}`}
                           >
                             <Icon name="trash" size={14} />
@@ -732,10 +736,11 @@ interface MonthYearPickerProps {
   onMonthChange: (m: number | null) => void;
   onYearChange: (y: number | null) => void;
   missingLabel: string;
+  language: Language;
 }
 
 const MonthYearPicker: React.FC<MonthYearPickerProps> = ({
-  month, year, onMonthChange, onYearChange, missingLabel,
+  month, year, onMonthChange, onYearChange, missingLabel, language,
 }) => {
   const missing = !month || !year;
   const thisYear = new Date().getFullYear();
@@ -749,7 +754,7 @@ const MonthYearPicker: React.FC<MonthYearPickerProps> = ({
           onChange={(v) => onMonthChange(v === '' ? null : parseInt(v, 10))}
           options={[
             { value: '', label: '—' },
-            ...MONTH_SHORT.map((m, i) => ({ value: String(i + 1), label: m })),
+            ...Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: monthShort(i + 1, language) })),
           ]}
           className="month-year-picker__month"
         />
@@ -787,22 +792,9 @@ function describeProgress(
   return `${t.zaliczkiPageProgress} ${Math.min(p.donePages + 1, p.totalPages)}/${p.totalPages}${cached}`;
 }
 
-function shortCat(c: ZaliczkiCategory): string {
-  const map: Record<ZaliczkiCategory, string> = {
-    zaliczka_utrzymanie: 'Zal. utrz.',
-    co_zmienna: 'CO zm.',
-    co_stala: 'CO st.',
-    ciepla_woda_licznik: 'C. woda licz.',
-    ciepla_woda_ryczalt: 'C. woda rycz.',
-    zw_kanalizacja_licznik: 'Z.W.+kanal. licz.',
-    zw_kanalizacja_ryczalt: 'Z.W.+kanal. rycz.',
-    woda_gospodarcza: 'Woda gosp.',
-    razem_swiadczenia: 'Razem św.',
-    odpady_komunalne: 'Odpady',
-    fundusz_remontowy: 'Fundusz rem.',
-    razem_total: 'RAZEM',
-  };
-  return map[c];
+/** A category's column heading, abbreviated so twelve amounts fit side by side. */
+function shortCat(c: ZaliczkiCategory, t: (typeof translations)[Language]): string {
+  return t[`zaliczkiCat_${c}` as const];
 }
 
 export default PodsumowanieZaliczek;

@@ -17,10 +17,11 @@
  * render, and a batch now pays it once.
  */
 
-import { BrowserWindow, PrintToPDFOptions, app } from 'electron';
+import { BrowserWindow, PrintToPDFOptions, app, session } from 'electron';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import log from 'electron-log';
 
 /** The reusable renderer. Created on first use, dropped when it goes away. */
@@ -33,14 +34,86 @@ let sharedWindow: BrowserWindow | null = null;
  */
 let queue: Promise<unknown> = Promise.resolve();
 
+/**
+ * The render window's own in-memory session. A letter's HTML is user-written
+ * (templates, resolutions), so this window may load exactly one thing: the temp
+ * file being printed. Everything else — a `file://` image pointing at the user's
+ * documents, an `http(s)` tracker, a meta refresh to another file that would then
+ * be printed instead of the letter — is cancelled here. The letterhead and the
+ * fonts are `data:` URIs, which never reach the network layer.
+ *
+ * A separate partition, because a filter on the default session would apply to
+ * the main window too.
+ */
+const RENDER_PARTITION = 'ff-pdf-render';
+
+/** The temp file currently being printed — the only page the render window may load. */
+let allowedFile: string | null = null;
+
+/**
+ * Compared as paths, not URL strings: Electron builds the `file://` URL for
+ * `loadFile` itself, and how it escapes a space or a Polish letter in the user's
+ * temp folder is not worth betting a mailing's PDFs on.
+ */
+function isAllowedPage(url: string): boolean {
+  if (!allowedFile || !url.startsWith('file:')) return false;
+  try {
+    const requested = path.resolve(fileURLToPath(url));
+    const allowed = path.resolve(allowedFile);
+    return process.platform === 'linux' ? requested === allowed : requested.toLowerCase() === allowed.toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
+let renderSessionReady = false;
+
+function lockRenderSession(): void {
+  if (renderSessionReady) return;
+  renderSessionReady = true;
+  const ses = session.fromPartition(RENDER_PARTITION);
+  ses.webRequest.onBeforeRequest((details, callback) => {
+    // `data:` should never get here; allowed anyway, so a change in that never
+    // costs the letters their letterhead — the CSP below confines it.
+    const allowed =
+      details.url.startsWith('data:') || (details.resourceType === 'mainFrame' && isAllowedPage(details.url));
+    if (!allowed) log.warn('[PDF] blocked a resource in a rendered document:', details.url.slice(0, 200));
+    callback({ cancel: !allowed });
+  });
+  ses.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+}
+
+/**
+ * Belt and braces for the session filter: a Content-Security-Policy as the first
+ * thing in the document, allowing only inline styles and `data:` images/fonts.
+ * Inserted after `<head>` — never before the doctype, which would drop the
+ * document into quirks mode and change the layout.
+ */
+const RENDER_CSP =
+  "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; " +
+  "base-uri 'none'; form-action 'none'";
+
+function withRenderCsp(html: string): string {
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${RENDER_CSP}">`;
+  const head = /<head(\s[^>]*)?>/i.exec(html);
+  if (head) return html.slice(0, head.index + head[0].length) + meta + html.slice(head.index + head[0].length);
+  const doctype = /^\s*<!doctype[^>]*>/i.exec(html);
+  if (doctype) return doctype[0] + meta + html.slice(doctype[0].length);
+  return meta + html;
+}
+
 function getWindow(): BrowserWindow {
   if (sharedWindow && !sharedWindow.isDestroyed()) return sharedWindow;
+  lockRenderSession();
   // Script-free: this window only ever loads our own generated markup, and
   // nothing in a letter needs to execute.
   const win = new BrowserWindow({
     show: false,
-    webPreferences: { javascript: false, sandbox: true },
+    webPreferences: { javascript: false, sandbox: true, partition: RENDER_PARTITION },
   });
+  // No navigating away from the letter and no new windows, whatever its markup says.
+  win.webContents.on('will-navigate', (event) => event.preventDefault());
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.on('closed', () => {
     if (sharedWindow === win) sharedWindow = null;
   });
@@ -67,7 +140,7 @@ const LETTER_PRINT: PrintToPDFOptions = {
   // No page margins: the tint has to reach the paper edge, or the letter
   // would read as a grey box floating in a white frame. The white space
   // around the card comes from the shell's own padding instead.
-  margins: { marginType: 'custom', top: 0, bottom: 0, left: 0, right: 0 },
+  margins: { top: 0, bottom: 0, left: 0, right: 0 },
 };
 
 async function renderNow(html: string, outPath: string, print: PrintToPDFOptions): Promise<void> {
@@ -76,15 +149,17 @@ async function renderNow(html: string, outPath: string, print: PrintToPDFOptions
   // that is tedious to diagnose.
   const tempDir = fs.mkdtempSync(path.join(app?.getPath?.('temp') ?? os.tmpdir(), 'ff-mailing-'));
   const tempHtml = path.join(tempDir, 'mail.html');
-  fs.writeFileSync(tempHtml, html, 'utf8');
+  fs.writeFileSync(tempHtml, withRenderCsp(html), 'utf8');
 
   try {
     const win = getWindow();
+    allowedFile = tempHtml;
     await win.loadFile(tempHtml);
     const data = await win.webContents.printToPDF(print);
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
     fs.writeFileSync(outPath, data);
   } finally {
+    allowedFile = null;
     try {
       fs.rmSync(tempDir, { recursive: true, force: true });
     } catch (error: unknown) {

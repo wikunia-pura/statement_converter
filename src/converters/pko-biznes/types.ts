@@ -82,6 +82,8 @@ export interface PKOBiznesStatement {
   
   // Transactions from all files
   transactions: PKOBiznesTransaction[];
+  /** CSV lines that could not be read. */
+  dropped?: import('../../shared/types').DroppedStatementLine[];
 }
 
 /**

@@ -218,7 +218,7 @@ const Footer: React.FC<FooterProps> = ({ language, appVersion }) => {
           className="footer-button"
           onClick={handleCheckForUpdates}
           disabled={checkingUpdate}
-          title={t.checkForUpdates}
+          data-tip={t.checkForUpdates}
           aria-label={t.checkForUpdates}
         >
           {checkingUpdate ? '⟳ ' : ''}{t.checkForUpdates}
@@ -231,7 +231,7 @@ const Footer: React.FC<FooterProps> = ({ language, appVersion }) => {
             type="button"
             className="footer-zoom-button"
             onClick={handleZoomOut}
-            title={t.zoomOut}
+            data-tip={t.zoomOut}
             aria-label={t.zoomOut}
           >
             −
@@ -240,7 +240,7 @@ const Footer: React.FC<FooterProps> = ({ language, appVersion }) => {
             type="button"
             className="footer-zoom-button"
             onClick={handleZoomReset}
-            title={t.zoomReset}
+            data-tip={t.zoomReset}
             aria-label={t.zoomReset}
           >
             100%
@@ -249,7 +249,7 @@ const Footer: React.FC<FooterProps> = ({ language, appVersion }) => {
             type="button"
             className="footer-zoom-button"
             onClick={handleZoomIn}
-            title={t.zoomIn}
+            data-tip={t.zoomIn}
             aria-label={t.zoomIn}
           >
             +

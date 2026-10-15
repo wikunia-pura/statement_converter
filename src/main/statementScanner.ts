@@ -49,6 +49,7 @@ import {
   accountSuffixFor,
   accountTypeNameOf,
   datesInText,
+  isSafeScanRelPath,
   looksLikeElixir,
   looksLikeStatementPdf,
   looksLikeMt940,
@@ -768,7 +769,9 @@ export async function scanStatementsFolder(input: ScanInput, store: ScanStore): 
 
     const byHash = existing.find((e) => e.kind === d.kind && e.fileHash === d.fileHash);
     if (byHash && !byPath) {
-      if (fs.existsSync(path.join(root, ...byHash.relPath.split('/')))) {
+      // A stored path that climbs out of the folder is no evidence of a copy
+      // here — treated as moved, so the row is re-pointed at this file.
+      if (isSafeScanRelPath(byHash.relPath) && fs.existsSync(path.join(root, ...byHash.relPath.split('/')))) {
         report.duplicates++;
       } else {
         // Same file, moved: follow it.

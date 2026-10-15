@@ -9,9 +9,11 @@ import {
 import { okresLabel } from '../../shared/sprawozdanie';
 import { foldText, nazwaNieruchomosci } from '../../shared/plan-gospodarczy';
 import { formatStamp } from '../../shared/calendar';
+import { localeOf } from '../../shared/format';
 import { ZebranieDane, sortWersje, wersjaLabel, zebranieDane } from '../../shared/zebrania';
 import { translations, Language } from '../translations';
 import { plural } from '../plural';
+import { ipcErrorMessage } from '../ipcError';
 import { useNotify } from '../components/Notifications';
 import { FormSection } from '../components/FormSection';
 import Icon from '../components/Icon';
@@ -69,11 +71,11 @@ const wspolnotaTytul = (nazwa: string) => `Wspólnota Mieszkaniowa ${nazwaNieruc
 /** Whether a meeting presents the statement, as a badge — the same look as Zebrania's "z kalendarza". */
 const PowiazanieBadge: React.FC<{ t: T; powiazane: boolean }> = ({ t, powiazane }) =>
   powiazane ? (
-    <span className="status-badge zeb-link zeb-link--kal" title={t.sprawPowiazaneHint}>
+    <span className="status-badge zeb-link zeb-link--kal" data-tip={t.sprawPowiazaneHint}>
       <Icon name="file-check" size={11} /> {t.sprawPowiazane}
     </span>
   ) : (
-    <span className="status-badge zeb-link" title={t.sprawNiezalezneHint}>
+    <span className="status-badge zeb-link" data-tip={t.sprawNiezalezneHint}>
       {t.sprawNiezalezne}
     </span>
   );
@@ -163,7 +165,7 @@ const SprawozdanieScreen: React.FC<{
       notify.success(t.sprawDeleted);
       onDeleted();
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err));
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
     } finally {
       setBusy(false);
     }
@@ -208,7 +210,7 @@ const SprawozdanieScreen: React.FC<{
             onClick={() => void remove()}
             // A statement a meeting presents stays: unlinking it is Zebrania's call.
             disabled={busy || powiazane}
-            title={powiazane ? t.sprawDeleteLinked : undefined}
+            data-tip={powiazane ? t.sprawDeleteLinked : undefined}
           >
             <Icon name="trash" size={13} /> {t.delete}
           </button>
@@ -292,7 +294,7 @@ const SprawozdanieScreen: React.FC<{
                         type="button"
                         className="zfin-pick-item"
                         onClick={() => onOpenZebranie(p.zebranie.id)}
-                        title={t.planyOpenInZebrania}
+                        data-tip={t.planyOpenInZebrania}
                       >
                         <span className="zfin-pick-item__main">
                           <strong>{p.dane.nazwa || p.dane.adresNazwa || '—'}</strong>
@@ -368,7 +370,7 @@ const Sprawozdania: React.FC<{
 }> = ({ language, onOpenZebranie }) => {
   const t = translations[language];
   const notify = useNotify();
-  const locale = language === 'en' ? 'en-GB' : 'pl-PL';
+  const locale = localeOf(language);
 
   const [lista, setLista] = useState<SprawozdanieZapisane[]>([]);
   const [zebrania, setZebrania] = useState<Zebranie[]>([]);
@@ -496,7 +498,7 @@ const Sprawozdania: React.FC<{
       }
       await load(true);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.zfinImportError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.zfinImportError);
     } finally {
       setImporting(false);
     }
@@ -552,7 +554,7 @@ const Sprawozdania: React.FC<{
             }
           }}
         >
-          <div className="zeb-date spr-nr" title={t.zfinNr}>
+          <div className="zeb-date spr-nr" data-tip={t.zfinNr}>
             <span className="zeb-date__month">{t.sprawNrShort}</span>
             <span className="zeb-date__day">{s.nrWsp ?? '—'}</span>
           </div>
@@ -562,7 +564,7 @@ const Sprawozdania: React.FC<{
               <span>
                 <Icon name="calendar" size={13} /> {okresLabel(s.okresOd, s.okresDo)}
               </span>
-              <span title={s.plikNazwa}>
+              <span data-tip={s.plikNazwa}>
                 <Icon name="file-text" size={13} /> {s.plikNazwa || '—'}
               </span>
               <span>
@@ -597,7 +599,7 @@ const Sprawozdania: React.FC<{
             className="ksieg-nav-arrow"
             onClick={() => void load(true)}
             disabled={isRefreshing}
-            title={t.zebraniaRefresh}
+            data-tip={t.zebraniaRefresh}
             aria-label={t.zebraniaRefresh}
           >
             <Icon name="refresh" size={16} />
@@ -607,7 +609,7 @@ const Sprawozdania: React.FC<{
             className="button button-primary"
             onClick={() => void upload()}
             disabled={importing}
-            title={t.sprawUploadHint}
+            data-tip={t.sprawUploadHint}
           >
             <Icon name={importing ? 'loader' : 'upload'} size={14} /> {t.zfinUpload}
           </button>
@@ -642,7 +644,7 @@ const Sprawozdania: React.FC<{
                 onChange={(e) => setSearch(e.target.value)}
               />
               {search.trim() && (
-                <button type="button" onClick={() => setSearch('')} title={t.close} aria-label={t.close}>
+                <button type="button" onClick={() => setSearch('')} data-tip={t.close} aria-label={t.close}>
                   <Icon name="x" size={14} />
                 </button>
               )}

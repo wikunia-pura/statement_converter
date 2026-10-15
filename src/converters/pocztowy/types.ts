@@ -76,6 +76,8 @@ export interface PocztowyStatement {
   /** Trailing `:86:NAME ACCOUNT OWNER:…`, empty when absent */
   accountOwner: string;
   transactions: PocztowyTransaction[];
+  /** :61: lines that could not be read (see shared/mt940). */
+  dropped?: import('../../shared/types').DroppedStatementLine[];
 }
 
 /**

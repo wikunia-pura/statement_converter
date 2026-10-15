@@ -30,6 +30,10 @@ const History: React.FC<HistoryProps> = ({ language, searchSeed }) => {
     try {
       const historyData = await window.electronAPI.getHistory();
       setHistory(historyData);
+    } catch (error) {
+      // Without this the view would just show "no history" for a list that failed to load.
+      console.error('Error loading history:', error);
+      notify.error(t.historyLoadError);
     } finally {
       setIsLoading(false);
     }

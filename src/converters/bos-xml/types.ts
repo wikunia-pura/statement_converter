@@ -26,6 +26,8 @@ export interface BosStatement {
   periodEnd: string;
   /** All entries across every <Rpt> */
   transactions: BosTransaction[];
+  /** Entries that could not be read. */
+  dropped?: import('../../shared/types').DroppedStatementLine[];
 }
 
 export interface ConverterConfig {

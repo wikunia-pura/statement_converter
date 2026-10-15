@@ -13,8 +13,10 @@ import { ZebranieDane, uchwalaMissing, wersjaLabel } from '../../shared/zebrania
 import { buildKalendarzContext } from '../../shared/mailing-template';
 import { formatStamp } from '../../shared/calendar';
 import { translations, Language } from '../translations';
+import { ipcErrorMessage } from '../ipcError';
 import { useNotify } from './Notifications';
 import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
+import { FormSection } from './FormSection';
 import Icon from './Icon';
 import MailingVisualEditor from './MailingVisualEditor';
 import MailingSaveTemplateModal from './MailingSaveTemplateModal';
@@ -113,7 +115,7 @@ const UchwalaEditorModal: React.FC<{
       await saveIfDirty();
       notify.success(t.uchSaved);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.uchSaveError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.uchSaveError);
     } finally {
       setBusy(null);
     }
@@ -142,7 +144,7 @@ const UchwalaEditorModal: React.FC<{
         file: result.files[0]?.filePath,
       });
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.zfinDownloadError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.zfinDownloadError);
     } finally {
       setBusy(null);
     }
@@ -184,57 +186,63 @@ const UchwalaEditorModal: React.FC<{
 
   return (
     <div className="modal-overlay zaw-overlay">
-      <div className="modal zaw-modal" role="dialog" aria-label={t.uchEditTitle}>
+      <div className="modal zaw-modal" role="dialog" aria-modal="true" aria-label={t.uchEditTitle}>
         <ModalDismiss onClose={() => void handleClose()} ariaLabel={t.close} />
         <ModalHeader icon="file-text" title={`${t.uchEditTitle} ${lp}`} subtitle={subtitle} />
 
+        {/* The window's own grid: the letter, its side panel beside it — each column is a
+            sectioned body. */}
         <div className="zaw-body">
-          <div className="zaw-main">
-            <p className="zaw-hint">{t.uchEditHint}</p>
-            <MailingVisualEditor
-              language={language}
-              temat={draft.temat}
-              onTematChange={(temat) => patch({ temat })}
-              tresc={draft.tresc}
-              onTrescChange={(tresc) => patch({ tresc })}
-              values={draft.values}
-              onValuesChange={(values) => patch({ values })}
-              pola={pola}
-              adresNazwa={dane.adresNazwa}
-              kalendarz={kalendarz}
-              zebranie={zebranieCtx}
-              typ={draft.typ}
-              tableFields={draft.tableFields}
-              onSaveAsTemplate={() => setSaveTemplateOpen(true)}
-              hideHint
-            />
+          <div className="modal-body modal-body--sectioned zaw-main">
+            <FormSection icon="file-text" title={t.uchLetterTitle} description={t.uchEditHint}>
+              <MailingVisualEditor
+                language={language}
+                temat={draft.temat}
+                onTematChange={(temat) => patch({ temat })}
+                tresc={draft.tresc}
+                onTrescChange={(tresc) => patch({ tresc })}
+                values={draft.values}
+                onValuesChange={(values) => patch({ values })}
+                pola={pola}
+                adresNazwa={dane.adresNazwa}
+                kalendarz={kalendarz}
+                zebranie={zebranieCtx}
+                typ={draft.typ}
+                tableFields={draft.tableFields}
+                onSaveAsTemplate={() => setSaveTemplateOpen(true)}
+                hideHint
+              />
+            </FormSection>
           </div>
 
-          <aside className="zaw-side">
-            <section className={`zaw-panel${missing.length > 0 ? ' is-warning' : ' is-ok'}`}>
-              <h4 className="zaw-panel__title">
-                <Icon name={missing.length > 0 ? 'alert-triangle' : 'check-circle'} size={15} />
-                {t.uchPanelFields}
-              </h4>
+          <aside className="modal-body modal-body--sectioned zaw-side">
+            {/* The card has no tone of its own: the callout says whether anything is blank. */}
+            <FormSection icon="clipboard" title={t.uchPanelFields}>
               {missing.length === 0 ? (
-                <p>{t.uchMissingNone}</p>
+                <div className="callout callout--success">
+                  <Icon name="check-circle" size={16} />
+                  <div className="callout__body">{t.uchMissingNone}</div>
+                </div>
               ) : (
-                <>
-                  <p>{t.uchMissingIntro}</p>
-                  <ul className="zaw-missing">
-                    {missing.map((m) => (
-                      <li key={m}>{m}</li>
-                    ))}
-                  </ul>
-                </>
+                <div className="callout callout--warning">
+                  <Icon name="alert-triangle" size={16} />
+                  <div className="callout__body">
+                    <p>{t.uchMissingIntro}</p>
+                    <ul className="zaw-missing">
+                      {missing.map((m) => (
+                        <li key={m}>{m}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
               )}
-            </section>
+            </FormSection>
 
-            <section className="zaw-panel">
-              <h4 className="zaw-panel__title">
-                <Icon name="download" size={15} /> {t.uchPanelDownload}
-              </h4>
-              <p className="zaw-panel__hint">{t.uchPanelDownloadHint}</p>
+            <FormSection
+              icon="download"
+              title={t.uchPanelDownload}
+              description={t.uchPanelDownloadHint}
+            >
               <div className="zaw-downloads">
                 <button
                   type="button"
@@ -252,7 +260,7 @@ const UchwalaEditorModal: React.FC<{
                   {lastFiles.map((f) => (
                     <li key={f.filePath} className="zaw-file">
                       <Icon name="file-check" size={14} />
-                      <span className="zaw-file__name" title={f.filePath}>
+                      <span className="zaw-file__name" data-tip={f.filePath}>
                         {fileBaseName(f.filePath)}
                       </span>
                       <span className="zaw-file__actions">
@@ -291,7 +299,7 @@ const UchwalaEditorModal: React.FC<{
                   </ul>
                 </div>
               )}
-            </section>
+            </FormSection>
           </aside>
         </div>
 

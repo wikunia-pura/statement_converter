@@ -25,6 +25,10 @@ const OdczytyHistoria: React.FC<Props> = ({ language }) => {
   const loadHistory = async () => {
     try {
       setHistory(await window.electronAPI.odczytyGetHistory());
+    } catch (error) {
+      // Without this the view would just show "no history" for a list that failed to load.
+      console.error('Error loading odczyty history:', error);
+      notify.error(t.odczytyHistoryLoadError);
     } finally {
       setIsLoading(false);
     }

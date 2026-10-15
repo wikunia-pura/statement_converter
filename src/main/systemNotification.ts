@@ -1,4 +1,5 @@
 import { Notification } from 'electron';
+import log from 'electron-log';
 
 /**
  * Every operating-system notification the app shows goes through here, so they
@@ -25,6 +26,7 @@ const alive = new Set<Notification>();
 export function showSystemNotification(
   options: { title: string; body: string },
   onClick?: () => void,
+  onShown?: () => void,
 ): void {
   if (!Notification.isSupported()) return;
   const notification = new Notification({ ...options, timeoutType: 'never' });
@@ -37,6 +39,12 @@ export function showSystemNotification(
     onClick?.();
   });
   notification.on('close', release);
-  notification.on('failed', release);
+  notification.on('show', () => onShown?.());
+  // Since Electron 42 macOS notifications go through UNUserNotificationCenter,
+  // which refuses them when the person declined the permission prompt.
+  notification.on('failed', (_event, error) => {
+    log.warn('[NOTIFICATION] not shown:', error);
+    release();
+  });
   notification.show();
 }

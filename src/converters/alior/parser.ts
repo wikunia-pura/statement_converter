@@ -5,12 +5,15 @@
  * Key differences from PKO MT940:
  *   - :86: subfield delimiter: `<XX` instead of `~XX`
  *   - :61: may contain optional funds code letter after D/C indicator
- *   - Bank fees identified by transaction type `NCHG` or code `8090`
+ *   - Bank fees come as transaction type `NCHG` / code `8090`; they are ordinary
+ *     expenses and are not filtered
  *   - ASCII encoding (no Polish diacritics)
  *   - Block delimited by `{` ... `-}`
  */
 
 import { AliorStatement, AliorTransaction } from './types';
+import { DroppedStatementLine } from '../../shared/types';
+import { line61Excerpt, parseLine61, walkMt940Entries } from '../shared/mt940';
 
 export class AliorMT940Parser {
   /**
@@ -32,7 +35,9 @@ export class AliorMT940Parser {
     const closingBalance = this.parseBalance(closingBalanceStr);
     const availableBalance = availableBalanceStr ? this.parseBalance(availableBalanceStr) : undefined;
 
-    const transactions = this.parseTransactions(fields);
+    // Transactions are walked in file order, see shared/mt940.
+    const dropped: DroppedStatementLine[] = [];
+    const transactions = this.parseTransactions(cleanedContent, dropped);
 
     return {
       reference,
@@ -42,6 +47,7 @@ export class AliorMT940Parser {
       closingBalance,
       availableBalance,
       transactions,
+      dropped,
     };
   }
 
@@ -130,19 +136,14 @@ export class AliorMT940Parser {
   }
 
   /**
-   * Parse transactions from :61: and :86: fields
+   * Parse transactions: each :61: with the :86: that follows it in the file. A
+   * line that cannot be read is recorded in `dropped`, never skipped silently.
    */
-  private parseTransactions(fields: Map<string, string[]>): AliorTransaction[] {
-    const field61s = fields.get(':61:') || [];
-    const field86s = fields.get(':86:') || [];
-
+  private parseTransactions(content: string, dropped: DroppedStatementLine[]): AliorTransaction[] {
     const transactions: AliorTransaction[] = [];
 
-    for (let i = 0; i < field61s.length; i++) {
-      const field61 = field61s[i];
-      const field86 = i < field86s.length ? field86s[i] : '';
-
-      const transaction = this.parseTransaction(field61, field86);
+    for (const entry of walkMt940Entries(content)) {
+      const transaction = this.parseTransaction(entry.field61, entry.field86s.join('\n'), dropped);
       if (transaction) {
         transactions.push(transaction);
       }
@@ -159,32 +160,29 @@ export class AliorMT940Parser {
    *   2602020202CN506,14NTRFNONREF//17929   (C + funds code N + 506,14)
    *   2602020202DN2460,00NTRFNONREF//17931   (D + funds code N + 2460,00)
    */
-  private parseTransaction(field61: string, field86: string): AliorTransaction | null {
+  private parseTransaction(
+    field61: string,
+    field86: string,
+    dropped: DroppedStatementLine[]
+  ): AliorTransaction | null {
     try {
       // Only first line of :61: contains the structured data
       const firstLine = field61.split('\n')[0];
 
-      const valueDate = firstLine.substring(0, 6);   // YYMMDD
-      const entryDate = firstLine.substring(6, 10);   // MMDD
-      const debitCredit = firstLine[10] as 'D' | 'C';
-
-      // After D/C there may be an optional funds code (single alpha char)
-      let pos = 11;
-      if (pos < firstLine.length && /[A-Z]/i.test(firstLine[pos]) && !/[0-9,]/.test(firstLine[pos])) {
-        // Skip funds code character (e.g., 'N')
-        pos++;
+      // Shared reader: funds code ('N'), storno mark, strict amount.
+      const line61 = parseLine61(firstLine);
+      if (!line61) {
+        dropped.push({ excerpt: line61Excerpt(field61), reason: 'structure' });
+        return null;
       }
-
-      // Parse amount: digits and comma until first uppercase letter
-      const amountStart = pos;
-      while (pos < firstLine.length && !/[A-Z]/.test(firstLine[pos])) {
-        pos++;
+      if (line61.amount === null) {
+        dropped.push({ excerpt: line61Excerpt(field61), reason: 'amount' });
+        return null;
       }
-      const amountStr = firstLine.substring(amountStart, pos);
-      const amount = this.parseAmount(amountStr);
+      const { valueDate, entryDate, debitCredit, reversal, amount, rest } = line61;
 
       // Transaction type: 4 characters (e.g., "NTRF", "NCHG")
-      const transactionType = firstLine.substring(pos, Math.min(pos + 4, firstLine.length));
+      const transactionType = rest.substring(0, 4);
 
       // Reference (after "NONREF//")
       const refMatch = firstLine.match(/NONREF\/\/(.+)/);
@@ -197,6 +195,7 @@ export class AliorMT940Parser {
         valueDate,
         entryDate,
         debitCredit,
+        ...(reversal ? { reversal } : {}),
         amount,
         transactionType,
         reference,
@@ -208,6 +207,7 @@ export class AliorMT940Parser {
       };
     } catch (error) {
       console.error('Error parsing Alior transaction:', error);
+      dropped.push({ excerpt: line61Excerpt(field61), reason: 'error' });
       return null;
     }
   }

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { MailingPole, MailingPoleTyp, MailingTypDef } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { ipcErrorMessage } from '../ipcError';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
 import { FormField, FormSection, RequiredNote } from '../components/FormSection';
@@ -320,7 +321,7 @@ const MailingPola: React.FC<Props> = ({ language }) => {
       setFormState(null);
       await load();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(ipcErrorMessage(err, t.errorUnexpected));
     } finally {
       setIsSaving(false);
     }
@@ -333,7 +334,7 @@ const MailingPola: React.FC<Props> = ({ language }) => {
       if (formState?.editing?.id === pole.id) setFormState(null);
       await load();
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : 'Unknown error');
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
     }
   };
 
@@ -433,7 +434,7 @@ const MailingPola: React.FC<Props> = ({ language }) => {
                         className="button button-ghost button-icon icon-danger"
                         onClick={() => handleDelete(p)}
                         disabled={isSaving}
-                        title={t.delete}
+                        data-tip={t.delete}
                         aria-label={`${t.delete}: ${p.nazwa}`}
                       >
                         <Icon name="trash" size={15} />

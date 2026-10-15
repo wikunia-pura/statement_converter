@@ -80,10 +80,15 @@ export function createTray(deps: Deps): void {
  */
 export function announceBackgroundOnce(language: 'pl' | 'en'): void {
   if (hintStore.get('hintShown') || !Notification.isSupported()) return;
-  hintStore.set('hintShown', true);
   const t = TEXT[language];
-  showSystemNotification({
-    title: t.hintTitle,
-    body: process.platform === 'darwin' ? t.hintBodyMac : t.hintBodyWin,
-  });
+  // Marked once it was actually on screen: a notification the system refused
+  // (macOS, permission declined) must not use up the one chance.
+  showSystemNotification(
+    {
+      title: t.hintTitle,
+      body: process.platform === 'darwin' ? t.hintBodyMac : t.hintBodyWin,
+    },
+    undefined,
+    () => hintStore.set('hintShown', true),
+  );
 }

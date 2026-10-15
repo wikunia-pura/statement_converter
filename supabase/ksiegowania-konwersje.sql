@@ -12,8 +12,11 @@
 -- read only this table.
 --
 -- The backfill at the end copies every row `history` has now — run it AFTER
--- the history was restored, so the posting state comes over complete. It skips
--- rows already copied, so running the file again is safe.
+-- the history was restored, so the posting state comes over complete. It runs
+-- ONLY into an empty table, so running the file again is a no-op: the two
+-- tables cannot be matched row by row (older versions of the app wrote the two
+-- rows with two separate `now()`s, so `converted_at` differs between them by a
+-- few milliseconds), and a second copy would double every dashboard record.
 
 create table if not exists public.ksiegowania_konwersje (
   id                bigint      generated always as identity primary key,
@@ -63,7 +66,8 @@ drop policy if exists "authenticated_all" on public.ksiegowania_konwersje;
 create policy "authenticated_all" on public.ksiegowania_konwersje
   for all to authenticated using (true) with check (true);
 
--- Backfill: everything the history holds now, ticks included.
+-- Backfill: everything the history holds now, ticks included — once, into an
+-- empty table only (see the header for why not row by row).
 insert into public.ksiegowania_konwersje (
   file_name, bank_name, converter_name, status, error_message, input_path,
   output_path, converted_at, adres_id, adres_nazwa, booked_in_dom,
@@ -74,7 +78,4 @@ select
   h.input_path, h.output_path, h.converted_at, h.adres_id, h.adres_nazwa,
   h.booked_in_dom, h.booked_in_dom_at, h.booked_in_dom_by
 from public.history h
-where not exists (
-  select 1 from public.ksiegowania_konwersje k
-  where k.file_name = h.file_name and k.converted_at = h.converted_at
-);
+where not exists (select 1 from public.ksiegowania_konwersje);

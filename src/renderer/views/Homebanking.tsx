@@ -3,6 +3,7 @@ import { translations, Language } from '../translations';
 import { FormSection } from '../components/FormSection';
 import Icon from '../components/Icon';
 import { ModalFooter } from '../components/Modal';
+import { useNotify } from '../components/Notifications';
 import {
   HomebankingAnalyzedFile,
   HomebankingBankHit,
@@ -20,6 +21,8 @@ export interface HomebankingFileEntry {
   selectedBankIds: number[];
   addressHits: { label: string; lineCount: number }[];
   lineCount: number;
+  /** Lines no bank can be chosen for — written nowhere, so the user confirms them. */
+  unroutedLines: HomebankingAnalyzedFile['unroutedLines'];
   splitByAddress: boolean;
   error?: string;
 }
@@ -46,12 +49,14 @@ function applyAnalyzed(
     selectedBankIds,
     addressHits: data.addressHits,
     lineCount: data.lineCount,
+    unroutedLines: data.unroutedLines ?? [],
     error: undefined,
   };
 }
 
 const Homebanking: React.FC<Props> = ({ language, files, setFiles }) => {
   const t = translations[language];
+  const notify = useNotify();
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [statusIsError, setStatusIsError] = useState(false);
@@ -70,7 +75,7 @@ const Homebanking: React.FC<Props> = ({ language, files, setFiles }) => {
       prev.map((f) => {
         if (f.filePath !== filePath) return f;
         if (res.error || !res.data) {
-          return { ...f, status: 'error' as const, error: res.error ?? 'Unknown error' };
+          return { ...f, status: 'error' as const, error: res.error ?? t.errorUnexpected };
         }
         return applyAnalyzed(f, res.data);
       }),
@@ -92,6 +97,7 @@ const Homebanking: React.FC<Props> = ({ language, files, setFiles }) => {
         selectedBankIds: [],
         addressHits: [],
         lineCount: 0,
+        unroutedLines: [],
         splitByAddress: false,
       })),
     ]);
@@ -111,7 +117,7 @@ const Homebanking: React.FC<Props> = ({ language, files, setFiles }) => {
     const dropped = Array.from(e.dataTransfer.files)
       .map((file) => ({
         fileName: file.name,
-        filePath: (file as unknown as { path: string }).path,
+        filePath: window.electronAPI.getPathForFile(file),
       }))
       .filter((f) => f.filePath);
     if (dropped.length > 0) await addFiles(dropped);
@@ -184,6 +190,16 @@ const Homebanking: React.FC<Props> = ({ language, files, setFiles }) => {
     [files],
   );
 
+  /** Files to be merged that have lines no bank can be chosen for. */
+  const unroutedFiles = useMemo(
+    () =>
+      files.filter(
+        (f) => f.status === 'ready' && f.selectedBankIds.length > 0 && f.unroutedLines.length > 0,
+      ),
+    [files],
+  );
+  const unroutedTotal = unroutedFiles.reduce((sum, f) => sum + f.unroutedLines.length, 0);
+
   const canMerge =
     !isProcessing &&
     !anyAnalyzing &&
@@ -201,6 +217,17 @@ const Homebanking: React.FC<Props> = ({ language, files, setFiles }) => {
       setStatusIsError(true);
       return;
     }
+    // Lines no bank can be chosen for are written to no file. That must be a
+    // decision, not a difference in the line counts noticed later (or never).
+    const unrouted = ready.reduce((sum, f) => sum + f.unroutedLines.length, 0);
+    if (
+      unrouted > 0 &&
+      !(await notify.confirm(t.homebankingUnroutedConfirm.replace('{n}', String(unrouted)), {
+        confirmLabel: t.homebankingUnroutedConfirmButton,
+      }))
+    ) {
+      return;
+    }
     const outputDir = await window.electronAPI.homebankingSelectOutputDir();
     if (!outputDir) return;
 
@@ -213,6 +240,7 @@ const Homebanking: React.FC<Props> = ({ language, files, setFiles }) => {
       bankIds: f.selectedBankIds,
       date: f.date,
       splitByAddress: f.splitByAddress,
+      acknowledgedUnrouted: f.unroutedLines.length,
     }));
     const res = await window.electronAPI.homebankingMerge(payload, outputDir);
     setIsProcessing(false);
@@ -268,6 +296,29 @@ const Homebanking: React.FC<Props> = ({ language, files, setFiles }) => {
             <div className="callout callout--danger" role="alert">
               <Icon name="alert-triangle" size={16} />
               <div className="callout__body">{t.homebankingMissingBankBanner}</div>
+            </div>
+          )}
+
+          {unroutedTotal > 0 && (
+            <div className="callout callout--warning" role="alert">
+              <Icon name="alert-triangle" size={16} />
+              <div className="callout__body">
+                <span className="callout__title">
+                  {t.homebankingUnroutedTitle.replace('{n}', String(unroutedTotal))}
+                </span>{' '}
+                {t.homebankingUnroutedBody}
+                <ul className="callout__list">
+                  {unroutedFiles.flatMap((f) =>
+                    f.unroutedLines.map((u) => (
+                      <li key={`${f.filePath}:${u.lineNumber}`}>
+                        <strong>{f.fileName}</strong>, {t.homebankingUnroutedLine} {u.lineNumber} (
+                        {u.reason === 'ambiguous' ? t.homebankingUnroutedAmbiguous : t.homebankingUnroutedNoBank}):{' '}
+                        <span className="cell-mono">{u.excerpt}</span>
+                      </li>
+                    )),
+                  )}
+                </ul>
+              </div>
             </div>
           )}
 
@@ -342,7 +393,7 @@ const Homebanking: React.FC<Props> = ({ language, files, setFiles }) => {
                     </td>
                     <td>{f.status === 'ready' ? f.lineCount : <span className="cell-empty">—</span>}</td>
                     <td className="data-table__center">
-                      <label className="toggle-switch" title={t.homebankingSplitByAddressHint}>
+                      <label className="toggle-switch" data-tip={t.homebankingSplitByAddressHint}>
                         <input
                           type="checkbox"
                           checked={f.splitByAddress}
@@ -360,7 +411,7 @@ const Homebanking: React.FC<Props> = ({ language, files, setFiles }) => {
                           className="button button-ghost button-icon icon-danger"
                           onClick={() => removeFile(f.filePath)}
                           disabled={isProcessing}
-                          title={t.remove}
+                          data-tip={t.remove}
                           aria-label={`${t.remove}: ${f.fileName}`}
                         >
                           <Icon name="trash" size={15} />
@@ -396,7 +447,7 @@ const Homebanking: React.FC<Props> = ({ language, files, setFiles }) => {
                   type="button"
                   className="button button-small button-subtle"
                   onClick={() => openOutput(lastOutputDir)}
-                  title={lastOutputDir}
+                  data-tip={lastOutputDir}
                 >
                   <Icon name="folder" size={13} /> {t.openOutputFolder}
                 </button>

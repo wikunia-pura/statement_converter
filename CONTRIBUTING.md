@@ -33,25 +33,17 @@ git commit -m "fix: resolve file path validation error"
   description: Converter for New Bank statements
 ```
 
-2. Zaimplementuj logikę w `src/main/converterRegistry.ts`:
-```typescript
-async convert(converterId: string, inputPath: string, outputPath: string): Promise<void> {
-  switch(converterId) {
-    case 'new_bank_converter':
-      return this.convertNewBank(inputPath, outputPath);
-    // ... other cases
-  }
-}
+2. Zaimplementuj konwerter w `src/converters/<bank>/` (parser, regex-extractor, csv-exporter, `index.ts`
+   z klasą dziedziczącą po `BaseConverter` z `src/shared/base-converter.ts`) i podepnij go w
+   `src/main/converterRegistry.ts`. Wspólne czytniki: `src/converters/shared/mt940.ts`, `camt.ts`.
 
-private async convertNewBank(inputPath: string, outputPath: string): Promise<void> {
-  // Implementation here
-}
-```
-
-3. Dodaj testy w `tests/converters/`:
+3. Dodaj testy obok kodu, np. `src/converters/<bank>/parser.test.ts` (Vitest, tylko dane syntetyczne —
+   repo jest publiczne):
 ```typescript
-describe('New Bank Converter', () => {
-  it('should convert valid XML file', async () => {
+import { describe, it, expect } from 'vitest';
+
+describe('New Bank parser', () => {
+  it('reads a credit line', () => {
     // test implementation
   });
 });
@@ -60,14 +52,9 @@ describe('New Bank Converter', () => {
 ### Testowanie
 
 ```bash
-# Uruchom wszystkie testy
-npm test
-
-# Testy w trybie watch
-npm test -- --watch
-
-# Coverage report
-npm test -- --coverage
+npm test             # wszystkie testy jednostkowe (vitest run)
+npm run test:watch   # tryb watch
+npm run type-check   # oba projekty TypeScript
 ```
 
 ### Budowanie aplikacji

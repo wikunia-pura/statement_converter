@@ -35,6 +35,13 @@ export interface BnpTransaction {
   counterpartyAccount: string;
   /** Remittance information (description) */
   description: string;
+  /**
+   * True for a batch entry whose transaction details name more than one
+   * counterparty — no single one can be booked, so the row is held for review.
+   */
+  batchCounterparties?: boolean;
+  /** <RvslInd>true</RvslInd>: a storno — held for review, direction as written. */
+  reversal?: boolean;
 }
 
 export interface BnpStatement {
@@ -64,6 +71,8 @@ export interface BnpStatement {
   closingBalance: number;
   /** All entries */
   transactions: BnpTransaction[];
+  /** Entries that could not be read. */
+  dropped?: import('../../shared/types').DroppedStatementLine[];
 }
 
 export interface ExtractedData {

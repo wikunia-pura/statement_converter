@@ -129,7 +129,7 @@ const UchwalyPickerModal: React.FC<{
                     onChange={(e) => setSearch(e.target.value)}
                   />
                   {search.trim() && (
-                    <button type="button" onClick={() => setSearch('')} title={t.close} aria-label={t.close}>
+                    <button type="button" onClick={() => setSearch('')} data-tip={t.close} aria-label={t.close}>
                       <Icon name="x" size={14} />
                     </button>
                   )}

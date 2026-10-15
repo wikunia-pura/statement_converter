@@ -48,9 +48,19 @@ export function ukryteKwotyInterEj(sec: Pick<SprawozdanieSekcja, 'wiersze'>): Se
   return out;
 }
 
+/**
+ * An AI text that brings INTER-EJ up — the check behind `zakazInterEj`, for answers made of many items.
+ * Where the model is given row NAMES on purpose (sorting rows for the CIT, grouping a statement's rows), an
+ * INTER-EJ row's own item may name it: refusing the whole answer would refuse every run over such a
+ * statement, so the item's text is refused instead (`citAi`, `laczeniaAi`).
+ */
+export function wspominaInterEj(text: string): boolean {
+  return INTER_EJ.test(text);
+}
+
 /** An AI answer that brings INTER-EJ up is refused — the rule is not left to the prompt alone. */
 export function zakazInterEj(text: string): void {
-  if (INTER_EJ.test(text)) {
+  if (wspominaInterEj(text)) {
     throw new Error('AI wspomniało o kwotach INTER-EJ, czego nie robimy — spróbuj ponownie.');
   }
 }

@@ -11,9 +11,11 @@ import {
   ZadanieStatus,
   ZadaniePriorytet,
   ZadanieZalacznik,
+  ZadaniePatch,
   ZADANIE_STATUSES,
   ZADANIE_PRIORYTETY,
   DEFAULT_ZADANIE_PRIORYTET,
+  ZADANIE_CONFLICT_MESSAGE,
 } from '../../shared/types';
 import {
   DEFAULT_ZADANIA_FILTER,
@@ -39,6 +41,7 @@ import SearchableSelect from '../components/SearchableSelect';
 import ZadanieKomentarze, { CommentText } from '../components/ZadanieKomentarze';
 import ZadaniaNotatki from '../components/ZadaniaNotatki';
 import SpotkaniePreviewModal from '../components/SpotkaniePreviewModal';
+import { ipcErrorMessage } from '../ipcError';
 
 interface Props {
   language: Language;
@@ -96,7 +99,7 @@ const SpotkanieLink: React.FC<{
         onOpen?.(spotkanie);
       }}
       disabled={!onOpen}
-      title={onOpen ? t.zadMeetingPreview : text}
+      data-tip={onOpen ? t.zadMeetingPreview : text}
     >
       <Icon name="calendar" size={12} />
       <span className="zad-meeting__text">{text}</span>
@@ -189,7 +192,25 @@ export const ZadanieFormModal: React.FC<FormModalProps> = ({
   // Uploads made in THIS form: they are in the bucket but on no card until the
   // form is saved, so closing it any other way has to take them out again.
   const uploadedHere = useRef<Set<string>>(new Set());
+  // Files that were on the card and the person took off in THIS form. The save
+  // names them, and only they are deleted from the bucket — never whatever is
+  // missing from a list that may be older than the card.
+  const removedHere = useRef<Set<string>>(new Set());
   const mounted = useRef(true);
+  // After a save conflict the board hands this form the card as it now is (same
+  // id, newer `updatedAt`). The person's own edits stay in the fields; the
+  // attachments are rebased on the fresh card — its files, minus the ones taken
+  // off here, plus the ones uploaded here — so a save never drops a file somebody
+  // else attached meanwhile, nor brings back one they removed.
+  const seenUpdatedAt = useRef(editing?.updatedAt);
+  useEffect(() => {
+    if (!editing || editing.updatedAt === seenUpdatedAt.current) return;
+    seenUpdatedAt.current = editing.updatedAt;
+    setZalaczniki((current) => [
+      ...editing.zalaczniki.filter((z) => !removedHere.current.has(z.sciezka)),
+      ...current.filter((z) => uploadedHere.current.has(z.sciezka)),
+    ]);
+  }, [editing]);
   // Armed in the body, not only disarmed in the cleanup: StrictMode runs
   // mount → cleanup → mount, and a ref that cleanup left false would read as
   // "form closed" for the rest of the form's life.
@@ -249,6 +270,7 @@ export const ZadanieFormModal: React.FC<FormModalProps> = ({
     // A file uploaded in this very form can go at once; one that was already on
     // the card is only deleted once the save that drops it succeeds.
     if (uploadedHere.current.delete(z.sciezka)) discard([z.sciezka]);
+    else removedHere.current.add(z.sciezka);
   };
 
   const { busyId, download: handleDownload } = useAttachmentDownload(t);
@@ -300,6 +322,9 @@ export const ZadanieFormModal: React.FC<FormModalProps> = ({
       zalaczniki,
       // Not a field of the form: a card keeps the meeting it was made for.
       spotkanieId: editing ? editing.spotkanieId : initialValues?.spotkanieId ?? null,
+      ...(editing
+        ? { removedAttachments: [...removedHere.current], expectedUpdatedAt: editing.updatedAt }
+        : {}),
     });
   };
 
@@ -355,7 +380,7 @@ export const ZadanieFormModal: React.FC<FormModalProps> = ({
                     <button
                       type="button"
                       className="button button-small button-subtle"
-                      title={t.zadAssignToMe}
+                      data-tip={t.zadAssignToMe}
                       onClick={() => setEmail(userEmail)}
                     >
                       <Icon name="user-plus" size={13} /> {t.zadAssignToMeShort}
@@ -385,7 +410,7 @@ export const ZadanieFormModal: React.FC<FormModalProps> = ({
                       <button
                         type="button"
                         className="button button-small button-subtle"
-                        title={t.zadDueSetToday}
+                        data-tip={t.zadDueSetToday}
                         onClick={() => setTermin(dayKey())}
                       >
                         <Icon name="clock" size={13} /> {t.zadDueTodayShort}
@@ -395,7 +420,7 @@ export const ZadanieFormModal: React.FC<FormModalProps> = ({
                       <button
                         type="button"
                         className="button button-small button-subtle"
-                        title={t.zadDueClear}
+                        data-tip={t.zadDueClear}
                         onClick={() => setTermin('')}
                       >
                         <Icon name="x" size={13} /> {t.zadDueClear}
@@ -447,7 +472,7 @@ export const ZadanieFormModal: React.FC<FormModalProps> = ({
                     <button
                       type="button"
                       className={`file-list__name file-list__name--link${busyId === z.id ? ' is-busy' : ''}`}
-                      title={t.zadAttachDownload}
+                      data-tip={t.zadAttachDownload}
                       disabled={busyId !== null}
                       onClick={() => void handleDownload(z)}
                     >
@@ -457,7 +482,7 @@ export const ZadanieFormModal: React.FC<FormModalProps> = ({
                     <button
                       type="button"
                       className="button button-ghost button-icon icon-danger"
-                      title={t.zadAttachRemove}
+                      data-tip={t.zadAttachRemove}
                       aria-label={`${t.zadAttachRemove}: ${z.nazwa}`}
                       onClick={() => handleRemoveAttachment(z)}
                       disabled={isSaving}
@@ -575,7 +600,7 @@ const CommentStrip: React.FC<CommentStripProps> = ({ summary, usersByEmail, user
     <button
       type="button"
       className="zad-card__comment"
-      title={t.zadCommentOpen}
+      data-tip={t.zadCommentOpen}
       // A card is draggable; the strip must not start a drag.
       draggable={false}
       onClick={onOpen}
@@ -735,7 +760,7 @@ export const ZadaniePreviewModal: React.FC<PreviewModalProps> = ({
                     <button
                       type="button"
                       className={`file-list__name file-list__name--link${busyId === a.id ? ' is-busy' : ''}`}
-                      title={t.zadAttachDownload}
+                      data-tip={t.zadAttachDownload}
                       disabled={busyId !== null}
                       onClick={() => void download(a)}
                     >
@@ -837,7 +862,7 @@ const PriorityBadge: React.FC<PriorityBadgeProps> = ({ zadanie: z, t, onChange }
         ref={button}
         type="button"
         className={`zad-prio zad-prio--${z.priorytet} zad-prio--button`}
-        title={`${t.zadFieldPriority} — ${t.zadChangePriority}`}
+        data-tip={`${t.zadFieldPriority} — ${t.zadChangePriority}`}
         aria-haspopup="listbox"
         aria-expanded={at !== null}
         // A card is draggable; the pill must not start a drag.
@@ -927,7 +952,7 @@ const DueBadge: React.FC<DueBadgeProps> = ({ zadanie: z, today, locale, t, onCha
         className={`zad-due zad-due--button zad-due--${
           !z.termin ? 'ghost' : done ? 'done' : (bucket ?? 'upcoming')
         }`}
-        title={
+        data-tip={
           !z.termin
             ? t.zadAddDue
             : !done && bucket === 'overdue'
@@ -1182,40 +1207,26 @@ const Zadania: React.FC<Props> = ({
     return options;
   };
 
+  /** Put the board's copy of one card in step with what the database now holds. */
+  const replaceCard = (fresh: Zadanie) =>
+    setZadania((prev) => prev.map((c) => (c.id === fresh.id ? fresh : c)));
+
   /**
    * Change one thing on a card straight from the board — who it is assigned to,
    * or its due date. Optimistic, like moving a card between columns: the card
    * changes at once, and a failed write puts the board back to what the database
-   * says. Everything else is sent as it already is, so nothing but the patched
-   * field can change.
+   * says. Only the changed field is sent — never the rest of a card this board
+   * loaded minutes ago, which would undo what somebody saved since.
    */
-  const patchCard = async (
-    z: Zadanie,
-    patch: Partial<Pick<Zadanie, 'tytul' | 'przypisanyEmail' | 'termin' | 'priorytet'>>
-  ) => {
-    const next = { ...z, ...patch };
-    if (
-      next.tytul === z.tytul &&
-      next.przypisanyEmail === z.przypisanyEmail &&
-      next.termin === z.termin &&
-      next.priorytet === z.priorytet
-    ) {
-      return;
-    }
-    setZadania((prev) => prev.map((c) => (c.id === z.id ? next : c)));
+  const patchCard = async (z: Zadanie, patch: ZadaniePatch) => {
+    const changed = (Object.keys(patch) as (keyof ZadaniePatch)[]).filter((k) => patch[k] !== z[k]);
+    if (changed.length === 0) return;
+    const sent: ZadaniePatch = Object.fromEntries(changed.map((k) => [k, patch[k]]));
+    setZadania((prev) => prev.map((c) => (c.id === z.id ? { ...c, ...sent } : c)));
     try {
-      await window.electronAPI.updateZadanie(z.id, {
-        tytul: next.tytul,
-        opis: next.opis,
-        status: next.status,
-        priorytet: next.priorytet,
-        przypisanyEmail: next.przypisanyEmail,
-        termin: next.termin,
-        zalaczniki: next.zalaczniki,
-        spotkanieId: next.spotkanieId,
-      });
+      replaceCard(await window.electronAPI.patchZadanie(z.id, sent));
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : t.zadSaveError);
+      notify.error(ipcErrorMessage(err, t.zadSaveError));
       await load();
     }
   };
@@ -1241,10 +1252,16 @@ const Zadania: React.FC<Props> = ({
   const setArchived = async (z: Zadanie, archived: boolean) => {
     setZadania((prev) => prev.map((c) => (c.id === z.id ? { ...c, zarchiwizowane: archived } : c)));
     try {
-      await window.electronAPI.archiveZadanie(z.id, archived);
+      const fresh = await window.electronAPI.archiveZadanie(z.id, archived);
+      replaceCard(fresh);
+      // Archived from inside the form: its save must not mistake this own write
+      // for somebody else's.
+      setFormState((prev) =>
+        prev?.editing?.id === fresh.id ? { ...prev, editing: fresh } : prev
+      );
       return true;
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : t.zadSaveError);
+      notify.error(ipcErrorMessage(err, t.zadSaveError));
       await load();
       return false;
     }
@@ -1271,7 +1288,23 @@ const Zadania: React.FC<Props> = ({
       setFormState(null);
       await load();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t.zadSaveError);
+      const message = ipcErrorMessage(err, '');
+      if (message.includes(ZADANIE_CONFLICT_MESSAGE)) {
+        // Saved by somebody else since the form opened: nothing is written. The
+        // form stays open with the person's edits and is rebased on the card as
+        // it now is (see ZadanieFormModal), so "Zapisz" again saves on top of it.
+        notify.error(t.zadConflict);
+        const fresh = await window.electronAPI.getZadania().catch(() => null);
+        if (fresh) {
+          setZadania(fresh);
+          const card = fresh.find((z) => z.id === editingId);
+          setFormState((prev) => (prev && card ? { ...prev, editing: card } : null));
+        } else {
+          await load();
+        }
+      } else {
+        setError(message || t.zadSaveError);
+      }
     } finally {
       setIsSaving(false);
     }
@@ -1285,7 +1318,7 @@ const Zadania: React.FC<Props> = ({
       await window.electronAPI.deleteZadanie(z.id);
       await load();
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : t.zadSaveError);
+      notify.error(ipcErrorMessage(err, t.zadSaveError));
     }
   };
 
@@ -1341,9 +1374,11 @@ const Zadania: React.FC<Props> = ({
       })
     );
     try {
-      await window.electronAPI.moveZadanie(id, status, orderedIds);
+      const updatedAt = await window.electronAPI.moveZadanie(id, status, orderedIds);
+      // A change of column is an edit of the card: keep the board's copy current.
+      if (updatedAt) setZadania((prev) => prev.map((z) => (z.id === id ? { ...z, updatedAt } : z)));
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : t.zadSaveError);
+      notify.error(ipcErrorMessage(err, t.zadSaveError));
       await load();
     }
   };
@@ -1595,7 +1630,7 @@ const Zadania: React.FC<Props> = ({
                 <button
                   type="button"
                   className="zad-icon-btn"
-                  title={t.zadAdd}
+                  data-tip={t.zadAdd}
                   aria-label={`${t.zadAdd}: ${col.label}`}
                   onClick={() => {
                     setError(null);
@@ -1694,7 +1729,7 @@ const Zadania: React.FC<Props> = ({
                         ) : (
                           <div
                             className="zad-card__title zad-card__title--editable"
-                            title={t.zadRenameTitle}
+                            data-tip={t.zadRenameTitle}
                           >
                             {z.tytul}
                           </div>
@@ -1735,7 +1770,7 @@ const Zadania: React.FC<Props> = ({
                               key={a.id}
                               type="button"
                               className={`zad-card__file${downloadingId === a.id ? ' is-busy' : ''}`}
-                              title={`${t.zadAttachDownload}: ${a.nazwa} (${formatBytes(a.rozmiar)})`}
+                              data-tip={`${t.zadAttachDownload}: ${a.nazwa} (${formatBytes(a.rozmiar)})`}
                               disabled={downloadingId !== null}
                               // A card is draggable; the button must not start a drag.
                               draggable={false}
@@ -1750,7 +1785,7 @@ const Zadania: React.FC<Props> = ({
                             <button
                               type="button"
                               className="zad-card__file zad-card__file--more"
-                              title={t.zadAttachCount.replace(
+                              data-tip={t.zadAttachCount.replace(
                                 '{count}',
                                 String(z.zalaczniki.length)
                               )}
@@ -1777,7 +1812,7 @@ const Zadania: React.FC<Props> = ({
                         {/* The person IS the control: clicking the name opens the
                             same searchable list as the form, and picking someone
                             reassigns the card at once. */}
-                        <span className="zad-card__who" title={assignee?.email}>
+                        <span className="zad-card__who" data-tip={assignee?.email}>
                           <span
                             className={`zad-avatar${assignee ? '' : ' zad-avatar--none'}`}
                             style={
@@ -1808,7 +1843,7 @@ const Zadania: React.FC<Props> = ({
                             <button
                               type="button"
                               className="zad-icon-btn"
-                              title={t.zadDueSetToday}
+                              data-tip={t.zadDueSetToday}
                               aria-label={t.zadDueSetToday}
                               onClick={() => void patchCard(z, { termin: today })}
                             >
@@ -1819,7 +1854,7 @@ const Zadania: React.FC<Props> = ({
                             <button
                               type="button"
                               className="zad-icon-btn"
-                              title={t.zadAssignToMe}
+                              data-tip={t.zadAssignToMe}
                               aria-label={t.zadAssignToMe}
                               onClick={() => void reassign(z, userEmail)}
                             >
@@ -1830,7 +1865,7 @@ const Zadania: React.FC<Props> = ({
                           <button
                             type="button"
                             className="zad-icon-btn"
-                            title={t.zadCommentAddQuick}
+                            data-tip={t.zadCommentAddQuick}
                             aria-label={t.zadCommentAddQuick}
                             onClick={() => setCommentsFor({ zadanie: z, focus: true })}
                           >
@@ -1839,7 +1874,7 @@ const Zadania: React.FC<Props> = ({
                           <button
                             type="button"
                             className="zad-icon-btn"
-                            title={t.edit}
+                            data-tip={t.edit}
                             aria-label={t.edit}
                             onClick={() => {
                               setError(null);
@@ -1851,7 +1886,7 @@ const Zadania: React.FC<Props> = ({
                           <button
                             type="button"
                             className="zad-icon-btn"
-                            title={z.zarchiwizowane ? t.zadUnarchive : t.zadArchive}
+                            data-tip={z.zarchiwizowane ? t.zadUnarchive : t.zadArchive}
                             aria-label={z.zarchiwizowane ? t.zadUnarchive : t.zadArchive}
                             onClick={() => void setArchived(z, !z.zarchiwizowane)}
                           >
@@ -1860,7 +1895,7 @@ const Zadania: React.FC<Props> = ({
                           <button
                             type="button"
                             className="zad-icon-btn zad-icon-btn--danger"
-                            title={t.delete}
+                            data-tip={t.delete}
                             aria-label={t.delete}
                             onClick={() => void handleDelete(z)}
                           >

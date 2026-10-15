@@ -504,12 +504,22 @@ export function pdfForStatement(statement: KsiegowaniePlik, pliki: KsiegowaniePl
   return best;
 }
 
+/** A stored relative path that stays inside the scan folder: no `..`, no root, no drive. */
+export function isSafeScanRelPath(relPath: string): boolean {
+  if (typeof relPath !== 'string' || !relPath) return false;
+  if (/^[\\/]/.test(relPath) || /^[a-z]:/i.test(relPath)) return false;
+  return !relPath.split(/[\\/]+/).includes('..');
+}
+
 /**
  * An absolute path from the scan folder and a stored relative one. Relative
  * paths are stored with `/`, so the same row opens on a Mac and on Windows,
  * whatever drive letter or mount point the shared folder has there.
  */
 export function joinScanPath(root: string, relPath: string): string {
+  // The row is shared data: a relative path that climbs out (`..`) or is not
+  // relative at all yields '', which every opener refuses as "not found".
+  if (!isSafeScanRelPath(relPath)) return '';
   const sep = root.includes('\\') && !root.includes('/') ? '\\' : '/';
   const base = root.replace(/[\\/]+$/, '');
   return `${base}${sep}${relPath.split('/').join(sep)}`;

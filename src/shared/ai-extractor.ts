@@ -42,6 +42,67 @@ function responseText(message: Anthropic.Message): string {
   return text;
 }
 
+/**
+ * The model's results placed by the `index` each one names — one slot per
+ * transaction, null where no usable answer arrived.
+ *
+ * The reply's own order means nothing: a model that lists result 3 before result
+ * 2 would otherwise book payer 3's apartment onto payer 2, at the model's own
+ * confidence, and the extraction cache would serve that swap for a month. So a
+ * result counts only through its index, and an index that is not an integer in
+ * range, or that appears twice (which of the two answers belongs to it cannot be
+ * known), leaves its slot empty. Empty slots become rows held for review — never
+ * a guess, and never a crash of the whole conversion over one malformed reply.
+ */
+function placeByIndex(results: unknown, count: number, label: string): Array<Record<string, any> | null> {
+  const slots: Array<Record<string, any> | null> = new Array(count).fill(null);
+  if (!Array.isArray(results)) {
+    logger.warn(`[AI-EXTRACTOR/${label}] reply has no "results" array — all ${count} transaction(s) held for review`);
+    return slots;
+  }
+  const seen = new Map<number, number>();
+  let rejected = 0;
+  for (const result of results) {
+    const raw = result && typeof result === 'object' ? (result as Record<string, any>).index : undefined;
+    const index = typeof raw === 'string' && /^\d+$/.test(raw) ? Number(raw) : raw;
+    if (!Number.isInteger(index) || index < 0 || index >= count) {
+      rejected++;
+      continue;
+    }
+    seen.set(index, (seen.get(index) ?? 0) + 1);
+    slots[index] = result as Record<string, any>;
+  }
+  let duplicated = 0;
+  for (const [index, times] of seen) {
+    if (times > 1) {
+      slots[index] = null;
+      duplicated++;
+    }
+  }
+  const missing = slots.filter((slot) => slot === null).length;
+  if (rejected || duplicated || missing) {
+    logger.warn(
+      `[AI-EXTRACTOR/${label}] reply for ${count} transaction(s): ${rejected} result(s) with an invalid index, ` +
+        `${duplicated} index(es) answered twice, ${missing} transaction(s) left without an answer — held for review`,
+    );
+  }
+  return slots;
+}
+
+/** A 0–100 score from the reply, or null when the model sent something else. */
+function score(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.min(100, Math.max(0, Math.round(value)))
+    : null;
+}
+
+/** A text field from the reply: a string, a number written as one ("27"), or null. */
+function textField(value: unknown): string | null {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return null;
+}
+
 /** Contractor as it appears in a prompt — either as a pre-filtered candidate or in the shared pool. */
 type CandidateContractor = {
   id: number;
@@ -245,17 +306,21 @@ export class AIExtractor {
   }
 
   /**
-   * Extract data from a single transaction using AI
+   * Extract data from a single transaction using AI. Null when the reply carried
+   * no usable answer for it.
    */
-  async extractSingle(transaction: AITransaction): Promise<AIExtractedData> {
+  async extractSingle(transaction: AITransaction): Promise<AIExtractedData | null> {
     const results = await this.extractBatch([transaction]);
     return results[0];
   }
 
   /**
-   * Extract data from multiple transactions in a single API call (batch processing)
+   * Extract data from multiple transactions in a single API call (batch processing).
+   *
+   * One slot per transaction, in input order; null where the reply had no usable
+   * answer for that transaction (see placeByIndex).
    */
-  async extractBatch(transactions: AITransaction[]): Promise<AIExtractedData[]> {
+  async extractBatch(transactions: AITransaction[]): Promise<Array<AIExtractedData | null>> {
     logger.debug('[AI-EXTRACTOR] extractBatch called with', transactions.length, 'transactions');
     logger.debug('[AI-EXTRACTOR] Provider:', this.config.aiProvider);
     logger.debug('[AI-EXTRACTOR] TEST_AI_BILLING_ERROR env var =', process.env.TEST_AI_BILLING_ERROR);
@@ -296,7 +361,7 @@ export class AIExtractor {
   /**
    * Extract using Claude API (with retry logic)
    */
-  private async extractWithClaude(transactions: AITransaction[]): Promise<AIExtractedData[]> {
+  private async extractWithClaude(transactions: AITransaction[]): Promise<Array<AIExtractedData | null>> {
     if (!this.anthropic) {
       throw new Error('Anthropic client not initialized');
     }
@@ -388,7 +453,7 @@ export class AIExtractor {
   /**
    * Extract using OpenAI API (with retry logic)
    */
-  private async extractWithOpenAI(transactions: AITransaction[]): Promise<AIExtractedData[]> {
+  private async extractWithOpenAI(transactions: AITransaction[]): Promise<Array<AIExtractedData | null>> {
     if (!this.openai) {
       throw new Error('OpenAI client not initialized');
     }
@@ -588,7 +653,10 @@ Return a JSON object with this exact structure:
       "reasoning": "Found clear identifier and name in desc-opt"
     }
   ]
-}`;
+}
+
+"index" is REQUIRED in every result: the number N of the "Transaction N" it answers (0 to ${transactions.length - 1}).
+Exactly one result per transaction. A result without an "index" (or with a repeated one) is discarded.`;
   }
 
   /**
@@ -731,31 +799,40 @@ Example 3 (lettered apartment — the letter must survive):
   }
 
   /**
-   * Process AI response and convert to AIExtractedData format
+   * Process AI response and convert to AIExtractedData format — one slot per
+   * transaction, placed by the result's own `index`, null where the reply has no
+   * usable answer for it (missing, duplicated, out of range, or without numeric
+   * confidence scores).
    */
   private processAIResponse(
     response: AIExtractionResponse,
     transactions: AITransaction[]
-  ): AIExtractedData[] {
-    return response.results.map((result) => {
-      const transaction = transactions[result.index];
-      
-      const overall = Math.round(
-        (result.confidence.address + result.confidence.apartment + result.confidence.tenantName) / 3
-      );
-      
+  ): Array<AIExtractedData | null> {
+    const placed = placeByIndex(response?.results, transactions.length, 'extract');
+    return placed.map((result, index) => {
+      if (!result) return null;
+      const transaction = transactions[index];
+
+      const confidence = result.confidence ?? {};
+      const address = score(confidence.address);
+      const apartment = score(confidence.apartment);
+      const tenantName = score(confidence.tenantName);
+      if (address === null || apartment === null || tenantName === null) {
+        logger.warn(`[AI-EXTRACTOR/extract] result ${index} has no numeric confidence scores — held for review`);
+        return null;
+      }
+
+      const overall = Math.round((address + apartment + tenantName) / 3);
+
       return {
-        streetName: result.streetName,
-        buildingNumber: result.buildingNumber,
-        apartmentNumber: result.apartmentNumber,
-        fullAddress: result.fullAddress,
-        tenantName: result.tenantName,
-        confidence: {
-          ...result.confidence,
-          overall,
-        },
+        streetName: textField(result.streetName),
+        buildingNumber: textField(result.buildingNumber),
+        apartmentNumber: textField(result.apartmentNumber),
+        fullAddress: textField(result.fullAddress),
+        tenantName: textField(result.tenantName),
+        confidence: { address, apartment, tenantName, overall },
         extractionMethod: 'ai' as const,
-        reasoning: result.reasoning,
+        reasoning: typeof result.reasoning === 'string' ? result.reasoning : undefined,
         warnings: overall < 70 ? ['Low confidence - review required'] : [],
         rawData: {
           descBase: transaction.descBase,
@@ -995,7 +1072,10 @@ JSON format:
       "reasoning": "Krótkie wyjaśnienie"
     }
   ]
-}`;
+}
+
+Pole "index" jest WYMAGANE w każdym wyniku: to numer N z nagłówka "=== Transakcja N ===".
+Dokładnie jeden wynik na transakcję. Wynik bez "index" (albo z powtórzonym) jest odrzucany.`;
   }
 
   /**
@@ -1034,6 +1114,7 @@ JSON format:
 
     prompt += '\n\n📋 PODSUMOWANIE:';
     prompt += '\n- Zwróć JSON z "results" zawierającym dokładnie ' + transactions.length + ' elementów';
+    prompt += '\n- Każdy element MUSI mieć pole "index" = numer N transakcji ("=== Transakcja N ===", od 0 do ' + (transactions.length - 1) + ')';
     prompt += '\n- Dla każdej transakcji: wybierz ID z listy kandydatów LUB null (jeśli żaden nie pasuje)';
     prompt += '\n- NIE wymyślaj nowych kontrahentów - tylko ID z listy!';
     prompt += '\n- W "reasoning" wyjaśnij ZWIĘŹLE dlaczego wybrałeś tego kontrahenta lub dlaczego null';
@@ -1042,15 +1123,31 @@ JSON format:
   }
 
   /**
-   * Process contractor matching response
+   * Process contractor matching response — one slot per transaction, placed by
+   * the result's own `index` (see placeByIndex). A transaction without a usable
+   * answer comes back unmatched, so it goes to the acceptance screen and nothing
+   * is remembered for it in the match cache.
    */
   private processContractorMatchingResponse(
     response: any,
     candidatesPerTransaction: CandidateContractor[][],
     sharedPool?: CandidateContractor[]
   ): Array<{ contractor: any | null; confidence: number; matchedIn: 'desc-opt' | 'desc-base' | 'none'; matchedText?: string; reasoning?: string }> {
-    return response.results.map((result: any, idx: number) => {
-      if (result.contractorId === null || result.confidence < 50) {
+    const placed = placeByIndex(response?.results, candidatesPerTransaction.length, 'match');
+    return placed.map((result: any, idx: number) => {
+      const confidence = result ? score(result.confidence) : null;
+      if (!result || confidence === null) {
+        return {
+          contractor: null,
+          confidence: 0,
+          matchedIn: 'none' as const,
+          reasoning: this.config.language === 'en'
+            ? 'AI error: no usable answer for this transaction'
+            : 'AI error: brak poprawnej odpowiedzi dla tej transakcji',
+        };
+      }
+
+      if (result.contractorId === null || result.contractorId === undefined || confidence < 50) {
         return {
           contractor: null,
           confidence: 0,
@@ -1088,8 +1185,8 @@ JSON format:
           nazwa: contractor.nazwa,
           kontoKontrahenta: contractor.kontoKontrahenta,
         },
-        confidence: result.confidence,
-        matchedIn: result.matchedIn || 'none',
+        confidence,
+        matchedIn: result.matchedIn === 'desc-opt' || result.matchedIn === 'desc-base' ? result.matchedIn : 'none',
         matchedText: contractor.nazwa,
         reasoning: result.reasoning,
       };

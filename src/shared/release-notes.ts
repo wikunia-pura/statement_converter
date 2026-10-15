@@ -84,6 +84,160 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '11.0.0',
+    date: '2026-10-15',
+    title: 'Pewniejsze księgowanie wyciągów, bezpieczniejsze wysyłki CIT i nowy silnik aplikacji',
+    tagline:
+      'Konwerter nie gubi już po cichu linii wyciągu ani nie zgaduje kontrahenta po fragmencie słowa — wątpliwe pozycje czekają na Twoje potwierdzenie. Wysyłka CIT-8 nie złoży zeznania dwa razy, kopie zapasowe nie przenoszą ustawień tego komputera, a aplikacja działa na nowej, wspieranej wersji Electrona.',
+    stats: [
+      { value: '4', label: 'nowe zabezpieczenia' },
+      { value: '5', label: 'usprawnień' },
+      { value: '6', label: 'poprawek' },
+    ],
+    highlights: [
+      {
+        id: 'konwerter-pominiete-linie',
+        kind: 'new',
+        icon: 'alert-triangle',
+        title: 'Konwerter pokazuje linie wyciągu, których nie odczytał',
+        summary:
+          'Jeśli jakiejś linii pliku z banku nie da się odczytać (np. kwota w nieznanym formacie), Konwerter już jej nie pomija po cichu — ekran akceptacji wymienia ją i prosi o potwierdzenie, zanim powstanie plik księgowy.',
+        where: ['Konwerter', 'Akceptacja'],
+        steps: [
+          {
+            do: 'Przekonwertuj wyciąg jak zwykle.',
+            then: 'Gdy coś nie zostało odczytane, ekran akceptacji otwiera się zawsze — także przy włączonym pomijaniu akceptacji — z czerwoną ramką „Linie wyciągu, których nie udało się odczytać”.',
+          },
+          {
+            do: 'Zaksięguj te pozycje ręcznie albo sprawdź plik pobrany z banku, a potem zaznacz „Rozumiem — tych pozycji nie będzie w pliku księgowym”.',
+            then: 'Dopiero wtedy da się zakończyć akceptację.',
+          },
+        ],
+        expect: [
+          'Pominięte linie są też wypisane w pliku podglądu.',
+          'Plik z kilkoma rachunkami (np. BNP z dwoma wyciągami) księguje tylko rachunek wspólnoty, a wiersze z drugiego rachunku pokazuje jako pominięte.',
+        ],
+      },
+      {
+        id: 'konwerter-wstrzymane-pozycje',
+        kind: 'improved',
+        icon: 'shield',
+        title: 'Wątpliwe pozycje czekają na potwierdzenie',
+        summary:
+          'Storna, księgowania zbiorcze, nazwy kontrahentów sklejone przez bank z sąsiednim tekstem i obciążenia z rachunków wirtualnych (SWRK) trafiają do ramki „Wstrzymane do przeglądu” zamiast prosto do pliku.',
+        details: [
+          'Kontrahent jest dopasowywany tylko po całych słowach. Krótkie skróty (np. „FV”, „SA”) i nazwy alternatywne złożone z samych znaków („-”) nie przypisują już przelewu do przypadkowego kontrahenta.',
+          'Gdy bank skleił długą nazwę z dalszym tekstem, kontrahent jest od razu wybrany — wystarczy go zatwierdzić.',
+          'Do akceptacji trafia każda pozycja, której pewność nie wystarcza do automatycznego zatwierdzenia, także gdy adres był pewny, a numer lokalu nie.',
+          '„Odrzuć” przy wydatku naprawdę zostawia go jako nierozpoznany — wcześniej plik księgowy mógł mimo to wpisać odrzuconego kontrahenta.',
+        ],
+        where: ['Konwerter', 'Akceptacja'],
+        expect: [
+          'Przez pierwsze konwersje po aktualizacji AI może być pytane częściej: pamięć wcześniejszych odpowiedzi jest teraz osobna dla każdej wspólnoty, a reguły lokali mają pierwszeństwo przed nią.',
+          'Numer dokumentu (BNK/MM) bierze miesiąc z wyciągu, a nie z dnia konwersji.',
+        ],
+      },
+      {
+        id: 'cit-niepewna-wysylka',
+        kind: 'new',
+        icon: 'file-check',
+        title: 'CIT-8: wysyłka bez ryzyka podwójnego złożenia',
+        summary:
+          'Zanim zeznanie pójdzie do e-Deklaracji, aplikacja zapisuje wysyłkę. Gdy bramka nie odpowie (np. przeciążenie pod koniec marca), wysyłka dostaje stan „Bez odpowiedzi — niepewna” i blokuje kolejną wysyłkę produkcyjną tego zeznania, dopóki jej nie rozstrzygniesz.',
+        where: ['Podatki', 'CIT', 'zeznanie', 'Wysyłki'],
+        steps: [
+          {
+            do: 'Przy wysyłce „Bez odpowiedzi — niepewna” sprawdź w e-Deklaracjach, czy dokument dotarł.',
+          },
+          {
+            do: 'Kliknij „Dotarła” albo „Nie dotarła — pozwól wysłać ponownie”.',
+            then: 'Decyzja jest zapisana z Twoim nazwiskiem i godziną; „Dotarła” oznacza zeznanie jako złożone.',
+          },
+          {
+            do: 'Przy wysyłce czekającej na UPO dłużej niż godzinę możesz kliknąć „Przestań czekać”.',
+            then: 'Wysyłka przestaje blokować kolejne.',
+          },
+        ],
+        expect: [
+          'Korekta jest wstrzymywana, gdy poprzednia korekta czeka na UPO albo już je ma — aplikacja pyta przed użyciem PIN-u.',
+          'Odpowiedź 200 bez treści UPO nie oznacza już zeznania jako złożonego.',
+          'Zapisy z kilku komputerów naraz nie nadpisują sobie wysyłek ani pobrań.',
+        ],
+      },
+      {
+        id: 'kopie-ustawienia-tego-komputera',
+        kind: 'fixed',
+        icon: 'settings',
+        title: 'Kopia zapasowa nie zmienia ustawień tego komputera',
+        summary:
+          'Przywrócenie kopii i import ustawień przenoszą tylko ustawienia, które mają sens na innym komputerze. Foldery, poczta (SMTP), biblioteka karty i środowisko e-Deklaracji zostają takie, jakie są tutaj — kopia z komputera ustawionego na produkcję nie przełączy już tego komputera na prawdziwą bramkę.',
+        where: ['Ustawienia', 'Kopie zapasowe'],
+        expect: [
+          'Gdy zmienisz serwer albo użytkownika poczty, zapisane hasło jest czyszczone — wpisz je ponownie.',
+          'Jeśli kopii brakuje jakiejś sekcji (np. tabela jeszcze nie istnieje w bazie), podsumowanie to mówi. Przywracanie nie usuwa już danych przed wstawieniem nowych, więc błąd w połowie nie zostawia pustych tabel.',
+        ],
+      },
+      {
+        id: 'zadania-zapis-dwoch-osob',
+        kind: 'fixed',
+        icon: 'clipboard',
+        title: 'Zadania: zapis dwóch osób naraz nie kasuje załączników',
+        summary:
+          'Szybka zmiana na tablicy (tytuł, osoba, termin, priorytet) zapisuje tylko to, co zmieniłeś. Gdy ktoś zapisał kartę, kiedy miałeś otwarty formularz, aplikacja o tym mówi, a formularz zostaje otwarty z Twoimi zmianami i aktualnymi załącznikami.',
+        where: ['Zadania'],
+        expect: ['Plik jest usuwany z karty tylko wtedy, gdy sam go usunąłeś w formularzu.'],
+      },
+      {
+        id: 'podatki-poprawki',
+        kind: 'fixed',
+        icon: 'landmark',
+        title: 'Podatki i zebrania: poprawki wyliczeń',
+        summary:
+          'Korekta DN-1 nie wydrukuje już ujemnej raty, PIT-11 wymaga PESEL-u albo NIP-u przed podpisem, a zebranie bez godziny drukuje się w planie i sprawozdaniu z właściwą datą (wcześniej dzień wcześniej).',
+        expect: [
+          'Raty DN-1 dla zwykłych kwot są takie same jak dotąd.',
+          'Znak, którego nie ma w czcionce formularza (np. imię cyrylicą), zatrzymuje PDF z nazwą pola zamiast pustej kratki.',
+        ],
+      },
+      {
+        id: 'mailing-wyslano-czesciowo',
+        kind: 'improved',
+        icon: 'mail',
+        title: 'Mailing: „Wysłano częściowo”',
+        summary:
+          'Gdy serwer pocztowy odrzuci część adresów, historia pokazuje „Wysłano częściowo”, a odrzucone adresy mają znacznik „odrzucony”.',
+        where: ['Mailing', 'Historia'],
+      },
+      {
+        id: 'homebanking-linie-bez-banku',
+        kind: 'improved',
+        icon: 'building',
+        title: 'Homebanking: linie bez banku nie znikają',
+        summary:
+          'Przelewy, których bank nie został rozpoznany, są wypisane w ramce „Linie bez banku”, a scalenie bez nich wymaga kliknięcia „Scal bez nich”.',
+        where: ['Homebanking'],
+      },
+      {
+        id: 'bezpieczenstwo-i-silnik',
+        kind: 'improved',
+        icon: 'shield',
+        title: 'Nowy silnik aplikacji i bezpieczeństwo',
+        summary:
+          'Aplikacja działa na aktualnej, wspieranej wersji Electrona (44). Treść szablonów, uchwał i wysłanych maili jest oczyszczana z kodu, a pliki z historii czy załączników nie otworzą się, jeśli są programami albo leżą na cudzym serwerze.',
+        details: [
+          'Na Windows sesja logowania i hasło poczty są szyfrowane kontem Windows.',
+          'Okno wyboru pliku otwiera się w folderze, z którego ostatnio coś wybrałeś.',
+          'Noty świadczeń nie nadpisują plików o tej samej nazwie — dostają końcówkę -1, -2.',
+          'Linki w podglądzie wysłanego maila nie otwierają się w oknie aplikacji.',
+        ],
+        note: {
+          type: 'warning',
+          text: 'Wymagania: macOS 13 lub nowszy, Windows 10/11 w wersji 64-bitowej.',
+        },
+      },
+    ],
+  },
+  {
     version: '10.1.0',
     date: '2026-10-15',
     title: 'Homebanking rozpoznaje bank po rachunku, a zarząd i reguły lokali są w formularzu adresu',

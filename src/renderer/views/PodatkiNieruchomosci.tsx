@@ -43,6 +43,7 @@ import {
 import { foldText } from '../../shared/plan-gospodarczy';
 import { WierszDn1, wierszeDn1 } from '../../shared/adres-identyfikacja';
 import { formatStamp } from '../../shared/calendar';
+import { localeOf } from '../../shared/format';
 import { translations, Language } from '../translations';
 import { plural } from '../plural';
 import { useNotify } from '../components/Notifications';
@@ -55,6 +56,7 @@ import Icon from '../components/Icon';
 import Loader, { BusyOverlay } from '../components/Loader';
 import Select from '../components/Select';
 import { parseKwota } from '../components/KwotaInput';
+import { ipcErrorMessage } from '../ipcError';
 
 type T = (typeof translations)['pl'];
 
@@ -152,12 +154,15 @@ const Licznik: React.FC<{ value: number; label: string; tone: 'success' | 'warni
  * Where a send to e-Deklaracje stands, in words: by the gateway's status — or "taken, being processed" when it
  * gave a reference number, "not sent" when the document never got to it.
  */
-export const etapWysylkiText = (t: T, status: number | null, refId: string | null): string => {
+export const etapWysylkiText = (t: T, status: number | null, refId: string | null, niepewna = false): string => {
+  // No answer after the request went out: the gateway may have the document — neither sent nor failed.
+  if (niepewna) return t.citEtap_niepewna;
   if (status === null) return refId ? t.citEtap_w_toku : t.citEtap_brak;
   return t[`citEtap_${etapStatusu(status)}` as const];
 };
 
-export const klasaEtapu = (status: number | null, refId: string | null): string => {
+export const klasaEtapu = (status: number | null, refId: string | null, niepewna = false): string => {
+  if (niepewna) return 'status-pending';
   if (status === null) return refId ? 'status-pending' : 'status-neutral';
   switch (etapStatusu(status)) {
     case 'przyjeta':
@@ -273,11 +278,19 @@ export const PodsumowaniePodpisow: React.FC<{
                 .replace('{n}', String(wysylki.length))}
               description={t.podSumSentDesc}
             >
+              {wysylki.some((w) => w.niezapisana) && (
+                <div className="callout callout--danger" role="alert">
+                  <Icon name="alert-circle" size={16} />
+                  <div className="callout__body">{t.citSendNotRecorded}</div>
+                </div>
+              )}
               <ul className="podpis-sum__list">
                 {wysylki.map((w) => (
                   <li key={w.id}>
                     <span className="podpis-sum__name">{w.nazwa}</span>
-                    <span className={`status-badge ${klasaEtapu(w.status, w.refId)}`}>{etapWysylkiText(t, w.status, w.refId)}</span>
+                    <span className={`status-badge ${klasaEtapu(w.status, w.refId, w.niepewna)}`}>
+                      {etapWysylkiText(t, w.status, w.refId, w.niepewna)}
+                    </span>
                     {w.refId && <span className="podpis-sum__reason">{t.citSendRef.replace('{ref}', w.refId)}</span>}
                     {w.opis && <span className="podpis-sum__reason">{w.opis}</span>}
                   </li>
@@ -574,7 +587,7 @@ const StawkiSection: React.FC<{
       notify.success(t.podRatesSaved.replace('{rok}', String(rok)));
       onSaved();
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.podRatesSaveError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.podRatesSaveError);
     } finally {
       setSaving(false);
     }
@@ -669,7 +682,7 @@ export const DomSlot: React.FC<{
   dom ? (
     <div
       className={`ksieg-book-done ksieg-book-done--sm${size === 'button' ? ' ksieg-book-done--inline' : ''}`}
-      title={(labels?.doneBy ?? t.podDomBookedBy).replace('{when}', formatStamp(dom.at, locale)).replace('{who}', dom.by || '—')}
+      data-tip={(labels?.doneBy ?? t.podDomBookedBy).replace('{when}', formatStamp(dom.at, locale)).replace('{who}', dom.by || '—')}
     >
       <span className="ksieg-book-done__label">
         <Icon name="check-circle" size={size === 'button' ? 13 : 14} /> {labels?.done ?? t.ksAllInDom}
@@ -787,7 +800,7 @@ const DeklaracjaScreen: React.FC<{
       onSaved(saved);
       return true;
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.podSaveError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.podSaveError);
       return false;
     } finally {
       setBusy(null);
@@ -802,7 +815,7 @@ const DeklaracjaScreen: React.FC<{
       notify.success(t.podDownloaded.replace('{file}', baseName(filePath)), { file: filePath });
       onDownloaded();
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.podDownloadError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.podDownloadError);
     } finally {
       setBusy(null);
     }
@@ -833,7 +846,7 @@ const DeklaracjaScreen: React.FC<{
       notify.success(t.podDeleted);
       onDeleted();
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err));
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
       setBusy(null);
     }
   };
@@ -910,7 +923,7 @@ const DeklaracjaScreen: React.FC<{
                 className="button button-small button-secondary"
                 onClick={() => void download()}
                 disabled={pdfBlocked !== null || busy !== null}
-                title={pdfBlocked ?? undefined}
+                data-tip={pdfBlocked ?? undefined}
               >
                 <Icon name={busy === 'pdf' ? 'loader' : 'download'} size={13} /> {t.podDownloadPdf}
               </button>
@@ -919,7 +932,7 @@ const DeklaracjaScreen: React.FC<{
                 className="button button-small button-primary"
                 onClick={() => setPodpisOpen(true)}
                 disabled={pdfBlocked !== null || busy !== null}
-                title={pdfBlocked ?? t.podSignPdfHint}
+                data-tip={pdfBlocked ?? t.podSignPdfHint}
               >
                 <Icon name="signature" size={13} /> {t.podSignPdf}
               </button>
@@ -1193,7 +1206,7 @@ const DeklaracjaScreen: React.FC<{
                         type="button"
                         className="button button-small button-ghost icon-danger"
                         onClick={() => removeGrunt(i)}
-                        title={t.podLandRemove}
+                        data-tip={t.podLandRemove}
                         aria-label={t.podLandRemove}
                       >
                         <Icon name="trash" size={13} />
@@ -1375,7 +1388,7 @@ const DeklaracjaScreen: React.FC<{
                     .reverse()
                     .slice(0, 3)
                     .map((p, i) => (
-                      <li key={i} title={p.plik}>
+                      <li key={i} data-tip={p.plik}>
                         {(p.podpis ? t.podPdfHistorySigned.replace('{signer}', p.podpis.podmiot) : t.podPdfHistoryItem)
                           .replace('{when}', formatStamp(p.at, locale))
                           .replace('{who}', p.by || '—')}
@@ -1445,7 +1458,7 @@ const domyslnyRok = (lata: number[]) => (lata.length > 0 ? Math.max(...lata) : n
 const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) => {
   const t = translations[language];
   const notify = useNotify();
-  const locale = language === 'en' ? 'en-GB' : 'pl-PL';
+  const locale = localeOf(language);
 
   const [lista, setLista] = useState<PodatekNieruchomosci[]>([]);
   const [stawki, setStawki] = useState<PodatkiStawki[]>([]);
@@ -1501,7 +1514,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
       setStawki(rates);
       setAdresy(addresses);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.podLoadError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.podLoadError);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -1674,7 +1687,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
       }
       return true;
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.ksMarkError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.ksMarkError);
       await load(true);
       return false;
     } finally {
@@ -1756,7 +1769,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
       if (lataPliku.length > 0) setRokWybrany(Math.max(...lataPliku));
       await load(true);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.podImportError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.podImportError);
     } finally {
       setBusy(null);
     }
@@ -1770,7 +1783,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
       setRokWybrany(rok);
       await load(true);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.podCarryError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.podCarryError);
     } finally {
       setBusy(null);
     }
@@ -1813,7 +1826,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
       }
       await load(true);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.podDownloadError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.podDownloadError);
     } finally {
       setBusy(null);
     }
@@ -1904,7 +1917,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
               )}
             </div>
             <div className="zeb-row__side">
-              <span className="status-badge status-neutral" title={t.podRowNoneHint}>
+              <span className="status-badge status-neutral" data-tip={t.podRowNoneHint}>
                 {t.podRowNone}
               </span>
             </div>
@@ -1938,7 +1951,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
         <span className="ksieg-row__select">
           <label
             className={`ks-check${isSelected ? ' is-on' : ''}`}
-            title={t.podSelectFor}
+            data-tip={t.podSelectFor}
             // Shift+click selects a range; without this it also selects text.
             onMouseDown={(e) => {
               if (e.shiftKey) e.preventDefault();
@@ -1969,7 +1982,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
               }
             }}
           >
-            <div className="zeb-date pod-kwota" title={t.podCalc99}>
+            <div className="zeb-date pod-kwota" data-tip={t.podCalc99}>
               <span className="pod-kwota__label">{t.podRowTax}</span>
               {kwota ? (
                 <span className={`pod-kwota__value${kwota.size}`}>
@@ -2002,7 +2015,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
                   </span>
                 )}
                 {!w.adres && (
-                  <span className="pod-meta-warning" title={t.podOrphanHint}>
+                  <span className="pod-meta-warning" data-tip={t.podOrphanHint}>
                     <Icon name="alert-triangle" size={13} /> {t.podOrphanBadge}
                   </span>
                 )}
@@ -2023,7 +2036,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
                   className={`status-badge ${
                     stan === 'braki' ? 'status-pending' : stan === 'pobrana' ? 'status-info' : 'status-accent'
                   }`}
-                  title={problemy.map((p) => problemText(t, p, rok)).join('\n') || undefined}
+                  data-tip={problemy.map((p) => problemText(t, p, rok)).join('\n') || undefined}
                 >
                   {stan === 'braki' ? t.podStatusMissing : stan === 'pobrana' ? t.podStatusDownloaded : t.podStatusReady}
                 </span>
@@ -2102,7 +2115,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
             className="ksieg-nav-arrow"
             onClick={() => zmienRok(rok - 1)}
             disabled={rok <= minRok}
-            title={t.podYearPrev}
+            data-tip={t.podYearPrev}
             aria-label={t.podYearPrev}
           >
             <Icon name="chevron-left" size={17} />
@@ -2123,7 +2136,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
             className="ksieg-nav-arrow"
             onClick={() => zmienRok(rok + 1)}
             disabled={rok >= maxRok}
-            title={t.podYearNext}
+            data-tip={t.podYearNext}
             aria-label={t.podYearNext}
           >
             <Icon name="chevron-right" size={17} />
@@ -2133,7 +2146,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
             className="ksieg-scan-btn"
             onClick={() => void downloadAll()}
             disabled={busy !== null || wRoku.length === 0}
-            title={t.podDownloadAllHint.replace('{rok}', String(rok))}
+            data-tip={t.podDownloadAllHint.replace('{rok}', String(rok))}
           >
             <Icon name={busy === 'all' ? 'loader' : 'download'} size={15} />
             <span>{t.podDownloadAll}</span>
@@ -2143,7 +2156,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
             className="ksieg-nav-arrow"
             onClick={() => void load(true)}
             disabled={isRefreshing}
-            title={t.zebraniaRefresh}
+            data-tip={t.zebraniaRefresh}
             aria-label={t.zebraniaRefresh}
           >
             <Icon name="refresh" size={16} />
@@ -2171,7 +2184,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
           <Icon name="search" size={15} />
           <input type="text" placeholder={t.podSearch} value={search} onChange={(e) => setSearch(e.target.value)} />
           {search.trim() && (
-            <button type="button" onClick={() => setSearch('')} title={t.close} aria-label={t.close}>
+            <button type="button" onClick={() => setSearch('')} data-tip={t.close} aria-label={t.close}>
               <Icon name="x" size={14} />
             </button>
           )}
@@ -2198,7 +2211,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
             className="button button-secondary"
             onClick={() => void importXlsx()}
             disabled={busy !== null}
-            title={t.podImportHint}
+            data-tip={t.podImportHint}
           >
             <Icon name={busy === 'import' ? 'loader' : 'upload'} size={14} /> {t.podImport}
           </button>
@@ -2364,7 +2377,7 @@ const PodatkiNieruchomosci: React.FC<{ language: Language }> = ({ language }) =>
               className="button button-secondary"
               disabled={busy !== null || podpisWiele !== null}
               onClick={() => setPodpisWiele(zaznaczone.map((r) => r.id))}
-              title={t.podSignPdfHint}
+              data-tip={t.podSignPdfHint}
             >
               <Icon name="signature" size={14} /> {t.podBatchSign.replace('{n}', String(zaznaczone.length))}
             </button>

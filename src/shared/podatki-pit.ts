@@ -19,7 +19,8 @@
 
 import type { PodatekPobranie } from './types';
 import { PIT11_URZEDY, PIT4R_URZEDY_DODATKOWE } from './pit-urzedy';
-import { czysc, doGroszy, doZlotych, tylkoCyfry } from './podatki';
+import { czysc, doGroszy, doZlotych, nipPoprawny, tylkoCyfry } from './podatki';
+import { foldText } from './text';
 
 /* ================================ Form versions ================================ */
 
@@ -421,7 +422,6 @@ export function normalizeDanePit(raw: unknown): PitDane {
 /* =============================== Identification ============================== */
 
 const WAGI_PESEL = [1, 3, 7, 9, 1, 3, 7, 9, 1, 3];
-const WAGI_NIP = [6, 5, 7, 2, 3, 4, 5, 6, 7];
 
 /** 11 digits and the check digit — the office's files held PESELs cut to 6–10 digits. */
 export function peselPoprawny(p: string): boolean {
@@ -430,11 +430,8 @@ export function peselPoprawny(p: string): boolean {
   return (10 - (suma % 10)) % 10 === Number(p[10]);
 }
 
-export function nipPoprawny(n: string): boolean {
-  if (!/^\d{10}$/.test(n)) return false;
-  const suma = WAGI_NIP.reduce((s, w, i) => s + w * Number(n[i]), 0) % 11;
-  return suma !== 10 && suma === Number(n[9]);
-}
+/** One NIP check for the whole app (podatki.ts); re-exported for the PIT code that imports it from here. */
+export { nipPoprawny };
 
 /** The birth date a PESEL encodes ("1985-06-17"), null for a PESEL that is not valid. */
 export function dataZPesela(p: string): string | null {
@@ -447,19 +444,9 @@ export function dataZPesela(p: string): string | null {
   return `${wiek + rr}-${String(mm).padStart(2, '0')}-${dd}`;
 }
 
-const zlozFold = (s: string) =>
-  s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/ł/g, 'l')
-    .replace(/Ł/g, 'L')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
-
 /** The same person in another row or another year: by PESEL, else NIP, else name and birth date. */
 export const kluczOsoby = (o: PitOsoba): string =>
-  o.pesel ? `p${o.pesel}` : o.nip ? `n${o.nip}` : `x${zlozFold(o.nazwisko)}|${zlozFold(o.imie)}|${o.dataUrodzenia ?? ''}`;
+  o.pesel ? `p${o.pesel}` : o.nip ? `n${o.nip}` : `x${foldText(o.nazwisko)}|${foldText(o.imie)}|${o.dataUrodzenia ?? ''}`;
 
 export const nazwaOsoby = (o: Pick<PitOsoba, 'imie' | 'nazwisko'>): string => `${o.nazwisko} ${o.imie}`.trim();
 
@@ -626,8 +613,18 @@ export function problemyOsoby(o: PitOsoba, rok: number): PitProblem[] {
   if (!o.imie || !o.nazwisko) out.push(blad('Brak imienia lub nazwiska.'));
   if (!o.dataUrodzenia) out.push(blad('Brak daty urodzenia.'));
   if (!o.adres.miejscowosc) out.push(blad('Brak miejscowości w adresie (schemat jej wymaga).'));
-  const maObcy = o.nrId !== '' && o.rodzajNrId !== null && o.krajWydania !== '';
-  if (!o.pesel && !o.nip && !maObcy) out.push(blad('Brak PESEL-u, NIP-u albo zagranicznego numeru (z rodzajem i krajem wydania).'));
+  // The schema identifies the person by NIP or PESEL — a choice it requires; the foreign number
+  // (poz. 13–15) comes on top of one of them, never instead: a file with the foreign number alone
+  // is refused by the gateway after the card has signed it.
+  if (!o.pesel && !o.nip) {
+    out.push(
+      blad(
+        o.nrId !== ''
+          ? 'Brak PESEL-u albo NIP-u — sam numer zagraniczny nie wystarcza: e-Deklaracje wymagają jednego z nich także od cudzoziemca.'
+          : 'Brak PESEL-u albo NIP-u.',
+      ),
+    );
+  }
   if (o.pesel && !peselPoprawny(o.pesel)) out.push(blad(`PESEL „${o.pesel}” jest nieprawidłowy (11 cyfr i cyfra kontrolna).`));
   if (o.nip && !nipPoprawny(o.nip)) out.push(blad(`NIP „${o.nip}” jest nieprawidłowy.`));
   if (o.nrId !== '' && (o.rodzajNrId === null || o.krajWydania === '')) {
@@ -774,7 +771,7 @@ export function daneNaKolejnyRok(d: PitDane): PitDane {
  * and the address "Śniardwy 6" all give "sniardwy6".
  */
 export const rdzenWspolnoty = (nazwa: string): string =>
-  zlozFold(nazwa.replace(/^\s*wsp[oó]lnota\s+mieszkaniowa\s+/i, '').replace(/^\s*wm\s+/i, '')).replace(/\s+/g, '');
+  foldText(nazwa.replace(/^\s*wsp[oó]lnota\s+mieszkaniowa\s+/i, '').replace(/^\s*wm\s+/i, '')).replace(/\s+/g, '');
 
 /** The payer's name as the declarations print it: "Gotarda 8" → "WSPÓLNOTA MIESZKANIOWA GOTARDA 8". */
 export const nazwaPlatnikaZAdresu = (nazwaAdresu: string): string => {

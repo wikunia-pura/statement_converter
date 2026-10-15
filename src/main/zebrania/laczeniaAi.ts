@@ -14,7 +14,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import logger from '../../shared/logger';
 import { maxTokensFor, modelRequestFields } from '../../shared/ai-models';
 import { bezLaczenia, formatKwota, laczenieAktualne } from '../../shared/sprawozdanie';
-import { wierszInterEj } from '../../shared/inter-ej';
+import { ukryteKwotyInterEj, wierszInterEj, wspominaInterEj } from '../../shared/inter-ej';
 import {
   Sprawozdanie,
   SprawozdanieGrupowanie,
@@ -38,6 +38,7 @@ RULES
 - Do not group rows that are different things just to shorten the list. Leave significant, distinct items on their own (the repair fund, administration, insurance, a specific repair). When nothing is worth grouping, answer with an empty list.
 - "nazwa": a short Polish name for the group, as an accountant would print it (e.g. "Najem części wspólnych", "Energia elektryczna"), max 40 characters.
 - "uzasadnienie": one short Polish sentence (max 15 words) saying why.
+- Never name INTER-EJ (the managing company) or its fee in a "nazwa" or an "uzasadnienie" — such a proposal is discarded.
 - Refer to rows by their "id" only.
 
 ANSWER FORMAT — a single JSON object and nothing else:
@@ -59,6 +60,7 @@ RULES
 - Group by what the rows ARE (a kind of cost or income); a row that fits no group stays on its own. Do not make a subcategory of everything.
 - "nazwa": a short Polish heading, as an accountant would print it (e.g. "Remonty bieżące", "Media"), max 40 characters.
 - "uzasadnienie": one short Polish sentence (max 15 words) saying why.
+- Never name INTER-EJ (the managing company) or its fee in a "nazwa" or an "uzasadnienie" — such a proposal is discarded.
 - Refer to rows by their "id" only.
 
 ANSWER FORMAT — a single JSON object and nothing else:
@@ -103,6 +105,9 @@ export async function proponujLaczeniaAi(
   const sekcje: Sekcja[] = [];
   const lines: string[] = [];
   spr.sekcje.forEach((sec, i) => {
+    // Amounts that hold INTER-EJ's fee: its rows, rows merged with one, a heading over one (shared/inter-ej).
+    const ukryteIdx = ukryteKwotyInterEj(sec);
+    const ukryte = new Set(sec.wiersze.filter((w, j) => ukryteIdx.has(j) || wierszInterEj(w)).map((w) => w.nazwa));
     const rows = sec.wiersze.filter(
       (w) => !w.podsumowanie && w.kwoty.some((k) => k != null && Math.abs(k) >= 0.005) && !zajete.has(`${sec.tytul}\u0000${w.nazwa}`) &&
         (rodzaj === 'podkategorie' || !bezLaczenia(w.nazwa)),
@@ -117,7 +122,7 @@ export async function proponujLaczeniaAi(
       const id = nextRow++;
       s.wiersze.push({ id, nazwa });
       // An INTER-EJ row is grouped by its name and columns alone — its amount never reaches the model (shared/inter-ej).
-      const ukryta = wierszInterEj(w);
+      const ukryta = ukryte.has(nazwa);
       const kwoty = sec.kolumny
         .map((k, c) => `${k}=${w.kwoty[c] != null ? (ukryta ? 'withheld' : formatKwota(w.kwoty[c])) : '-'}`)
         .join('; ');
@@ -158,13 +163,20 @@ export async function proponujLaczeniaAi(
     const ids = [...new Set((Array.isArray(r.wiersze) ? r.wiersze : []).map(Number))];
     const rows = ids.map((id) => sec?.wiersze.find((w) => w.id === id));
     const nazwa = typeof r.nazwa === 'string' ? r.nazwa.trim().slice(0, 80) : '';
+    const uzasadnienie = typeof r.uzasadnienie === 'string' ? r.uzasadnienie.trim() : '';
     if (!sec || !nazwa || rows.length < 2 || rows.some((w) => !w) || ids.some((id) => used.has(id))) continue;
+    // A group the model named or explained by INTER-EJ is refused, not repaired (shared/inter-ej) — the
+    // name would go onto the statement the owners read.
+    if (wspominaInterEj(nazwa) || wspominaInterEj(uzasadnienie)) {
+      logger.warn(`[SPR-LACZ-AI] a proposal naming INTER-EJ dropped (${rows.length} rows)`);
+      continue;
+    }
     ids.forEach((id) => used.add(id));
     out.push({
       sekcja: sec.tytul,
       wiersze: rows.map((w) => w!.nazwa),
       nazwa,
-      uzasadnienie: typeof r.uzasadnienie === 'string' ? r.uzasadnienie.trim() : '',
+      uzasadnienie,
     });
   }
   logger.info(`[SPR-LACZ-AI] ${out.length} ${rodzaj} proposed by ${model} over ${nextRow - 1} rows`);

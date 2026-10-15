@@ -409,36 +409,36 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       <div className={'rte' + (className ? ` ${className}` : '')}>
         {!readOnly && (
           <div className="rte-toolbar">
-            <button type="button" className="button button-ghost button-icon" title={labels.bold} onClick={() => exec('bold')}>
+            <button type="button" className="button button-ghost button-icon" data-tip={labels.bold} aria-label={labels.bold} onClick={() => exec('bold')}>
               <strong>B</strong>
             </button>
-            <button type="button" className="button button-ghost button-icon" title={labels.italic} onClick={() => exec('italic')}>
+            <button type="button" className="button button-ghost button-icon" data-tip={labels.italic} aria-label={labels.italic} onClick={() => exec('italic')}>
               <em>I</em>
             </button>
-            <button type="button" className="button button-ghost button-icon" title={labels.underline} onClick={() => exec('underline')}>
+            <button type="button" className="button button-ghost button-icon" data-tip={labels.underline} aria-label={labels.underline} onClick={() => exec('underline')}>
               <span style={{ textDecoration: 'underline' }}>U</span>
             </button>
             <span className="toolbar-divider" />
-            <button type="button" className="button button-ghost button-icon" title={labels.heading} onClick={() => exec('formatBlock', 'H3')}>
+            <button type="button" className="button button-ghost button-icon" data-tip={labels.heading} aria-label={labels.heading} onClick={() => exec('formatBlock', 'H3')}>
               H
             </button>
-            <button type="button" className="button button-ghost button-icon" title={labels.bulletList} onClick={() => exec('insertUnorderedList')}>
+            <button type="button" className="button button-ghost button-icon" data-tip={labels.bulletList} aria-label={labels.bulletList} onClick={() => exec('insertUnorderedList')}>
               •
             </button>
-            <button type="button" className="button button-ghost button-icon" title={labels.numberedList} onClick={() => exec('insertOrderedList')}>
+            <button type="button" className="button button-ghost button-icon" data-tip={labels.numberedList} aria-label={labels.numberedList} onClick={() => exec('insertOrderedList')}>
               1.
             </button>
             <span className="toolbar-divider" />
-            <button type="button" className="button button-ghost button-icon" title={labels.alignLeft} onClick={() => align('justifyLeft')}>
+            <button type="button" className="button button-ghost button-icon" data-tip={labels.alignLeft} aria-label={labels.alignLeft} onClick={() => align('justifyLeft')}>
               <Icon name="align-left" size={15} />
             </button>
-            <button type="button" className="button button-ghost button-icon" title={labels.alignCenter} onClick={() => align('justifyCenter')}>
+            <button type="button" className="button button-ghost button-icon" data-tip={labels.alignCenter} aria-label={labels.alignCenter} onClick={() => align('justifyCenter')}>
               <Icon name="align-center" size={15} />
             </button>
-            <button type="button" className="button button-ghost button-icon" title={labels.alignRight} onClick={() => align('justifyRight')}>
+            <button type="button" className="button button-ghost button-icon" data-tip={labels.alignRight} aria-label={labels.alignRight} onClick={() => align('justifyRight')}>
               <Icon name="align-right" size={15} />
             </button>
-            <button type="button" className="button button-ghost button-icon" title={labels.alignJustify} onClick={() => align('justifyFull')}>
+            <button type="button" className="button button-ghost button-icon" data-tip={labels.alignJustify} aria-label={labels.alignJustify} onClick={() => align('justifyFull')}>
               <Icon name="align-justify" size={15} />
             </button>
             <span className="toolbar-divider" />
@@ -446,7 +446,8 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
               <button
                 type="button"
                 className="button button-ghost button-icon"
-                title={labels.table}
+                data-tip={labels.table}
+                aria-label={labels.table}
                 onClick={() => setTablePanelOpen((open) => !open)}
               >
                 <Icon name="table" size={15} />
@@ -491,7 +492,8 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
             <button
               type="button"
               className="button button-ghost button-icon"
-              title={labels.clearFormatting}
+              data-tip={labels.clearFormatting}
+              aria-label={labels.clearFormatting}
               onClick={clearFormatting}
             >
               <Icon name="x" size={14} />

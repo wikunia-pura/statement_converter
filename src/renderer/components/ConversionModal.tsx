@@ -3,6 +3,7 @@ import { FileEntry } from '../../shared/types';
 import { translations, Language } from '../translations';
 import Converter from '../views/Converter';
 import ModalDismiss, { ModalHeader } from './Modal';
+import { ConversionSessionProvider } from '../conversionSession';
 
 /**
  * The Converter, over the dashboard: the statements the folder scan pinned —
@@ -46,14 +47,17 @@ const ConversionModal: React.FC<{
           subtitle={t.ksConvModalProgress.replace('{done}', String(done)).replace('{total}', String(files.length))}
         />
         <div className="conv-modal__body">
-          <Converter
-            language={language}
-            files={files}
-            setFiles={setFiles}
-            selectedBank={selectedBank}
-            setSelectedBank={setSelectedBank}
-            embedded
-          />
+          {/* Its own run: a batch going on in the Converter tab is not this one. */}
+          <ConversionSessionProvider files={files} setFiles={setFiles} language={language}>
+            <Converter
+              language={language}
+              files={files}
+              setFiles={setFiles}
+              selectedBank={selectedBank}
+              setSelectedBank={setSelectedBank}
+              embedded
+            />
+          </ConversionSessionProvider>
         </div>
       </div>
     </div>

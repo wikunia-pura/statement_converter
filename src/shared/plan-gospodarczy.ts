@@ -36,6 +36,8 @@ import {
   SprawozdanieWiersz,
   ZebraniaUstawienia,
 } from './types';
+import { toDayKey } from './calendar';
+import { foldText } from './text';
 
 /* ---------------------------- Legacy categories ---------------------------- */
 // The fixed lines of the form plans were drafted into before they became a copy
@@ -104,16 +106,8 @@ export function normalizeUstawienia(value: unknown): ZebraniaUstawienia {
   };
 }
 
-/** Lower-case, no Polish diacritics, single spaces — how names and phrases are compared. */
-export function foldText(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/ł/g, 'l')
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+/** Re-exported so the views that import it from here keep working. */
+export { foldText };
 
 /**
  * The rows the plan does not copy, by their printed names: the year's result,
@@ -825,6 +819,17 @@ export function wolneMiesiaceZmiany(okresy: PlanOkresZaliczki[]): number[] {
 }
 
 /**
+ * The month (1–12) of the meeting adopting the plan, when it falls in the plan's
+ * year; null otherwise. Read from the meeting's local day: a meeting with no hour
+ * is stored as the evening before in UTC, so the stored text's own year and month
+ * would put a 1 January meeting in the year before.
+ */
+export function miesiacZebraniaWRoku(dataZebrania: string | null, rok: number): number | null {
+  const m = /^(\d{4})-(\d{2})/.exec(dataZebrania ? toDayKey(dataZebrania) : '');
+  return m && Number(m[1]) === rok ? Number(m[2]) : null;
+}
+
+/**
  * The month a new rate is offered from: the one after the meeting that adopts
  * the plan, when that is in the plan's year; otherwise the middle of the
  * longest stretch. Null when every month starts a stretch already.
@@ -832,8 +837,8 @@ export function wolneMiesiaceZmiany(okresy: PlanOkresZaliczki[]): number[] {
 export function domyslnyMiesiacZmiany(okresy: PlanOkresZaliczki[], rok: number, dataZebrania: string | null): number | null {
   const wolne = wolneMiesiaceZmiany(okresy);
   if (wolne.length === 0) return null;
-  const m = /^(\d{4})-(\d{2})/.exec(dataZebrania ?? '');
-  if (m && Number(m[1]) === rok && wolne.includes(Number(m[2]) + 1)) return Number(m[2]) + 1;
+  const miesiac = miesiacZebraniaWRoku(dataZebrania, rok);
+  if (miesiac !== null && wolne.includes(miesiac + 1)) return miesiac + 1;
   const starts = poczatkiOkresow(okresy);
   const lens = okresyZPoczatkow(starts, []).map((o) => o.miesiace);
   let i = 0;

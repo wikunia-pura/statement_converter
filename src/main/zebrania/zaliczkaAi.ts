@@ -16,6 +16,7 @@ import { maxTokensFor, modelRequestFields } from '../../shared/ai-models';
 import { naM2, okresyLabels, planSumy, zaliczkaBilansujaca, ZaliczkaRodzaj } from '../../shared/plan-gospodarczy';
 import { formatData, formatKwota } from '../../shared/sprawozdanie';
 import { INTER_EJ_PROMPT, nazwaInterEj, zakazInterEj } from '../../shared/inter-ej';
+import { toDayKey } from '../../shared/calendar';
 import { PlanGospodarczy, PlanOkresZaliczki, PlanPozycja, PlanZaliczkaAiPropozycja } from '../../shared/types';
 
 const ANSWER_TOKENS = 1500;
@@ -106,19 +107,27 @@ function fakty(plan: PlanGospodarczy, x: ZaliczkaRodzaj, dataZebrania: string | 
   const okresy = x === 'A' ? plan.zaliczkaA : plan.zaliczkaB;
   const kwoty = x === 'A' ? s.zaliczkaA : s.zaliczkaB;
   const labels = okresyLabels(okresy, plan.rok);
-  // INTER-EJ's fee is never itemised to the model (shared/inter-ej); the totals still include it.
-  const wymienialne = plan.pozycje.filter((z) => !nazwaInterEj(z.nazwa) && !z.wiersze.some(nazwaInterEj));
+  // INTER-EJ's fee is never itemised to the model (shared/inter-ej); the totals still include it. A
+  // subcategory holding an INTER-EJ position goes out whole: the model sees a group as one line with its
+  // total, and that total less the fee would let the fee be read off against the printed plan.
+  const interEj = (z: PlanPozycja) => nazwaInterEj(z.nazwa) || z.wiersze.some(nazwaInterEj);
+  const grupyInterEj = new Set(
+    plan.pozycje.filter((z) => z.grupa.trim() && (interEj(z) || nazwaInterEj(z.grupa))).map((z) => `${z.strona}|${z.grupa.trim()}`),
+  );
+  const wymienialne = plan.pozycje.filter((z) => !interEj(z) && !grupyInterEj.has(`${z.strona}|${z.grupa.trim()}`));
   const koszty = wymienialne.filter((z) => z.strona === 'koszt');
   const przychody = wymienialne.filter((z) => z.strona === 'przychod');
   const zeszloroczne = plan.pozycje
     .filter((z) => z.strona === 'koszt' && z.wiersze.length > 0)
     .reduce((n, z) => n + z.kwotaRoczna, 0);
-  const meeting = dataZebrania && dataZebrania.startsWith(String(plan.rok)) ? formatData(dataZebrania) : null;
+  // The meeting's local day: a meeting with no hour is stored as the evening before in UTC.
+  const dzienZebrania = dataZebrania ? toDayKey(dataZebrania) : '';
+  const meeting = dzienZebrania.startsWith(`${plan.rok}-`) ? formatData(dzienZebrania) : null;
   const naglowek = [
     `Community: ${plan.nieruchomosc || '—'}`,
     `Plan year: ${plan.rok}`,
     `Total usable area: ${formatKwota(plan.powierzchnia)} m²`,
-    `Meeting adopting the plan: ${dataZebrania ? formatData(dataZebrania) : 'unknown'}${dataZebrania && !meeting ? ' (not in the plan year)' : ''}`,
+    `Meeting adopting the plan: ${dzienZebrania ? formatData(dzienZebrania) : 'unknown'}${dzienZebrania && !meeting ? ' (not in the plan year)' : ''}`,
     `Cost increase assumed, for the statement's costs in total: ${formatKwota(plan.wskaznik)}% (items with an own growth rise by it, the others share the rest)`,
     '',
   ];

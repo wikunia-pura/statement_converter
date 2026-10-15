@@ -6,6 +6,7 @@
  */
 
 import { BrowserWindow, dialog, ipcMain } from 'electron';
+import { showOpenDialog } from '../dialogs';
 import log from 'electron-log';
 import fs from 'fs';
 import path from 'path';
@@ -173,7 +174,7 @@ export function registerPitHandlers(deps: PitDeps): void {
 
   ipcMain.handle(IPC_CHANNELS.PODATKI_PIT_IMPORT_XML, async (_, rok: number): Promise<PodatkiPitImportResult | null> => {
     const window = deps.getMainWindow();
-    const wybor = await dialog.showOpenDialog(window!, {
+    const wybor = await showOpenDialog(window!, {
       title: `Folder z plikami XML PIT-11 i PIT-4R za ${rok}`,
       properties: ['openDirectory'],
     });
@@ -217,7 +218,7 @@ export function registerPitHandlers(deps: PitDeps): void {
   });
 
   ipcMain.handle(IPC_CHANNELS.PODATKI_PIT_EXCEL_WCZYTAJ, async (_, rok: number): Promise<PodatkiPitExcelResult | null> => {
-    const wybor = await dialog.showOpenDialog(deps.getMainWindow()!, {
+    const wybor = await showOpenDialog(deps.getMainWindow()!, {
       title: `Wypełniony szablon kwot PIT za ${rok}`,
       properties: ['openFile'],
       filters: [{ name: 'Excel', extensions: ['xlsx'] }],

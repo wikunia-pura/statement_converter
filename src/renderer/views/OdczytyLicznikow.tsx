@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { translations, Language } from '../translations';
+import { useNotify } from '../components/Notifications';
 import { FormSection } from '../components/FormSection';
 import Icon from '../components/Icon';
 import { ModalFooter } from '../components/Modal';
@@ -57,6 +58,7 @@ const OdczytyLicznikow: React.FC<Props> = ({
   onNavigateToHistory,
 }) => {
   const t = translations[language];
+  const notify = useNotify();
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [statusIsError, setStatusIsError] = useState(false);
@@ -77,6 +79,7 @@ const OdczytyLicznikow: React.FC<Props> = ({
       setHistory(await window.electronAPI.odczytyGetHistory());
     } catch (error) {
       console.error('Error loading odczyty history:', error);
+      notify.error(t.odczytyHistoryLoadError);
     }
   };
 
@@ -138,7 +141,7 @@ const OdczytyLicznikow: React.FC<Props> = ({
     const dropped = Array.from(e.dataTransfer.files)
       .map((file) => ({
         fileName: file.name,
-        filePath: (file as unknown as { path: string }).path,
+        filePath: window.electronAPI.getPathForFile(file),
       }))
       .filter((f) => f.filePath);
     if (dropped.length > 0) await addFiles(dropped);
@@ -215,7 +218,7 @@ const OdczytyLicznikow: React.FC<Props> = ({
     setIsProcessing(false);
     setConvertingPath(null);
     if (res.error || !res.result) {
-      setStatusMessage(`${t.odczytyError}: ${res.error ?? 'unknown'}`);
+      setStatusMessage(`${t.odczytyError}: ${res.error ?? t.errorUnexpected}`);
       setStatusIsError(true);
       return;
     }
@@ -312,7 +315,7 @@ const OdczytyLicznikow: React.FC<Props> = ({
                               type="button"
                               className="button button-small button-subtle cell-inline-action"
                               onClick={() => showSkipped([f])}
-                              title={`${t.odczytySkipped}: ${f.skippedCount} — ${t.odczytySkippedShowDetails}`}
+                              data-tip={`${t.odczytySkipped}: ${f.skippedCount} — ${t.odczytySkippedShowDetails}`}
                             >
                               (−{f.skippedCount})
                             </button>
@@ -329,7 +332,7 @@ const OdczytyLicznikow: React.FC<Props> = ({
                           className="button button-small button-secondary"
                           onClick={() => convertOne(f)}
                           disabled={isProcessing || f.status !== 'ready' || f.readingCount === 0}
-                          title={t.odczytyConvertOne}
+                          data-tip={t.odczytyConvertOne}
                         >
                           <Icon name="arrow-right" size={13} />{' '}
                           {convertingPath === f.filePath ? t.odczytyConverting : t.convert}
@@ -339,7 +342,7 @@ const OdczytyLicznikow: React.FC<Props> = ({
                           className="button button-ghost button-icon icon-danger"
                           onClick={() => removeFile(f.filePath)}
                           disabled={isProcessing}
-                          title={t.remove}
+                          data-tip={t.remove}
                           aria-label={`${t.remove}: ${f.fileName}`}
                         >
                           <Icon name="trash" size={15} />
@@ -374,7 +377,7 @@ const OdczytyLicznikow: React.FC<Props> = ({
                 type="button"
                 className="button button-small button-subtle"
                 onClick={() => openOutput(lastResult.outputDir)}
-                title={lastResult.outputDir}
+                data-tip={lastResult.outputDir}
               >
                 <Icon name="folder" size={13} /> {t.openOutputFolder}
               </button>

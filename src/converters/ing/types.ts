@@ -21,6 +21,8 @@ export interface INGTransaction {
   valueDate: string;          // YYMMDD format (e.g., "260131")
   entryDate: string;          // MMDD format (e.g., "0131")
   debitCredit: 'D' | 'C';    // D = debit (expense), C = credit (income)
+  /** Storno ("RC"/"RD"): debitCredit is already turned over; the row is held for review. */
+  reversal?: boolean;
   amount: number;             // Transaction amount (always positive)
   transactionType: string;    // 3-digit code after S prefix (e.g., "082", "020", "034")
   reference: string;          // Reference number after the transaction type
@@ -33,6 +35,8 @@ export interface INGTransaction {
     bankCode: string;          // ~30 field
     accountNumber: string;     // ~31 field
     counterpartyName: string;  // ~32 + ~33 fields combined
+    /** ~32 and ~33 apart, for contractor matching (counterpartyName glues them). */
+    counterpartyNameParts?: string[];
     transactionCodeField: string; // ~34 field (transaction code)
     counterpartyIBAN: string;  // ~38 field (PL-prefixed IBAN)
     additionalInfo: string;    // ~62 field (continuation of name/address)
@@ -69,6 +73,8 @@ export interface INGStatement {
     amount: number;
   };
   transactions: INGTransaction[];
+  /** :61: lines that could not be read (see shared/mt940). */
+  dropped?: import('../../shared/types').DroppedStatementLine[];
 }
 
 /**

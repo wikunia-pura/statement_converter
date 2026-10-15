@@ -32,6 +32,7 @@ import {
   ParseResult,
   ICsvExporter,
 } from '../../shared/base-converter';
+import type { ReviewHoldReason } from '../../shared/types';
 
 export class INGConverter extends BaseConverter<INGTransaction> {
   private parser: INGMT940Parser;
@@ -58,6 +59,7 @@ export class INGConverter extends BaseConverter<INGTransaction> {
     const statement = this.parser.parse(content);
     return {
       transactions: statement.transactions,
+      dropped: statement.dropped,
       logExtra: `IBAN: ${statement.accountIBAN}, Opening: ${statement.openingBalance.amount} ${statement.openingBalance.debitCredit}, Closing: ${statement.closingBalance.amount} ${statement.closingBalance.debitCredit}`,
     };
   }
@@ -69,6 +71,11 @@ export class INGConverter extends BaseConverter<INGTransaction> {
     return this.parser.filterTransactions(transactions, {
       skipNegative: opts.skipNegative,
     });
+  }
+
+  /** A storno (RC/RD) is held for review, never booked automatically. */
+  protected holdReason(transaction: INGTransaction): ReviewHoldReason | null {
+    return transaction.reversal ? 'reversal' : null;
   }
 
   protected isIncome(transaction: INGTransaction): boolean {
@@ -84,6 +91,12 @@ export class INGConverter extends BaseConverter<INGTransaction> {
     return {
       descBase: transaction.details.description.join(' '),
       descOpt,
+      // ~32 and ~33 are glued into one name (see the parser); kept apart here for
+      // contractor matching only, so a name ending at the seam is a whole word.
+      descOptParts: [
+        ...(transaction.details.counterpartyNameParts ?? [transaction.details.counterpartyName]),
+        transaction.details.additionalInfo,
+      ].filter(Boolean),
       exeDate: transaction.valueDate,
       creatDate: transaction.entryDate,
       value: transaction.debitCredit === 'C' ? transaction.amount : -transaction.amount,

@@ -14,6 +14,8 @@
 
 import { parseStringPromise, processors } from 'xml2js';
 import { BosStatement, BosTransaction } from './types';
+import { DroppedStatementLine } from '../../shared/types';
+import { asArray, entryExcerpt, isReversalEntry, readAmount, readEntryDetails, splitByAccount } from '../shared/camt';
 
 export class BosXmlParser {
   private cleanXmlContent(xmlContent: string): string {
@@ -87,11 +89,14 @@ export class BosXmlParser {
       const periodStart = this.toDateOnly(this.get(frTodt, 'frdttm'));
       const periodEnd = this.toDateOnly(this.get(frTodt, 'todttm'));
 
-      // Collect entries from every <Rpt>. Currency is read from each <Amt Ccy="..."/>.
+      // Collect entries from every <Rpt> of the first one's account — a report for
+      // another account is not merged in, its entries go to `dropped` (see
+      // splitByAccount). Currency is read from each <Amt Ccy="..."/>.
       const transactions: BosTransaction[] = [];
+      const dropped: DroppedStatementLine[] = [];
       let currency = 'PLN';
-      for (const rpt of rptNodes) {
-        const entries = this.parseEntries(rpt.ntry);
+      for (const rpt of splitByAccount(rptNodes, dropped)) {
+        const entries = this.parseEntries(rpt.ntry, dropped);
         for (const entry of entries) {
           if (entry.currency) currency = entry.currency;
           transactions.push(entry);
@@ -106,80 +111,65 @@ export class BosXmlParser {
         periodStart,
         periodEnd,
         transactions,
+        dropped,
       };
     } catch (error) {
       throw new Error(`Failed to parse BOŚ XML: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  private parseEntries(ntryNode: any): BosTransaction[] {
-    if (!ntryNode) return [];
+  /**
+   * Parse the <Ntry> elements of one <Rpt>. An entry whose amount or direction
+   * cannot be read is recorded in `dropped`, never booked as 0,00 or guessed onto
+   * a side.
+   */
+  private parseEntries(ntryNode: any, dropped: DroppedStatementLine[]): BosTransaction[] {
+    const transactions: BosTransaction[] = [];
 
-    const entries = Array.isArray(ntryNode) ? ntryNode : [ntryNode];
-
-    return entries.map((ntry: any) => {
-      const amtNode = ntry.amt;
-      let amount = 0;
-      let currency = 'PLN';
-      if (amtNode) {
-        if (typeof amtNode === 'object' && '_' in amtNode) {
-          amount = parseFloat(amtNode._);
-          currency = amtNode.$?.ccy || 'PLN';
-        } else {
-          amount = parseFloat(String(amtNode));
-        }
-      }
-
-      const creditDebitIndicator = this.get(ntry, 'cdtdbtind') as 'CRDT' | 'DBIT';
+    for (const ntry of asArray(ntryNode)) {
+      const { amount, currency, text: amountText } = readAmount(ntry.amt);
+      const indicator = this.get(ntry, 'cdtdbtind');
       const status = this.get(ntry, 'sts');
       const bookingDate = this.toDateOnly(this.get(ntry, 'bookgdt', 'dttm'));
       const valueDate = this.toDateOnly(this.get(ntry, 'valdt', 'dttm'));
       // BOŚ always emits <Prtry><Cd>UNDEFINED</Cd></Prtry>; keep it for parity with BNP shape.
       const txCode = this.get(ntry, 'bktxcd', 'prtry', 'cd');
 
-      const txDtls = ntry.ntrydtls?.txdtls || {};
-
-      const refs = txDtls.refs || {};
-      const instrId = this.get(refs, 'instrid') || this.get(refs, 'txid');
-      const endToEndId = this.get(refs, 'endtoendid');
-
-      // Counterparty: Dbtr for CRDT (incoming), Cdtr for DBIT (outgoing).
-      // BOŚ does not use <PstlAdr> — the name already contains the address string.
-      const rltdPties = txDtls.rltdpties || {};
-      let counterpartyName = '';
-      let counterpartyAccount = '';
-
-      if (creditDebitIndicator === 'CRDT') {
-        const dbtr = rltdPties.dbtr || {};
-        counterpartyName = this.get(dbtr, 'nm');
-        const dbtrAcct = rltdPties.dbtracct?.id?.othr?.id || '';
-        counterpartyAccount = typeof dbtrAcct === 'object' ? '' : String(dbtrAcct);
-      } else {
-        const cdtr = rltdPties.cdtr || {};
-        counterpartyName = this.get(cdtr, 'nm');
-        const cdtrAcct = rltdPties.cdtracct?.id?.othr?.id || '';
-        counterpartyAccount = typeof cdtrAcct === 'object' ? '' : String(cdtrAcct);
+      if (indicator !== 'CRDT' && indicator !== 'DBIT') {
+        dropped.push({ excerpt: entryExcerpt(bookingDate, indicator, amountText), reason: 'direction' });
+        continue;
+      }
+      if (amount === null) {
+        dropped.push({ excerpt: entryExcerpt(bookingDate, indicator, amountText), reason: 'amount' });
+        continue;
       }
 
-      const description = this.get(txDtls, 'rmtinf', 'ustrd');
+      // Counterparty: Dbtr for CRDT (incoming), Cdtr for DBIT (outgoing), read from
+      // every <TxDtls> (see readEntryDetails). BOŚ does not use <PstlAdr> — the
+      // name already contains the address string.
+      const details = readEntryDetails(ntry, indicator, { txIdAsInstrId: true });
 
-      return {
+      transactions.push({
         amount,
         currency,
-        creditDebitIndicator,
+        creditDebitIndicator: indicator,
         status,
         bookingDate,
         valueDate,
         txCode,
-        instrId,
-        endToEndId,
-        counterpartyName,
+        instrId: details.instrId,
+        endToEndId: details.endToEndId,
+        counterpartyName: details.counterpartyName,
         counterpartyAddress: '',
         counterpartyCountry: '',
-        counterpartyAccount,
-        description,
-      };
-    });
+        counterpartyAccount: details.counterpartyAccount,
+        description: details.description,
+        ...(details.batchCounterparties ? { batchCounterparties: true } : {}),
+        ...(isReversalEntry(ntry) ? { reversal: true } : {}),
+      });
+    }
+
+    return transactions;
   }
 
   /**

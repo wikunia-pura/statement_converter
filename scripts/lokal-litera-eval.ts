@@ -27,6 +27,7 @@
  *
  *   npx tsx scripts/lokal-litera-eval.ts
  *   npx tsx scripts/lokal-litera-eval.ts --verbose   # print every transaction
+ *   npx tsx scripts/lokal-litera-eval.ts --cases-only # synthetic cases only, no statement files
  *
  * Exit code is non-zero when any check fails, so this works as a gate.
  */
@@ -54,11 +55,14 @@ import { PKOBPMT940Parser } from '../src/converters/pko-mt940/parser';
 import { RegexExtractor } from '../src/converters/pko-mt940/regex-extractor';
 import { CsvExporter } from '../src/converters/pko-mt940/csv-exporter';
 import { PocztowyMT940Parser } from '../src/converters/pocztowy/parser';
+import { parseLine61, walkMt940Entries } from '../src/converters/shared/mt940';
+import { ContractorMatcher } from '../src/shared/contractor-matcher';
 import { RegexExtractor as INGRegexExtractor } from '../src/converters/ing/regex-extractor';
 import { readFileWithEncoding } from '../src/shared/encoding';
 import { Adres } from '../src/shared/types';
 
 const VERBOSE = process.argv.includes('--verbose');
+const CASES_ONLY = process.argv.includes('--cases-only');
 const PREFIX = '204';
 
 let failures = 0;
@@ -73,7 +77,7 @@ function check(name: string, actual: unknown, expected: unknown): void {
 
 // ── 1. Matcher + account resolution ────────────────────────────────────────
 
-const bogunki: Adres[] = [{ id: 1, nazwa: 'Bogunki 5', createdAt: '' }];
+const testowa: Adres[] = [{ id: 1, nazwa: 'Testowa 5', createdAt: '' }];
 const bachmacka: Adres[] = [{ id: 2, nazwa: 'Bachmacka 6A', createdAt: '' }];
 /** The BOŚ camt.052 community, whose payer names arrive with the postal code glued on. */
 const pulawska: Adres[] = [{ id: 4, nazwa: 'Puławska 116', createdAt: '' }];
@@ -82,10 +86,10 @@ const kwiatowa: Adres[] = [{ id: 5, nazwa: 'Kwiatowa 24A', createdAt: '' }];
 const withRules: Adres[] = [
   {
     id: 1,
-    nazwa: 'Bogunki 5',
+    nazwa: 'Testowa 5',
     createdAt: '',
     apartmentMappings: [
-      { id: 'r1', matchText: 'CEZARY GUZ', apartmentNumber: '17A', kontoLokalu: '204-00017A' },
+      { id: 'r1', matchText: 'ADAM NOWAK', apartmentNumber: '17A', kontoLokalu: '204-00017A' },
       { id: 'r2', matchText: 'JAN BEZKONTA', apartmentNumber: '18B' },
       { id: 'r3', matchText: 'ANNA ZWYKLA', apartmentNumber: '25' },
     ],
@@ -96,7 +100,7 @@ const withRules: Adres[] = [
 const withMultiRules: Adres[] = [
   {
     id: 3,
-    nazwa: 'Bogunki 5',
+    nazwa: 'Testowa 5',
     createdAt: '',
     apartmentMappings: [
       {
@@ -135,16 +139,16 @@ interface Case {
 const CASES: Case[] = [
   {
     name: 'litera sklejona z numerem (~20 i ~33 zgodne)',
-    addresses: bogunki,
-    description: 'BOGUNKI 5M17A',
-    counterparty: 'CEZARY GUZ 02-692 WARSZAWAUL.BOGUNKI 5 M.17A',
+    addresses: testowa,
+    description: 'TESTOWA 5M17A',
+    counterparty: 'ADAM NOWAK 02-692 WARSZAWAUL.TESTOWA 5 M.17A',
     apartment: '17A',
     account: null,
     heldBack: true,
   },
   {
     name: 'litera zapisana małą literą → wielka',
-    addresses: bogunki,
+    addresses: testowa,
     description: 'czynsz lokal 17a',
     counterparty: 'JAN K',
     apartment: '17A',
@@ -153,27 +157,27 @@ const CASES: Case[] = [
   },
   {
     name: 'luźne "A" po spacji to nie lokal 27A',
-    addresses: bogunki,
-    description: 'OPLATA ESPLOATACYJNA, BOGUNKI 5/27 A, WARSZAWA, MAREK SOSINSKI , ID 01211427',
-    counterparty: 'MAREK SOSINSKI 02-692 WARSZAWA UL. BOGUNKI 5 M.27',
+    addresses: testowa,
+    description: 'OPLATA ESPLOATACYJNA, TESTOWA 5/27 A, WARSZAWA, PIOTR KOWALSKI , ID 01234567',
+    counterparty: 'PIOTR KOWALSKI 02-692 WARSZAWA UL. TESTOWA 5 M.27',
     apartment: '27',
     account: '204-000027',
     heldBack: false,
   },
   {
     name: 'zwykły numer księguje się jak dotąd',
-    addresses: bogunki,
+    addresses: testowa,
     description: 'Czynsz',
-    counterparty: 'JUSTYNA GASIOROWSKA BOGUNKI 5/21, 02-692 WARSZAWA',
+    counterparty: 'EWA ZIELINSKA TESTOWA 5/21, 02-692 WARSZAWA',
     apartment: '21',
     account: '204-000021',
     heldBack: false,
   },
   {
     name: 'data VII/2026r. nie jest lokalem z literą',
-    addresses: bogunki,
+    addresses: testowa,
     description:
-      'Anna Wyka. W-wa ul. Bogunki 5 m 22 oplata eksploatacyjna za m-c VII/2026r.w tym fundusz remontowy. doplata za IV.V.VI/2026r.',
+      'Anna Testowa. W-wa ul. Testowa 5 m 22 oplata eksploatacyjna za m-c VII/2026r.w tym fundusz remontowy. doplata za IV.V.VI/2026r.',
     counterparty: 'WYKA ANNA WYKA PIOTR KONIECZNA 20 05-506 MAGDALENKA',
     apartment: '22',
     account: '204-000022',
@@ -200,8 +204,8 @@ const CASES: Case[] = [
   {
     name: 'reguła z kontem lokalu księguje 17A',
     addresses: withRules,
-    description: 'BOGUNKI 5M17A',
-    counterparty: 'CEZARY GUZ 02-692 WARSZAWA',
+    description: 'TESTOWA 5M17A',
+    counterparty: 'ADAM NOWAK 02-692 WARSZAWA',
     apartment: '17A',
     account: '204-00017A',
     heldBack: true, // rules always show up for acceptance
@@ -479,9 +483,9 @@ console.log('\n1c. Format MAP: w eksporcie adresów');
     'MAP: ANNA ZWYKLA => 25 | wpłaca z konta w AT');
   check('jeden lokal — powrót z pliku', roundTrip(single), { ...single, id: '' });
 
-  const withKonto = { id: 'b', matchText: 'CEZARY GUZ', apartmentNumber: '17A', kontoLokalu: '204-00017A' };
+  const withKonto = { id: 'b', matchText: 'ADAM NOWAK', apartmentNumber: '17A', kontoLokalu: '204-00017A' };
   check('lokal z kontem — postać linii', formatApartmentMappingLine(withKonto as any),
-    'MAP: CEZARY GUZ => 17A | KONTO: 204-00017A');
+    'MAP: ADAM NOWAK => 17A | KONTO: 204-00017A');
   check('lokal z kontem — powrót z pliku', roundTrip(withKonto), { ...withKonto, id: '' });
 
   const multi = {
@@ -530,28 +534,28 @@ check('17A to nie symbol konta', isAccountSymbol('17A'), false);
 // carries no letter-awareness of its own.
 
 console.log('\n2b. Kontrola po tekście (niezależna od ekstraktora)');
-check('litera widoczna w opisie', letteredApartmentInText('UL.BOGUNKI 5 M.17A'), '17A');
-check('litera po ukośniku', letteredApartmentInText('BOGUNKI 5/17a'), '17A');
+check('litera widoczna w opisie', letteredApartmentInText('UL.TESTOWA 5 M.17A'), '17A');
+check('litera po ukośniku', letteredApartmentInText('TESTOWA 5/17a'), '17A');
 check('data VII/2026r. to nie lokal', letteredApartmentInText('za m-c VII/2026r.'), null);
-check('luźne "A" nie jest literą lokalu', letteredApartmentInText('BOGUNKI 5/27 A, WARSZAWA'), null);
+check('luźne "A" nie jest literą lokalu', letteredApartmentInText('TESTOWA 5/27 A, WARSZAWA'), null);
 check(
   'AI zwraca 17 dla opisu z 17A → wstrzymane',
-  needsExplicitAccount('17', null, 'BOGUNKI 5M17A CEZARY GUZ UL.BOGUNKI 5 M.17A'),
+  needsExplicitAccount('17', null, 'TESTOWA 5M17A ADAM NOWAK UL.TESTOWA 5 M.17A'),
   true,
 );
 check(
   'AI zwraca 17A → wstrzymane',
-  needsExplicitAccount('17A', null, 'BOGUNKI 5M17A'),
+  needsExplicitAccount('17A', null, 'TESTOWA 5M17A'),
   true,
 );
 check(
   'podane konto odpowiada na pytanie',
-  needsExplicitAccount('17A', '204-00017A', 'BOGUNKI 5M17A'),
+  needsExplicitAccount('17A', '204-00017A', 'TESTOWA 5M17A'),
   false,
 );
 check(
   'zwykła wpłata nie jest wstrzymywana',
-  needsExplicitAccount('21', null, 'JUSTYNA GASIOROWSKA BOGUNKI 5/21, 02-692 WARSZAWA'),
+  needsExplicitAccount('21', null, 'EWA ZIELINSKA TESTOWA 5/21, 02-692 WARSZAWA'),
   false,
 );
 
@@ -569,6 +573,42 @@ check('za szeroki w całości to nie ogon', apartmentSplitInText('m. 12 26082610
 check('litera kończy numer', apartmentSplitInText('lok 5A 3', '5A'), null);
 check('szukany numer musi być całym ciągiem cyfr', apartmentSplitInText('lok. 25 3', '2'), null);
 
+// ── 2c. Guards from the 2026-10 audit: values that only look bookable ─────
+//
+// A dashed answer passes for an account symbol by its shape, an MT940 storno or
+// funds code used to leave an empty amount, and a contractor name matched as a
+// bare substring booked unrelated titles. Each must reach the user, not k_ma.
+
+console.log('\n2c. Strażniki: wartości, które tylko wyglądają na gotowe');
+check('"12-14" od AI → wstrzymane do decyzji', needsExplicitAccount('12-14', null, 'CZYNSZ LOKALE 12-14'), true);
+check('konto z wpisu (override) nie jest wstrzymywane', needsExplicitAccount('760-500', '760-500', ''), false);
+check('ZGN nie jest wstrzymywany', needsExplicitAccount('ZGN', null, ''), false);
+check('"12-" nie trafia do k_ma', resolveApartmentAccount('12-', null, PREFIX), null);
+check('"-5" nie trafia do k_ma', resolveApartmentAccount('-5', null, PREFIX), null);
+check('kod funduszu "CN653,00" → 653', parseLine61('2607010701CN653,00')?.amount, 653);
+check('storno RC → obciążenie', parseLine61('2607010701RC100,00NTRFNONREF//1')?.debitCredit, 'D');
+check('storno RD → uznanie', parseLine61('2607010701RD100,00NTRFNONREF//1')?.debitCredit, 'C');
+check('kwota z kropką nie jest czytana jako 653', parseLine61('2607010701C653.00')?.amount, null);
+check(
+  'pusty :86: zostaje pustym opisem (bez przesunięcia)',
+  walkMt940Entries(':61:2607010701C1,00\n:86:\n:61:2607020702C2,00\n:86:~20DRUGA').map(e => e.field86s),
+  [[''], ['~20DRUGA']],
+);
+const auditMatcher = new ContractorMatcher([
+  { id: 1, nazwa: 'Firma Testowa', kontoKontrahenta: '201-00001', alternativeNames: ['-', 'FV'], createdAt: '' },
+  { id: 2, nazwa: 'Usługi Wodne', kontoKontrahenta: '201-00002', createdAt: '' },
+] as any);
+const auditMatch = (descBase: string) =>
+  auditMatcher.match({ descBase, descOpt: '', exeDate: '', value: 0 }).contractor?.id ?? null;
+check('nazwa "-" nie pasuje do wszystkiego', auditMatch('CZYNSZ LOKAL 12'), null);
+check('"FV" nie pasuje w "FVSERWIS"', auditMatch('ZAPLATA FVSERWIS 12/2026'), null);
+check('"Usługi Wodne" pasuje do "USLUGI WODNE"', auditMatch('PRZELEW USLUGI WODNE SP Z O O'), 2);
+
+if (CASES_ONLY) {
+  console.log(`\n${failures === 0 ? '✓ wszystkie sprawdzenia przeszły' : `✗ nieudanych sprawdzeń: ${failures}`}\n`);
+  process.exit(failures === 0 ? 0 : 1);
+}
+
 // ── 3. Whole pipeline over the real statement files ────────────────────────
 
 const DIR = path.join(__dirname, '..', 'test-data', 'Wierzbno');
@@ -583,7 +623,7 @@ if (FILES.length === 0) {
   for (const file of FILES) {
     const content = readFileWithEncoding(path.join(DIR, file));
     const stmt = new PKOBPMT940Parser().parse(content);
-    const extractor = new RegexExtractor(bogunki);
+    const extractor = new RegexExtractor(testowa);
 
     const processed = stmt.transactions.map(t => ({
       original: t,
@@ -641,7 +681,7 @@ if (FILES.length === 0) {
   const withPayerRule: Adres[] = [
     {
       id: 9,
-      nazwa: 'Bogunki 5',
+      nazwa: 'Testowa 5',
       createdAt: '',
       apartmentMappings: [
         {

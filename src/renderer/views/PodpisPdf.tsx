@@ -7,6 +7,7 @@ import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
 import { PodpisKartaModal } from '../components/PodpisKarta';
 import { useNotify } from '../components/Notifications';
 import { plural } from '../plural';
+import { ipcErrorMessage } from '../ipcError';
 
 type T = (typeof translations)['pl'];
 
@@ -114,7 +115,7 @@ const PodsumowaniePodpisow: React.FC<{
                 {podpisane.map((p) => (
                   <li key={p.zrodlo}>
                     <span className="podpis-sum__name">{p.nazwa}</span>
-                    <button type="button" className="podpis-sum__file" onClick={() => void otworz(p.sciezka)} title={p.sciezka}>
+                    <button type="button" className="podpis-sum__file" onClick={() => void otworz(p.sciezka)} data-tip={p.sciezka}>
                       <Icon name="file-text" size={13} /> {p.sciezka.split(/[\\/]/).pop()}
                     </button>
                   </li>
@@ -218,7 +219,7 @@ const PodpisPdf: React.FC<Props> = ({ language, files, setFiles }) => {
         blokada: a.blokada,
       });
     } catch (error: unknown) {
-      patch(filePath, { status: 'blocked', blokada: error instanceof Error ? error.message : String(error) });
+      patch(filePath, { status: 'blocked', blokada: ipcErrorMessage(error, t.errorUnexpected) });
     }
   };
 
@@ -252,7 +253,7 @@ const PodpisPdf: React.FC<Props> = ({ language, files, setFiles }) => {
     e.preventDefault();
     setDragOver(false);
     const dropped = Array.from(e.dataTransfer.files)
-      .map((file) => ({ fileName: file.name, filePath: (file as unknown as { path: string }).path }))
+      .map((file) => ({ fileName: file.name, filePath: window.electronAPI.getPathForFile(file) }))
       .filter((f) => f.filePath);
     if (dropped.length > 0) await addFiles(dropped);
   };
@@ -386,7 +387,7 @@ const PodpisPdf: React.FC<Props> = ({ language, files, setFiles }) => {
                         }}
                         onChange={toggleAll}
                         aria-label={allTicked ? t.ksSelectNone : t.ksSelectAll}
-                        title={t.ksSelectRangeHint}
+                        data-tip={t.ksSelectRangeHint}
                       />
                       <span className="ks-check__box" aria-hidden="true">
                         <Icon name={someTicked ? 'minus' : 'check'} size={12} strokeWidth={3} />
@@ -406,7 +407,7 @@ const PodpisPdf: React.FC<Props> = ({ language, files, setFiles }) => {
                     <td className="data-table__index">
                       <label
                         className={`ks-check${f.zaznaczony ? ' is-on' : ''}`}
-                        title={t.ksSelectRangeHint}
+                        data-tip={t.ksSelectRangeHint}
                         // Shift+click selects a range; without this it also selects text.
                         onMouseDown={(e) => {
                           if (e.shiftKey) e.preventDefault();
@@ -426,7 +427,7 @@ const PodpisPdf: React.FC<Props> = ({ language, files, setFiles }) => {
                       </label>
                     </td>
                     <td className="data-table__name">
-                      <span className="cell-title cell-wrap" title={f.filePath}>
+                      <span className="cell-title cell-wrap" data-tip={f.filePath}>
                         {f.fileName}
                       </span>
                       {f.status === 'blocked' && f.blokada && <span className="cell-warning is-danger cell-wrap">{f.blokada}</span>}
@@ -452,7 +453,7 @@ const PodpisPdf: React.FC<Props> = ({ language, files, setFiles }) => {
                           className="button button-ghost button-icon icon-danger"
                           onClick={() => remove(f.filePath)}
                           disabled={modalOpen}
-                          title={t.remove}
+                          data-tip={t.remove}
                           aria-label={`${t.remove}: ${f.fileName}`}
                         >
                           <Icon name="trash" size={15} />
@@ -471,7 +472,7 @@ const PodpisPdf: React.FC<Props> = ({ language, files, setFiles }) => {
                             className="button button-small button-primary"
                             onClick={() => setDoPodpisu([f.filePath])}
                             disabled={modalOpen}
-                            title={t.podpisPdfSignOneHint}
+                            data-tip={t.podpisPdfSignOneHint}
                           >
                             <Icon name="signature" size={13} /> {t.podpisSign}
                           </button>
@@ -503,7 +504,7 @@ const PodpisPdf: React.FC<Props> = ({ language, files, setFiles }) => {
               className="button button-secondary"
               disabled={modalOpen}
               onClick={() => setDoPodpisu(zaznaczone.map((f) => f.filePath))}
-              title={t.podpisPdfSignHint}
+              data-tip={t.podpisPdfSignHint}
             >
               <Icon name="signature" size={14} /> {t.podpisPdfSignBtn.replace('{n}', String(zaznaczone.length))}
             </button>

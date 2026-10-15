@@ -56,6 +56,8 @@ export interface PKOSAStatement {
   
   // Transactions
   transactions: PKOSATransaction[];
+  /** #OPERACJA# lines that could not be read. */
+  dropped?: import('../../shared/types').DroppedStatementLine[];
 }
 
 /**

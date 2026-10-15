@@ -4,8 +4,8 @@ import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import { FormSection } from '../components/FormSection';
 import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
-import { bezPrefiksu } from '../components/PodpisKarta';
 import Icon from '../components/Icon';
+import { ipcErrorMessage } from '../ipcError';
 
 /*
  * One-time fill of the tax identification of Adresy from the DN-1 declarations
@@ -94,7 +94,7 @@ const AdresyZasilDn1: React.FC<{ language: Language; onDone: () => void; disable
       setWynik(await window.electronAPI.zasilAdresyZDn1());
       onDone();
     } catch (err: unknown) {
-      notify.error(bezPrefiksu(err), t.adresyZasilError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.adresyZasilError);
     } finally {
       setBusy(false);
     }
@@ -107,7 +107,7 @@ const AdresyZasilDn1: React.FC<{ language: Language; onDone: () => void; disable
         className="button button-import"
         onClick={() => void run()}
         disabled={busy || disabled}
-        title={t.adresyZasilHint}
+        data-tip={t.adresyZasilHint}
       >
         <Icon name={busy ? 'loader' : 'copy'} size={14} /> {t.adresyZasil}
       </button>

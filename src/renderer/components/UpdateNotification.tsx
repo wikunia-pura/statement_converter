@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { translations, Language } from '../translations';
 import Icon from './Icon';
+import { ipcErrorMessage } from '../ipcError';
 
 interface UpdateNotificationProps {
   language: Language;
@@ -73,7 +74,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
           setError(result.error);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error');
+        setError(ipcErrorMessage(err, t.errorUnexpected));
       }
       return;
     }
@@ -89,7 +90,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
       }
     } catch (err) {
       console.error('Download error:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(ipcErrorMessage(err, t.errorUnexpected));
       setDownloading(false);
     }
   };
@@ -140,7 +141,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
             {updateDownloaded && platform !== 'win32' ? (
               <button className="button button-primary" onClick={handleOpenDownloads}>
                 <Icon name="folder" size={14} />{' '}
-                {language === 'pl' ? 'Otwórz folder Pobrane' : 'Open Downloads'}
+                {t.updateOpenDownloads}
               </button>
             ) : (
               <button className="button button-primary" onClick={handleUpdateNow}>
@@ -169,25 +170,17 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
         <div className="update-content">
           <div className="update-icon is-success"><Icon name="sparkles" size={24} /></div>
           <div className="update-text">
-            <strong>{language === 'pl' ? 'Aktualizacja pobrana!' : 'Update Downloaded!'}</strong>
+            <strong>{t.updateDownloadedTitle}</strong>
             {platform === 'win32' ? (
-              <p>
-                {language === 'pl'
-                  ? 'Aplikacja zostanie automatycznie zaktualizowana i uruchomiona ponownie.'
-                  : 'The app will be automatically updated and restarted.'}
-              </p>
+              <p>{t.updateDownloadedAuto}</p>
             ) : (
-              <p>
-                {language === 'pl'
-                  ? 'Plik instalacyjny został pobrany do folderu Pobrane. Otwórz folder i zainstaluj aktualizację ręcznie.'
-                  : 'Installation file has been downloaded to Downloads folder. Open the folder and install the update manually.'}
-              </p>
+              <p>{t.updateDownloadedManual}</p>
             )}
           </div>
           <div className="update-actions">
             {platform !== 'win32' && (
               <button className="button button-primary" onClick={handleOpenDownloads}>
-                <Icon name="folder" size={14} />{' '}{language === 'pl' ? 'Otwórz folder Pobrane' : 'Open Downloads'}
+                <Icon name="folder" size={14} />{' '}{t.updateOpenDownloads}
               </button>
             )}
             <button className="button button-secondary" onClick={handleLater}>
@@ -207,7 +200,7 @@ const UpdateNotification: React.FC<UpdateNotificationProps> = ({ language }) => 
           <div className="update-actions">
             {downloading ? (
               <div className="update-progress">
-                <div className="spinner"></div>
+                <Icon name="loader" size={14} className="icon-spin" />
                 <span>{t.downloading} {downloadProgress > 0 ? `${downloadProgress}%` : ''}</span>
               </div>
             ) : (

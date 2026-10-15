@@ -104,7 +104,7 @@ const OverflowMenu: React.FC<OverflowMenuProps> = ({ items, label, disabled = fa
       type="button"
       role="menuitem"
       className={`menu-popover__item${item.danger ? ' is-danger' : ''}`}
-      title={item.title}
+      data-tip={item.title}
       disabled={item.disabled}
       onClick={() => {
         setOpen(false);
@@ -123,7 +123,7 @@ const OverflowMenu: React.FC<OverflowMenuProps> = ({ items, label, disabled = fa
         className={`button button-ghost button-icon overflow-menu__trigger${open ? ' is-open' : ''}`}
         onClick={() => setOpen((v) => !v)}
         disabled={disabled}
-        title={label}
+        data-tip={label}
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}

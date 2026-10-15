@@ -70,6 +70,7 @@ export class PKOBiznesConverter extends BaseConverter<PKOBiznesTransaction> {
     
     return {
       transactions: statement.transactions,
+      dropped: statement.dropped,
       logExtra: `Files: ${statement.filesCount}, Accounts: ${statement.accountNumbers.join(', ')}, Date range: ${statement.startDate} - ${statement.endDate}`,
     };
   }

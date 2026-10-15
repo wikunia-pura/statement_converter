@@ -61,6 +61,7 @@ import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
 import { PodpisKartaModal, PodpiszTezPdf } from '../components/PodpisKarta';
 import ScreenTitle from '../components/ScreenTitle';
 import { useNavItem } from '../navigation';
+import { structuralEqual } from '../structuralEqual';
 import Icon from '../components/Icon';
 import Loader, { BusyOverlay } from '../components/Loader';
 import Select from '../components/Select';
@@ -123,7 +124,7 @@ const KwotaPole: React.FC<{
       <>
         {hint && <span>{hint} </span>}
         {prev && (
-          <span className="pit-prev" title={sub(t.prevYear, { rok: prev.rok, kwota: '' })}>
+          <span className="pit-prev" data-tip={sub(t.prevYear, { rok: prev.rok, kwota: '' })}>
             {prev.wartosc === null
               ? sub(t.prevYearNone, { rok: prev.rok })
               : sub(t.prevYear, { rok: prev.rok, kwota: decimals === 0 ? zl0(prev.wartosc) : zl2(prev.wartosc) })}
@@ -188,7 +189,7 @@ const OsobaForm: React.FC<{
       description={tytuly.join(' · ') || undefined}
       badge={
         o.zlozone ? (
-          <span className="pit-tone-ok" title={filedTitle(t, o.zlozone, locale)}>
+          <span className="pit-tone-ok" data-tip={filedTitle(t, o.zlozone, locale)}>
             {t.filedDone}
           </span>
         ) : bledy.length > 0 ? (
@@ -218,7 +219,7 @@ const OsobaForm: React.FC<{
               )}
             </>
           )}
-          <button type="button" className="button button-small button-ghost icon-danger" onClick={onRemove} title={t.personRemove}>
+          <button type="button" className="button button-small button-ghost icon-danger" onClick={onRemove} data-tip={t.personRemove} aria-label={t.personRemove}>
             <Icon name="trash" size={13} />
           </button>
         </span>
@@ -389,7 +390,7 @@ const OsobaForm: React.FC<{
       </FormRow>
       {wInnych > 0 && (
         <div className="pit-apply">
-          <button type="button" className="button button-small button-ghost" onClick={onApply} title={sub(t.applyHint, { n: wInnych })}>
+          <button type="button" className="button button-small button-ghost" onClick={onApply} data-tip={sub(t.applyHint, { n: wInnych })}>
             <Icon name="copy" size={13} /> {t.apply}
           </button>
         </div>
@@ -600,7 +601,7 @@ const OsobaForm: React.FC<{
               .reverse()
               .slice(0, 3)
               .map((p, i) => (
-                <li key={i} title={p.plik}>
+                <li key={i} data-tip={p.plik}>
                   {sub(t.historyItem, { when: formatStamp(p.at, locale), who: p.by || '—', plik: p.plik })}
                 </li>
               ))}
@@ -661,7 +662,7 @@ const Pit4RForm: React.FC<{
       description={t.pit4rDesc}
       badge={
         p?.zlozone ? (
-          <span className="pit-tone-ok" title={filedTitle(t, p.zlozone, locale)}>
+          <span className="pit-tone-ok" data-tip={filedTitle(t, p.zlozone, locale)}>
             {t.filedDone}
           </span>
         ) : undefined
@@ -838,7 +839,7 @@ const Pit4RForm: React.FC<{
                   .reverse()
                   .slice(0, 3)
                   .map((x, i) => (
-                    <li key={i} title={x.plik}>
+                    <li key={i} data-tip={x.plik}>
                       {sub(t.historyItem, { when: formatStamp(x.at, locale), who: x.by || '—', plik: x.plik })}
                     </li>
                   ))}
@@ -853,15 +854,23 @@ const Pit4RForm: React.FC<{
 
 /* ================================= One community ================================= */
 
-const migawka = (nip: string, d: PitDane) =>
-  JSON.stringify({
-    nip,
-    d: {
-      ...d,
-      osoby: d.osoby.map((o) => ({ ...o, zlozone: null, pobrania: [] })),
-      pit4r: d.pit4r ? { ...d.pit4r, zlozone: null, pobrania: [] } : null,
-    },
-  });
+/** What "unsaved changes" ignores on a person and on PIT-4R: the filing mark and the downloads, written at once by their own calls. */
+const PIT_NIE_EDYCJA = ['zlozone', 'pobrania'] as const;
+
+/**
+ * Whether the form holds what was last loaded or saved. Walks only what an
+ * edit replaced (see structuralEqual) instead of serializing every person of
+ * the community on each render.
+ */
+const takieSame = (nipA: string, a: PitDane, nipB: string, b: PitDane): boolean => {
+  if (nipA !== nipB) return false;
+  if (a === b) return true;
+  if (!structuralEqual(a, b, ['osoby', 'pit4r'])) return false;
+  if (a.osoby.length !== b.osoby.length) return false;
+  if (!a.osoby.every((o, i) => structuralEqual(o, b.osoby[i], PIT_NIE_EDYCJA))) return false;
+  if (!a.pit4r || !b.pit4r) return !a.pit4r && !b.pit4r;
+  return structuralEqual(a.pit4r, b.pit4r, PIT_NIE_EDYCJA);
+};
 
 /** A community of the Adresy list — the app's register of communities. */
 interface Rejestr {
@@ -903,7 +912,10 @@ const WspolnotaScreen: React.FC<{
   const [dane, setDane] = useState<PitDane>(
     rekord?.dane ?? { ...pusteDanePit(), nazwa: wstepnie?.platnik ?? '', urzadPlatnika: wstepnie?.kodUrzedu || URZAD_DOMYSLNY },
   );
-  const [baseline, setBaseline] = useState(() => (rekord ? migawka(rekord.nip, rekord.dane) : ''));
+  /** What was last loaded or saved; null for a community without a row yet — always unsaved. */
+  const [baseline, setBaseline] = useState<{ nip: string; dane: PitDane } | null>(() =>
+    rekord ? { nip: rekord.nip, dane: rekord.dane } : null,
+  );
   const [busy, setBusy] = useState<null | 'save' | 'delete' | 'apply'>(null);
   const [pickOsoba, setPickOsoba] = useState('');
   /** People start folded; "Rozwiń / Zwiń wszystkie" bumps `wersja`, which remounts the cards in the new state. */
@@ -913,7 +925,7 @@ const WspolnotaScreen: React.FC<{
 
   // Filing marks and downloads are written at once by their own calls, into the
   // record the list holds — carry them into the draft, so the screen shows them
-  // without touching what is being edited (`migawka` ignores both).
+  // without touching what is being edited (`takieSame` ignores both).
   useEffect(() => {
     if (!rekord) return;
     const zRekordu = new Map(rekord.dane.osoby.map((o) => [o.klucz, o]));
@@ -928,14 +940,20 @@ const WspolnotaScreen: React.FC<{
     }));
   }, [rekord]);
 
-  const dirty = migawka(nip, dane) !== baseline;
+  const dirty = useMemo(
+    () => !baseline || !takieSame(nip, dane, baseline.nip, baseline.dane),
+    [nip, dane, baseline],
+  );
   const canAdd = nip.length === 10 && dane.nazwa.trim() !== '';
-  const wiersz: PodatekPit | null = rekord ? { ...rekord, nip, dane } : null;
-  const oceny = useMemo(() => (wiersz ? ocenDokumenty(wiersz) : new Map<string, Ocena>()), [wiersz?.id, nip, dane, rok]);
-  const prev4r = wiersz ? poprzedniePit4R(wszystkie, wiersz) : null;
-  const innych = osobyRoku(wszystkie, rok, rekord?.id);
-  const jestWTejWspolnocie = new Set(dane.osoby.map(kluczOsoby));
-  const doWyboru = innych.filter((o) => !jestWTejWspolnocie.has(kluczOsoby(o)));
+  // Derived once per change of what they read, not on every render of the form.
+  const wiersz = useMemo<PodatekPit | null>(() => (rekord ? { ...rekord, nip, dane } : null), [rekord, nip, dane]);
+  const oceny = useMemo(() => (wiersz ? ocenDokumenty(wiersz) : new Map<string, Ocena>()), [wiersz]);
+  const prev4r = useMemo(() => (wiersz ? poprzedniePit4R(wszystkie, wiersz) : null), [wszystkie, wiersz]);
+  const innych = useMemo(() => osobyRoku(wszystkie, rok, rekord?.id), [wszystkie, rok, rekord?.id]);
+  const doWyboru = useMemo(() => {
+    const jestWTejWspolnocie = new Set(dane.osoby.map(kluczOsoby));
+    return innych.filter((o) => !jestWTejWspolnocie.has(kluczOsoby(o)));
+  }, [innych, dane.osoby]);
   const wzor = pitWzor(rok);
 
   const setOsoba = (klucz: string, patch: Partial<PitOsoba>) =>
@@ -968,7 +986,7 @@ const WspolnotaScreen: React.FC<{
         : await window.electronAPI.addPodatekPit(nip, rok, dane);
       setNip(saved.nip);
       setDane(saved.dane);
-      setBaseline(migawka(saved.nip, saved.dane));
+      setBaseline({ nip: saved.nip, dane: saved.dane });
       notify.success(t.saved);
       onSaved(saved);
       return true;
@@ -1089,7 +1107,7 @@ const WspolnotaScreen: React.FC<{
                 className="button button-small button-secondary"
                 onClick={() => onFiles(wszystkieDokumenty)}
                 disabled={zablokowane !== null || busy !== null}
-                title={zablokowane ?? undefined}
+                data-tip={zablokowane ?? undefined}
               >
                 <Icon name="download" size={13} /> {t.downloadAll}
               </button>
@@ -1098,7 +1116,7 @@ const WspolnotaScreen: React.FC<{
                 className="button button-small button-primary"
                 onClick={() => onSign(wszystkieDokumenty)}
                 disabled={zablokowane !== null || busy !== null}
-                title={zablokowane ?? undefined}
+                data-tip={zablokowane ?? undefined}
               >
                 <Icon name="signature" size={13} /> {sub(t.batchSign, { n: wszystkieDokumenty.length })}
               </button>
@@ -1958,7 +1976,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
         <span className="ksieg-row__select">
           <label
             className={`ks-check${isSelected ? ' is-on' : ''}`}
-            title={t.selectFor}
+            data-tip={t.selectFor}
             onMouseDown={(e) => {
               if (e.shiftKey) e.preventDefault();
             }}
@@ -2004,7 +2022,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
         </div>
         <span
           className={`status-badge ${stan === 'blad' ? 'status-pending' : stan === 'uwagi' ? 'status-info' : 'status-neutral'}`}
-          title={(o?.problemy ?? []).map((p) => p.tekst).join('\n') || undefined}
+          data-tip={(o?.problemy ?? []).map((p) => p.tekst).join('\n') || undefined}
           hidden={stan === 'zlozone'}
         >
           {stan === 'blad' ? t.statusError : stan === 'uwagi' ? t.statusWarn : t.statusReady}
@@ -2044,7 +2062,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
       <li key={w.id} className="pit-wsp">
         <div className="pod-item">
           <span className="ksieg-row__select">
-            <label className={`ks-check${wszystkie ? ' is-on' : ''}${czesc ? ' is-mixed' : ''}`} title={t.selectFor}>
+            <label className={`ks-check${wszystkie ? ' is-on' : ''}${czesc ? ' is-mixed' : ''}`} data-tip={t.selectFor}>
               <input
                 type="checkbox"
                 className="ks-check__input"
@@ -2073,7 +2091,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
                 }
               }}
             >
-              <div className="zeb-date pod-kwota" title={t.rowAdvances}>
+              <div className="zeb-date pod-kwota" data-tip={t.rowAdvances}>
                 <span className="pod-kwota__label">{t.rowAdvances}</span>
                 <span className={`pod-kwota__value${sumaZal >= 100000 ? ' is-s' : sumaZal >= 10000 ? ' is-m' : ''}`}>
                   {Math.round(sumaZal).toLocaleString('pl-PL').replace(/\s/g, ' ')}
@@ -2117,7 +2135,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
                     return next;
                   })
                 }
-                title={rozw ? t.rowCollapse : t.rowExpand}
+                data-tip={rozw ? t.rowCollapse : t.rowExpand}
                 aria-expanded={rozw}
               >
                 <Icon name={rozw ? 'chevron-down' : 'chevron-right'} size={14} /> {sub(t.rowDocsButton, { n: dok.length })}
@@ -2175,7 +2193,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
           <p className="ksieg-hero__facts">{fakty.join(' · ')}</p>
         </div>
         <div className="ksieg-hero__nav">
-          <button type="button" className="ksieg-nav-arrow" onClick={() => zmienRok(rok - 1)} disabled={rok <= minRok} title={t.yearPrev} aria-label={t.yearPrev}>
+          <button type="button" className="ksieg-nav-arrow" onClick={() => zmienRok(rok - 1)} disabled={rok <= minRok} data-tip={t.yearPrev} aria-label={t.yearPrev}>
             <Icon name="chevron-left" size={17} />
           </button>
           <Select
@@ -2186,7 +2204,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
             ariaLabel={t.year}
             className="ksieg-nav-select"
           />
-          <button type="button" className="ksieg-nav-arrow" onClick={() => zmienRok(rok + 1)} disabled={rok >= maxRok} title={t.yearNext} aria-label={t.yearNext}>
+          <button type="button" className="ksieg-nav-arrow" onClick={() => zmienRok(rok + 1)} disabled={rok >= maxRok} data-tip={t.yearNext} aria-label={t.yearNext}>
             <Icon name="chevron-right" size={17} />
           </button>
           <button
@@ -2194,12 +2212,12 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
             className="ksieg-scan-btn"
             onClick={() => void pliki(dokumentyRoku)}
             disabled={busy !== null || wRoku.length === 0}
-            title={sub(t.downloadAllHint, { rok })}
+            data-tip={sub(t.downloadAllHint, { rok })}
           >
             <Icon name={busy === 'files' ? 'loader' : 'download'} size={15} />
             <span>{t.downloadAll}</span>
           </button>
-          <button type="button" className="ksieg-nav-arrow" onClick={() => void load(true)} disabled={isRefreshing} title={t.refresh} aria-label={t.refresh}>
+          <button type="button" className="ksieg-nav-arrow" onClick={() => void load(true)} disabled={isRefreshing} data-tip={t.refresh} aria-label={t.refresh}>
             <Icon name="refresh" size={16} />
           </button>
         </div>
@@ -2224,7 +2242,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
           <Icon name="search" size={15} />
           <input type="text" placeholder={t.search} value={search} onChange={(e) => setSearch(e.target.value)} />
           {search.trim() && (
-            <button type="button" onClick={() => setSearch('')} title={tMain.close} aria-label={tMain.close}>
+            <button type="button" onClick={() => setSearch('')} data-tip={tMain.close} aria-label={tMain.close}>
               <Icon name="x" size={14} />
             </button>
           )}
@@ -2246,13 +2264,13 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
           </div>
         )}
         <div className="pod-toolbar-end">
-          <button type="button" className="button button-secondary" onClick={() => void importXml()} disabled={busy !== null} title={t.importXmlHint}>
+          <button type="button" className="button button-secondary" onClick={() => void importXml()} disabled={busy !== null} data-tip={t.importXmlHint}>
             <Icon name={busy === 'import' ? 'loader' : 'upload'} size={14} /> {t.importXml}
           </button>
-          <button type="button" className="button button-secondary" onClick={() => void excelSzablon()} disabled={busy !== null || wRoku.length === 0} title={t.excelTemplateHint}>
+          <button type="button" className="button button-secondary" onClick={() => void excelSzablon()} disabled={busy !== null || wRoku.length === 0} data-tip={t.excelTemplateHint}>
             <Icon name="table" size={14} /> {t.excelTemplate}
           </button>
-          <button type="button" className="button button-secondary" onClick={() => void excelWczytaj()} disabled={busy !== null || wRoku.length === 0} title={t.excelReadHint}>
+          <button type="button" className="button button-secondary" onClick={() => void excelWczytaj()} disabled={busy !== null || wRoku.length === 0} data-tip={t.excelReadHint}>
             <Icon name="upload" size={14} /> {t.excelRead}
           </button>
           <button

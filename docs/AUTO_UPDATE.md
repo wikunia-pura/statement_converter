@@ -21,29 +21,26 @@ Aplikacja używa `electron-updater` do automatycznych aktualizacji przez GitHub 
 ## Proces wydawania nowej wersji:
 
 ```bash
-# 1. Zaktualizuj wersję w package.json
-npm version patch  # lub minor/major
+# 1. Zaktualizuj wersję w package.json i dodaj wpis w src/shared/release-notes.ts
+npm version patch --no-git-tag-version  # lub minor/major
 
-# 2. Zbuduj i przetestuj lokalnie
-npm run build
-npm run package:mac  # lub package:win
+# 2. Sprawdź lokalnie
+npm run type-check && npm test && npm run lint
 
-# 3. Stwórz tag i wypchj
-git push
-git push --tags
+# 3. Commit, potem tag i push — tag v* uruchamia build
+git tag vX.Y.Z
+git push && git push origin vX.Y.Z
 
 # 4. GitHub Actions zbuduje i opublikuje release automatycznie
 ```
 
-## Ręczne publikowanie (opcjonalne):
+Migracje `supabase/*.sql`, których wymaga wydanie, uruchom w Supabase przed tagiem.
 
-Jeśli chcesz ręcznie wypubliko wać:
+## Ręczne publikowanie
 
-```bash
-# Wymaga GH_TOKEN w środowisku
-export GH_TOKEN=your_github_token
-npm run publish:mac  # lub publish:win
-```
+Nie ma skryptów `publish:*`. `npm run package:mac` / `package:win` budują lokalnie z `--publish never`
+(do sprawdzenia paczki), a jedyną drogą wydania jest tag `v*` → GitHub Actions → GitHub Release
+(zob. [GITHUB_ACTIONS_SETUP.md](GITHUB_ACTIONS_SETUP.md)).
 
 ## Testowanie w developmencie:
 

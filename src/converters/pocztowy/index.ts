@@ -22,6 +22,7 @@ import {
   ParseResult,
   ICsvExporter,
 } from '../../shared/base-converter';
+import type { ReviewHoldReason } from '../../shared/types';
 
 export class PocztowyConverter extends BaseConverter<PocztowyTransaction> {
   private parser: PocztowyMT940Parser;
@@ -48,6 +49,7 @@ export class PocztowyConverter extends BaseConverter<PocztowyTransaction> {
     const statement = this.parser.parse(content);
     return {
       transactions: statement.transactions,
+      dropped: statement.dropped,
       logExtra:
         `Account: ${statement.accountIBAN}, Statement: ${statement.statementNumber}, ` +
         `Opening: ${statement.openingBalance.amount} ${statement.openingBalance.debitCredit}, ` +
@@ -62,6 +64,11 @@ export class PocztowyConverter extends BaseConverter<PocztowyTransaction> {
     return this.parser.filterTransactions(transactions, {
       skipNegative: opts.skipNegative,
     });
+  }
+
+  /** A storno (RC/RD) is held for review, never booked automatically. */
+  protected holdReason(transaction: PocztowyTransaction): ReviewHoldReason | null {
+    return transaction.reversal ? 'reversal' : null;
   }
 
   protected isIncome(transaction: PocztowyTransaction): boolean {

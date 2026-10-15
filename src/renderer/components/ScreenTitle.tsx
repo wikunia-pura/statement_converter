@@ -25,13 +25,13 @@ const ScreenTitle: React.FC<{
       type="button"
       className="ksieg-nav-arrow screen-title__back"
       onClick={onBack}
-      title={backLabel}
+      data-tip={backLabel}
       aria-label={backLabel}
     >
       <Icon name="chevron-left" size={18} />
     </button>
     <div className="zeb-screen-head__id screen-title__id">
-      <button type="button" className="screen-title__crumb" onClick={onBack} title={backLabel}>
+      <button type="button" className="screen-title__crumb" onClick={onBack} data-tip={backLabel}>
         {crumb}
       </button>
       <h1 className="zeb-screen-head__title">{title}</h1>

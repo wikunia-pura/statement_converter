@@ -17,6 +17,8 @@ import {
 } from './types';
 import { foldText, nazwaNieruchomosci, normalizePobrania } from './plan-gospodarczy';
 import { ukryteKwotyInterEj } from './inter-ej';
+import { toDayKey } from './calendar';
+import { formatKwota } from './format';
 
 const numOrNull = (v: unknown): number | null => {
   if (v === null || v === undefined || v === '') return null;
@@ -284,20 +286,9 @@ export function sprawozdanieWersji(z: ZebranieSprawozdanie): Sprawozdanie {
 
 /* -------------------------------- Formatting -------------------------------- */
 
-// Grouping always: Polish style leaves four-digit numbers ungrouped ("6609,10"),
-// which reads as a misprint in a column of "16 669,33"s.
-const PLN = new Intl.NumberFormat('pl-PL', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-  useGrouping: 'always',
-} as unknown as Intl.NumberFormatOptions);
-
-/** 12345.6 → "12 345,60" — how amounts are printed on every document. */
-export function formatKwota(n: number | null | undefined): string {
-  if (n === null || n === undefined || !Number.isFinite(n)) return '';
-  // Intl puts a narrow no-break space between thousands; documents use a plain one.
-  return PLN.format(n).replace(/ | /g, ' ');
-}
+// "12 345,60" on every document: the one amount format lives in format.ts,
+// re-exported here because statement, plan and meeting code imports it from here.
+export { formatKwota };
 
 /** "2026-09-30" → "30.09.2026". */
 export function formatData(iso: string): string {
@@ -353,7 +344,8 @@ export function sprawozdanieDlaZebrania(
   vdomNr: number | null,
   dataZebrania: string | null,
 ): SprawozdanieZapisane | null {
-  const dzien = dataZebrania?.slice(0, 10) ?? '';
+  // The meeting's local day — the stored instant of a meeting with no hour is the evening before in UTC.
+  const dzien = dataZebrania ? toDayKey(dataZebrania) : '';
   if (vdomNr == null || !/^\d{4}-\d{2}-\d{2}$/.test(dzien)) return null;
   const [y, m, d] = dzien.split('-').map(Number);
   const od = new Date(Date.UTC(y, m - 1 - AUTO_OKRES_MIESIECY, d)).toISOString().slice(0, 10);

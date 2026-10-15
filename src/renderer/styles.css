@@ -4718,15 +4718,6 @@ body.dark-mode .footer-piggy-svg {
   font-size: var(--fs-md);
 }
 
-.spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--border-default);
-  border-top-color: var(--info);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
 .update-error .update-text strong {
   color: var(--danger);
 }
@@ -11946,6 +11937,9 @@ body.dark-mode .mve-subject .ff-chip__missing {
   margin-bottom: var(--s-3);
 }
 .zeb-szb-toolbar__select { display: flex; gap: var(--s-1); }
+/* In the apply dialog's section cards, the card's own gap spaces them. */
+.form-section__body > .zeb-szb-parts,
+.form-section__body > .zeb-szb-toolbar { margin-bottom: 0; }
 
 .zeb-szb-table-wrap {
   max-height: 52vh;
@@ -12707,6 +12701,7 @@ body.dark-mode .mve-subject .ff-chip__missing {
 .zfin-empty { color: var(--text-tertiary); font-style: italic; }
 
 .zfin-pick-search { margin-bottom: var(--s-3); }
+.form-section__body > .zfin-pick-search { margin-bottom: 0; }
 
 .zfin-pick-list { list-style: none; display: flex; flex-direction: column; gap: 4px; max-height: 52vh; overflow-y: auto; }
 
@@ -13434,6 +13429,7 @@ input[type='text'].zplan-input--rate { width: 84px; }
   font-size: var(--fs-sm);
   color: var(--danger);
 }
+.form-section__body > .ks-scan-error { margin-top: 0; }
 
 /* While the scan runs: one calm, centred state — nothing that appears and goes. */
 .ks-scan-loading {
@@ -14471,6 +14467,8 @@ body.dark-mode .ksieg-selbar .ksieg-convert:hover { color: #0d0e24; }
   color: var(--text-primary);
   pointer-events: none;
 }
+/* A `data-tip` hint drawn by TipLayer: plain text, its own line breaks kept. */
+.tip--text { white-space: pre-line; }
 .tip__title { font-weight: 600; margin-bottom: 4px; }
 .tip__docs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
 .tip__docs li { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
@@ -14554,3 +14552,20 @@ body.dark-mode .ksieg-act--book { color: #0b1a12; }
 
 /* The AI's justification of a rate: its paragraphs kept, under its label. */
 .zplan-ai-text { display: block; margin-top: 2px; white-space: pre-line; }
+
+/* ---- E-perf: a view that crashed (ErrorBoundary) ---- */
+.view-error { max-width: 720px; margin: 24px auto; }
+.view-error__text { margin: 6px 0 10px; }
+.view-error__message {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  max-height: 160px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  background: var(--bg-surface);
+  border-radius: 6px;
+}

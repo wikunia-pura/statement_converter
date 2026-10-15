@@ -9,10 +9,13 @@ import {
   ScanUnrecognized,
 } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { ipcErrorMessage } from '../ipcError';
 import Icon from './Icon';
-import ModalDismiss, { ModalHeader } from './Modal';
+import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
+import { FormSection } from './FormSection';
 import { useNotify } from './Notifications';
 import { joinScanPath } from '../../shared/statement-scan';
+import { formatDateTime } from '../../shared/format';
 
 type Trans = (typeof translations)['pl' | 'en'];
 type IconName = React.ComponentProps<typeof Icon>['name'];
@@ -198,7 +201,7 @@ const StatementScanModal: React.FC<{
       setStep(result.report.conflicts.length > 0 ? 'conflicts' : 'report');
     } catch (e) {
       if (id !== runId.current) return;
-      setError(`${t.ksScanErrGeneric}: ${e instanceof Error ? e.message : String(e)}`);
+      setError(`${t.ksScanErrGeneric}: ${ipcErrorMessage(e, t.errorUnexpected)}`);
       setStep('setup');
     }
   };
@@ -230,15 +233,6 @@ const StatementScanModal: React.FC<{
     onClose(changed.current);
   };
 
-  const formatStamp = (iso: string) =>
-    new Date(iso).toLocaleString(locale, {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
   /* -------------------------------- Pieces -------------------------------- */
 
   /**
@@ -255,7 +249,7 @@ const StatementScanModal: React.FC<{
           <button
             type="button"
             className="button button-small button-ghost ks-rep-file__preview"
-            title={t.ksScanPreviewHint}
+            data-tip={t.ksScanPreviewHint}
             onClick={async () => {
               const ok = await window.electronAPI.previewPdf(path);
               if (!ok) notify.error(t.fileNotFound);
@@ -267,7 +261,7 @@ const StatementScanModal: React.FC<{
           <button
             type="button"
             className="button button-small button-ghost ks-rep-file__preview"
-            title={t.ksScanOpenFileHint}
+            data-tip={t.ksScanOpenFileHint}
             onClick={async () => {
               const ok = await window.electronAPI.openFile(path);
               if (!ok) notify.error(t.fileNotFound);
@@ -280,7 +274,7 @@ const StatementScanModal: React.FC<{
         <button
           type="button"
           className="button button-small button-ghost button-icon ks-rep-file__reveal"
-          title={t.ksScanShowInFolder}
+          data-tip={t.ksScanShowInFolder}
           aria-label={t.ksScanShowInFolder}
           onClick={async () => {
             const ok = await window.electronAPI.showInFolder(path);
@@ -293,21 +287,19 @@ const StatementScanModal: React.FC<{
     );
   };
 
-  /** The whole statements folder, in Finder / Explorer — left in the footer. */
+  /** The whole statements folder, in Finder / Explorer — the footer's note, on the left. */
   const folderButton = folder ? (
-    <div className="modal-footer__note">
-      <button
-        type="button"
-        className="button button-secondary"
-        title={folder}
-        onClick={async () => {
-          const ok = await window.electronAPI.openFile(folder);
-          if (!ok) notify.error(t.fileNotFound);
-        }}
-      >
-        <Icon name="folder" size={14} /> {t.openOutputFolder}
-      </button>
-    </div>
+    <button
+      type="button"
+      className="button button-secondary"
+      data-tip={folder}
+      onClick={async () => {
+        const ok = await window.electronAPI.openFile(folder);
+        if (!ok) notify.error(t.fileNotFound);
+      }}
+    >
+      <Icon name="folder" size={14} /> {t.openOutputFolder}
+    </button>
   ) : null;
 
   const kindPill = (kind: 'statement' | 'pdf') => (
@@ -325,7 +317,7 @@ const StatementScanModal: React.FC<{
           {f.accountTypeName && <span className="ks-rep-file__type">{f.accountTypeName}</span>}
           {f.periodFrom && <span className="ks-rep-file__period">{formatPeriod(f.periodFrom, f.periodTo)}</span>}
         </div>
-        <div className="ks-rep-file__name" title={f.relPath}>
+        <div className="ks-rep-file__name" data-tip={f.relPath}>
           {f.fileName}
           {f.originalName && f.originalName !== f.fileName && (
             <span className="ks-rep-file__was"> ← {f.originalName}</span>
@@ -387,10 +379,10 @@ const StatementScanModal: React.FC<{
         <div className="ks-scan-conflict__compare">
           <div className="ks-scan-conflict__side">
             <span className="ks-scan-conflict__label">{t.ksScanCurrent}</span>
-            <span className="ks-rep-file__name" title={c.existing.relPath}>{c.existing.fileName}</span>
+            <span className="ks-rep-file__name" data-tip={c.existing.relPath}>{c.existing.fileName}</span>
             <span className="ks-rep-file__period">
               {formatPeriod(c.existing.periodFrom, c.existing.periodTo)} ·{' '}
-              {t.ksScanModified.replace('{date}', formatStamp(c.existing.fileMtime))}
+              {t.ksScanModified.replace('{date}', formatDateTime(c.existing.fileMtime, language))}
             </span>
             {/* Both versions can be opened, to compare them before choosing. */}
             {previewButton(c.existing.relPath)}
@@ -398,10 +390,10 @@ const StatementScanModal: React.FC<{
           <Icon name="arrow-right" size={16} />
           <div className="ks-scan-conflict__side ks-scan-conflict__side--new">
             <span className="ks-scan-conflict__label">{t.ksScanFound}</span>
-            <span className="ks-rep-file__name" title={c.found.relPath}>{c.found.fileName}</span>
+            <span className="ks-rep-file__name" data-tip={c.found.relPath}>{c.found.fileName}</span>
             <span className="ks-rep-file__period">
               {formatPeriod(c.found.periodFrom, c.found.periodTo)} ·{' '}
-              {t.ksScanModified.replace('{date}', formatStamp(c.found.fileMtime))}
+              {t.ksScanModified.replace('{date}', formatDateTime(c.found.fileMtime, language))}
             </span>
             {/* Both versions can be opened, to compare them before choosing. */}
             {previewButton(c.found.relPath)}
@@ -454,12 +446,12 @@ const StatementScanModal: React.FC<{
     );
   } else if (step === 'setup') {
     body = (
-      <>
-        <p className="ks-scan-intro">{t.ksScanIntro.replace('{month}', monthLabel)}</p>
+      <FormSection
+        icon="folder"
+        title={t.ksScanFolderLabel}
+        description={t.ksScanIntro.replace('{month}', monthLabel)}
+      >
         <div className="ks-scan-folder">
-          <span className="ks-scan-folder__label">
-            <Icon name="folder" size={14} /> {t.ksScanFolderLabel}
-          </span>
           <code className={folder ? '' : 'is-empty'}>{folder || t.ksScanFolderNone}</code>
           <button type="button" className="button button-small button-secondary" onClick={() => void pickFolder()}>
             {t.ksScanFolderPick}
@@ -470,42 +462,48 @@ const StatementScanModal: React.FC<{
             <Icon name="alert-circle" size={14} /> {error}
           </p>
         )}
-      </>
+      </FormSection>
     );
     footer = (
-      <>
-        <button type="button" className="button button-secondary" onClick={close}>
-          {t.cancel}
-        </button>
-        <button type="button" className="button button-success" disabled={!folder} onClick={() => void run()}>
-          <Icon name="search" size={14} /> {t.ksScanStart}
-        </button>
-      </>
+      <ModalFooter
+        onCancel={close}
+        cancelLabel={t.cancel}
+        onSubmit={() => void run()}
+        submitLabel={t.ksScanStart}
+        submitIcon="search"
+        submitDisabled={!folder}
+      />
     );
   } else if (step === 'conflicts' && report) {
     body = (
-      <>
-        <p className="ks-scan-intro">{t.ksScanConflictsIntro}</p>
+      <FormSection
+        icon="refresh"
+        title={t.ksScanConflictsList}
+        description={t.ksScanConflictsIntro}
+      >
         <ul className="ks-scan-conflicts">{report.conflicts.map(conflictCard)}</ul>
-      </>
+      </FormSection>
     );
     footer = (
-      <>
-        {folderButton}
-        <button
-          type="button"
-          className="button button-secondary"
-          disabled={applying}
-          onClick={() =>
-            setDecisions(Object.fromEntries(report.conflicts.map((c) => [c.id, 'replace' as ScanDecision])))
-          }
-        >
-          {t.ksScanReplaceAll}
-        </button>
-        <button type="button" className="button button-success" disabled={applying} onClick={() => void apply()}>
-          <Icon name="check" size={14} /> {t.ksScanApply}
-        </button>
-      </>
+      <ModalFooter
+        note={folderButton}
+        secondaryAction={
+          <button
+            type="button"
+            className="button button-secondary"
+            disabled={applying}
+            onClick={() =>
+              setDecisions(Object.fromEntries(report.conflicts.map((c) => [c.id, 'replace' as ScanDecision])))
+            }
+          >
+            {t.ksScanReplaceAll}
+          </button>
+        }
+        onSubmit={() => void apply()}
+        submitLabel={t.ksScanApply}
+        submitIcon="check"
+        busy={applying}
+      />
     );
   } else if (step === 'report' && report) {
     const missCount = report.unrecognized.length + report.renameFailures.length + (applied?.failed.length ?? 0);
@@ -551,28 +549,33 @@ const StatementScanModal: React.FC<{
         ))}
       </div>
     ) : (
+      // A block of its own in the sectioned body: the folding cards keep their height
+      // instead of shrinking to fit it.
       <div className="ks-rep">
-        <div className="ks-rep-stats">
-          {stats.map((s) => (
-            <div key={s.label} className={`ks-rep-stat ks-rep-stat--${s.tone}`}>
-              <Icon name={s.icon} size={16} />
-              <b>{s.value}</b>
-              <span>{s.label}</span>
-            </div>
-          ))}
-        </div>
+        {/* The figures in a card of their own; each list below is a folding card already. */}
+        <FormSection icon="bar-chart" title={t.ksScanSummary}>
+          <div className="ks-rep-stats">
+            {stats.map((s) => (
+              <div key={s.label} className={`ks-rep-stat ks-rep-stat--${s.tone}`}>
+                <Icon name={s.icon} size={16} />
+                <b>{s.value}</b>
+                <span>{s.label}</span>
+              </div>
+            ))}
+          </div>
 
-        <div className="ks-rep-meta">
-          <span>{t.ksScanExamined.replace('{n}', String(report.examined))}</span>
-          {folder && <span className="ks-rep-meta__folder">{t.ksScanFolderIn.replace('{folder}', folder)}</span>}
-          {notes.map((n) => (
-            <span key={n} className="ks-rep-meta__note">
-              <Icon name="info" size={12} /> {n}
-            </span>
-          ))}
-        </div>
+          <div className="ks-rep-meta">
+            <span>{t.ksScanExamined.replace('{n}', String(report.examined))}</span>
+            {folder && <span className="ks-rep-meta__folder">{t.ksScanFolderIn.replace('{folder}', folder)}</span>}
+            {notes.map((n) => (
+              <span key={n} className="ks-rep-meta__note">
+                <Icon name="info" size={12} /> {n}
+              </span>
+            ))}
+          </div>
 
-        {nothingNew && <p className="ks-rep-empty">{t.ksScanNothing}</p>}
+          {nothingNew && <p className="ks-rep-empty">{t.ksScanNothing}</p>}
+        </FormSection>
 
         {applied && applied.failed.length > 0 && (
           <ReportSection
@@ -628,7 +631,7 @@ const StatementScanModal: React.FC<{
                     {items.map((u: ScanUnrecognized) => (
                       <li key={u.relPath} className="ks-rep-file">
                         <div className="ks-rep-file__main">
-                          <div className="ks-rep-file__name" title={u.relPath}>
+                          <div className="ks-rep-file__name" data-tip={u.relPath}>
                             {u.fileName}
                           </div>
                           {(u.adresNazwa || u.detail) && (
@@ -694,12 +697,12 @@ const StatementScanModal: React.FC<{
       </div>
     );
     footer = (
-      <>
-        {folderButton}
-        <button type="button" className="button button-success" onClick={close}>
-          <Icon name="check" size={14} /> {t.ksScanDone}
-        </button>
-      </>
+      <ModalFooter
+        note={folderButton}
+        onSubmit={close}
+        submitLabel={t.ksScanDone}
+        submitIcon="check"
+      />
     );
   }
 
@@ -714,11 +717,17 @@ const StatementScanModal: React.FC<{
 
   return (
     <div className="modal-overlay" onClick={close}>
-      <div className="modal ks-scan-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal ks-scan-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(e) => e.stopPropagation()}
+      >
         {!busy && <ModalDismiss onClose={close} ariaLabel={t.close} />}
         <ModalHeader icon="search" title={title} />
-        <div className="modal-body">{body}</div>
-        {footer && <div className="modal-footer">{footer}</div>}
+        <div className="modal-body modal-body--sectioned">{body}</div>
+        {footer}
       </div>
     </div>
   );

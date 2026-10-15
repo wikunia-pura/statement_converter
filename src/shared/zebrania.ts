@@ -501,13 +501,15 @@ const STRATA_RE = /(^|[^a-z])strat/;
 function pokrycieStratyOpcje(plan: PlanGospodarczy | null): MailingZebranieOpcja[] {
   if (!plan) return [];
   const opcje: MailingZebranieOpcja[] = [];
-  const add = (etykieta: string, kwota: number) => {
+  const add = (etykieta: string, kwota: number, wiersze: string[] = []) => {
     const name = etykieta.trim();
-    if (!name || !(kwota > 0.005) || nazwaInterEj(name) || opcje.some((o) => o.klucz === name)) return;
+    if (!name || !(kwota > 0.005) || opcje.some((o) => o.klucz === name)) return;
+    // A position stands for printed rows: one of them INTER-EJ's (a merge) makes it INTER-EJ's too.
+    if (nazwaInterEj(name) || wiersze.some(nazwaInterEj)) return;
     opcje.push({ klucz: name, etykieta: name, kwota: zl(kwota) });
   };
   add('Pokrycie straty z funduszu remontowego (saldo zaliczki „A”)', planSumy(plan).saldoAKoszt);
-  for (const z of plan.pozycje) if (STRATA_RE.test(foldText(z.nazwa))) add(z.nazwa, z.kwota);
+  for (const z of plan.pozycje) if (STRATA_RE.test(foldText(z.nazwa))) add(z.nazwa, z.kwota, z.wiersze);
   for (const r of plan.remontyFR) if (STRATA_RE.test(foldText(r.opis))) add(r.opis, r.kwota);
   return opcje;
 }

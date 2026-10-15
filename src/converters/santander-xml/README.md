@@ -89,14 +89,11 @@ console.log(`Auto-approved: ${result.summary.autoApproved}`);
 console.log(`Needs review: ${result.summary.needsReview}`);
 ```
 
-### Uruchom przykład:
+### Testy:
 
 ```bash
-# Ustaw API key
-export ANTHROPIC_API_KEY="your-key-here"
-
-# Uruchom przykład
-npx ts-node examples/santander-converter-example.ts
+# Testy jednostkowe (dane syntetyczne, bez AI)
+npm test
 ```
 
 ## 💰 Koszty
@@ -117,14 +114,14 @@ Z optymalizacją (regex + cache):
 1. **Batch processing** - 20 transakcji w jednym zapytaniu (oszczędność ~30%)
 2. **Cache** - powtarzające się opisy są przetwarzane tylko raz
 3. **Regex first** - proste przypadki nie trafiają do AI
-4. **Filtrowanie** - pomijamy wydatki i opłaty bankowe
+4. **Wydatki osobno** - wydatki (także opłaty bankowe, które są zwykłymi kosztami) idą do dopasowania kontrahentów, nie do AI adresów
 
 ## 🏗️ Architektura
 
 ```
 XML Input
     ↓
-Parser (filtruje wydatki, opłaty bankowe)
+Parser (dzieli na wpłaty i wydatki; opłaty bankowe to zwykłe wydatki)
     ↓
 Quick Extraction (Regex + Cache)
     ↓
@@ -219,11 +216,8 @@ const converter = new SantanderXmlConverter({
 ## 🧪 Testowanie
 
 ```bash
-# Uruchom przykład z testowym plikiem
-npx ts-node examples/santander-converter-example.ts
-
-# Wynik zostanie zapisany do:
-# test-data/conversion-result.json
+# Testy jednostkowe (dane syntetyczne)
+npm test
 ```
 
 ## 📈 Statystyki

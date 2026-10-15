@@ -13,6 +13,8 @@ export interface MT940Transaction {
   valueDate: string;          // YYMMDD format (e.g., "260101")
   entryDate: string;          // MMDD format (e.g., "0101")
   debitCredit: 'D' | 'C';     // D = debit (expense), C = credit (income)
+  /** Storno ("RC"/"RD"): debitCredit is already turned over; the row is held for review. */
+  reversal?: boolean;
   amount: number;             // Transaction amount
   transactionType: string;    // e.g., "NU13", "NU12", "NG04", "N188"
   reference: string;          // Reference number (e.g., "5010594470002223")
@@ -24,6 +26,8 @@ export interface MT940Transaction {
     bankCode: string;          // ~30 field
     accountNumber: string;     // ~31 field
     counterpartyName: string;  // ~32-33 fields combined
+    /** ~32 and ~33 apart, for contractor matching (counterpartyName glues them). */
+    counterpartyNameParts?: string[];
     counterpartyIBAN: string;  // ~38 field
     transactionDate: string;   // ~60 field (if present)
     additionalInfo: string;    // ~63 field (if present)
@@ -59,6 +63,8 @@ export interface MT940Statement {
     amount: number;
   };
   transactions: MT940Transaction[];
+  /** :61: lines that could not be read (see shared/mt940). */
+  dropped?: import('../../shared/types').DroppedStatementLine[];
 }
 
 /**

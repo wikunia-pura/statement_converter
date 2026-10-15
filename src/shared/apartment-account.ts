@@ -53,6 +53,15 @@ export function isAccountSymbol(value: string | null | undefined): boolean {
 }
 
 /**
+ * True for an apartment value the account convention covers on its own: a plain
+ * number ("17"), or the ZGN marker. Everything else an extractor may hand over —
+ * "12-14", "5/7", a lettered "17A" — needs the user (or a rule) to name the account.
+ */
+function isPlainApartment(value: string): boolean {
+  return /^\d+$/.test(value) || value.toUpperCase() === ZGN_MARKER;
+}
+
+/**
  * The lettered apartment the text mentions ("17A"), or null if it mentions none.
  *
  * This is a cross-check, not an extractor, and it is the part of the fix that does
@@ -231,10 +240,13 @@ export const HELD_BACK_CONFIDENCE = 40;
 
 /**
  * True when the recognized apartment must not be booked without the user naming an
- * account: either it carries a letter itself, or the text shows a lettered
+ * account: either it carries a letter itself, it is not an apartment number at all
+ * ("12-14" from the AI, a range from a rule), or the text shows a lettered
  * apartment while the recognized number has no letter (the mis-booking case).
  *
- * An explicit account override answers the question, so it clears the flag.
+ * An explicit account override answers the question, so it clears the flag. That
+ * is also how the values that legitimately are accounts — a "Pozostałe przychody"
+ * entry's account, the clarification account — travel: in the override.
  */
 export function needsExplicitAccount(
   apartmentNumber: string | null | undefined,
@@ -245,6 +257,9 @@ export function needsExplicitAccount(
   if (!apartment) return false;
   if ((accountOverride ?? '').trim()) return false;
   if (isLetteredApartment(apartment)) return true;
+  // A dashed answer such as "12-14" passes for an account symbol by its shape
+  // alone, which is exactly why it may not reach resolveApartmentAccount unasked.
+  if (!isPlainApartment(apartment)) return true;
   return letteredApartmentInText(text) !== null;
 }
 
@@ -286,8 +301,11 @@ export function resolveApartmentAccount(
   // Plain apartment number — the one case where the convention is known.
   if (/^\d+$/.test(apartment)) return `${prefix}-${apartment.padStart(6, '0')}`;
 
-  // Already a symbol (235-1, a contractor account) — emit untouched.
-  if (apartment.includes('-')) return apartment;
+  // Already a symbol (235-1, a contractor account) — emit untouched. Only a
+  // well-formed one, though: "any value with a dash" used to pass "12-" or "-5"
+  // straight into k_ma. A well-formed but doubtful value ("12-14" from the AI) is
+  // stopped earlier, by needsExplicitAccount, before it can be booked.
+  if (isAccountSymbol(apartment)) return apartment;
 
   // Anything else (e.g. "17AB") is neither a number we can map nor a symbol we
   // can trust. Refusing beats writing a made-up account into the books.

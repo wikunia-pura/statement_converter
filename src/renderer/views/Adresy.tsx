@@ -29,6 +29,7 @@ import CheckList, { CheckListItem } from '../components/CheckList';
 import { FormField, FormRow, FormSection, RequiredNote } from '../components/FormSection';
 import Icon from '../components/Icon';
 import Tip from '../components/Tip';
+import { useStableCallback } from '../hooks/useStableCallback';
 import Loader, { BusyOverlay } from '../components/Loader';
 import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
 import ModuleTabs from '../components/ModuleTabs';
@@ -330,7 +331,7 @@ const AccountTypesPanel: React.FC<AccountTypesPanelProps> = ({ language, kontoTy
                       className="button button-ghost button-icon icon-danger"
                       onClick={() => handleDelete(typ.id)}
                       disabled={isSaving}
-                      title={t.delete}
+                      data-tip={t.delete}
                       aria-label={`${t.delete}: ${typ.name}`}
                     >
                       <Icon name="trash" size={15} />
@@ -1604,7 +1605,7 @@ const ZgnUnitsPanel: React.FC<ZgnUnitsPanelProps> = ({
                                 className="button button-ghost button-icon"
                                 onClick={() => { setError(null); setProxyForm({ jednostka: j, editing: p }); }}
                                 disabled={isSaving}
-                                title={t.edit}
+                                data-tip={t.edit}
                                 aria-label={`${t.edit}: ${p.imieNazwisko}`}
                               >
                                 <Icon name="edit" size={13} />
@@ -1614,7 +1615,7 @@ const ZgnUnitsPanel: React.FC<ZgnUnitsPanelProps> = ({
                                 className="button button-ghost button-icon icon-danger"
                                 onClick={() => void handleProxyDelete(p)}
                                 disabled={isSaving}
-                                title={t.delete}
+                                data-tip={t.delete}
                                 aria-label={`${t.delete}: ${p.imieNazwisko}`}
                               >
                                 <Icon name="trash" size={13} />
@@ -1642,7 +1643,7 @@ const ZgnUnitsPanel: React.FC<ZgnUnitsPanelProps> = ({
                         className="button button-ghost button-icon icon-danger"
                         onClick={() => handleDelete(j)}
                         disabled={isSaving}
-                        title={t.delete}
+                        data-tip={t.delete}
                         aria-label={`${t.delete}: ${j.nazwa}`}
                       >
                         <Icon name="trash" size={15} />
@@ -1846,6 +1847,175 @@ const IdentyfikacjaSection: React.FC<{
 };
 
 /** Tabs of the Adresy module: the communities themselves plus their dictionaries. */
+/**
+ * One community of the list. Memoized, with its bank, city unit and account
+ * types handed in from maps built once: the address form keeps its fields in
+ * the view's state, so every key typed there used to re-render — and re-search
+ * the bank, unit and type lists for — every row of the table.
+ */
+const AdresRow = React.memo(function AdresRow({
+  adres,
+  bank,
+  jednostka,
+  kontoTypyById,
+  missingOf,
+  language,
+  onEdit,
+  onDelete,
+  onZarzad,
+  onMappings,
+}: {
+  adres: Adres;
+  bank: Bank | undefined;
+  jednostka: ZgnJednostka | undefined;
+  kontoTypyById: Map<number, KontoTyp>;
+  missingOf: (a: Adres) => string[];
+  language: Language;
+  onEdit: (adres: Adres) => void;
+  onDelete: (id: number) => void;
+  onZarzad: (id: number) => void;
+  onMappings: (id: number) => void;
+}) {
+  const t = translations[language];
+  const altNames = adres.alternativeNames ?? [];
+  const swrk = adres.swrkIdentifiers ?? [];
+  const accounts = adres.accountNumbers ?? [];
+  const zarzadCount = adres.zarzad?.length ?? 0;
+  const mappingsCount = adres.apartmentMappings?.length ?? 0;
+  const missing = missingOf(adres);
+  return (
+    <tr>
+      <td className="data-table__name nowrap">
+        <span className="adres-missing-slot">
+          {missing.length > 0 && (
+            <Tip
+              className="cell-warning"
+              ariaLabel={`${t.adresMissingTitle}: ${missing.join(', ')}`}
+              content={
+                <>
+                  <div className="tip__title">{t.adresMissingTitle}</div>
+                  <ul className="tip__list">
+                    {missing.map((m) => (
+                      <li key={m}>{m}</li>
+                    ))}
+                  </ul>
+                </>
+              }
+            >
+              <Icon name="alert-triangle" size={14} />
+            </Tip>
+          )}
+        </span>
+        {/* Spelling variants are for matching, not for reading the list —
+            on hover only (search still finds them). */}
+        <span
+          className="cell-title"
+          data-tip={altNames.length > 0 ? `${t.alternativeNames}:\n${altNames.join('\n')}` : undefined}
+        >
+          {adres.nazwa}
+        </span>
+      </td>
+      <td className="nowrap">
+        {bank ? bank.name : <span className="cell-empty">—</span>}
+      </td>
+      <td>
+        {accounts.length > 0 ? (
+          <div className="adres-accounts">
+            {accounts.map((acc) => {
+              const typId = adres.accountTypes?.[acc];
+              const typ = typId != null ? kontoTypyById.get(typId) : undefined;
+              return (
+                <React.Fragment key={acc}>
+                  <span className="adres-account__number">{formatAccount(acc)}</span>
+                  <span
+                    className="adres-account__type"
+                    data-tip={typ ? `${typ.name} (${typ.bankAccountSymbol})` : undefined}
+                  >
+                    {typ?.name ?? ''}
+                  </span>
+                </React.Fragment>
+              );
+            })}
+          </div>
+        ) : (
+          <span className="cell-warning" data-tip={t.adresNoAccountHint}>
+            <Icon name="alert-triangle" size={13} />
+            {t.adresNoAccount}
+          </span>
+        )}
+      </td>
+      <td>
+        {swrk.length > 0 ? (
+          <span className="adres-swrk">{swrk.join(', ')}</span>
+        ) : (
+          <span className="cell-empty">—</span>
+        )}
+      </td>
+      <td>
+        {jednostka ? (
+          <span className="adres-zgn" data-tip={jednostka.email}>{jednostka.nazwa}</span>
+        ) : (
+          <span className="cell-empty">—</span>
+        )}
+      </td>
+      <td>
+        <button
+          type="button"
+          className={`button button-small button-ghost count-button${zarzadCount === 0 ? ' is-zero' : ''}`}
+          onClick={() => onZarzad(adres.id)}
+          data-tip={
+            zarzadCount > 0
+              ? adres.zarzad!.map((m) => m.imieNazwisko).join(', ')
+              : t.zarzadTitle
+          }
+          aria-label={`${t.zarzadTitle}: ${zarzadCount}`}
+        >
+          {zarzadCount > 0 ? (
+            <><Icon name="users" size={13} />{zarzadCount}</>
+          ) : (
+            <><Icon name="plus" size={13} />{t.add}</>
+          )}
+        </button>
+      </td>
+      <td>
+        <button
+          type="button"
+          className={`button button-small button-ghost count-button${mappingsCount === 0 ? ' is-zero' : ''}`}
+          onClick={() => onMappings(adres.id)}
+          data-tip={t.apartmentMappingsTitle}
+          aria-label={`${t.apartmentMappings}: ${mappingsCount}`}
+        >
+          {mappingsCount > 0 ? (
+            <><Icon name="clipboard" size={13} />{mappingsCount}</>
+          ) : (
+            <><Icon name="plus" size={13} />{t.add}</>
+          )}
+        </button>
+      </td>
+      <td className="data-table__actions">
+        <div className="row-actions">
+          <button
+            type="button"
+            className="button button-small button-secondary"
+            onClick={() => onEdit(adres)}
+          >
+            <Icon name="edit" size={13} />{' '}{t.edit}
+          </button>
+          <button
+            type="button"
+            className="button button-ghost button-icon icon-danger"
+            onClick={() => onDelete(adres.id)}
+            data-tip={t.delete}
+            aria-label={`${t.delete}: ${adres.nazwa}`}
+          >
+            <Icon name="trash" size={15} />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+});
+
 type AdresyTab = 'lista' | 'typy' | 'zgn';
 
 const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefillConsumed }) => {
@@ -1928,6 +2098,8 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
       setZgnJednostki(zgnData);
     } catch (error) {
       console.error('Error loading adresy:', error);
+      // Said out loud: an empty table with no word why reads as "no addresses".
+      notify.error(t.adresyLoadError);
     } finally {
       setIsLoading(false);
     }
@@ -2197,6 +2369,14 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     return false;
   }), [adresy, searchTerm, onlyIncomplete, missingOf]);
 
+  // Lookups the rows make, built once per list instead of a `find` per row per render.
+  const banksById = useMemo(() => new Map(banks.map((b) => [b.id, b])), [banks]);
+  const zgnById = useMemo(() => new Map(zgnJednostki.map((j) => [j.id, j])), [zgnJednostki]);
+  const kontoTypyById = useMemo(() => new Map(kontoTypy.map((k) => [k.id, k])), [kontoTypy]);
+  // One identity for the view's life, so the memoized rows stay put.
+  const onEditRow = useStableCallback(handleEditAdres);
+  const onDeleteRow = useStableCallback((id: number) => void handleDeleteAdres(id));
+
   if (isLoading) {
     return (
       <div className="content-body">
@@ -2353,7 +2533,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                                 className="button button-ghost button-icon icon-danger"
                                 onClick={() => handleRemoveAccountNumber(index)}
                                 aria-label={`${t.remove}: ${formatAccount(acc)}`}
-                                title={t.remove}
+                                data-tip={t.remove}
                               >
                                 <Icon name="trash" size={14} />
                               </button>
@@ -2494,7 +2674,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                             type="button"
                             className="button button-secondary"
                             onClick={() => setShowZgnUnitsModal(true)}
-                            title={t.zgnUnitsTitle}
+                            data-tip={t.zgnUnitsTitle}
                           >
                             <Icon name="settings" size={14} />{' '}{t.zgnManageUnits}
                           </button>
@@ -2580,146 +2760,21 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredAdresy.map((adres) => {
-                      const altNames = adres.alternativeNames ?? [];
-                      const swrk = adres.swrkIdentifiers ?? [];
-                      const accounts = adres.accountNumbers ?? [];
-                      const bank = adres.bankId ? banks.find((b) => b.id === adres.bankId) : undefined;
-                      const jednostka = zgnJednostki.find((j) => j.id === adres.zgnJednostkaId);
-                      const zarzadCount = adres.zarzad?.length ?? 0;
-                      const mappingsCount = adres.apartmentMappings?.length ?? 0;
-                      const missing = missingOf(adres);
-                      return (
-                        <tr key={adres.id}>
-                          <td className="data-table__name nowrap">
-                            <span className="adres-missing-slot">
-                              {missing.length > 0 && (
-                                <Tip
-                                  className="cell-warning"
-                                  ariaLabel={`${t.adresMissingTitle}: ${missing.join(', ')}`}
-                                  content={
-                                    <>
-                                      <div className="tip__title">{t.adresMissingTitle}</div>
-                                      <ul className="tip__list">
-                                        {missing.map((m) => (
-                                          <li key={m}>{m}</li>
-                                        ))}
-                                      </ul>
-                                    </>
-                                  }
-                                >
-                                  <Icon name="alert-triangle" size={14} />
-                                </Tip>
-                              )}
-                            </span>
-                            {/* Spelling variants are for matching, not for reading the list —
-                                on hover only (search still finds them). */}
-                            <span
-                              className="cell-title"
-                              title={altNames.length > 0 ? `${t.alternativeNames}:\n${altNames.join('\n')}` : undefined}
-                            >
-                              {adres.nazwa}
-                            </span>
-                          </td>
-                          <td className="nowrap">
-                            {bank ? bank.name : <span className="cell-empty">—</span>}
-                          </td>
-                          <td>
-                            {accounts.length > 0 ? (
-                              <div className="adres-accounts">
-                                {accounts.map((acc) => {
-                                  const typ = kontoTypy.find((k) => k.id === adres.accountTypes?.[acc]);
-                                  return (
-                                    <React.Fragment key={acc}>
-                                      <span className="adres-account__number">{formatAccount(acc)}</span>
-                                      <span
-                                        className="adres-account__type"
-                                        title={typ ? `${typ.name} (${typ.bankAccountSymbol})` : undefined}
-                                      >
-                                        {typ?.name ?? ''}
-                                      </span>
-                                    </React.Fragment>
-                                  );
-                                })}
-                              </div>
-                            ) : (
-                              <span className="cell-warning" title={t.adresNoAccountHint}>
-                                <Icon name="alert-triangle" size={13} />
-                                {t.adresNoAccount}
-                              </span>
-                            )}
-                          </td>
-                          <td>
-                            {swrk.length > 0 ? (
-                              <span className="adres-swrk">{swrk.join(', ')}</span>
-                            ) : (
-                              <span className="cell-empty">—</span>
-                            )}
-                          </td>
-                          <td>
-                            {jednostka ? (
-                              <span className="adres-zgn" title={jednostka.email}>{jednostka.nazwa}</span>
-                            ) : (
-                              <span className="cell-empty">—</span>
-                            )}
-                          </td>
-                          <td>
-                            <button
-                              type="button"
-                              className={`button button-small button-ghost count-button${zarzadCount === 0 ? ' is-zero' : ''}`}
-                              onClick={() => setZarzadAdresId(adres.id)}
-                              title={
-                                zarzadCount > 0
-                                  ? adres.zarzad!.map((m) => m.imieNazwisko).join(', ')
-                                  : t.zarzadTitle
-                              }
-                              aria-label={`${t.zarzadTitle}: ${zarzadCount}`}
-                            >
-                              {zarzadCount > 0 ? (
-                                <><Icon name="users" size={13} />{zarzadCount}</>
-                              ) : (
-                                <><Icon name="plus" size={13} />{t.add}</>
-                              )}
-                            </button>
-                          </td>
-                          <td>
-                            <button
-                              type="button"
-                              className={`button button-small button-ghost count-button${mappingsCount === 0 ? ' is-zero' : ''}`}
-                              onClick={() => setMappingsAdresId(adres.id)}
-                              title={t.apartmentMappingsTitle}
-                              aria-label={`${t.apartmentMappings}: ${mappingsCount}`}
-                            >
-                              {mappingsCount > 0 ? (
-                                <><Icon name="clipboard" size={13} />{mappingsCount}</>
-                              ) : (
-                                <><Icon name="plus" size={13} />{t.add}</>
-                              )}
-                            </button>
-                          </td>
-                          <td className="data-table__actions">
-                            <div className="row-actions">
-                              <button
-                                type="button"
-                                className="button button-small button-secondary"
-                                onClick={() => handleEditAdres(adres)}
-                              >
-                                <Icon name="edit" size={13} />{' '}{t.edit}
-                              </button>
-                              <button
-                                type="button"
-                                className="button button-ghost button-icon icon-danger"
-                                onClick={() => handleDeleteAdres(adres.id)}
-                                title={t.delete}
-                                aria-label={`${t.delete}: ${adres.nazwa}`}
-                              >
-                                <Icon name="trash" size={15} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {filteredAdresy.map((adres) => (
+                      <AdresRow
+                        key={adres.id}
+                        adres={adres}
+                        bank={adres.bankId ? banksById.get(adres.bankId) : undefined}
+                        jednostka={adres.zgnJednostkaId != null ? zgnById.get(adres.zgnJednostkaId) : undefined}
+                        kontoTypyById={kontoTypyById}
+                        missingOf={missingOf}
+                        language={language}
+                        onEdit={onEditRow}
+                        onDelete={onDeleteRow}
+                        onZarzad={setZarzadAdresId}
+                        onMappings={setMappingsAdresId}
+                      />
+                    ))}
                   </tbody>
                 </table>
               </>

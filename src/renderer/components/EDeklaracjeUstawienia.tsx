@@ -3,6 +3,7 @@ import { EDeklaracjeSrodowisko, normalizeSrodowisko } from '../../shared/e-dekla
 import { translations, Language } from '../translations';
 import { FormSection } from './FormSection';
 import { useNotify } from './Notifications';
+import { ipcErrorMessage } from '../ipcError';
 import Icon from './Icon';
 
 /**
@@ -25,7 +26,7 @@ const EDeklaracjeUstawienia: React.FC<{ language: Language }> = ({ language }) =
       setSrodowisko(await window.electronAPI.setEDeklaracjeSrodowisko(prod ? 'prod' : 'test'));
       notify.success(prod ? t.edeklSwitchedProd : t.edeklSwitchedTest);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err));
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
     }
   };
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ConversionHistory } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { localeOf } from '../../shared/format';
 import { useNotify } from './Notifications';
 import Icon from './Icon';
 import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
@@ -64,7 +65,7 @@ const ConversionHistoryTimeline: React.FC<ConversionHistoryTimelineProps> = ({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const menuPlacement = useDropdownPlacement(dropdownRef, openDropdownId !== null, 120);
 
-  const locale = language === 'en' ? 'en-US' : 'pl-PL';
+  const locale = localeOf(language);
 
   // A fresh seed (a different file handed over from Księgowania) replaces what
   // is in the box; an unchanged one leaves the user's own edits alone.
@@ -328,7 +329,7 @@ const ConversionHistoryTimeline: React.FC<ConversionHistoryTimelineProps> = ({
                                   })}
                                 </span>
                                 <div className="history-entry-main">
-                                  <span className="history-entry-file" title={entry.fileName}>
+                                  <span className="history-entry-file" data-tip={entry.fileName}>
                                     {entry.fileName}
                                   </span>
                                   {entry.converterName && (

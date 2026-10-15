@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useCallback, useMemo, useState, useEffect } from 'react';
 import Converter from './views/Converter';
 import Settings from './views/Settings';
 import History from './views/History';
 import Ksiegowania, { bookingTileOrderItems } from './views/Ksiegowania';
 import Kontrahenci from './views/Kontrahenci';
-import Adresy from './views/Adresy';
 import Banki from './views/Banki';
 import PodsumowanieZaliczek, { ZaliczkiFileEntry } from './views/PodsumowanieZaliczek';
 import NotySwiadczenia, { NotyFileEntry } from './views/NotySwiadczenia';
@@ -12,28 +11,16 @@ import ScalanieWplat, { ScalanieFileEntry } from './views/ScalanieWplat';
 import Homebanking, { HomebankingFileEntry } from './views/Homebanking';
 import OdczytyLicznikow, { OdczytyFileEntry } from './views/OdczytyLicznikow';
 import OdczytyHistoria from './views/OdczytyHistoria';
-import Mailing, { MailingDraft, emptyMailingDraft } from './views/Mailing';
-import MailingSzablony from './views/MailingSzablony';
-import MailingPola from './views/MailingPola';
-import MailingHistoria from './views/MailingHistoria';
-import MailingTypy from './views/MailingTypy';
-import Kalendarz from './views/Kalendarz';
-import KalendarzTypy from './views/KalendarzTypy';
-import KalendarzLokalizacje from './views/KalendarzLokalizacje';
-import Zebrania, { ZebranieTab } from './views/Zebrania';
-import Sprawozdania from './views/Sprawozdania';
-import PlanyGospodarcze from './views/PlanyGospodarcze';
-import PodatkiNieruchomosci from './views/PodatkiNieruchomosci';
-import PodatkiCit from './views/PodatkiCit';
-import PodatkiPit from './views/PodatkiPit';
-import PodpisPdf, { PodpisPlikEntry } from './views/PodpisPdf';
-import PodpisHistoria from './views/PodpisHistoria';
-import Zadania from './views/Zadania';
+import { MailingDraft, emptyMailingDraft } from './views/mailingDraft';
+import type { ZebranieTab } from './views/Zebrania';
+import type { PodpisPlikEntry } from './views/PodpisPdf';
 import ZadaniaPulpit from './components/ZadaniaPulpit';
 import ModuleTabs from './components/ModuleTabs';
 import CoNowego from './views/CoNowego';
 import Login from './views/Login';
 import Logo from './components/Logo';
+import Loader from './components/Loader';
+import ErrorBoundary from './components/ErrorBoundary';
 import SplashScreen from './components/SplashScreen';
 import SidebarWelcome from './components/SidebarWelcome';
 import NotificationBell from './components/NotificationBell';
@@ -48,6 +35,8 @@ import UpdateNotification from './components/UpdateNotification';
 import BackupNotifier from './components/BackupNotifier';
 import WhatsNewModal from './components/WhatsNewModal';
 import { NotificationProvider } from './components/Notifications';
+import TipLayer from './components/TipLayer';
+import { ConversionSessionProvider } from './conversionSession';
 import { translations, Language } from './translations';
 import { AppUser, FileEntry, NotificationTarget } from '../shared/types';
 import {
@@ -61,6 +50,33 @@ import { DEFAULT_ZADANIA_FILTER, ZadaniaFilterSeed } from '../shared/zadania';
 import { releaseForVersion, shouldShowWhatsNew } from '../shared/release-notes';
 import { greetingName } from '../shared/app-users';
 import { NavigationProvider, HeaderNav } from './navigation';
+
+/*
+ * Views loaded on first visit. The app opens on the Pulpit, and the Converter
+ * is a click away from it, so those stay in the first bundle; the rest — the
+ * tax forms, meetings, mailing, signing, calendar, tasks — are fetched the
+ * first time somebody opens them, which keeps the start-up bundle a fraction
+ * of what it was. Adresy goes too: it is what ties the DN-1 module to the
+ * start-up bundle (it reuses its address fields).
+ */
+const Adresy = lazy(() => import('./views/Adresy'));
+const Mailing = lazy(() => import('./views/Mailing'));
+const MailingSzablony = lazy(() => import('./views/MailingSzablony'));
+const MailingPola = lazy(() => import('./views/MailingPola'));
+const MailingHistoria = lazy(() => import('./views/MailingHistoria'));
+const MailingTypy = lazy(() => import('./views/MailingTypy'));
+const Kalendarz = lazy(() => import('./views/Kalendarz'));
+const KalendarzTypy = lazy(() => import('./views/KalendarzTypy'));
+const KalendarzLokalizacje = lazy(() => import('./views/KalendarzLokalizacje'));
+const Zebrania = lazy(() => import('./views/Zebrania'));
+const Sprawozdania = lazy(() => import('./views/Sprawozdania'));
+const PlanyGospodarcze = lazy(() => import('./views/PlanyGospodarcze'));
+const PodatkiNieruchomosci = lazy(() => import('./views/PodatkiNieruchomosci'));
+const PodatkiCit = lazy(() => import('./views/PodatkiCit'));
+const PodatkiPit = lazy(() => import('./views/PodatkiPit'));
+const PodpisPdf = lazy(() => import('./views/PodpisPdf'));
+const PodpisHistoria = lazy(() => import('./views/PodpisHistoria'));
+const Zadania = lazy(() => import('./views/Zadania'));
 
 interface NavItemProps {
   icon: React.ComponentProps<typeof Icon>['name'];
@@ -78,7 +94,8 @@ const NavItem: React.FC<NavItemProps> = ({ icon, label, active, onClick, title, 
   <div
     className={`nav-item ${active ? 'active' : ''}${className ? ` ${className}` : ''}`}
     onClick={onClick}
-    title={title ?? label}
+    data-tip={title ?? label}
+    aria-label={label}
   >
     <Icon name={icon} />
     <span className="nav-label">{label}</span>
@@ -488,7 +505,7 @@ const App: React.FC = () => {
    * Open a record of the current view on its own screen (`useNavItem`). The
    * same record again only renames it — its name may arrive after its id.
    */
-  const openItem = (item: string, label: string, replace: boolean) =>
+  const openItem = useCallback((item: string, label: string, replace: boolean) =>
     setNav((prev) => {
       const here = prev.stack[prev.index];
       const next: AppLocation = { view: here.view, tab: here.tab, item, itemLabel: label };
@@ -498,10 +515,10 @@ const App: React.FC = () => {
         return { ...prev, stack };
       }
       return pushLocation(prev, next);
-    });
+    }), []);
 
   /** Leave a record for its view's list: a step back when the list is right behind. */
-  const closeItem = () =>
+  const closeItem = useCallback(() =>
     setNav((prev) => {
       const here = prev.stack[prev.index];
       if (here.item === undefined) return prev;
@@ -509,7 +526,7 @@ const App: React.FC = () => {
       const behind = prev.index > 0 ? prev.stack[prev.index - 1] : null;
       if (behind && sameLocation(behind, next)) return { ...prev, index: prev.index - 1 };
       return pushLocation(prev, next);
-    });
+    }), []);
 
   /** Kept as the old name so every existing call site reads unchanged. */
   const setCurrentView = (view: View) => navigate(view);
@@ -533,8 +550,9 @@ const App: React.FC = () => {
       return { ...prev, index };
     });
 
-  const goBack = () => step(-1);
-  const goForward = () => step(1);
+  // Stable, so the navigation context only changes when where the user is does.
+  const goBack = useCallback(() => step(-1), []);
+  const goForward = useCallback(() => step(1), []);
 
   // Whatever moved the history — a button, Alt+←, the mouse — the module ends
   // up on the tab that entry recorded, not on its most recently used one.
@@ -677,6 +695,10 @@ const App: React.FC = () => {
   };
 
   const t = translations[language];
+  const navLabels = useMemo(
+    () => ({ back: t.navBack, forward: t.navForward, group: t.navHistory }),
+    [t],
+  );
 
   // Who the app is talking to. The user list is the authority on names; before
   // anyone is named — or while the list is still loading — the mailbox stands
@@ -913,6 +935,7 @@ const App: React.FC = () => {
           <Login
             onSignedIn={handleSignedIn}
             notice={sessionExpired ? t.sessionExpiredNotice : null}
+            language={language}
           />
         </div>
       </NotificationProvider>
@@ -928,12 +951,15 @@ const App: React.FC = () => {
       goForward={goForward}
       backLabel={locationLabel(nav.stack[nav.index - 1])}
       forwardLabel={locationLabel(nav.stack[nav.index + 1])}
-      labels={{ back: t.navBack, forward: t.navForward, group: t.navHistory }}
+      labels={navLabels}
       item={nav.stack[nav.index].item ?? null}
       openItem={openItem}
       closeItem={closeItem}
     >
     {splash}
+    {/* The Converter tab's run of conversions: here, not in the view, so leaving
+        the view mid-batch does not stop it (see conversionSession.tsx). */}
+    <ConversionSessionProvider files={files} setFiles={setFiles} language={language}>
     <div className="app">
       <UpdateNotification language={language} />
       <BackupNotifier language={language} />
@@ -962,7 +988,7 @@ const App: React.FC = () => {
               type="button"
               className="sidebar-toggle"
               onClick={toggleSidebar}
-              title={sidebarCollapsed ? t.expandSidebar : t.collapseSidebar}
+              data-tip={sidebarCollapsed ? t.expandSidebar : t.collapseSidebar}
               aria-label={sidebarCollapsed ? t.expandSidebar : t.collapseSidebar}
               aria-expanded={!sidebarCollapsed}
             >
@@ -1015,6 +1041,17 @@ const App: React.FC = () => {
       </div>
 
       <div className="main-content">
+        {/* A view that throws takes only itself down, not the window. Keyed by
+            view and tab, so going elsewhere starts clean; the lazily loaded
+            views show the usual loader while their code arrives. */}
+        <ErrorBoundary key={`${currentView}:${nav.stack[nav.index].tab ?? ''}`} language={language}>
+        <Suspense
+          fallback={
+            <div className="content-body">
+              <Loader label={t.loading} />
+            </div>
+          }
+        >
         {currentView === 'pulpit' && (
           <Ksiegowania
             language={language}
@@ -1320,6 +1357,8 @@ const App: React.FC = () => {
             onSettingsRestored={loadSettings}
           />
         )}
+        </Suspense>
+        </ErrorBoundary>
       </div>
       </div>
       {sidebarOrderOpen && (
@@ -1358,7 +1397,10 @@ const App: React.FC = () => {
         />
       )}
       <Footer language={language} appVersion={appVersion} />
+      {/* Every `data-tip` hover hint in the app is shown by this one layer. */}
+      <TipLayer />
     </div>
+    </ConversionSessionProvider>
     </NavigationProvider>
     </NotificationProvider>
   );

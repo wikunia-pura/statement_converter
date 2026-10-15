@@ -1,363 +1,126 @@
-# Architecture Documentation
+# Architektura
 
-## Overview
+FileFunky to aplikacja desktopowa (Electron 44, React 18, TypeScript) dla biura obsługującego wspólnoty
+mieszkaniowe: wyciągi bankowe → pliki księgowe, podatki wspólnot, zebrania, mailing, kalendarz i zadania zespołu.
 
-Statement Converter to aplikacja desktopowa zbudowana w architekturze Electron (main process + renderer process) z wykorzystaniem React jako framework UI.
-
-## Diagram Architektury
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Electron App                         │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌──────────────────┐         ┌──────────────────┐     │
-│  │  Renderer Process│         │   Main Process   │     │
-│  │    (React UI)    │ ◄─IPC─► │   (Node.js)      │     │
-│  └──────────────────┘         └──────────────────┘     │
-│         │                             │                 │
-│         │                             │                 │
-│    ┌────▼────┐                  ┌────▼────┐           │
-│    │  Views  │                  │ Services│           │
-│    ├─────────┤                  ├─────────┤           │
-│    │Converter│                  │Database │           │
-│    │Settings │                  │Registry │           │
-│    │History  │                  │FS Utils │           │
-│    └─────────┘                  └─────────┘           │
-│                                       │                 │
-│                                  ┌────▼────┐           │
-│                                  │electron-│           │
-│                                  │  store  │           │
-│                                  └─────────┘           │
-└─────────────────────────────────────────────────────────┘
-                                       │
-                    ┌──────────────────┼──────────────────┐
-                    │                  │                  │
-              ┌─────▼─────┐      ┌────▼────┐       ┌────▼────┐
-              │  Config   │      │   DB    │       │  Output │
-              │   YAML    │      │  JSON   │       │   TXT   │
-              └───────────┘      └─────────┘       └─────────┘
-```
-
-## Core Components
-
-### 1. Main Process (`src/main/`)
-
-#### main.ts
-**Odpowiedzialność:** Zarządzanie oknem aplikacji i lifecycle
-- Tworzenie BrowserWindow
-- Obsługa trybu development/production
-- Setup IPC handlers
-- Zarządzanie zamykaniem aplikacji
-
-**Kluczowe funkcje:**
-- `createWindow()` - Tworzy główne okno
-- `setupIpcHandlers()` - Rejestruje handlery IPC
-
-#### database.ts
-**Odpowiedzialność:** Zarządzanie danymi aplikacji
-- Przechowywanie banków
-- Historia konwersji
-- Ustawienia użytkownika
-
-**Technologia:** electron-store (JSON storage)
-
-**API:**
-```typescript
-// Banks
-getAllBanks(): Bank[]
-addBank(name, converterId): Bank
-updateBank(id, name, converterId): void
-deleteBank(id): void
-
-// History
-addConversionHistory(data): void
-getAllHistory(): ConversionHistory[]
-clearHistory(): void
-
-// Settings
-getSetting(key): string
-setSetting(key, value): void
-```
-
-#### converterRegistry.ts
-**Odpowiedzialność:** Zarządzanie konwerterami i konwersja plików
-- Ładowanie definicji konwerterów z YAML
-- Routing do odpowiedniego konwertera
-- Wykonywanie konwersji
-
-**API:**
-```typescript
-getAllConverters(): Converter[]
-getConverter(id): Converter | undefined
-convert(converterId, inputPath, outputPath): Promise<void>
-```
-
-**Obecnie:** Mock implementation - zwraca "wikunia i pura"
-**TODO:** Implementacja prawdziwych parserów
-
-#### preload.ts
-**Odpowiedzialność:** Security bridge między main a renderer
-- Expose bezpiecznego API do renderer process
-- Context isolation
-- Type-safe IPC communication
-
-### 2. Renderer Process (`src/renderer/`)
-
-#### App.tsx
-**Odpowiedzialność:** Root component, routing, state management
-- Zarządza aktualnym widokiem (converter/settings/history)
-- Global state (files, selectedBank, theme, language)
-- Ładowanie ustawień przy starcie
-
-#### views/Converter.tsx
-**Odpowiedzialność:** UI dla konwersji plików
-- Wybór banku
-- Drag & drop / file selection
-- Wyświetlanie listy plików
-- Uruchamianie konwersji
-- Status updates
-
-**State:**
-- `banks` - lista banków
-- `isLoading` - status ładowania
-- `dragOver` - drag&drop state
-
-#### views/Settings.tsx
-**Odpowiedzialność:** UI dla konfiguracji
-- Zarządzanie bankami (CRUD)
-- Wybór folderu wyjściowego
-- Ustawienia wyglądu (dark mode)
-- Wybór języka
-- Lista dostępnych konwerterów
-
-**State:**
-- `banks`, `converters` - dane
-- `showAddBank`, `editingBank` - modal states
-- `isLoading` - status ładowania
-
-#### views/History.tsx
-**Odpowiedzialność:** UI dla historii konwersji
-- Wyświetlanie listy konwersji
-- Otwieranie skonwertowanych plików
-- Czyszczenie historii
-
-**State:**
-- `history` - lista konwersji
-- `isLoading` - status ładowania
-
-### 3. Shared (`src/shared/`)
-
-#### types.ts
-**Odpowiedzialność:** Wspólne typy TypeScript
-- Interfaces dla Bank, Converter, FileEntry, ConversionHistory
-- IPC channel constants
-- AppSettings type
-
-### 4. Configuration (`config/`)
-
-#### converters.yml
-Definicje dostępnych konwerterów:
-```yaml
-converters:
-  - id: ing_converter
-    name: Konwerter dla banku ING
-    description: Converter for ING bank statements
-```
-
-#### accepted-formats.yml
-Lista akceptowanych rozszerzeń plików:
-```yaml
-accepted_formats:
-  - .xml
-  - .txt
-  - .csv
-```
-
-## Data Flow
-
-### Konwersja pliku - szczegółowy flow:
+## Procesy
 
 ```
-1. User: Select Bank → Drag & Drop File
-   ↓
-2. Converter.tsx: addFiles()
-   - Tworzy FileEntry z status='pending'
-   - Dodaje do state `files`
-   ↓
-3. User: Click "Convert"
-   ↓
-4. Converter.tsx: handleConvert()
-   - Zmienia status na 'processing'
-   - Wywołuje: window.electronAPI.convertFile()
-   ↓
-5. Preload.ts: ipcRenderer.invoke()
-   - Przekazuje request do main process
-   ↓
-6. Main.ts: IPC Handler CONVERT_FILE
-   - Waliduje input file
-   - Pobiera bank z database
-   - Pobiera converter z registry
-   - Sprawdza output folder
-   ↓
-7. ConverterRegistry.ts: convert()
-   - Wykonuje konwersję (obecnie mock)
-   - Zapisuje plik do output folder
-   ↓
-8. Database.ts: addConversionHistory()
-   - Zapisuje wynik do historii
-   ↓
-9. Main.ts: Return result
-   - { success: true, outputPath: '...' }
-   ↓
-10. Converter.tsx: Update UI
-    - Zmienia status na 'success'
-    - Pokazuje przycisk "Open"
+┌──────────────── renderer (React, src/renderer) ───────────────┐
+│ widoki, komponenty, translations.ts (pl + en)                 │
+│ window.electronAPI  ── jedyna droga do reszty aplikacji        │
+└───────────────┬───────────────────────────────────────────────┘
+                │ IPC (ipcRenderer.invoke ↔ ipcMain.handle)
+┌───────────────▼──────── preload (src/main/preload.ts) ────────┐
+│ contextBridge.exposeInMainWorld('electronAPI', { … })         │
+└───────────────┬───────────────────────────────────────────────┘
+┌───────────────▼──────── main (Node, src/main) ────────────────┐
+│ main.ts: okno, tray, IPC, aktualizacje, kopie zapasowe        │
+│ database.ts ──► Supabase (dane wspólne)                       │
+│             └─► electron-store (ustawienia tego komputera)    │
+│ converterRegistry.ts ──► src/converters/<bank>                │
+│ moduły: podatki/, podpis/, zebrania/, mailing/, kalendarz/ …  │
+│ AI (Anthropic) wyłącznie stąd                                 │
+└───────────────────────────────────────────────────────────────┘
 ```
 
-## IPC Communication
+- **src/main** — proces główny. `main.ts` rejestruje handlery IPC (kanały w `IPC_CHANNELS`, `src/shared/types.ts`),
+  tworzy okno i tray (aplikacja może działać w tle dla powiadomień), uruchamia auto-update i automatyczne kopie.
+- **src/main/preload.ts** — wystawia rendererowi `window.electronAPI`; typy po stronie renderera:
+  `src/renderer/electronAPI.d.ts`.
+- **src/renderer** — UI. Widoki w `views/`, wspólne komponenty w `components/` (modale: `Modal.tsx` +
+  `FormSection.tsx`, podpowiedzi: `Tip.tsx`, powiadomienia: `Notifications.tsx`). Każdy tekst UI w
+  `translations.ts` w obu językach.
+- **src/shared** — czysta logika używana przez oba procesy (typy, dopasowanie adresów i kontrahentów, konta
+  lokali, obliczenia podatkowe, kalendarz, sprawozdania). Bez Electrona i bez DOM — to tu są testy jednostkowe.
+- **src/converters** — konwertery wyciągów, po jednym katalogu na format.
 
-### Channels
+## Dane
 
-**Banks:**
-- `db:get-banks` → `Bank[]`
-- `db:add-bank` → `Bank`
-- `db:update-bank` → `boolean`
-- `db:delete-bank` → `boolean`
+- **Supabase (Postgres + RLS)** — wspólna baza zespołu: banki, adresy, kontrahenci, historia konwersji,
+  stan Pulpitu (`ksiegowania_konwersje`), zadania, kalendarz, zebrania, sprawozdania i plany, mailing, podatki.
+  Klient (`supabaseClient.ts`) działa tylko w procesie głównym, z kluczem publishable; dostęp mają wyłącznie
+  zalogowani użytkownicy (polityki RLS). Sesja jest zapisywana w electron-store (na Windows szyfrowana DPAPI).
+  Klucz Anthropic leży w tabeli `app_config`, nie w binarkach.
+- **Migracje** — `supabase/*.sql`, idempotentne, uruchamiane ręcznie w SQL Editorze przed wydaniem, które
+  ich potrzebuje. Kod do tego czasu działa w trybie zgodności (brakująca kolumna nie wywraca widoku).
+- **electron-store** — ustawienia tego komputera (motyw, język, foldery, konfiguracja SMTP itp.). Do kopii
+  trafiają tylko `PORTABLE_SETTINGS`.
+- **Kopie zapasowe** — `backupService.ts`: pełny eksport danych z Supabase do JSON w `userData/backups`
+  co kilka godzin i przy zamknięciu, z retencją; ręczny eksport/przywracanie w Ustawieniach. Każda nowa
+  tabela lub ustawienie trwałe musi trafić do eksportu, przywracania i liczników (lista kontrolna przy
+  `BackupData` w `src/shared/types.ts`).
 
-**Converters:**
-- `converters:get-all` → `Converter[]`
+## Konwertery wyciągów
 
-**Files:**
-- `files:select` → `{fileName, filePath}[]`
-- `files:convert` → `ConversionResult`
-- `files:open` → `boolean`
+`converterRegistry.ts` mapuje identyfikator konwertera banku (`config/converters.yml`) na implementację:
 
-**Settings:**
-- `settings:get` → `AppSettings`
-- `settings:set-output-folder` → `boolean`
-- `settings:set-dark-mode` → `boolean`
-- `settings:set-language` → `boolean`
+| Katalog | Format |
+|---|---|
+| `pko-mt940`, `ing`, `alior`, `pocztowy` | MT940 (wspólny odczyt `:61:`/`:86:` w `converters/shared/mt940.ts`) |
+| `santander-xml` | XML Santandera (własny format) |
+| `bnp-xml`, `bos-xml` | XML CAMT.053 / CAMT.052 (wspólny odczyt w `converters/shared/camt.ts`) |
+| `pko-biznes` | ELIXIR w ZIP |
+| `pko-sa` | EXP |
 
-**History:**
-- `history:get-all` → `ConversionHistory[]`
-- `history:clear` → `boolean`
+Każdy konwerter dziedziczy po `BaseConverter` (`src/shared/base-converter.ts`): parsowanie → podział na
+wpływy i wydatki → regex/cache → AI (opcjonalnie) → podgląd do akceptacji → pliki księgowe. Zasady, których
+nie wolno złamać:
 
-## Security
+- konto lokalu tylko z `apartment-account.ts`; lokal z literą, sklejony lub ucięty numer są wstrzymywane do
+  przeglądu (strażniki), nigdy „naprawiane” heurystyką;
+- `typ` kontrahenta wyznacza kierunek: `Pozostałe przychody` tylko wpływy, `Pozostałe koszty` i
+  `Kontrahent` tylko wydatki;
+- prowizje bankowe to zwykłe wydatki (bez filtrów);
+- wyniki AI są przypisywane po `index`, brak lub dubel odpowiedzi = wiersz do przeglądu.
 
-### Context Isolation
-- Renderer process NIE MA bezpośredniego dostępu do Node.js
-- Komunikacja tylko przez preload API
-- Żadne `require()` w renderer
+## Moduły
 
-### Safe API Exposure
-```typescript
-// ❌ ZŁE
-contextBridge.exposeInMainWorld('electron', electron);
+- **Księgowania / Pulpit** — konwersje miesiąca per wspólnota, oznaczenia „zaksięgowane”, priorytety, uwagi
+  i wzmianki @ (stan w `ksiegowania_konwersje`, nigdy w `history`, którą Historia czyści).
+- **Konwerter, Historia, Homebanking, Scalanie wpłat** — wyciągi i pliki przelewów; Homebanking kieruje
+  linie do banku po rachunku nadawcy.
+- **Adresy, Kontrahenci, Banki** — słowniki dopasowania (z regułami lokali i zarządem wspólnoty).
+- **Mailing** — szablony (HTML sanityzowany), typy, pola, wysyłka SMTP (nodemailer) z historią.
+- **Kalendarz, Zadania, Zebrania** — spotkania z terminem materiałów, zadania z komentarzami i plikami,
+  zebrania z wersjami dokumentów, uchwałami i pakietem PDF.
+- **Sprawozdania, Plany gospodarcze** — import sprawozdań z PDF vDom (`zebrania/sprawozdanieParser.ts`),
+  plan liczony ze sprawozdania. Kwoty INTER-EJ nigdy nie trafiają do tekstów ani AI (`shared/inter-ej.ts`).
+- **Podatki** — DN-1 (podatek od nieruchomości, PDF na wzorze), CIT-8 z CIT-8/O i PIT (PIT-11/PIT-4R):
+  XML, PDF, wysyłka przez bramkę e-Deklaracji (`podatki/eDeklaracjeBramka.ts`) z UPO.
+- **Podpis kwalifikowany** — karta Szafir przez PKCS#11 (`podpis/karta.ts`, moduł natywny `pkcs11js`),
+  podpisy XAdES/PAdES/CAdES; klucz prywatny nie opuszcza karty.
+- **Odczyty liczników, Noty świadczeń, Zaliczki** — import plików dostawców i PDF (zaliczki przez AI z
+  kontrolą sum strony).
 
-// ✅ DOBRE
-contextBridge.exposeInMainWorld('electronAPI', {
-  getBanks: () => ipcRenderer.invoke('db:get-banks'),
-  // ... tylko potrzebne metody
-});
-```
+## Bezpieczeństwo
 
-## Storage
+- Okno: `contextIsolation: true`, `nodeIntegration: false`, sandbox renderera (domyślny w Electronie);
+  nawigacja i nowe okna zablokowane (`lockNavigation`), uprawnienia przeglądarki odrzucane poza zapisem do
+  schowka. Podgląd PDF w osobnym oknie z `sandbox: true`.
+- CSP wstrzykiwane przy buildzie (`vite.config.ts`): skrypty tylko z paczki, bez `eval` i inline, bez ramek;
+  renderer nie łączy się z siecią — Supabase i AI działają w procesie głównym.
+- HTML z bazy (szablony, uchwały, treści maili) przechodzi przez DOMPurify z listą dozwolonych tagów
+  (`src/renderer/sanitize.ts`).
+- Ścieżki z renderera (a więc z bazy) są sprawdzane w `src/main/pathGuards.ts` przed `shell.openPath` /
+  `showItemInFolder`: tylko ścieżki absolutne, bez `..`, bez obcych hostów UNC, bez plików wykonywalnych
+  (także po rozwiązaniu dowiązań), bez strumieni NTFS.
+- Repo jest publiczne: żadnych kluczy w kodzie i binarkach, `test-data/` tylko lokalnie (gitignore).
 
-### electron-store
-- **Lokalizacja:** 
-  - macOS: `~/Library/Application Support/statement-converter/`
-  - Windows: `%APPDATA%\statement-converter\`
-- **Format:** JSON
-- **Zawartość:** Banks, History, Settings
+## Narzędzia
 
-### File System
-- **Input:** Pliki wybrane przez użytkownika
-- **Output:** Domyślnie `Documents/StatementConverter/`
-- **Config:** `config/*.yml` w app bundle
+- `npm run dev` — tsc w trybie watch dla main + Vite (renderer) + Electron.
+- `npm run type-check` — oba tsconfigi (`tsconfig.main.json`, `tsconfig.renderer.json`); Vite nie sprawdza typów.
+- `npm test` — Vitest (`vitest.config.ts`): pliki `*.test.ts` obok kodu w `src/` i `scripts/`, środowisko
+  Node, strefa `Europe/Warsaw`, tylko dane syntetyczne.
+- `npm run lint` — ESLint (`eslint.config.mjs`); natywny `title` i `cursor: help` to błąd.
+- `scripts/*-eval.ts`, `scripts/*-check.ts` — dłuższe harnessy (`npm run eval:lokal-cases` bez plików wyciągów).
 
-## Error Handling
+## Build i wydanie
 
-### Strategie:
-
-1. **Validation errors** - Rzucane przed operacją
-   ```typescript
-   if (!fs.existsSync(inputPath)) {
-     throw new Error('Input file not found');
-   }
-   ```
-
-2. **IPC errors** - Catch w handler, return error object
-   ```typescript
-   try {
-     // operation
-     return { success: true, ... };
-   } catch (error: unknown) {
-     return { success: false, error: errorMessage };
-   }
-   ```
-
-3. **UI errors** - Wyświetlane użytkownikowi
-   - Alerts dla krytycznych błędów
-   - Status w tabeli dla błędów konwersji
-   - Error messages w history
-
-## Performance Considerations
-
-### Current
-- Synchronous file operations (small files, OK)
-- In-memory state management (React useState)
-- No virtualization (lists < 1000 items)
-
-### Future Optimizations
-- Worker threads dla dużych plików
-- Virtualized lists (react-window)
-- Incremental parsing dla XML/CSV
-- Batch operations queue
-
-## Build Process
-
-```
-1. TypeScript Compilation
-   - Main process: tsconfig.main.json → dist/main/
-   - Types checking: tsconfig.json
-
-2. Vite Build
-   - Renderer process: vite.config.ts → dist/renderer/
-   - React bundling + optimization
-
-3. Electron Builder
-   - Package into executable
-   - Include: dist/, config/, node_modules/
-   - Output: release/
-```
-
-## Testing Strategy (TODO)
-
-```
-┌─────────────────────────────────┐
-│ Unit Tests                      │
-│ - Converters                    │
-│ - Database operations           │
-│ - Utils functions               │
-└─────────────────────────────────┘
-
-┌─────────────────────────────────┐
-│ Integration Tests               │
-│ - IPC communication             │
-│ - File operations               │
-│ - Settings persistence          │
-└─────────────────────────────────┘
-
-┌─────────────────────────────────┐
-│ E2E Tests                       │
-│ - Full user flows               │
-│ - UI interactions               │
-│ - File conversion scenarios     │
-└─────────────────────────────────┘
-```
-
----
-
-**Autorzy:** Wikunia & Pura  
-**Ostatnia aktualizacja:** 2026-02-06
+- `npm run build` — `tsc -p tsconfig.main.json` → `dist/main`, `vite build` → `dist/renderer`.
+- `npm run package:mac` / `package:win` — electron-builder do `release/` (bez publikacji).
+- Wydanie: podbicie wersji + wpis w `src/shared/release-notes.ts` („Co nowego”), migracje SQL uruchomione w
+  Supabase, potem tag `v*` → GitHub Actions (`.github/workflows/build.yml`) buduje macOS i Windows i tworzy
+  GitHub Release, z którego aplikacje pobierają aktualizację (`electron-updater`, zob. docs/AUTO_UPDATE.md).
+- Zależności: lockfile sprawdzany przez `npx npm@11 ci --dry-run`; nie generować go `npm install --package-lock-only`.

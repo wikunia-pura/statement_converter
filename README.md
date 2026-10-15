@@ -1,228 +1,95 @@
-# Statement Converter
+# FileFunky (statement_converter)
 
-A desktop application for converting bank statements from various formats to a unified format for accounting software used by housing communities.
+A desktop application for an office that manages housing communities: it turns Polish bank statements into
+accounting files and handles the communities' taxes, meetings, mailing, calendar and team tasks.
 
 **Developers**: Wikunia & Pura
 
 ## Features
 
-- **Multi-format Support**: Handles XML, MT940, CSV, Excel, and custom text formats
-- **Bank Management**: Configure multiple banks and assign them to appropriate converters
-- **Drag & Drop**: Easy file upload via drag and drop or file selection
-- **Batch Processing**: Convert multiple files at once
-- **Duplicate Detection**: Automatically detects duplicate files in the list
-- **Conversion History**: Track all conversions with detailed history and pagination (100 entries per page)
-- **Dark Mode**: Switch between light and dark themes
-- **Multilingual**: Polish and English language support
-- **Settings Export/Import**: Backup and restore your configuration
-- **Auto-Update**: Automatic updates via GitHub Releases
-- **Cross-platform**: Works on Windows and macOS
+- **Statement conversion** for 9 bank formats (MT940, Santander XML, CAMT XML, ELIXIR ZIP, EXP): apartment and contractor
+  matching by rules, regex and optional AI, with a review screen before anything is booked
+- **Księgowania / Pulpit**: the month's conversions per community, booking marks, priorities, notes, @mentions
+- **Adresy, Kontrahenci, Banki**: the dictionaries the matching runs on
+- **Mailing**: templates, recipients and SMTP sending with history
+- **Kalendarz, Zadania, Zebrania**: meetings with document deadlines, tasks, meeting packages and resolutions
+- **Sprawozdania, Plany gospodarcze**: statements imported from vDom PDFs, budget plans
+- **Podatki**: DN-1, CIT-8 and PIT forms, e-Deklaracje submission, qualified signature with a Szafir card
+- **Homebanking, Scalanie wpłat, Odczyty liczników, Noty świadczeń, Zaliczki**: file tools for the office
+- Shared data in Supabase for the whole team, automatic backups, Polish and English UI, dark mode,
+  auto-update from GitHub Releases, Windows and macOS (Apple Silicon)
 
 ## Installation
 
-### For End Users
-
 Download the latest version from [GitHub Releases](https://github.com/wikunia-pura/statement_converter/releases):
 
-#### Windows
-1. Download `FileFunky-Setup-X.X.X.exe`
-2. Run the installer
-3. The application will auto-update when new versions are available
+- **Windows**: `FileFunky-Setup-X.X.X.exe`, then run the installer.
+- **macOS (Apple Silicon)**: the `.dmg` (or `.zip`); on first launch see the
+  [macOS Installation Guide](docs/MACOS_INSTALLATION.md).
 
-#### macOS
-1. Download the appropriate ZIP file:
-   - Apple Silicon (M1/M2/M3): `FileFunky-X.X.X-arm64.zip`
-   - Intel Mac: `FileFunky-X.X.X-x64.zip`
-2. Unzip the file (double-click)
-3. Drag FileFunky to Applications folder
-4. **First run**: Right-click → Open → Confirm
-   - See [macOS Installation Guide](docs/MACOS_INSTALLATION.md) for details
-   - Only needed once, then works normally
+The app updates itself when a new release is published. Signing in needs an account in the team's Supabase
+project.
 
-### For Developers
+## Development
 
-1. Install dependencies:
+Requirements: **Node.js 24** (`.nvmrc`; `engines` allows >= 22.12) and npm 11.
+
 ```bash
-npm install
+npm ci          # install exactly what package-lock.json pins
+npm run dev     # main process (tsc --watch) + Vite dev server + Electron
 ```
 
-2. Run the application in development mode:
-```bash
-npm run dev
-```
-
-### Building for Production
-
-#### Windows
-```bash
-npm run build
-npm run package:win
-```
-
-#### macOS
-```bash
-npm run build
-npm run package:mac
-```
-
-The packaged application will be available in the `release/` directory.
-
-## Usage
-
-### 1. Configure Settings
-
-- Go to **Settings** view
-- **Appearance**: Toggle dark mode and select language (Polish/English)
-- **Output Folder**: Set where converted files will be saved
-- **Banks**: Add banks and assign them to converters
-- **Export/Import**: Backup or restore your settings
-- **Available Converters**: View all configured converter types
-
-### 2. Convert Files
-
-- Go to **Converter** view
-- Select a bank from the dropdown
-- Drag & drop files or click to select them
-- Files appear in the table
-- Click **Convert** for individual files or **Convert All** for batch processing
-- Successfully converted files can be opened directly from the table
-
-### 3. View History
-
-- Go to **History** view
-- See all past conversions with timestamps, status, and error messages
-- Browse through history with pagination (100 entries per page)
-- Open successfully converted files directly
-- Clear entire history if needed
-
-## Configuration
-
-### Adding Converters
-
-Edit `config/converters.yml` to add new converter types:
-
-```yaml
-converters:
-  - id: my_converter
-    name: My Converter
-    description: Description of the converter
-```
-
-### Accepted File Formats
-
-The application accepts the following bank statement formats:
-- `.xml` - XML statements
-- `.txt` - Text-based formats
-- `.940`, `.mt940` - MT940 format
-- `.csv` - CSV files
-- `.xlsx`, `.xls` - Excel spreadsheets
-
-## Architecture
-
-- **Electron**: Main process and window management
-- **React**: User interface with modern component architecture
-- **TypeScript**: Type-safe development across the entire codebase
-- **Electron Store**: Persistent local storage for configuration and history
-- **Vite**: Fast development server and optimized production builds
-- **YAML**: Converter configuration files
-
-## Project Structure
-
-```
-statement_converter/
-├── config/              # Configuration files
-│   └── converters.yml   # Converter definitions
-├── resources/           # Application icons
-│   ├── icon.icns       # macOS icon
-│   └── icon.ico        # Windows icon
-├── src/
-│   ├── main/           # Electron main process
-│   │   ├── main.ts
-│   │   ├── database.ts
-│   │   ├── converterRegistry.ts
-│   │   └── preload.ts
-│   ├── renderer/       # React UI
-│   │   ├── views/      # Main application views
-│   │   ├── components/ # Reusable components
-│   │   ├── assets/     # Images and static files
-│   │   ├── App.tsx
-│   │   └── translations.ts
-│   └── shared/         # Shared types and utilities
-│       ├── types.ts
-│       └── utils.ts
-└── package.json
-```
-
-## Development Notes
-
-- The application uses **electron-store** for persistent data storage
-- Converter implementations are modular and can be extended via `converterRegistry.ts`
-- Currently generates mock output ("wikunia i pura") for testing - real converters need to be implemented
-- UI supports responsive design with dark mode
-- All user-facing text is internationalized (i18n) via `translations.ts`
-- File icons are automatically generated from the logo with rounded corners
-
-## Documentation
-
-- 🏗️ [Architecture Guide](ARCHITECTURE.md) - Detailed architecture overview
-- 📊 [Optimization Report](OPTIMIZATION_REPORT.md) - Lista zrealizowanych optymalizacji i propozycje dalszych ulepszeń
-- 🤝 [Contributing Guide](CONTRIBUTING.md) - Jak rozwijać aplikację i zgłaszać zmiany
-- 🧪 [Test Data](test-data/README.md) - Przykładowe dane testowe dla konwerterów
-- 🔄 [Auto-Update Guide](docs/AUTO_UPDATE.md) - How to release updates via GitHub
-
-## Requirements
-
-- **Node.js**: 18.x or higher
-- **npm**: 9.x or higher
-- **Operating System**: 
-  - macOS 10.12+ (Sierra or later)
-  - Windows 10 or later
+The AI key is read at runtime from Supabase (`app_config`) after sign-in; a local `config/ai-config.yml`
+(see `config/ai-config.example.yml`) overrides it for development. Never commit keys: the repository is public.
 
 ## Scripts
 
-```bash
-# Development
-npm run dev              # Start development mode
-npm run build            # Build for production
+| Script | What it does |
+|---|---|
+| `npm run dev` | Development mode |
+| `npm run build` | Compile the main process and bundle the renderer into `dist/` |
+| `npm run type-check` | TypeScript check of both the main and the renderer project |
+| `npm test` | Unit tests (Vitest), `npm run test:watch` to keep them running |
+| `npm run lint` / `lint:fix` | ESLint |
+| `npm run format` / `format:check` | Prettier |
+| `npm run eval:lokal-cases` | Apartment-number regression cases (no statement files needed) |
+| `npm run package:mac` / `package:win` | Build installers into `release/` (no publishing) |
 
-# Code Quality
-npm run lint             # Check for linting errors
-npm run lint:fix         # Fix linting errors automatically
-npm run format           # Format code with Prettier
-npm run type-check       # TypeScript type checking
+## Project structure
 
-# Packaging
-npm run package:win      # Build Windows installer
-npm run package:mac      # Build macOS .dmg
+```
+config/            converter list (converters.yml), example AI and backup configs
+docs/              auto-update, release, macOS install and troubleshooting guides
+resources/         application icons
+scripts/           evaluation and check harnesses (tsx)
+src/
+  main/            Electron main process: IPC, Supabase data layer, modules (podatki, podpis, zebrania, mailing …)
+  renderer/        React UI: views/, components/, translations.ts
+  shared/          pure logic shared by both processes (matching, accounts, taxes, calendar …)
+  converters/      one folder per statement format, plus shared MT940/CAMT readers
+supabase/          idempotent SQL migrations, run by hand in the Supabase SQL Editor
 ```
 
-## Building with GitHub Actions
+Unit tests live next to the code they test (`*.test.ts`) and use synthetic data only.
 
-The application uses GitHub Actions for automated building and releasing:
+## Releasing
 
-### Quick Start
+1. Bump the version in `package.json` and add the entry to `src/shared/release-notes.ts` ("Co nowego").
+2. Run any new `supabase/*.sql` migration the release needs.
+3. Make sure `npm run type-check`, `npm test` and `npm run lint` pass.
+4. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`. GitHub Actions builds macOS and Windows and
+   publishes the GitHub Release; installed apps pick it up through auto-update.
 
-1. **Add API Key to GitHub Secrets**:
-   - Go to your repository → Settings → Secrets and variables → Actions
-   - Add secret: `ANTHROPIC_API_KEY` with your API key
+No AI key is baked into the build. See [GitHub Actions Setup](docs/GITHUB_ACTIONS_SETUP.md) and the
+[Auto-Update Guide](docs/AUTO_UPDATE.md).
 
-2. **Create a Release**:
-   ```bash
-   git tag v2.0.4
-   git push origin v2.0.4
-   ```
+## Documentation
 
-3. **Download artifacts** from the Actions tab or from the GitHub Release
-
-📚 **Full Guide**: See [GitHub Actions Setup](docs/GITHUB_ACTIONS_SETUP.md) for detailed instructions
-
-### What Gets Built
-
-- **macOS**: `.dmg` installer with auto-update support
-- **Windows**: `.exe` installer with auto-update support
-- **Artifacts**: Automatically uploaded to GitHub Releases
-
-The AI configuration is automatically injected during the build process from GitHub Secrets, so end users don't need to configure anything.
+- [Architecture](ARCHITECTURE.md) — processes, data, converters, modules, security model
+- [Contributing](CONTRIBUTING.md)
+- [Supabase setup](SUPABASE_SETUP.md)
+- [Auto-Update](docs/AUTO_UPDATE.md) and [Troubleshooting updates](docs/TROUBLESHOOTING_UPDATES.md)
+- [Converter design](docs/CONVERTER_DESIGN.md)
 
 ## License
 

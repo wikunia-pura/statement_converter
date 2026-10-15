@@ -10,6 +10,7 @@ import {
 } from '../../shared/calendar';
 import { personLabel } from '../../shared/app-users';
 import { translations, Language } from '../translations';
+import { localeOf } from '../../shared/format';
 import Icon from './Icon';
 import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
 import { FormSection } from './FormSection';
@@ -39,7 +40,7 @@ const SpotkaniePreviewModal: React.FC<Props> = ({
   onClose,
 }) => {
   const t = translations[language];
-  const locale = language === 'en' ? 'en-GB' : 'pl-PL';
+  const locale = localeOf(language);
   const color = normalizeHexColor(typ?.kolor ?? DEFAULT_TYP_COLOR);
   const materialyLabels: Record<SpotkanieMaterialyStatus, string> = {
     brak: t.kalMatStateBrak,
@@ -115,7 +116,7 @@ const SpotkaniePreviewModal: React.FC<Props> = ({
                   <span className="kal-card__label">{t.kalFieldParticipants}</span>
                   <div className="kal-people">
                     {s.uczestnicy.map((person) => (
-                      <span key={person.userId} className="kal-person kal-person--static" title={person.email}>
+                      <span key={person.userId} className="kal-person kal-person--static" data-tip={person.email}>
                         <Icon name="users" size={12} />
                         <span className="kal-person__label">{personLabel(person)}</span>
                       </span>
@@ -131,7 +132,7 @@ const SpotkaniePreviewModal: React.FC<Props> = ({
                       <span
                         key={`z-${m.imieNazwisko}`}
                         className="kal-person kal-person--static kal-person--board"
-                        title={m.email ?? undefined}
+                        data-tip={m.email ?? undefined}
                       >
                         <Icon name="home" size={12} />
                         <span className="kal-person__label">{m.imieNazwisko}</span>

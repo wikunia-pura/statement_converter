@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDropdownPlacement } from '../hooks/useDropdownPlacement';
-import { titleIfTruncated, useMenuInViewport } from '../hooks/useMenuInViewport';
+import { tipIfTruncated, useMenuInViewport } from '../hooks/useMenuInViewport';
 
 export interface SearchableOption {
   /** Option value. Numbers should be pre-stringified by the caller. */
@@ -252,7 +252,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
             }
             onClick={() => pick(opt.value)}
             onMouseEnter={() => setActiveIndex(i)}
-            title={opt.hint ? `${opt.label} — ${opt.hint}` : opt.label}
+            data-tip={opt.hint ? `${opt.label} — ${opt.hint}` : opt.label}
           >
             <div className="ui-select__option-label">{opt.label}</div>
             {opt.hint && <div className="ui-select__option-hint">{opt.hint}</div>}
@@ -290,9 +290,9 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
           }
         }}
         disabled={disabled}
-        title={title}
+        data-tip={title}
         // A value cut with an ellipsis shows in full on hover.
-        onMouseEnter={title ? undefined : (e) => titleIfTruncated(e.currentTarget)}
+        onMouseEnter={title ? undefined : (e) => tipIfTruncated(e.currentTarget)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-label={ariaLabel}

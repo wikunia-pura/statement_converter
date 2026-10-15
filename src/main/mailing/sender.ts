@@ -18,12 +18,20 @@ export function validateSmtp(config: SmtpCredentials): string | null {
   return null;
 }
 
-function createTransport(config: SmtpCredentials): Transporter {
+/**
+ * A batch's transport is a pool: one connection, logged in once and reused for up to `maxMessages` mails
+ * before it reconnects, and at most `rateLimit` mails a second — a send to 150 communities used to open 150
+ * connections and log in 150 times in a burst, which is what gets a mailbox throttled or blocked.
+ */
+const POOL = { pool: true, maxConnections: 1, maxMessages: 100, rateDelta: 1000, rateLimit: 3 } as const;
+
+function createTransport(config: SmtpCredentials, pool = false): Transporter {
   return nodemailer.createTransport({
     host: config.host.trim(),
     port: config.port,
     secure: config.secure,
     auth: { user: config.user.trim(), pass: config.pass },
+    ...(pool ? POOL : {}),
   });
 }
 
@@ -72,23 +80,40 @@ export interface OutgoingMail {
   inlineImages?: InlineImage[];
 }
 
+/** Who the server took the mail for, and whom it refused (lower-cased addresses). */
+export interface SendOutcome {
+  accepted: string[];
+  rejected: string[];
+}
+
+const adresy = (list: unknown): string[] =>
+  (Array.isArray(list) ? list : [])
+    .map((a) => (typeof a === 'string' ? a : (a as { address?: unknown })?.address))
+    .filter((a): a is string => typeof a === 'string' && a.trim() !== '')
+    .map((a) => a.trim().toLowerCase());
+
 /**
  * Sender bound to one set of credentials, reused across every community in a
- * send so a batch opens a single SMTP connection instead of one per message.
+ * send over one pooled SMTP connection (see `POOL`).
  */
 export class MailingSender {
   private transport: Transporter;
 
   constructor(private config: SmtpCredentials) {
-    this.transport = createTransport(config);
+    this.transport = createTransport(config, true);
   }
 
   get from(): string {
     return this.config.user.trim();
   }
 
-  async send(mail: OutgoingMail): Promise<void> {
-    await this.transport.sendMail({
+  /**
+   * Sends one mail. The server may take it for some recipients and refuse others (a mailbox that does not
+   * exist, a full one): the mail then went out, but not to everyone — `rejected` says to whom not. When it
+   * refuses them all, nodemailer rejects with an error.
+   */
+  async send(mail: OutgoingMail): Promise<SendOutcome> {
+    const info = await this.transport.sendMail({
       from: formatFrom(this.config),
       to: mail.to,
       // SMTP leaves no copy in the mailbox's Sent folder; a self-BCC is the
@@ -111,6 +136,7 @@ export class MailingSender {
         })),
       ],
     });
+    return { accepted: adresy(info.accepted), rejected: adresy(info.rejected) };
   }
 
   close(): void {

@@ -17,9 +17,9 @@
 import { ConversionCancelledError, throwIfCancelled } from './conversion-cancel';
 import * as path from 'path';
 import { AIExtractor } from './ai-extractor';
-import { ExtractionCache } from './extraction-cache';
-import { MatchCache, contractorSetFingerprint } from './match-cache';
-import { ContractorMatcher, MatchedContractor } from './contractor-matcher';
+import { ExtractionCache, extractionCacheScope } from './extraction-cache';
+import { MatchCache } from './match-cache';
+import { ContractorMatcher, MatchedContractor, GLUED_MATCH_CONFIDENCE } from './contractor-matcher';
 import {
   EXPENSE_MATCH_TYPES,
   DEFAULT_EXPENSE_AI_BATCH_SIZE,
@@ -27,16 +27,47 @@ import {
   matchExpensesWithAI,
   runWithConcurrency,
 } from './expense-ai-matcher';
-import { Kontrahent, Adres, KontrahentTyp } from './types';
+import { Kontrahent, Adres, KontrahentTyp, DroppedStatementLine, ReviewHoldReason } from './types';
 import {
   needsExplicitAccount,
   apartmentGlueInText,
   apartmentSplitInText,
   apartmentWidthImplausible,
+  isAccountSymbol,
   HELD_BACK_CONFIDENCE,
 } from './apartment-account';
 
 const INCOME_MATCH_TYPES: KontrahentTyp[] = ['Pozostałe przychody'];
+
+/** The warning a held row carries in the preview file, per reason. */
+const HOLD_WARNINGS: Record<ReviewHoldReason, string> = {
+  'reversal': 'Reversal (storno) entry - held for review, never booked automatically',
+  'batch-booking': 'Batch entry with several counterparties - held for review',
+  'invalid-account': 'The matched entry\'s account is not a valid account symbol - fix it in Kontrahenci',
+  'ai-answer-missing': 'AI returned no usable answer for this transaction - held for review',
+  'glued-name': 'Contractor name glued to the neighbouring text - confirm the contractor',
+  'virtual-account-debit': 'Debit marked as a virtual-account (SWRK) movement - check it before booking',
+};
+
+/**
+ * The confidence an income row is gated on: its apartment confidence, but never
+ * more than the overall score.
+ *
+ * The overall score is the average of address, apartment and tenant — so an
+ * apartment the AI was only 40% sure of, next to a confident address and name,
+ * averaged out at 80 and was booked without review. The apartment is what decides
+ * where the money goes, so it is what the gate reads; taking the lower of the two
+ * keeps every row the average used to hold back still held.
+ */
+export function incomeGateConfidence(extracted: {
+  confidence: { apartment: number; overall: number };
+}): number {
+  const { apartment, overall } = extracted.confidence;
+  return Math.min(
+    Number.isFinite(apartment) ? apartment : 0,
+    Number.isFinite(overall) ? overall : 0,
+  );
+}
 
 // ============================================================
 // Shared interfaces
@@ -49,6 +80,9 @@ const INCOME_MATCH_TYPES: KontrahentTyp[] = ['Pozostałe przychody'];
 export interface NormalizedTransaction {
   descBase: string;
   descOpt: string;
+  /** Subfields of a glued descBase / descOpt, for contractor matching only (see AITransaction). */
+  descBaseParts?: string[];
+  descOptParts?: string[];
   exeDate: string;
   creatDate: string;
   value: number;
@@ -116,6 +150,8 @@ export interface BaseExtractedData {
    * known for it, so the transaction must not be booked automatically.
    */
   needsAccount?: boolean;
+  /** Why the row is held for review whatever its confidence (storno, batch entry…). */
+  holdReason?: ReviewHoldReason;
 }
 
 /**
@@ -163,7 +199,10 @@ export interface BaseImportResult<TRaw> {
       manual: number;
     };
   };
-  errors: any[];
+  /** Statement lines the parser could not turn into transactions. */
+  dropped: DroppedStatementLine[];
+  /** Same list as `dropped`, kept under the older name. */
+  errors: DroppedStatementLine[];
 }
 
 /**
@@ -182,6 +221,12 @@ export interface ParseResult<TRaw> {
   transactions: TRaw[];
   /** Extra info for logging (e.g., opening/closing balance) */
   logExtra?: string;
+  /**
+   * Lines the parser skipped because it could not read them (an amount that does
+   * not parse, a line of the wrong shape). Never dropped silently: the conversion
+   * goes to the review screen, which lists them for the user to acknowledge.
+   */
+  dropped?: DroppedStatementLine[];
 }
 
 /**
@@ -282,7 +327,9 @@ export abstract class BaseConverter<TRaw> {
       aiConcurrency: config.aiConcurrency ?? 3,
     };
 
-    this.cache = new ExtractionCache(this.config.cachePath);
+    // Scoped to the community this converter was built for, so one community's
+    // answer for "CZYNSZ LOKAL 12" is never served to another.
+    this.cache = new ExtractionCache(this.config.cachePath, extractionCacheScope(this.config.addresses));
     // Contractor matches live in their own file next to the extraction cache, so
     // every converter gets one without threading a second path through all the
     // construction sites in converterRegistry.
@@ -290,7 +337,9 @@ export abstract class BaseConverter<TRaw> {
       this.config.cachePath
         ? path.join(path.dirname(this.config.cachePath), 'match-cache.json')
         : undefined,
-      contractorSetFingerprint(this.config.contractors ?? []),
+      // Undefined (no list given) skips the per-entry check; there is then no
+      // matcher either, so no cached id can be resolved and served anyway.
+      this.config.contractors,
     );
 
     if (this.config.apiKey && this.config.aiProvider !== 'none') {
@@ -370,6 +419,15 @@ export abstract class BaseConverter<TRaw> {
   }
 
   /**
+   * Why this transaction must be held for review whatever it matches, or null.
+   * Format-specific: an MT940 storno, a camt batch entry with several
+   * counterparties. A held row is never auto-approved.
+   */
+  protected holdReason(_transaction: TRaw): ReviewHoldReason | null {
+    return null;
+  }
+
+  /**
    * Whether AI is allowed for expense matching *during a conversion* — opt-in,
    * and off unless a caller explicitly asks for it.
    *
@@ -433,9 +491,12 @@ export abstract class BaseConverter<TRaw> {
 
     throwIfCancelled(this.signal);
     this.emitProgress('parse', 'Parsowanie pliku...');
-    const { transactions, logExtra } = await this.doParse(content);
+    const { transactions, logExtra, dropped = [] } = await this.doParse(content);
     console.log(`📄 Parsed ${transactions.length} transactions`);
     if (logExtra) console.log(`   ${logExtra}`);
+    if (dropped.length > 0) {
+      console.warn(`⚠️  ${dropped.length} statement line(s) could not be read - they go to review`);
+    }
 
     throwIfCancelled(this.signal);
     this.emitProgress('filter', 'Filtrowanie transakcji...');
@@ -449,7 +510,7 @@ export abstract class BaseConverter<TRaw> {
 
     throwIfCancelled(this.signal);
     this.emitProgress('done', 'Generowanie wyników...', 97);
-    const result = this.generateResult(processed, transactions.length);
+    const result = this.generateResult(processed, transactions.length, dropped);
 
     console.log('✅ Conversion complete');
     console.log(`   Auto-approved: ${result.summary.autoApproved}`);
@@ -608,16 +669,15 @@ export abstract class BaseConverter<TRaw> {
       }
 
       const transaction = transactions[i];
-      let extracted: BaseExtractedData | null = null;
+      const norm = this.normalize(transaction);
 
       // Income-side name match against 'Pozostałe przychody' entries.
       // Runs before cache/regex so categorized deposits (lokaty, odsetki, etc.)
       // route straight to the configured income account.
       if (this.contractorMatcher) {
-        const norm = this.normalize(transaction);
         const incomeMatch = this.contractorMatcher.match(norm, INCOME_MATCH_TYPES);
         if (incomeMatch.contractor && incomeMatch.confidence >= 90) {
-          extracted = this.buildIncomeCategoryExtracted(transaction, incomeMatch.contractor);
+          const extracted = this.buildIncomeCategoryExtracted(transaction, incomeMatch.contractor);
           processed.push(
             this.createProcessedTransaction(transaction, extracted, 'income')
           );
@@ -625,39 +685,41 @@ export abstract class BaseConverter<TRaw> {
         }
       }
 
-      // Optional: check cache first
+      // Regex runs before the cache is consulted, because it carries the user's
+      // apartment rules and a rule must win over a remembered answer. The cache
+      // holds what the AI said before the rule existed: a rule "ANNA NOWAK → 21"
+      // added after the AI answered 12 used to be ignored until the entry expired.
+      const fromRegex = this.config.useRegexFirst ? this.extractWithRegex(transaction) : null;
+      if (fromRegex?.matchedByManualMapping) {
+        processed.push(
+          this.createProcessedTransaction(transaction, fromRegex, 'income')
+        );
+        continue;
+      }
+
+      // Optional: the remembered answer, once no rule applies.
       if (this.shouldCheckCacheBeforeRegex()) {
-        const norm = this.normalize(transaction);
-        extracted = this.cache.get(norm.descBase, norm.descOpt) as BaseExtractedData | null;
-        if (extracted) {
+        const cached = this.cache.get(norm.descBase, norm.descOpt) as BaseExtractedData | null;
+        if (cached) {
           processed.push(
-            this.createProcessedTransaction(transaction, extracted, 'income')
+            this.createProcessedTransaction(transaction, cached, 'income')
           );
           continue;
         }
       }
 
-      // Try regex extraction
-      if (this.config.useRegexFirst) {
-        extracted = this.extractWithRegex(transaction);
-        if (
-          extracted &&
-          extracted.confidence.overall >= this.regexAcceptThreshold()
-        ) {
-          // Optionally cache — never a rule match, though. The cache is consulted
-          // before the matcher runs, so a cached rule match would freeze the rule's
-          // answer: editing the rule (or adding a second apartment to it) would
-          // change nothing for this payer until the entry expired. Re-running a
-          // rule costs a substring search, so there is nothing to save here.
-          if (this.shouldCacheRegexResults() && !extracted.matchedByManualMapping) {
-            const norm = this.normalize(transaction);
-            this.cache.set(norm.descBase, norm.descOpt, extracted as any);
-          }
-          processed.push(
-            this.createProcessedTransaction(transaction, extracted, 'income')
-          );
-          continue;
+      // The regex reading itself, when it is confident enough.
+      if (fromRegex && fromRegex.confidence.overall >= this.regexAcceptThreshold()) {
+        // Optionally cache. A rule match never gets here (it returned above), and
+        // must not be cached anyway: a cached rule match would freeze the rule's
+        // answer, so editing the rule would change nothing until the entry expired.
+        if (this.shouldCacheRegexResults()) {
+          this.cache.set(norm.descBase, norm.descOpt, fromRegex as any);
         }
+        processed.push(
+          this.createProcessedTransaction(transaction, fromRegex, 'income')
+        );
+        continue;
       }
 
       needsAI.push({ transaction, index: i });
@@ -728,6 +790,18 @@ export abstract class BaseConverter<TRaw> {
             ? ['Low confidence match - may need review']
             : []
         );
+        // Found only as a name glued to the next word: the contractor stays
+        // picked, but the row is held. Its confidence (65) already keeps it off
+        // auto-approval, yet the Converter's "skip approval" mode accepts every
+        // row as it stands — only a hold reason makes it open the review screen.
+        // A format's own hold (storno, SWRK debit) says more, so it keeps its label.
+        if (
+          matchedContractor.confidence === GLUED_MATCH_CONFIDENCE &&
+          this.holdReason(transaction) === null
+        ) {
+          extracted.holdReason = 'glued-name';
+          extracted.warnings.push(HOLD_WARNINGS['glued-name']);
+        }
         processed.push(
           this.createProcessedTransaction(
             transaction,
@@ -849,10 +923,23 @@ export abstract class BaseConverter<TRaw> {
           const extracted =
             await this.aiExtractor!.extractBatch(transactionsForAI);
 
+          // `extracted` has one slot per transaction of the batch, placed by the
+          // index the model named (see AIExtractor.processAIResponse) — slot j is
+          // transaction j whatever order the reply came in.
           const items: BaseProcessedTransaction<TRaw>[] = batch.map((b, j) => {
             const norm = transactionsForAI[j];
+            const answer = extracted[j];
+            if (!answer) {
+              // No usable answer for this one: held for review, and nothing is
+              // cached, so the next conversion asks again instead of serving a gap.
+              const held = this.buildLowConfidenceExtracted(b.transaction, [
+                HOLD_WARNINGS['ai-answer-missing'],
+              ]);
+              held.holdReason = 'ai-answer-missing';
+              return this.createProcessedTransaction(b.transaction, held, 'income');
+            }
             const aiText = `${norm.descBase} ${norm.descOpt}`;
-            const aiApartment = extracted[j].apartmentNumber;
+            const aiApartment = answer.apartmentNumber;
             // The glue and split guards have to run again here, for the same
             // reason the letter check does: by this point the matcher's own result
             // is gone, and the model read the same unseparated "M.202-620" — or
@@ -865,7 +952,7 @@ export abstract class BaseConverter<TRaw> {
               !!apartmentSplitInText(aiText, aiApartment) ||
               apartmentWidthImplausible(aiApartment);
             const extractedData: BaseExtractedData = {
-              ...extracted[j],
+              ...answer,
               rawData: this.buildRawData(b.transaction),
               // The model is asked to keep the letter in "17A", but a dropped one
               // looks exactly like a correct plain number, so it is checked against
@@ -874,17 +961,17 @@ export abstract class BaseConverter<TRaw> {
               needsAccount: needsExplicitAccount(aiApartment, null, aiText),
               confidence: doubtfulDigits
                 ? {
-                    ...extracted[j].confidence,
+                    ...answer.confidence,
                     apartment: Math.min(
-                      extracted[j].confidence.apartment,
+                      answer.confidence.apartment,
                       HELD_BACK_CONFIDENCE
                     ),
                     overall: Math.min(
-                      extracted[j].confidence.overall,
+                      answer.confidence.overall,
                       HELD_BACK_CONFIDENCE
                     ),
                   }
-                : extracted[j].confidence,
+                : answer.confidence,
             };
             if (this.config.useCache) {
               this.cache.set(norm.descBase, norm.descOpt, extractedData as any);
@@ -1011,9 +1098,45 @@ export abstract class BaseConverter<TRaw> {
     transactionType: 'income' | 'expense',
     matchedContractor?: MatchedContractor
   ): BaseProcessedTransaction<TRaw> {
+    const normalized = this.normalize(transaction);
+
+    if (transactionType === 'income') {
+      // Whatever produced the number — regex, AI, cache — an apartment that has no
+      // account the convention can derive (17A, "12-14") is not booked unasked.
+      // Re-read here, the one place every income row passes, so the exporter's
+      // `needsAccount` check agrees with what the review screen shows.
+      const needsAccount =
+        extracted.needsAccount === true ||
+        needsExplicitAccount(
+          extracted.apartmentNumber,
+          extracted.accountOverride,
+          `${normalized.descBase} ${normalized.descOpt}`
+        );
+      if (needsAccount) {
+        extracted = {
+          ...extracted,
+          needsAccount: true,
+          confidence: {
+            ...extracted.confidence,
+            apartment: Math.min(extracted.confidence.apartment, HELD_BACK_CONFIDENCE),
+            overall: Math.min(extracted.confidence.overall, HELD_BACK_CONFIDENCE),
+          },
+        };
+      }
+    }
+
+    const holdReason = extracted.holdReason ?? this.holdReason(transaction);
+    if (holdReason && !extracted.holdReason) {
+      extracted = {
+        ...extracted,
+        holdReason,
+        warnings: [...(extracted.warnings ?? []), HOLD_WARNINGS[holdReason]],
+      };
+    }
+
     const confidence =
       transactionType === 'income'
-        ? extracted.confidence.overall
+        ? incomeGateConfidence(extracted)
         : matchedContractor?.confidence || 0;
 
     let status: BaseProcessedTransaction<TRaw>['status'];
@@ -1024,10 +1147,14 @@ export abstract class BaseConverter<TRaw> {
     } else {
       status = 'needs-manual-input';
     }
+    // A held row keeps its match on display, but is never booked unseen.
+    if (holdReason && status === 'auto-approved') {
+      status = 'needs-review';
+    }
 
     return {
       original: transaction,
-      normalized: this.normalize(transaction),
+      normalized,
       extracted,
       transactionType,
       matchedContractor,
@@ -1040,7 +1167,8 @@ export abstract class BaseConverter<TRaw> {
    */
   protected generateResult(
     processed: BaseProcessedTransaction<TRaw>[],
-    totalTransactions: number
+    totalTransactions: number,
+    dropped: DroppedStatementLine[] = []
   ): BaseImportResult<TRaw> {
     // Single pass over `processed` instead of ~9 separate .filter().length scans.
     const summary = { autoApproved: 0, needsReview: 0, needsManualInput: 0, skipped: totalTransactions - processed.length };
@@ -1072,30 +1200,39 @@ export abstract class BaseConverter<TRaw> {
         averageConfidence,
         extractionMethods,
       },
-      errors: [],
+      dropped,
+      errors: dropped,
     };
   }
 
   /**
    * Build ExtractedData for an income transaction that matched a 'Pozostałe przychody' entry.
-   * The entry's account goes straight into apartmentNumber — csv-exporter's formatAccountNumber
-   * passes non-digit strings through as-is, so konto like "760-500" routes correctly.
+   *
+   * The entry's account is the destination, so it travels as the account
+   * override (and, for display, as the apartment value). As an override it is
+   * used only when it is a real account symbol: an entry whose account was typed
+   * as a bare "760" used to fall through the apartment rule and land on
+   * 204-000760. Such an entry is held for review instead.
    */
   protected buildIncomeCategoryExtracted(
     transaction: TRaw,
     contractor: Kontrahent
   ): BaseExtractedData {
+    const account = (contractor.kontoKontrahenta ?? '').trim();
+    const valid = isAccountSymbol(account);
     return {
       streetName: null,
       buildingNumber: null,
-      apartmentNumber: contractor.kontoKontrahenta,
+      apartmentNumber: account,
       fullAddress: contractor.nazwa,
       tenantName: contractor.nazwa,
       confidence: { address: 100, apartment: 100, tenantName: 100, overall: 100 },
       extractionMethod: 'regex',
       reasoning: `Dopasowano wpis "${contractor.nazwa}" (Pozostałe przychody)`,
-      warnings: [],
+      warnings: valid ? [] : [HOLD_WARNINGS['invalid-account']],
       rawData: this.buildRawData(transaction),
+      accountOverride: account,
+      ...(valid ? {} : { holdReason: 'invalid-account' as const }),
     };
   }
 

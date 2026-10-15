@@ -6,8 +6,10 @@ import Icon from './Icon';
 import { FormSection } from './FormSection';
 import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
 import { buildMailShell, formatFieldValue } from '../../shared/mailing-template';
+import { sanitizeHtml } from '../sanitize';
 import { MAILING_LOGO_SVG_DATA_URI } from '../../shared/mailing-logo';
 import { MailingOdbiorcyList } from './MailingRecipientsEditor';
+import { formatDateTime } from '../../shared/format';
 
 /**
  * One send, in full — extracted from the Mailing history so the Kalendarz can
@@ -15,19 +17,6 @@ import { MailingOdbiorcyList } from './MailingRecipientsEditor';
  * from the meeting; showing it a second, different way would be two answers to
  * one question.
  */
-
-/** Shared with the history table, hence exported rather than duplicated. */
-export function formatDateTime(iso: string, language: Language): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString(language === 'pl' ? 'pl-PL' : 'en-GB', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 interface DetailsModalProps {
   entry: MailingHistoryEntry;
@@ -63,6 +52,9 @@ const MailingDetailsModal: React.FC<DetailsModalProps> = ({ entry, language, onC
     };
   }, []);
 
+  // A partly sent mail: the server refused some recipients (stored as a success — see MailingOdbiorca.odrzucony).
+  const odrzuceni = (entry.odbiorcy ?? []).filter((o) => o.odrzucony);
+
   const openAttachment = async (filePath: string) => {
     const ok = await window.electronAPI.openFile(filePath);
     if (!ok) notify.error(t.mailingFileMissing);
@@ -92,7 +84,9 @@ const MailingDetailsModal: React.FC<DetailsModalProps> = ({ entry, language, onC
               <dd>{entry.sentFrom || '—'}</dd>
               <dt>{t.mailingResultStatus}</dt>
               <dd>
-                {entry.status === 'success' ? (
+                {entry.status === 'success' && odrzuceni.length > 0 ? (
+                  <span className="status-badge status-pending">{t.mailingStatusPartial}</span>
+                ) : entry.status === 'success' ? (
                   <span className="result-status is-ok">
                     <Icon name="check-circle" size={14} /> {t.mailingStatusSent}
                   </span>
@@ -109,6 +103,14 @@ const MailingDetailsModal: React.FC<DetailsModalProps> = ({ entry, language, onC
           </FormSection>
 
           <FormSection icon="users" title={t.mailingResultRecipient}>
+            {odrzuceni.length > 0 && (
+              <div className="callout callout--warning">
+                <Icon name="alert-triangle" size={16} />
+                <div className="callout__body">
+                  {t.mailingRejectedCallout.replace('{list}', odrzuceni.map((o) => o.email).join(', '))}
+                </div>
+              </div>
+            )}
             {/* Rows written since kinds have recipients list every addressee
                 with its group; older rows only know the one city unit. */}
             {entry.odbiorcy && entry.odbiorcy.length > 0 ? (
@@ -128,10 +130,11 @@ const MailingDetailsModal: React.FC<DetailsModalProps> = ({ entry, language, onC
             </dl>
             <div
               className="mailing-preview"
-              // Stored body of a message this user composed and already sent, with
-              // the letterhead re-added so the record looks like what went out.
+              // Stored body of a sent message, with the letterhead re-added so the
+              // record looks like what went out. The row is shared data, so the
+              // body is sanitized; the shell around it is our own constant markup.
               dangerouslySetInnerHTML={{
-                __html: buildMailShell(entry.bodyHtml, MAILING_LOGO_SVG_DATA_URI),
+                __html: buildMailShell(sanitizeHtml(entry.bodyHtml), MAILING_LOGO_SVG_DATA_URI),
               }}
             />
           </FormSection>
@@ -170,7 +173,7 @@ const MailingDetailsModal: React.FC<DetailsModalProps> = ({ entry, language, onC
                       type="button"
                       className="file-list__name file-list__name--link"
                       onClick={() => openAttachment(a.filePath)}
-                      title={a.filePath}
+                      data-tip={a.filePath}
                     >
                       {a.fileName}
                     </button>

@@ -53,6 +53,7 @@ export class PKOSAConverter extends BaseConverter<PKOSATransaction> {
     
     return {
       transactions: statement.transactions,
+      dropped: statement.dropped,
       logExtra: `Date range: ${statement.startDate} - ${statement.endDate}, Balance: ${statement.openingBalance} → ${statement.closingBalance} ${statement.currency || ''}`,
     };
   }

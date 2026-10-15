@@ -33,7 +33,12 @@ export interface PdfLine {
   text: string;
 }
 
-const AMOUNT_RE = /-?\d{1,3}(?:\.\d{3})*,\d{2}(?![\d,])/g;
+/**
+ * An amount as vDom prints it: "1.234,56", "-12,00". Anchored on the left too — without the lookbehind a
+ * run of digits printed without thousand dots ("12345,67") matched from its middle and read as 345,67.
+ * Such a run is no amount of this format and is left unread rather than cut.
+ */
+const AMOUNT_RE = /(?<![\d.])-?\d{1,3}(?:\.\d{3})*,\d{2}(?![\d,])/g;
 /** Within this many points an amount still ends "under" a heading. */
 const COLUMN_TOLERANCE = 4;
 

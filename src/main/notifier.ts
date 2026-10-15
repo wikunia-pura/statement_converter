@@ -2,6 +2,7 @@ import Store from 'electron-store';
 import log from 'electron-log';
 import {
   SPOTKANIE_MATERIALY_STATUSES,
+  AppUser,
   KsiegowaniePriorytet,
   KsiegowanieUwaga,
   NotificationTarget,
@@ -73,6 +74,17 @@ const MAX_INDIVIDUAL = 3;
 const SOON_MS = 3 * 24 * 60 * 60 * 1000;
 /** Kinds change rarely and deadlines are days apart: re-read them at most this often. */
 const TERMINY_CONTEXT_MS = 10 * 60_000;
+/**
+ * How far back the meetings are read. Materials and dates move before a meeting,
+ * not long after it; a meeting further back than this is no longer news.
+ */
+const SPOTKANIA_PAST_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** The month before `YYYY-MM` — priorities are read from there on. */
+function previousMonthKey(now: Date = new Date()): string {
+  const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 
 interface PersonState {
   /** Task id → `updatedAt` as last seen, for the tasks assigned to this person. */
@@ -113,31 +125,56 @@ interface PersonState {
    * that reads it, which only takes the baseline.
    */
   terminZmiany?: Record<string, string>;
+  /** The `restoredAt` this person's picture was last retaken for (see `markRestored`). */
+  restoreSeen?: string;
 }
 
 interface StoreSchema {
   people: Record<string, PersonState>;
+  /**
+   * When a backup was last restored on this machine. Every row came back with a
+   * new id, so a person whose `restoreSeen` differs gets one silent poll first.
+   */
+  restoredAt?: string;
 }
 
 /** Where a click on a notification goes. */
 export type NotifierTarget = NotificationTarget;
 
+/**
+ * What the notifier reads. Every minute, on every machine, all day — so each
+ * read is filtered in the database to what can still be news: the person's own
+ * cards, the comments and notes after the last one seen, the priorities from
+ * last month on, the meetings from a month back on. Never a whole table.
+ */
 interface Deps {
   getEmail: () => Promise<string | null>;
+  /** The whole board — only for the on-demand test notification. */
   getZadania: () => Promise<Zadanie[]>;
+  /** The cards assigned to this mailbox (archived ones included — see `diff`). */
+  getZadaniaPrzypisane: (email: string) => Promise<Zadanie[]>;
+  /** The cards with these ids — the ones fresh comments are on. */
+  getZadaniaByIds: (ids: number[]) => Promise<Zadanie[]>;
   /** Comments with an id above `afterId`, oldest first. */
   getKomentarzeAfter: (afterId: number) => Promise<ZadanieKomentarz[]>;
   /** Id of the newest comment (0 for none) — the baseline of a first poll. */
   getLatestKomentarzId: () => Promise<number>;
-  getPriorytety: () => Promise<KsiegowaniePriorytet[]>;
-  getUwagi: () => Promise<KsiegowanieUwaga[]>;
-  getSpotkania: () => Promise<Spotkanie[]>;
+  /** Priorities of `fromMonthKey` and later. */
+  getPriorytety: (fromMonthKey: string) => Promise<KsiegowaniePriorytet[]>;
+  /** Community notes with an id above `afterId`. */
+  getUwagiAfter: (afterId: number) => Promise<KsiegowanieUwaga[]>;
+  /** Community notes that tag this mailbox. */
+  getUwagiTagging: (email: string) => Promise<KsiegowanieUwaga[]>;
+  /** Id of the newest community note (0 for none) — the baseline of a first poll. */
+  getLatestUwagaId: () => Promise<number>;
+  /** Meetings starting at `fromIso` or later. */
+  getSpotkania: (fromIso: string) => Promise<Spotkanie[]>;
   /** Meeting kinds — they carry the notice period the deadline comes from. */
   getSpotkaniaTypy: () => Promise<SpotkanieTyp[]>;
   /** The person's own notification switches, from their account. */
   getNotificationPrefs: (email: string) => Promise<NotificationPrefs>;
-  /** Display name of a mailbox (typed name, else the mailbox) — "Anna przypisała Ci…". */
-  resolveName: (email: string) => Promise<string>;
+  /** The accounts, for names — "Anna przypisała Ci…". Read once per poll, and only when a poll has news. */
+  getAppUsers: () => Promise<AppUser[]>;
   getLanguage: () => 'pl' | 'en';
   /** Bring the window forward and open what the notification was about. */
   onOpen: (target: NotifierTarget) => void;
@@ -293,8 +330,51 @@ export class Notifier {
   private timer: NodeJS.Timeout | null = null;
   private typyCache: { at: number; value: SpotkanieTyp[] } | null = null;
   private running = false;
+  /**
+   * A restore is writing right now (see `beginRestore`): every poll meanwhile
+   * only takes the picture, however long the restore runs.
+   */
+  private restoring = false;
+  /** The accounts, read at most once per poll — and only if something needs a name. */
+  private users: Promise<AppUser[]> | null = null;
 
   constructor(private readonly deps: Deps) {}
+
+  /**
+   * A backup was just restored: every card, comment, note and meeting is back
+   * with a new id, and the next poll would announce them all as news. Instead
+   * the next poll of each person takes a fresh picture and shows nothing. Called
+   * before the restore and again after it, so a poll running meanwhile — over
+   * half-restored tables — is silenced too.
+   *
+   * Only this machine knows: another computer polling the same database still
+   * sees the new ids as news — and, past three of them, shows one summary
+   * rather than a barrage.
+   */
+  markRestored(): void {
+    this.store.set('restoredAt', new Date().toISOString());
+  }
+
+  /**
+   * Around a restore: polls while it runs read half-restored tables (new ids next
+   * to old ones) and must not announce anything; `endRestore` then marks the
+   * restore so the first poll after it retakes the picture in silence too.
+   */
+  beginRestore(): void {
+    this.restoring = true;
+    this.markRestored();
+  }
+
+  endRestore(): void {
+    this.restoring = false;
+    this.markRestored();
+  }
+
+  /** Display name of a mailbox (typed name, else the mailbox). */
+  private async resolveName(email: string): Promise<string> {
+    if (!this.users) this.users = this.deps.getAppUsers().catch(() => []);
+    return nameForMailbox(await this.users, email);
+  }
 
   start(): void {
     if (this.timer) return;
@@ -311,17 +391,22 @@ export class Notifier {
     // A slow read must not stack a second one on top of it.
     if (this.running) return;
     this.running = true;
+    this.users = null;
     try {
       const email = mailbox(await this.deps.getEmail());
       if (!email) return;
-      const all = await this.deps.getZadania();
-      const mine = all.filter((z) => mailbox(z.przypisanyEmail) === email);
+      // After a restore the whole picture is retaken in silence (see markRestored).
+      const restoredAt = this.store.get('restoredAt');
+      const retake = !!restoredAt && this.store.get('people')[email]?.restoreSeen !== restoredAt;
+      const mine = (await this.deps.getZadaniaPrzypisane(email)).filter(
+        (z) => mailbox(z.przypisanyEmail) === email,
+      );
       const events = await this.diff(email, mine);
       // Each source apart from the others: comments and Księgowania live in tables
       // of their own, and one that is missing (its SQL not run yet) must not
       // silence everything else.
       try {
-        events.push(...(await this.diffComments(email, all)));
+        events.push(...(await this.diffComments(email)));
       } catch (error) {
         log.warn('[NOTIFIER] comment check failed:', error instanceof Error ? error.message : error);
       }
@@ -334,7 +419,7 @@ export class Notifier {
         );
       }
       try {
-        const spotkania = await this.deps.getSpotkania();
+        const spotkania = await this.deps.getSpotkania(new Date(Date.now() - SPOTKANIA_PAST_MS).toISOString());
         events.push(...(await this.diffMaterialy(email, spotkania)));
         // Apart from the steps: it reads the meeting kinds too, and that failing
         // must not silence the materials steps.
@@ -351,6 +436,17 @@ export class Notifier {
           '[NOTIFIER] Kalendarz check failed:',
           error instanceof Error ? error.message : error,
         );
+      }
+      if (retake || this.restoring || this.store.get('restoredAt') !== restoredAt) {
+        // The picture is taken; the news it holds is the restore itself. A restore
+        // that started while this poll ran gets its own silent poll next time.
+        if (retake) {
+          const people = this.store.get('people');
+          people[email] = { ...people[email], restoreSeen: restoredAt };
+          this.store.set('people', people);
+        }
+        if (events.length > 0) log.info(`[NOTIFIER] ${events.length} change(s) after a restore taken in silence`);
+        return;
       }
       // Read after the diffs, and only when there is something to show. If the read
       // fails the defaults apply (the opt-in ones stay off) — a notification that
@@ -400,7 +496,7 @@ export class Notifier {
       if (previous && !byMe) {
         const before = previous.seen[String(z.id)];
         if (before === undefined) {
-          const who = await this.deps.resolveName(z.updatedBy || z.createdBy);
+          const who = await this.resolveName(z.updatedBy || z.createdBy);
           events.push({
             id: 'zadanieAssigned',
             title: text.assignedTitle,
@@ -408,7 +504,7 @@ export class Notifier {
             target,
           });
         } else if (before !== z.updatedAt) {
-          const who = await this.deps.resolveName(z.updatedBy);
+          const who = await this.resolveName(z.updatedBy);
           events.push({
             id: 'zadanieChanged',
             title: text.changedTitle,
@@ -443,9 +539,10 @@ export class Notifier {
 
   /**
    * New comments since the last poll that are worth a toast to this person.
-   * Reads the state `diff` has just written, so it must run after it.
+   * Reads the state `diff` has just written, so it must run after it. Only the
+   * cards those comments are on are read.
    */
-  private async diffComments(email: string, all: Zadanie[]): Promise<Event[]> {
+  private async diffComments(email: string): Promise<Event[]> {
     const people = this.store.get('people');
     const state = people[email];
     if (!state) return [];
@@ -460,10 +557,11 @@ export class Notifier {
     if (fresh.length === 0) return [];
 
     const text = TEXT[this.deps.getLanguage()];
-    const byId = new Map(all.map((z) => [z.id, z] as const));
+    const others = fresh.filter((c) => mailbox(c.autorEmail) !== email);
+    const cards = others.length > 0 ? await this.deps.getZadaniaByIds(others.map((c) => c.zadanieId)) : [];
+    const byId = new Map(cards.map((z) => [z.id, z] as const));
     const events: Event[] = [];
-    for (const c of fresh) {
-      if (mailbox(c.autorEmail) === email) continue;
+    for (const c of others) {
       const task = byId.get(c.zadanieId);
       if (!task) continue; // the card was deleted since
 
@@ -471,7 +569,7 @@ export class Notifier {
       const onMine = mailbox(task.przypisanyEmail) === email;
       if (!tagged && !onMine) continue;
 
-      const who = await this.deps.resolveName(c.autorEmail);
+      const who = await this.resolveName(c.autorEmail);
       events.push({
         id: tagged ? 'zadanieMention' : 'zadanieComment',
         title: tagged ? text.mentionTitle : text.commentTitle,
@@ -490,26 +588,31 @@ export class Notifier {
   /**
    * What the team did on the month's list since the last poll: a community
    * flagged, a priority's note written or changed, a plain note added.
-   * Both reads happen before anything is saved, so a failure on the second one
-   * leaves the first one's baseline untouched and nothing is lost.
+   * Every read happens before anything is saved, so a failure on one of them
+   * leaves the baseline untouched and nothing is lost.
+   *
+   * Read narrowly: the priorities from last month on (older months are not
+   * worked on), the notes after the last one seen, and the notes that tag me
+   * (a tag may be added to an old note — notes have no edit time to go by).
    */
   private async diffKsiegowania(email: string): Promise<Event[]> {
     const people = this.store.get('people');
     const state = people[email];
     if (!state) return [];
 
-    const [priorytety, uwagi] = await Promise.all([
-      this.deps.getPriorytety(),
-      this.deps.getUwagi(),
+    const [priorytety, fresh, taggingMe, newestUwaga] = await Promise.all([
+      this.deps.getPriorytety(previousMonthKey()),
+      state.lastUwagaId === undefined ? Promise.resolve([]) : this.deps.getUwagiAfter(state.lastUwagaId),
+      this.deps.getUwagiTagging(email),
+      state.lastUwagaId === undefined ? this.deps.getLatestUwagaId() : Promise.resolve(state.lastUwagaId),
     ]);
     const snapshot: Record<string, string> = {};
     for (const p of priorytety) snapshot[String(p.id)] = fingerprint(p.notatka ?? '');
-    const newestUwaga = uwagi.reduce((max, u) => Math.max(max, u.id), 0);
 
     const tagsMe = (mentions: string[] | undefined) => (mentions ?? []).some((m) => mailbox(m) === email);
     const tagged = [
       ...priorytety.filter((p) => (p.notatka ?? '').trim() && tagsMe(p.mentions)).map((p) => `prio:${p.id}`),
-      ...uwagi.filter((u) => tagsMe(u.mentions)).map((u) => `uwaga:${u.id}`),
+      ...taggingMe.filter((u) => tagsMe(u.mentions)).map((u) => `uwaga:${u.id}`),
     ];
     // Tags that were not there last time. None on the first poll: that one only
     // takes the picture.
@@ -525,19 +628,19 @@ export class Notifier {
         id: 'ksiegowaniaMention',
         title: text.ksMentionTitle,
         body: text.priorytetNotatkaBody(
-          await this.deps.resolveName(p.notatkaBy || p.createdBy || ''),
+          await this.resolveName(p.notatkaBy || p.createdBy || ''),
           p.adresNazwa,
           snippet(p.notatka),
         ),
         target,
       });
     }
-    for (const u of uwagi) {
+    for (const u of taggingMe) {
       if (!newlyTagged.has(`uwaga:${u.id}`)) continue;
       events.push({
         id: 'ksiegowaniaMention',
         title: text.ksMentionTitle,
-        body: text.uwagaBody(await this.deps.resolveName(u.createdBy), u.adresNazwa, snippet(u.tresc)),
+        body: text.uwagaBody(await this.resolveName(u.createdBy), u.adresNazwa, snippet(u.tresc)),
         target,
       });
     }
@@ -556,7 +659,7 @@ export class Notifier {
             id: 'ksiegowaniaPriorytet',
             title: text.priorytetTitle,
             body: text.priorytetBody(
-              await this.deps.resolveName(p.createdBy),
+              await this.resolveName(p.createdBy),
               p.adresNazwa,
               `${m}.${y}`,
             ),
@@ -570,7 +673,7 @@ export class Notifier {
             id: 'ksiegowaniaPriorytetNotatka',
             title: text.priorytetNotatkaTitle,
             body: text.priorytetNotatkaBody(
-              await this.deps.resolveName(p.notatkaBy || p.createdBy || ''),
+              await this.resolveName(p.notatkaBy || p.createdBy || ''),
               p.adresNazwa,
               snippet(p.notatka),
             ),
@@ -579,14 +682,14 @@ export class Notifier {
         }
       }
 
-      for (const u of uwagi) {
+      for (const u of fresh) {
         if (u.id <= state.lastUwagaId || mailbox(u.createdBy) === email) continue;
         if (newlyTagged.has(`uwaga:${u.id}`)) continue;
         events.push({
           id: 'ksiegowaniaUwaga',
           title: text.uwagaTitle,
           body: text.uwagaBody(
-            await this.deps.resolveName(u.createdBy),
+            await this.resolveName(u.createdBy),
             u.adresNazwa,
             snippet(u.tresc),
           ),
@@ -599,7 +702,7 @@ export class Notifier {
     people[email] = {
       ...state,
       priorytety: snapshot,
-      lastUwagaId: Math.max(state.lastUwagaId ?? 0, newestUwaga),
+      lastUwagaId: fresh.reduce((max, u) => Math.max(max, u.id), Math.max(state.lastUwagaId ?? 0, newestUwaga)),
       // Only what tags me now, so a removed note or tag does not pile up — and a
       // tag taken off and put back is news again.
       ksTagged: tagged,
@@ -647,7 +750,7 @@ export class Notifier {
           id: MATERIALY_NOTIFICATION[krok],
           title: text.materialyTitle[krok],
           body: text.materialyBody(
-            await this.deps.resolveName(s.materialyZmienioneBy ?? ''),
+            await this.resolveName(s.materialyZmienioneBy ?? ''),
             s.nazwa,
             meetingWhen(s.startsAt, lang),
           ),
@@ -712,7 +815,7 @@ export class Notifier {
           id: 'spotkanieTerminZmieniony',
           title: text.terminZmienionyTitle,
           body: text.terminZmienionyBody(
-            await this.deps.resolveName(s.terminZmienionyBy ?? ''),
+            await this.resolveName(s.terminZmienionyBy ?? ''),
             s.nazwa,
             s.terminZmienionyZ ? meetingWhen(s.terminZmienionyZ, lang) : '—',
             when,
@@ -821,7 +924,7 @@ export class Notifier {
     const text = TEXT[lang];
     let meeting: Spotkanie | undefined;
     try {
-      const all = await this.deps.getSpotkania();
+      const all = await this.deps.getSpotkania(new Date(Date.now() - SPOTKANIA_PAST_MS).toISOString());
       const now = Date.now();
       const byStart = [...all].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
       meeting =

@@ -16,6 +16,8 @@
 
 import * as iconv from 'iconv-lite';
 import { INGStatement, INGTransaction } from './types';
+import { DroppedStatementLine } from '../../shared/types';
+import { line61Excerpt, parseLine61, walkMt940Entries } from '../shared/mt940';
 
 export class INGMT940Parser {
   /**
@@ -48,7 +50,9 @@ export class INGMT940Parser {
     const closingBalance = this.parseBalance(closingBalanceStr);
     const availableBalance = availableBalanceStr ? this.parseBalance(availableBalanceStr) : undefined;
 
-    const transactions = this.parseTransactions(fields);
+    // Transactions are walked in file order, see shared/mt940.
+    const dropped: DroppedStatementLine[] = [];
+    const transactions = this.parseTransactions(cleanedContent, dropped);
 
     return {
       reference,
@@ -58,6 +62,7 @@ export class INGMT940Parser {
       closingBalance,
       availableBalance,
       transactions,
+      dropped,
     };
   }
 
@@ -153,24 +158,20 @@ export class INGMT940Parser {
    *   - 1st :86: — short code (e.g., "082")
    *   - 2nd :86: — structured data with ~XX subfields
    *
-   * Strategy: identify the "detailed" :86: fields (those containing `~`)
-   * and pair them 1:1 with :61: fields.  Also filters out special
+   * Strategy: walk the file in order, take the :86: fields that follow each :61:,
+   * and keep the "detailed" one (containing `~`). Pairing two separate lists by
+   * position used to shift every following description onto the wrong amount as
+   * soon as one transaction had no detailed :86:. Also filters out special
    * balance-info entries (transaction type "940").
    */
-  private parseTransactions(fields: Map<string, string[]>): INGTransaction[] {
-    const field61s = fields.get(':61:') || [];
-    const field86s = fields.get(':86:') || [];
-
-    // Separate detailed :86: fields (contain ~XX subfields) from short codes
-    const detailedField86s = field86s.filter(f => f.includes('~'));
-
+  private parseTransactions(content: string, dropped: DroppedStatementLine[]): INGTransaction[] {
     const transactions: INGTransaction[] = [];
 
-    for (let i = 0; i < field61s.length; i++) {
-      const field61 = field61s[i];
-      const field86 = i < detailedField86s.length ? detailedField86s[i] : '';
+    for (const entry of walkMt940Entries(content)) {
+      // Separate detailed :86: fields (contain ~XX subfields) from short codes
+      const field86 = entry.field86s.filter(f => f.includes('~')).join('\n');
 
-      const transaction = this.parseTransaction(field61, field86);
+      const transaction = this.parseTransaction(entry.field61, field86, dropped);
       if (transaction) {
         transactions.push(transaction);
       }
@@ -194,34 +195,43 @@ export class INGMT940Parser {
    *
    * :86: format: code~00value~20value~21value...
    */
-  private parseTransaction(field61: string, field86: string): INGTransaction | null {
+  private parseTransaction(
+    field61: string,
+    field86: string,
+    dropped: DroppedStatementLine[]
+  ): INGTransaction | null {
     try {
       const firstLine = field61.split('\n')[0];
 
-      const valueDate = firstLine.substring(0, 6);   // YYMMDD
-      const entryDate = firstLine.substring(6, 10);   // MMDD
-      const debitCredit = firstLine[10] as 'D' | 'C';
-
-      // Amount: from position 11 until 'S' separator
-      const sPos = firstLine.indexOf('S', 11);
-      if (sPos === -1) {
-        console.error('ING: Could not find S separator in :61: field:', firstLine);
+      // Shared reader: storno mark, funds code, strict amount.
+      const line61 = parseLine61(firstLine);
+      // The amount is followed by the 'S' separator and the 3-digit type; without
+      // it the line cannot be told apart from a balance-info entry.
+      if (!line61 || !line61.rest.startsWith('S')) {
+        console.error('ING: unrecognized :61: field:', line61Excerpt(field61));
+        // An amount that does not read ("1.000,00") also hides the separator.
+        const reason = line61 && line61.amount === null ? 'amount' : 'structure';
+        dropped.push({ excerpt: line61Excerpt(field61), reason });
         return null;
       }
-
-      const amountStr = firstLine.substring(11, sPos);
-      const amount = this.parseAmount(amountStr);
+      const { valueDate, entryDate, debitCredit, reversal, rest } = line61;
 
       // Transaction type: 3 digits after 'S'
-      const transactionType = firstLine.substring(sPos + 1, sPos + 4);
+      const transactionType = rest.substring(1, 4);
 
       // Reference: everything after the 3-digit type
-      const reference = firstLine.substring(sPos + 4).trim();
+      const reference = rest.substring(4).trim();
 
-      // Filter out balance info entries (type "940")
+      // Filter out balance info entries (type "940") — not transactions at all.
       if (transactionType === '940') {
         return null;
       }
+
+      if (line61.amount === null) {
+        dropped.push({ excerpt: line61Excerpt(field61), reason: 'amount' });
+        return null;
+      }
+      const amount = line61.amount;
 
       // Parse :86: field
       const details = this.parseTransactionDetails(field86);
@@ -230,6 +240,7 @@ export class INGMT940Parser {
         valueDate,
         entryDate,
         debitCredit,
+        ...(reversal ? { reversal } : {}),
         amount,
         transactionType,
         reference,
@@ -241,6 +252,7 @@ export class INGMT940Parser {
       };
     } catch (error) {
       console.error('Error parsing ING transaction:', error);
+      dropped.push({ excerpt: line61Excerpt(field61), reason: 'error' });
       return null;
     }
   }
@@ -316,6 +328,7 @@ export class INGMT940Parser {
       bankCode: subfields['30'] || '',
       accountNumber: subfields['31'] || '',
       counterpartyName: counterpartyParts.join(''), // No space — continuation
+      counterpartyNameParts: counterpartyParts,
       transactionCodeField: subfields['34'] || '',
       counterpartyIBAN: subfields['38'] || '',
       additionalInfo,

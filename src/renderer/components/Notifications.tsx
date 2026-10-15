@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon';
-import { ModalFooter, ModalHeader } from './Modal';
+import { ModalCloseLabelContext, ModalFooter, ModalHeader } from './Modal';
 
 /**
  * In-app notification system replacing native window.alert().
@@ -230,7 +230,8 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
 
   return (
     <NotificationContext.Provider value={api}>
-      {children}
+      {/* Every modal's X takes its name from here, in the app's language. */}
+      <ModalCloseLabelContext.Provider value={dismissLabel}>{children}</ModalCloseLabelContext.Provider>
 
       <div className="toast-container" aria-live="polite" aria-atomic="false">
         {toasts.map((toast) => (
@@ -244,7 +245,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
                 type="button"
                 className="toast-action"
                 onClick={() => void openToastFile(toast)}
-                title={toast.file}
+                data-tip={toast.file}
               >
                 {openFileLabel}
               </button>
@@ -254,7 +255,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
               className="toast-close"
               onClick={() => removeToast(toast.id)}
               aria-label={dismissLabel}
-              title={dismissLabel}
+              data-tip={dismissLabel}
             >
               <Icon name="x" size={15} />
             </button>

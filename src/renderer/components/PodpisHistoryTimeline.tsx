@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { PodpisHistoriaEntry, PodpisHistoriaPlik } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { localeOf } from '../../shared/format';
 import { useNotify } from './Notifications';
 import Icon from './Icon';
 import { plural } from '../plural';
@@ -41,7 +42,7 @@ const PodpisHistoryTimeline: React.FC<Props> = ({ history, language }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [dayOverrides, setDayOverrides] = useState<Record<string, boolean>>({});
 
-  const locale = language === 'en' ? 'en-US' : 'pl-PL';
+  const locale = localeOf(language);
   const searchActive = searchTerm.trim().length > 0;
 
   const statusLabel: Record<PodpisHistoriaPlik['status'], string> = {
@@ -198,7 +199,7 @@ const PodpisHistoryTimeline: React.FC<Props> = ({ history, language }) => {
                                     type="button"
                                     className="button button-small button-subtle"
                                     onClick={() => void openPath(p.zrodlo)}
-                                    title={p.zrodlo}
+                                    data-tip={p.zrodlo}
                                   >
                                     <Icon name="file-text" size={13} /> {t.podpisPdfHistoryOriginal}
                                   </button>
@@ -207,7 +208,7 @@ const PodpisHistoryTimeline: React.FC<Props> = ({ history, language }) => {
                                       type="button"
                                       className="button button-small button-secondary"
                                       onClick={() => void openPath(p.wynik)}
-                                      title={p.wynik}
+                                      data-tip={p.wynik}
                                     >
                                       <Icon name="signature" size={13} /> {t.podpisPdfHistorySigned}
                                     </button>

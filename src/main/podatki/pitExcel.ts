@@ -41,7 +41,8 @@ import {
   pustePit4R,
   sumyZaliczek,
 } from '../../shared/podatki-pit';
-import { doGroszy } from '../../shared/podatki';
+import { doGroszy, tylkoCyfry } from '../../shared/podatki';
+import { foldText } from '../../shared/text';
 
 /* ================================== Contract ================================== */
 
@@ -235,19 +236,7 @@ const ramka = (): Partial<ExcelJS.Borders> => {
 const wypelnienie = (argb: string): ExcelJS.Fill => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
 
 /** For matching headings and names: no diacritics, no case, one kind of dash, single spaces. */
-function fold(s: string): string {
-  return s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/ł/g, 'l')
-    .replace(/Ł/g, 'L')
-    .replace(/[–—−]/g, '-')
-    .toLowerCase()
-    .replace(/[\s ]+/g, ' ')
-    .trim();
-}
-
-const tylkoCyfry = (s: string): string => s.replace(/\D/g, '');
+const fold = (s: string): string => foldText(s.replace(/[–—−]/g, '-'));
 
 /** A cell's content as a primitive; formulas give their cached result, rich text its plain text. */
 function wartoscKomorki(cell: ExcelJS.Cell): string | number | boolean | Date | null {

@@ -15,9 +15,10 @@ jobs:
       fail-fast: false
       matrix:
         # windows-2022, not windows-latest: since June 2026 windows-latest carries
-        # Visual Studio 2026 only, which node-gyp 11 (npm's, and electron-builder's
-        # rebuild) cannot find — and pkcs11js, the card-signing module, is compiled
-        # with it on install.
+        # Visual Studio 2026 only, which node-gyp 11 cannot find — and pkcs11js, the
+        # card-signing module, is compiled on install. Node 24's npm 11 and
+        # electron-builder 26 bring node-gyp 12, which does find it; move to
+        # windows-latest only after one release built there has been checked.
         os: [macos-latest, windows-2022]
 
     steps:
@@ -27,10 +28,29 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 20
+          # Electron 44 and electron-builder 26 need Node >= 22.12.
+          node-version: 24
 
       - name: Install dependencies
         run: npm ci
+
+      # A type error in the renderer would not stop the build (Vite does not
+      # type-check), so it is checked here, before anything is packaged.
+      - name: Type-check
+        run: npm run type-check
+
+      # On the macOS runner only: it gates the release (the Windows job may fail
+      # without stopping it), and the path-guard tests' symlink case needs a
+      # Unix file system.
+      - name: Unit tests
+        if: matrix.os == 'macos-latest'
+        run: npm test
+
+      # Errors only (warnings do not fail it): among them the owner rule against
+      # native `title` hover hints and `cursor: help`.
+      - name: Lint
+        if: matrix.os == 'macos-latest'
+        run: npm run lint
 
       # NOTE: no AI key is baked into the build. Releases are publicly
       # downloadable, so a bundled key could be extracted by anyone. The app

@@ -35,7 +35,7 @@ const SidebarWelcome: React.FC<Props> = ({ language, name, email, action }) => {
   return (
     <div
       className="welcome"
-      title={`${t.greetingWord}, ${name} · ${email}`}
+      data-tip={`${t.greetingWord}, ${name} · ${email}`}
       style={{
         // Two variants of one hue: `ink` is dark enough to set 11px type in on
         // the light surface, `accent` is the bright one that only works on the

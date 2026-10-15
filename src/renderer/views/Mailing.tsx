@@ -1,8 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Adres,
   DEFAULT_MAILING_ADRESACI,
-  MAILING_TYP_ZGN,
   MailingAdresaci,
   MailingPole,
   MailingSendResult,
@@ -50,78 +49,10 @@ import {
   normalizeFieldName,
   readFieldValue,
 } from '../../shared/mailing-template';
+import { MailingDraft } from './mailingDraft';
 
-/**
- * The send form's state. Lifted to App so stepping out to Adresy to attach a
- * missing city unit — the most likely detour mid-flow — doesn't discard the
- * selection, the typed values and the attachments.
- */
-export interface MailingDraft {
-  typ: MailingTyp;
-  templateId: number | null;
-  adresIds: number[];
-  /** Field values keyed by field name — one set for the whole send. */
-  values: Record<string, string>;
-  /**
-   * Dynamic fields ticked for the `{{Tabela pól}}` table in the body. Per send,
-   * not per template: which positions a letter lists changes from month to month,
-   * and the values for them are typed here anyway.
-   */
-  tableFields: string[];
-  attachments: { fileName: string; filePath: string }[];
-  /** null ⇒ follow the template's default. */
-  attachPdf: boolean | null;
-  /**
-   * Subject and body for *this send*. Loaded from the chosen template and freely
-   * editable afterwards: a rate-change letter usually needs a sentence about the
-   * specific resolution, and saving that into the template would carry it into
-   * every future mailing.
-   */
-  temat: string;
-  tresc: string;
-  /**
-   * Template the text above was loaded from. Kept so picking another template
-   * (or having the template edited in the other tab) reloads the text, while
-   * every other re-render leaves the user's edits alone.
-   */
-  loadedFromTemplateId: number | null;
-  /** True once the text differs from the template — drives the "edited" hint. */
-  edited: boolean;
-  /**
-   * The meeting this send belongs to, when the user came here from a meeting's
-   * "wyślij dokumenty". Travels through to every history row the send writes,
-   * which is what lets the meeting list what actually went out for it.
-   */
-  spotkanieId?: number | null;
-  /** The meeting's name, for the banner that says where this draft came from. */
-  spotkanieNazwa?: string | null;
-  /**
-   * Recipient groups for this send. null ⇒ follow the kind's default (Mailing →
-   * Typy mailingu), so editing the kind in the other tab still shows up here
-   * until somebody changes the recipients for this one send.
-   */
-  adresaci: MailingAdresaci | null;
-  /** Mailboxes (lower-cased) unticked for this send — across every community. */
-  wykluczeni: string[];
-}
-
-export const emptyMailingDraft: MailingDraft = {
-  typ: MAILING_TYP_ZGN,
-  templateId: null,
-  adresIds: [],
-  values: {},
-  tableFields: [],
-  attachments: [],
-  attachPdf: null,
-  temat: '',
-  tresc: '',
-  loadedFromTemplateId: null,
-  edited: false,
-  spotkanieId: null,
-  spotkanieNazwa: null,
-  adresaci: null,
-  wykluczeni: [],
-};
+export { emptyMailingDraft } from './mailingDraft';
+export type { MailingDraft } from './mailingDraft';
 
 interface Props {
   language: Language;
@@ -132,15 +63,61 @@ interface Props {
   onNavigateToTemplates: () => void;
 }
 
+/** How long typing may pause before the draft is handed up to the app shell. */
+const DRAFT_PUSH_MS = 300;
+
 const Mailing: React.FC<Props> = ({
   language,
-  draft,
-  setDraft,
+  draft: savedDraft,
+  setDraft: saveDraft,
   onNavigateToHistory,
   onNavigateToTemplates,
 }) => {
   const t = translations[language];
   const notify = useNotify();
+
+  /**
+   * The draft being edited, held here and handed up to App (which keeps it
+   * across a detour to another view) a moment after typing pauses, and when
+   * the view closes. App holding the draft directly meant every key pressed
+   * in the letter re-rendered the whole app — the sidebar and the shell
+   * included — for a value only this view reads.
+   *
+   * The setter works out the next draft against a ref, synchronously, so the
+   * last keystrokes still reach App when the view closes: the editor's own
+   * pending text is flushed into this ref before the push on unmount runs.
+   */
+  const [draft, setDraftState] = useState<MailingDraft>(savedDraft);
+  const draftRef = useRef(savedDraft);
+  const pushedRef = useRef(savedDraft);
+  const setDraft: React.Dispatch<React.SetStateAction<MailingDraft>> = useCallback((action) => {
+    const next = typeof action === 'function' ? action(draftRef.current) : action;
+    draftRef.current = next;
+    setDraftState(next);
+  }, []);
+  // A draft set from outside while this view is open (none does so today) wins.
+  useEffect(() => {
+    if (savedDraft === pushedRef.current) return;
+    pushedRef.current = savedDraft;
+    draftRef.current = savedDraft;
+    setDraftState(savedDraft);
+  }, [savedDraft]);
+  useEffect(() => {
+    if (draft === pushedRef.current) return;
+    const timer = setTimeout(() => {
+      pushedRef.current = draftRef.current;
+      saveDraft(draftRef.current);
+    }, DRAFT_PUSH_MS);
+    return () => clearTimeout(timer);
+  }, [draft, saveDraft]);
+  useEffect(
+    () => () => {
+      if (draftRef.current !== pushedRef.current) saveDraft(draftRef.current);
+    },
+    // saveDraft is App's state setter — stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
   const [adresy, setAdresy] = useState<Adres[]>([]);
   const [jednostki, setJednostki] = useState<ZgnJednostka[]>([]);
   const [pelnomocnicy, setPelnomocnicy] = useState<ZgnPelnomocnik[]>([]);
@@ -233,10 +210,11 @@ const Mailing: React.FC<Props> = ({
       return;
     }
     let alive = true;
+    // The one meeting, not the whole table to pick it out of.
     window.electronAPI
-      .getSpotkania()
-      .then((all) => {
-        if (alive) setSpotkanie(all.find((s) => s.id === id) ?? null);
+      .getSpotkanie(id)
+      .then((found) => {
+        if (alive) setSpotkanie(found);
       })
       .catch(() => {
         if (alive) setSpotkanie(null);
@@ -775,7 +753,7 @@ const Mailing: React.FC<Props> = ({
               type="button"
               className="button button-small button-ghost button-icon"
               onClick={() => showPreviewFor(a.id)}
-              title={t.mailingPreviewThis}
+              data-tip={t.mailingPreviewThis}
               aria-label={`${t.mailingPreviewThis}: ${a.nazwa}`}
             >
               <Icon name="eye" size={14} />
@@ -1080,7 +1058,7 @@ const Mailing: React.FC<Props> = ({
               icon="eye"
               title={t.mailingPreviewTitle}
               description={`${t.mailingPreviewHint} ${t.mvePreviewEditHint}`}
-              badge={draft.edited ? <span title={t.mailingEditedNotice}>{t.mailingEditedBadge}</span> : undefined}
+              badge={draft.edited ? <span data-tip={t.mailingEditedNotice}>{t.mailingEditedBadge}</span> : undefined}
               aside={
                 draft.edited ? (
                   <button type="button" className="button button-small button-subtle" onClick={resetToTemplate}>
@@ -1117,7 +1095,7 @@ const Mailing: React.FC<Props> = ({
                             type="button"
                             className="button button-secondary button-icon"
                             onClick={() => stepPreview(-1)}
-                            title={t.mailingPreviewPrev}
+                            data-tip={t.mailingPreviewPrev}
                             aria-label={t.mailingPreviewPrev}
                           >
                             <Icon name="chevron-left" size={14} />
@@ -1131,7 +1109,7 @@ const Mailing: React.FC<Props> = ({
                             type="button"
                             className="button button-secondary button-icon"
                             onClick={() => stepPreview(1)}
-                            title={t.mailingPreviewNext}
+                            data-tip={t.mailingPreviewNext}
                             aria-label={t.mailingPreviewNext}
                           >
                             <Icon name="chevron-right" size={14} />
@@ -1247,7 +1225,7 @@ const Mailing: React.FC<Props> = ({
               {draft.attachments.map((a) => (
                 <div key={a.filePath} className="file-list__row">
                   <Icon name="paperclip" size={14} />
-                  <span className="file-list__name" title={a.filePath}>{a.fileName}</span>
+                  <span className="file-list__name" data-tip={a.filePath}>{a.fileName}</span>
                   <button
                     type="button"
                     className="button button-ghost button-icon icon-danger"
@@ -1257,7 +1235,7 @@ const Mailing: React.FC<Props> = ({
                         attachments: prev.attachments.filter((x) => x.filePath !== a.filePath),
                       }))
                     }
-                    title={t.remove}
+                    data-tip={t.remove}
                     aria-label={`${t.remove}: ${a.fileName}`}
                   >
                     <Icon name="trash" size={14} />
@@ -1320,7 +1298,7 @@ const Mailing: React.FC<Props> = ({
                           <Icon name="check-circle" size={14} /> {t.mailingStatusSent}
                         </span>
                       ) : (
-                        <span className="result-status is-error" title={r.errorMessage}>
+                        <span className="result-status is-error" data-tip={r.errorMessage}>
                           <Icon name="x-circle" size={14} /> {r.errorMessage ?? t.mailingStatusError}
                         </span>
                       )}

@@ -2,9 +2,11 @@ import React, { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 /**
- * A tooltip in the app's own look, for content a native `title` shows badly
- * (a list of problems). Shown on hover and keyboard focus, drawn in the body so
- * no table or card can clip it. Never changes the cursor — no help cursor, no "?".
+ * A tooltip in the app's own look for rich content (a list of problems, JSX).
+ * Plain-text hints don't need it: `data-tip="…"` on the element itself, drawn
+ * by the one `TipLayer`. The app never uses a native `title` hover box.
+ * Shown on hover and keyboard focus, drawn in the body so no table or card can
+ * clip it. Never changes the cursor — no help cursor, no "?".
  */
 /** Keep in step with `.tip { max-width }`. */
 const TIP_MAX_WIDTH = 380;

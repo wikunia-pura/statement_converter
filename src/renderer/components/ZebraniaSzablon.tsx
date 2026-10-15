@@ -13,8 +13,11 @@ import {
 import { liczbaWlasnychWzrostow, planZeSzablonu } from '../../shared/plan-gospodarczy';
 import { formatStamp } from '../../shared/calendar';
 import { translations, Language } from '../translations';
+import { pluralFormPl } from '../plural';
+import { ipcErrorMessage } from '../ipcError';
 import { useNotify } from './Notifications';
 import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
+import { FormSection } from './FormSection';
 import Icon from './Icon';
 import Select from './Select';
 import Tip from './Tip';
@@ -67,10 +70,8 @@ function kiedy(dane: ZebranieDane, t: T, locale: string): string {
 
 /** "3 uchwały" — Polish plural forms; English just adds an s. */
 function uchwalyCount(t: T, n: number): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  const form =
-    n === 1 ? t.zebSzablonResolutionsOne : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? t.zebSzablonResolutionsFew : t.zebSzablonResolutionsMany;
+  const forms = [t.zebSzablonResolutionsOne, t.zebSzablonResolutionsFew, t.zebSzablonResolutionsMany];
+  const form = forms[pluralFormPl(n)];
   return form.replace('{n}', String(n));
 }
 
@@ -320,7 +321,7 @@ export const ZebraniaSzablonModal: React.FC<{
           if (wersja.gotowe[d]) await window.electronAPI.setZebranieDokumentGotowe(wersja.id, d, false);
         }
       } catch (err: unknown) {
-        bledy.push(`${dane.nazwa || zebranie.id}: ${err instanceof Error ? err.message : String(err)}`);
+        bledy.push(`${dane.nazwa || zebranie.id}: ${ipcErrorMessage(err, t.errorUnexpected)}`);
       }
     }
     await onDone();
@@ -364,7 +365,13 @@ export const ZebraniaSzablonModal: React.FC<{
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal--xl" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal modal--xl"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t.zebSzablonApplyTitle}
+        onClick={(e) => e.stopPropagation()}
+      >
         <ModalDismiss onClose={onClose} ariaLabel={t.close} />
         <ModalHeader
           icon="copy"
@@ -373,109 +380,111 @@ export const ZebraniaSzablonModal: React.FC<{
             .replace('{nazwa}', zrodlo.dane.nazwa || zrodlo.dane.adresNazwa)
             .replace('{v}', wersjaLabel(zrodlo.wersja))}
         />
-        <div className="modal-body">
-          <div className="zeb-szb-parts" role="group" aria-label={t.zebSzablonParts}>
-            <span className="zeb-szb-parts__label">{t.zebSzablonParts}</span>
-            {CZESCI.map((c) => {
-              const dostepna = czescDostepna(zrodlo, c);
-              const usuwa = dostepna && !szablonMa(zrodlo, c);
-              return (
-                <label key={c} className={`zeb-szb-part${dostepna ? '' : ' is-off'}`}>
-                  <input
-                    type="checkbox"
-                    checked={czesci[c]}
-                    disabled={!dostepna || saving}
-                    onChange={(e) => setCzesci((prev) => ({ ...prev, [c]: e.target.checked }))}
-                  />
-                  {czescLabel(t, c)}
-                  {!dostepna && <span className="zeb-muted"> — {t.zebSzablonPartMissing}</span>}
-                  {usuwa && <span className="zeb-muted"> — {t.zebSzablonPartClears}</span>}
-                </label>
-              );
-            })}
-          </div>
+        <div className="modal-body modal-body--sectioned">
+          <FormSection icon="file-text" title={t.zebSzablonPartsTitle}>
+            <div className="zeb-szb-parts" role="group" aria-label={t.zebSzablonParts}>
+              {CZESCI.map((c) => {
+                const dostepna = czescDostepna(zrodlo, c);
+                const usuwa = dostepna && !szablonMa(zrodlo, c);
+                return (
+                  <label key={c} className={`zeb-szb-part${dostepna ? '' : ' is-off'}`}>
+                    <input
+                      type="checkbox"
+                      checked={czesci[c]}
+                      disabled={!dostepna || saving}
+                      onChange={(e) => setCzesci((prev) => ({ ...prev, [c]: e.target.checked }))}
+                    />
+                    {czescLabel(t, c)}
+                    {!dostepna && <span className="zeb-muted"> — {t.zebSzablonPartMissing}</span>}
+                    {usuwa && <span className="zeb-muted"> — {t.zebSzablonPartClears}</span>}
+                  </label>
+                );
+              })}
+            </div>
+          </FormSection>
 
-          <div className="zeb-szb-toolbar">
-            <div className="zad-seg" role="group" aria-label={t.zebSzablonView}>
-              {widoki.map((o) => (
-                <button
-                  key={o.key}
-                  type="button"
-                  className={`zad-seg__btn${widok === o.key ? ' is-active' : ''}${o.count === 0 ? ' is-empty' : ''}`}
-                  aria-pressed={widok === o.key}
-                  onClick={() => setWidok(o.key)}
-                >
-                  {o.label}
-                  <span className="zad-seg__count">{o.count}</span>
+          <FormSection icon="calendar" title={t.zebSzablonTargets}>
+            <div className="zeb-szb-toolbar">
+              <div className="zad-seg" role="group" aria-label={t.zebSzablonView}>
+                {widoki.map((o) => (
+                  <button
+                    key={o.key}
+                    type="button"
+                    className={`zad-seg__btn${widok === o.key ? ' is-active' : ''}${o.count === 0 ? ' is-empty' : ''}`}
+                    aria-pressed={widok === o.key}
+                    onClick={() => setWidok(o.key)}
+                  >
+                    {o.label}
+                    <span className="zad-seg__count">{o.count}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="zeb-szb-toolbar__select">
+                <button type="button" className="button button-small button-subtle" onClick={() => zaznacz(puste)}>
+                  {t.zebSzablonSelectEmpty}
                 </button>
-              ))}
+                <button type="button" className="button button-small button-subtle" onClick={() => zaznacz(cele)}>
+                  {t.zebSzablonSelectAll}
+                </button>
+                <button type="button" className="button button-small button-subtle" onClick={() => zaznacz([])}>
+                  {t.zebSzablonSelectNone}
+                </button>
+              </div>
             </div>
-            <div className="zeb-szb-toolbar__select">
-              <button type="button" className="button button-small button-subtle" onClick={() => zaznacz(puste)}>
-                {t.zebSzablonSelectEmpty}
-              </button>
-              <button type="button" className="button button-small button-subtle" onClick={() => zaznacz(cele)}>
-                {t.zebSzablonSelectAll}
-              </button>
-              <button type="button" className="button button-small button-subtle" onClick={() => zaznacz([])}>
-                {t.zebSzablonSelectNone}
-              </button>
-            </div>
-          </div>
 
-          {widoczne.length === 0 ? (
-            <p className="zeb-muted">{t.zebSzablonNoTargets}</p>
-          ) : (
-            <div className="zeb-szb-table-wrap">
-              <table className="zeb-szb-table">
-                <thead>
-                  <tr>
-                    <th aria-label={t.zebSzablonSelect} />
-                    <th>{t.zebSzablonMeeting}</th>
-                    {CZESCI.map((c) => (
-                      <th key={c} className={czesci[c] ? undefined : 'is-off'}>
-                        {czescLabel(t, c)}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {widoczne.map(({ zebranie, dane, wersja }) => {
-                    const checked = wybrane.has(zebranie.id);
-                    const dane_ = zDanymi(wersja);
-                    return (
-                      <tr
-                        key={zebranie.id}
-                        className={`${checked ? 'is-checked' : ''}${checked && dane_ ? ' is-overwrite' : ''}`}
-                        onClick={() => !saving && toggle(zebranie.id)}
-                      >
-                        <td>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={saving}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={() => toggle(zebranie.id)}
-                            aria-label={dane.nazwa || '—'}
-                          />
-                        </td>
-                        <td>
-                          <span className="zeb-szb-name">{dane.nazwa || '—'}</span>
-                          <span className="zeb-muted">
-                            {[dane.adresNazwa, kiedy(dane, t, locale), t.zebraniaVersion.replace('{v}', wersjaLabel(wersja))]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </span>
-                        </td>
-                        {CZESCI.map((c) => komorka(wersja, c))}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
+            {widoczne.length === 0 ? (
+              <p className="zeb-muted">{t.zebSzablonNoTargets}</p>
+            ) : (
+              <div className="zeb-szb-table-wrap">
+                <table className="zeb-szb-table">
+                  <thead>
+                    <tr>
+                      <th aria-label={t.zebSzablonSelect} />
+                      <th>{t.zebSzablonMeeting}</th>
+                      {CZESCI.map((c) => (
+                        <th key={c} className={czesci[c] ? undefined : 'is-off'}>
+                          {czescLabel(t, c)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {widoczne.map(({ zebranie, dane, wersja }) => {
+                      const checked = wybrane.has(zebranie.id);
+                      const dane_ = zDanymi(wersja);
+                      return (
+                        <tr
+                          key={zebranie.id}
+                          className={`${checked ? 'is-checked' : ''}${checked && dane_ ? ' is-overwrite' : ''}`}
+                          onClick={() => !saving && toggle(zebranie.id)}
+                        >
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={saving}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={() => toggle(zebranie.id)}
+                              aria-label={dane.nazwa || '—'}
+                            />
+                          </td>
+                          <td>
+                            <span className="zeb-szb-name">{dane.nazwa || '—'}</span>
+                            <span className="zeb-muted">
+                              {[dane.adresNazwa, kiedy(dane, t, locale), t.zebraniaVersion.replace('{v}', wersjaLabel(wersja))]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </span>
+                          </td>
+                          {CZESCI.map((c) => komorka(wersja, c))}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </FormSection>
         </div>
         <ModalFooter
           onCancel={onClose}

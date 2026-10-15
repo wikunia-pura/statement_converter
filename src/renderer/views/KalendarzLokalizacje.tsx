@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Spotkanie, SpotkanieLokalizacja } from '../../shared/types';
+import { normalizeName } from '../../shared/text';
 import { translations, Language } from '../translations';
+import { ipcErrorMessage } from '../ipcError';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
 import { FormField, FormSection, RequiredNote } from '../components/FormSection';
@@ -16,11 +18,6 @@ interface LokalizacjaFormData {
   nazwa: string;
   adres: string;
   opis: string;
-}
-
-/** Case- and whitespace-insensitive, so "Biuro ZGN" and "biuro zgn " clash. */
-function normalizeName(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 interface FormModalProps {
@@ -217,7 +214,7 @@ const KalendarzLokalizacje: React.FC<Props> = ({ language }) => {
       setFormState(null);
       await load();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(ipcErrorMessage(err, t.errorUnexpected));
     } finally {
       setIsSaving(false);
     }
@@ -235,7 +232,7 @@ const KalendarzLokalizacje: React.FC<Props> = ({ language }) => {
       if (formState?.editing?.id === lok.id) setFormState(null);
       await load();
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : 'Unknown error');
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
     }
   };
 
@@ -314,7 +311,7 @@ const KalendarzLokalizacje: React.FC<Props> = ({ language }) => {
                         className="button button-ghost button-icon icon-danger"
                         onClick={() => handleDelete(lok)}
                         disabled={isSaving}
-                        title={t.delete}
+                        data-tip={t.delete}
                         aria-label={`${t.delete}: ${lok.nazwa}`}
                       >
                         <Icon name="trash" size={15} />

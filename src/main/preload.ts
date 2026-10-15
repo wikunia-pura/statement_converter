@@ -1,6 +1,10 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
+// Type-only, erased from the emitted JS: a sandboxed preload cannot load local modules.
+import type * as SharedTypes from '../shared/types';
 
-// Define IPC channels directly in preload to avoid module resolution issues
+// The channel names, restated here because the sandboxed preload can only
+// `require('electron')` — it cannot load src/shared/types.ts at run time.
+// The check below keeps the two copies identical at compile time.
 const IPC_CHANNELS = {
   GET_BANKS: 'db:get-banks',
   ADD_BANK: 'db:add-bank',
@@ -34,11 +38,17 @@ const IPC_CHANNELS = {
   IMPORT_KONTO_TYPY_FROM_FILE: 'db:import-konto-typy-from-file',
   EXPORT_KONTO_TYPY_TO_FILE: 'db:export-konto-typy-to-file',
   GET_CONVERTERS: 'converters:get-all',
+  ZOOM_IN: 'app:zoom-in',
+  ZOOM_OUT: 'app:zoom-out',
+  ZOOM_RESET: 'app:zoom-reset',
+  CHECK_FOR_UPDATES: 'check-for-updates',
+  DOWNLOAD_UPDATE: 'download-update',
+  DOWNLOAD_INSTALLER: 'download-installer',
+  OPEN_DOWNLOADS_FOLDER: 'open-downloads-folder',
+  OPEN_LOGS_FOLDER: 'open-logs-folder',
   SELECT_FILES: 'files:select',
   SELECT_OUTPUT_FOLDER: 'files:select-output-folder',
   CONVERT_FILE: 'files:convert',
-  CONVERT_ALL: 'files:convert-all',
-  ANALYZE_FILE: 'files:analyze',
   DETECT_ACCOUNT_NUMBERS: 'files:detect-account-numbers',
   CONVERT_FILE_WITH_AI: 'files:convert-with-ai',
   CANCEL_CONVERSION: 'files:cancel-conversion',
@@ -199,6 +209,7 @@ const IPC_CHANNELS = {
   PODATKI_CIT_PODPISZ_PRZERWIJ: 'podatki:cit-podpisz-przerwij',
   PODATKI_CIT_UPO: 'podatki:cit-upo',
   PODATKI_CIT_UPO_POBIERZ: 'podatki:cit-upo-pobierz',
+  PODATKI_CIT_WYSYLKA_ROZSTRZYGNIJ: 'podatki:cit-wysylka-rozstrzygnij',
   PODATKI_CIT_USTAWIENIA_GET: 'podatki:cit-ustawienia-get',
   PODATKI_CIT_USTAWIENIA_SET: 'podatki:cit-ustawienia-set',
   PODATKI_CIT_KLASYFIKUJ_AI: 'podatki:cit-klasyfikuj-ai',
@@ -256,6 +267,7 @@ const IPC_CHANNELS = {
   GET_ZADANIA: 'zadania:get',
   ADD_ZADANIE: 'zadania:add',
   UPDATE_ZADANIE: 'zadania:update',
+  PATCH_ZADANIE: 'zadania:patch',
   MOVE_ZADANIE: 'zadania:move',
   DELETE_ZADANIE: 'zadania:delete',
   ARCHIVE_ZADANIE: 'zadania:archive',
@@ -292,7 +304,17 @@ const IPC_CHANNELS = {
   AUTH_SIGN_OUT: 'auth:sign-out',
   AUTH_GET_SESSION: 'auth:get-session',
   AUTH_CONSUME_EXPIRY_NOTICE: 'auth:consume-expiry-notice',
+  // E-perf
+  GET_SPOTKANIE: 'kalendarz:get-spotkanie',
+  GET_ZEBRANIA_STATUS: 'zebrania:get-status',
 } as const;
+
+/** True only when both objects have the same keys with the same literal values. */
+type SameChannels<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+// A channel added, renamed or removed on one side only fails the main type-check here
+// (`false` is not assignable to `true`) instead of failing at run time as an unhandled invoke.
+const ipcChannelsInSync: SameChannels<typeof IPC_CHANNELS, typeof SharedTypes.IPC_CHANNELS> = true;
+void ipcChannelsInSync;
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
@@ -391,8 +413,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectOutputFolder: () => ipcRenderer.invoke(IPC_CHANNELS.SELECT_OUTPUT_FOLDER),
   convertFile: (inputPath: string, bankId: number, fileName: string, adresId?: number | null, accountTypeId?: number | null) =>
     ipcRenderer.invoke(IPC_CHANNELS.CONVERT_FILE, inputPath, bankId, fileName, adresId, accountTypeId),
-  analyzeFile: (inputPath: string, bankId: number, adresId?: number | null) =>
-    ipcRenderer.invoke(IPC_CHANNELS.ANALYZE_FILE, inputPath, bankId, adresId),
   detectAccountNumbers: (inputPath: string, bankId?: number | null) =>
     ipcRenderer.invoke(IPC_CHANNELS.DETECT_ACCOUNT_NUMBERS, inputPath, bankId),
   convertFileWithAI: (inputPath: string, bankId: number, fileName: string, adresId?: number | null, accountTypeId?: number | null) =>
@@ -405,6 +425,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   touchConversion: (tempConversionId: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.TOUCH_CONVERSION, tempConversionId),
   openFile: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.OPEN_FILE, filePath),
+  // The path of a dropped file — `File.path` is gone since Electron 32. Empty when
+  // the File has no file on disk behind it (e.g. one built in the page).
+  getPathForFile: (file: File): string => {
+    try {
+      return webUtils.getPathForFile(file);
+    } catch {
+      return '';
+    }
+  },
 
   // Settings
   getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SETTINGS),
@@ -599,8 +628,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.MAILING_UPDATE_TYP, id, nazwa, opis, adresaci),
   mailingDeleteTyp: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.MAILING_DELETE_TYP, id),
   mailingExport: (request: unknown) => ipcRenderer.invoke(IPC_CHANNELS.MAILING_EXPORT, request),
-  mailingResolveOdbiorcy: (request: unknown) =>
-    ipcRenderer.invoke(IPC_CHANNELS.MAILING_RESOLVE_ODBIORCY, request),
   mailingShowInFolder: (filePath: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.MAILING_SHOW_IN_FOLDER, filePath),
   // The same handler, for any file: nothing about it is specific to mailing.
@@ -619,12 +646,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteZebranieWersja: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ZEBRANIE_WERSJA, id),
   addZebranieWersja: (zebranieId: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.ADD_ZEBRANIE_WERSJA, zebranieId),
-  updateZebranieWersja: (id: number, input: unknown) =>
-    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_ZEBRANIE_WERSJA, id, input),
+  updateZebranieWersja: (id: number, input: unknown, expectedUpdatedAt?: string | null) =>
+    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_ZEBRANIE_WERSJA, id, input, expectedUpdatedAt ?? null),
   setZebranieDokumentGotowe: (id: number, dokument: string, gotowe: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_ZEBRANIE_DOKUMENT_GOTOWE, id, dokument, gotowe),
-  setZebranieWersjaNazwa: (id: number, nazwa: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SET_ZEBRANIE_WERSJA_NAZWA, id, nazwa),
   getSprawozdaniaLista: () => ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_SPRAWOZDANIA_LISTA),
   getSprawozdanie: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_SPRAWOZDANIE_GET, id),
   attachZebranieSprawozdanie: (wersjaId: number, sprawozdanieId: number) =>
@@ -641,8 +666,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIE_SPRAWOZDANIE_WSTEP_AI, cel, wskazowki),
   proponujZaliczkeAi: (plan: unknown, rodzaj: string, wskazowki: string, dataZebrania: string | null) =>
     ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_PLAN_ZALICZKA_AI, plan, rodzaj, wskazowki, dataZebrania),
-  setZebranieWersjaPlan: (wersjaId: number, plan: unknown) =>
-    ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIE_WERSJA_SET_PLAN, wersjaId, plan),
+  setZebranieWersjaPlan: (wersjaId: number, plan: unknown, expectedUpdatedAt?: string | null) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIE_WERSJA_SET_PLAN, wersjaId, plan, expectedUpdatedAt ?? null),
   getZebraniaWspolnoty: () => ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_WSPOLNOTY_GET),
   setZebraniaWspolnota: (adresNazwa: string, patch: unknown) =>
     ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_WSPOLNOTA_SET, adresNazwa, patch),
@@ -658,7 +683,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getPlanyWlasne: () => ipcRenderer.invoke(IPC_CHANNELS.PLANY_WLASNE_GET),
   addPlanWlasny: (nrWsp: number, nazwa: string, plan: unknown) =>
     ipcRenderer.invoke(IPC_CHANNELS.PLAN_WLASNY_ADD, nrWsp, nazwa, plan),
-  setPlanWlasny: (id: number, plan: unknown) => ipcRenderer.invoke(IPC_CHANNELS.PLAN_WLASNY_SET, id, plan),
+  setPlanWlasny: (id: number, plan: unknown, expectedUpdatedAt?: string | null) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PLAN_WLASNY_SET, id, plan, expectedUpdatedAt ?? null),
   deletePlanWlasny: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.PLAN_WLASNY_DELETE, id),
   exportPlanWlasny: (request: unknown) => ipcRenderer.invoke(IPC_CHANNELS.PLAN_WLASNY_EXPORT, request),
   // Podatki — nieruchomości (DN-1)
@@ -701,10 +727,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_PLIKI, rok, ids, tryb),
   setPodatkiCitZlozone: (ids: number[], filed: boolean) =>
     ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_SET_ZLOZONE, ids, filed),
-  podpiszPodatkiCit: (rok: number, ids: number[], wybor: unknown, opcje: { pdfPodpisany: boolean; wyslij: boolean }) =>
-    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_PODPISZ_WIELE, rok, ids, wybor, opcje),
+  podpiszPodatkiCit: (
+    rok: number,
+    ids: number[],
+    wybor: unknown,
+    opcje: { pdfPodpisany: boolean; wyslij: boolean; potwierdzoneKorekty?: number[] },
+  ) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_PODPISZ_WIELE, rok, ids, wybor, opcje),
   sprawdzUpoCit: (rok: number, ids?: number[]) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_UPO, rok, ids),
   pobierzUpoCit: (id: number, refId: string) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_UPO_POBIERZ, id, refId),
+  rozstrzygnijWysylkeCit: (id: number, at: string, jak: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_CIT_WYSYLKA_ROZSTRZYGNIJ, id, at, jak),
   onCitUpo: (callback: (wynik: any) => void) => {
     const listener = (_event: unknown, wynik: any) => callback(wynik);
     ipcRenderer.on('podatki:cit-upo-zmiana', listener);
@@ -808,8 +840,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportKalendarzPdf: (request: unknown) => ipcRenderer.invoke(IPC_CHANNELS.KALENDARZ_PDF_EXPORT, request),
   addSpotkanie: (input: import('../shared/types').SpotkanieInput) =>
     ipcRenderer.invoke(IPC_CHANNELS.ADD_SPOTKANIE, input),
-  updateSpotkanie: (id: number, input: import('../shared/types').SpotkanieInput) =>
-    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_SPOTKANIE, id, input),
+  updateSpotkanie: (
+    id: number,
+    input: import('../shared/types').SpotkanieInput,
+    expectedUpdatedAt?: string | null,
+  ) => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_SPOTKANIE, id, input, expectedUpdatedAt ?? null),
   deleteSpotkanie: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_SPOTKANIE, id),
   ackSpotkanieTermin: (id: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.ACK_SPOTKANIE_TERMIN, id),
@@ -823,6 +858,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.ADD_ZADANIE, input),
   updateZadanie: (id: number, input: import('../shared/types').ZadanieInput) =>
     ipcRenderer.invoke(IPC_CHANNELS.UPDATE_ZADANIE, id, input),
+  patchZadanie: (id: number, patch: import('../shared/types').ZadaniePatch) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PATCH_ZADANIE, id, patch),
   moveZadanie: (
     id: number,
     status: import('../shared/types').ZadanieStatus,
@@ -912,9 +949,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.GET_APP_VERSION),
 
   // Zoom controls
-  zoomIn: () => ipcRenderer.invoke('app:zoom-in'),
-  zoomOut: () => ipcRenderer.invoke('app:zoom-out'),
-  zoomReset: () => ipcRenderer.invoke('app:zoom-reset'),
+  zoomIn: () => ipcRenderer.invoke(IPC_CHANNELS.ZOOM_IN),
+  zoomOut: () => ipcRenderer.invoke(IPC_CHANNELS.ZOOM_OUT),
+  zoomReset: () => ipcRenderer.invoke(IPC_CHANNELS.ZOOM_RESET),
 
   // Auth (Supabase)
   authSignIn: (email: string, password: string) =>
@@ -932,17 +969,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
 
   // Auto-updater
-  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
-  downloadUpdate: () => ipcRenderer.invoke('download-update'),
-  openDownloadsFolder: () => ipcRenderer.invoke('open-downloads-folder'),
-  downloadInstaller: () => ipcRenderer.invoke('download-installer'),
+  checkForUpdates: () => ipcRenderer.invoke(IPC_CHANNELS.CHECK_FOR_UPDATES),
+  downloadUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.DOWNLOAD_UPDATE),
+  openDownloadsFolder: () => ipcRenderer.invoke(IPC_CHANNELS.OPEN_DOWNLOADS_FOLDER),
+  downloadInstaller: () => ipcRenderer.invoke(IPC_CHANNELS.DOWNLOAD_INSTALLER),
   onInstallerDownloadProgress: (callback: (percent: number) => void) => {
     const listener = (_event: unknown, percent: number) => callback(percent);
     ipcRenderer.on('installer-download-progress', listener);
     return () => ipcRenderer.off('installer-download-progress', listener);
   },
-  openLogsFolder: () => ipcRenderer.invoke('open-logs-folder'),
-  getLogPath: () => ipcRenderer.invoke('get-log-path'),
+  openLogsFolder: () => ipcRenderer.invoke(IPC_CHANNELS.OPEN_LOGS_FOLDER),
   onUpdateAvailable: (callback: (info: any) => void) => {
     const listener = (_event: unknown, info: any) => callback(info);
     ipcRenderer.on('update-available', listener);
@@ -978,4 +1014,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('backup:auto-created', listener);
     return () => ipcRenderer.off('backup:auto-created', listener);
   },
+  // E-perf: one meeting by id, and the Zebrania entries' newest-version status only.
+  getSpotkanie: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.GET_SPOTKANIE, id),
+  getZebraniaStatus: () => ipcRenderer.invoke(IPC_CHANNELS.GET_ZEBRANIA_STATUS),
 });

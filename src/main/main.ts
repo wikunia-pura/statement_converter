@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, nativeImage, net } from 'electron';
+import { showOpenDialog } from './dialogs';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 import path from 'path';
@@ -61,6 +62,7 @@ import {
   ZebraniePakietRequest,
   KalendarzPdfRequest,
   ZadanieInput,
+  ZadaniePatch,
   ZadanieStatus,
   ZadanieZalacznik,
   ZadanieKomentarzInput,
@@ -68,7 +70,7 @@ import {
 import { runAutoBackup, getBackupStatus, getBackupsDir, validateBackup } from './backupService';
 import { conversionCache } from './conversionCache';
 import * as authService from './authService';
-import { Notifier, nameForMailbox } from './notifier';
+import { Notifier } from './notifier';
 import { deleteFromInbox, listInbox, markInboxRead } from './notificationInbox';
 import { NOTIFICATION_DEFS } from '../shared/notifications';
 import { createTray, announceBackgroundOnce } from './tray';
@@ -118,6 +120,7 @@ import {
 } from './mailing/service';
 import { verifySmtp } from './mailing/sender';
 import { uniquePath } from './mailing/service';
+import { checkLocalPathString, checkOpenablePath, isInsideDir } from './pathGuards';
 import { parseSprawozdaniaPdf } from './zebrania/sprawozdanieParser';
 import { nazwaPliku, planPdf, planXlsx, sprawozdaniePdf, sprawozdanieXlsx } from './zebrania/dokumenty';
 import { kalendarzPdf, kalendarzPdfName } from './kalendarz/pdf';
@@ -142,13 +145,11 @@ import {
   EDeklaracjeSrodowisko,
   EDeklaracjeWysylka,
   czekaNaUpo,
-  statusKoncowy,
   swiezaWysylka,
   normalizeSrodowisko,
-  ostatniaWysylka,
-  przyjetaProdukcyjnie,
 } from '../shared/e-deklaracje';
-import { FetchLike, pobierzUpo, wyslijDokument } from './podatki/eDeklaracjeBramka';
+import { blokadaDoPotwierdzenia, blokadyWysylkiProd, odstepUpoMs, opisBlokady } from '../shared/e-deklaracje';
+import { BramkaNiePrzyjela, FetchLike, pobierzUpo, wyslijDokument } from './podatki/eDeklaracjeBramka';
 import { analizujPlik, podpiszPliki } from './podpis/podpiszPliki';
 import { parsePodatkiXlsx } from './podatki/importXlsx';
 import { registerPitHandlers } from './podatki/pitHandlers';
@@ -381,6 +382,37 @@ function runExitBackup(resume: () => void) {
     });
 }
 
+/** The bundled renderer page; __dirname is dist/main/main, so two levels up. */
+const RENDERER_INDEX = path.join(__dirname, '..', '..', 'renderer', 'index.html');
+
+/**
+ * Whether a URL is the app itself: the Vite dev server in development, the
+ * bundled index.html when packaged. The app never navigates on its own — it is
+ * one page — so anything else (a link in a mail body, a file dropped outside a
+ * drop zone) would be a foreign page running with the preload's `electronAPI`.
+ */
+function isAppUrl(url: string): boolean {
+  try {
+    if (!app.isPackaged) return new URL(url).origin === new URL(DEV_SERVER_URL).origin;
+    return url.split('#')[0].split('?')[0] === pathToFileURL(RENDERER_INDEX).href;
+  } catch {
+    return false;
+  }
+}
+
+/** Keep a window on its own content: no navigating elsewhere, no new windows. */
+function lockNavigation(contents: Electron.WebContents, allow: (url: string) => boolean) {
+  contents.on('will-navigate', (event, url) => {
+    if (allow(url)) return;
+    event.preventDefault();
+    log.warn('[SECURITY] navigation blocked:', url.slice(0, 200));
+  });
+  contents.setWindowOpenHandler(({ url }) => {
+    log.warn('[SECURITY] new window blocked:', url.slice(0, 200));
+    return { action: 'deny' };
+  });
+}
+
 function createWindow() {
   // A fresh window starts a fresh session — its close deserves its own backup.
   backupOnExitDone = false;
@@ -399,6 +431,15 @@ function createWindow() {
 
   // A start at login hides only the first window; any later one is wanted.
   startHidden = false;
+
+  lockNavigation(mainWindow.webContents, isAppUrl);
+  // Session-wide (the default session), so setting it again for a re-created
+  // window just replaces it. The renderer asks for one thing: writing the
+  // clipboard ("copy error" buttons). Camera, microphone, notifications,
+  // geolocation, fullscreen, opening external protocols — all refused.
+  mainWindow.webContents.session.setPermissionRequestHandler((_contents, permission, callback) => {
+    callback(permission === 'clipboard-sanitized-write');
+  });
 
   mainWindow.on('close', (event) => {
     // The X hides the window and leaves the app running — the task notifications
@@ -420,7 +461,7 @@ function createWindow() {
   if (app.isPackaged) {
     // Production: load from local files
     // __dirname is dist/main/main, so we need to go up two levels
-    mainWindow.loadFile(path.join(__dirname, '..', '..', 'renderer', 'index.html'));
+    mainWindow.loadFile(RENDERER_INDEX);
   } else {
     // Development: load from Vite dev server
     mainWindow.loadURL(DEV_SERVER_URL);
@@ -437,6 +478,92 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  // The renderer died under the window (a crash, out of memory, killed by the
+  // system): without this the window stays blank until the app is restarted.
+  // Logged, then reloaded — once per minute at most, so a page that crashes
+  // as it loads does not spin in a reload loop.
+  let crashReloadAt = 0;
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    log.error(`[RENDERER] process gone: ${details.reason} (exit code ${details.exitCode})`);
+    if (details.reason === 'clean-exit' || isQuitting) return;
+    const win = mainWindow;
+    if (!win || win.isDestroyed()) return;
+    if (Date.now() - crashReloadAt < 60_000) {
+      log.error('[RENDERER] crashed again within a minute of the last reload — not reloading');
+      return;
+    }
+    crashReloadAt = Date.now();
+    win.webContents.reload();
+  });
+}
+
+/* --------------------- Paths the renderer hands back --------------------- */
+// The renderer can be steered by stored HTML (see renderer/sanitize.ts), so a
+// path it sends back is checked against where it could legitimately come from.
+
+/** Folders set in Settings on this machine — each chosen in a dialog here. */
+const FOLDER_SETTINGS = ['outputFolder', 'statementsFolder', 'swrkFolder', 'impexFolder', 'podatkiFolder'];
+
+function configuredFolders(): string[] {
+  return FOLDER_SETTINGS.map((key) => (database.getSetting(key) || '').trim()).filter(Boolean);
+}
+
+/** Folders the user picked in a main-process dialog this session. */
+const pickedFolders = new Set<string>();
+
+/** Note a folder a dialog returned, and hand it back. */
+function rememberPickedFolder(dir: string): string {
+  pickedFolders.add(path.resolve(dir));
+  return dir;
+}
+
+/**
+ * A folder the main process may write into on the renderer's word: one picked
+ * in a dialog this session, or the current value of one of `settingKeys`.
+ */
+function isAllowedOutputDir(dir: unknown, ...settingKeys: string[]): dir is string {
+  if (typeof dir !== 'string' || !dir.trim()) return false;
+  const resolved = path.resolve(dir.trim());
+  if (pickedFolders.has(resolved)) return true;
+  return settingKeys.some((key) => {
+    const configured = (database.getSetting(key) || '').trim();
+    return configured !== '' && path.resolve(configured) === resolved;
+  });
+}
+
+/** A folder setting from the renderer: cleared, unchanged, or picked in a dialog this session. */
+function setFolderSetting(key: string, folderPath: unknown): boolean {
+  if (folderPath !== '' && !isAllowedOutputDir(folderPath, key)) {
+    log.warn(`[SETTINGS] ${key}: refused a folder that was not picked in the dialog`);
+    return false;
+  }
+  database.setSetting(key, folderPath as string);
+  return true;
+}
+
+/** Files picked in the mailing attachment dialog this session. */
+const pickedAttachments = new Set<string>();
+
+/**
+ * A file a mailing may attach: picked in the attachment dialog this session, or
+ * written by the app itself — under the output folder (the mailing archive and
+ * the conversions) or the tax folder. Anything else the renderer names would be
+ * read and mailed out of the office.
+ */
+function isAllowedAttachment(filePath: unknown): boolean {
+  if (typeof filePath !== 'string' || !filePath) return false;
+  if (pickedAttachments.has(path.resolve(filePath))) return true;
+  if (!checkLocalPathString(filePath, { networkRoots: configuredFolders() })) return false;
+  try {
+    const real = fs.realpathSync(filePath);
+    return ['outputFolder', 'podatkiFolder'].some((key) => {
+      const dir = (database.getSetting(key) || '').trim();
+      return dir !== '' && fs.existsSync(dir) && isInsideDir(real, fs.realpathSync(dir));
+    });
+  } catch {
+    return false;
+  }
 }
 
 function setupIpcHandlers() {
@@ -493,7 +620,7 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.IMPORT_BANKS_FROM_FILE, async () => {
     try {
-      const result = await dialog.showOpenDialog(mainWindow!, {
+      const result = await showOpenDialog(mainWindow!, {
         title: 'Import Banki',
         filters: [{ name: 'JSON', extensions: ['json'] }],
         properties: ['openFile'],
@@ -551,7 +678,7 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.IMPORT_KONTRAHENCI_FROM_FILE, async () => {
     try {
-      const result = await dialog.showOpenDialog(mainWindow!, {
+      const result = await showOpenDialog(mainWindow!, {
         properties: ['openFile'],
         filters: [
           { name: 'Plan kont', extensions: ['txt', 'pdf'] },
@@ -706,7 +833,7 @@ function setupIpcHandlers() {
   // Import from DOM - updates existing entries by name, doesn't modify alternative names
   ipcMain.handle(IPC_CHANNELS.IMPORT_KONTRAHENCI_FROM_DOM, async () => {
     try {
-      const result = await dialog.showOpenDialog(mainWindow!, {
+      const result = await showOpenDialog(mainWindow!, {
         properties: ['openFile'],
         filters: [
           { name: 'Plan kont', extensions: ['txt', 'pdf'] },
@@ -992,7 +1119,7 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.IMPORT_KONTO_TYPY_FROM_FILE, async () => {
     try {
-      const result = await dialog.showOpenDialog(mainWindow!, {
+      const result = await showOpenDialog(mainWindow!, {
         title: 'Import Typy kont',
         filters: [{ name: 'JSON', extensions: ['json'] }],
         properties: ['openFile'],
@@ -1037,7 +1164,7 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.IMPORT_ADRESY_FROM_FILE, async () => {
     try {
-      const result = await dialog.showOpenDialog(mainWindow!, {
+      const result = await showOpenDialog(mainWindow!, {
         properties: ['openFile'],
         filters: [
           { name: 'Text Files', extensions: ['txt'] },
@@ -1380,7 +1507,7 @@ function setupIpcHandlers() {
 
   // File operations
   ipcMain.handle(IPC_CHANNELS.SELECT_FILES, async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    const result = await showOpenDialog(mainWindow!, {
       properties: ['openFile', 'multiSelections'],
     });
 
@@ -1394,19 +1521,19 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle(IPC_CHANNELS.SELECT_OUTPUT_FOLDER, async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    const result = await showOpenDialog(mainWindow!, {
       properties: ['openDirectory'],
     });
 
     if (!result.canceled && result.filePaths.length > 0) {
-      return result.filePaths[0];
+      return rememberPickedFolder(result.filePaths[0]);
     }
     return null;
   });
 
   // PDF operations
   ipcMain.handle(IPC_CHANNELS.SELECT_PDF, async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    const result = await showOpenDialog(mainWindow!, {
       properties: ['openFile'],
       filters: [
         { name: 'PDF Files', extensions: ['pdf'] },
@@ -1435,7 +1562,7 @@ function setupIpcHandlers() {
 
   // ---- Zaliczki (podsumowanie zaliczek miesięcznych) ----
   ipcMain.handle(IPC_CHANNELS.ZALICZKI_SELECT_PDFS, async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    const result = await showOpenDialog(mainWindow!, {
       properties: ['openFile', 'multiSelections'],
       filters: [{ name: 'PDF', extensions: ['pdf'] }],
     });
@@ -1500,7 +1627,7 @@ function setupIpcHandlers() {
 
   // ---- Noty Świadczenia (correction notices) ----
   ipcMain.handle(IPC_CHANNELS.NOTY_SELECT_PDFS, async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    const result = await showOpenDialog(mainWindow!, {
       properties: ['openFile', 'multiSelections'],
       filters: [{ name: 'PDF', extensions: ['pdf'] }],
     });
@@ -1509,11 +1636,11 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle(IPC_CHANNELS.NOTY_SELECT_OUTPUT_DIR, async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    const result = await showOpenDialog(mainWindow!, {
       properties: ['openDirectory', 'createDirectory'],
     });
     if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0];
+    return rememberPickedFolder(result.filePaths[0]);
   });
 
   ipcMain.handle(
@@ -1531,7 +1658,11 @@ function setupIpcHandlers() {
 
         let targetPath: string;
         if (outputDir) {
-          targetPath = path.join(outputDir, defaultName);
+          if (!isAllowedOutputDir(outputDir)) {
+            return { error: 'Folder docelowy nie został wybrany w oknie wyboru — wybierz go ponownie.' };
+          }
+          // Never over an existing file: a second note with the same name gets "-1".
+          targetPath = uniquePath(outputDir, defaultName);
         } else {
           const saveResult = await dialog.showSaveDialog(mainWindow!, {
             title: 'Zapisz notę jako Excel',
@@ -1556,7 +1687,7 @@ function setupIpcHandlers() {
 
   // ---- Scalanie wpłat (merge daily deposit files per community) ----
   ipcMain.handle(IPC_CHANNELS.SCALANIE_SELECT_FILES, async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    const result = await showOpenDialog(mainWindow!, {
       properties: ['openFile', 'multiSelections'],
     });
     if (result.canceled) return [];
@@ -1564,11 +1695,11 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle(IPC_CHANNELS.SCALANIE_SELECT_OUTPUT_DIR, async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    const result = await showOpenDialog(mainWindow!, {
       properties: ['openDirectory', 'createDirectory'],
     });
     if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0];
+    return rememberPickedFolder(result.filePaths[0]);
   });
 
   ipcMain.handle(IPC_CHANNELS.SCALANIE_ANALYZE_FILE, async (_event, filePath: string) => {
@@ -1595,6 +1726,10 @@ function setupIpcHandlers() {
         if (!outputDir || !fs.existsSync(outputDir)) {
           return { error: 'Folder docelowy nie istnieje' };
         }
+        // The configured SWRK folder, or one picked in the dialog — nothing else.
+        if (!isAllowedOutputDir(outputDir, 'swrkFolder')) {
+          return { error: 'Folder docelowy nie został wybrany w oknie wyboru — wybierz go ponownie.' };
+        }
         const result = scalanieMergeFiles(files, outputDir);
         return { success: true, result };
       } catch (error: unknown) {
@@ -1607,7 +1742,7 @@ function setupIpcHandlers() {
 
   // ---- Homebanking (merge multi-day, multi-bank deposit files) ----
   ipcMain.handle(IPC_CHANNELS.HOMEBANKING_SELECT_FILES, async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    const result = await showOpenDialog(mainWindow!, {
       properties: ['openFile', 'multiSelections'],
     });
     if (result.canceled) return [];
@@ -1615,11 +1750,11 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle(IPC_CHANNELS.HOMEBANKING_SELECT_OUTPUT_DIR, async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    const result = await showOpenDialog(mainWindow!, {
       properties: ['openDirectory', 'createDirectory'],
     });
     if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0];
+    return rememberPickedFolder(result.filePaths[0]);
   });
 
   ipcMain.handle(IPC_CHANNELS.HOMEBANKING_ANALYZE_FILE, async (_event, filePath: string) => {
@@ -1652,6 +1787,9 @@ function setupIpcHandlers() {
         if (!outputDir || !fs.existsSync(outputDir)) {
           return { error: 'Folder docelowy nie istnieje' };
         }
+        if (!isAllowedOutputDir(outputDir)) {
+          return { error: 'Folder docelowy nie został wybrany w oknie wyboru — wybierz go ponownie.' };
+        }
         const banks = await database.getAllBanks();
         const adresy = await database.getAllAdresy();
         const results = homebankingMergeGroups(files, outputDir, banks, adresy);
@@ -1666,7 +1804,7 @@ function setupIpcHandlers() {
 
   // ---- Odczyty liczników (supplier workbooks → tab-separated IMPEX files) ----
   ipcMain.handle(IPC_CHANNELS.ODCZYTY_SELECT_FILES, async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    const result = await showOpenDialog(mainWindow!, {
       properties: ['openFile', 'multiSelections'],
       filters: [{ name: 'Excel', extensions: ['xlsx', 'xls', 'xlsm'] }],
     });
@@ -1675,11 +1813,11 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle(IPC_CHANNELS.ODCZYTY_SELECT_OUTPUT_DIR, async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    const result = await showOpenDialog(mainWindow!, {
       properties: ['openDirectory', 'createDirectory'],
     });
     if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0];
+    return rememberPickedFolder(result.filePaths[0]);
   });
 
   ipcMain.handle(IPC_CHANNELS.ODCZYTY_GET_HISTORY, async () => {
@@ -1740,6 +1878,9 @@ function setupIpcHandlers() {
           return {
             error: 'Folder IMPEX nie jest skonfigurowany (Ustawienia → Folder IMPEX).',
           };
+        }
+        if (!isAllowedOutputDir(outputDir, 'impexFolder')) {
+          return { error: 'Folder docelowy nie został wybrany w oknie wyboru — wybierz go ponownie.' };
         }
 
         const readings: OdczytReading[] = [];
@@ -1845,11 +1986,16 @@ function setupIpcHandlers() {
    *
    * The input file's hash goes with it: it links the conversion to the pinned
    * statement even after someone renames or moves the file in the folder.
+   *
+   * Never throws: it runs after the output file was written. What could not be
+   * recorded comes back as text, and a successful conversion hands it to the
+   * renderer as `recordError` — the user must know the dashboard does not see
+   * this conversion, or the statement may be posted twice.
    */
   const recordConversion = async (
     converterId: string | null | undefined,
     data: Parameters<typeof database.addConversionHistory>[0],
-  ): Promise<void> => {
+  ): Promise<string | null> => {
     let monthKey: string | null = null;
     let inputHash: string | null = null;
     if (data.inputPath && fs.existsSync(data.inputPath)) {
@@ -1867,7 +2013,12 @@ function setupIpcHandlers() {
         inputHash = null;
       }
     }
-    await database.addConversionHistory({ ...data, monthKey, inputHash });
+    try {
+      return (await database.addConversionHistory({ ...data, monthKey, inputHash })).error;
+    } catch (error: unknown) {
+      log.error('[CONVERT] conversion record failed:', error);
+      return getErrorMessage(error);
+    }
   };
 
   // Conversions in flight, by input file — "Anuluj" aborts one by its path.
@@ -1961,7 +2112,7 @@ function setupIpcHandlers() {
         }
 
         // Save to history (only if no review needed)
-        await recordConversion(bank.converterId, {
+        const recordError = await recordConversion(bank.converterId, {
           fileName,
           bankName: bank.name,
           converterName: converter.name,
@@ -1974,6 +2125,7 @@ function setupIpcHandlers() {
         return {
           success: true,
           outputPath: finalOutputPath,
+          ...(recordError ? { recordError } : {}),
         };
       } catch (error: unknown) {
         // Cancelled by the user: not a failure, nothing to record.
@@ -2140,7 +2292,7 @@ function setupIpcHandlers() {
             };
           }
 
-          await recordConversion(bank.converterId, {
+          const recordError = await recordConversion(bank.converterId, {
             fileName,
             bankName: bank.name,
             converterName: converter.name,
@@ -2153,6 +2305,7 @@ function setupIpcHandlers() {
           return {
             success: true,
             outputPath: finalOutputPath,
+            ...(recordError ? { recordError } : {}),
           };
         } catch (aiError: unknown) {
           // Cancelled — never "fall back" into a second, non-AI conversion.
@@ -2198,7 +2351,7 @@ function setupIpcHandlers() {
               };
             }
 
-            await recordConversion(bank.converterId, {
+            const recordError = await recordConversion(bank.converterId, {
               fileName,
               bankName: bank.name,
               converterName: converter.name,
@@ -2212,6 +2365,7 @@ function setupIpcHandlers() {
               success: true,
               outputPath: finalOutputPath,
               warningMessage: fallbackMessage,
+              ...(recordError ? { recordError } : {}),
             };
           } catch (fallbackError: unknown) {
             if (isConversionCancelled(fallbackError)) throw fallbackError;
@@ -2259,9 +2413,10 @@ function setupIpcHandlers() {
         const result = await converterRegistry.finalizeConversion(tempConversionId, decisions);
         
         // Add to history
+        let recordError: string | null = null;
         if (result.fileName && result.bankName && result.inputPath && result.outputPath) {
           const converter = converterRegistry.getConverter(result.converterId || '');
-          await recordConversion(result.converterId, {
+          recordError = await recordConversion(result.converterId, {
             fileName: result.fileName,
             bankName: result.bankName,
             converterName: converter?.name || 'Unknown',
@@ -2275,6 +2430,7 @@ function setupIpcHandlers() {
         return {
           success: true,
           outputPath: result.outputPath,
+          ...(recordError ? { recordError } : {}),
         };
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -2331,12 +2487,17 @@ function setupIpcHandlers() {
     }
   );
 
-  ipcMain.handle(IPC_CHANNELS.OPEN_FILE, async (_, filePath: string) => {
+  ipcMain.handle(IPC_CHANNELS.OPEN_FILE, async (_, requestedPath: string) => {
+    // Paths come from shared rows too (history, mailing attachments, the folder
+    // scan), so before anything touches them: no network host other than a
+    // configured folder's, no `..`, and nothing the system would run. Folders
+    // pass — the output-folder buttons open them through here.
+    const filePath = checkOpenablePath(requestedPath, { networkRoots: configuredFolders() });
+    if (!filePath) {
+      log.warn('[OPEN] refused or missing:', String(requestedPath).slice(0, 300));
+      return false;
+    }
     try {
-      // Check if file exists
-      if (!fs.existsSync(filePath)) {
-        return false;
-      }
       // Opening an archive unpacks it beside itself (macOS Archive Utility), and
       // the folder scan would then pin every unpacked file as a statement of its
       // own — so an archive is shown in its folder instead.
@@ -2433,28 +2594,23 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle(IPC_CHANNELS.SET_OUTPUT_FOLDER, async (_, folderPath: string) => {
-    database.setSetting('outputFolder', folderPath);
-    return true;
+    return setFolderSetting('outputFolder', folderPath);
   });
 
   ipcMain.handle(IPC_CHANNELS.SET_IMPEX_FOLDER, async (_, folderPath: string) => {
-    database.setSetting('impexFolder', folderPath);
-    return true;
+    return setFolderSetting('impexFolder', folderPath);
   });
 
   ipcMain.handle(IPC_CHANNELS.SET_SWRK_FOLDER, async (_, folderPath: string) => {
-    database.setSetting('swrkFolder', folderPath);
-    return true;
+    return setFolderSetting('swrkFolder', folderPath);
   });
 
   ipcMain.handle(IPC_CHANNELS.SET_PODATKI_FOLDER, async (_, folderPath: string) => {
-    database.setSetting('podatkiFolder', folderPath);
-    return true;
+    return setFolderSetting('podatkiFolder', folderPath);
   });
 
   ipcMain.handle(IPC_CHANNELS.SET_STATEMENTS_FOLDER, async (_, folderPath: string) => {
-    database.setSetting('statementsFolder', folderPath);
-    return true;
+    return setFolderSetting('statementsFolder', folderPath);
   });
 
   ipcMain.handle(IPC_CHANNELS.SET_DARK_MODE, async (_, enabled: boolean) => {
@@ -2600,7 +2756,7 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle(IPC_CHANNELS.IMPORT_SETTINGS, async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    const result = await showOpenDialog(mainWindow!, {
       title: 'Importuj ustawienia',
       filters: [{ name: 'JSON', extensions: ['json'] }],
       properties: ['openFile'],
@@ -2609,8 +2765,8 @@ function setupIpcHandlers() {
     if (!result.canceled && result.filePaths.length > 0) {
       try {
         const data = JSON.parse(fs.readFileSync(result.filePaths[0], 'utf-8'));
-        database.importSettings(data);
-        return { success: true };
+        const imported = database.importSettings(data);
+        return { success: true, imported };
       } catch (error) {
         return { success: false, error: 'Nieprawidłowy format pliku' };
       }
@@ -2651,7 +2807,7 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.IMPORT_HISTORY_FROM_FILE, async () => {
     try {
-      const result = await dialog.showOpenDialog(mainWindow!, {
+      const result = await showOpenDialog(mainWindow!, {
         title: 'Import Historia',
         filters: [{ name: 'JSON', extensions: ['json'] }],
         properties: ['openFile'],
@@ -2844,7 +3000,12 @@ function setupIpcHandlers() {
       const backup = await database.exportFullBackup(app.getVersion());
       fs.writeFileSync(result.filePath, JSON.stringify(backup, null, 2), 'utf-8');
       log.info(`[BACKUP] Manual backup written: ${result.filePath}`);
-      return { success: true, filePath: result.filePath, counts: countBackup(backup) };
+      return {
+        success: true,
+        filePath: result.filePath,
+        counts: countBackup(backup),
+        skippedSections: backup.meta?.skippedSections ?? [],
+      };
     } catch (error) {
       log.error('[BACKUP] Export failed:', error);
       return { success: false, error: getErrorMessage(error) };
@@ -2853,7 +3014,7 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.BACKUP_RESTORE, async () => {
     try {
-      const result = await dialog.showOpenDialog(mainWindow!, {
+      const result = await showOpenDialog(mainWindow!, {
         title: 'Przywróć z kopii zapasowej',
         defaultPath: getBackupsDir(),
         filters: [{ name: 'JSON', extensions: ['json'] }],
@@ -2864,17 +3025,46 @@ function setupIpcHandlers() {
       }
       const backup = validateBackup(JSON.parse(fs.readFileSync(result.filePaths[0], 'utf-8')));
       // Snapshot the current state before it's replaced, so a restore of the
-      // wrong file is itself recoverable from the backups folder.
+      // wrong file is itself recoverable from the backups folder. It has to be
+      // COMPLETE: a read error already fails the export (and so this restore,
+      // before anything is touched), and a section left out for a missing table
+      // stops it here too when the file carries that section — the person runs
+      // the migration, then restores.
       const preRestore = await database.exportFullBackup(app.getVersion());
+      // Only a section this restore will write matters: one the file does not
+      // carry is left alone anyway, so its missing table cannot lose anything.
+      const missingSections = (preRestore.meta?.skippedSections ?? []).filter(
+        (key) => backup.data[key] !== undefined,
+      );
+      if (missingSections.length > 0) {
+        log.warn(`[BACKUP] Restore stopped, safety copy incomplete: ${missingSections.join(', ')}`);
+        return {
+          success: false,
+          missingSections,
+          error: `kopia bezpieczeństwa byłaby niepełna (brak tabel: ${missingSections.join(', ')})`,
+        };
+      }
       const dir = getBackupsDir();
       fs.mkdirSync(dir, { recursive: true });
       const safetyPath = path.join(dir, `pre-restore-${Date.now()}.json`);
       fs.writeFileSync(safetyPath, JSON.stringify(preRestore, null, 2), 'utf-8');
       log.info(`[BACKUP] Pre-restore safety copy: ${safetyPath}`);
 
-      await database.importFullBackup(backup);
+      // Every row gets a fresh id: the notifier would announce the whole
+      // restored board as news. Its next poll takes a new picture instead.
+      notifier?.beginRestore();
+      try {
+        await database.importFullBackup(backup);
+      } finally {
+        notifier?.endRestore();
+      }
       log.info(`[BACKUP] Restored from: ${result.filePaths[0]}`);
-      return { success: true, counts: countBackup(backup), createdAt: backup.createdAt };
+      return {
+        success: true,
+        counts: countBackup(backup),
+        createdAt: backup.createdAt,
+        skippedSections: backup.meta?.skippedSections ?? [],
+      };
     } catch (error) {
       log.error('[BACKUP] Restore failed:', error);
       return { success: false, error: getErrorMessage(error) };
@@ -2893,12 +3083,12 @@ function setupIpcHandlers() {
   });
 
   // App info
-  ipcMain.handle('app:get-version', () => {
+  ipcMain.handle(IPC_CHANNELS.GET_APP_VERSION, () => {
     return app.getVersion();
   });
 
   // Zoom controls
-  ipcMain.handle('app:zoom-in', () => {
+  ipcMain.handle(IPC_CHANNELS.ZOOM_IN, () => {
     if (mainWindow) {
       const currentZoom = mainWindow.webContents.getZoomLevel();
       mainWindow.webContents.setZoomLevel(currentZoom + 0.5);
@@ -2907,7 +3097,7 @@ function setupIpcHandlers() {
     return false;
   });
 
-  ipcMain.handle('app:zoom-out', () => {
+  ipcMain.handle(IPC_CHANNELS.ZOOM_OUT, () => {
     if (mainWindow) {
       const currentZoom = mainWindow.webContents.getZoomLevel();
       mainWindow.webContents.setZoomLevel(currentZoom - 0.5);
@@ -2916,7 +3106,7 @@ function setupIpcHandlers() {
     return false;
   });
 
-  ipcMain.handle('app:zoom-reset', () => {
+  ipcMain.handle(IPC_CHANNELS.ZOOM_RESET, () => {
     if (mainWindow) {
       mainWindow.webContents.setZoomLevel(0);
       return true;
@@ -2925,7 +3115,7 @@ function setupIpcHandlers() {
   });
 
   // Auto-updater
-  ipcMain.handle('check-for-updates', async () => {
+  ipcMain.handle(IPC_CHANNELS.CHECK_FOR_UPDATES, async () => {
     if (!app.isPackaged) {
       return { available: false, message: 'Aktualizacje wyłączone w trybie deweloperskim' };
     }
@@ -2989,7 +3179,7 @@ function setupIpcHandlers() {
     });
   });
 
-  ipcMain.handle('download-update', async () => {
+  ipcMain.handle(IPC_CHANNELS.DOWNLOAD_UPDATE, async () => {
     // macOS: notify-only flow — niepodpisana aplikacja nie przejdzie weryfikacji
     // podpisu w electron-updater, więc otwieramy stronę Release w przeglądarce.
     if (process.platform === 'darwin') {
@@ -3013,28 +3203,24 @@ function setupIpcHandlers() {
     }
   });
 
-  ipcMain.handle('download-installer', (event) =>
+  ipcMain.handle(IPC_CHANNELS.DOWNLOAD_INSTALLER, (event) =>
     downloadLatestInstaller((percent) => {
       if (!event.sender.isDestroyed()) event.sender.send('installer-download-progress', percent);
     }),
   );
 
-  ipcMain.handle('open-downloads-folder', () => {
+  ipcMain.handle(IPC_CHANNELS.OPEN_DOWNLOADS_FOLDER, () => {
     const downloadsFolder = app.getPath('downloads');
     shell.openPath(downloadsFolder);
     return { success: true };
   });
 
   // Logs
-  ipcMain.handle('open-logs-folder', () => {
+  ipcMain.handle(IPC_CHANNELS.OPEN_LOGS_FOLDER, () => {
     const logPath = log.transports.file.getFile().path;
     const logFolder = path.dirname(logPath);
     shell.showItemInFolder(logPath);
     return { success: true, logPath };
-  });
-
-  ipcMain.handle('get-log-path', () => {
-    return { path: log.transports.file.getFile().path };
   });
 
   // ------------------- Mailing (zmiany stawek → jednostki) -------------------
@@ -3179,15 +3365,29 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle(IPC_CHANNELS.MAILING_SELECT_ATTACHMENTS, async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    const result = await showOpenDialog(mainWindow!, {
       properties: ['openFile', 'multiSelections'],
     });
     if (result.canceled) return [];
+    for (const p of result.filePaths) pickedAttachments.add(path.resolve(p));
     return result.filePaths.map((p) => ({ fileName: path.basename(p), filePath: p }));
   });
 
   ipcMain.handle(IPC_CHANNELS.MAILING_SEND, async (_, request: MailingSendRequest) => {
     try {
+      // Only files the user picked, or the app's own: refused outright rather
+      // than sent without them, so nobody mails a letter missing its annex.
+      const refused = (Array.isArray(request?.attachments) ? request.attachments : []).filter(
+        (a) => !isAllowedAttachment(a?.filePath),
+      );
+      if (refused.length > 0) {
+        log.warn('[MAILING] refused attachments:', refused.map((a) => String(a?.filePath)).join(', '));
+        return {
+          error: `Załącznik spoza wybranych plików: ${refused
+            .map((a) => path.basename(String(a?.fileName || a?.filePath || '')))
+            .join(', ')} — dodaj go ponownie przyciskiem „Dodaj załącznik”.`,
+        };
+      }
       const result = await sendMailing(
         {
           database,
@@ -3256,7 +3456,12 @@ function setupIpcHandlers() {
   ipcMain.handle(
     IPC_CHANNELS.MAILING_SET_SMTP,
     async (_, config: MailingSmtpConfig & { pass?: string }) => {
-      database.setMailingSmtp(config);
+      // A new host or login without a new password clears the stored one —
+      // see setMailingSmtp. Only a string is a password; anything else is "unchanged".
+      database.setMailingSmtp({
+        ...config,
+        pass: typeof config?.pass === 'string' ? config.pass : undefined,
+      });
       return true;
     },
   );
@@ -3332,8 +3537,15 @@ function setupIpcHandlers() {
     },
   );
 
-  ipcMain.handle(IPC_CHANNELS.MAILING_SHOW_IN_FOLDER, async (_, filePath: string) => {
-    if (typeof filePath !== 'string' || !fs.existsSync(filePath)) return false;
+  ipcMain.handle(IPC_CHANNELS.MAILING_SHOW_IN_FOLDER, async (_, requestedPath: string) => {
+    // Revealing runs nothing, so programs may be shown — but the same rules as
+    // OPEN_FILE apply before the path is touched (merely probing a `\\host`
+    // path hands the Windows login hash to that host).
+    const filePath = checkOpenablePath(requestedPath, {
+      networkRoots: configuredFolders(),
+      allowExecutable: true,
+    });
+    if (!filePath) return false;
     shell.showItemInFolder(filePath);
     return true;
   });
@@ -3352,6 +3564,11 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.GET_ZEBRANIA, async () => {
     return await database.getZebrania();
+  });
+
+  // The calendar's view of the entries: which meeting, and the newest version's state.
+  ipcMain.handle(IPC_CHANNELS.GET_ZEBRANIA_STATUS, async () => {
+    return await database.getZebraniaStatus();
   });
 
   ipcMain.handle(IPC_CHANNELS.ZEBRANIE_FROM_SPOTKANIE, async (_, spotkanieId: number) => {
@@ -3387,8 +3604,8 @@ function setupIpcHandlers() {
 
   ipcMain.handle(
     IPC_CHANNELS.UPDATE_ZEBRANIE_WERSJA,
-    async (_, id: number, input: ZebranieWersjaInput) => {
-      await database.updateZebranieWersja(id, input, await zebraniaWho());
+    async (_, id: number, input: ZebranieWersjaInput, expectedUpdatedAt?: string | null) => {
+      await database.updateZebranieWersja(id, input, await zebraniaWho(), expectedUpdatedAt ?? null);
       return true;
     },
   );
@@ -3405,7 +3622,7 @@ function setupIpcHandlers() {
 
   /** A vDom "RozliczenieWsp" PDF picked by the user, read; null when they cancel. */
   const pickSprawozdaniaPdf = async (): Promise<{ lista: Sprawozdanie[]; plikNazwa: string } | null> => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    const result = await showOpenDialog(mainWindow!, {
       title: 'Sprawozdania z vDom (RozliczenieWsp)',
       properties: ['openFile'],
       filters: [{ name: 'PDF', extensions: ['pdf'] }],
@@ -3590,10 +3807,13 @@ function setupIpcHandlers() {
     },
   );
 
-  ipcMain.handle(IPC_CHANNELS.ZEBRANIE_WERSJA_SET_PLAN, async (_, wersjaId: number, plan: PlanGospodarczy | null) => {
-    await database.setZebranieWersjaPlan(wersjaId, plan, await zebraniaWho());
-    return true;
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.ZEBRANIE_WERSJA_SET_PLAN,
+    async (_, wersjaId: number, plan: PlanGospodarczy | null, expectedUpdatedAt?: string | null) => {
+      await database.setZebranieWersjaPlan(wersjaId, plan, await zebraniaWho(), expectedUpdatedAt ?? null);
+      return true;
+    },
+  );
 
   ipcMain.handle(IPC_CHANNELS.ZEBRANIA_WSPOLNOTY_GET, async () => database.getZebraniaWspolnoty());
 
@@ -3691,13 +3911,16 @@ function setupIpcHandlers() {
     },
   );
 
-  ipcMain.handle(IPC_CHANNELS.PLAN_WLASNY_SET, async (_, id: number, plan: PlanGospodarczy) => {
-    const stored = await database.getPlanWlasny(id);
-    if (!stored) throw new Error('Tego planu już nie ma — mógł zostać usunięty.');
-    await assertPlanNieWZebraniach(stored.nrWsp, plan.rok);
-    await database.setPlanWlasny(id, plan, await zebraniaWho());
-    return true;
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.PLAN_WLASNY_SET,
+    async (_, id: number, plan: PlanGospodarczy, expectedUpdatedAt?: string | null) => {
+      const stored = await database.getPlanWlasny(id);
+      if (!stored) throw new Error('Tego planu już nie ma — mógł zostać usunięty.');
+      await assertPlanNieWZebraniach(stored.nrWsp, plan.rok);
+      await database.setPlanWlasny(id, plan, await zebraniaWho(), expectedUpdatedAt ?? null);
+      return true;
+    },
+  );
 
   ipcMain.handle(IPC_CHANNELS.PLAN_WLASNY_DELETE, async (_, id: number) => {
     await database.deletePlanWlasny(id);
@@ -3761,7 +3984,7 @@ function setupIpcHandlers() {
   );
 
   ipcMain.handle(IPC_CHANNELS.PODATKI_NIER_IMPORT, async (): Promise<PodatkiImportResult | null> => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    const result = await showOpenDialog(mainWindow!, {
       title: 'Tabela do podatku od nieruchomości',
       properties: ['openFile'],
       filters: [{ name: 'Excel', extensions: ['xlsx', 'xls'] }],
@@ -4029,8 +4252,9 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_LISTA, async () => {
     const lista = await database.getPodatkiCit();
-    // Someone is looking at the returns: if a send still waits, the 30-second automat must be running.
-    if (lista.some((r) => r.dane.wysylki.some((w) => czekaNaUpo(w) && swiezaWysylka(w)))) citUpoAutomat();
+    // Someone is looking at the returns: if a send still waits, the UPO automat must be running.
+    const odstep = odstepAutomatuUpo(lista);
+    if (odstep !== null) citUpoAutomat(odstep);
     return lista;
   });
 
@@ -4130,8 +4354,16 @@ function setupIpcHandlers() {
   const bramkaFetch: FetchLike = (url, init) => net.fetch(url, init);
 
   /**
-   * One signed return to the gateway, recorded on the return whatever the answer. Held back on production
-   * when the return is filed already (or its last send still waits) and it is not a correction.
+   * One signed return to the gateway, recorded on the return whatever the answer.
+   *
+   * The send is recorded BEFORE the POST, as uncertain, and on production only if the guards
+   * (`blokadyWysylkiProd`), asked about the return as it is at that moment (not as it was read before the
+   * PIN), let it go: the record is the lock another computer finds, and the trace left if no answer ever
+   * comes. The answer then settles it: a refId and a status, or an error that certainly kept the document
+   * out (no connection, a SOAP fault). Anything else — a timeout, a dropped connection — leaves it
+   * uncertain for a person to settle; on production it holds further production sends of the return back
+   * until then (on the test gateway it only says so — which is where the flow can be tried out).
+   * `potwierdzona`: the person confirmed this correction although an earlier send holds it back.
    */
   const citWyslij = async (
     rek: PodatekCit,
@@ -4140,45 +4372,88 @@ function setupIpcHandlers() {
     srodowisko: EDeklaracjeSrodowisko,
     who: string,
     nazwa: string,
+    potwierdzona: boolean,
   ): Promise<PodatkiWysylkaWynik> => {
-    const wynik = (refId: string | null, status: number | null, opis: string): PodatkiWysylkaWynik => ({
-      id: rek.id,
-      nazwa,
-      srodowisko,
-      refId,
-      status,
-      opis,
-    });
-    if (srodowisko === 'prod' && rek.dane.cel !== 2) {
-      const przyjeta = przyjetaProdukcyjnie(rek.dane.wysylki);
-      const czeka = ostatniaWysylka(rek.dane.wysylki, 'prod');
-      if (przyjeta) return wynik(null, null, `Nie wysłano: to zeznanie ma już UPO (nr ${przyjeta.refId}). Zmianę złóż jako korektę.`);
-      if (czeka && czekaNaUpo(czeka)) {
-        return wynik(null, null, `Nie wysłano: poprzednia wysyłka (nr ${czeka.refId}) czeka jeszcze na UPO — sprawdź UPO.`);
-      }
-      if (rek.dane.zlozone) return wynik(null, null, 'Nie wysłano: zeznanie jest oznaczone jako złożone. Zmianę złóż jako korektę.');
+    const wynik = (
+      refId: string | null,
+      status: number | null,
+      opis: string,
+      extra: Pick<PodatkiWysylkaWynik, 'niepewna' | 'niezapisana'> = {},
+    ): PodatkiWysylkaWynik => ({ id: rek.id, nazwa, srodowisko, refId, status, opis, ...extra });
+    const blad = (error: unknown) => (error instanceof Error ? error.message : String(error));
+    const prod = srodowisko === 'prod';
+    // The purpose the signed XML carries — the return may have been edited since.
+    const cel = rek.dane.cel;
+    const at = new Date().toISOString();
+
+    let rezerwacja: Awaited<ReturnType<typeof database.rezerwujPodatekCitWysylke>>;
+    try {
+      rezerwacja = await database.rezerwujPodatekCitWysylke(
+        rek.id,
+        { at, by: who, srodowisko, plik, refId: null, status: null, opis: 'Wysyłanie…', sprawdzono: null, upo: null, cel, niepewna: true },
+        (stored) => {
+          if (!prod) return null;
+          const blokady = blokadyWysylkiProd({ cel, wysylki: stored.dane.wysylki, zlozone: stored.dane.zlozone }).filter(
+            (b) => !(potwierdzona && blokadaDoPotwierdzenia(b)),
+          );
+          return blokady.length > 0 ? blokady.map(opisBlokady).join(' ') : null;
+        },
+      );
+    } catch (error: unknown) {
+      log.error('[CIT] send not reserved, nothing sent:', blad(error));
+      return wynik(null, null, `Nie wysłano: nie udało się zapisać wysyłki w bazie (${blad(error)}) — bez zapisu dokument nie idzie do bramki. Spróbuj ponownie.`);
     }
-    const teraz = new Date().toISOString();
+    if (!rezerwacja.rek) return wynik(null, null, 'Nie wysłano: tego zeznania już nie ma — mogło zostać usunięte.');
+    if (rezerwacja.powod) return wynik(null, null, rezerwacja.powod);
+
     let odp: PodatkiWysylkaWynik;
     try {
       const r = await wyslijDokument(bramkaFetch, srodowisko, xml);
       odp = wynik(r.refId, r.status, r.opis);
     } catch (error: unknown) {
-      odp = wynik(null, null, error instanceof Error ? error.message : String(error));
+      odp =
+        error instanceof BramkaNiePrzyjela
+          ? wynik(null, null, blad(error))
+          : wynik(
+              null,
+              null,
+              `${blad(error)} Nie wiadomo, czy bramka przyjęła dokument — ${
+                prod ? 'sprawdź to (e-Urząd Skarbowy, urząd) i ' : ''
+              }rozstrzygnij tę wysyłkę na liście wysyłek zeznania, zanim wyślesz je ponownie.`,
+              { niepewna: true },
+            );
     }
-    await database
-      .recordPodatekCitWysylka(rek.id, {
-        at: teraz,
-        by: who,
-        srodowisko,
-        plik,
-        refId: odp.refId,
-        status: odp.status,
-        opis: odp.opis,
-        sprawdzono: null,
-        upo: null,
-      })
-      .catch((error: unknown) => log.warn('[CIT] send not recorded:', error instanceof Error ? error.message : error));
+
+    // The answer onto the record — tried again, since losing it loses the refId (and with it the UPO).
+    let zapisBlad: string | null = null;
+    for (let proba = 0; proba < 3; proba += 1) {
+      try {
+        const po = await database.zakonczPodatekCitWysylke(rek.id, at, {
+          refId: odp.refId,
+          status: odp.status,
+          opis: odp.opis,
+          niepewna: odp.niepewna,
+        });
+        zapisBlad = po ? null : 'zeznania już nie ma';
+        break;
+      } catch (error: unknown) {
+        zapisBlad = blad(error);
+        await new Promise((r) => setTimeout(r, 1000 * (proba + 1)));
+      }
+    }
+    if (zapisBlad) {
+      log.error(`[CIT] answer of send ${at} (return ${rek.id}, ${srodowisko}, refId ${odp.refId ?? '—'}) not recorded:`, zapisBlad);
+      const numer = odp.refId ? `numer referencyjny ${odp.refId} — zanotuj go, bez niego nie pobierzesz UPO` : 'bramka nie podała numeru referencyjnego';
+      odp = {
+        ...odp,
+        niezapisana: true,
+        opis:
+          `UWAGA: odpowiedzi bramki nie udało się zapisać w zeznaniu (${zapisBlad}); ${numer}.` +
+          ' Wysyłka zostaje na liście jako niepewna' +
+          (prod ? ' i blokuje kolejne, dopóki jej nie rozstrzygniesz.' : '.') +
+          ` Odpowiedź bramki: ${odp.opis}`,
+      };
+    }
     log.info(`[CIT] return ${rek.id} sent to ${srodowisko}: ${odp.refId ?? '—'} ${odp.status ?? ''} ${odp.opis}`);
     return odp;
   };
@@ -4200,15 +4475,17 @@ function setupIpcHandlers() {
   /**
    * Asks the gateway about every send of the given returns it took and has not answered for good — each on
    * the gateway it went to, whatever the switch says now. A UPO is kept on the send (so any computer can
-   * download it) and saved into the year's folder; a production UPO ticks the return as filed. One check at a
-   * time: the 30-second automat and the button share this queue.
+   * download it) and saved into the year's folder; a production UPO ticks the return as filed. A 200 that
+   * comes without the UPO itself is no receipt: the send keeps its status and is asked about again. One check
+   * at a time: the automat and the button share this queue. `odstep`: when the automat should look again
+   * (null = nothing of these returns waits any more).
    */
   let citUpoKolejka: Promise<unknown> = Promise.resolve();
   const citSprawdzUpo = (
     filtr: (rek: PodatekCit) => boolean,
     wysylka: (w: EDeklaracjeWysylka) => boolean = czekaNaUpo,
-  ): Promise<PodatkiCitUpoResult> => {
-    const praca = citUpoKolejka.then(async (): Promise<PodatkiCitUpoResult> => {
+  ): Promise<{ wynik: PodatkiCitUpoResult; odstep: number | null }> => {
+    const praca = citUpoKolejka.then(async (): Promise<{ wynik: PodatkiCitUpoResult; odstep: number | null }> => {
       const rekordy = (await database.getPodatkiCit()).filter(filtr);
       const who = await zebraniaWho();
       const wyniki: PodatkiCitUpoResult['wyniki'] = [];
@@ -4227,14 +4504,20 @@ function setupIpcHandlers() {
               upoSciezka = zapiszUpoPlik(rek, w, odp.upo);
               folder = path.dirname(upoSciezka);
             }
+            // "Processed" with no UPO in the answer is no receipt: nothing is filed until the UPO itself comes.
+            const bezUpo = odp.status === 200 && !odp.upo;
+            const status = bezUpo ? w.status : odp.status;
+            const opis = bezUpo
+              ? `Bramka podała status 200${odp.opis ? ` (${odp.opis})` : ''}, ale bez UPO — zapytam o nie ponownie.`
+              : odp.opis;
             const po = await database.updatePodatekCitWysylka(
               rek.id,
               refId,
               {
-                status: odp.status,
-                opis: odp.opis,
+                status,
+                opis,
                 sprawdzono: teraz,
-                upo: odp.status === 200 && odp.upo ? { at: teraz, plik: path.basename(upoSciezka!), tresc: odp.upo } : w.upo,
+                upo: upoSciezka && odp.upo ? { at: teraz, plik: path.basename(upoSciezka), tresc: odp.upo } : w.upo,
               },
               who,
             );
@@ -4244,10 +4527,10 @@ function setupIpcHandlers() {
               nazwa,
               srodowisko: w.srodowisko,
               refId,
-              status: odp.status,
-              opis: odp.opis,
+              status,
+              opis,
               upoSciezka,
-              zmiana: odp.status !== w.status,
+              zmiana: status !== w.status,
             });
           } catch (error: unknown) {
             bledy.push({ id: rek.id, nazwa, powod: error instanceof Error ? error.message : String(error) });
@@ -4257,39 +4540,73 @@ function setupIpcHandlers() {
       if (wyniki.length + bledy.length > 0) {
         log.info(`[CIT] UPO asked for ${wyniki.length + bledy.length} sends: ${wyniki.filter((w) => w.upoSciezka).length} UPO`);
       }
-      return { wyniki, bledy, rekordy: [...zmienione.values()], folder };
+      return {
+        wynik: { wyniki, bledy, rekordy: [...zmienione.values()], folder },
+        odstep: odstepAutomatuUpo(rekordy.map((rek) => zmienione.get(rek.id) ?? rek)),
+      };
     });
     citUpoKolejka = praca.catch(() => undefined);
     return praca;
   };
 
   /**
-   * The automat: while any send waits for its answer, the gateway is asked every 30 seconds — in the
-   * background, whether or not the CIT tab is open — and stops by itself once nothing waits. Kicked at start,
-   * after a send, after "Sprawdź UPO" and whenever the CIT list is read. What changed is pushed to the window
-   * ("podatki:cit-upo"), which reloads and says it.
+   * When the automat should look again: the soonest any send still waiting (and fresh enough to poll) asks
+   * for by its age (`odstepUpoMs` — 30 s at first, then less and less often); null when nothing waits.
    */
-  const UPO_CO_MS = 30_000;
+  const odstepAutomatuUpo = (rekordy: PodatekCit[]): number | null => {
+    const teraz = Date.now();
+    const odstepy = rekordy.flatMap((rek) =>
+      rek.dane.wysylki.filter((w) => czekaNaUpo(w) && swiezaWysylka(w, teraz)).map((w) => odstepUpoMs(w, teraz)),
+    );
+    return odstepy.length > 0 ? Math.min(...odstepy) : null;
+  };
+
+  /**
+   * The automat: while any send waits for its answer, the gateway is asked — in the background, whether or
+   * not the CIT tab is open — at a pace that slows down as the send gets older, and it stops by itself once
+   * nothing waits. Kicked at start, after a send, after "Sprawdź UPO" and whenever the CIT list is read; a
+   * kick asking for an earlier look than the one planned brings it forward. What changed is pushed to the
+   * window ("podatki:cit-upo"), which reloads and says it.
+   */
+  const UPO_PIERWSZY_MS = 30_000;
   let citUpoTimer: NodeJS.Timeout | null = null;
-  const citUpoAutomat = (zaMs = UPO_CO_MS) => {
-    if (citUpoTimer) return;
+  let citUpoTermin = 0;
+  let citUpoBiegnie = false;
+  /** A kick while a pass runs: the earliest look it asked for, kept for when the pass is over. */
+  let citUpoPonow: number | null = null;
+  const citUpoAutomat = (zaMs = UPO_PIERWSZY_MS) => {
+    if (citUpoBiegnie) {
+      citUpoPonow = Math.min(citUpoPonow ?? zaMs, zaMs);
+      return;
+    }
+    const termin = Date.now() + zaMs;
+    if (citUpoTimer) {
+      if (citUpoTermin <= termin) return;
+      clearTimeout(citUpoTimer);
+    }
+    citUpoTermin = termin;
     citUpoTimer = setTimeout(async () => {
-      let dalej = false;
+      citUpoTimer = null;
+      citUpoBiegnie = true;
+      let dalej: number | null = null;
       try {
         const czeka = (w: EDeklaracjeWysylka) => czekaNaUpo(w) && swiezaWysylka(w);
-        const wynik = await citSprawdzUpo((rek) => rek.dane.wysylki.some(czeka), czeka);
+        const { wynik, odstep } = await citSprawdzUpo((rek) => rek.dane.wysylki.some(czeka), czeka);
         const zmiany = wynik.wyniki.filter((w) => w.zmiana);
         if (zmiany.length > 0 && mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('podatki:cit-upo-zmiana', { ...wynik, wyniki: zmiany });
         }
-        // Still waiting, or the gateway could not be reached this time — try again in 30 s.
-        dalej = wynik.wyniki.some((w) => !statusKoncowy(w.status)) || wynik.bledy.length > 0;
+        // Still waiting, or the gateway could not be reached this time — look again when the oldest asks.
+        dalej = odstep;
       } catch (error: unknown) {
         // Not signed in yet, no network to the database: the next kick starts it again.
         log.debug('[CIT] UPO automat paused:', error instanceof Error ? error.message : error);
       }
-      citUpoTimer = null;
-      if (dalej) citUpoAutomat();
+      citUpoBiegnie = false;
+      const ponow = citUpoPonow;
+      citUpoPonow = null;
+      const nastepny = dalej === null ? ponow : ponow === null ? dalej : Math.min(dalej, ponow);
+      if (nastepny !== null) citUpoAutomat(nastepny);
     }, zaMs);
   };
   citUpoAutomat(15_000);
@@ -4297,8 +4614,8 @@ function setupIpcHandlers() {
   /** "Sprawdź UPO" by hand: the year's waiting sends, or those of `ids` — then the automat carries on if needed. */
   ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_UPO, async (_, rok: number, ids?: number[]): Promise<PodatkiCitUpoResult> => {
     const only = ids && ids.length > 0 ? new Set(ids) : null;
-    const wynik = await citSprawdzUpo((p) => p.rok === rok && (!only || only.has(p.id)));
-    if (wynik.wyniki.some((w) => !statusKoncowy(w.status))) citUpoAutomat();
+    const { wynik, odstep } = await citSprawdzUpo((p) => p.rok === rok && (!only || only.has(p.id)));
+    if (odstep !== null) citUpoAutomat(odstep);
     return wynik;
   });
 
@@ -4309,6 +4626,18 @@ function setupIpcHandlers() {
     const w = rek.dane.wysylki.find((x) => x.refId === refId);
     if (!w?.upo?.tresc) throw new Error('Ta wysyłka nie ma jeszcze UPO.');
     return { filePath: zapiszUpoPlik(rek, w, w.upo.tresc) };
+  });
+
+  /**
+   * A person settles a send the app could not: an uncertain one did not reach the gateway (it stops
+   * blocking) or did (on production the return is ticked as filed), or a send stuck "in progress" is no
+   * longer waited for. Found by its `at` — an uncertain send has no refId. The return as it now is.
+   */
+  ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_WYSYLKA_ROZSTRZYGNIJ, async (_, id: number, at: string, jak: unknown) => {
+    if (jak !== 'nie_dotarla' && jak !== 'dotarla' && jak !== 'porzucona') throw new Error('Nieznane rozstrzygnięcie wysyłki.');
+    const rek = await database.rozstrzygnijPodatekCitWysylke(id, String(at), jak, await zebraniaWho());
+    log.info(`[CIT] send ${at} of return ${id} settled by hand: ${jak}`);
+    return rek;
   });
 
   /** "Przerwij" of a signing run: it stops after the return in hand. */
@@ -4329,8 +4658,9 @@ function setupIpcHandlers() {
    *
    * With `wyslij` each signed XML then goes to the e-Deklaracje gateway of Settings → Administracja (test
    * unless switched) — after the card session has closed, so no network wait holds the card. A send that
-   * fails is noted for that return and the rest go on. On the production gateway a return already filed
-   * (UPO, the filed tick, or a send still waiting for its UPO) is held back unless it is a correction.
+   * fails is noted for that return and the rest go on. On the production gateway `citWyslij` holds back what
+   * may already be filed (`blokadyWysylkiProd`); a correction an earlier send holds back goes only when its
+   * id is in `potwierdzoneKorekty` — the window asks before the PIN.
    */
   ipcMain.handle(
     IPC_CHANNELS.PODATKI_CIT_PODPISZ_WIELE,
@@ -4339,9 +4669,10 @@ function setupIpcHandlers() {
       rok: number,
       ids: number[],
       wybor: PodpisWybor,
-      opcje: { pdfPodpisany: boolean; wyslij?: boolean },
+      opcje: { pdfPodpisany: boolean; wyslij?: boolean; potwierdzoneKorekty?: number[] },
     ): Promise<PodatkiPodpisWieleResult> => {
       citPodpisyPrzerwane = false;
+      const potwierdzone = new Set(Array.isArray(opcje?.potwierdzoneKorekty) ? opcje.potwierdzoneKorekty : []);
       const srodowisko = database.getEDeklaracjeSrodowisko();
       const only = new Set(ids);
       const rekordy = (await database.getPodatkiCit()).filter((p) => p.rok === rok && only.has(p.id));
@@ -4385,12 +4716,20 @@ function setupIpcHandlers() {
             break;
           }
           postep(przetworzone, nazwa(rek));
+          let etap: 'xml' | 'pdf' = 'xml';
           try {
             // Everything that can fail without the card is made first: a signature must never be spent on a
             // return whose other half cannot be made.
             const xml = cit8Xml({ rok, dane: rek.dane, slownik });
             const pdf = await cit8Pdf({ rok, dane: zDataPodpisu(rek.dane, dzis), slownik });
             const podpisanyXml = await podpiszXml(xml, sesja);
+            // Both signatures before any file: a PAdES failure used to leave the XML signed, saved and sent
+            // while the return was listed as skipped. Now a return is signed whole — or skipped whole.
+            etap = 'pdf';
+            const bytes = opcje?.pdfPodpisany
+              ? await podpiszPdf(pdf, { ...sesja, powod: `Zeznanie CIT-8 za ${rok} r.` })
+              : pdf;
+            etap = 'xml';
             if (podpisaneZeznania === 0) fs.mkdirSync(folder, { recursive: true });
             const sciezkaXml = uniquePath(folder, citPlik(rek, ' (podpisana)', 'xml'));
             fs.writeFileSync(sciezkaXml, podpisanyXml, 'utf8');
@@ -4399,9 +4738,6 @@ function setupIpcHandlers() {
             await citZapiszPobranie(rek, path.basename(sciezkaXml), who, podpis);
             doWyslania.push({ rek, xml: podpisanyXml, plik: path.basename(sciezkaXml) });
 
-            const bytes = opcje?.pdfPodpisany
-              ? await podpiszPdf(pdf, { ...sesja, powod: `Zeznanie CIT-8 za ${rok} r.` })
-              : pdf;
             const sciezkaPdf = uniquePath(folder, citPlik(rek, opcje?.pdfPodpisany ? ' (podpisana)' : ''));
             fs.writeFileSync(sciezkaPdf, bytes);
             podpisane.push({ id: rek.id, nazwa: nazwa(rek), sciezka: sciezkaPdf });
@@ -4412,7 +4748,15 @@ function setupIpcHandlers() {
               przerwano = error.message;
               break;
             }
-            pominiete.push({ id: rek.id, nazwa: nazwa(rek), powod: error instanceof Error ? error.message : String(error) });
+            const powod = error instanceof Error ? error.message : String(error);
+            pominiete.push({
+              id: rek.id,
+              nazwa: nazwa(rek),
+              powod:
+                etap === 'pdf'
+                  ? `Nie udało się podpisać PDF (${powod}) — zeznania nie zapisano ani nie wysłano. Spróbuj ponownie albo bez podpisanego PDF.`
+                  : powod,
+            });
           }
           przetworzone += 1;
         }
@@ -4433,11 +4777,11 @@ function setupIpcHandlers() {
             continue;
           }
           postep(i, `${nazwa(rek)} — e-Deklaracje`);
-          wysylki.push(await citWyslij(rek, xml, plik, srodowisko, who, nazwa(rek)));
+          wysylki.push(await citWyslij(rek, xml, plik, srodowisko, who, nazwa(rek), potwierdzone.has(rek.id)));
         }
         postep(doWyslania.length, '');
         log.info(`[CIT] ${wysylki.filter((w) => w.refId).length}/${doWyslania.length} returns of ${rok} sent (${srodowisko})`);
-        if (wysylki.some((w) => w.refId)) citUpoAutomat();
+        if (wysylki.some((w) => w.refId)) citUpoAutomat(UPO_PIERWSZY_MS);
       }
       return {
         folder: podpisaneZeznania > 0 ? folder : '',
@@ -4509,7 +4853,7 @@ function setupIpcHandlers() {
   ipcMain.handle(IPC_CHANNELS.PODPIS_KARTA_STAN, async () => stanKarty(database.getSettings().podpisBiblioteka ?? ''));
 
   ipcMain.handle(IPC_CHANNELS.PODPIS_BIBLIOTEKA_WSKAZ, async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    const result = await showOpenDialog(mainWindow!, {
       title: 'Biblioteka PKCS#11 karty do podpisu',
       // Szafir keeps it inside its .app bundle on macOS.
       properties: ['openFile', 'treatPackageAsDirectory'],
@@ -4532,7 +4876,7 @@ function setupIpcHandlers() {
   // ---- Podpis kwalifikowany: any PDF or XML signed with the card ----
 
   ipcMain.handle(IPC_CHANNELS.PODPIS_PDF_WYBIERZ, async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
+    const result = await showOpenDialog(mainWindow!, {
       title: 'Pliki PDF i XML do podpisania',
       properties: ['openFile', 'multiSelections'],
       filters: [{ name: 'PDF, XML', extensions: ['pdf', 'xml'] }],
@@ -4700,17 +5044,22 @@ function setupIpcHandlers() {
     return true;
   });
 
+  // A quick edit on the board: only the fields sent are written.
+  ipcMain.handle(IPC_CHANNELS.PATCH_ZADANIE, async (_, id: number, patch: ZadaniePatch) => {
+    const session = await authService.getSession();
+    return await database.patchZadanie(Number(id), patch ?? {}, session?.email ?? '');
+  });
+
   ipcMain.handle(
     IPC_CHANNELS.MOVE_ZADANIE,
     async (_, id: number, status: ZadanieStatus, orderedIds: number[]) => {
       const session = await authService.getSession();
-      await database.moveZadanie(
+      return await database.moveZadanie(
         id,
         status,
         Array.isArray(orderedIds) ? orderedIds.map(Number) : [],
         session?.email ?? '',
       );
-      return true;
     },
   );
 
@@ -4721,7 +5070,7 @@ function setupIpcHandlers() {
   const pendingAttachmentPicks = new Map<string, string>();
 
   ipcMain.handle(IPC_CHANNELS.ZADANIA_PICK_ATTACHMENT, async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openFile'] });
+    const result = await showOpenDialog(mainWindow!, { properties: ['openFile'] });
     if (result.canceled || result.filePaths.length === 0) return null;
     const filePath = result.filePaths[0];
     const checked = await checkAttachmentFile(filePath);
@@ -4836,8 +5185,7 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.ARCHIVE_ZADANIE, async (_, id: number, archived: boolean) => {
     const session = await authService.getSession();
-    await database.setZadanieArchived(Number(id), archived === true, session?.email ?? '');
-    return true;
+    return await database.setZadanieArchived(Number(id), archived === true, session?.email ?? '');
   });
 
   ipcMain.handle(IPC_CHANNELS.SET_APP_USER_COLOR, async (_, id: string, color: string | null) => {
@@ -4880,6 +5228,10 @@ function setupIpcHandlers() {
     return await database.getSpotkania();
   });
 
+  ipcMain.handle(IPC_CHANNELS.GET_SPOTKANIE, async (_, id: number) => {
+    return await database.getSpotkanie(id);
+  });
+
   /**
    * The month as a PDF in Downloads. The meetings are read again here rather
    * than taken from the renderer, so the file shows what is saved; the request
@@ -4916,11 +5268,11 @@ function setupIpcHandlers() {
 
   ipcMain.handle(
     IPC_CHANNELS.UPDATE_SPOTKANIE,
-    async (_, id: number, input: SpotkanieInput) => {
+    async (_, id: number, input: SpotkanieInput, expectedUpdatedAt?: string | null) => {
       // Who moved the date comes from the session, never from the renderer —
       // it is a record of who did something, not a field anyone gets to fill in.
       const session = await authService.getSession();
-      await database.updateSpotkanie(id, input, session?.email ?? '');
+      await database.updateSpotkanie(id, input, session?.email ?? '', expectedUpdatedAt ?? null);
       return true;
     },
   );
@@ -5151,8 +5503,11 @@ function setupIpcHandlers() {
   // A PDF's preview from the scan report: a small window over the app, with
   // Chromium's own PDF viewer — so a file the scan could not place can be read
   // without leaving the dialog. Falls back to the system's viewer.
-  ipcMain.handle(IPC_CHANNELS.PREVIEW_PDF, async (_, filePath: string) => {
-    if (typeof filePath !== 'string' || !/\.pdf$/i.test(filePath) || !fs.existsSync(filePath)) return false;
+  ipcMain.handle(IPC_CHANNELS.PREVIEW_PDF, async (_, requestedPath: string) => {
+    const filePath = checkOpenablePath(requestedPath, { networkRoots: configuredFolders() });
+    if (!filePath || !/\.pdf$/i.test(filePath)) return false;
+    if (!fs.statSync(filePath, { throwIfNoEntry: false })?.isFile()) return false;
+    const pdfUrl = pathToFileURL(filePath).toString();
     const preview = new BrowserWindow({
       parent: mainWindow ?? undefined,
       width: 920,
@@ -5161,8 +5516,10 @@ function setupIpcHandlers() {
       autoHideMenuBar: true,
       webPreferences: { plugins: true, contextIsolation: true, nodeIntegration: false, sandbox: true },
     });
+    // A PDF can carry links: the window stays on the file it was opened for.
+    lockNavigation(preview.webContents, (url) => url.split('#')[0] === pdfUrl);
     try {
-      await preview.loadURL(pathToFileURL(filePath).toString());
+      await preview.loadURL(pdfUrl);
       return true;
     } catch (error: unknown) {
       log.warn('[PREVIEW] PDF viewer failed, opening with the system viewer:', getErrorMessage(error));
@@ -5231,12 +5588,11 @@ function setupAutoUpdater() {
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false; // User will install manually
 
-  // CRITICAL: Allow unsigned builds by setting environment variable
-  process.env.ELECTRON_UPDATER_ALLOW_UNVERIFIED = '1';
-  
-  // Additional flags for development/unsigned builds
-  (autoUpdater as any).forceDevUpdateConfig = true;
-  (autoUpdater as any).allowDowngrade = true;
+  // Never install an older version than the running one: a downgrade offered by
+  // the feed would bring back fixed vulnerabilities. (The former
+  // ELECTRON_UPDATER_ALLOW_UNVERIFIED variable did not exist in electron-updater,
+  // and forceDevUpdateConfig only matters unpackaged, where no check runs.)
+  autoUpdater.allowDowngrade = false;
 
   log.info('=== Auto-updater configuration ===');
   log.info('App version:', app.getVersion());
@@ -5391,6 +5747,16 @@ if (!gotSingleInstanceLock) {
   app.on('second-instance', () => showMainWindow());
 }
 
+// No server the app talks to (Supabase, GitHub, the e-Deklaracje gateway, the AI)
+// asks for a TLS client certificate — returns are signed inside the XML. Since
+// Electron 44 a request that did get asked would pick the first certificate in
+// the system store on its own, and with a card driver installed that can mean a
+// PIN prompt out of nowhere; so the answer is always "none".
+app.on('select-client-certificate', (event, _webContents, _url, _list, callback) => {
+  event.preventDefault();
+  callback();
+});
+
 app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return;
 
@@ -5399,7 +5765,7 @@ app.whenReady().then(() => {
     const iconPath = path.join(__dirname, '..', '..', '..', 'src', 'renderer', 'assets', 'icon-rounded.png');
     if (fs.existsSync(iconPath)) {
       const image = nativeImage.createFromPath(iconPath);
-      app.dock.setIcon(image);
+      app.dock?.setIcon(image);
     }
   }
 
@@ -5432,8 +5798,10 @@ app.whenReady().then(() => {
     // Always on, as asked: notifications about tasks only work while the app is
     // running, so the app starts with the system, hidden. Set on every launch
     // (not once) so a reinstall or an update cannot leave it unregistered; the
-    // person can still switch it off in the system's own startup list.
-    app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true, args: ['--hidden'] });
+    // person can still switch it off in the system's own startup list. (macOS
+    // starts hidden through `wasOpenedAtLogin` above; `openAsHidden` only ever
+    // worked up to macOS 12, which Electron 44 no longer runs on.)
+    app.setLoginItemSettings({ openAtLogin: true, args: ['--hidden'] });
   }
 
   // Windows files a notification under the app's AppUserModelID; without one
@@ -5442,20 +5810,18 @@ app.whenReady().then(() => {
   notifier = new Notifier({
     getEmail: async () => (await authService.getSession())?.email ?? null,
     getZadania: () => database.getZadania(),
+    getZadaniaPrzypisane: (email) => database.getZadaniaPrzypisane(email),
+    getZadaniaByIds: (ids) => database.getZadaniaByIds(ids),
     getKomentarzeAfter: (afterId) => database.getZadaniaKomentarzeAfter(afterId),
     getLatestKomentarzId: () => database.getLatestZadanieKomentarzId(),
-    getPriorytety: () => database.getKsiegowaniaPriorytety(),
-    getUwagi: () => database.getKsiegowaniaUwagi(),
-    getSpotkania: () => database.getSpotkania(),
+    getPriorytety: (fromMonthKey) => database.getKsiegowaniaPriorytety(fromMonthKey),
+    getUwagiAfter: (afterId) => database.getKsiegowaniaUwagiAfter(afterId),
+    getUwagiTagging: (email) => database.getKsiegowaniaUwagiTagging(email),
+    getLatestUwagaId: () => database.getLatestKsiegowanieUwagaId(),
+    getSpotkania: (fromIso) => database.getSpotkania(fromIso),
     getSpotkaniaTypy: () => database.getSpotkaniaTypy(),
     getNotificationPrefs: (email) => database.getNotificationPrefs(email),
-    resolveName: async (email) => {
-      try {
-        return nameForMailbox(await database.getAppUsers(), email);
-      } catch {
-        return email;
-      }
-    },
+    getAppUsers: () => database.getAppUsers(),
     getLanguage: () => (database.getSettings().language === 'en' ? 'en' : 'pl'),
     onInboxChanged: () => mainWindow?.webContents.send('inbox:changed'),
     onOpen: (target) => {

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Kontrahent, KontrahentTyp } from '../../shared/types';
+import { isAccountSymbol } from '../../shared/apartment-account';
 import { translations, Language } from '../translations';
+import { ipcErrorMessage } from '../ipcError';
 import { useNotify } from '../components/Notifications';
 import ChoiceCards from '../components/ChoiceCards';
 import { FormField, FormRow, FormSection, RequiredNote } from '../components/FormSection';
@@ -31,6 +33,12 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
   const [newNip, setNewNip] = useState('');
   const [newTypy, setNewTypy] = useState<KontrahentTyp[]>(['Kontrahent']);
   const [newAlternativeNames, setNewAlternativeNames] = useState<string[]>([]);
+  /**
+   * Set when a save was refused because the account is not a chart-of-accounts
+   * symbol. A bare "760" used to be accepted, and a "Pozostałe przychody" entry
+   * with it was booked onto apartment 760 (204-000760).
+   */
+  const [kontoError, setKontoError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -45,9 +53,17 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
       setKontrahenci(kontrahenciData);
     } catch (error) {
       console.error('Error loading kontrahenci:', error);
+      notify.error(t.kontrahenciLoadError);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  /** False (and the field's error shown) when the account is not a valid symbol. */
+  const validateKonto = (): boolean => {
+    if (isAccountSymbol(newKontoKontrahenta)) return true;
+    setKontoError(t.kontrahentAccountInvalid);
+    return false;
   };
 
   const handleAddKontrahent = async () => {
@@ -55,6 +71,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
       notify.warning(t.fillAllFields);
       return;
     }
+    if (!validateKonto()) return;
 
     // Check for duplicate name (case-insensitive)
     const duplicateExists = kontrahenci.some(
@@ -66,7 +83,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
     }
 
     try {
-      await window.electronAPI.addKontrahent(newNazwa, newKontoKontrahenta, newNip || undefined, newAlternativeNames, newTypy);
+      await window.electronAPI.addKontrahent(newNazwa, newKontoKontrahenta.trim(), newNip || undefined, newAlternativeNames, newTypy);
       setNewNazwa('');
       setNewKontoKontrahenta('');
       setNewNip('');
@@ -75,7 +92,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
       setShowAddKontrahent(false);
       loadData();
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = ipcErrorMessage(error, t.errorUnexpected);
       notify.error(`${t.errorAddingKontrahent}: ${errorMessage}`);
     }
   };
@@ -85,6 +102,12 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
       notify.warning(t.fillAllFields);
       return;
     }
+    // Only an account the user typed now is checked: an entry saved before the
+    // check existed keeps its account, and fixing its name or aliases must not
+    // be blocked by it.
+    const kontoChanged =
+      newKontoKontrahenta.trim() !== (editingKontrahent.kontoKontrahenta ?? '').trim();
+    if (kontoChanged && !validateKonto()) return;
 
     // Check for duplicate name (case-insensitive), excluding current kontrahent
     const duplicateExists = kontrahenci.some(
@@ -96,7 +119,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
     }
 
     try {
-      await window.electronAPI.updateKontrahent(editingKontrahent.id, newNazwa, newKontoKontrahenta, newNip || undefined, newAlternativeNames, newTypy);
+      await window.electronAPI.updateKontrahent(editingKontrahent.id, newNazwa, newKontoKontrahenta.trim(), newNip || undefined, newAlternativeNames, newTypy);
       setNewNazwa('');
       setNewKontoKontrahenta('');
       setNewNip('');
@@ -105,7 +128,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
       setEditingKontrahent(null);
       loadData();
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = ipcErrorMessage(error, t.errorUnexpected);
       notify.error(`${t.errorUpdatingKontrahent}: ${errorMessage}`);
     }
   };
@@ -116,13 +139,14 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
         await window.electronAPI.deleteKontrahent(id);
         loadData();
       } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const errorMessage = ipcErrorMessage(error, t.errorUnexpected);
         notify.error(`${t.errorDeletingKontrahent}: ${errorMessage}`);
       }
     }
   };
 
   const handleEditKontrahent = (kontrahent: Kontrahent) => {
+    setKontoError(null);
     setEditingKontrahent(kontrahent);
     setNewNazwa(kontrahent.nazwa);
     setNewKontoKontrahenta(kontrahent.kontoKontrahenta);
@@ -132,6 +156,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
   };
 
   const handleCancelEdit = () => {
+    setKontoError(null);
     setEditingKontrahent(null);
     setShowAddKontrahent(false);
     setNewNazwa('');
@@ -186,7 +211,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
       // If success is false but no error, user canceled - do nothing
     } catch (error) {
       console.error('Error importing from DOM:', error);
-      notify.error(`${t.importKontrahenciError}: ${error}`);
+      notify.error(`${t.importKontrahenciError}: ${ipcErrorMessage(error, t.errorUnexpected)}`);
     } finally {
       setIsImporting(false);
     }
@@ -213,7 +238,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
         await window.electronAPI.deleteAllKontrahenci();
         loadData();
       } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const errorMessage = ipcErrorMessage(error, t.errorUnexpected);
         notify.error(`${t.errorDeletingKontrahent}: ${errorMessage}`);
       }
     }
@@ -300,19 +325,23 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
                       type="text"
                       value={newNazwa}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewNazwa(e.target.value)}
-                      placeholder="np. Miasto Stołeczne Warszawa"
+                      placeholder={t.kontrahentNazwaPlaceholder}
                       autoFocus={!editingKontrahent}
                     />
                   </FormField>
                   <FormRow>
-                    <FormField label={t.kontoKontrahenta} htmlFor="kontrahent-konto" required>
+                    <FormField label={t.kontoKontrahenta} htmlFor="kontrahent-konto" required error={kontoError ?? undefined}>
                       <input
                         id="kontrahent-konto"
                         type="text"
                         className="input-mono"
                         value={newKontoKontrahenta}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewKontoKontrahenta(e.target.value)}
-                        placeholder="np. 201-00001"
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                          setNewKontoKontrahenta(e.target.value);
+                          if (kontoError) setKontoError(null);
+                        }}
+                        placeholder={t.kontrahentKontoPlaceholder}
+                        aria-invalid={kontoError ? true : undefined}
                       />
                     </FormField>
                     <FormField label={t.nip} htmlFor="kontrahent-nip">
@@ -322,7 +351,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
                         className="input-mono"
                         value={newNip}
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewNip(e.target.value)}
-                        placeholder="np. 1234567890"
+                        placeholder={t.kontrahentNipPlaceholder}
                       />
                     </FormField>
                   </FormRow>
@@ -342,7 +371,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
                       id="kontrahent-alt"
                       values={newAlternativeNames}
                       onChange={setNewAlternativeNames}
-                      placeholder="np. Tech-Home, TECH HOME"
+                      placeholder={t.kontrahentAltNamesPlaceholder}
                       addLabel={t.add}
                       removeLabel={t.remove}
                     />
@@ -402,7 +431,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
                             on hover only (search still finds them by name). */}
                         <span
                           className="cell-title"
-                          title={altNames.length > 0 ? `${t.alternativeNames}:\n${altNames.join('\n')}` : undefined}
+                          data-tip={altNames.length > 0 ? `${t.alternativeNames}:\n${altNames.join('\n')}` : undefined}
                         >
                           {kontrahent.nazwa}
                         </span>
@@ -414,7 +443,9 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
                       <td>
                         <div className="badge-row">
                           {typy.map((typ) => (
-                            <span key={typ} className={`typ-badge ${TYP_BADGE[typ]}`}>{typ}</span>
+                            <span key={typ} className={`typ-badge ${TYP_BADGE[typ]}`}>
+                              {typOptions.find((o) => o.value === typ)?.label ?? typ}
+                            </span>
                           ))}
                         </div>
                       </td>
@@ -431,7 +462,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
                             type="button"
                             className="button button-ghost button-icon icon-danger"
                             onClick={() => handleDeleteKontrahent(kontrahent.id)}
-                            title={t.delete}
+                            data-tip={t.delete}
                             aria-label={`${t.delete}: ${kontrahent.nazwa}`}
                           >
                             <Icon name="trash" size={15} />

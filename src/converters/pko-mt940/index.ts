@@ -25,6 +25,7 @@ import {
   ParseResult,
   ICsvExporter,
 } from '../../shared/base-converter';
+import type { ReviewHoldReason } from '../../shared/types';
 
 export class PKOBPMT940Converter extends BaseConverter<MT940Transaction> {
   private parser: PKOBPMT940Parser;
@@ -46,6 +47,7 @@ export class PKOBPMT940Converter extends BaseConverter<MT940Transaction> {
     const statement = this.parser.parse(content);
     return {
       transactions: statement.transactions,
+      dropped: statement.dropped,
       logExtra: `Opening balance: ${statement.openingBalance.amount} ${statement.openingBalance.debitCredit}, Closing balance: ${statement.closingBalance.amount} ${statement.closingBalance.debitCredit}`,
     };
   }
@@ -60,14 +62,38 @@ export class PKOBPMT940Converter extends BaseConverter<MT940Transaction> {
     });
   }
 
+  /**
+   * A storno (RC/RD) is held for review, never booked automatically. So is a
+   * debit marked as a virtual-account (SWRK) movement: the SWRK credits are left
+   * to the Scalanie wpłat track (see filterTransactions), and a debit on such an
+   * account — typically a payment returned to a resident — is unusual enough to
+   * be looked at before it goes into the books.
+   */
+  protected holdReason(transaction: MT940Transaction): ReviewHoldReason | null {
+    if (transaction.reversal) return 'reversal';
+    if (
+      transaction.debitCredit === 'D' &&
+      transaction.details.additionalInfo.trim().toUpperCase().startsWith('SWRK')
+    ) {
+      return 'virtual-account-debit';
+    }
+    return null;
+  }
+
   protected isIncome(transaction: MT940Transaction): boolean {
     return transaction.debitCredit === 'C';
   }
 
   protected normalize(transaction: MT940Transaction): NormalizedTransaction {
     return {
+      // Glued on purpose: the bank wraps its fixed-width subfields mid-word, and
+      // the apartment regexes and their guards read the text as one string.
+      // The subfields travel alongside for contractor matching only, so a name
+      // ending where a subfield ends is still a whole word there.
       descBase: transaction.details.description.join(''),
       descOpt: transaction.details.counterpartyName,
+      descBaseParts: transaction.details.description,
+      descOptParts: transaction.details.counterpartyNameParts,
       exeDate: transaction.valueDate,
       creatDate: transaction.entryDate,
       value: transaction.amount,

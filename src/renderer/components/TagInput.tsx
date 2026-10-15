@@ -58,7 +58,7 @@ const TagInput: React.FC<TagInputProps> = ({
             className="tag-input__chip-remove"
             onClick={() => remove(index)}
             aria-label={`${removeLabel}: ${value}`}
-            title={removeLabel}
+            data-tip={removeLabel}
           >
             <Icon name="x" size={12} />
           </button>

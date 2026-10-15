@@ -90,9 +90,9 @@ export const RELEASES: Release[] = [
     tagline:
       'Konwerter nie gubi już po cichu linii wyciągu ani nie zgaduje kontrahenta po fragmencie słowa — wątpliwe pozycje czekają na Twoje potwierdzenie. Wysyłka CIT-8 nie złoży zeznania dwa razy, kopie zapasowe nie przenoszą ustawień tego komputera, a aplikacja działa na nowej, wspieranej wersji Electrona.',
     stats: [
-      { value: '4', label: 'nowe zabezpieczenia' },
-      { value: '5', label: 'usprawnień' },
-      { value: '6', label: 'poprawek' },
+      { value: '2', label: 'nowe funkcje' },
+      { value: '4', label: 'usprawnienia' },
+      { value: '3', label: 'poprawki' },
     ],
     highlights: [
       {

@@ -2727,6 +2727,9 @@ body.dark-mode .modal-overlay {
 /* ZGN units: one table row per unit — who it is, where mail goes, its proxies. */
 .zgn-table td { vertical-align: top; }
 .zgn-table__email { overflow-wrap: anywhere; }
+/* Every track in a proxy row may shrink to 0, so the cell has no width of its
+   own; without a floor a crowded table squeezes the e-mail to a letter a line. */
+.zgn-table__proxies { min-width: 240px; }
 
 .zgn-proxy-list {
   margin: 0;
@@ -2736,27 +2739,31 @@ body.dark-mode .modal-overlay {
   border-radius: var(--r-md);
 }
 
+/* Name over e-mail, actions on the right: the e-mail gets the cell's whole text
+   width instead of what is left beside the name. */
 .zgn-proxy-row {
   display: grid;
-  grid-template-columns: minmax(0, max-content) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'name actions' 'email actions';
   align-items: center;
-  gap: var(--s-3);
+  column-gap: var(--s-3);
   padding: 4px 4px 4px var(--s-3);
   font-size: var(--fs-md);
 }
 
 .zgn-proxy-row + .zgn-proxy-row { border-top: 1px solid var(--border-subtle); }
 
-.zgn-proxy-row__name { font-weight: 600; color: var(--text-primary); }
+.zgn-proxy-row__name { grid-area: name; font-weight: 600; color: var(--text-primary); }
 
 .zgn-proxy-row__email {
+  grid-area: email;
   color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
 
 .zgn-proxy-row__email.is-missing { color: var(--text-tertiary); font-style: italic; }
 
-.zgn-proxy-row__actions { display: inline-flex; gap: 2px; }
+.zgn-proxy-row__actions { grid-area: actions; display: inline-flex; gap: 2px; }
 
 .zgn-proxy-row__actions .button-icon { padding: 6px; }
 

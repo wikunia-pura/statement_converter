@@ -894,6 +894,13 @@ const ApartmentMappingsModal: React.FC<ApartmentMappingsModalProps> = ({
   );
 };
 
+/** An e-mail that wraps after its "@" first, rather than at an arbitrary letter, in a narrow column. */
+const breakableEmail = (email: string): React.ReactNode => {
+  const at = email.indexOf('@');
+  if (at < 0) return email;
+  return <>{email.slice(0, at + 1)}<wbr />{email.slice(at + 1)}</>;
+};
+
 interface ZgnUnitFormModalProps {
   language: Language;
   /** Unit being edited, or null when adding a new one. */
@@ -1052,7 +1059,7 @@ const ZgnUnitFormModal: React.FC<ZgnUnitFormModalProps> = ({
                       <li key={p.id} className="zgn-proxy-row">
                         <span className="zgn-proxy-row__name">{p.imieNazwisko}</span>
                         <span className={`zgn-proxy-row__email${p.email ? '' : ' is-missing'}`}>
-                          {p.email || t.zgnProxyNoEmail}
+                          {p.email ? breakableEmail(p.email) : t.zgnProxyNoEmail}
                         </span>
                       </li>
                     ))}
@@ -1420,16 +1427,16 @@ const ZgnUnitsPanel: React.FC<ZgnUnitsPanelProps> = ({
                   <td className="data-table__name">
                     <span className="cell-title">{j.nazwa}</span>
                   </td>
-                  <td className="zgn-table__email">{j.email}</td>
+                  <td className="zgn-table__email">{breakableEmail(j.email)}</td>
                   <td className="data-table__center">{used}</td>
-                  <td>
+                  <td className="zgn-table__proxies">
                     {proxies.length > 0 ? (
                       <ul className="zgn-proxy-list">
                         {proxies.map((p) => (
                           <li key={p.id} className="zgn-proxy-row">
                             <span className="zgn-proxy-row__name">{p.imieNazwisko}</span>
                             <span className={`zgn-proxy-row__email${p.email ? '' : ' is-missing'}`}>
-                              {p.email || t.zgnProxyNoEmail}
+                              {p.email ? breakableEmail(p.email) : t.zgnProxyNoEmail}
                             </span>
                             <span className="zgn-proxy-row__actions">
                               <button
@@ -1544,7 +1551,7 @@ const ZgnUnitsModal: React.FC<ZgnUnitsModalProps> = ({ onClose, ...panelProps })
   const t = translations[panelProps.language];
   return (
     <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1100 }}>
-      <div className="modal modal--lg" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal--xl" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onClose} />
         <ModalHeader icon="building" title={t.zgnUnitsTitle} subtitle={t.zgnUnitsModalSubtitle} />
         <div className="modal-body modal-body--sectioned">

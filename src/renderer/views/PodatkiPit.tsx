@@ -911,6 +911,23 @@ const WspolnotaScreen: React.FC<{
   /** People added on this screen start open — somebody is about to fill them in. */
   const noweKlucze = useRef<Set<string>>(new Set());
 
+  // Filing marks and downloads are written at once by their own calls, into the
+  // record the list holds — carry them into the draft, so the screen shows them
+  // without touching what is being edited (`migawka` ignores both).
+  useEffect(() => {
+    if (!rekord) return;
+    const zRekordu = new Map(rekord.dane.osoby.map((o) => [o.klucz, o]));
+    const p4r = rekord.dane.pit4r;
+    setDane((d) => ({
+      ...d,
+      osoby: d.osoby.map((o) => {
+        const r = zRekordu.get(o.klucz);
+        return r ? { ...o, zlozone: r.zlozone, pobrania: r.pobrania } : o;
+      }),
+      pit4r: d.pit4r && p4r ? { ...d.pit4r, zlozone: p4r.zlozone, pobrania: p4r.pobrania } : d.pit4r,
+    }));
+  }, [rekord]);
+
   const dirty = migawka(nip, dane) !== baseline;
   const canAdd = nip.length === 10 && dane.nazwa.trim() !== '';
   const wiersz: PodatekPit | null = rekord ? { ...rekord, nip, dane } : null;

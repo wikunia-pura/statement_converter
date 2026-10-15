@@ -152,6 +152,11 @@ interface FormModalProps {
   error: string | null;
   onSubmit: (input: ZadanieInput) => void;
   onCancel: () => void;
+  /**
+   * Put the card away or bring it back, as the card's own button does — at once,
+   * not with "Zapisz", so the form stays open with its edits. Answers whether it worked.
+   */
+  onArchive?: (archived: boolean) => Promise<boolean>;
 }
 
 export const ZadanieFormModal: React.FC<FormModalProps> = ({
@@ -166,8 +171,10 @@ export const ZadanieFormModal: React.FC<FormModalProps> = ({
   error,
   onSubmit,
   onCancel,
+  onArchive,
 }) => {
   const t = translations[language];
+  const [archived, setArchived] = useState(editing?.zarchiwizowane ?? false);
   const [tytul, setTytul] = useState(editing?.tytul ?? initialValues?.tytul ?? '');
   const [opis, setOpis] = useState(editing?.opis ?? initialValues?.opis ?? '');
   const [status, setStatus] = useState<ZadanieStatus>(editing?.status ?? initialStatus);
@@ -513,7 +520,24 @@ export const ZadanieFormModal: React.FC<FormModalProps> = ({
           )}
         </div>
         <ModalFooter
-          note={<RequiredNote label={t.formRequiredNote} />}
+          note={
+            editing && onArchive ? (
+              <button
+                type="button"
+                className="button button-small button-subtle"
+                onClick={async () => {
+                  const next = !archived;
+                  setArchived(next);
+                  if (!(await onArchive(next))) setArchived(!next);
+                }}
+                disabled={isSaving}
+              >
+                <Icon name={archived ? 'undo' : 'archive'} size={13} /> {archived ? t.zadUnarchive : t.zadArchive}
+              </button>
+            ) : (
+              <RequiredNote label={t.formRequiredNote} />
+            )
+          }
           onCancel={handleCancel}
           cancelLabel={t.cancel}
           onSubmit={handleSubmit}
@@ -1218,9 +1242,11 @@ const Zadania: React.FC<Props> = ({
     setZadania((prev) => prev.map((c) => (c.id === z.id ? { ...c, zarchiwizowane: archived } : c)));
     try {
       await window.electronAPI.archiveZadanie(z.id, archived);
+      return true;
     } catch (err: unknown) {
       notify.error(err instanceof Error ? err.message : t.zadSaveError);
       await load();
+      return false;
     }
   };
 
@@ -1864,6 +1890,7 @@ const Zadania: React.FC<Props> = ({
           error={error}
           onSubmit={handleSubmit}
           onCancel={() => setFormState(null)}
+          onArchive={formState.editing ? (archived) => setArchived(formState.editing!, archived) : undefined}
         />
       )}
 

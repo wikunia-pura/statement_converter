@@ -600,10 +600,150 @@ const ZarzadPersonFormModal: React.FC<ZarzadPersonFormModalProps> = ({
   );
 };
 
+/** What a folded section holds, in a few words: "A, B +3" — or the empty-state line. */
+const foldSummary = (items: string[], empty: string, max = 2): string =>
+  items.length === 0
+    ? empty
+    : items.slice(0, max).join(', ') + (items.length > max ? ` +${items.length - max}` : '');
+
+interface ZarzadEditorProps {
+  language: Language;
+  /** The community, named under the person form's title. */
+  adresNazwa: string;
+  members: ZarzadOsoba[];
+  /**
+   * Takes the whole new list — the board is one value on the address. The board
+   * modal saves it at once and answers whether that worked (a failed save keeps
+   * the person form open); the address form keeps it until "Zapisz".
+   */
+  onChange: (next: ZarzadOsoba[]) => boolean | Promise<boolean>;
+  isSaving?: boolean;
+  error?: string | null;
+  /** Inside a larger form: the add button follows the list, quieter than the form's own save. */
+  inForm?: boolean;
+}
+
 /**
- * A community's board, in a modal like the apartment rules: the list of people,
- * each with edit and delete, and "add" on top. Every change saves the whole list
- * at once — it is one value on the address.
+ * A community's board as an editable list: each person with edit and delete,
+ * and "add". The same editor serves the board modal on the address list and
+ * the address form, so both offer the same.
+ */
+const ZarzadEditor: React.FC<ZarzadEditorProps> = ({
+  language,
+  adresNazwa,
+  members,
+  onChange,
+  isSaving = false,
+  error,
+  inForm = false,
+}) => {
+  const t = translations[language];
+  const notify = useNotify();
+  const [formState, setFormState] = useState<{ editing: ZarzadOsoba | null } | null>(null);
+
+  const handleFormSubmit = async (data: { imieNazwisko: string; email: string }) => {
+    const editing = formState?.editing;
+    const next = editing
+      ? members.map((m) => (m.id === editing.id ? { ...m, ...data } : m))
+      : [...members, { id: `z${Date.now().toString(36)}`, ...data }];
+    if (await onChange(next)) setFormState(null);
+  };
+
+  const handleDelete = async (m: ZarzadOsoba) => {
+    if (!(await notify.confirm(t.zarzadConfirmDelete.replace('{name}', m.imieNazwisko), { danger: true }))) {
+      return;
+    }
+    await onChange(members.filter((x) => x.id !== m.id));
+  };
+
+  const addButton = (
+    <button
+      type="button"
+      className={inForm ? 'button button-small button-subtle' : 'button button-primary'}
+      onClick={() => setFormState({ editing: null })}
+      disabled={isSaving}
+    >
+      <Icon name="plus" size={inForm ? 13 : 14} />{' '}{t.zarzadAdd}
+    </button>
+  );
+
+  return (
+    <>
+      {!inForm && <div className="panel-intro panel-intro--end">{addButton}</div>}
+
+      {error && (
+        <div className="callout callout--danger" role="alert">
+          <Icon name="alert-triangle" size={16} />
+          <div className="callout__body">{error}</div>
+        </div>
+      )}
+
+      {members.length > 0 ? (
+        <ul className="record-list">
+          {members.map((m) => (
+            <li key={m.id} className="record-row">
+              <span className="record-row__icon" aria-hidden="true">
+                <Icon name="users" size={15} />
+              </span>
+              <div className="record-row__main">
+                <div className="record-row__title">{m.imieNazwisko}</div>
+                <div className={`record-row__meta${m.email ? '' : ' is-missing'}`}>
+                  <Icon name="mail" size={12} />
+                  {m.email || t.noEmail}
+                </div>
+              </div>
+              <div className="row-actions">
+                <button
+                  type="button"
+                  className="button button-small button-secondary"
+                  onClick={() => setFormState({ editing: m })}
+                  disabled={isSaving}
+                >
+                  <Icon name="edit" size={13} />{' '}{t.edit}
+                </button>
+                <button
+                  type="button"
+                  className="button button-ghost button-icon icon-danger"
+                  onClick={() => void handleDelete(m)}
+                  disabled={isSaving}
+                  aria-label={`${t.delete}: ${m.imieNazwisko}`}
+                >
+                  <Icon name="trash" size={15} />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="form-empty">
+          <Icon name="users" size={16} />
+          {t.zarzadEmpty}
+        </div>
+      )}
+
+      {inForm && <div>{addButton}</div>}
+
+      {/* In the body: inside a form the editor sits in a scrolling modal body. */}
+      {formState &&
+        createPortal(
+          <ZarzadPersonFormModal
+            key={formState.editing ? `edit-${formState.editing.id}` : 'new'}
+            language={language}
+            adresNazwa={adresNazwa}
+            editing={formState.editing}
+            isSaving={isSaving}
+            onSubmit={(data) => void handleFormSubmit(data)}
+            onCancel={() => setFormState(null)}
+          />,
+          document.body,
+        )}
+    </>
+  );
+};
+
+/**
+ * A community's board, in a modal like the apartment rules, opened from the
+ * address list. Every change saves the whole list at once.
  */
 const ZarzadModal: React.FC<{
   adres: Adres;
@@ -612,11 +752,9 @@ const ZarzadModal: React.FC<{
   onSaved: () => void;
 }> = ({ adres, language, onClose, onSaved }) => {
   const t = translations[language];
-  const notify = useNotify();
   const [members, setMembers] = useState<ZarzadOsoba[]>(adres.zarzad || []);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [formState, setFormState] = useState<{ editing: ZarzadOsoba | null } | null>(null);
 
   const persist = async (next: ZarzadOsoba[]) => {
     setIsSaving(true);
@@ -634,104 +772,162 @@ const ZarzadModal: React.FC<{
     }
   };
 
-  const handleFormSubmit = async (data: { imieNazwisko: string; email: string }) => {
-    const editing = formState?.editing;
-    const next = editing
-      ? members.map((m) => (m.id === editing.id ? { ...m, ...data } : m))
-      : [...members, { id: `z${Date.now().toString(36)}`, ...data }];
-    if (await persist(next)) setFormState(null);
-  };
-
-  const handleDelete = async (m: ZarzadOsoba) => {
-    if (!(await notify.confirm(t.zarzadConfirmDelete.replace('{name}', m.imieNazwisko), { danger: true }))) {
-      return;
-    }
-    await persist(members.filter((x) => x.id !== m.id));
-  };
-
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal--lg" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onClose} />
         <ModalHeader icon="users" title={t.zarzadTitle} subtitle={adres.nazwa} />
         <div className="modal-body modal-body--sectioned">
-          <div className="panel-intro panel-intro--end">
-            <button
-              type="button"
-              className="button button-primary"
-              onClick={() => setFormState({ editing: null })}
-              disabled={isSaving}
-            >
-              <Icon name="plus" size={14} />{' '}{t.zarzadAdd}
-            </button>
-          </div>
-
-          {error && (
-            <div className="callout callout--danger" role="alert">
-              <Icon name="alert-triangle" size={16} />
-              <div className="callout__body">{error}</div>
-            </div>
-          )}
-
-          {members.length > 0 ? (
-            <ul className="record-list">
-              {members.map((m) => (
-                <li key={m.id} className="record-row">
-                  <span className="record-row__icon" aria-hidden="true">
-                    <Icon name="users" size={15} />
-                  </span>
-                  <div className="record-row__main">
-                    <div className="record-row__title">{m.imieNazwisko}</div>
-                    <div className={`record-row__meta${m.email ? '' : ' is-missing'}`}>
-                      <Icon name="mail" size={12} />
-                      {m.email || t.noEmail}
-                    </div>
-                  </div>
-                  <div className="row-actions">
-                    <button
-                      type="button"
-                      className="button button-small button-secondary"
-                      onClick={() => setFormState({ editing: m })}
-                      disabled={isSaving}
-                    >
-                      <Icon name="edit" size={13} />{' '}{t.edit}
-                    </button>
-                    <button
-                      type="button"
-                      className="button button-ghost button-icon icon-danger"
-                      onClick={() => void handleDelete(m)}
-                      disabled={isSaving}
-                      title={t.delete}
-                      aria-label={`${t.delete}: ${m.imieNazwisko}`}
-                    >
-                      <Icon name="trash" size={15} />
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="form-empty">
-              <Icon name="users" size={16} />
-              {t.zarzadEmpty}
-            </div>
-          )}
+          <ZarzadEditor
+            language={language}
+            adresNazwa={adres.nazwa}
+            members={members}
+            onChange={persist}
+            isSaving={isSaving}
+            error={error}
+          />
         </div>
         <ModalFooter onCancel={onClose} cancelLabel={t.close} />
       </div>
-
-      {formState && (
-        <ZarzadPersonFormModal
-          key={formState.editing ? `edit-${formState.editing.id}` : 'new'}
-          language={language}
-          adresNazwa={adres.nazwa}
-          editing={formState.editing}
-          isSaving={isSaving}
-          onSubmit={(data) => void handleFormSubmit(data)}
-          onCancel={() => setFormState(null)}
-        />
-      )}
     </div>
+  );
+};
+
+interface ApartmentMappingsEditorProps {
+  language: Language;
+  mappings: ApartmentMapping[];
+  /** Takes the whole new list — saved at once by the rules modal, kept until "Zapisz" by the address form. */
+  onChange: (next: ApartmentMapping[]) => boolean | Promise<boolean>;
+  isSaving?: boolean;
+  error?: string | null;
+  /** Inside a larger form: the add button follows the list, quieter than the form's own save. */
+  inForm?: boolean;
+}
+
+/**
+ * An address's apartment-number rules as an editable list. Adding/editing a
+ * rule happens in ApartmentMappingFormModal so the list stays readable. Shared
+ * by the rules modal on the address list and the address form.
+ */
+const ApartmentMappingsEditor: React.FC<ApartmentMappingsEditorProps> = ({
+  language,
+  mappings,
+  onChange,
+  isSaving = false,
+  error,
+  inForm = false,
+}) => {
+  const t = translations[language];
+  const notify = useNotify();
+  // null = closed; { editing: null } = add; { editing: <m> } = edit.
+  const [formState, setFormState] = useState<{ editing: ApartmentMapping | null } | null>(null);
+
+  const handleFormSubmit = async (entry: ApartmentMapping) => {
+    const exists = mappings.some(m => m.id === entry.id);
+    const next = exists
+      ? mappings.map(m => (m.id === entry.id ? entry : m))
+      : [...mappings, entry];
+    if (await onChange(next)) setFormState(null);
+  };
+
+  const handleDelete = async (m: ApartmentMapping) => {
+    if (!(await notify.confirm(t.apartmentMappingConfirmDelete.replace('{name}', m.matchText), { danger: true }))) {
+      return;
+    }
+    await onChange(mappings.filter(x => x.id !== m.id));
+  };
+
+  const addButton = (
+    <button
+      type="button"
+      className={inForm ? 'button button-small button-subtle' : 'button button-primary'}
+      onClick={() => setFormState({ editing: null })}
+      disabled={isSaving}
+    >
+      <Icon name="plus" size={inForm ? 13 : 14} />{' '}{t.addApartmentMapping}
+    </button>
+  );
+
+  return (
+    <>
+      {!inForm && <div className="panel-intro panel-intro--end">{addButton}</div>}
+
+      {error && (
+        <div className="callout callout--danger" role="alert">
+          <Icon name="alert-triangle" size={16} />
+          <div className="callout__body">{error}</div>
+        </div>
+      )}
+
+      {mappings.length > 0 ? (
+        /* One card-row per rule: the phrase (a whole payer name plus address —
+           it needs the width, so it gets the row's main line), then the
+           apartments it points at, each with its account, and the note. */
+        <ul className="record-list">
+          {mappings.map((m) => {
+            const targets = mappingTargets(m);
+            return (
+              <li key={m.id} className="record-row record-row--top">
+                {/* The apartment leads the row, in a column of its own, so the numbers line up and the long phrase does not push them around. */}
+                <div className="record-row__lead">
+                  {targets.map((target) => (
+                    <span key={target.apartmentNumber} className="apt-chip">
+                      <Icon name="home" size={12} />
+                      <b>{target.apartmentNumber}</b>
+                      {target.kontoLokalu && <span className="apt-chip__account">{target.kontoLokalu}</span>}
+                    </span>
+                  ))}
+                </div>
+                <div className="record-row__main">
+                  <div className="record-row__title record-row__title--wrap">{m.matchText}</div>
+                  {m.note && <div className="record-row__note">{m.note}</div>}
+                </div>
+                <div className="row-actions">
+                  <button
+                    type="button"
+                    className="button button-small button-secondary"
+                    onClick={() => setFormState({ editing: m })}
+                    disabled={isSaving}
+                  >
+                    <Icon name="edit" size={13} />{' '}{t.edit}
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-ghost button-icon icon-danger"
+                    onClick={() => void handleDelete(m)}
+                    disabled={isSaving}
+                    aria-label={`${t.delete}: ${m.matchText}`}
+                  >
+                    <Icon name="trash" size={15} />
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <div className="form-empty">
+          <Icon name="clipboard" size={16} />
+          {t.noApartmentMappings}
+        </div>
+      )}
+
+      {inForm && <div>{addButton}</div>}
+
+      {/* In the body: inside a form the editor sits in a scrolling modal body. */}
+      {formState &&
+        createPortal(
+          <ApartmentMappingFormModal
+            language={language}
+            editing={formState.editing}
+            existing={mappings}
+            isSaving={isSaving}
+            onSubmit={(entry) => void handleFormSubmit(entry)}
+            onCancel={() => setFormState(null)}
+          />,
+          document.body,
+        )}
+    </>
   );
 };
 
@@ -743,9 +939,8 @@ interface ApartmentMappingsModalProps {
 }
 
 /**
- * Per-address modal listing all apartment-number rules. Adding/editing a rule
- * happens in a separate ApartmentMappingFormModal so the list stays readable.
- * Saves through updateAdres (re-sending the address's other fields).
+ * Per-address modal listing all apartment-number rules, opened from the
+ * address list. Saves through updateAdres (re-sending the address's other fields).
  */
 const ApartmentMappingsModal: React.FC<ApartmentMappingsModalProps> = ({
   adres,
@@ -754,12 +949,9 @@ const ApartmentMappingsModal: React.FC<ApartmentMappingsModalProps> = ({
   onSaved,
 }) => {
   const t = translations[language];
-  const notify = useNotify();
   const [mappings, setMappings] = useState<ApartmentMapping[]>(adres.apartmentMappings || []);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  // null = closed; { editing: null } = add; { editing: <m> } = edit.
-  const [formState, setFormState] = useState<{ editing: ApartmentMapping | null } | null>(null);
 
   const persist = async (next: ApartmentMapping[]) => {
     setIsSaving(true);
@@ -785,111 +977,22 @@ const ApartmentMappingsModal: React.FC<ApartmentMappingsModalProps> = ({
     }
   };
 
-  const handleFormSubmit = async (entry: ApartmentMapping) => {
-    const exists = mappings.some(m => m.id === entry.id);
-    const next = exists
-      ? mappings.map(m => (m.id === entry.id ? entry : m))
-      : [...mappings, entry];
-    const ok = await persist(next);
-    if (ok) setFormState(null);
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!(await notify.confirm(t.confirmDeleteAdres, { danger: true }))) return;
-    await persist(mappings.filter(m => m.id !== id));
-  };
-
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal--2xl" onClick={(e) => e.stopPropagation()}>
         <ModalDismiss onClose={onClose} />
         <ModalHeader icon="clipboard" title={t.apartmentMappingsTitle} subtitle={adres.nazwa} />
         <div className="modal-body modal-body--sectioned">
-          <div className="panel-intro panel-intro--end">
-            <button
-              type="button"
-              className="button button-primary"
-              onClick={() => setFormState({ editing: null })}
-              disabled={isSaving}
-            >
-              <Icon name="plus" size={14} />{' '}{t.addApartmentMapping}
-            </button>
-          </div>
-
-          {error && (
-            <div className="callout callout--danger" role="alert">
-              <Icon name="alert-triangle" size={16} />
-              <div className="callout__body">{error}</div>
-            </div>
-          )}
-
-          {mappings.length > 0 ? (
-            /* One card-row per rule: the phrase (a whole payer name plus address —
-               it needs the width, so it gets the row's main line), then the
-               apartments it points at, each with its account, and the note. */
-            <ul className="record-list">
-              {mappings.map((m) => {
-                const targets = mappingTargets(m);
-                return (
-                  <li key={m.id} className="record-row record-row--top">
-                    {/* The apartment leads the row, in a column of its own, so the numbers line up and the long phrase does not push them around. */}
-                    <div className="record-row__lead">
-                      {targets.map((target) => (
-                        <span key={target.apartmentNumber} className="apt-chip">
-                          <Icon name="home" size={12} />
-                          <b>{target.apartmentNumber}</b>
-                          {target.kontoLokalu && <span className="apt-chip__account">{target.kontoLokalu}</span>}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="record-row__main">
-                      <div className="record-row__title record-row__title--wrap">{m.matchText}</div>
-                      {m.note && <div className="record-row__note">{m.note}</div>}
-                    </div>
-                    <div className="row-actions">
-                      <button
-                        type="button"
-                        className="button button-small button-secondary"
-                        onClick={() => setFormState({ editing: m })}
-                        disabled={isSaving}
-                      >
-                        <Icon name="edit" size={13} />{' '}{t.edit}
-                      </button>
-                      <button
-                        type="button"
-                        className="button button-ghost button-icon icon-danger"
-                        onClick={() => handleDelete(m.id)}
-                        disabled={isSaving}
-                        title={t.delete}
-                        aria-label={`${t.delete}: ${m.matchText}`}
-                      >
-                        <Icon name="trash" size={15} />
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <div className="form-empty">
-              <Icon name="clipboard" size={16} />
-              {t.noApartmentMappings}
-            </div>
-          )}
+          <ApartmentMappingsEditor
+            language={language}
+            mappings={mappings}
+            onChange={persist}
+            isSaving={isSaving}
+            error={error}
+          />
         </div>
         <ModalFooter onCancel={onClose} cancelLabel={t.close} />
       </div>
-
-      {formState && (
-        <ApartmentMappingFormModal
-          language={language}
-          editing={formState.editing}
-          existing={mappings}
-          isSaving={isSaving}
-          onSubmit={handleFormSubmit}
-          onCancel={() => setFormState(null)}
-        />
-      )}
     </div>
   );
 };
@@ -914,10 +1017,12 @@ interface ZgnUnitFormModalProps {
   error: string | null;
   /** Stack above the units modal when the dictionary itself is a modal. */
   zIndex?: number;
-  /** The unit's proxies, kept live by the panel — managed here, in the unit's edit view. */
+  /** The unit's proxies, kept live by the panel — managed here as on the units list. */
   pelnomocnicy: ZgnPelnomocnik[];
-  /** Adding lives here; editing and deleting stay on the units list. */
+  /** Proxies are their own records: these save at once, not with the unit's "Zapisz". */
   onAddProxy: () => void;
+  onEditProxy: (p: ZgnPelnomocnik) => void;
+  onDeleteProxy: (p: ZgnPelnomocnik) => void;
   onSubmit: (data: { nazwa: string; email: string; adresIds: number[]; assignmentChanged: boolean }) => void;
   onCancel: () => void;
 }
@@ -937,6 +1042,8 @@ const ZgnUnitFormModal: React.FC<ZgnUnitFormModalProps> = ({
   zIndex = 1100,
   pelnomocnicy,
   onAddProxy,
+  onEditProxy,
+  onDeleteProxy,
   onSubmit,
   onCancel,
 }) => {
@@ -1004,7 +1111,15 @@ const ZgnUnitFormModal: React.FC<ZgnUnitFormModalProps> = ({
           subtitle={editing ? editing.nazwa : t.zgnUnitFormSubtitle}
         />
         <div className="modal-body modal-body--sectioned">
-          <FormSection icon="building" title={t.zgnSectionUnit} description={t.zgnSectionUnitDesc}>
+          {/* Editing a saved unit opens folded, like the address form; a new one opens unfolded. */}
+          <FormSection
+            icon="building"
+            title={t.zgnSectionUnit}
+            description={t.zgnSectionUnitDesc}
+            collapsible={!!editing}
+            defaultCollapsed
+            collapsedSummary={[nazwa.trim(), email.trim()].filter(Boolean).join(' — ')}
+          >
             <FormRow>
               <FormField label={t.zgnUnitName} htmlFor="zgn-unit-name" required>
                 <input
@@ -1022,7 +1137,7 @@ const ZgnUnitFormModal: React.FC<ZgnUnitFormModalProps> = ({
                 htmlFor="zgn-unit-email"
                 required
                 hint={t.zgnUnitEmailHint}
-                error={localError || error}
+                error={localError}
               >
                 <div className="input-icon">
                   <Icon name="mail" size={15} />
@@ -1050,7 +1165,14 @@ const ZgnUnitFormModal: React.FC<ZgnUnitFormModalProps> = ({
             )}
           </FormSection>
 
-          <FormSection icon="users" title={t.zgnProxies} description={t.zgnSectionProxiesDesc}>
+          <FormSection
+            icon="users"
+            title={t.zgnProxies}
+            description={t.zgnSectionProxiesDesc}
+            collapsible={!!editing}
+            defaultCollapsed
+            collapsedSummary={foldSummary(pelnomocnicy.map((p) => p.imieNazwisko), t.zgnProxiesCollapsedEmpty, 3)}
+          >
             {editing ? (
               <>
                 {pelnomocnicy.length > 0 && (
@@ -1060,6 +1182,26 @@ const ZgnUnitFormModal: React.FC<ZgnUnitFormModalProps> = ({
                         <span className="zgn-proxy-row__name">{p.imieNazwisko}</span>
                         <span className={`zgn-proxy-row__email${p.email ? '' : ' is-missing'}`}>
                           {p.email ? breakableEmail(p.email) : t.zgnProxyNoEmail}
+                        </span>
+                        <span className="zgn-proxy-row__actions">
+                          <button
+                            type="button"
+                            className="button button-ghost button-icon"
+                            onClick={() => onEditProxy(p)}
+                            disabled={isSaving}
+                            aria-label={`${t.edit}: ${p.imieNazwisko}`}
+                          >
+                            <Icon name="edit" size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            className="button button-ghost button-icon icon-danger"
+                            onClick={() => onDeleteProxy(p)}
+                            disabled={isSaving}
+                            aria-label={`${t.delete}: ${p.imieNazwisko}`}
+                          >
+                            <Icon name="trash" size={13} />
+                          </button>
                         </span>
                       </li>
                     ))}
@@ -1088,6 +1230,16 @@ const ZgnUnitFormModal: React.FC<ZgnUnitFormModalProps> = ({
             icon="home"
             title={t.zgnSectionCommunities}
             description={t.zgnSectionCommunitiesDesc}
+            collapsible={!!editing}
+            defaultCollapsed
+            collapsedSummary={
+              adresIds.length > 0
+                ? t.formSectionPicked.replace(
+                    '{names}',
+                    foldSummary(adresy.filter((a) => adresIds.includes(a.id)).map((a) => a.nazwa), '', 3),
+                  )
+                : t.zgnCommunitiesCollapsedEmpty
+            }
           >
             <CheckList
               items={items}
@@ -1098,6 +1250,14 @@ const ZgnUnitFormModal: React.FC<ZgnUnitFormModalProps> = ({
               emptyLabel={t.zgnPickEmpty}
             />
           </FormSection>
+
+          {/* Under the sections, not in a field: the section it concerns may be folded. */}
+          {error && (
+            <div className="callout callout--danger" role="alert">
+              <Icon name="alert-triangle" size={16} />
+              <div className="callout__body">{error}</div>
+            </div>
+          )}
         </div>
         <ModalFooter
           note={
@@ -1516,6 +1676,12 @@ const ZgnUnitsPanel: React.FC<ZgnUnitsPanelProps> = ({
             setError(null);
             setProxyForm({ jednostka: formState.editing, editing: null });
           }}
+          onEditProxy={(p) => {
+            if (!formState.editing) return;
+            setError(null);
+            setProxyForm({ jednostka: formState.editing, editing: p });
+          }}
+          onDeleteProxy={(p) => void handleProxyDelete(p)}
           onSubmit={(data) => void handleFormSubmit(data)}
           onCancel={() => { setFormState(null); setError(null); }}
         />
@@ -1585,7 +1751,9 @@ const IdentyfikacjaSection: React.FC<{
   nazwa: string;
   value: AdresIdentyfikacja;
   onChange: (value: AdresIdentyfikacja) => void;
-}> = ({ t, nazwa, value, onChange }) => {
+  /** A saved address: always opens folded, the fold of the add form is not carried over. */
+  editing: boolean;
+}> = ({ t, nazwa, value, onChange, editing }) => {
   const set = <K extends keyof AdresIdentyfikacja>(key: K, v: AdresIdentyfikacja[K]) => onChange({ ...value, [key]: v });
   const setSiedziba = (key: keyof PodatekAdres, v: string) => set('siedziba', { ...value.siedziba, [key]: v });
   const kodyUrzedow = useMemo(() => [{ value: '', label: t.adresIdentKodUrzeduBrak }, ...urzedyOpcje(true)], [t]);
@@ -1603,7 +1771,7 @@ const IdentyfikacjaSection: React.FC<{
       description={t.adresSectionIdentDesc}
       collapsible
       defaultCollapsed
-      persistKey="adres-identyfikacja"
+      persistKey={editing ? undefined : 'adres-identyfikacja'}
       collapsedSummary={value.nip ? `NIP ${value.nip}` : t.adresIdentCollapsedEmpty}
     >
       <FormRow>
@@ -1701,6 +1869,10 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
   const [accountNumberError, setAccountNumberError] = useState<string | null>(null);
   const [newBankId, setNewBankId] = useState<number | null>(null);
   const [newIdentyfikacja, setNewIdentyfikacja] = useState<AdresIdentyfikacja>(pustaIdentyfikacja());
+  // The board and the apartment rules are also on the list (their own modals);
+  // here they are part of the form and saved with it.
+  const [newZarzad, setNewZarzad] = useState<ZarzadOsoba[]>([]);
+  const [newMappings, setNewMappings] = useState<ApartmentMapping[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -1770,6 +1942,15 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     }
   };
 
+  /** Like the identification: the address is saved by now, so a failure is reported without keeping the form open. */
+  const saveZarzad = async (id: number, value: ZarzadOsoba[]) => {
+    try {
+      await window.electronAPI.setAdresZarzad(id, value);
+    } catch (error: unknown) {
+      notify.error(error instanceof Error ? error.message : String(error), t.adresZarzadSaveError);
+    }
+  };
+
   const handleAddAdres = async () => {
     if (!newNazwa) {
       notify.warning(t.fillAllFields);
@@ -1792,12 +1973,13 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
         newSwrkIdentifiers,
         newBankId,
         newAccountNumbers,
-        undefined,
+        newMappings,
         newAccountTypes,
         newZgnJednostkaId,
       );
-      // A new address has no id until now, so its identification is saved right after it exists.
+      // A new address has no id until now, so its identification and board are saved right after it exists.
       if (!identyfikacjaPusta(newIdentyfikacja)) await saveIdentyfikacja(created.id, newIdentyfikacja);
+      if (newZarzad.length > 0) await saveZarzad(created.id, newZarzad);
       resetForm();
       setShowAddAdres(false);
       loadData();
@@ -1830,13 +2012,17 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
         newSwrkIdentifiers,
         newBankId,
         newAccountNumbers,
-        undefined, // apartment mappings unchanged here (managed in their own modal)
+        // Only when touched: an untouched list is not re-sent.
+        JSON.stringify(newMappings) !== JSON.stringify(editingAdres.apartmentMappings || []) ? newMappings : undefined,
         newAccountTypes,
         newZgnJednostkaId,
       );
       const ident = normalizeIdentyfikacja(newIdentyfikacja);
       if (JSON.stringify(ident) !== JSON.stringify(normalizeIdentyfikacja(editingAdres.identyfikacja))) {
         await saveIdentyfikacja(editingAdres.id, ident);
+      }
+      if (JSON.stringify(newZarzad) !== JSON.stringify(editingAdres.zarzad || [])) {
+        await saveZarzad(editingAdres.id, newZarzad);
       }
       resetForm();
       setEditingAdres(null);
@@ -1870,6 +2056,8 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     setNewBankId(null);
     setNewZgnJednostkaId(null);
     setNewIdentyfikacja(pustaIdentyfikacja());
+    setNewZarzad([]);
+    setNewMappings([]);
   };
 
   const handleEditAdres = (adres: Adres) => {
@@ -1884,6 +2072,8 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     setNewBankId(adres.bankId ?? null);
     setNewZgnJednostkaId(adres.zgnJednostkaId ?? null);
     setNewIdentyfikacja(normalizeIdentyfikacja(adres.identyfikacja));
+    setNewZarzad(adres.zarzad || []);
+    setNewMappings(adres.apartmentMappings || []);
   };
 
   const handleCancelEdit = () => {
@@ -2015,6 +2205,12 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     );
   }
 
+  // Editing a saved address opens with every section folded, each header saying
+  // what it holds — unfold only the part being changed. A new address opens
+  // unfolded: all of it is to be filled in.
+  const foldEdit = editingAdres !== null;
+  const zgnWybrana = zgnJednostki.find((j) => j.id === newZgnJednostkaId);
+
   return (
     <>
       <ModuleTabs
@@ -2089,6 +2285,11 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                       icon="home"
                       title={t.adresSectionBasic}
                       description={t.adresSectionBasicDesc}
+                      collapsible={foldEdit}
+                      defaultCollapsed
+                      collapsedSummary={[newNazwa.trim(), banks.find((b) => b.id === newBankId)?.name ?? t.adresNoBank]
+                        .filter(Boolean)
+                        .join(' · ')}
                     >
                       <FormRow>
                         <FormField label={t.nazwa} htmlFor="adres-nazwa" required>
@@ -2120,6 +2321,9 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                       icon="wallet"
                       title={t.adresSectionAccounts}
                       description={t.adresSectionAccountsDesc}
+                      collapsible={foldEdit}
+                      defaultCollapsed
+                      collapsedSummary={foldSummary(newAccountNumbers.map(formatAccount), t.adresNoAccount, 1)}
                     >
                       {newAccountNumbers.length > 0 ? (
                         <div className={`account-list${kontoTypy.length === 0 ? ' account-list--untyped' : ''}`}>
@@ -2203,6 +2407,16 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                       icon="search"
                       title={t.adresSectionMatching}
                       description={t.adresSectionMatchingDesc}
+                      collapsible={foldEdit}
+                      defaultCollapsed
+                      collapsedSummary={
+                        [
+                          newAlternativeNames.length > 0 && `${t.alternativeNames}: ${foldSummary(newAlternativeNames, '')}`,
+                          newSwrkIdentifiers.length > 0 && `${t.swrkIdentifiers}: ${foldSummary(newSwrkIdentifiers, '')}`,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ') || t.adresMatchingCollapsedEmpty
+                      }
                     >
                       <FormField
                         label={t.alternativeNames}
@@ -2236,9 +2450,29 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                     </FormSection>
 
                     <FormSection
+                      icon="clipboard"
+                      title={t.apartmentMappingsTitle}
+                      description={t.adresSectionApartmentsDesc}
+                      collapsible
+                      defaultCollapsed={foldEdit}
+                      persistKey={foldEdit ? undefined : 'adres-reguly-lokali'}
+                      collapsedSummary={foldSummary(newMappings.map((m) => m.matchText), t.noApartmentMappings)}
+                    >
+                      <ApartmentMappingsEditor
+                        language={language}
+                        mappings={newMappings}
+                        onChange={(next) => { setNewMappings(next); return true; }}
+                        inForm
+                      />
+                    </FormSection>
+
+                    <FormSection
                       icon="mail"
                       title={t.adresSectionMailing}
                       description={t.adresSectionMailingDesc}
+                      collapsible={foldEdit}
+                      defaultCollapsed
+                      collapsedSummary={zgnWybrana ? `${zgnWybrana.nazwa} — ${zgnWybrana.email}` : t.zgnUnitNone}
                     >
                       <FormField label={t.zgnUnit}>
                         <div className="form-inline">
@@ -2268,7 +2502,30 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                       </FormField>
                     </FormSection>
 
-                    <IdentyfikacjaSection t={t} nazwa={newNazwa} value={newIdentyfikacja} onChange={setNewIdentyfikacja} />
+                    <FormSection
+                      icon="users"
+                      title={t.zarzadTitle}
+                      description={t.adresSectionZarzadDesc}
+                      collapsible={foldEdit}
+                      defaultCollapsed
+                      collapsedSummary={foldSummary(newZarzad.map((m) => m.imieNazwisko), t.zarzadEmpty, 3)}
+                    >
+                      <ZarzadEditor
+                        language={language}
+                        adresNazwa={newNazwa.trim() || t.addNewAdres}
+                        members={newZarzad}
+                        onChange={(next) => { setNewZarzad(next); return true; }}
+                        inForm
+                      />
+                    </FormSection>
+
+                    <IdentyfikacjaSection
+                      t={t}
+                      nazwa={newNazwa}
+                      value={newIdentyfikacja}
+                      onChange={setNewIdentyfikacja}
+                      editing={foldEdit}
+                    />
                   </div>
                   <ModalFooter
                     note={<RequiredNote label={t.formRequiredNote} />}

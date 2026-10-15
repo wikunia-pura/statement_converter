@@ -325,7 +325,7 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
                       <td className="cell-mono">
                         {bank.accountPrefixes && bank.accountPrefixes.length > 0
                           ? bank.accountPrefixes.join(', ')
-                          : <span className="cell-empty">—</span>}
+                          : <span className="cell-empty">{t.bankPrefixesEmpty}</span>}
                       </td>
                       <td className="data-table__actions">
                         <div className="row-actions">

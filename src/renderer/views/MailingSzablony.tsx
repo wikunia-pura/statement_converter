@@ -284,27 +284,34 @@ const MailingSzablony: React.FC<Props> = ({ language }) => {
       tableFields: szablon.tableFields ?? [],
     });
 
-  const handleSave = async () => {
-    if (!editing) return;
+  /** The editor's fields as the API takes them; null, with the reason shown, while a required one is empty. */
+  const editorPayload = () => {
+    if (!editing) return null;
     if (!editing.nazwa.trim()) {
       setError(t.mailingTemplateNameRequired);
-      return;
+      return null;
     }
     if (!editing.temat.trim()) {
       setError(t.mailingTemplateSubjectRequired);
-      return;
+      return null;
     }
+    return {
+      nazwa: editing.nazwa.trim(),
+      typ: editing.typ,
+      temat: editing.temat,
+      tresc: editing.tresc,
+      attachPdf: editing.attachPdf,
+      tableFields: editing.tableFields,
+    };
+  };
+
+  const handleSave = async () => {
+    if (!editing) return;
+    const payload = editorPayload();
+    if (!payload) return;
     setIsSaving(true);
     setError(null);
     try {
-      const payload = {
-        nazwa: editing.nazwa.trim(),
-        typ: editing.typ,
-        temat: editing.temat,
-        tresc: editing.tresc,
-        attachPdf: editing.attachPdf,
-        tableFields: editing.tableFields,
-      };
       if (editing.id !== null) {
         await window.electronAPI.mailingUpdateSzablon(editing.id, payload);
       } else {
@@ -328,6 +335,31 @@ const MailingSzablony: React.FC<Props> = ({ language }) => {
       await load();
     } catch (err: unknown) {
       notify.error(err instanceof Error ? err.message : 'Unknown error');
+    }
+  };
+
+  /**
+   * The list's "Duplikuj" from inside the editor: what the editor shows becomes a
+   * new template, the original keeps its saved version, and the editor moves on
+   * to the copy.
+   */
+  const handleSaveAsCopy = async () => {
+    const payload = editorPayload();
+    if (!payload) return;
+    setIsSaving(true);
+    setError(null);
+    try {
+      const created = await window.electronAPI.mailingAddSzablon({
+        ...payload,
+        nazwa: `${payload.nazwa} (${t.mailingTemplateCopySuffix})`,
+      });
+      await load();
+      startEdit(created);
+      notify.success(t.mailingTemplateCopySaved);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -571,17 +603,27 @@ const MailingSzablony: React.FC<Props> = ({ language }) => {
               <>
                 <RequiredNote label={t.formRequiredNote} />
                 {editing.id !== null && (
-                  <button
-                    type="button"
-                    className="button button-small button-ghost icon-danger"
-                    onClick={() => {
-                      const current = szablony.find((x) => x.id === editing.id);
-                      if (current) void handleDelete(current);
-                    }}
-                    disabled={isSaving}
-                  >
-                    <Icon name="trash" size={13} /> {t.delete}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="button button-small button-subtle"
+                      onClick={() => void handleSaveAsCopy()}
+                      disabled={isSaving}
+                    >
+                      <Icon name="copy" size={13} /> {t.mailingTemplateSaveAsCopy}
+                    </button>
+                    <button
+                      type="button"
+                      className="button button-small button-ghost icon-danger"
+                      onClick={() => {
+                        const current = szablony.find((x) => x.id === editing.id);
+                        if (current) void handleDelete(current);
+                      }}
+                      disabled={isSaving}
+                    >
+                      <Icon name="trash" size={13} /> {t.delete}
+                    </button>
+                  </>
                 )}
               </>
             }

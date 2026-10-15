@@ -2,13 +2,20 @@
  * Homebanking — merge multi-day deposit/payment files coming from many banks
  * into one file per bank, with optional split per address.
  *
- * Bank detection: each Bank carries `accountPrefixes`. For each row we restrict
- * the prefix scan to the SENDER section of the line (everything up to and
- * including the first 26-digit IBAN). Homebanking files are outgoing payments
- * by the wspólnota — the sender's bank is what we want to route by; the
- * receiver bank (E.ON, ZGN, etc.) is irrelevant and would otherwise tie or
- * dominate the count. Files without any matching bank are flagged and skipped
- * during merge.
+ * Bank detection, per line. Homebanking files are outgoing payments by the
+ * wspólnota, so we route by the SENDER account — the first 26-digit run of an
+ * Elixir/PLI line; the receiver (E.ON, ZGN, etc.) is irrelevant.
+ *   1. The sender account is a wspólnota account from Adresy → the bank of
+ *      that address.
+ *   2. Otherwise each Bank's `accountPrefixes` are compared, by position, with
+ *      the account's 8-digit sort code: the bank code (e.g. 1020) or the branch
+ *      number (e.g. 1026). Never anywhere in the line — a 4-digit prefix used to
+ *      hit by accident inside another bank's account number, the amount or the
+ *      date, and silently sent the line to the wrong bank.
+ *   3. More than one bank matching ⇒ no bank: the file shows as unrecognised
+ *      instead of taking a guess.
+ * Lines without an account number keep the old "contains" scan of the whole
+ * line. Files without any matching bank are flagged and skipped during merge.
  *
  * Address split (optional): when enabled, each "position" (line) in the
  * input is run through the shared AddressMatcher (same logic as the
@@ -25,6 +32,7 @@ import path from 'path';
 import { Adres, Bank } from '../../shared/types';
 import { decodeBuffer } from '../../shared/encoding';
 import { AddressMatcher } from '../../shared/address-matcher';
+import { normalizeAccount } from '../../shared/account-extractor';
 
 export interface AnalyzedAddressHit {
   /** Display label, e.g. "Pieńkowskiego 4" */
@@ -89,27 +97,81 @@ export function extractDate(fileName: string, content: string): string | null {
   return null;
 }
 
-/**
- * For an Elixir/PLI line, return the slice ending at the first 26-digit run
- * (sender IBAN). Field 4 (sender clearing number) and the sender IBAN both
- * fall within this slice; the receiver IBAN that follows is excluded. Lines
- * without an IBAN-like pattern fall back to the full line.
- */
-export function extractSenderSection(line: string): string {
+type DetectedBank = { bankId: number; bankName: string };
+
+/** Sender account of an Elixir/PLI line: the first 26-digit run (the receiver's comes after it). */
+export function extractSenderAccount(line: string): string | null {
   const m = /\d{26}/.exec(line);
-  if (!m) return line;
-  return line.slice(0, m.index + m[0].length);
+  return m ? m[0] : null;
 }
 
 /**
- * Pick the bank whose accountPrefixes appear most often (as substrings) in
- * `content`. Ties are broken by configured order (first wins) so detection
- * is stable across calls.
+ * Wspólnota accounts from Adresy → the bank of their address. An account listed
+ * under addresses of different banks is left out, so the prefixes decide it.
  */
-export function detectBankForContent(
-  content: string,
+export function buildAccountBankIndex(addresses: Adres[], banks: Bank[]): Map<string, Bank> {
+  const banksById = new Map(banks.map((b) => [b.id, b]));
+  const index = new Map<string, Bank>();
+  const conflicting = new Set<string>();
+  for (const adres of addresses) {
+    const bank = adres.bankId != null ? banksById.get(adres.bankId) : undefined;
+    if (!bank) continue;
+    for (const raw of adres.accountNumbers ?? []) {
+      const account = normalizeAccount(raw);
+      if (!account || conflicting.has(account)) continue;
+      const prev = index.get(account);
+      if (prev && prev.id !== bank.id) {
+        index.delete(account);
+        conflicting.add(account);
+      } else {
+        index.set(account, bank);
+      }
+    }
+  }
+  return index;
+}
+
+/**
+ * Whether a configured prefix names the bank of an 8-digit sort code — by
+ * position only: its leading digits (bank code, e.g. 1020, or the whole sort
+ * code) or its branch number (digits 5–8, e.g. 1026).
+ */
+function prefixMatchesSortCode(prefix: string, sortCode: string): boolean {
+  const digits = prefix.replace(/[\s-]/g, '');
+  if (!/^\d+$/.test(digits)) return false;
+  if (digits.length >= 3 && sortCode.startsWith(digits)) return true;
+  return digits.length === 4 && sortCode.slice(4, 8) === digits;
+}
+
+/**
+ * The bank a Homebanking line is sent from — see the module header for the
+ * rules. Null when no bank matches, or when more than one does.
+ */
+export function detectBankForLine(
+  line: string,
   banks: Bank[],
-): { bankId: number; bankName: string } | null {
+  accountBanks: Map<string, Bank>,
+): DetectedBank | null {
+  const account = extractSenderAccount(line);
+  if (!account) return detectBankByContains(line, banks);
+
+  const fromAddress = accountBanks.get(account);
+  if (fromAddress) return { bankId: fromAddress.id, bankName: fromAddress.name };
+
+  const sortCode = account.slice(2, 10);
+  const matching = banks.filter((bank) =>
+    (bank.accountPrefixes ?? []).some((p) => prefixMatchesSortCode(p, sortCode)),
+  );
+  if (matching.length !== 1) return null;
+  return { bankId: matching[0].id, bankName: matching[0].name };
+}
+
+/**
+ * Lines without an account number (not Elixir): pick the bank whose
+ * accountPrefixes appear most often (as substrings) in the line. Ties are
+ * broken by configured order (first wins) so detection is stable across calls.
+ */
+function detectBankByContains(content: string, banks: Bank[]): DetectedBank | null {
   let best: { bankId: number; bankName: string; hits: number } | null = null;
 
   for (const bank of banks) {
@@ -164,6 +226,7 @@ export function analyzeFile(
   const date = extractDate(fileName, content);
 
   const matcher = new AddressMatcher(addresses);
+  const accountBanks = buildAccountBankIndex(addresses, banks);
   const lines = content.split(/\r?\n/);
 
   const bankCounts = new Map<number, { bankName: string; lineCount: number }>();
@@ -174,8 +237,7 @@ export function analyzeFile(
     nonEmpty += 1;
 
     // Per-line bank detection — supports multi-bank files like .PLI.
-    // Restrict to sender section so receiver IBAN/clearing don't pollute the count.
-    const bank = detectBankForContent(extractSenderSection(line), banks);
+    const bank = detectBankForLine(line, banks, accountBanks);
     if (bank) {
       const prev = bankCounts.get(bank.bankId);
       if (prev) prev.lineCount += 1;
@@ -281,6 +343,7 @@ function makeBucketKey(k: BucketKey): string {
 function bucketLines(
   inputs: MergeFileInput[],
   banks: Bank[],
+  accountBanks: Map<string, Bank>,
   matcher: AddressMatcher,
 ): Map<string, { key: BucketKey; lines: BucketLine[] }> {
   const buckets = new Map<string, { key: BucketKey; lines: BucketLine[] }>();
@@ -303,7 +366,7 @@ function bucketLines(
       // empty lines: skip — they'd add stray separators on join
       if (lineBuf.length === 0) continue;
       const lineText = decodeBuffer(lineBuf);
-      const bank = detectBankForContent(extractSenderSection(lineText), banks);
+      const bank = detectBankForLine(lineText, banks, accountBanks);
       if (!bank || !allowed.has(bank.bankId)) continue;
 
       let addressLabel = '';
@@ -392,7 +455,7 @@ export function mergeGroups(
   addresses: Adres[],
 ): MergeGroupResult[] {
   const matcher = new AddressMatcher(addresses);
-  const buckets = bucketLines(inputs, banks, matcher);
+  const buckets = bucketLines(inputs, banks, buildAccountBankIndex(addresses, banks), matcher);
 
   // Track which inputs contributed any line per bank (for fileCount in results).
   const filesPerBank = new Map<number, Set<string>>();

@@ -84,6 +84,141 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '10.1.0',
+    date: '2026-10-15',
+    title: 'Homebanking rozpoznaje bank po rachunku, a zarząd i reguły lokali są w formularzu adresu',
+    tagline:
+      'Homebanking nie przypisuje już plików do złego banku — bank wspólnoty bierze z Adresów. W formularzu adresu edytujesz zarząd i reguły lokali, w formularzu jednostki ZGN pełnomocników, a szablon maila zapiszesz jako kopię.',
+    stats: [
+      { value: '1', label: 'nowa funkcja' },
+      { value: '3', label: 'usprawnienia' },
+      { value: '2', label: 'poprawki' },
+    ],
+    highlights: [
+      {
+        id: 'homebanking-bank-po-rachunku',
+        kind: 'fixed',
+        icon: 'building',
+        title: 'Homebanking: bank rozpoznany po rachunku wspólnoty',
+        summary:
+          'Homebanking rozpoznaje bank po rachunku nadawcy: najpierw szuka go w Adresach, a gdy go tam nie ma — po prefiksie z „Banków”. Wcześniej czterocyfrowy prefiks jednego banku potrafił trafić w środek numeru rachunku innego banku i linia lądowała w złym pliku, np. Bank Pocztowy jako PKO BP, a PKO SA jako BNP Paribas.',
+        details: [
+          'Prefiks porównujemy tylko z kodem banku w numerze rachunku — z drugą grupą cyfr (np. 1020 dla PKO BP) albo z trzecią (numer oddziału). Kwota, data i reszta numeru już się nie liczą.',
+          'Gdy rachunek pasuje do więcej niż jednego banku, plik dostaje „Nierozpoznany” zamiast zgadywania — bank zaznaczasz sam.',
+        ],
+        where: ['Homebanking'],
+        steps: [
+          {
+            do: 'Wrzuć pliki Homebanking jak dotąd.',
+            then: 'Przy każdym pliku widać bank, w którym wspólnota ma rachunek zapisany w Adresach.',
+          },
+          {
+            do: 'Jeśli przy pliku jest „Nierozpoznany”, otwórz „Banki”, kliknij „Edytuj” przy banku i wpisz w „Prefixy rachunku” drugą grupę cyfr jego numeru rachunku.',
+            then: 'Po ponownym wrzuceniu pliku bank jest rozpoznany.',
+          },
+        ],
+        expect: [
+          'W „Bankach” bank bez prefiksów ma dopisek „tylko rachunki z Adresów” — rozpoznasz go wyłącznie po rachunkach zapisanych w Adresach.',
+        ],
+        note: {
+          type: 'tip',
+          text: 'Pliki scalone wcześniej warto przejrzeć: jeśli linia wspólnoty trafiła do pliku złego banku, scal te pliki jeszcze raz.',
+        },
+      },
+      {
+        id: 'adres-zarzad-reguly-w-formularzu',
+        kind: 'improved',
+        icon: 'users',
+        title: 'Zarząd i reguły lokali w formularzu adresu',
+        summary:
+          'Formularz adresu ma sekcje „Zarząd” i „Reguły numeru lokalu” — dodasz, poprawisz i usuniesz je w tym samym miejscu co resztę danych wspólnoty, także przy zakładaniu nowego adresu.',
+        details: [
+          'Edytowany adres otwiera się ze zwiniętymi sekcjami, a nagłówek każdej mówi, co w niej jest, np. pierwsze osoby z zarządu. Rozwijasz tylko tę, którą zmieniasz. Nowy adres otwiera się rozwinięty — wszystko jest do wypełnienia.',
+          'Zarząd i reguły zmienione w formularzu zapisują się razem z adresem, przyciskiem „Zapisz”. Okna „Zarząd” i „Reguły lokali” otwierane z listy adresów działają jak dotąd i zapisują od razu.',
+        ],
+        where: ['Adresy', 'Edytuj'],
+        steps: [
+          {
+            do: 'W „Adresach” kliknij „Edytuj” przy wspólnocie.',
+            then: 'Formularz otwiera się ze zwiniętymi sekcjami; w nagłówku „Zarząd” widać pierwsze osoby.',
+          },
+          {
+            do: 'Rozwiń „Zarząd” i kliknij „Dodaj członka zarządu”.',
+            then: 'Otwiera się formularz osoby; po zatwierdzeniu osoba jest na liście.',
+          },
+          {
+            do: 'Kliknij „Zapisz”.',
+            then: 'Adres zapisuje się razem z zarządem i regułami numeru lokalu.',
+          },
+        ],
+      },
+      {
+        id: 'zgn-pelnomocnicy-w-formularzu',
+        kind: 'improved',
+        icon: 'building',
+        title: 'Pełnomocnicy jednostki ZGN w jej formularzu',
+        summary:
+          'W formularzu jednostki ZGN każdy pełnomocnik ma przyciski edycji i usuwania — nie trzeba już wracać do listy jednostek.',
+        details: [
+          'Zmiany pełnomocników zapisują się od razu, niezależnie od „Zapisz” jednostki. Edytowana jednostka otwiera się ze zwiniętymi sekcjami, tak jak adres.',
+        ],
+        where: ['Adresy', 'Jednostki ZGN', 'Edytuj'],
+        steps: [
+          {
+            do: 'W „Adresach” przejdź do „Jednostki ZGN” i kliknij „Edytuj” przy jednostce.',
+            then: 'Rozwiń „Pełnomocnicy” — przy każdej osobie jest ikona edycji i kosza.',
+          },
+        ],
+      },
+      {
+        id: 'mailing-szablon-jako-kopia',
+        kind: 'new',
+        icon: 'copy',
+        title: 'Szablon maila zapiszesz jako kopię',
+        summary:
+          'W edytorze szablonu jest przycisk „Zapisz jako kopię”: to, co widzisz w edytorze, staje się nowym szablonem, a oryginał zostaje bez zmian.',
+        where: ['Mailing', 'Szablony'],
+        steps: [
+          { do: 'Otwórz istniejący szablon i zmień, co trzeba.' },
+          {
+            do: 'Kliknij „Zapisz jako kopię”.',
+            then: 'Powstaje szablon z dopiskiem „(kopia)” w nazwie, a edytor przełącza się na niego.',
+          },
+        ],
+      },
+      {
+        id: 'zadania-archiwizacja-z-formularza',
+        kind: 'improved',
+        icon: 'archive',
+        title: 'Archiwizacja zadania z jego formularza',
+        summary:
+          'W stopce formularza edycji zadania jest przycisk „Archiwizuj zadanie” (albo „Przywróć z archiwum”). Działa od razu, a formularz zostaje otwarty z Twoimi zmianami.',
+        where: ['Zadania'],
+        steps: [
+          {
+            do: 'Otwórz zadanie do edycji i kliknij „Archiwizuj zadanie”.',
+            then: 'Zadanie trafia do archiwum, a przycisk zmienia się na „Przywróć z archiwum”.',
+          },
+        ],
+      },
+      {
+        id: 'pit-oznaczenia-od-razu',
+        kind: 'fixed',
+        icon: 'check',
+        title: 'PIT: złożenie i pobranie widać od razu',
+        summary:
+          'Na otwartym ekranie wspólnoty oznaczenie PIT-u jako złożonego i pobranie pliku pokazują się od razu — bez zamykania i ponownego otwierania ekranu. Niezapisane zmiany w danych zostają nietknięte.',
+        where: ['Podatki', 'PIT'],
+        steps: [
+          {
+            do: 'Otwórz wspólnotę, pobierz PIT-11 albo oznacz go jako złożony.',
+            then: 'Stan dokumentu zmienia się od razu na tym samym ekranie.',
+          },
+        ],
+      },
+    ],
+  },
+  {
     version: '10.0.0',
     date: '2026-10-11',
     title: 'CIT-8 z wysyłką do e-Deklaracji, PIT-11 i PIT-4R oraz uchwały zebrań',

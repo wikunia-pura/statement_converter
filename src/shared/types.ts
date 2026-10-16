@@ -400,6 +400,14 @@ export interface ConversionHistory {
    * output file; undoing the mark deletes it. Dashboard records only.
    */
   manual?: boolean;
+  /**
+   * Discarded as a duplicate ("Odrzuć — duplikat"): the statement converted
+   * again by mistake. The record and its file stay, but it is no longer a file
+   * to post. Null when not discarded. Dashboard records only.
+   */
+  discardedAt?: string | null;
+  /** Who discarded it. */
+  discardedBy?: string | null;
 }
 
 /**
@@ -2887,6 +2895,7 @@ export const IPC_CHANNELS = {
   CONVERT_ALL: 'files:convert-all',
   OPEN_FILE: 'files:open',
   DETECT_ACCOUNT_NUMBERS: 'files:detect-account-numbers',
+  FILE_HASH: 'files:hash',
   
   // Settings
   GET_SETTINGS: 'settings:get',
@@ -2927,6 +2936,7 @@ export const IPC_CHANNELS = {
   GET_KS_KONWERSJE: 'ksiegowania:get-konwersje',
   MARK_KS_PLIK_BOOKED: 'ksiegowania:mark-plik-booked',
   UNDO_KS_MANUAL: 'ksiegowania:undo-manual',
+  SET_KS_DISCARDED: 'ksiegowania:set-discarded',
 
   // Backup (full snapshot: Supabase tables + local settings)
   BACKUP_EXPORT: 'backup:export',

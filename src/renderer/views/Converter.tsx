@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { FileEntry, Bank, Adres, KontoTyp, ConversionReviewData, ReviewDecision, ConversionHistory, KsiegowanieUwaga } from '../../shared/types';
 import { translations, Language } from '../translations';
-import { generateId, formatDate } from '../../shared/utils';
+import { generateId } from '../../shared/utils';
 import { TransactionReviewScreen } from '../components/TransactionReviewScreen';
 import { useNotify } from '../components/Notifications';
 import Icon from '../components/Icon';
@@ -15,7 +15,13 @@ import { findAdresByAccountNumbers, normalizeAccount } from '../../shared/accoun
 import { resolveOutputFilePath } from '../../shared/outputPaths';
 import ConversionHistoryTimeline from '../components/ConversionHistoryTimeline';
 import { PostingNoteNotice, PostingNoteNoticeItem, uwagaMeta } from '../components/PostingNotes';
-import { openUwagiByAdresId } from '../../shared/bookings';
+import {
+  conversionAccountLabel,
+  conversionsByAccount,
+  openUwagiByAdresId,
+  priorConversionsOf,
+  toBookingRows,
+} from '../../shared/bookings';
 import { plural } from '../plural';
 
 interface SearchableAdresSelectProps {
@@ -214,21 +220,25 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
     if (completedFileCount > 0) loadHistory();
   }, [completedFileCount]);
 
-  // Map of previously-processed input files → most recent successful conversion date.
-  // Keyed by lowercased file name so an uploaded file can be flagged if it was already
-  // converted before (guards against accidentally booking the same statement twice).
-  const processedFileDates = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const entry of conversionRecords) {
-      if (entry.status !== 'success') continue;
-      const key = entry.fileName.toLowerCase();
-      const existing = map.get(key);
-      if (!existing || new Date(entry.convertedAt).getTime() > new Date(existing).getTime()) {
-        map.set(key, entry.convertedAt);
-      }
+  // Each loaded file's SHA-1, by path: the content its conversions recorded, so
+  // a statement already converted (or posted in DOM) is recognised by what it
+  // is, not by a name banks reuse month after month. null = could not be read.
+  const [fileHashes, setFileHashes] = useState<ReadonlyMap<string, string | null>>(new Map());
+  const hashRequested = useRef(new Set<string>());
+  useEffect(() => {
+    for (const file of files) {
+      if (hashRequested.current.has(file.filePath)) continue;
+      hashRequested.current.add(file.filePath);
+      void window.electronAPI
+        .fileHash(file.filePath)
+        .catch(() => null)
+        .then((hash) => setFileHashes((prev) => new Map(prev).set(file.filePath, hash)));
     }
-    return map;
-  }, [conversionRecords]);
+  }, [files]);
+
+  // The dashboard's records, read the way the dashboard reads them — what a
+  // loaded statement's earlier conversions are looked up in.
+  const bookingRows = useMemo(() => toBookingRows(conversionRecords, adresy), [conversionRecords, adresy]);
 
   // Recent activity panel: only the last 30 days, so the converter view stays
   // a quick reference without turning into the full History view.
@@ -1184,29 +1194,49 @@ const Converter: React.FC<ConverterProps> = ({ language, files, setFiles, select
                         <td>
                           <div className="conv-table__name" title={file.filePath}>{file.fileName}</div>
                           {(() => {
-                            const processedAt = processedFileDates.get(file.fileName.toLowerCase());
                             // Not on a file converted just now: it is the one in the records.
-                            if (!processedAt || file.status === 'success') return null;
+                            if (file.status === 'success') return null;
+                            // Still reading the file: say nothing rather than judge by name.
+                            if (!fileHashes.has(file.filePath)) return null;
+                            const prior = priorConversionsOf(bookingRows, {
+                              fileName: file.fileName,
+                              hash: fileHashes.get(file.filePath) ?? null,
+                            });
+                            if (prior.length === 0) return null;
+                            const perAccount = conversionsByAccount(prior, kontoTypy);
+                            const inDom = perAccount.some((g) => g.row.bookedInDom);
                             return (
-                              <div
-                                style={{
-                                  marginTop: '6px',
-                                  padding: '3px 8px',
-                                  background: 'var(--bg-surface)',
-                                  color: 'var(--danger)',
-                                  border: '1px solid var(--danger-border)',
-                                  borderRadius: '4px',
-                                  fontSize: '12px',
-                                  fontWeight: 600,
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  lineHeight: 1.3,
-                                  maxWidth: '100%',
-                                }}
-                              >
-                                <span>
-                                  {t.alreadyProcessedWarning}, {t.alreadyProcessedOn}: {formatDate(processedAt)}
-                                </span>
+                              <div className={`conv-prior${inDom ? ' is-in-dom' : ''}`}>
+                                {perAccount.map(({ account, row }) => {
+                                  const label = account ? conversionAccountLabel(account) : null;
+                                  const { entry } = row;
+                                  let text: string;
+                                  if (row.bookedInDom) {
+                                    text = (label ? t.convPriorInDom : t.convPriorInDomNoAccount).replace(
+                                      '{account}',
+                                      label ?? '',
+                                    );
+                                    if (entry.bookedInDomAt) {
+                                      const date = formatNoteDate(entry.bookedInDomAt);
+                                      text += ` — ${
+                                        entry.bookedInDomBy
+                                          ? t.convPriorMarkedBy.replace('{date}', date).replace('{who}', entry.bookedInDomBy)
+                                          : t.convPriorMarked.replace('{date}', date)
+                                      }`;
+                                    }
+                                  } else {
+                                    text = (label ? t.convPriorConverted : t.convPriorConvertedNoAccount)
+                                      .replace('{date}', formatNoteDate(entry.convertedAt))
+                                      .replace('{account}', label ?? '');
+                                  }
+                                  return (
+                                    <span key={label ?? ''} className="conv-prior__line">
+                                      <Icon name={row.bookedInDom ? 'check-circle' : 'alert-triangle'} size={13} />
+                                      {text}
+                                    </span>
+                                  );
+                                })}
+                                <span className="conv-prior__hint">{t.convPriorHint}</span>
                               </div>
                             );
                           })()}

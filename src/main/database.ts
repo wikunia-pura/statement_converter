@@ -306,6 +306,8 @@ const KS_KONWERSJE_OPTIONAL: Record<string, string> = {
   month_key: 'monthKey:month_key',
   input_hash: 'inputHash:input_hash',
   recznie: 'manual:recznie',
+  odrzucone_at: 'discardedAt:odrzucone_at',
+  odrzucone_by: 'discardedBy:odrzucone_by',
 };
 
 /** Which of `names` a PostgREST "no such column" error is about, if any. */
@@ -1049,6 +1051,8 @@ class DatabaseService {
       errorMessage: h.errorMessage ?? undefined,
       bookedInDom: h.bookedInDom === true,
       manual: h.manual === true,
+      discardedAt: h.discardedAt ?? null,
+      discardedBy: h.discardedBy ?? null,
     })) as ConversionHistory[];
   }
 
@@ -1120,6 +1124,33 @@ class DatabaseService {
       .eq('id', id)
       .eq('recznie', true);
     if (error) throw new Error(`undoKsiegowanieManual: ${error.message}`);
+  }
+
+  /**
+   * "Odrzuć — duplikat" / "Przywróć". Only a real conversion not yet ticked in
+   * DOM can be discarded: a posted file is not a duplicate to throw away, and a
+   * manual mark has its own undo. Restoring is always allowed.
+   */
+  async setKsiegowanieDiscarded(id: number, discarded: boolean, by: string | null): Promise<void> {
+    let query = getSupabase()
+      .from('ksiegowania_konwersje')
+      .update(
+        discarded
+          ? { odrzucone_at: new Date().toISOString(), odrzucone_by: by }
+          : { odrzucone_at: null, odrzucone_by: null },
+      )
+      .eq('id', id);
+    if (discarded) query = query.eq('booked_in_dom', false).eq('status', 'success');
+    const { data, error } = await query.select('id');
+    if (error) {
+      if (missingColumn(error.message, ['odrzucone_at', 'odrzucone_by'])) {
+        throw new Error('Brak kolumny odrzucone_at — uruchom supabase/ksiegowania-odrzucone.sql');
+      }
+      throw new Error(`setKsiegowanieDiscarded: ${error.message}`);
+    }
+    if (!data || data.length === 0) {
+      throw new Error('setKsiegowanieDiscarded: the conversion is gone or already posted in DOM');
+    }
   }
 
   /**
@@ -5878,6 +5909,9 @@ class DatabaseService {
     // Absent in backups written before it had its own table: then the live
     // records stay as they are (the history above is only the log).
     if (ksiegowaniaKonwersje) {
+      // Discarded duplicates go on every row or on none, so a backup without any
+      // still restores into a database that has not had ksiegowania-odrzucone.sql run.
+      const anyDiscarded = ksiegowaniaKonwersje.some(h => !!h.discardedAt);
       const { error: wipeError } = await getSupabase()
         .from('ksiegowania_konwersje')
         .delete()
@@ -5906,6 +5940,9 @@ class DatabaseService {
           // Only on manual marks, so a backup without any restores into a
           // database that has not had ksiegowania-recznie.sql run yet.
           ...(h.manual ? { recznie: true } : {}),
+          ...(anyDiscarded
+            ? { odrzucone_at: h.discardedAt ?? null, odrzucone_by: h.discardedAt ? h.discardedBy ?? null : null }
+            : {}),
         })),
       );
     }

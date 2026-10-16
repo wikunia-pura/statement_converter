@@ -2029,6 +2029,19 @@ function setupIpcHandlers() {
     },
   );
 
+  // The SHA-1 a conversion of this file would record, so the Converter can tell
+  // a statement already converted (or posted) by its content, not its name.
+  ipcMain.handle(IPC_CHANNELS.FILE_HASH, async (_, inputPath: string): Promise<string | null> => {
+    try {
+      if (typeof inputPath !== 'string' || !inputPath) return null;
+      const stat = await fs.promises.stat(inputPath);
+      return stat.isFile() ? await sha1(inputPath) : null;
+    } catch (error) {
+      log.warn('[file-hash] failed:', error);
+      return null;
+    }
+  });
+
   // Analyze file without AI to check confidence
   ipcMain.handle(
     'files:analyze',
@@ -2813,6 +2826,25 @@ function setupIpcHandlers() {
         by = null;
       }
       await database.markKsiegowaniePlikBooked(plikId, by);
+      return { success: true };
+    } catch (error: unknown) {
+      return { success: false, error: getErrorMessage(error) };
+    }
+  });
+
+  // "Odrzuć — duplikat" on a conversion row, and its "Przywróć". Signed like the DOM tick.
+  ipcMain.handle(IPC_CHANNELS.SET_KS_DISCARDED, async (_, id: number, discarded: boolean) => {
+    try {
+      if (typeof id !== 'number' || !Number.isFinite(id)) throw new Error('invalid record id');
+      let by: string | null = null;
+      if (discarded) {
+        try {
+          by = (await authService.getSession())?.email ?? null;
+        } catch {
+          by = null;
+        }
+      }
+      await database.setKsiegowanieDiscarded(id, discarded === true, by);
       return { success: true };
     } catch (error: unknown) {
       return { success: false, error: getErrorMessage(error) };

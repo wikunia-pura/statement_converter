@@ -806,7 +806,15 @@ class ConverterRegistry {
       //    symbol to book it to (17A). Checked independently of confidence because
       //    the AI can return such a number with a high score of its own, and the
       //    alternative to asking the user is booking onto the wrong apartment.
-      const needsReview = trn.status !== 'auto-approved'
+      // Expenses keep 10.1.0's gate — a contractor matched from 70 up is booked
+      // unseen; whole-word matching and the minimum name length are what now keep
+      // a stray "FR" out — unless the row is held. Incomes keep the status gate:
+      // a payment booked to the wrong apartment is the costly mistake.
+      const expenseConfident =
+        trn.transactionType === 'expense' &&
+        !trn.extracted.holdReason &&
+        (trn.matchedContractor?.confidence || 0) >= 70;
+      const needsReview = (trn.status !== 'auto-approved' && !expenseConfident)
         || (trn.transactionType === 'income' && !trn.extracted.apartmentNumber)
         || trn.extracted.matchedByManualMapping === true
         || (trn.transactionType === 'income' && this.needsAccountDecision(trn));

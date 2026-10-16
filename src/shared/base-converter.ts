@@ -39,6 +39,12 @@ import {
 
 const INCOME_MATCH_TYPES: KontrahentTyp[] = ['Pozostałe przychody'];
 
+/**
+ * An expense whose contractor name the bank glued to the next word: booked
+ * like 10.1.0's space-insensitive match (88), above the expense review gate.
+ */
+const GLUED_EXPENSE_CONFIDENCE = 88;
+
 /** The warning a held row carries in the preview file, per reason. */
 const HOLD_WARNINGS: Record<ReviewHoldReason, string> = {
   'reversal': 'Reversal (storno) entry - held for review, never booked automatically',
@@ -779,9 +785,17 @@ export abstract class BaseConverter<TRaw> {
       const transaction = transactions[i];
       const norm = this.normalize(transaction);
 
-      const matchedContractor = this.contractorMatcher
+      const found = this.contractorMatcher
         ? this.contractorMatcher.match(norm, EXPENSE_MATCH_TYPES)
         : { contractor: null, confidence: 0, matchedIn: 'none' as const };
+      // A long name glued to the next word ("…WARSZAWAPLAC BANKOWY") is booked
+      // as 10.1.0 booked it, for expenses only: the matcher keeps it a hint (65)
+      // so that it never routes an income to a "Pozostałe przychody" entry, and
+      // a surer match in the other field still wins inside the matcher.
+      const matchedContractor =
+        found.contractor !== null && found.confidence === GLUED_MATCH_CONFIDENCE
+          ? { ...found, confidence: GLUED_EXPENSE_CONFIDENCE }
+          : found;
 
       if (matchedContractor.contractor !== null && matchedContractor.confidence > 0) {
         const extracted = this.buildExpenseExtracted(
@@ -791,18 +805,12 @@ export abstract class BaseConverter<TRaw> {
             ? ['Low confidence match - may need review']
             : []
         );
-        // Found only as a name glued to the next word: the contractor stays
-        // picked, but the row is held. Its confidence (65) already keeps it off
+        // Found only by a two-character name ("FR"): the contractor stays picked,
+        // but the row is held. Its confidence (60) already keeps it off
         // auto-approval, yet the Converter's "skip approval" mode accepts every
         // row as it stands — only a hold reason makes it open the review screen.
         // A format's own hold (storno, SWRK debit) says more, so it keeps its label.
-        // Same for a two-character name ("FR"): a suggestion, held.
-        const hintOnly =
-          matchedContractor.confidence === GLUED_MATCH_CONFIDENCE
-            ? 'glued-name'
-            : matchedContractor.confidence === SHORT_MATCH_CONFIDENCE
-              ? 'short-name'
-              : null;
+        const hintOnly = matchedContractor.confidence === SHORT_MATCH_CONFIDENCE ? 'short-name' : null;
         if (hintOnly && this.holdReason(transaction) === null) {
           extracted.holdReason = hintOnly;
           extracted.warnings.push(HOLD_WARNINGS[hintOnly]);

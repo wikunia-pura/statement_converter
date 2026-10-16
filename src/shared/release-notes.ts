@@ -91,7 +91,7 @@ export const RELEASES: Release[] = [
       'Konwerter nie gubi już po cichu linii wyciągu ani nie zgaduje kontrahenta po fragmencie słowa — wątpliwe pozycje czekają na Twoje potwierdzenie. Wysyłka CIT-8 nie złoży zeznania dwa razy, kopie zapasowe nie przenoszą ustawień tego komputera, a aplikacja działa na nowej, wspieranej wersji Electrona.',
     stats: [
       { value: '2', label: 'nowe funkcje' },
-      { value: '5', label: 'usprawnienia' },
+      { value: '6', label: 'usprawnień' },
       { value: '3', label: 'poprawki' },
     ],
     highlights: [
@@ -240,6 +240,33 @@ export const RELEASES: Release[] = [
         summary:
           'Przelewy, których bank nie został rozpoznany, są wypisane w ramce „Linie bez banku”, a scalenie bez nich wymaga kliknięcia „Scal bez nich”.',
         where: ['Homebanking'],
+      },
+      {
+        id: 'pulpit-konto-konwersji',
+        kind: 'improved',
+        icon: 'check-circle',
+        title: 'Pulpit pokazuje, na jakie konto wyciąg został zaksięgowany',
+        summary:
+          'Każdy plik księgowy na Pulpicie mówi, kiedy go skonwertowano i na jakie konto — np. „Eksploatacja 2 (131-2)”. Widać od razu, czy ponowna konwersja tego samego wyciągu poszła na inne konto niż ta już zaksięgowana.',
+        where: ['Pulpit', 'Konwerter'],
+        steps: [
+          {
+            do: 'Rozwiń wspólnotę na Pulpicie.',
+            then: 'Przy każdym pliku księgowym jest „Skonwertowany {data}” i konto: zielone „W DOM na …”, gdy plik jest już w DOM, albo „Na konto …”, gdy czeka.',
+          },
+          {
+            do: 'Spójrz na „Pliki z folderu”.',
+            then: 'Pod każdym wyciągiem z folderu są jego konwersje, a konwersje plików spoza folderu — w osobnej grupie „Inne konwersje”. Przy wyciągu widać, ile razy go skonwertowano i kiedy (np. „Skonwertowany 3× · 02.10 – 16.10”), i stan każdego konta: „W DOM na Eksploatacja (131-1)”, „Na konto Eksploatacja 2 (131-2)”.',
+          },
+        ],
+        details: [
+          'Konwersja zrobiona drugi raz przez pomyłkę (ten sam wyciąg, to samo konto) ma w menu „⋯” opcję „Odrzuć — duplikat”: plik zostaje i da się go otworzyć, ale nie liczy się już do zaksięgowania, więc wspólnota nie wisi na „Częściowo”. „Przywróć” cofa odrzucenie.',
+        ],
+        expect: [
+          'Konwerter rozpoznaje wyciąg skonwertowany już wcześniej po jego treści, nie po nazwie pliku. Pod nazwą pliku pisze, na jakie konto i kiedy wyciąg poszedł: na czerwono „Ten wyciąg jest już w DOM na …”, a na żółto, gdy był tylko skonwertowany. Konwersji nie blokuje — ponowna konwersja może być celową poprawką na inne konto.',
+          'Plik o tej samej nazwie, ale innej treści (np. „operacje (1).xml” z kolejnego miesiąca), nie wywołuje już ostrzeżenia.',
+          'Pliki utworzone, zanim w aplikacji pojawiły się typy kont, nie mają znacznika konta.',
+        ],
       },
       {
         id: 'bezpieczenstwo-i-silnik',

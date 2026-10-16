@@ -58,25 +58,66 @@ import { NavigationProvider, HeaderNav } from './navigation';
  * first time somebody opens them, which keeps the start-up bundle a fraction
  * of what it was. Adresy goes too: it is what ties the DN-1 module to the
  * start-up bundle (it reuses its address fields).
+ *
+ * "First visit" must not mean "first click waits for the code", though: once
+ * the user is in, `prefetchLazyViews` fetches them all in the background, in
+ * the order below (the most visited first). Under the dev server that matters
+ * most — there a view is not one chunk but its whole module tree, compiled on
+ * request.
  */
-const Adresy = lazy(() => import('./views/Adresy'));
-const Mailing = lazy(() => import('./views/Mailing'));
-const MailingSzablony = lazy(() => import('./views/MailingSzablony'));
-const MailingPola = lazy(() => import('./views/MailingPola'));
-const MailingHistoria = lazy(() => import('./views/MailingHistoria'));
-const MailingTypy = lazy(() => import('./views/MailingTypy'));
-const Kalendarz = lazy(() => import('./views/Kalendarz'));
-const KalendarzTypy = lazy(() => import('./views/KalendarzTypy'));
-const KalendarzLokalizacje = lazy(() => import('./views/KalendarzLokalizacje'));
-const Zebrania = lazy(() => import('./views/Zebrania'));
-const Sprawozdania = lazy(() => import('./views/Sprawozdania'));
-const PlanyGospodarcze = lazy(() => import('./views/PlanyGospodarcze'));
-const PodatkiNieruchomosci = lazy(() => import('./views/PodatkiNieruchomosci'));
-const PodatkiCit = lazy(() => import('./views/PodatkiCit'));
-const PodatkiPit = lazy(() => import('./views/PodatkiPit'));
-const PodpisPdf = lazy(() => import('./views/PodpisPdf'));
-const PodpisHistoria = lazy(() => import('./views/PodpisHistoria'));
-const Zadania = lazy(() => import('./views/Zadania'));
+const LAZY_VIEW_IMPORTS: (() => Promise<unknown>)[] = [];
+
+/** `lazy`, with the import also queued for `prefetchLazyViews` — the same module, so the view finds it loaded. */
+function lazyView<T extends React.ComponentType<any>>(load: () => Promise<{ default: T }>) {
+  LAZY_VIEW_IMPORTS.push(load);
+  return lazy(load);
+}
+
+const Kalendarz = lazyView(() => import('./views/Kalendarz'));
+const Zadania = lazyView(() => import('./views/Zadania'));
+const Zebrania = lazyView(() => import('./views/Zebrania'));
+const Adresy = lazyView(() => import('./views/Adresy'));
+const Mailing = lazyView(() => import('./views/Mailing'));
+const Sprawozdania = lazyView(() => import('./views/Sprawozdania'));
+const PlanyGospodarcze = lazyView(() => import('./views/PlanyGospodarcze'));
+const KalendarzTypy = lazyView(() => import('./views/KalendarzTypy'));
+const KalendarzLokalizacje = lazyView(() => import('./views/KalendarzLokalizacje'));
+const MailingSzablony = lazyView(() => import('./views/MailingSzablony'));
+const MailingPola = lazyView(() => import('./views/MailingPola'));
+const MailingHistoria = lazyView(() => import('./views/MailingHistoria'));
+const MailingTypy = lazyView(() => import('./views/MailingTypy'));
+const PodatkiNieruchomosci = lazyView(() => import('./views/PodatkiNieruchomosci'));
+const PodatkiCit = lazyView(() => import('./views/PodatkiCit'));
+const PodatkiPit = lazyView(() => import('./views/PodatkiPit'));
+const PodpisPdf = lazyView(() => import('./views/PodpisPdf'));
+const PodpisHistoria = lazyView(() => import('./views/PodpisHistoria'));
+
+/**
+ * Fetch the lazy views' code one by one while the window is idle, so the first
+ * visit to each finds it already there. A failed fetch is left to the view's
+ * own visit (and its ErrorBoundary). Returns the stop, for an effect's cleanup.
+ */
+function prefetchLazyViews(): () => void {
+  let stopped = false;
+  let idle: number | null = null;
+  const next = (i: number) => {
+    if (stopped || i >= LAZY_VIEW_IMPORTS.length) return;
+    idle = window.requestIdleCallback(
+      () => {
+        idle = null;
+        void LAZY_VIEW_IMPORTS[i]()
+          .catch(() => undefined)
+          .then(() => next(i + 1));
+      },
+      { timeout: 2000 },
+    );
+  };
+  next(0);
+  return () => {
+    stopped = true;
+    if (idle !== null) window.cancelIdleCallback(idle);
+  };
+}
 
 interface NavItemProps {
   icon: React.ComponentProps<typeof Icon>['name'];
@@ -380,6 +421,12 @@ const App: React.FC = () => {
       }
     })();
   }, []);
+
+  // Signed in and past the intro: the other views' code comes in behind the dashboard.
+  useEffect(() => {
+    if (!session || showSplash) return;
+    return prefetchLazyViews();
+  }, [session, showSplash]);
 
   // A notification about Księgowania was clicked: the priorities live on the dashboard.
   useEffect(() => {

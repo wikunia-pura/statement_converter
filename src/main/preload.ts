@@ -50,6 +50,7 @@ const IPC_CHANNELS = {
   SELECT_OUTPUT_FOLDER: 'files:select-output-folder',
   CONVERT_FILE: 'files:convert',
   DETECT_ACCOUNT_NUMBERS: 'files:detect-account-numbers',
+  FILE_HASH: 'files:hash',
   CONVERT_FILE_WITH_AI: 'files:convert-with-ai',
   CANCEL_CONVERSION: 'files:cancel-conversion',
   FINALIZE_CONVERSION: 'files:finalize-conversion',
@@ -94,6 +95,7 @@ const IPC_CHANNELS = {
   GET_KS_KONWERSJE: 'ksiegowania:get-konwersje',
   MARK_KS_PLIK_BOOKED: 'ksiegowania:mark-plik-booked',
   UNDO_KS_MANUAL: 'ksiegowania:undo-manual',
+  SET_KS_DISCARDED: 'ksiegowania:set-discarded',
   BACKUP_EXPORT: 'backup:export',
   BACKUP_RESTORE: 'backup:restore',
   BACKUP_GET_STATUS: 'backup:get-status',
@@ -418,6 +420,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.CONVERT_FILE, inputPath, bankId, fileName, adresId, accountTypeId),
   detectAccountNumbers: (inputPath: string, bankId?: number | null) =>
     ipcRenderer.invoke(IPC_CHANNELS.DETECT_ACCOUNT_NUMBERS, inputPath, bankId),
+  fileHash: (inputPath: string) => ipcRenderer.invoke(IPC_CHANNELS.FILE_HASH, inputPath),
   convertFileWithAI: (inputPath: string, bankId: number, fileName: string, adresId?: number | null, accountTypeId?: number | null) =>
     ipcRenderer.invoke(IPC_CHANNELS.CONVERT_FILE_WITH_AI, inputPath, bankId, fileName, adresId, accountTypeId),
   cancelConversion: (inputPath: string) => ipcRenderer.invoke(IPC_CHANNELS.CANCEL_CONVERSION, inputPath),
@@ -504,6 +507,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.SET_KS_BOOKED_IN_DOM, ids, booked),
   markKsiegowaniePlikBooked: (plikId: number) => ipcRenderer.invoke(IPC_CHANNELS.MARK_KS_PLIK_BOOKED, plikId),
   undoKsiegowanieManual: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.UNDO_KS_MANUAL, id),
+  setKsiegowanieDiscarded: (id: number, discarded: boolean) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_KS_DISCARDED, id, discarded),
 
   // Backup
   backupExport: () => ipcRenderer.invoke(IPC_CHANNELS.BACKUP_EXPORT),

@@ -265,6 +265,8 @@ interface ElectronAPI {
   selectOutputFolder: () => Promise<string | null>;
   convertFile: (inputPath: string, bankId: number, fileName: string, adresId?: number | null, accountTypeId?: number | null) => Promise<ConversionResult>;
   detectAccountNumbers: (inputPath: string, bankId?: number | null) => Promise<string[]>;
+  /** SHA-1 of a statement file — the `inputHash` its conversion records — or null when it cannot be read. */
+  fileHash: (inputPath: string) => Promise<string | null>;
   convertFileWithAI: (inputPath: string, bankId: number, fileName: string, adresId?: number | null, accountTypeId?: number | null) => Promise<ConversionResult>;
   /** Stop the conversion of this input file; it resolves with `cancelled: true`. */
   cancelConversion: (inputPath: string) => Promise<boolean>;
@@ -351,6 +353,8 @@ interface ElectronAPI {
   markKsiegowaniePlikBooked: (plikId: number) => Promise<{ success: boolean; error?: string }>;
   /** Undo such a mark: deletes the manual record, never a real conversion. */
   undoKsiegowanieManual: (id: number) => Promise<{ success: boolean; error?: string }>;
+  /** Discard a conversion as a duplicate (it stops counting as a file to post), or restore it. */
+  setKsiegowanieDiscarded: (id: number, discarded: boolean) => Promise<{ success: boolean; error?: string }>;
 
   // Backup
   /** `skippedSections`: left out because their table does not exist yet (a migration not run). */

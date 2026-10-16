@@ -43,6 +43,10 @@ import {
   AddressBookingGroup,
   BookingFilter,
   BookingRow,
+  ConversionAccount,
+  conversionAccount,
+  conversionAccountLabel,
+  conversionsByAccount,
   BookingSort,
   BookingTotals,
   PlikStatus,
@@ -892,13 +896,33 @@ const Ksiegowania: React.FC<Props> = ({
       if (!result.success) notify.error(`${t.ksManualUndoError}${result.error ? `\n${result.error}` : ''}`);
       await load(true);
     },
+    discard: async (row, discarded) => {
+      if (discarded) {
+        const ok = await notify.confirm(t.ksDiscardConfirm.replace('{name}', baseName(row.entry.outputPath)), {
+          title: t.ksDiscard,
+          confirmLabel: t.ksDiscard,
+          danger: true,
+        });
+        if (!ok) return;
+      }
+      const result = await window.electronAPI.setKsiegowanieDiscarded(row.entry.id, discarded);
+      if (!result.success) notify.error(`${t.ksDiscardError}${result.error ? `\n${result.error}` : ''}`);
+      await load(true);
+    },
   };
   const plikOpen = useStableCallback(plikActionsImpl.open);
   const plikUnpin = useStableCallback(plikActionsImpl.unpin);
   const plikMarkBooked = useStableCallback(plikActionsImpl.markBooked);
   const plikUndoManual = useStableCallback(plikActionsImpl.undoManual);
+  const plikDiscard = useStableCallback(plikActionsImpl.discard);
   const plikActions = useMemo<PlikActions>(
-    () => ({ open: plikOpen, unpin: plikUnpin, markBooked: plikMarkBooked, undoManual: plikUndoManual }),
+    () => ({
+      open: plikOpen,
+      unpin: plikUnpin,
+      markBooked: plikMarkBooked,
+      undoManual: plikUndoManual,
+      discard: plikDiscard,
+    }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
@@ -1489,6 +1513,7 @@ const Ksiegowania: React.FC<Props> = ({
                   onToggle={rowToggle}
                   saving={group.rows.some((r) => saving.has(r.entry.id)) ? saving : NO_SAVING}
                   formatDateTime={formatDateTime}
+                  kontoTypy={kontoTypy}
                   onSetBooked={rowSetBooked}
                   onOpenFile={rowOpenFile}
                   onShowInHistory={onShowInHistory ? rowShowInHistory : undefined}
@@ -1801,6 +1826,7 @@ const CommunityRow = React.memo(function CommunityRow({
   onToggle,
   saving,
   formatDateTime,
+  kontoTypy,
   onSetBooked,
   onOpenFile,
   onShowInHistory,
@@ -1831,6 +1857,8 @@ const CommunityRow = React.memo(function CommunityRow({
   /** Files with a tick in flight — only handed in when one of them is this row's. */
   saving: ReadonlySet<number>;
   formatDateTime: (iso: string) => string;
+  /** The account types, to say which account each conversion posted to. */
+  kontoTypy: KontoTyp[];
   onSetBooked: (ids: number[], booked: boolean, announce: boolean) => Promise<void>;
   onOpenFile: (filePath: string) => void;
   onShowInHistory?: (query: string) => void;
@@ -1907,6 +1935,45 @@ const CommunityRow = React.memo(function CommunityRow({
   const bookedIds = bookings.filter((r) => r.bookedInDom && !r.manual).map((r) => r.entry.id);
   const pct = group.generated === 0 ? 0 : Math.round((group.booked / group.generated) * 100);
   const busy = group.rows.some((r) => saving.has(r.entry.id));
+  // The month's conversions under the folder's file they were made from — the
+  // conversions linked to it, and a failed one of the same content — and the
+  // rest on their own.
+  const rowsOfPlik = useMemo(() => {
+    const plikOfRow = new Map<number, number>();
+    for (const s of group.statements) for (const r of s.conversions) plikOfRow.set(r.entry.id, s.plik.id);
+    const plikOfHash = new Map(group.statements.map((s) => [s.plik.fileHash, s.plik.id]));
+    const byPlik = new Map<number, BookingRow[]>();
+    const other: BookingRow[] = [];
+    for (const r of group.rows) {
+      const plikId =
+        plikOfRow.get(r.entry.id) ?? (r.entry.inputHash ? plikOfHash.get(r.entry.inputHash) : undefined);
+      if (plikId == null) {
+        other.push(r);
+        continue;
+      }
+      const bucket = byPlik.get(plikId);
+      if (bucket) bucket.push(r);
+      else byPlik.set(plikId, [r]);
+    }
+    return { byPlik, other };
+  }, [group]);
+  const fileRow = (row: BookingRow) => (
+    <FileRow
+      key={row.entry.id}
+      row={row}
+      pdf={group.pdfByConversionId.get(row.entry.id) ?? null}
+      onOpenPlik={plikActions.open}
+      language={language}
+      saving={saving.has(row.entry.id)}
+      formatDateTime={formatDateTime}
+      account={conversionAccount(row, kontoTypy)}
+      onSetBooked={onSetBooked}
+      onOpenFile={onOpenFile}
+      onShowInHistory={onShowInHistory}
+      onUndoManual={(r) => void plikActions.undoManual(r)}
+      onDiscard={(r, discarded) => void plikActions.discard(r, discarded)}
+    />
+  );
 
   const subtitle = [
     group.banks.length > 0 ? group.banks.join(', ') : null,
@@ -2374,38 +2441,40 @@ const CommunityRow = React.memo(function CommunityRow({
           <PlikiSection
             group={group}
             language={language}
+            locale={locale}
             formatDateTime={formatDateTime}
+            kontoTypy={kontoTypy}
             actions={plikActions}
             onConvertOne={(status) => onConvertOne(group, status)}
+            renderConversions={(status) => {
+              const own = rowsOfPlik.byPlik.get(status.plik.id) ?? [];
+              return own.length > 0 ? <div className="ksieg-files ksieg-files--nested">{own.map(fileRow)}</div> : null;
+            }}
           />
           {group.rows.length === 0 ? (
             <div className="ksieg-files-empty">
               <Icon name="calendar" size={16} /> {t.ksNothingThisMonth}
             </div>
           ) : (
-            <div className="ksieg-files">
-              <div className="ksieg-files__head">
-                <span>{t.ksColWhen}</span>
-                <span>{t.ksColFiles}</span>
-                <span>{t.ksColActions}</span>
-                <span>{t.ksColDom}</span>
-              </div>
-              {group.rows.map((row) => (
-                <FileRow
-                  key={row.entry.id}
-                  row={row}
-                  pdf={group.pdfByConversionId.get(row.entry.id) ?? null}
-                  onOpenPlik={plikActions.open}
-                  language={language}
-                  saving={saving.has(row.entry.id)}
-                  formatDateTime={formatDateTime}
-                  onSetBooked={onSetBooked}
-                  onOpenFile={onOpenFile}
-                  onShowInHistory={onShowInHistory}
-                  onUndoManual={(r) => void plikActions.undoManual(r)}
-                />
-              ))}
-            </div>
+            rowsOfPlik.other.length > 0 && (
+              <>
+                {/* Under the folder's files: what was converted from anything else. */}
+                {group.statements.length > 0 && (
+                  <div className="ksieg-pliki__head" data-tip={t.ksOtherConversionsHint}>
+                    <Icon name="file-text" size={14} /> {t.ksOtherConversions}
+                  </div>
+                )}
+                <div className="ksieg-files">
+                  <div className="ksieg-files__head">
+                    <span>{t.ksColWhen}</span>
+                    <span>{t.ksColFiles}</span>
+                    <span>{t.ksColActions}</span>
+                    <span>{t.ksColDom}</span>
+                  </div>
+                  {rowsOfPlik.other.map(fileRow)}
+                </div>
+              </>
+            )
           )}
         </div>
       )}
@@ -2415,6 +2484,57 @@ const CommunityRow = React.memo(function CommunityRow({
 
 /* ---------------------- Files pinned by the folder scan --------------------- */
 
+/**
+ * Where a conversion stands, the same words for a pinned statement and for an
+ * accounting file: "W DOM na …" once posted, otherwise "Skonwertowany …" and
+ * "Na konto …".
+ */
+function conversionChips(
+  t: Trans,
+  formatDateTime: (iso: string) => string,
+  row: BookingRow,
+  account: ConversionAccount | null,
+  /** Off under "Pliki z folderu": the file's own line sums its conversions up, each row below has its date. */
+  withDate: boolean,
+): React.ReactNode {
+  const label = account ? conversionAccountLabel(account) : null;
+  const converted = (
+    <span key="converted" className="ksieg-plik-chip ksieg-plik-chip--ok">
+      {t.ksFileConverted.replace('{date}', formatDateTime(row.entry.convertedAt))}
+    </span>
+  );
+  if (row.bookedInDom) {
+    return (
+      <>
+        {withDate && converted}
+        <span
+          key="dom"
+          className="ksieg-plik-chip ksieg-plik-chip--dom"
+          data-tip={
+            row.entry.bookedInDomAt
+              ? t.ksFileInDomOnHint
+                  .replace('{date}', formatDateTime(row.entry.bookedInDomAt))
+                  .replace('{account}', label ?? '—')
+              : undefined
+          }
+        >
+          {label ? t.ksFileInDomOn.replace('{account}', label) : t.ksFileInDom}
+        </span>
+      </>
+    );
+  }
+  return (
+    <>
+      {withDate && converted}
+      {label && (
+        <span key="account" className="ksieg-plik-chip" data-tip={t.ksAccountChipHint}>
+          {t.ksAccountChip.replace('{account}', label)}
+        </span>
+      )}
+    </>
+  );
+}
+
 /** What a row can do with a pinned file; the view owns the IPC. */
 interface PlikActions {
   open: (plik: KsiegowaniePlik) => void;
@@ -2423,6 +2543,8 @@ interface PlikActions {
   markBooked: (status: PlikStatus) => Promise<void>;
   /** Take such a mark back — the statement is waiting again. */
   undoManual: (row: BookingRow) => Promise<void>;
+  /** "Odrzuć — duplikat": a conversion that must not be posted stops counting; false restores it. */
+  discard: (row: BookingRow, discarded: boolean) => Promise<void>;
 }
 
 /**
@@ -2433,10 +2555,14 @@ interface PlikActions {
 const PlikiSection: React.FC<{
   group: AddressBookingGroup;
   language: Language;
+  locale: string;
   formatDateTime: (iso: string) => string;
+  kontoTypy: KontoTyp[];
   actions: PlikActions;
   onConvertOne: (status: PlikStatus) => void;
-}> = ({ group, language, formatDateTime, actions, onConvertOne }) => {
+  /** The statement's conversions, shown under it. */
+  renderConversions: (status: PlikStatus) => React.ReactNode;
+}> = ({ group, language, locale, formatDateTime, kontoTypy, actions, onConvertOne, renderConversions }) => {
   const t = translations[language];
   // PDFs already shown beside a statement or an accounting file are not "alone".
   const pairedPdfIds = new Set([
@@ -2470,7 +2596,10 @@ const PlikiSection: React.FC<{
     </button>
   );
 
-  const statusChip = (s: PlikStatus) => {
+  // One chip per account the statement was converted to: in DOM on it, or
+  // converted to it and waiting — so a statement converted again to another
+  // account says both where it was posted and what is still to post.
+  const statusChips = (s: PlikStatus) => {
     if (!s.conversion) return <span className="ksieg-plik-chip ksieg-plik-chip--wait">{t.ksFileWaiting}</span>;
     if (s.conversion.manual) {
       return (
@@ -2479,11 +2608,40 @@ const PlikiSection: React.FC<{
         </span>
       );
     }
-    if (s.conversion.bookedInDom) return <span className="ksieg-plik-chip ksieg-plik-chip--dom">{t.ksFileInDom}</span>;
+    // How many times and over which days — not just the newest one, which read
+    // as "converted only then". Every time is in the tooltip and in the rows below.
+    const converted = s.conversions.filter((r) => !r.manual);
+    const dayOf = (iso: string) => new Date(iso).toLocaleDateString(locale, { day: '2-digit', month: '2-digit' });
+    const first = converted[converted.length - 1];
+    const last = converted[0];
+    const range = first && last ? [dayOf(first.entry.convertedAt), dayOf(last.entry.convertedAt)] : [];
     return (
-      <span className="ksieg-plik-chip ksieg-plik-chip--ok">
-        {t.ksFileConverted.replace('{date}', formatDateTime(s.conversion.entry.convertedAt))}
-      </span>
+      <>
+        {converted.length === 1 ? (
+          <span className="ksieg-plik-chip ksieg-plik-chip--ok">
+            {t.ksFileConverted.replace('{date}', formatDateTime(last.entry.convertedAt))}
+          </span>
+        ) : (
+          converted.length > 1 && (
+            <span
+              className="ksieg-plik-chip ksieg-plik-chip--ok"
+              data-tip={[...converted]
+                .reverse()
+                .map((r) => formatDateTime(r.entry.convertedAt))
+                .join(' · ')}
+            >
+              {t.ksFileConvertedTimes
+                .replace('{n}', String(converted.length))
+                .replace('{range}', range[0] === range[1] ? range[0] : `${range[0]} – ${range[1]}`)}
+            </span>
+          )
+        )}
+        {conversionsByAccount(s.conversions, kontoTypy).map(({ account, row }) => (
+          <React.Fragment key={account ? conversionAccountLabel(account) : ''}>
+            {conversionChips(t, formatDateTime, row, account, false)}
+          </React.Fragment>
+        ))}
+      </>
     );
   };
 
@@ -2493,7 +2651,8 @@ const PlikiSection: React.FC<{
         <Icon name="folder" size={14} /> {t.ksFilesHeading}
       </div>
       {group.statements.map((s) => (
-        <div key={s.plik.id} className="ksieg-plik">
+        <div key={s.plik.id} className="ksieg-plik-group">
+        <div className="ksieg-plik">
           <div className="ksieg-plik__main">
             {/* The statement and its PDF side by side, read left to right. */}
             <div className="ksieg-plik__files">
@@ -2505,7 +2664,7 @@ const PlikiSection: React.FC<{
                 <span className="ksieg-plik-chip ksieg-plik-chip--warn">{t.ksFileNoPdf}</span>
               )}
               {/* What the file is and where it stands, read with its name. */}
-              {statusChip(s)}
+              {statusChips(s)}
             </div>
             <span className="ksieg-plik__meta">
               {s.plik.accountTypeName && <span>{s.plik.accountTypeName}</span>}
@@ -2562,6 +2721,8 @@ const PlikiSection: React.FC<{
             />
           </div>
         </div>
+        {renderConversions(s)}
+        </div>
       ))}
       {group.fileErrors.map((plik) => (
         <div key={plik.id} className="ksieg-plik ksieg-plik--error">
@@ -2609,14 +2770,33 @@ const FileRow: React.FC<{
   language: Language;
   saving: boolean;
   formatDateTime: (iso: string) => string;
+  /** The account this conversion posted to, when its file name tells. */
+  account: ConversionAccount | null;
   onSetBooked: (ids: number[], booked: boolean, announce: boolean) => Promise<void>;
   onOpenFile: (filePath: string) => void;
   onShowInHistory?: (query: string) => void;
   /** Take back a "posted without converting" mark. */
   onUndoManual: (row: BookingRow) => void;
-}> = ({ row, pdf, onOpenPlik, language, saving, formatDateTime, onSetBooked, onOpenFile, onShowInHistory, onUndoManual }) => {
+  /** Discard as a duplicate (true) or restore (false). */
+  onDiscard: (row: BookingRow, discarded: boolean) => void;
+}> = ({
+  row,
+  pdf,
+  onOpenPlik,
+  language,
+  saving,
+  formatDateTime,
+  account,
+  onSetBooked,
+  onOpenFile,
+  onShowInHistory,
+  onUndoManual,
+  onDiscard,
+}) => {
   const t = translations[language];
   const { entry } = row;
+  // A discarded duplicate still has its file — it is shown, just not counted.
+  const hasFile = row.isBooking || row.discarded;
   const accountingPath = entry.outputPath ? resolveOutputFilePath(entry.outputPath, 'accounting') : '';
   const previewPath = entry.outputPath ? resolveOutputFilePath(entry.outputPath, 'preview') : '';
 
@@ -2630,8 +2810,8 @@ const FileRow: React.FC<{
 
   return (
     <div
-      className={`ksieg-file ${row.isBooking ? '' : 'ksieg-file--failed'} ${
-        row.bookedInDom ? 'is-booked' : ''
+      className={`ksieg-file ${hasFile ? '' : 'ksieg-file--failed'} ${row.bookedInDom ? 'is-booked' : ''}${
+        row.discarded ? ' is-discarded' : ''
       }`}
     >
       <div className="ksieg-file__when">{formatDateTime(entry.convertedAt)}</div>
@@ -2655,7 +2835,7 @@ const FileRow: React.FC<{
               <Icon name="check-circle" size={13} />
               <span className="ksieg-node__label">{t.ksManualNode}</span>
             </span>
-          ) : row.isBooking ? (
+          ) : hasFile ? (
             <button
               type="button"
               className="ksieg-node ksieg-node--out"
@@ -2671,7 +2851,7 @@ const FileRow: React.FC<{
               <span className="ksieg-node__label">{t.ksErrorRow}</span>
             </span>
           )}
-          {row.isBooking && pdf && (
+          {hasFile && pdf && (
             <button
               type="button"
               className="ksieg-node ksieg-node--pdf"
@@ -2681,6 +2861,27 @@ const FileRow: React.FC<{
               <Icon name="paperclip" size={13} />
               <span className="ksieg-node__label">{pdf.fileName}</span>
             </button>
+          )}
+          {/* The same facts the folder's file shows: when it was converted, and to which account. */}
+          {row.isBooking && !row.manual && conversionChips(t, formatDateTime, row, account, true)}
+          {row.discarded && (
+            <>
+              <span className="ksieg-plik-chip ksieg-plik-chip--ok">
+                {t.ksFileConverted.replace('{date}', formatDateTime(entry.convertedAt))}
+              </span>
+              <span
+                className="ksieg-plik-chip ksieg-plik-chip--discarded"
+                data-tip={
+                  entry.discardedAt
+                    ? (entry.discardedBy ? t.ksDiscardedAtBy : t.ksDiscardedAt)
+                        .replace('{date}', formatDateTime(entry.discardedAt))
+                        .replace('{who}', entry.discardedBy ?? '')
+                    : undefined
+                }
+              >
+                {t.ksDiscarded}
+              </span>
+            </>
           )}
         </div>
         <div className="ksieg-file__meta">
@@ -2694,7 +2895,7 @@ const FileRow: React.FC<{
       </div>
 
       <div className="ksieg-file__actions">
-        {row.isBooking && !row.manual && (
+        {hasFile && !row.manual && (
           <button
             type="button"
             className="button button-small button-secondary"
@@ -2715,12 +2916,39 @@ const FileRow: React.FC<{
             <Icon name="history" size={13} />
           </button>
         )}
+        {/* The rare one behind "⋯": a conversion that must not be posted —
+            the same statement converted again to the same account. */}
+        {!row.manual && (row.discarded || (row.isBooking && !row.bookedInDom)) && (
+          <OverflowMenu
+            label={t.convMoreActions}
+            items={[
+              row.discarded
+                ? { icon: 'undo' as const, label: t.ksDiscardRestore, onClick: () => onDiscard(row, false) }
+                : {
+                    icon: 'x-circle' as const,
+                    label: t.ksDiscard,
+                    title: t.ksDiscardHint,
+                    onClick: () => onDiscard(row, true),
+                    danger: true,
+                  },
+            ]}
+          />
+        )}
       </div>
 
       {/* The community's button, scoped to this one file — same action, same
           place in every row, so a single exception costs one click. */}
       <div className="ksieg-file__book">
-        {!row.isBooking ? (
+        {row.discarded ? (
+          <div className="ksieg-book-done ksieg-book-done--sm is-discarded">
+            <span className="ksieg-book-done__label">
+              <Icon name="x-circle" size={14} /> {t.ksDiscarded}
+            </span>
+            <button type="button" className="ksieg-book-undo" disabled={saving} onClick={() => onDiscard(row, false)}>
+              {t.ksDiscardRestore}
+            </button>
+          </div>
+        ) : !row.isBooking ? (
           <span className="status-badge status-error">{t.error}</span>
         ) : row.manual ? (
           <div className="ksieg-book-done ksieg-book-done--sm">

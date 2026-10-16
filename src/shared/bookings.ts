@@ -15,7 +15,7 @@
  * without another round trip.
  */
 
-import { Adres, ConversionHistory, KsiegowaniePlik, KsiegowaniePriorytet, KsiegowanieUwaga } from './types';
+import { Adres, ConversionHistory, KontoTyp, KsiegowaniePlik, KsiegowaniePriorytet, KsiegowanieUwaga } from './types';
 import { adresPartOfOutputPath, sanitizeForFilename } from './outputPaths';
 import { pdfForStatement } from './statement-scan';
 import { normalizeName } from './text';
@@ -159,8 +159,13 @@ export interface BookingRow {
   /** Null only when nothing could attribute the row to a community. */
   adresNazwa: string | null;
   monthKey: string;
-  /** An accounting file was generated — this row IS a booking. */
+  /** An accounting file was generated and not discarded — this row IS a booking. */
   isBooking: boolean;
+  /**
+   * Discarded as a duplicate: the file was generated, but it is not one to
+   * post, so it counts nowhere — not as generated, not as waiting.
+   */
+  discarded: boolean;
   bookedInDom: boolean;
   /**
    * Marked as posted without a conversion: a booking with no accounting file.
@@ -180,7 +185,9 @@ export function toBookingRows(history: ConversionHistory[], adresy: Adres[]): Bo
       // The statement's own month when the conversion recorded it; older rows
       // fall back to the day they were converted.
       monthKey: entry.monthKey || monthKeyOf(entry.convertedAt),
-      isBooking: entry.status === 'success' && (!!entry.outputPath || entry.manual === true),
+      isBooking:
+        entry.status === 'success' && (!!entry.outputPath || entry.manual === true) && !entry.discardedAt,
+      discarded: !!entry.discardedAt,
       bookedInDom: entry.bookedInDom === true,
       manual: entry.manual === true,
     };
@@ -230,7 +237,12 @@ function normalizePath(p: string): string {
 export function linkConversions(
   pliki: KsiegowaniePlik[],
   rows: BookingRow[],
-): { byPlik: Map<number, BookingRow>; monthByHistoryId: Map<number, string> } {
+): {
+  byPlik: Map<number, BookingRow>;
+  /** Every conversion of each pinned statement, newest first — re-conversions included. */
+  allByPlik: Map<number, BookingRow[]>;
+  monthByHistoryId: Map<number, string>;
+} {
   const byName = new Map<string, KsiegowaniePlik[]>();
   const byHash = new Map<string, KsiegowaniePlik[]>();
   const push = (map: Map<string, KsiegowaniePlik[]>, key: string, p: KsiegowaniePlik) => {
@@ -248,8 +260,9 @@ export function linkConversions(
     if (p.fileHash) push(byHash, p.fileHash, p);
   }
   const byPlik = new Map<number, BookingRow>();
+  const allByPlik = new Map<number, BookingRow[]>();
   const monthByHistoryId = new Map<number, string>();
-  if (byName.size === 0) return { byPlik, monthByHistoryId };
+  if (byName.size === 0) return { byPlik, allByPlik, monthByHistoryId };
 
   for (const row of rows) {
     if (!row.isBooking) continue;
@@ -272,8 +285,101 @@ export function linkConversions(
     monthByHistoryId.set(row.entry.id, plik.monthKey);
     const best = byPlik.get(plik.id);
     if (!best || row.entry.convertedAt > best.entry.convertedAt) byPlik.set(plik.id, row);
+    const all = allByPlik.get(plik.id);
+    if (all) all.push(row);
+    else allByPlik.set(plik.id, [row]);
   }
-  return { byPlik, monthByHistoryId };
+  for (const all of allByPlik.values()) all.sort((a, b) => b.entry.convertedAt.localeCompare(a.entry.convertedAt));
+  return { byPlik, allByPlik, monthByHistoryId };
+}
+
+/** The account a conversion posted to: the account type it was converted as, and that type's bank account symbol. */
+export interface ConversionAccount {
+  name: string;
+  /** Null when the type has been renamed or removed since — only its name is left in the file name. */
+  symbol: string | null;
+}
+
+/**
+ * Which account type a conversion was made as. Not stored on the record: it is
+ * read back from the generated file's name, `{address}_{accountType}_{timestamp}.txt`
+ * (see `generateOutputFileName`), and looked up in the account types for its
+ * symbol. A file named before account types existed, or a manual mark, has none.
+ */
+export function conversionAccount(row: BookingRow, kontoTypy: KontoTyp[]): ConversionAccount | null {
+  if (!row.isBooking || row.manual || !row.entry.outputPath) return null;
+  const stem = fileNameOf(row.entry.outputPath)
+    .replace(/\.[^.]+$/, '')
+    .replace(/_\d{8}_\d{6}$/, '');
+  const lower = stem.toLowerCase();
+  // Longest name first: "…_Eksploatacja_2" must not read as "Eksploatacja".
+  const byLength = [...kontoTypy].sort((a, b) => b.name.length - a.name.length);
+  for (const k of byLength) {
+    const part = sanitizeForFilename(k.name).toLowerCase();
+    if (part && lower.endsWith(`_${part}`)) return { name: k.name, symbol: k.bankAccountSymbol || null };
+  }
+  // A type renamed since: whatever follows the address is its old name.
+  const adresPart = row.adresNazwa ? `${sanitizeForFilename(row.adresNazwa).toLowerCase()}_` : null;
+  if (adresPart && lower.startsWith(adresPart) && stem.length > adresPart.length) {
+    return { name: stem.slice(adresPart.length).replace(/_/g, ' '), symbol: null };
+  }
+  return null;
+}
+
+/** "Eksploatacja 2 (131-2)", or just the name when the symbol is unknown. */
+export function conversionAccountLabel(account: ConversionAccount): string {
+  return account.symbol ? `${account.name} (${account.symbol})` : account.name;
+}
+
+/** The conversions of one statement to one account. */
+export interface AccountConversions {
+  /** Null when the file name does not say. */
+  account: ConversionAccount | null;
+  /** What stands for this account: the conversion ticked in DOM, else the newest one. */
+  row: BookingRow;
+  /** All of them, newest first. */
+  rows: BookingRow[];
+}
+
+/**
+ * One statement's conversions per account, the newest account first. A
+ * statement converted again to another account is two postings; converted
+ * again to the same account, it is the same posting once more — so per account
+ * the question is only "is it in DOM yet?". Manual marks have no account and
+ * are left out.
+ */
+export function conversionsByAccount(rows: BookingRow[], kontoTypy: KontoTyp[]): AccountConversions[] {
+  const byKey = new Map<string, AccountConversions>();
+  const sorted = rows
+    .filter((r) => r.isBooking && !r.manual)
+    .sort((a, b) => b.entry.convertedAt.localeCompare(a.entry.convertedAt));
+  for (const r of sorted) {
+    const account = conversionAccount(r, kontoTypy);
+    const key = account ? conversionAccountLabel(account) : '';
+    const bucket = byKey.get(key);
+    if (bucket) bucket.rows.push(r);
+    else byKey.set(key, { account, row: r, rows: [r] });
+  }
+  for (const group of byKey.values()) group.row = group.rows.find((r) => r.bookedInDom) ?? group.rows[0];
+  return [...byKey.values()];
+}
+
+/**
+ * The earlier conversions of a statement about to be converted: those of the
+ * same content (by hash), and — for records written before hashes were kept —
+ * of the same file name. A record with a hash that differs is another file,
+ * whatever it is called: banks reuse names month after month.
+ */
+export function priorConversionsOf(
+  rows: BookingRow[],
+  file: { fileName: string; hash: string | null },
+): BookingRow[] {
+  const name = file.fileName.toLowerCase();
+  return rows.filter((r) => {
+    if (!r.isBooking || r.manual) return false;
+    if (file.hash && r.entry.inputHash) return r.entry.inputHash === file.hash;
+    return r.entry.fileName.toLowerCase() === name;
+  });
 }
 
 /**
@@ -294,7 +400,10 @@ export function attributeToStatementMonths(rows: BookingRow[], pliki: Ksiegowani
 /** One pinned statement, read against the history and the month's PDFs. */
 export interface PlikStatus {
   plik: KsiegowaniePlik;
+  /** The newest conversion of it. */
   conversion: BookingRow | null;
+  /** Every conversion of it, newest first — a statement converted again, to another account, has several. */
+  conversions: BookingRow[];
   /** The PDF that goes with it, when one was found. */
   pdf: KsiegowaniePlik | null;
 }
@@ -532,7 +641,7 @@ export function groupByAddress(
   const accountsById = new Map(adresy.map((a) => [a.id, (a.accountNumbers ?? []).length]));
   // Every pinned statement's conversion (any month), and the month's files
   // under the key of their community's row.
-  const conversions = linkConversions(pliki, rows).byPlik;
+  const { byPlik: conversions, allByPlik: allConversions } = linkConversions(pliki, rows);
   const plikiByKey = new Map<string, KsiegowaniePlik[]>();
   for (const p of pliki) {
     if (p.monthKey !== monthKey) continue;
@@ -575,6 +684,7 @@ export function groupByAddress(
       .map((plik) => ({
         plik,
         conversion: conversions.get(plik.id) ?? null,
+        conversions: allConversions.get(plik.id) ?? [],
         pdf: pdfForStatement(plik, pdfs),
       }));
     const accountCount = adresId != null ? (accountsById.get(adresId) ?? 0) : 0;

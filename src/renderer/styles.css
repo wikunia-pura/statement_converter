@@ -4379,6 +4379,27 @@ body.dark-mode .conversion-progress-bar-text {
   white-space: nowrap;
 }
 .conv-table__name { overflow-wrap: anywhere; }
+
+/* The statement was converted before: where it went, per account. Red once it
+   is in DOM — converting it again would post it twice — amber while it waits. */
+.conv-prior {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 6px;
+  padding: 5px 9px;
+  max-width: 100%;
+  border: 1px solid var(--warning-border);
+  border-radius: var(--r-sm);
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: var(--fs-xs);
+  line-height: 1.35;
+}
+.conv-prior.is-in-dom { border-color: var(--danger-border); background: var(--danger-bg); color: var(--danger); }
+.conv-prior__line { display: flex; align-items: flex-start; gap: 6px; font-weight: 600; }
+.conv-prior__line > svg { flex-shrink: 0; margin-top: 1px; }
+.conv-prior__hint { color: var(--text-secondary); padding-left: 19px; }
 /* The file name keeps a share of the width, not all that is left, so the Bank
    column starts close to the name; the rest goes to the other columns (in the
    dialog: to the address). */
@@ -7906,15 +7927,19 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 
 .ksieg-flow__arrow { color: var(--text-tertiary); flex-shrink: 0; }
 
+/* A file is a tile — a rectangle, its kind in the icon's colour (statement
+   grey, accounting file green, PDF accent) — so it never reads as one of the
+   pill-shaped status chips beside it. */
 .ksieg-node {
+  --node-kind: var(--text-tertiary);
   display: inline-flex;
   align-items: center;
   gap: var(--s-2);
   max-width: 100%;
   padding: 4px 10px;
   border: 1px solid var(--border-default);
-  border-radius: var(--r-pill);
-  background: var(--bg-surface);
+  border-radius: var(--r-sm);
+  background: var(--bg-surface-sunken);
   font: inherit;
   font-size: var(--fs-sm);
   color: var(--text-primary);
@@ -7929,8 +7954,8 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 
 .ksieg-node:disabled { cursor: default; opacity: 0.7; }
 
-.ksieg-node > svg { color: var(--text-tertiary); flex-shrink: 0; }
-.ksieg-node--out > svg { color: var(--success); }
+.ksieg-node > svg { color: var(--node-kind); flex-shrink: 0; }
+.ksieg-node--out { --node-kind: var(--success); }
 
 .ksieg-node--missing {
   border-style: dashed;
@@ -7939,7 +7964,7 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
   background: none;
 }
 
-.ksieg-node--missing > svg { color: var(--danger); }
+.ksieg-node--missing { --node-kind: var(--danger); }
 
 /* Posted without a conversion: no file to open, so not a button — a quiet
    dashed node in the "done" colour. */
@@ -7950,7 +7975,7 @@ body.dark-mode .ksieg-book--sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
   background: none;
 }
 
-.ksieg-node--manual > svg { color: var(--success); }
+.ksieg-node--manual { --node-kind: var(--success); }
 
 .ksieg-node__label {
   overflow: hidden;
@@ -13359,6 +13384,29 @@ input[type='text'].zplan-input--rate { width: 84px; }
   border-top: 1px solid var(--border-subtle);
 }
 .ksieg-plik--error { background: var(--danger-bg); border-radius: var(--r-md); }
+/* A folder's file with its conversions: one card per file — the file is the
+   card's header, its conversions the card's body — so where one file's rows
+   end and the next file begins is drawn, not guessed from indentation. */
+.ksieg-plik-group {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.ksieg-plik-group + .ksieg-plik-group { margin-top: var(--s-3); }
+.ksieg-plik-group > .ksieg-plik {
+  border-top: none;
+  padding: var(--s-2) var(--s-3);
+  /* Tinted from the text colour, so the header stands out in both themes —
+     the surface-hover token sits too close to the row's own surface. */
+  background: color-mix(in srgb, var(--text-primary) 6%, var(--bg-surface));
+}
+.ksieg-files--nested {
+  padding: var(--s-1) var(--s-2) var(--s-2);
+  border-top: 1px solid var(--border-strong);
+}
+.ksieg-files--nested > .ksieg-file:first-child { border-top: none; }
 .ksieg-plik__main { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
 /* Statement + PDF on one line from the left; each pill as wide as its name. */
 .ksieg-plik__files {
@@ -13382,7 +13430,7 @@ input[type='text'].zplan-input--rate { width: 84px; }
 }
 .ksieg-plik__error { color: var(--danger); }
 .ksieg-plik__actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--s-2); }
-.ksieg-node--pdf > svg { color: var(--accent); }
+.ksieg-node--pdf { --node-kind: var(--accent); }
 
 .ksieg-plik-chip {
   display: inline-flex;
@@ -13400,6 +13448,13 @@ input[type='text'].zplan-input--rate { width: 84px; }
 .ksieg-plik-chip--dom  { color: var(--success); background: var(--success-bg); border-color: var(--success-border); }
 .ksieg-plik-chip--warn { color: var(--warning); background: var(--warning-bg); border-color: var(--warning-border); }
 .ksieg-plik-chip--err  { color: var(--danger); background: var(--danger-bg); border-color: var(--danger-border); }
+.ksieg-plik-chip--discarded { color: var(--text-tertiary); border-style: dashed; }
+
+/* A discarded duplicate: still there and openable, but out of the count — faded. */
+.ksieg-file.is-discarded .ksieg-file__when,
+.ksieg-file.is-discarded .ksieg-flow > .ksieg-node { opacity: 0.55; }
+.ksieg-file.is-discarded .ksieg-node--out .ksieg-node__label { text-decoration: line-through; }
+.ksieg-book-done.is-discarded .ksieg-book-done__label { color: var(--text-tertiary); }
 
 /* ------------------------------ Scan dialog ------------------------------ */
 

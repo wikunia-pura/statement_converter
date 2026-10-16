@@ -3628,6 +3628,7 @@ export const translations = {
     uchLetterTitle: 'Treść uchwały',
     zawLetterTitle: 'Treść zawiadomienia',
     zawPickList: 'Szablony zawiadomień',
+    revHoldShortName: 'Kontrahent rozpoznany tylko po dwuznakowej nazwie (np. „FR”) — potwierdź kontrahenta.',
   },
   en: {
     // Navigation
@@ -7256,6 +7257,7 @@ export const translations = {
     uchLetterTitle: 'Resolution text',
     zawLetterTitle: 'Notice content',
     zawPickList: 'Notice templates',
+    revHoldShortName: 'Contractor recognised only by a two-character name (e.g. “FR”) — confirm the contractor.',
   },
 };
 

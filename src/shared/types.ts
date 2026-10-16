@@ -325,6 +325,8 @@ export const CLARIFICATION_ACCOUNT = '235-1';
  *  - ai-answer-missing: the AI reply had no usable answer for this transaction;
  *  - glued-name: the contractor was found only as a long name glued to the next
  *    word of the bank text — very likely right, but the text is damaged;
+ *  - short-name: the contractor was found only by a two-character name ("FR")
+ *    standing as a word — real, but too common a word to book on unseen;
  *  - virtual-account-debit: a PKO MT940 debit marked as a virtual-account (SWRK)
  *    movement — money leaving such an account, e.g. a returned payment.
  */
@@ -334,6 +336,7 @@ export type ReviewHoldReason =
   | 'invalid-account'
   | 'ai-answer-missing'
   | 'glued-name'
+  | 'short-name'
   | 'virtual-account-debit';
 
 /**

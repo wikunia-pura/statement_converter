@@ -23,6 +23,7 @@ const HOLD_REASON_KEYS = {
   'invalid-account': 'revHoldInvalidAccount',
   'ai-answer-missing': 'revHoldAiMissing',
   'glued-name': 'revHoldGluedName',
+  'short-name': 'revHoldShortName',
   'virtual-account-debit': 'revHoldVirtualAccountDebit',
 } as const satisfies Record<ReviewHoldReason, string>;
 

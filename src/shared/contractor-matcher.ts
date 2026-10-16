@@ -23,11 +23,20 @@ import { foldText } from './text';
 export type { MatchedContractor } from './ai-types';
 
 /**
- * Shortest normalized name the matcher will look for. Below this a name is an
- * abbreviation ("FV", "SA") that occurs as a word in unrelated titles far too
- * often to book money on.
+ * Shortest normalized name the matcher books on by itself. Below this a name is
+ * an abbreviation ("FR", "FV", "SA") that occurs as a word in unrelated text far
+ * too often to book money on: "FR" of a community's own street "FR.JOLIOT-CURIE"
+ * once took every overnight deposit of that community to the repair fund.
  */
 const MIN_NAME_LENGTH = 3;
+
+/**
+ * A two-character name ("FR") found as a whole word. It still counts — the
+ * contractor is real — but only as a suggestion: the row is held for review
+ * with it picked, and a surer match in the other description field wins.
+ * Below GLUED_MATCH_CONFIDENCE so that every "only a hint" match is ≤ it.
+ */
+export const SHORT_MATCH_CONFIDENCE = 60;
 
 /**
  * A long name the bank glued to the word after it ("…SP Z O OUL LIPOWA" — fixed-
@@ -48,6 +57,8 @@ const GLUED_MIN_LENGTH = 12;
 interface DerivedAlt {
   /** normalizeText(altName); '' when too short to match on (see MIN_NAME_LENGTH) */
   norm: string;
+  /** normalizeText(altName) when exactly two characters long, else '' (see SHORT_MATCH_CONFIDENCE) */
+  short: string;
   /** norm with all whitespace removed */
   noSpace: string;
   /** norm split into words of length > 2 (for fuzzy matching) */
@@ -79,6 +90,8 @@ interface DerivedContractor {
   nipDigits: string;
   /** normalizeText(nazwa); '' when too short to match on (see MIN_NAME_LENGTH) */
   nameNorm: string;
+  /** normalizeText(nazwa) when exactly two characters long, else '' (see SHORT_MATCH_CONFIDENCE) */
+  nameShort: string;
   /** nameNorm with all whitespace removed */
   nameNoSpace: string;
   /** nameNorm split into words of length > 2 (for fuzzy matching) */
@@ -101,6 +114,7 @@ export class ContractorMatcher {
       const norm = this.matchableName(altName);
       return {
         norm,
+        short: this.shortName(altName),
         noSpace: norm.replace(/\s/g, ''),
         words: this.fuzzyWords(norm),
       };
@@ -110,6 +124,7 @@ export class ContractorMatcher {
       typy: contractor.typy && contractor.typy.length > 0 ? contractor.typy : ['Kontrahent'],
       nipDigits: contractor.nip && contractor.nip.trim() ? contractor.nip.replace(/[\s-]/g, '') : '',
       nameNorm,
+      nameShort: this.shortName(contractor.nazwa),
       nameNoSpace: nameNorm.replace(/\s/g, ''),
       nameWords: this.fuzzyWords(nameNorm),
       alts,
@@ -124,6 +139,12 @@ export class ContractorMatcher {
   private matchableName(name: string): string {
     const norm = this.normalizeText(name ?? '');
     return norm.replace(/\s/g, '').length >= MIN_NAME_LENGTH ? norm : '';
+  }
+
+  /** A name of exactly two letters/digits ("FR"), normalized; '' for any other length. */
+  private shortName(name: string): string {
+    const norm = this.normalizeText(name ?? '');
+    return norm.replace(/\s/g, '').length === 2 ? norm : '';
   }
 
   /** Words of length > 2, as fuzzy matching compares them. */
@@ -223,6 +244,10 @@ export class ContractorMatcher {
   private normalizeText(text: string): string {
     return foldText(text)
       .replace(/[^a-z0-9]+/g, ' ')
+      // Where digits meet letters the bank often dropped a space ("FAKTURA NR
+      // 123456energia elektryczna"): a digit/letter change counts as a word
+      // boundary. Names are normalized the same way, so "M3 Serwis" still matches.
+      .replace(/(\d)(?=[a-z])|([a-z])(?=\d)/g, '$1$2 ')
       .trim();
   }
 
@@ -430,6 +455,14 @@ export class ContractorMatcher {
         }
       }
 
+      // A two-character name as a whole word - Score: 80 (a candidate for the
+      // model to weigh, never more).
+      if (score === 0) {
+        if (this.containsWords(search, d.nameShort) || d.alts.some(alt => this.containsWords(search, alt.short))) {
+          score = 80;
+        }
+      }
+
       // If exact match not found, try fuzzy matching - Score: 85-95
       // This catches typos and similar names (e.g., "Gontarek" vs "Guntarek")
       if (score === 0) {
@@ -557,6 +590,25 @@ export class ContractorMatcher {
             if (this.startsAtWord(desc, d.alts[i].noSpace)) {
               bestMatch = contractor;
               bestConfidence = GLUED_MATCH_CONFIDENCE;
+              matchedText = contractor.alternativeNames![i];
+              break;
+            }
+          }
+        }
+      }
+
+      // SIXTH: a two-character name as a whole word — a suggestion only (see
+      // SHORT_MATCH_CONFIDENCE).
+      if (bestConfidence < SHORT_MATCH_CONFIDENCE) {
+        if (this.containsWords(desc, d.nameShort)) {
+          bestMatch = contractor;
+          bestConfidence = SHORT_MATCH_CONFIDENCE;
+          matchedText = contractor.nazwa;
+        } else {
+          for (let i = 0; i < d.alts.length; i++) {
+            if (this.containsWords(desc, d.alts[i].short)) {
+              bestMatch = contractor;
+              bestConfidence = SHORT_MATCH_CONFIDENCE;
               matchedText = contractor.alternativeNames![i];
               break;
             }

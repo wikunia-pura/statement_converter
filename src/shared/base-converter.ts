@@ -19,7 +19,7 @@ import * as path from 'path';
 import { AIExtractor } from './ai-extractor';
 import { ExtractionCache, extractionCacheScope } from './extraction-cache';
 import { MatchCache } from './match-cache';
-import { ContractorMatcher, MatchedContractor, GLUED_MATCH_CONFIDENCE } from './contractor-matcher';
+import { ContractorMatcher, MatchedContractor, GLUED_MATCH_CONFIDENCE, SHORT_MATCH_CONFIDENCE } from './contractor-matcher';
 import {
   EXPENSE_MATCH_TYPES,
   DEFAULT_EXPENSE_AI_BATCH_SIZE,
@@ -46,6 +46,7 @@ const HOLD_WARNINGS: Record<ReviewHoldReason, string> = {
   'invalid-account': 'The matched entry\'s account is not a valid account symbol - fix it in Kontrahenci',
   'ai-answer-missing': 'AI returned no usable answer for this transaction - held for review',
   'glued-name': 'Contractor name glued to the neighbouring text - confirm the contractor',
+  'short-name': 'Contractor found only by a two-character name - confirm the contractor',
   'virtual-account-debit': 'Debit marked as a virtual-account (SWRK) movement - check it before booking',
 };
 
@@ -795,12 +796,16 @@ export abstract class BaseConverter<TRaw> {
         // auto-approval, yet the Converter's "skip approval" mode accepts every
         // row as it stands — only a hold reason makes it open the review screen.
         // A format's own hold (storno, SWRK debit) says more, so it keeps its label.
-        if (
-          matchedContractor.confidence === GLUED_MATCH_CONFIDENCE &&
-          this.holdReason(transaction) === null
-        ) {
-          extracted.holdReason = 'glued-name';
-          extracted.warnings.push(HOLD_WARNINGS['glued-name']);
+        // Same for a two-character name ("FR"): a suggestion, held.
+        const hintOnly =
+          matchedContractor.confidence === GLUED_MATCH_CONFIDENCE
+            ? 'glued-name'
+            : matchedContractor.confidence === SHORT_MATCH_CONFIDENCE
+              ? 'short-name'
+              : null;
+        if (hintOnly && this.holdReason(transaction) === null) {
+          extracted.holdReason = hintOnly;
+          extracted.warnings.push(HOLD_WARNINGS[hintOnly]);
         }
         processed.push(
           this.createProcessedTransaction(
@@ -1105,12 +1110,16 @@ export abstract class BaseConverter<TRaw> {
       // account the convention can derive (17A, "12-14") is not booked unasked.
       // Re-read here, the one place every income row passes, so the exporter's
       // `needsAccount` check agrees with what the review screen shows.
+      // An apartment rule's own answer is not second-guessed by the text: rules
+      // exist for exactly the payers whose titles say something odd ("lok 12A"
+      // for apartment 99), so only the value the rule gave is checked.
+      const ruleDecided = extracted.matchedByManualMapping === true;
       const needsAccount =
         extracted.needsAccount === true ||
         needsExplicitAccount(
           extracted.apartmentNumber,
           extracted.accountOverride,
-          `${normalized.descBase} ${normalized.descOpt}`
+          ruleDecided ? null : `${normalized.descBase} ${normalized.descOpt}`
         );
       if (needsAccount) {
         extracted = {

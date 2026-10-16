@@ -56,10 +56,31 @@ describe('ContractorMatcher — whole words only', () => {
   });
 });
 
-describe('ContractorMatcher — names too short or empty never match', () => {
-  it('an alternative name below 3 characters is ignored ("FV")', () => {
-    const m = new ContractorMatcher([k('Firma Testowa', { alternativeNames: ['FV', 'SA'] })]);
-    expect(matched(m, tx('FV 123/2026 SA'))).toBeNull();
+describe('ContractorMatcher — short names are hints, empty ones never match', () => {
+  it('a two-character name matches only as a whole word, and only as a hint (60)', () => {
+    const m = new ContractorMatcher([k('FR', { kontoKontrahenta: '850-2' })]);
+    const hit = m.match(tx('PRZELEW NA FR ZA WRZESIEN'));
+    expect(hit.contractor?.nazwa).toBe('FR');
+    expect(hit.confidence).toBe(60);
+    // Inside a longer word it is not a match at all.
+    expect(matched(m, tx('FRANCUSKA 5 OPLATA'))).toBeNull();
+  });
+
+  it('a surer match in the other field beats a two-character hint', () => {
+    // An overnight deposit: the community's own street "Fr. Joliot-Curie" sits in
+    // the counterparty field, the deposit's own name in the title.
+    const m = new ContractorMatcher([
+      k('FR', { kontoKontrahenta: '850-2' }),
+      k('Założenie lokaty Overnight', { kontoKontrahenta: '135-1' }),
+    ]);
+    const hit = m.match(tx('ZALOZENIE LOKATY OVERNIGHT', 'WSPOLNOTA TESTOWA UL. FR.JOLIOT-CURIE 9'));
+    expect(hit.contractor?.nazwa).toBe('Założenie lokaty Overnight');
+    expect(hit.confidence).toBe(100);
+  });
+
+  it('a single-character name is never matched', () => {
+    const m = new ContractorMatcher([k('Firma Testowa', { alternativeNames: ['X'] })]);
+    expect(matched(m, tx('FAKTURA X 12/2026'))).toBeNull();
   });
 
   it('a name of punctuation only ("-") normalizes to nothing and matches nothing', () => {
@@ -73,6 +94,19 @@ describe('ContractorMatcher — names too short or empty never match', () => {
     const m = new ContractorMatcher([k(''), k('Energia Testowa')]);
     expect(matched(m, tx(''))).toBeNull();
     expect(matched(m, tx('   '))).toBeNull();
+  });
+});
+
+describe('ContractorMatcher — digits glued to a name', () => {
+  it('an invoice number glued to the name still lets the name match as words', () => {
+    const m = new ContractorMatcher([k('ENERGIA ELEKTRYCZNA', { kontoKontrahenta: '425-2' })]);
+    expect(matched(m, tx('Faktura VAT nr 123456789012energia elektryczna za 9/2026'))).toBe('ENERGIA ELEKTRYCZNA');
+  });
+
+  it('a name with digits of its own keeps matching ("M3 Serwis")', () => {
+    const m = new ContractorMatcher([k('M3 Serwis')]);
+    expect(matched(m, tx('FV 12/2026 M3 SERWIS SP Z O O'))).toBe('M3 Serwis');
+    expect(matched(m, tx('FV 12/2026 M3SERWIS'))).toBe('M3 Serwis');
   });
 });
 

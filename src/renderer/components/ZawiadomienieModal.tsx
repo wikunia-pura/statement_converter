@@ -248,9 +248,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
       const resolveZebranie = async (): Promise<Zebranie> => {
         if (spotkanieId != null) return window.electronAPI.zebranieFromSpotkanie(spotkanieId);
         if (!zebranieProp) throw new Error(t.zawVersionGone);
-        const fresh = (await window.electronAPI.getZebrania()).find(
-          (z) => z.id === zebranieProp.id
-        );
+        const fresh = await window.electronAPI.getZebranie(zebranieProp.id);
         if (!fresh) throw new Error(t.zawVersionGone);
         return fresh;
       };
@@ -321,7 +319,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
     base: Zebranie,
     target: ZebranieWersja
   ): Promise<ZebranieMaterial> => {
-    const fresh = (await window.electronAPI.getZebrania()).find((z) => z.id === base.id);
+    const fresh = await window.electronAPI.getZebranie(base.id);
     const freshWersja = fresh?.wersje.find((w) => w.id === target.id);
     if (!fresh || !freshWersja) throw new Error(t.zawVersionGone);
     const stored = freshWersja.materialy.find((m) => m.id === material.id);
@@ -552,7 +550,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
     if (!ok) return;
     setBusy('save');
     try {
-      const fresh = (await window.electronAPI.getZebrania()).find((z) => z.id === zebranie.id);
+      const fresh = await window.electronAPI.getZebranie(zebranie.id);
       const freshWersja = fresh?.wersje.find((w) => w.id === wersja.id);
       if (!fresh || !freshWersja) throw new Error(t.zawVersionGone);
       const materialy = freshWersja.materialy.filter(

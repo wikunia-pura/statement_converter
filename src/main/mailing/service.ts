@@ -142,7 +142,7 @@ async function findSpotkanie(
   spotkanieId: number | null | undefined,
 ): Promise<Spotkanie | null> {
   if (spotkanieId == null) return null;
-  return (await database.getSpotkania()).find((s) => s.id === spotkanieId) ?? null;
+  return database.getSpotkanie(spotkanieId);
 }
 
 /** Where generated PDFs and archived attachments live, per send day. */

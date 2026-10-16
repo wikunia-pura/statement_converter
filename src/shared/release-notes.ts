@@ -91,7 +91,7 @@ export const RELEASES: Release[] = [
       'Konwerter nie gubi już po cichu linii wyciągu ani nie zgaduje kontrahenta po fragmencie słowa — wątpliwe pozycje czekają na Twoje potwierdzenie. Wysyłka CIT-8 nie złoży zeznania dwa razy, kopie zapasowe nie przenoszą ustawień tego komputera, a aplikacja działa na nowej, wspieranej wersji Electrona.',
     stats: [
       { value: '2', label: 'nowe funkcje' },
-      { value: '4', label: 'usprawnienia' },
+      { value: '5', label: 'usprawnienia' },
       { value: '3', label: 'poprawki' },
     ],
     highlights: [
@@ -209,6 +209,28 @@ export const RELEASES: Release[] = [
         summary:
           'Gdy serwer pocztowy odrzuci część adresów, historia pokazuje „Wysłano częściowo”, a odrzucone adresy mają znacznik „odrzucony”.',
         where: ['Mailing', 'Historia'],
+      },
+      {
+        id: 'kalendarz-zebrania-zadania-szybciej',
+        kind: 'improved',
+        icon: 'calendar',
+        title: 'Kalendarz, Zebrania i Zadania działają szybciej',
+        summary:
+          'Przechodzenie między Kalendarzem, Zebraniami, Sprawozdaniami i Zadaniami nie pobiera już za każdym razem wszystkich danych od nowa, a po zapisie odświeża się tylko to, co zmieniłeś — bez czekania na przeładowanie całej listy.',
+        where: ['Kalendarz', 'Zebrania', 'Zadania'],
+        steps: [
+          {
+            do: 'Zapisz spotkanie, kartę zadania albo zmianę w zebraniu.',
+            then: 'Zmiana jest widoczna od razu, a reszta listy zostaje na miejscu.',
+          },
+          {
+            do: 'Żeby zobaczyć, co przed chwilą zmienił ktoś inny, kliknij strzałkę odświeżania w nagłówku Kalendarza, Zebrań, Sprawozdań albo Planów gospodarczych.',
+            then: 'Dane są pobierane od nowa.',
+          },
+        ],
+        expect: [
+          'Zmiany zapisane na innym komputerze pojawiają się u Ciebie najpóźniej po minucie, tak jak to już było z kontrahentami i adresami. Twoje własne zmiany widzisz od razu.',
+        ],
       },
       {
         id: 'homebanking-linie-bez-banku',

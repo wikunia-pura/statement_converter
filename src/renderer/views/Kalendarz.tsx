@@ -84,6 +84,7 @@ import {
   DEFAULT_TYP_COLOR,
   defaultTerminWysylki,
 } from '../../shared/calendar';
+import { reloadFromServer } from '../dataCache';
 
 interface Props {
   language: Language;
@@ -702,7 +703,7 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
         // the card as it now is (ZadanieFormModal), so the next save goes through.
         setTaskError(t.zadConflict);
         const id = taskForm.editing.id;
-        const card = (await window.electronAPI.getZadania().catch(() => [])).find((z) => z.id === id);
+        const card = await window.electronAPI.getZadanie(id).catch(() => null);
         if (card) setTaskForm((prev) => (prev?.editing?.id === id ? { editing: card } : prev));
         onZadaniaChanged();
       } else {
@@ -2687,11 +2688,16 @@ const Kalendarz: React.FC<Props> = ({
       notify.error(t.kalLoadError);
       return;
     }
+    putSpotkanie(id, fresh);
+  };
+
+  /** One meeting in place of the copy on screen; null takes it off the list. */
+  const putSpotkanie = (id: number, row: Spotkanie | null) => {
     setSpotkania((prev) => {
       const rest = prev.filter((s) => s.id !== id);
-      if (!fresh) return rest;
+      if (!row) return rest;
       // Same order as the table hands them over: newest first, then by id.
-      return [...rest, fresh].sort(
+      return [...rest, row].sort(
         (a, b) => Date.parse(b.startsAt) - Date.parse(a.startsAt) || a.id - b.id,
       );
     });
@@ -2987,24 +2993,31 @@ const Kalendarz: React.FC<Props> = ({
     setFormError(null);
     try {
       let savedId: number;
+      // The meeting as the save returned it — null once a later write (the
+      // materials status) has moved it on, and it has to be read back instead.
+      let saved: Spotkanie | null;
       if (form?.editing) {
         savedId = form.editing.id;
-        await window.electronAPI.updateSpotkanie(form.editing.id, input);
+        saved = await window.electronAPI.updateSpotkanie(form.editing.id, input);
         // The form only says needed or not: unticking drops the materials,
         // ticking a meeting that had none makes them needed, and a meeting
         // already under way keeps the step it reached.
         const was = form.editing.materialyStatus;
         if (!materialyPotrzebne && was !== 'brak') {
           await window.electronAPI.setSpotkanieMaterialy(form.editing.id, 'brak');
+          saved = null;
         } else if (materialyPotrzebne && was === 'brak') {
           await window.electronAPI.setSpotkanieMaterialy(form.editing.id, 'potrzebne');
+          saved = null;
         }
         if (materialyPotrzebne) await ensureZebranie(form.editing.id);
       } else {
         const created = await window.electronAPI.addSpotkanie(input);
         savedId = created.id;
+        saved = created;
         if (materialyPotrzebne) {
           await window.electronAPI.setSpotkanieMaterialy(created.id, 'potrzebne');
+          saved = null;
           await ensureZebranie(created.id);
         }
         // The meeting exists now, so the tasks written for it can point at it.
@@ -3020,8 +3033,9 @@ const Kalendarz: React.FC<Props> = ({
       setForm(null);
       // Only what the save can have changed: the meeting itself, its Zebrania
       // entry (when it needs materials) and its tasks (a new meeting's).
+      if (saved) putSpotkanie(savedId, saved);
       await Promise.all([
-        refreshSpotkanie(savedId),
+        saved ? null : refreshSpotkanie(savedId),
         materialyPotrzebne ? loadZebrania() : null,
         !form?.editing && pendingZadania.length > 0 ? loadZadania() : null,
       ]);
@@ -3194,7 +3208,7 @@ const Kalendarz: React.FC<Props> = ({
         // As in the meeting form above: keep the edits, rebase on the fresh card.
         setCardTaskError(t.zadConflict);
         const id = cardTask.editing.id;
-        const card = (await window.electronAPI.getZadania().catch(() => [])).find((z) => z.id === id);
+        const card = await window.electronAPI.getZadanie(id).catch(() => null);
         if (card) setCardTask((prev) => (prev?.editing?.id === id ? { ...prev, editing: card } : prev));
         await loadZadania();
       } else {
@@ -3540,7 +3554,7 @@ const Kalendarz: React.FC<Props> = ({
             <button
               type="button"
               className="ksieg-nav-arrow"
-              onClick={() => void load(true)}
+              onClick={() => void reloadFromServer(() => load(true))}
               disabled={isRefreshing}
               data-tip={t.kalRefresh}
               aria-label={t.kalRefresh}

@@ -28,6 +28,7 @@ import {
   SprawozdaniePodglad,
   SprawozdanieWstepSection,
 } from '../components/ZebranieSprawozdanie';
+import { reloadFromServer } from '../dataCache';
 
 type T = (typeof translations)['pl'];
 type PowiazanieFilter = 'all' | 'powiazane' | 'niezalezne';
@@ -597,7 +598,7 @@ const Sprawozdania: React.FC<{
           <button
             type="button"
             className="ksieg-nav-arrow"
-            onClick={() => void load(true)}
+            onClick={() => void reloadFromServer(() => load(true))}
             disabled={isRefreshing}
             data-tip={t.zebraniaRefresh}
             aria-label={t.zebraniaRefresh}

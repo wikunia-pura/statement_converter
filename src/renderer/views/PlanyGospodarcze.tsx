@@ -44,6 +44,7 @@ import {
   draftPlanu,
   zapamietajUdzialy,
 } from '../components/ZebraniePlan';
+import { reloadFromServer } from '../dataCache';
 
 type T = (typeof translations)['pl'];
 type ZrodloFilter = 'all' | 'zebrania' | 'wlasne';
@@ -902,7 +903,7 @@ const PlanyGospodarcze: React.FC<{
           <button
             type="button"
             className="ksieg-nav-arrow"
-            onClick={() => void load(true)}
+            onClick={() => void reloadFromServer(() => load(true))}
             disabled={isRefreshing}
             data-tip={t.zebraniaRefresh}
             aria-label={t.zebraniaRefresh}

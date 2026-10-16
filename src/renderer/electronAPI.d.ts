@@ -814,7 +814,7 @@ interface ElectronAPI {
   /** `createdBy` is filled in by the main process from the session. */
   addSpotkanie: (input: SpotkanieInput) => Promise<Spotkanie>;
   /** `expectedUpdatedAt`: the meeting's `updatedAt` as loaded; a meeting saved since by somebody else is refused. */
-  updateSpotkanie: (id: number, input: SpotkanieInput, expectedUpdatedAt?: string | null) => Promise<boolean>;
+  updateSpotkanie: (id: number, input: SpotkanieInput, expectedUpdatedAt?: string | null) => Promise<Spotkanie>;
   deleteSpotkanie: (id: number) => Promise<boolean>;
   /** "I have seen that this moved" — stops the meeting being marked as changed. */
   ackSpotkanieTermin: (id: number) => Promise<boolean>;
@@ -832,9 +832,9 @@ interface ElectronAPI {
   /**
    * The form's full save. Refused with `ZADANIE_CONFLICT_MESSAGE` when the card
    * changed after `input.expectedUpdatedAt`; deletes from storage only the files
-   * in `input.removedAttachments`.
+   * in `input.removedAttachments`. Returns the card as saved.
    */
-  updateZadanie: (id: number, input: ZadanieInput) => Promise<boolean>;
+  updateZadanie: (id: number, input: ZadanieInput) => Promise<Zadanie>;
   /** A quick edit on the board: writes only the fields given. Returns the card as it now is. */
   patchZadanie: (id: number, patch: ZadaniePatch) => Promise<Zadanie>;
   /**
@@ -997,6 +997,17 @@ interface ElectronAPI {
   getSpotkanie: (id: number) => Promise<Spotkanie | null>;
   /** Every Zebrania entry with its newest version's status and ready marks — no statement or plan JSON. */
   getZebraniaStatus: () => Promise<ZebranieStatusRow[]>;
+  /** One Zebrania entry with its versions, read now (never cached) — or null when it is gone. */
+  getZebranie: (id: number) => Promise<Zebranie | null>;
+  /** One card, read now (never cached) — or null when it is gone. */
+  getZadanie: (id: number) => Promise<Zadanie | null>;
+  /**
+   * Drop the main process's cached lists (meetings, entries, cards, people,
+   * dictionaries), so the next reads fetch the tables as they are now. For a
+   * refresh asked for by hand: other people's changes otherwise show within a
+   * minute.
+   */
+  invalidateDataCache: () => Promise<boolean>;
 }
 
 export interface ConversionProgressEvent {

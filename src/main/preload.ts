@@ -307,6 +307,9 @@ const IPC_CHANNELS = {
   // E-perf
   GET_SPOTKANIE: 'kalendarz:get-spotkanie',
   GET_ZEBRANIA_STATUS: 'zebrania:get-status',
+  GET_ZEBRANIE: 'zebrania:get-one',
+  GET_ZADANIE: 'zadania:get-one',
+  DATA_CACHE_INVALIDATE: 'data:cache-invalidate',
 } as const;
 
 /** True only when both objects have the same keys with the same literal values. */
@@ -1017,4 +1020,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // E-perf: one meeting by id, and the Zebrania entries' newest-version status only.
   getSpotkanie: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.GET_SPOTKANIE, id),
   getZebraniaStatus: () => ipcRenderer.invoke(IPC_CHANNELS.GET_ZEBRANIA_STATUS),
+  getZebranie: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.GET_ZEBRANIE, id),
+  getZadanie: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.GET_ZADANIE, id),
+  invalidateDataCache: () => ipcRenderer.invoke(IPC_CHANNELS.DATA_CACHE_INVALIDATE),
 });

@@ -175,6 +175,53 @@ function unauthorizedResponse(): Response {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Table writes
+//
+// Every write to a table goes through the fetch below, whichever method built
+// it — a named one, `casUpdate`, the restore's helpers. Reporting it here is
+// what lets a read cache drop what a write made stale without each of the
+// write sites having to remember to.
+// ---------------------------------------------------------------------------
+
+const tableWriteListeners = new Set<(table: string) => void>();
+
+/** Subscribe to "a request that may have changed this table has finished". Returns an unsubscribe function. */
+export function onTableWrite(listener: (table: string) => void): () => void {
+  tableWriteListeners.add(listener);
+  return () => tableWriteListeners.delete(listener);
+}
+
+/** The table a REST request is about — the path segment after `/rest/v1/`. */
+function restTable(url: string): string {
+  const rest = url.slice(url.indexOf(REST_PATH) + REST_PATH.length);
+  return decodeURIComponent(rest.split(/[/?#]/)[0] ?? '');
+}
+
+function reportTableWrite(table: string): void {
+  for (const listener of tableWriteListeners) {
+    try {
+      listener(table);
+    } catch (error) {
+      log.error('[DB] Listener zapisu rzucił wyjątek:', error);
+    }
+  }
+}
+
+/** Reads go straight through; a write reports its table once it has finished. */
+const reportingFetch: typeof fetch = async (input, init) => {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+  const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+  if (!url.includes(REST_PATH) || method === 'GET' || method === 'HEAD') return guardedFetch(input, init);
+  try {
+    return await guardedFetch(input, init);
+  } finally {
+    // Failed or not: a write that errored may still have landed, and dropping
+    // a cache entry costs one read.
+    reportTableWrite(restTable(url));
+  }
+};
+
 const guardedFetch: typeof fetch = async (input, init) => {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
   const isRest = url.includes(REST_PATH);
@@ -213,7 +260,7 @@ export function getSupabase(): SupabaseClient {
         autoRefreshToken: true,
         detectSessionInUrl: false,
       },
-      global: { fetch: guardedFetch },
+      global: { fetch: reportingFetch },
     });
   }
   return client;

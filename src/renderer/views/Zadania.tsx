@@ -1280,13 +1280,15 @@ const Zadania: React.FC<Props> = ({
     setIsSaving(true);
     setError(null);
     try {
+      // The card as saved goes in place of the board's copy (a new one joins
+      // it): its own column and place come with it, and no other card moved.
       if (editingId !== null) {
-        await window.electronAPI.updateZadanie(editingId, input);
+        replaceCard(await window.electronAPI.updateZadanie(editingId, input));
       } else {
-        await window.electronAPI.addZadanie(input);
+        const created = await window.electronAPI.addZadanie(input);
+        setZadania((prev) => [created, ...prev]);
       }
       setFormState(null);
-      await load();
     } catch (err: unknown) {
       const message = ipcErrorMessage(err, '');
       if (message.includes(ZADANIE_CONFLICT_MESSAGE)) {
@@ -1316,7 +1318,7 @@ const Zadania: React.FC<Props> = ({
     }
     try {
       await window.electronAPI.deleteZadanie(z.id);
-      await load();
+      setZadania((prev) => prev.filter((c) => c.id !== z.id));
     } catch (err: unknown) {
       notify.error(ipcErrorMessage(err, t.zadSaveError));
     }

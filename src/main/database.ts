@@ -142,7 +142,7 @@ import {
   zrodloSzablonu,
 } from '../shared/zebrania';
 import { randomUUID } from 'crypto';
-import { getSupabase } from './supabaseClient';
+import { getSupabase, onTableWrite } from './supabaseClient';
 import { removeAttachments } from './zadaniaStorage';
 import { ZADANIE_ATTACHMENT_MAX_BYTES, ZADANIE_STORAGE_KEY, isValidDayKey } from '../shared/zadania';
 import { NOTIFICATION_DEFS } from '../shared/notifications';
@@ -410,13 +410,50 @@ class DatabaseService {
   // enough when another instance edits the shared Supabase DB, while local writes
   // invalidate immediately so the user always sees their own edits. This removes
   // the dominant "full-table re-download on every operation" cost.
+  //
+  // The same holds for the lists the Kalendarz, Zebrania and Zadania screens
+  // read whole on every visit and after every write (`spotkania`, `zebrania`,
+  // `zadania`, `appUsers`). Those are invalidated by table rather than by
+  // method: every REST write reports its table (`onTableWrite`), and
+  // `CACHE_TABLES` says which entries a table feeds — `getZebrania` reads three
+  // of them, and a statement edited in Sprawozdania must reach it too. Only the
+  // whole-list reads are cached; a read of one row (`getSpotkanie`,
+  // `getZebranie`) always goes to the database — it is what a screen asks for
+  // when it wants the row as it is now.
   private static readonly CACHE_TTL_MS = 60_000;
   private cache: {
     banks?: CacheEntry<Bank[]>;
     kontrahenci?: CacheEntry<Kontrahent[]>;
     adresy?: CacheEntry<Adres[]>;
     kontoTypy?: CacheEntry<KontoTyp[]>;
+    spotkania?: CacheEntry<Spotkanie[]>;
+    zadania?: CacheEntry<Zadanie[]>;
+    appUsers?: CacheEntry<AppUser[]>;
+    zebrania?: CacheEntry<Zebranie[]>;
+    zebraniaStatus?: CacheEntry<ZebranieStatusRow[]>;
   } = {};
+
+  /**
+   * Bumped on every invalidation. A read that started before a write and
+   * answers after it carries the data from before the write; it is only kept
+   * when its key was not invalidated in between (see `cacheRead`).
+   */
+  private cacheGeneration: Partial<Record<keyof DatabaseService['cache'], number>> = {};
+
+  /** Which cache entries a write to a table makes stale. */
+  private static readonly CACHE_TABLES: Record<string, (keyof DatabaseService['cache'])[]> = {
+    banks: ['banks'],
+    kontrahenci: ['kontrahenci'],
+    adresy: ['adresy'],
+    konto_typy: ['kontoTypy'],
+    spotkania: ['spotkania'],
+    zadania: ['zadania'],
+    app_users: ['appUsers'],
+    zebrania: ['zebrania', 'zebraniaStatus'],
+    zebrania_wersje: ['zebrania', 'zebraniaStatus'],
+    // A version shows its linked statement's figures (`zebranieWersjeRows`).
+    zebrania_sprawozdania: ['zebrania'],
+  };
 
   private cacheGet<T>(entry: CacheEntry<T> | undefined): T | undefined {
     if (entry && entry.expires > Date.now()) return entry.data;
@@ -427,9 +464,46 @@ class DatabaseService {
     return { data, expires: Date.now() + DatabaseService.CACHE_TTL_MS };
   }
 
+  /**
+   * A whole-list read through the cache: served from memory while fresh,
+   * otherwise loaded and kept — unless a write invalidated the key while the
+   * load was out. Callers get their own copy of the array, so sorting it cannot
+   * reorder the cache for everyone after them.
+   */
+  private async cacheRead<K extends 'spotkania' | 'zadania' | 'appUsers' | 'zebrania' | 'zebraniaStatus'>(
+    key: K,
+    load: () => Promise<NonNullable<DatabaseService['cache'][K]>['data']>,
+  ): Promise<NonNullable<DatabaseService['cache'][K]>['data']> {
+    type Rows = NonNullable<DatabaseService['cache'][K]>['data'];
+    const cached = this.cacheGet(this.cache[key] as CacheEntry<Rows> | undefined);
+    if (cached) return [...cached] as Rows;
+    const generation = this.cacheGeneration[key] ?? 0;
+    const data = await load();
+    if ((this.cacheGeneration[key] ?? 0) === generation) {
+      (this.cache as Record<K, CacheEntry<Rows> | undefined>)[key] = this.cacheSet(data);
+    }
+    return [...data] as Rows;
+  }
+
   /** Drop cached reference data. Called after every local write so reads re-fetch. */
   private invalidateCache(key: keyof DatabaseService['cache']): void {
     this.cache[key] = undefined;
+    this.cacheGeneration[key] = (this.cacheGeneration[key] ?? 0) + 1;
+  }
+
+  /** Drop what a write to `table` made stale. */
+  private invalidateTable(table: string): void {
+    for (const key of DatabaseService.CACHE_TABLES[table] ?? []) this.invalidateCache(key);
+  }
+
+  /**
+   * Drop every cached list. For reads whose point is to see what other people
+   * changed — a manual refresh, a notification opened — and for a restore,
+   * which rewrites the tables underneath.
+   */
+  invalidateAllCaches(): void {
+    // Every key, not only the filled ones: a load still out must not land either.
+    for (const key of new Set(Object.values(DatabaseService.CACHE_TABLES).flat())) this.invalidateCache(key);
   }
 
   /**
@@ -473,10 +547,17 @@ class DatabaseService {
           .eq('id', id)
           .maybeSingle();
         if (error) throw new Error(`${op} (odczyt): ${error.message}`);
-        if (!data) return null;
+        if (!data) {
+          // Gone — deleted elsewhere; a cached list still has it.
+          this.invalidateTable(table);
+          return null;
+        }
         row = data as unknown as R;
       }
       if (options.expectedUpdatedAt && !sameInstant(options.expectedUpdatedAt, row.updated_at)) {
+        // Refused before any write, so nothing reported the table: somebody
+        // else's save is exactly what the cached list is missing.
+        this.invalidateTable(table);
         throw new Error(CONCURRENT_EDIT_MESSAGE);
       }
       const patch = apply(row);
@@ -497,6 +578,7 @@ class DatabaseService {
   }
 
   constructor() {
+    onTableWrite((table) => this.invalidateTable(table));
     // Keep the default store file ('config.json' in userData) so existing
     // settings (dark mode, folder paths, language) are preserved across the migration.
     // Legacy keys (banks, kontrahenci, adresy, history, nextBankId, …) are left in
@@ -1978,6 +2060,10 @@ class DatabaseService {
    * reach would hand every client the whole user table. See supabase/kalendarz.sql.
    */
   async getAppUsers(): Promise<AppUser[]> {
+    return this.cacheRead('appUsers', () => this.readAppUsers());
+  }
+
+  private async readAppUsers(): Promise<AppUser[]> {
     const read = (cols: string) =>
       getSupabase().from('app_users').select(cols).order('email', { ascending: true });
     let { data, error } = await read(APP_USER_COLS);
@@ -2265,6 +2351,10 @@ class DatabaseService {
   }
 
   async getZadania(): Promise<Zadanie[]> {
+    return this.cacheRead('zadania', () => this.readZadania());
+  }
+
+  private async readZadania(): Promise<Zadanie[]> {
     const rows = await fetchAllPaged<any>('getZadania', (from, to) =>
       getSupabase()
         .from('zadania')
@@ -2275,6 +2365,13 @@ class DatabaseService {
         .range(from, to),
     );
     return rows.map(DatabaseService.zadanieFromRow);
+  }
+
+  /** One card as it is now — or null when it is gone. Never from the cache. */
+  async getZadanie(id: number): Promise<Zadanie | null> {
+    const { data, error } = await getSupabase().from('zadania').select(ZADANIE_COLS).eq('id', id).maybeSingle();
+    if (error) throw new Error(`getZadanie: ${error.message}`);
+    return data ? DatabaseService.zadanieFromRow(data) : null;
   }
 
   /**
@@ -2352,7 +2449,7 @@ class DatabaseService {
    * save really dropped them. Diffing against a list that may be stale is what
    * once deleted files a colleague had just attached.
    */
-  async updateZadanie(id: number, input: ZadanieInput, changedBy: string): Promise<void> {
+  async updateZadanie(id: number, input: ZadanieInput, changedBy: string): Promise<Zadanie> {
     const payload = DatabaseService.zadaniePayload(input);
     const { data: before, error: readError } = await getSupabase()
       .from('zadania')
@@ -2360,9 +2457,15 @@ class DatabaseService {
       .eq('id', id)
       .maybeSingle();
     if (readError) throw new Error(`updateZadanie (odczyt): ${readError.message}`);
-    if (!before) throw new Error(DatabaseService.ZADANIE_GONE);
+    // Both refusals below come before any write, so nothing has reported the
+    // table: the board's cached list is the one missing somebody else's change.
+    if (!before) {
+      this.invalidateTable('zadania');
+      throw new Error(DatabaseService.ZADANIE_GONE);
+    }
     const stored = before as { zalaczniki: unknown; status: string; updated_at: string };
     if (input.expectedUpdatedAt && !sameInstant(input.expectedUpdatedAt, stored.updated_at)) {
+      this.invalidateTable('zadania');
       throw new Error(ZADANIE_CONFLICT_MESSAGE);
     }
 
@@ -2377,7 +2480,7 @@ class DatabaseService {
       .update({ ...payload, ...pozycja, updated_at: new Date().toISOString(), updated_by: changedBy })
       .eq('id', id)
       .eq('updated_at', stored.updated_at)
-      .select('id');
+      .select(ZADANIE_COLS);
     if (error) throw new Error(`updateZadanie: ${error.message}`);
     if (!written || written.length === 0) {
       // Saved by somebody else between the read and the write — or deleted.
@@ -2392,6 +2495,7 @@ class DatabaseService {
       .map(String)
       .filter(p => had.has(p) && !kept.has(p));
     await removeAttachments(removed);
+    return DatabaseService.zadanieFromRow(written[0]);
   }
 
   /**
@@ -2462,7 +2566,10 @@ class DatabaseService {
       .eq('id', id)
       .maybeSingle();
     if (readError) throw new Error(`moveZadanie (odczyt): ${readError.message}`);
-    if (!current) throw new Error(DatabaseService.ZADANIE_GONE);
+    if (!current) {
+      this.invalidateTable('zadania');
+      throw new Error(DatabaseService.ZADANIE_GONE);
+    }
     // The card's new `updated_at` when the column changed, so the board can keep
     // its copy current — a form opened on it later must not look stale.
     let updatedAt: string | null = null;
@@ -2535,8 +2642,9 @@ class DatabaseService {
    * the wrong path can delete nothing that is in use.
    */
   async discardZadanieZalaczniki(paths: string[]): Promise<void> {
+    // Read live: a file somebody attached a moment ago is in use, cached list or not.
     const inUse = new Set(
-      (await this.getZadania()).flatMap(z => z.zalaczniki.map(a => a.sciezka)),
+      (await this.readZadania()).flatMap(z => z.zalaczniki.map(a => a.sciezka)),
     );
     await removeAttachments(paths.filter(p => !inUse.has(p)));
   }
@@ -2754,15 +2862,31 @@ class DatabaseService {
 
   /* ---------------------------- Meetings ---------------------------- */
 
-  /** Every meeting, newest first — or only those starting at `fromIso` or later (the notifier's window). */
+  /**
+   * Every meeting, newest first — or only those starting at `fromIso` or later
+   * (the notifier's window), or the one `id`. Only the whole list is cached:
+   * the window and the single row are read to see the table as it is now.
+   */
   async getSpotkania(fromIso?: string, id?: number): Promise<Spotkanie[]> {
+    if (fromIso === undefined && id === undefined) {
+      return this.cacheRead('spotkania', () => this.readSpotkania());
+    }
+    return this.readSpotkania(fromIso, id);
+  }
+
+  private async readSpotkania(fromIso?: string, id?: number): Promise<Spotkanie[]> {
     const rows = await fetchAllPaged<any>('getSpotkania', (from, to) => {
       let query = getSupabase().from('spotkania').select(SPOTKANIE_COLS);
       if (fromIso) query = query.gte('starts_at', fromIso);
       if (id !== undefined) query = query.eq('id', id);
       return query.order('starts_at', { ascending: false }).order('id', { ascending: true }).range(from, to);
     });
-    return rows.map(r => ({
+    return rows.map(DatabaseService.spotkanieRow);
+  }
+
+  /** A `SPOTKANIE_COLS` row as a meeting — the one shape the list and every returned row share. */
+  private static spotkanieRow(r: any): Spotkanie {
+    return {
       ...r,
       typId: r.typId ?? null,
       adresId: r.adresId ?? null,
@@ -2789,7 +2913,7 @@ class DatabaseService {
       materialyZmienioneAt: r.materialyZmienioneAt ?? null,
       materialyZmienioneBy: r.materialyZmienioneBy ?? null,
       createdBy: r.createdBy ?? '',
-    })) as Spotkanie[];
+    } as Spotkanie;
   }
 
   /** One meeting, shaped exactly as the list shapes it — or null when it is gone. */
@@ -2840,9 +2964,7 @@ class DatabaseService {
       .insert({ ...DatabaseService.spotkaniePayload(input), created_by: createdBy })
       .select(SPOTKANIE_COLS)
       .single();
-    // Cast through unknown: SPOTKANIE_COLS is assembled from parts, so
-    // postgrest-js cannot infer the row shape from a literal any more.
-    return unwrap(data, error, 'addSpotkanie') as unknown as Spotkanie;
+    return DatabaseService.spotkanieRow(unwrap(data, error, 'addSpotkanie'));
   }
 
   /**
@@ -2861,13 +2983,16 @@ class DatabaseService {
    * write lands, never against one somebody changed in between. With
    * `expectedUpdatedAt` (what the form loaded) a meeting saved meanwhile by
    * somebody else is refused instead.
+   *
+   * Returns the meeting as saved — with its new `updatedAt` — so the screen can
+   * put it in place of the old one instead of reading the calendar again.
    */
   async updateSpotkanie(
     id: number,
     input: SpotkanieInput,
     changedBy: string,
     expectedUpdatedAt?: string | null,
-  ): Promise<void> {
+  ): Promise<Spotkanie> {
     const base = DatabaseService.spotkaniePayload(input);
     const result = await this.casUpdate<{ starts_at: string; ends_at: string | null; updated_at: string }>(
       'spotkania',
@@ -2890,9 +3015,10 @@ class DatabaseService {
         }
         return payload;
       },
-      { expectedUpdatedAt },
+      { expectedUpdatedAt, returning: SPOTKANIE_COLS },
     );
     if (!result) throw new Error('Tego spotkania już nie ma — mogło zostać usunięte.');
+    return DatabaseService.spotkanieRow(result.written);
   }
 
   /**
@@ -3112,6 +3238,10 @@ class DatabaseService {
 
   /** Every entry with its versions, newest entry first. Two queries, joined here. */
   async getZebrania(): Promise<Zebranie[]> {
+    return this.cacheRead('zebrania', () => this.readZebrania());
+  }
+
+  private async readZebrania(): Promise<Zebranie[]> {
     const [rows, wersje] = await Promise.all([
       fetchAllPaged<any>('getZebrania', (from, to) =>
         getSupabase()
@@ -3139,6 +3269,10 @@ class DatabaseService {
    * statement, plan or materials JSON, and no lookup of linked statements.
    */
   async getZebraniaStatus(): Promise<ZebranieStatusRow[]> {
+    return this.cacheRead('zebraniaStatus', () => this.readZebraniaStatus());
+  }
+
+  private async readZebraniaStatus(): Promise<ZebranieStatusRow[]> {
     const [rows, wersje] = await Promise.all([
       fetchAllPaged<any>('getZebraniaStatus', (from, to) =>
         getSupabase()
@@ -5500,6 +5634,8 @@ class DatabaseService {
   // shared/types.ts.
 
   async exportFullBackup(appVersion: string): Promise<BackupData> {
+    // A copy of the tables as they are, not as this computer last read them.
+    this.invalidateAllCaches();
     // Tables added by a migration that may not have run yet: a missing one is
     // left out of the backup (its key absent = "leave live rows alone" on
     // restore) and named in `meta.skippedSections`, so the summary says so.
@@ -5897,10 +6033,7 @@ class DatabaseService {
     const staleAtEnd: { table: string; ids: number[] }[] = [];
 
     // Bypass the 60 s cache — every read below must see the live tables.
-    this.invalidateCache('banks');
-    this.invalidateCache('kontoTypy');
-    this.invalidateCache('adresy');
-    this.invalidateCache('kontrahenci');
+    this.invalidateAllCaches();
 
     // ---------------- Dictionaries, merged in place by name ----------------
     // Each is required in a backup (validateBackup) except the city units, and
@@ -6847,10 +6980,7 @@ class DatabaseService {
 
     this.importSettings({ settings });
 
-    this.invalidateCache('banks');
-    this.invalidateCache('kontrahenci');
-    this.invalidateCache('adresy');
-    this.invalidateCache('kontoTypy');
+    this.invalidateAllCaches();
   }
 
   close(): void {

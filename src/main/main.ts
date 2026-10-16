@@ -3571,6 +3571,11 @@ function setupIpcHandlers() {
     return await database.getZebraniaStatus();
   });
 
+  // One entry as it is now — what a screen reads back after a write to it.
+  ipcMain.handle(IPC_CHANNELS.GET_ZEBRANIE, async (_, id: number) => {
+    return await database.getZebranie(Number(id));
+  });
+
   ipcMain.handle(IPC_CHANNELS.ZEBRANIE_FROM_SPOTKANIE, async (_, spotkanieId: number) => {
     return await database.createZebranieFromSpotkanie(spotkanieId, await zebraniaWho());
   });
@@ -5040,8 +5045,11 @@ function setupIpcHandlers() {
     // Who changed it also comes from the session: the notifier uses it to skip
     // the changes the person made themselves.
     const session = await authService.getSession();
-    await database.updateZadanie(id, input, session?.email ?? '');
-    return true;
+    return await database.updateZadanie(id, input, session?.email ?? '');
+  });
+
+  ipcMain.handle(IPC_CHANNELS.GET_ZADANIE, async (_, id: number) => {
+    return await database.getZadanie(Number(id));
   });
 
   // A quick edit on the board: only the fields sent are written.
@@ -5232,6 +5240,11 @@ function setupIpcHandlers() {
     return await database.getSpotkanie(id);
   });
 
+  ipcMain.handle(IPC_CHANNELS.DATA_CACHE_INVALIDATE, async () => {
+    database.invalidateAllCaches();
+    return true;
+  });
+
   /**
    * The month as a PDF in Downloads. The meetings are read again here rather
    * than taken from the renderer, so the file shows what is saved; the request
@@ -5272,8 +5285,7 @@ function setupIpcHandlers() {
       // Who moved the date comes from the session, never from the renderer —
       // it is a record of who did something, not a field anyone gets to fill in.
       const session = await authService.getSession();
-      await database.updateSpotkanie(id, input, session?.email ?? '', expectedUpdatedAt ?? null);
-      return true;
+      return await database.updateSpotkanie(id, input, session?.email ?? '', expectedUpdatedAt ?? null);
     },
   );
 
@@ -5825,6 +5837,9 @@ app.whenReady().then(() => {
     getLanguage: () => (database.getSettings().language === 'en' ? 'en' : 'pl'),
     onInboxChanged: () => mainWindow?.webContents.send('inbox:changed'),
     onOpen: (target) => {
+      // The notification is about somebody else's change, which a list cached
+      // in the last minute may not have yet.
+      database.invalidateAllCaches();
       showMainWindow();
       if (target.view === 'ksiegowania') mainWindow?.webContents.send('ksiegowania:open');
       else if (target.view === 'kalendarz') {

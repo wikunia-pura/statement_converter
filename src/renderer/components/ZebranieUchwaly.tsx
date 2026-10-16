@@ -134,7 +134,7 @@ const ZebranieUchwaly: React.FC<{
   const writeList = async (
     change: (current: ZebranieMaterial[]) => ZebranieMaterial[]
   ): Promise<void> => {
-    const fresh = (await window.electronAPI.getZebrania()).find((z) => z.id === zebranie.id);
+    const fresh = await window.electronAPI.getZebranie(zebranie.id);
     const freshWersja = fresh?.wersje.find((w) => w.id === wersja.id);
     if (!freshWersja) throw new Error(t.zawVersionGone);
     const next = change(uchwalyOf(freshWersja));

@@ -411,6 +411,9 @@ const App: React.FC = () => {
 
   /** The bell's list sends a click to the same place its desktop toast would. */
   const openNotificationTarget = (target: NotificationTarget) => {
+    // Somebody else's change, which main's cached lists may not have yet; sent
+    // before the view mounts, so its reads arrive after it.
+    void window.electronAPI.invalidateDataCache().catch(() => undefined);
     if (target.view === 'ksiegowania') navigate('pulpit');
     else if (target.view === 'kalendarz') openSpotkanie(target.spotkanieId);
     else openZadaniaCard(target.zadanieId);

@@ -3333,6 +3333,10 @@ export const IPC_CHANNELS = {
   // E-perf: lighter reads for views that need one row or one column
   GET_SPOTKANIE: 'kalendarz:get-spotkanie',
   GET_ZEBRANIA_STATUS: 'zebrania:get-status',
+  GET_ZEBRANIE: 'zebrania:get-one',
+  GET_ZADANIE: 'zadania:get-one',
+  // Drop main's cached lists before a read meant to see other people's changes
+  DATA_CACHE_INVALIDATE: 'data:cache-invalidate',
 } as const;
 
 /**

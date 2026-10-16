@@ -56,6 +56,7 @@ import ScreenTitle from '../components/ScreenTitle';
 import { useNavItem } from '../navigation';
 import { useRequestSeq } from '../hooks/useRequestSeq';
 import { defaultUstawienia, foldText } from '../../shared/plan-gospodarczy';
+import { reloadFromServer } from '../dataCache';
 
 type T = (typeof translations)['pl'];
 
@@ -835,6 +836,8 @@ const Zebrania: React.FC<Props> = ({
    */
   const loadSeq = useRequestSeq();
   const coreSeq = useRequestSeq();
+  /** `reloadEntry`'s own: it must not cut short a full load's loader, nor be undone by an older one. */
+  const entrySeq = useRequestSeq();
 
   const load = async (silent = false) => {
     const ticket = loadSeq.next();
@@ -878,18 +881,60 @@ const Zebrania: React.FC<Props> = ({
    * After a write that can only have moved entries and their meetings — a
    * document marked ready, a version added or deleted, a meeting edited from
    * here (main keeps the meeting's materials status and the newest version in
-   * step) — those two lists, not all eight.
+   * step) — those two lists, not all eight. With `id` the write was to that one
+   * entry: it alone is read back and put in place of the copy on screen; the
+   * meetings come from main's cache unless the write moved one.
    */
-  const reloadCore = async () => {
+  const reloadCore = async (id?: number) => {
     const ticket = coreSeq.next();
     try {
-      const [z, s] = await Promise.all([window.electronAPI.getZebrania(), window.electronAPI.getSpotkania()]);
-      if (!coreSeq.isLatest(ticket)) return;
-      setZebrania(z);
-      setSpotkania(s);
+      const [z, s] = await Promise.all([
+        id === undefined ? window.electronAPI.getZebrania() : window.electronAPI.getZebranie(id),
+        window.electronAPI.getSpotkania(),
+      ]);
+      if (id !== undefined) {
+        // Applied whatever came since: it is the entry just written, read after the write.
+        putZebranie(id, z as Zebranie | null);
+      } else if (coreSeq.isLatest(ticket)) {
+        setZebrania(z as Zebranie[]);
+      }
+      if (coreSeq.isLatest(ticket)) setSpotkania(s);
     } catch {
       if (coreSeq.isLatest(ticket)) notify.error(t.zebraniaLoadError);
     }
+  };
+
+  /** One entry in place of the copy on screen — a new one first, as the table orders them; null takes it off. */
+  const putZebranie = (id: number, row: Zebranie | null) =>
+    setZebrania((prev) => {
+      if (!row) return prev.filter((z) => z.id !== id);
+      return prev.some((z) => z.id === id) ? prev.map((z) => (z.id === id ? row : z)) : [row, ...prev];
+    });
+
+  /**
+   * After a write inside one entry's screen — its statement, plan, resolutions
+   * or notice: that entry, the meetings, and the two lists those tabs can also
+   * write (the statement library and the communities' vDom links). Not the
+   * places, addresses, units and settings the full load reads.
+   */
+  const reloadEntry = async (id: number) => {
+    const ticket = entrySeq.next();
+    await Promise.all([
+      reloadCore(id),
+      (async () => {
+        try {
+          const [sp, w] = await Promise.all([
+            window.electronAPI.getSprawozdaniaLista(),
+            window.electronAPI.getZebraniaWspolnoty(),
+          ]);
+          if (!entrySeq.isLatest(ticket)) return;
+          setLista(sp);
+          setWspolnoty(w);
+        } catch {
+          if (entrySeq.isLatest(ticket)) notify.error(t.zebraniaLoadError);
+        }
+      })(),
+    ]);
   };
 
   // "Otwórz w Zebraniach" from a meeting card: open that entry once it is loaded.
@@ -979,16 +1024,19 @@ const Zebrania: React.FC<Props> = ({
     setFormSaving(true);
     setFormError(null);
     try {
+      let savedId: number;
       if (form.editing) {
+        savedId = form.editing.id;
         await window.electronAPI.updateZebranie(form.editing.id, input);
         notify.success(t.zebraniaSaved);
       } else {
         const created = await window.electronAPI.addZebranie(input);
+        savedId = created.id;
         openDetail(created.id);
         notify.success(t.zebraniaCreated);
       }
       setForm(null);
-      await reloadCore();
+      await reloadCore(savedId);
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : t.zebraniaSaveError);
     } finally {
@@ -996,12 +1044,12 @@ const Zebrania: React.FC<Props> = ({
     }
   };
 
-  /** Busy, write, reload, report — the same shape for every small action. */
-  const run = async (action: () => Promise<unknown>, done: string) => {
+  /** Busy, write, reload, report — the same shape for every small action. `id`: the entry it wrote to. */
+  const run = async (action: () => Promise<unknown>, done: string, id?: number) => {
     setBusy(true);
     try {
       await action();
-      await reloadCore();
+      await reloadCore(id);
       notify.success(done);
     } catch (err: unknown) {
       notify.error(err instanceof Error ? err.message : String(err));
@@ -1028,6 +1076,7 @@ const Zebrania: React.FC<Props> = ({
     run(
       () => window.electronAPI.setZebranieDokumentGotowe(wersja.id, dokument, gotowe),
       t.zebraniaStatusSaved,
+      wersja.zebranieId,
     );
 
   const handleAddRevision = async (zebranie: Zebranie) => {
@@ -1044,7 +1093,8 @@ const Zebrania: React.FC<Props> = ({
         const created = await window.electronAPI.addZebranieWersja(zebranie.id);
         return created;
       },
-      t.zebraniaRevisionAdded.replace('{v}', v)
+      t.zebraniaRevisionAdded.replace('{v}', v),
+      zebranie.id,
     );
   };
 
@@ -1060,6 +1110,7 @@ const Zebrania: React.FC<Props> = ({
     await run(
       () => window.electronAPI.deleteZebranieWersja(wersja.id),
       t.zebraniaVersionDeleted.replace('{v}', v),
+      wersja.zebranieId,
     );
   };
 
@@ -1070,7 +1121,7 @@ const Zebrania: React.FC<Props> = ({
     if (!(await notify.confirm(message, { danger: true, confirmLabel: t.delete }))) return;
     // From the list no entry is open, so there is nothing to close.
     if (detailId === zebranie.id) navItem.close();
-    await run(() => window.electronAPI.deleteZebranie(zebranie.id), t.zebraniaDeleted);
+    await run(() => window.electronAPI.deleteZebranie(zebranie.id), t.zebraniaDeleted, zebranie.id);
   };
 
   /* ------------------------------- Rendering ------------------------------- */
@@ -1283,7 +1334,7 @@ const Zebrania: React.FC<Props> = ({
           zebranie={notice.zebranie}
           wersjaId={notice.wersjaId}
           onClose={() => setNotice(null)}
-          onChanged={() => void reloadCore()}
+          onChanged={() => void reloadCore(notice.zebranie.id)}
           onOpenSzablony={onOpenSzablony}
         />
       )}
@@ -1335,7 +1386,7 @@ const Zebrania: React.FC<Props> = ({
           ustawienia={ustawienia}
           szablonPlan={zrodlo?.plan ? { plan: zrodlo.plan, nazwa: zrodlo.dane.adresNazwa } : null}
           zebrania={zebrania}
-          onReload={() => load(true)}
+          onReload={() => reloadEntry(detail.zebranie.id)}
           onOpenUstawienia={() => setUstawieniaOpen(true)}
           onBack={() => navItem.close()}
           onEditData={() => {
@@ -1385,7 +1436,7 @@ const Zebrania: React.FC<Props> = ({
           <button
             type="button"
             className="ksieg-nav-arrow"
-            onClick={() => void load(true)}
+            onClick={() => void reloadFromServer(() => load(true))}
             disabled={isRefreshing}
             data-tip={t.zebraniaRefresh}
             aria-label={t.zebraniaRefresh}

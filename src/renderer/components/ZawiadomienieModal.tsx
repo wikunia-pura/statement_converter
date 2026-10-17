@@ -631,7 +631,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
             subtitle={contextLine}
           />
           <div className="modal-body modal-body--sectioned">
-            {phase === 'loading' && <Loader label={t.zawLoading} />}
+            {phase === 'loading' && <Loader inline label={t.zawLoading} />}
 
             {phase === 'error' && (
               <div className="zaw-empty">

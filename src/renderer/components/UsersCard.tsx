@@ -191,7 +191,7 @@ const UsersCard: React.FC<Props> = ({ language, currentEmail, onNamesChanged }) 
     <FormSection icon="users" title={t.usersTitle} description={t.usersHint}>
 
       {isLoading ? (
-        <Loader label={t.loading} />
+        <Loader inline label={t.loading} />
       ) : users.length === 0 ? (
         <div className="form-empty">
           <Icon name="users" size={16} />

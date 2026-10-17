@@ -247,7 +247,7 @@ export const SprawozdanieSekcja: React.FC<{
       {open && (
         <>
           {lista === null ? (
-            <Loader label={t.loading} />
+            <Loader inline label={t.loading} />
           ) : (
             <>
               <div className="list-filter zfin-filter">

@@ -82,7 +82,7 @@ const AudytSlownika: React.FC<{
       {blad ? (
         <p className="zeb-muted">{blad}</p>
       ) : !gotowy ? (
-        <Loader />
+        <Loader inline />
       ) : aiBusy ? (
         <AiWorking title={t.citAudWorking} hint={t.citAudWorkingHint} />
       ) : !sprawdzono ? (
@@ -219,7 +219,7 @@ const PrzegladSlownika: React.FC<{
       {blad ? (
         <p className="zeb-muted">{blad}</p>
       ) : pozycje === null ? (
-        <Loader />
+        <Loader inline />
       ) : aiBusy ? (
         <AiWorking title={t.citRevWorking} hint={t.citAiWorkingHint} />
       ) : pozycje.length === 0 ? (

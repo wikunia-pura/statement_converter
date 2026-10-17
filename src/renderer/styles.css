@@ -3054,18 +3054,43 @@ body.dark-mode .modal-overlay {
 .ks-check--sm .ks-check__box { width: 16px; height: 16px; border-radius: 4px; }
 
 /* Blocks the window during an import — see BusyOverlay in Loader.tsx. */
-/* The window stays readable under a light veil; clicks are still blocked. */
-.busy-overlay {
+/* Window-wide loaders: the window stays visible under a soft blur, with no
+   tint. The progress line runs across the full width of the window at its
+   vertical middle, what is happening right under it.
+   - .busy-overlay (a long operation, e.g. an import) blocks clicks;
+   - .view-loader (a view fetching its data on entry) lets them through, so the
+     sidebar still works, sits under the modals, and fades in a beat late so a
+     fast fetch never flashes it. */
+.busy-overlay,
+.view-loader {
   position: fixed;
   inset: 0;
+  background: transparent;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+.busy-overlay {
   z-index: 9999;
-  background: color-mix(in srgb, var(--bg-app) 40%, transparent);
   cursor: progress;
   animation: overlayFade 0.15s ease-out;
 }
-.busy-overlay__label {
+.view-loader {
+  z-index: 900;
+  pointer-events: none;
+  animation: overlayFade 0.2s ease-out 0.12s both;
+}
+.busy-overlay > .progress-line,
+.view-loader > .progress-line {
   position: absolute;
-  top: var(--s-4);
+  top: 50%;
+  left: 0;
+  right: 0;
+  transform: translateY(-50%);
+}
+.busy-overlay__label,
+.view-loader__text {
+  position: absolute;
+  top: calc(50% + var(--s-4));
   left: 50%;
   transform: translateX(-50%);
   padding: var(--s-1) var(--s-3);
@@ -3079,11 +3104,12 @@ body.dark-mode .modal-overlay {
   white-space: nowrap;
 }
 
-/* Indeterminate progress: a short accent segment running left to right over
-   a faint track. Shared by the view loader and the busy overlay. */
+/* Indeterminate progress: an accent segment running left to right across the
+   full width of its container, over a faint track. Shared by the view loader
+   and the busy overlay. */
 .progress-line {
   position: relative;
-  height: 2px;
+  height: 3px;
   overflow: hidden;
   background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
@@ -3093,21 +3119,13 @@ body.dark-mode .modal-overlay {
   top: 0;
   bottom: 0;
   left: 0;
-  width: 40%;
-  border-radius: var(--r-pill);
+  width: 30%;
   background: linear-gradient(90deg, transparent, var(--accent) 30%, var(--accent) 70%, transparent);
-  animation: progress-line-run 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-.progress-line--window {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
+  animation: progress-line-run 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 @keyframes progress-line-run {
   from { transform: translateX(-100%); }
-  to { transform: translateX(250%); }
+  to { transform: translateX(340%); }
 }
 @keyframes progress-line-pulse {
   50% { opacity: 0.35; }
@@ -4206,22 +4224,21 @@ body.dark-mode .modal-overlay {
   to { transform: rotate(360deg); }
 }
 
-/* Full-view loader shown while a view fetches its data on entry: the progress
-   line along the top of the content area, the caption under it. It fades in a
-   beat late, so a fast fetch never flashes it. */
-.view-loader {
+/* Loader inside a modal or a section: the progress line across the box, the
+   caption under it. */
+.inline-loader {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: var(--s-3);
-  min-height: 55vh;
+  min-height: 160px;
   animation: overlayFade 0.2s ease-out 0.12s both;
 }
-.view-loader > .progress-line {
+.inline-loader > .progress-line {
   align-self: stretch;
 }
-
-.view-loader__text {
+.inline-loader__text {
   font-size: var(--fs-md);
   color: var(--text-tertiary);
 }

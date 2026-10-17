@@ -286,7 +286,7 @@ const ZebranieUchwaly: React.FC<{
 
   const noDate = !dane.startsAt;
 
-  if (loading) return <Loader label={t.loading} />;
+  if (loading) return <Loader inline label={t.loading} />;
 
   return (
     <div className="page-form zeb-page">

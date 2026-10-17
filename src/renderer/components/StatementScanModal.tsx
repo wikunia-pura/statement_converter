@@ -361,8 +361,9 @@ const StatementScanModal: React.FC<{
 
   const conflictCard = (c: ScanConflict) => {
     const choice = decisions[c.id] ?? 'keep';
+    // A file covering fewer days cannot replace the pinned one — the rest would be lost.
     const options: { value: ScanDecision; label: string }[] = [
-      { value: 'replace', label: t.ksScanReplace },
+      ...(c.narrower ? [] : [{ value: 'replace' as const, label: t.ksScanReplace }]),
       { value: 'keep', label: t.ksScanKeep },
       ...(c.kind === 'overlap' ? [{ value: 'add' as const, label: t.ksScanAdd }] : []),
     ];
@@ -399,7 +400,12 @@ const StatementScanModal: React.FC<{
             {previewButton(c.found.relPath)}
           </div>
         </div>
-        {c.existingConverted && (
+        {c.narrower && (
+          <p className="ks-scan-conflict__warn">
+            <Icon name="alert-triangle" size={14} /> {t.ksScanNarrowerNote}
+          </p>
+        )}
+        {c.existingConverted && !c.narrower && (
           <p className="ks-scan-conflict__warn">
             <Icon name="alert-triangle" size={14} /> {t.ksScanConvertedWarn}
           </p>
@@ -493,7 +499,12 @@ const StatementScanModal: React.FC<{
             className="button button-secondary"
             disabled={applying}
             onClick={() =>
-              setDecisions(Object.fromEntries(report.conflicts.map((c) => [c.id, 'replace' as ScanDecision])))
+              setDecisions((prev) => ({
+                ...prev,
+                ...Object.fromEntries(
+                  report.conflicts.filter((c) => !c.narrower).map((c) => [c.id, 'replace' as ScanDecision]),
+                ),
+              }))
             }
           >
             {t.ksScanReplaceAll}

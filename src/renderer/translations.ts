@@ -1297,6 +1297,8 @@ export const translations = {
     ksScanReplace: 'Zamień na nowszy',
     ksScanKeep: 'Zostaw obecny',
     ksScanAdd: 'Dodaj obok',
+    ksScanNarrowerNote:
+      'Znaleziony plik obejmuje tylko część okresu obecnego, więc nie może go zastąpić — zgubiłby pozostałe dni. Dodaj go obok tylko wtedy, gdy tych dni nie ma w obecnym pliku.',
     ksScanReplaceAll: 'Zamień wszystkie',
     ksScanApply: 'Zastosuj',
     ksScanApplyFailed: 'Nie udało się zastosować decyzji: {n}',
@@ -5226,6 +5228,8 @@ export const translations = {
     ksScanReplace: 'Replace with newer',
     ksScanKeep: 'Keep current',
     ksScanAdd: 'Add alongside',
+    ksScanNarrowerNote:
+      'The found file covers only part of the current one’s period, so it cannot replace it — the other days would be lost. Add it alongside only if those days are missing from the current file.',
     ksScanReplaceAll: 'Replace all',
     ksScanApply: 'Apply',
     ksScanApplyFailed: 'Could not apply decisions: {n}',

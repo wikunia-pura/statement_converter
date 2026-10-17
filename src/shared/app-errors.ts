@@ -139,6 +139,10 @@ export const APP_ERRORS = {
     pl: 'Plik zmienił się od skanowania — uruchom skan ponownie.',
     en: 'The file has changed since the scan — run the scan again.',
   },
+  scanReplaceNarrower: {
+    pl: 'Znaleziony plik obejmuje tylko część okresu obecnego — zamiana zgubiłaby pozostałe dni.',
+    en: 'The found file covers only part of the current one’s period — replacing it would lose the other days.',
+  },
 
   // ---------------- Meter readings (Odczyty) ----------------
   impexFolderNotSet: {

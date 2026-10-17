@@ -636,6 +636,11 @@ export interface ScanConflict {
   found: ScanFoundFile;
   /** The pinned statement was already converted (not yet ticked in DOM): replacing it outdates that accounting file. */
   existingConverted: boolean;
+  /**
+   * The found file covers only part of the pinned one's days (one daily report
+   * against a month): replacing would lose the rest, so it is not offered.
+   */
+  narrower: boolean;
 }
 
 export type ScanDecision = 'replace' | 'keep' | 'add';

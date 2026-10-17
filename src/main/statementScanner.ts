@@ -143,7 +143,12 @@ interface FoundOnDisk {
  * cannot exist before that month began, so anything older is skipped without
  * being opened — the folder holds years of history, and the scan reads one month.
  */
-async function walk(root: string, since: Date, onCount: (n: number) => void): Promise<FoundOnDisk[]> {
+async function walk(
+  root: string,
+  since: Date,
+  renamedArchives: Map<string, Set<string>>,
+  onCount: (n: number) => void,
+): Promise<FoundOnDisk[]> {
   const out: FoundOnDisk[] = [];
   const stack = [root];
   while (stack.length > 0) {
@@ -155,7 +160,8 @@ async function walk(root: string, since: Date, onCount: (n: number) => void): Pr
     } catch {
       continue; // unreadable subfolder — the rest of the tree still counts
     }
-    const unpacked = unpackedFolderTest(entries);
+    const relDir = path.relative(root, dir).split(path.sep).join('/');
+    const unpacked = unpackedFolderTest(entries, renamedArchives.get(relDir));
     for (const entry of entries) {
       const name = entry.name;
       if (name.startsWith('.') || name.startsWith('~$')) continue;
@@ -189,18 +195,57 @@ async function walk(root: string, since: Date, onCount: (n: number) => void): Pr
  * opened in Finder becomes `Raporty_MT940_…/` (or `Raporty_MT940_… 2/` when that
  * name is taken). The archive is the statement; its unpacked daily files would
  * be pinned a second time and converted twice, so the walk does not go in.
+ * A pinned archive is renamed to the community's name, so its folder is also
+ * matched by the name the archive had when it was found (`renamedStems`).
  */
-function unpackedFolderTest(entries: fs.Dirent[]): (folder: string) => boolean {
-  const stems = new Set(
-    entries
+function unpackedFolderTest(entries: fs.Dirent[], renamedStems?: Set<string>): (folder: string) => boolean {
+  const stems = new Set([
+    ...entries
       .filter((e) => e.isFile() && path.extname(e.name).toLowerCase() === '.zip')
       .map((e) => e.name.slice(0, -4).toLowerCase()),
-  );
+    ...(renamedStems ?? []),
+  ]);
   if (stems.size === 0) return () => false;
   return (folder) => {
     const name = folder.toLowerCase();
     return stems.has(name) || stems.has(name.replace(/ \d+$/, ''));
   };
+}
+
+/**
+ * Original stems (`raporty_mt940_…`) of the pinned archives that were renamed,
+ * by the folder they lie in (relative, `/`-separated, `''` for the root).
+ */
+function renamedArchiveStems(pinned: KsiegowaniePlik[]): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>();
+  for (const p of pinned) {
+    const original = p.originalName?.toLowerCase();
+    if (p.kind !== 'statement' || !original?.endsWith('.zip')) continue;
+    const dir = path.posix.dirname(p.relPath);
+    const key = dir === '.' ? '' : dir;
+    if (!out.has(key)) out.set(key, new Set());
+    out.get(key)!.add(original.slice(0, -4));
+  }
+  return out;
+}
+
+/**
+ * SHA-1 of every text entry of a pinned archive — a daily report found loose
+ * with one of these hashes is that archive's own content, not a rival. An
+ * archive that cannot be read contains nothing, so the user is still asked.
+ */
+function archiveEntryHashes(root: string, archive: KsiegowaniePlik): Set<string> {
+  const hashes = new Set<string>();
+  if (!archive.fileName.toLowerCase().endsWith('.zip') || !isSafeScanRelPath(archive.relPath)) return hashes;
+  try {
+    for (const e of new AdmZip(path.join(root, ...archive.relPath.split('/'))).getEntries()) {
+      if (e.isDirectory || !/\.(txt|csv)$/i.test(e.entryName)) continue;
+      hashes.add(crypto.createHash('sha1').update(e.getData()).digest('hex'));
+    }
+  } catch {
+    /* unreadable or gone — no evidence either way */
+  }
+  return hashes;
 }
 
 /**
@@ -658,6 +703,16 @@ function foundOf(draft: PlikDraft): ScanFoundFile {
   };
 }
 
+/** `found` lies inside `pinned`'s days and covers fewer of them. */
+function isNarrower(
+  found: Pick<KsiegowaniePlik, 'periodFrom' | 'periodTo'>,
+  pinned: Pick<KsiegowaniePlik, 'periodFrom' | 'periodTo'>,
+): boolean {
+  if (!found.periodFrom || !found.periodTo || !pinned.periodFrom || !pinned.periodTo) return false;
+  const inside = found.periodFrom >= pinned.periodFrom && found.periodTo <= pinned.periodTo;
+  return inside && (found.periodFrom !== pinned.periodFrom || found.periodTo !== pinned.periodTo);
+}
+
 function sameCommunity(a: Pick<KsiegowaniePlik, 'adresId' | 'adresNazwa'>, b: Pick<KsiegowaniePlik, 'adresId' | 'adresNazwa'>): boolean {
   if (a.adresId != null && b.adresId != null) return a.adresId === b.adresId;
   return a.adresNazwa.trim().toLowerCase() === b.adresNazwa.trim().toLowerCase();
@@ -682,7 +737,7 @@ export async function scanStatementsFolder(input: ScanInput, store: ScanStore): 
     renameFailures: [],
   };
 
-  const files = await walk(root, new Date(year, month - 1, 1), (n) =>
+  const files = await walk(root, new Date(year, month - 1, 1), renamedArchiveStems(input.existing), (n) =>
     input.onProgress?.({ phase: 'walk', done: n, total: 0 }),
   );
   report.examined = files.length;
@@ -732,6 +787,11 @@ export async function scanStatementsFolder(input: ScanInput, store: ScanStore): 
   // is pinned and the older one is recognised as superseded, not as a rival.
   candidates.sort((a, b) => b.draft.fileMtime.localeCompare(a.draft.fileMtime));
   const conflictByExisting = new Map<number, string>();
+  const entryHashesOf = new Map<number, Set<string>>();
+  const archiveHolds = (archive: KsiegowaniePlik, hash: string): boolean => {
+    if (!entryHashesOf.has(archive.id)) entryHashesOf.set(archive.id, archiveEntryHashes(root, archive));
+    return entryHashesOf.get(archive.id)!.has(hash);
+  };
 
   for (const c of candidates) {
     try {
@@ -804,6 +864,13 @@ export async function scanStatementsFolder(input: ScanInput, store: ScanStore): 
             e.accountNumber === d.accountNumber &&
             sameCommunity(e, d),
         );
+    // A daily report that is byte for byte an entry of a pinned archive
+    // (PKO's "Raporty_MT940_….zip", unpacked or downloaded again) is already
+    // pinned — offering it would swap a month for a day, or book that day twice.
+    if (!byPath && rivals.some((e) => archiveHolds(e, d.fileHash))) {
+      report.duplicates++;
+      return;
+    }
     const samePeriod = rivals.find((e) => e.periodFrom === d.periodFrom && e.periodTo === d.periodTo);
     // A file overwritten in place competes with its own row, whatever days it covers now.
     const rival = byPath ?? samePeriod ?? rivals.find((e) => periodsOverlap(e, d));
@@ -828,6 +895,8 @@ export async function scanStatementsFolder(input: ScanInput, store: ScanStore): 
         existing: rival,
         found: foundOf(d),
         existingConverted: rival.kind === 'statement' && conversion(rival) !== null,
+        // A file overwritten in place replaces nothing but itself, whatever days it covers now.
+        narrower: !byPath && isNarrower(d, rival),
       };
       report.conflicts.push(conflict);
       return;
@@ -843,7 +912,8 @@ export async function scanStatementsFolder(input: ScanInput, store: ScanStore): 
 
 /**
  * Apply the user's answers to the last scan's conflicts:
- *   replace — the pinned row now points at the newer file,
+ *   replace — the pinned row now points at the newer file (never with one
+ *             covering fewer days — the rest would be lost),
  *   keep    — remembered, so the same file is not offered again,
  *   add     — pinned beside the existing one (overlapping periods only).
  */
@@ -863,6 +933,10 @@ export async function resolveScanConflicts(
       if (decision === 'keep') {
         await store.setKsiegowaniePlikIgnored(existing.id, [...existing.ignoredHashes, c.draft.fileHash]);
         applied++;
+        continue;
+      }
+      if (decision === 'replace' && existing.relPath !== c.draft.relPath && isNarrower(c.draft, existing)) {
+        failed.push({ relPath: c.draft.relPath, message: new AppError('scanReplaceNarrower').message });
         continue;
       }
       // The file must still be the one the user was shown.

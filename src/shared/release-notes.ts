@@ -84,7 +84,9 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    version: '11.0.0',
+    // Carries everything new in 11.0.0 (released the same day) plus the scan fix,
+    // so users updating from 10.x see the whole of 11 in one entry.
+    version: '11.0.1',
     date: '2026-10-17',
     title: 'Pewniejsze księgowanie wyciągów, bezpieczniejsze wysyłki CIT i nowy silnik aplikacji',
     tagline:
@@ -92,7 +94,7 @@ export const RELEASES: Release[] = [
     stats: [
       { value: '2', label: 'nowe funkcje' },
       { value: '5', label: 'usprawnienia' },
-      { value: '3', label: 'poprawki' },
+      { value: '4', label: 'poprawki' },
     ],
     highlights: [
       {
@@ -204,6 +206,25 @@ export const RELEASES: Release[] = [
         expect: [
           'Plik jest usuwany z karty zadania tylko wtedy, gdy sam go usunąłeś w formularzu.',
           'Zawiadomienie, uchwały i szablon zebrania zapisują się na aktualną wersję zebrania, więc materiał dodany w tej samej chwili przez kogoś innego nie znika.',
+        ],
+      },
+      {
+        id: 'skan-dzienne-raporty-mt940',
+        kind: 'fixed',
+        icon: 'search',
+        title: 'Znajdź pliki księgowe nie proponuje zamiany miesiąca na jeden dzień',
+        summary:
+          'Paczka dziennych raportów MT940 z PKO (plik ZIP za cały miesiąc) nie jest już porównywana z pojedynczym raportem dziennym, który sama zawiera — takiego pliku skan nie pokazuje jako „nowszego”.',
+        where: ['Pulpit', 'Znajdź pliki księgowe'],
+        steps: [
+          {
+            do: 'Kliknij «Szukaj plików» jak zwykle.',
+            then: 'Raport dzienny, który jest już w przypisanym pliku ZIP (np. po rozpakowaniu paczki obok), jest liczony jako kopia przypisanego pliku, a nie jako plik do decyzji.',
+          },
+        ],
+        expect: [
+          'Folder z rozpakowaną paczką jest pomijany także wtedy, gdy sam ZIP dostał już nazwę wspólnoty.',
+          'Gdy znaleziony plik obejmuje tylko część okresu obecnego, w oknie „Znaleziono nowsze pliki” nie ma opcji «Zamień na nowszy» — zamiana zgubiłaby pozostałe dni. Zostają «Zostaw obecny» i «Dodaj obok»; «Zamień wszystkie» takich plików nie rusza.',
         ],
       },
       {

@@ -137,6 +137,7 @@ export const RELEASES: Release[] = [
           'Prowizje banku za przelew do ZUS (opis „PROW …ZUS”) nie są już księgowane na ZUS — wybierz dla nich kontrahenta banku.',
           'Przez pierwsze konwersje po aktualizacji AI może być pytane częściej: pamięć wcześniejszych odpowiedzi jest teraz osobna dla każdej wspólnoty, a reguły lokali mają pierwszeństwo przed nią.',
           'Numer dokumentu (BNK/MM) bierze miesiąc z wyciągu, a nie z dnia konwersji.',
+          'Wspólnota, której numer budynku ma ukośnik (np. „Jadźwingów 5/7”), jest rozpoznawana tak jak inne: „Jadźwingów 5/7 m. 11” trafia na lokal 11. Wcześniej adres płatnika „UL. JADŹWINGÓW 5/7” bez numeru lokalu był księgowany automatycznie na lokal 7 — teraz taka wpłata czeka na Twój wybór.',
           'Plik księgowy każdego banku ma pełny tytuł przelewu (wcześniej PKO BP, PKO SA, ING, Alior i Pocztowy ucinały go do 50 znaków i usuwały znaki takie jak „#” czy „(”) i numery kont bez dopisanych spacji — tak jak dotąd pliki BNP, BOŚ i Santandera.',
         ],
       },

@@ -160,8 +160,12 @@ const GENERIC_PATTERN_2 = new RegExp(
  * parsed to *no* building number, and extractAddress skips every variation whose
  * building is unknown — so the known-address path silently never ran for such a
  * community, leaving it on the generic fallback patterns.
+ *
+ * So is the optional second number: "Jadźwingów 5/7" is ONE building, numbered
+ * 5/7. Unparsed, it had no known-address pattern, and the generic patterns read
+ * "UL. JADŹWINGÓW 5/7" in a payer's address as building 5, apartment 7.
  */
-const ADDRESS_NAME = /^(.+?)\s+(\d+[A-Za-z]?)$/;
+const ADDRESS_NAME = /^(.+?)\s+(\d+[A-Za-z]?(?:\/\d+[A-Za-z]?)?)$/;
 const STREET_BLACKLIST =
   /^(czynsz|zaliczka|zaliczki|fundusz|remontowy|remontowa|opłata|oplata|rata|wpłata|wplata|przelew|należność|naleznosc|płatność|platnosc|faktura|rachunek|za\s+)/i;
 
@@ -255,6 +259,12 @@ interface CompiledAddress {
   mainStreet: string;
   variations: CompiledVariation[];
   mappings: CompiledMapping[];
+  /**
+   * "Street 5/7" for each name of this community whose building number holds a
+   * slash — matched on the diacritic-free text, like `streetPattern`, to find
+   * the slash maskCompoundBuildings takes out.
+   */
+  compoundPatterns: RegExp[];
 }
 
 // === MAIN CLASS ===
@@ -283,10 +293,11 @@ export class AddressMatcher {
       // Build the street+building matching regex (only when a building is known).
       let streetPattern: RegExp | null = null;
       if (building) {
-        const streetAscii = this.normalizePolishChars(street);
-        const flexibleStreet = this.flexifyStreetName(streetAscii);
+        const flexibleStreet = this.flexifyStreetName(street);
+        // A building numbered "5/7" may be written "5 / 7".
+        const buildingPattern = this.escapeRegex(building).replace('/', '\\s*\\/\\s*');
         streetPattern = new RegExp(
-          `(${flexibleStreet})\\s*${this.escapeRegex(building)}\\s*[/\\s]?\\s*(?:m\\.?\\s*)?(?:lok\\.?\\s*)?(?:loc\\.?\\s*)?([0-9]+${APT_LETTER})?`,
+          `(${flexibleStreet})\\s*${buildingPattern}\\s*[/\\s]?\\s*(?:m\\.?\\s*)?(?:lok\\.?\\s*)?(?:loc\\.?\\s*)?([0-9]+${APT_LETTER})?`,
           'i',
         );
       }
@@ -323,7 +334,38 @@ export class AddressMatcher {
       })
       .filter((m): m is CompiledMapping => m !== null);
 
-    return { mainStreet, variations, mappings };
+    const compoundPatterns = nameVariations.flatMap((addrName) => {
+      const named = addrName.match(ADDRESS_NAME);
+      if (!named || !named[2].includes('/')) return [];
+      const [first, second] = named[2].split('/').map((part) => this.escapeRegex(part));
+      return [
+        new RegExp(`(${this.flexifyStreetName(named[1].toLowerCase())}\\s*${first}\\s*)\\/\\s*${second}(?![0-9])`, 'gi'),
+      ];
+    });
+    return { mainStreet, variations, mappings, compoundPatterns };
+  }
+
+  /**
+   * The text with each managed building number that holds a slash, where it
+   * stands after its own street ("Jadźwingów 5/7"), written "5-7": it names ONE
+   * building, so neither the apartment patterns nor the lettered-apartment
+   * guard may read it as "building 5, apartment 7" — or, glued to what follows
+   * ("5/7M143"), as apartment 7M. The same number after another street stays.
+   */
+  private maskCompoundBuildings(text: string): string {
+    // Found on the diacritic-free text — any Polish letter the payer typed (or
+    // the bank's "?") — and edited at the same place in the text itself:
+    // folding maps one character to one, so the positions agree.
+    const folded = this.normalizePolishChars(text.toLowerCase());
+    if (folded.length !== text.length) return text;
+    const chars = [...text];
+    if (chars.length !== text.length) return text;
+    for (const compiled of this.compiled) {
+      for (const pattern of compiled.compoundPatterns) {
+        for (const m of folded.matchAll(pattern)) chars[m.index! + m[1].length] = '-';
+      }
+    }
+    return chars.join('');
   }
 
   /**
@@ -369,8 +411,11 @@ export class AddressMatcher {
     //    "M.202-620" as apartment 202, and the known-address path reads the plain
     //    "Puławska 116 02-620" as apartment 02. Stripping happens *after* the
     //    rules above, so a rule whose phrase contains a postal code still matches.
+    //    The apartment is read with the managed buildings numbered "5/7" masked
+    //    (maskCompoundBuildings); the known-address path below matches them as they are.
     const scanText = stripAddressCodes(combinedText);
-    const apartmentResult = this.extractApartmentNumber(scanText);
+    const maskedText = this.maskCompoundBuildings(combinedText);
+    const apartmentResult = this.extractApartmentNumber(stripAddressCodes(maskedText));
 
     // 3. Match address against known properties
     const addressResult = this.extractAddress(
@@ -485,7 +530,7 @@ export class AddressMatcher {
     //
     // Both push the transaction below the review threshold. Under-booking costs a
     // click; over-confident booking moves money to the wrong owner.
-    const letteredInText = letteredApartmentInText(combinedText);
+    const letteredInText = letteredApartmentInText(maskedText);
     const apartmentIsLettered = isLetteredApartment(apartmentNumber);
     const letterLost = !!letteredInText && !!apartmentNumber && !apartmentIsLettered;
     const needsAccount = apartmentIsLettered || letterLost;
@@ -914,8 +959,14 @@ export class AddressMatcher {
           streetWithoutSpaces.includes(knownWithoutSpaces) ||
           knownWithoutSpaces.includes(streetWithoutSpaces)
         ) {
-          // If both building numbers are known, they must match
-          if (buildingNumber && variation.building && buildingNumber !== variation.building) {
+          // If both building numbers are known, they must match — a building
+          // numbered "5/7" also when the bank cut the payer's address to "5".
+          if (
+            buildingNumber &&
+            variation.building &&
+            buildingNumber !== variation.building &&
+            !variation.building.startsWith(`${buildingNumber}/`)
+          ) {
             continue;
           }
           return true;
@@ -1084,14 +1135,23 @@ export class AddressMatcher {
   }
 
   /**
-   * Convert a street name into a flexible regex pattern where:
+   * A configured street name (lowercase, with its Polish letters) as a regex over
+   * the diacritic-free text:
    * - hyphens and spaces are interchangeable (e.g., "Joliot-Curie" matches "joliot curie")
    * - dots are optional (e.g., "Al." matches "Al")
+   * - a Polish letter also matches "?", which is what some payers' banks put in
+   *   its place ("Jad?wingów"): the bank loses only letters outside ASCII, so a
+   *   "?" exactly where the configured name has one is that name, not a guess.
    */
   private flexifyStreetName(name: string): string {
-    const escaped = this.escapeRegex(name);
-    return escaped
-      .replace(/[-\s]+/g, '[-\\s]+')
-      .replace(/\\\./g, '\\.?');
+    let out = '';
+    for (const c of name) {
+      const ascii = this.normalizePolishChars(c);
+      if (ascii !== c) out += `(?:${ascii}|\\?)`;
+      else if (/[-\s]/.test(c)) out += out.endsWith('[-\\s]+') ? '' : '[-\\s]+';
+      else if (c === '.') out += '\\.?';
+      else out += this.escapeRegex(c);
+    }
+    return out;
   }
 }

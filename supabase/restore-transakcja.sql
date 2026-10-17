@@ -25,6 +25,10 @@
 --   Then each sequence is moved past the highest id, so the next row the app
 --   adds gets a new one.
 --
+-- If the app still says the function is missing right after this ran, the
+-- API has not reloaded its schema yet (Supabase usually does it at once):
+--   notify pgrst, 'reload schema';
+--
 -- If a real restore ever fails with "canceling statement due to statement
 -- timeout", raise the limit of the signed-in role (Supabase's default is 8 s) —
 -- a limit set on the function itself does not reach the call already running:

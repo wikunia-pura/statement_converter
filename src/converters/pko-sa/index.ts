@@ -103,7 +103,7 @@ export class PKOSAConverter extends BaseConverter<PKOSATransaction> {
   }
 
   protected createCsvExporter(options?: any): ICsvExporter<PKOSATransaction> {
-    return new CsvExporter(options) as unknown as ICsvExporter<PKOSATransaction>;
+    return new CsvExporter(options);
   }
 
   // ── Hook overrides (PKO SA-specific behavior) ───────────────

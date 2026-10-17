@@ -120,7 +120,7 @@ export class INGConverter extends BaseConverter<INGTransaction> {
   }
 
   protected createCsvExporter(options?: any): ICsvExporter<INGTransaction> {
-    return new CsvExporter(options) as unknown as ICsvExporter<INGTransaction>;
+    return new CsvExporter(options);
   }
 
   // ── Hook overrides (ING-specific behavior) ─────────────────

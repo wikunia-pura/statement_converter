@@ -102,7 +102,7 @@ export class PocztowyConverter extends BaseConverter<PocztowyTransaction> {
   }
 
   protected createCsvExporter(options?: any): ICsvExporter<PocztowyTransaction> {
-    return new CsvExporter(options) as unknown as ICsvExporter<PocztowyTransaction>;
+    return new CsvExporter(options);
   }
 
   // ── Hook overrides ─────────────────────────────────────────

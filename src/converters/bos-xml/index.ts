@@ -100,7 +100,7 @@ export class BosXmlConverter extends BaseConverter<BosTransaction> {
   }
 
   protected createCsvExporter(options?: any): ICsvExporter<BosTransaction> {
-    return new CsvExporter(options) as unknown as ICsvExporter<BosTransaction>;
+    return new CsvExporter(options);
   }
 
   protected shouldCheckCacheBeforeRegex(): boolean {

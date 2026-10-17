@@ -112,7 +112,7 @@ export class BnpXmlConverter extends BaseConverter<BnpTransaction> {
   }
 
   protected createCsvExporter(options?: any): ICsvExporter<BnpTransaction> {
-    return new CsvExporter(options) as unknown as ICsvExporter<BnpTransaction>;
+    return new CsvExporter(options);
   }
 
   // ── Hook overrides (BNP-specific behavior) ─────────────────

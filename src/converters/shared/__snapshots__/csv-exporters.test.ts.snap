@@ -1,0 +1,694 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`accounting file: 'alior' > with another account type 1`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	2.09.2026	NIEROZPOZNANE #2 wpłata bez lokalu	1,00	142-2  	   -
+BNK/0009	2	3.09.2026	NIEROZPOZNANE #3 Lokal 17A	1234,50	142-2  	   -
+BNK/0009	3	4.09.2026	NIEROZPOZNANE #5 needsAccount bez konta	99,99	142-2  	   -
+BNK/0009	4	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	142-2  	   -
+BNK/0009	5	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	   -	205-000012
+BNK/0009	6	3.09.2026	Lokal 17A z kontem	300,00	142-2  	   -
+BNK/0009	7	3.09.2026	Lokal 17A z kontem	300,00	   -	204-0017A
+BNK/0009	8	4.09.2026	needsAccount z kontem	100,00	142-2  	   -
+BNK/0009	9	4.09.2026	needsAccount z kontem	100,00	   -	205-1  
+BNK/0009	10	5.09.2026	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	142-2  	   -
+BNK/0009	11	5.09.2026	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	   -	205-000003
+BNK/0009	12	31.08.2026	Ostatni dzień sierpnia	7,00	142-2  	   -
+BNK/0009	13	31.08.2026	Ostatni dzień sierpnia	7,00	   -	205-000120
+BNK/0009	14	12.09.2026	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	142-2  
+BNK/0009	15	13.09.2026	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...	0,50	   -	142-2  
+BNK/0009	16	10.09.2026	ENERGA faktura 123456	250,00	220-2  	142-2  
+BNK/0009	17	11.09.2026	Firma sprzątająca	1999,95	201-00123	142-2  
+BNK/0009	18	1.10.2026	Opłata październikowa	80,00	850-2  	142-2  "
+`;
+
+exports[`accounting file: 'alior' > with only expenses, and with nothing at all 1`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	12.09.2026	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	131-1  
+BNK/0009	2	13.09.2026	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...	0,50	   -	131-1  
+BNK/0009	3	10.09.2026	ENERGA faktura 123456	250,00	220-2  	131-1  
+BNK/0009	4	11.09.2026	Firma sprzątająca	1999,95	201-00123	131-1  
+BNK/0009	5	1.10.2026	Opłata październikowa	80,00	850-2  	131-1  "
+`;
+
+exports[`accounting file: 'alior' > with only expenses, and with nothing at all 2`] = `"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma"`;
+
+exports[`accounting file: 'alior' > with the defaults the app uses 1`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	2.09.2026	NIEROZPOZNANE #2 wpłata bez lokalu	1,00	131-1  	   -
+BNK/0009	2	3.09.2026	NIEROZPOZNANE #3 Lokal 17A	1234,50	131-1  	   -
+BNK/0009	3	4.09.2026	NIEROZPOZNANE #5 needsAccount bez konta	99,99	131-1  	   -
+BNK/0009	4	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	131-1  	   -
+BNK/0009	5	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	   -	204-000012
+BNK/0009	6	3.09.2026	Lokal 17A z kontem	300,00	131-1  	   -
+BNK/0009	7	3.09.2026	Lokal 17A z kontem	300,00	   -	204-0017A
+BNK/0009	8	4.09.2026	needsAccount z kontem	100,00	131-1  	   -
+BNK/0009	9	4.09.2026	needsAccount z kontem	100,00	   -	205-1  
+BNK/0009	10	5.09.2026	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	131-1  	   -
+BNK/0009	11	5.09.2026	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	   -	204-000003
+BNK/0009	12	31.08.2026	Ostatni dzień sierpnia	7,00	131-1  	   -
+BNK/0009	13	31.08.2026	Ostatni dzień sierpnia	7,00	   -	204-000120
+BNK/0009	14	12.09.2026	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	131-1  
+BNK/0009	15	13.09.2026	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...	0,50	   -	131-1  
+BNK/0009	16	10.09.2026	ENERGA faktura 123456	250,00	220-2  	131-1  
+BNK/0009	17	11.09.2026	Firma sprzątająca	1999,95	201-00123	131-1  
+BNK/0009	18	1.10.2026	Opłata październikowa	80,00	850-2  	131-1  "
+`;
+
+exports[`accounting file: 'alior' > with the other formatting options 1`] = `
+"nr_dok;nr_poz;data_p;tresc;kwota;k_wn;k_ma
+BNK/0009;1;02/09/2026;NIEROZPOZNANE #2 wpłata bez lokalu;1.00;131-1  ;   -
+BNK/0009;2;03/09/2026;NIEROZPOZNANE #3 Lokal 17A;1234.50;131-1  ;   -
+BNK/0009;3;04/09/2026;NIEROZPOZNANE #5 needsAccount bez konta;99.99;131-1  ;   -
+BNK/0009;4;01/09/2026;CZYNSZ LOKAL 12 JAN KOWALSKI;512.40;131-1  ;   -
+BNK/0009;5;01/09/2026;CZYNSZ LOKAL 12 JAN KOWALSKI;512.40;   -;204-000012
+BNK/0009;6;03/09/2026;Lokal 17A z kontem;300.00;131-1  ;   -
+BNK/0009;7;03/09/2026;Lokal 17A z kontem;300.00;   -;204-0017A
+BNK/0009;8;04/09/2026;needsAccount z kontem;100.00;131-1  ;   -
+BNK/0009;9;04/09/2026;needsAccount z kontem;100.00;   -;205-1  
+BNK/0009;10;05/09/2026;Opłata za lokal nr 12 czynsz fundusz remontowy ...;45.10;131-1  ;   -
+BNK/0009;11;05/09/2026;Opłata za lokal nr 12 czynsz fundusz remontowy ...;45.10;   -;204-000003
+BNK/0009;12;31/08/2026;Ostatni dzień sierpnia;7.00;131-1  ;   -
+BNK/0009;13;31/08/2026;Ostatni dzień sierpnia;7.00;   -;204-000120
+BNK/0009;14;12/09/2026;NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent;12.30;   -;131-1  
+BNK/0009;15;13/09/2026;NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...;0.50;   -;131-1  
+BNK/0009;16;10/09/2026;ENERGA faktura 123456;250.00;220-2  ;131-1  
+BNK/0009;17;11/09/2026;Firma sprzątająca;1999.95;201-00123;131-1  
+BNK/0009;18;01/10/2026;Opłata październikowa;80.00;850-2  ;131-1  "
+`;
+
+exports[`accounting file: 'alior' > with the other formatting options 2`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	2026-09-02	NIEROZPOZNANE #2 wpłata bez lokalu	1,00	131-1  	   -
+BNK/0009	2	2026-09-03	NIEROZPOZNANE #3 Lokal 17A	1234,50	131-1  	   -
+BNK/0009	3	2026-09-04	NIEROZPOZNANE #5 needsAccount bez konta	99,99	131-1  	   -
+BNK/0009	4	2026-09-01	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	131-1  	   -
+BNK/0009	5	2026-09-01	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	   -	204-000012
+BNK/0009	6	2026-09-03	Lokal 17A z kontem	300,00	131-1  	   -
+BNK/0009	7	2026-09-03	Lokal 17A z kontem	300,00	   -	204-0017A
+BNK/0009	8	2026-09-04	needsAccount z kontem	100,00	131-1  	   -
+BNK/0009	9	2026-09-04	needsAccount z kontem	100,00	   -	205-1  
+BNK/0009	10	2026-09-05	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	131-1  	   -
+BNK/0009	11	2026-09-05	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	   -	204-000003
+BNK/0009	12	2026-08-31	Ostatni dzień sierpnia	7,00	131-1  	   -
+BNK/0009	13	2026-08-31	Ostatni dzień sierpnia	7,00	   -	204-000120
+BNK/0009	14	2026-09-12	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	131-1  
+BNK/0009	15	2026-09-13	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...	0,50	   -	131-1  
+BNK/0009	16	2026-09-10	ENERGA faktura 123456	250,00	220-2  	131-1  
+BNK/0009	17	2026-09-11	Firma sprzątająca	1999,95	201-00123	131-1  
+BNK/0009	18	2026-10-01	Opłata październikowa	80,00	850-2  	131-1  "
+`;
+
+exports[`accounting file: 'bnp-xml' > with another account type 1`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	2.09.2026	NIEROZPOZNANE #2 wpłata bez lokalu	1,00	142-2	   -
+BNK/0009	2	3.09.2026	NIEROZPOZNANE #3 Lokal 17A	1234,50	142-2	   -
+BNK/0009	3	4.09.2026	NIEROZPOZNANE #5 needsAccount bez konta	99,99	142-2	   -
+BNK/0009	4	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	142-2	   -
+BNK/0009	5	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	   -	205-000012
+BNK/0009	6	3.09.2026	Lokal 17A z kontem	300,00	142-2	   -
+BNK/0009	7	3.09.2026	Lokal 17A z kontem	300,00	   -	204-0017A
+BNK/0009	8	4.09.2026	needsAccount z kontem	100,00	142-2	   -
+BNK/0009	9	4.09.2026	needsAccount z kontem	100,00	   -	205-1
+BNK/0009	10	5.09.2026	Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu	45,10	142-2	   -
+BNK/0009	11	5.09.2026	Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu	45,10	   -	205-000003
+BNK/0009	12	31.08.2026	Ostatni dzień sierpnia	7,00	142-2	   -
+BNK/0009	13	31.08.2026	Ostatni dzień sierpnia	7,00	   -	205-000120
+BNK/0009	14	12.09.2026	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	142-2
+BNK/0009	15	13.09.2026	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu	0,50	   -	142-2
+BNK/0009	16	10.09.2026	ENERGA faktura 123456	250,00	220-2	142-2
+BNK/0009	17	11.09.2026	Firma sprzątająca	1999,95	201-00123	142-2
+BNK/0009	18	1.10.2026	Opłata październikowa	80,00	850-2	142-2"
+`;
+
+exports[`accounting file: 'bnp-xml' > with only expenses, and with nothing at all 1`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	12.09.2026	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	131-1
+BNK/0009	2	13.09.2026	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu	0,50	   -	131-1
+BNK/0009	3	10.09.2026	ENERGA faktura 123456	250,00	220-2	131-1
+BNK/0009	4	11.09.2026	Firma sprzątająca	1999,95	201-00123	131-1
+BNK/0009	5	1.10.2026	Opłata październikowa	80,00	850-2	131-1"
+`;
+
+exports[`accounting file: 'bnp-xml' > with only expenses, and with nothing at all 2`] = `"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma"`;
+
+exports[`accounting file: 'bnp-xml' > with the defaults the app uses 1`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	2.09.2026	NIEROZPOZNANE #2 wpłata bez lokalu	1,00	131-1	   -
+BNK/0009	2	3.09.2026	NIEROZPOZNANE #3 Lokal 17A	1234,50	131-1	   -
+BNK/0009	3	4.09.2026	NIEROZPOZNANE #5 needsAccount bez konta	99,99	131-1	   -
+BNK/0009	4	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	131-1	   -
+BNK/0009	5	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	   -	204-000012
+BNK/0009	6	3.09.2026	Lokal 17A z kontem	300,00	131-1	   -
+BNK/0009	7	3.09.2026	Lokal 17A z kontem	300,00	   -	204-0017A
+BNK/0009	8	4.09.2026	needsAccount z kontem	100,00	131-1	   -
+BNK/0009	9	4.09.2026	needsAccount z kontem	100,00	   -	205-1
+BNK/0009	10	5.09.2026	Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu	45,10	131-1	   -
+BNK/0009	11	5.09.2026	Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu	45,10	   -	204-000003
+BNK/0009	12	31.08.2026	Ostatni dzień sierpnia	7,00	131-1	   -
+BNK/0009	13	31.08.2026	Ostatni dzień sierpnia	7,00	   -	204-000120
+BNK/0009	14	12.09.2026	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	131-1
+BNK/0009	15	13.09.2026	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu	0,50	   -	131-1
+BNK/0009	16	10.09.2026	ENERGA faktura 123456	250,00	220-2	131-1
+BNK/0009	17	11.09.2026	Firma sprzątająca	1999,95	201-00123	131-1
+BNK/0009	18	1.10.2026	Opłata październikowa	80,00	850-2	131-1"
+`;
+
+exports[`accounting file: 'bnp-xml' > with the other formatting options 1`] = `
+"nr_dok;nr_poz;data_p;tresc;kwota;k_wn;k_ma
+BNK/0009;1;02/09/2026;NIEROZPOZNANE #2 wpłata bez lokalu;1.00;131-1;   -
+BNK/0009;2;03/09/2026;NIEROZPOZNANE #3 Lokal 17A;1234.50;131-1;   -
+BNK/0009;3;04/09/2026;NIEROZPOZNANE #5 needsAccount bez konta;99.99;131-1;   -
+BNK/0009;4;01/09/2026;CZYNSZ LOKAL 12 JAN KOWALSKI;512.40;131-1;   -
+BNK/0009;5;01/09/2026;CZYNSZ LOKAL 12 JAN KOWALSKI;512.40;   -;204-000012
+BNK/0009;6;03/09/2026;Lokal 17A z kontem;300.00;131-1;   -
+BNK/0009;7;03/09/2026;Lokal 17A z kontem;300.00;   -;204-0017A
+BNK/0009;8;04/09/2026;needsAccount z kontem;100.00;131-1;   -
+BNK/0009;9;04/09/2026;needsAccount z kontem;100.00;   -;205-1
+BNK/0009;10;05/09/2026;Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu;45.10;131-1;   -
+BNK/0009;11;05/09/2026;Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu;45.10;   -;204-000003
+BNK/0009;12;31/08/2026;Ostatni dzień sierpnia;7.00;131-1;   -
+BNK/0009;13;31/08/2026;Ostatni dzień sierpnia;7.00;   -;204-000120
+BNK/0009;14;12/09/2026;NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent;12.30;   -;131-1
+BNK/0009;15;13/09/2026;NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu;0.50;   -;131-1
+BNK/0009;16;10/09/2026;ENERGA faktura 123456;250.00;220-2;131-1
+BNK/0009;17;11/09/2026;Firma sprzątająca;1999.95;201-00123;131-1
+BNK/0009;18;01/10/2026;Opłata październikowa;80.00;850-2;131-1"
+`;
+
+exports[`accounting file: 'bnp-xml' > with the other formatting options 2`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	2026-09-02	NIEROZPOZNANE #2 wpłata bez lokalu	1,00	131-1	   -
+BNK/0009	2	2026-09-03	NIEROZPOZNANE #3 Lokal 17A	1234,50	131-1	   -
+BNK/0009	3	2026-09-04	NIEROZPOZNANE #5 needsAccount bez konta	99,99	131-1	   -
+BNK/0009	4	2026-09-01	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	131-1	   -
+BNK/0009	5	2026-09-01	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	   -	204-000012
+BNK/0009	6	2026-09-03	Lokal 17A z kontem	300,00	131-1	   -
+BNK/0009	7	2026-09-03	Lokal 17A z kontem	300,00	   -	204-0017A
+BNK/0009	8	2026-09-04	needsAccount z kontem	100,00	131-1	   -
+BNK/0009	9	2026-09-04	needsAccount z kontem	100,00	   -	205-1
+BNK/0009	10	2026-09-05	Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu	45,10	131-1	   -
+BNK/0009	11	2026-09-05	Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu	45,10	   -	204-000003
+BNK/0009	12	2026-08-31	Ostatni dzień sierpnia	7,00	131-1	   -
+BNK/0009	13	2026-08-31	Ostatni dzień sierpnia	7,00	   -	204-000120
+BNK/0009	14	2026-09-12	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	131-1
+BNK/0009	15	2026-09-13	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu	0,50	   -	131-1
+BNK/0009	16	2026-09-10	ENERGA faktura 123456	250,00	220-2	131-1
+BNK/0009	17	2026-09-11	Firma sprzątająca	1999,95	201-00123	131-1
+BNK/0009	18	2026-10-01	Opłata październikowa	80,00	850-2	131-1"
+`;
+
+exports[`accounting file: 'ing' > with another account type 1`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	2.09.2026	NIEROZPOZNANE #2 wpłata bez lokalu	1,00	142-2  	   -
+BNK/0009	2	3.09.2026	NIEROZPOZNANE #3 Lokal 17A	1234,50	142-2  	   -
+BNK/0009	3	4.09.2026	NIEROZPOZNANE #5 needsAccount bez konta	99,99	142-2  	   -
+BNK/0009	4	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	142-2  	   -
+BNK/0009	5	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	   -	205-000012
+BNK/0009	6	3.09.2026	Lokal 17A z kontem	300,00	142-2  	   -
+BNK/0009	7	3.09.2026	Lokal 17A z kontem	300,00	   -	204-0017A
+BNK/0009	8	4.09.2026	needsAccount z kontem	100,00	142-2  	   -
+BNK/0009	9	4.09.2026	needsAccount z kontem	100,00	   -	205-1  
+BNK/0009	10	5.09.2026	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	142-2  	   -
+BNK/0009	11	5.09.2026	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	   -	205-000003
+BNK/0009	12	31.08.2026	Ostatni dzień sierpnia	7,00	142-2  	   -
+BNK/0009	13	31.08.2026	Ostatni dzień sierpnia	7,00	   -	205-000120
+BNK/0009	14	12.09.2026	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	142-2  
+BNK/0009	15	13.09.2026	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...	0,50	   -	142-2  
+BNK/0009	16	10.09.2026	ENERGA faktura 123456	250,00	220-2  	142-2  
+BNK/0009	17	11.09.2026	Firma sprzątająca	1999,95	201-00123	142-2  
+BNK/0009	18	1.10.2026	Opłata październikowa	80,00	850-2  	142-2  "
+`;
+
+exports[`accounting file: 'ing' > with only expenses, and with nothing at all 1`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	12.09.2026	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	131-1  
+BNK/0009	2	13.09.2026	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...	0,50	   -	131-1  
+BNK/0009	3	10.09.2026	ENERGA faktura 123456	250,00	220-2  	131-1  
+BNK/0009	4	11.09.2026	Firma sprzątająca	1999,95	201-00123	131-1  
+BNK/0009	5	1.10.2026	Opłata październikowa	80,00	850-2  	131-1  "
+`;
+
+exports[`accounting file: 'ing' > with only expenses, and with nothing at all 2`] = `"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma"`;
+
+exports[`accounting file: 'ing' > with the defaults the app uses 1`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	2.09.2026	NIEROZPOZNANE #2 wpłata bez lokalu	1,00	131-1  	   -
+BNK/0009	2	3.09.2026	NIEROZPOZNANE #3 Lokal 17A	1234,50	131-1  	   -
+BNK/0009	3	4.09.2026	NIEROZPOZNANE #5 needsAccount bez konta	99,99	131-1  	   -
+BNK/0009	4	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	131-1  	   -
+BNK/0009	5	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	   -	204-000012
+BNK/0009	6	3.09.2026	Lokal 17A z kontem	300,00	131-1  	   -
+BNK/0009	7	3.09.2026	Lokal 17A z kontem	300,00	   -	204-0017A
+BNK/0009	8	4.09.2026	needsAccount z kontem	100,00	131-1  	   -
+BNK/0009	9	4.09.2026	needsAccount z kontem	100,00	   -	205-1  
+BNK/0009	10	5.09.2026	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	131-1  	   -
+BNK/0009	11	5.09.2026	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	   -	204-000003
+BNK/0009	12	31.08.2026	Ostatni dzień sierpnia	7,00	131-1  	   -
+BNK/0009	13	31.08.2026	Ostatni dzień sierpnia	7,00	   -	204-000120
+BNK/0009	14	12.09.2026	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	131-1  
+BNK/0009	15	13.09.2026	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...	0,50	   -	131-1  
+BNK/0009	16	10.09.2026	ENERGA faktura 123456	250,00	220-2  	131-1  
+BNK/0009	17	11.09.2026	Firma sprzątająca	1999,95	201-00123	131-1  
+BNK/0009	18	1.10.2026	Opłata październikowa	80,00	850-2  	131-1  "
+`;
+
+exports[`accounting file: 'ing' > with the other formatting options 1`] = `
+"nr_dok;nr_poz;data_p;tresc;kwota;k_wn;k_ma
+BNK/0009;1;02/09/2026;NIEROZPOZNANE #2 wpłata bez lokalu;1.00;131-1  ;   -
+BNK/0009;2;03/09/2026;NIEROZPOZNANE #3 Lokal 17A;1234.50;131-1  ;   -
+BNK/0009;3;04/09/2026;NIEROZPOZNANE #5 needsAccount bez konta;99.99;131-1  ;   -
+BNK/0009;4;01/09/2026;CZYNSZ LOKAL 12 JAN KOWALSKI;512.40;131-1  ;   -
+BNK/0009;5;01/09/2026;CZYNSZ LOKAL 12 JAN KOWALSKI;512.40;   -;204-000012
+BNK/0009;6;03/09/2026;Lokal 17A z kontem;300.00;131-1  ;   -
+BNK/0009;7;03/09/2026;Lokal 17A z kontem;300.00;   -;204-0017A
+BNK/0009;8;04/09/2026;needsAccount z kontem;100.00;131-1  ;   -
+BNK/0009;9;04/09/2026;needsAccount z kontem;100.00;   -;205-1  
+BNK/0009;10;05/09/2026;Opłata za lokal nr 12 czynsz fundusz remontowy ...;45.10;131-1  ;   -
+BNK/0009;11;05/09/2026;Opłata za lokal nr 12 czynsz fundusz remontowy ...;45.10;   -;204-000003
+BNK/0009;12;31/08/2026;Ostatni dzień sierpnia;7.00;131-1  ;   -
+BNK/0009;13;31/08/2026;Ostatni dzień sierpnia;7.00;   -;204-000120
+BNK/0009;14;12/09/2026;NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent;12.30;   -;131-1  
+BNK/0009;15;13/09/2026;NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...;0.50;   -;131-1  
+BNK/0009;16;10/09/2026;ENERGA faktura 123456;250.00;220-2  ;131-1  
+BNK/0009;17;11/09/2026;Firma sprzątająca;1999.95;201-00123;131-1  
+BNK/0009;18;01/10/2026;Opłata październikowa;80.00;850-2  ;131-1  "
+`;
+
+exports[`accounting file: 'ing' > with the other formatting options 2`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	2026-09-02	NIEROZPOZNANE #2 wpłata bez lokalu	1,00	131-1  	   -
+BNK/0009	2	2026-09-03	NIEROZPOZNANE #3 Lokal 17A	1234,50	131-1  	   -
+BNK/0009	3	2026-09-04	NIEROZPOZNANE #5 needsAccount bez konta	99,99	131-1  	   -
+BNK/0009	4	2026-09-01	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	131-1  	   -
+BNK/0009	5	2026-09-01	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	   -	204-000012
+BNK/0009	6	2026-09-03	Lokal 17A z kontem	300,00	131-1  	   -
+BNK/0009	7	2026-09-03	Lokal 17A z kontem	300,00	   -	204-0017A
+BNK/0009	8	2026-09-04	needsAccount z kontem	100,00	131-1  	   -
+BNK/0009	9	2026-09-04	needsAccount z kontem	100,00	   -	205-1  
+BNK/0009	10	2026-09-05	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	131-1  	   -
+BNK/0009	11	2026-09-05	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	   -	204-000003
+BNK/0009	12	2026-08-31	Ostatni dzień sierpnia	7,00	131-1  	   -
+BNK/0009	13	2026-08-31	Ostatni dzień sierpnia	7,00	   -	204-000120
+BNK/0009	14	2026-09-12	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	131-1  
+BNK/0009	15	2026-09-13	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...	0,50	   -	131-1  
+BNK/0009	16	2026-09-10	ENERGA faktura 123456	250,00	220-2  	131-1  
+BNK/0009	17	2026-09-11	Firma sprzątająca	1999,95	201-00123	131-1  
+BNK/0009	18	2026-10-01	Opłata październikowa	80,00	850-2  	131-1  "
+`;
+
+exports[`accounting file: 'pko-biznes' > with another account type 1`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	2.09.2026	NIEROZPOZNANE #2 wpłata bez lokalu	1,00	142-2  	   -
+BNK/0009	2	3.09.2026	NIEROZPOZNANE #3 Lokal 17A	1234,50	142-2  	   -
+BNK/0009	3	4.09.2026	NIEROZPOZNANE #5 needsAccount bez konta	99,99	142-2  	   -
+BNK/0009	4	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	142-2  	   -
+BNK/0009	5	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	   -	205-000012
+BNK/0009	6	3.09.2026	Lokal 17A z kontem	300,00	142-2  	   -
+BNK/0009	7	3.09.2026	Lokal 17A z kontem	300,00	   -	204-0017A
+BNK/0009	8	4.09.2026	needsAccount z kontem	100,00	142-2  	   -
+BNK/0009	9	4.09.2026	needsAccount z kontem	100,00	   -	205-1  
+BNK/0009	10	5.09.2026	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	142-2  	   -
+BNK/0009	11	5.09.2026	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	   -	205-000003
+BNK/0009	12	31.08.2026	Ostatni dzień sierpnia	7,00	142-2  	   -
+BNK/0009	13	31.08.2026	Ostatni dzień sierpnia	7,00	   -	205-000120
+BNK/0009	14	12.09.2026	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	142-2  
+BNK/0009	15	13.09.2026	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...	0,50	   -	142-2  
+BNK/0009	16	10.09.2026	ENERGA faktura 123456	250,00	220-2  	142-2  
+BNK/0009	17	11.09.2026	Firma sprzątająca	1999,95	201-00123	142-2  
+BNK/0009	18	1.10.2026	Opłata październikowa	80,00	850-2  	142-2  "
+`;
+
+exports[`accounting file: 'pko-biznes' > with only expenses, and with nothing at all 1`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	12.09.2026	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	131-1  
+BNK/0009	2	13.09.2026	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...	0,50	   -	131-1  
+BNK/0009	3	10.09.2026	ENERGA faktura 123456	250,00	220-2  	131-1  
+BNK/0009	4	11.09.2026	Firma sprzątająca	1999,95	201-00123	131-1  
+BNK/0009	5	1.10.2026	Opłata październikowa	80,00	850-2  	131-1  "
+`;
+
+exports[`accounting file: 'pko-biznes' > with only expenses, and with nothing at all 2`] = `"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma"`;
+
+exports[`accounting file: 'pko-biznes' > with the defaults the app uses 1`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	2.09.2026	NIEROZPOZNANE #2 wpłata bez lokalu	1,00	131-1  	   -
+BNK/0009	2	3.09.2026	NIEROZPOZNANE #3 Lokal 17A	1234,50	131-1  	   -
+BNK/0009	3	4.09.2026	NIEROZPOZNANE #5 needsAccount bez konta	99,99	131-1  	   -
+BNK/0009	4	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	131-1  	   -
+BNK/0009	5	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	   -	204-000012
+BNK/0009	6	3.09.2026	Lokal 17A z kontem	300,00	131-1  	   -
+BNK/0009	7	3.09.2026	Lokal 17A z kontem	300,00	   -	204-0017A
+BNK/0009	8	4.09.2026	needsAccount z kontem	100,00	131-1  	   -
+BNK/0009	9	4.09.2026	needsAccount z kontem	100,00	   -	205-1  
+BNK/0009	10	5.09.2026	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	131-1  	   -
+BNK/0009	11	5.09.2026	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	   -	204-000003
+BNK/0009	12	31.08.2026	Ostatni dzień sierpnia	7,00	131-1  	   -
+BNK/0009	13	31.08.2026	Ostatni dzień sierpnia	7,00	   -	204-000120
+BNK/0009	14	12.09.2026	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	131-1  
+BNK/0009	15	13.09.2026	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...	0,50	   -	131-1  
+BNK/0009	16	10.09.2026	ENERGA faktura 123456	250,00	220-2  	131-1  
+BNK/0009	17	11.09.2026	Firma sprzątająca	1999,95	201-00123	131-1  
+BNK/0009	18	1.10.2026	Opłata październikowa	80,00	850-2  	131-1  "
+`;
+
+exports[`accounting file: 'pko-biznes' > with the other formatting options 1`] = `
+"nr_dok;nr_poz;data_p;tresc;kwota;k_wn;k_ma
+BNK/0009;1;02/09/2026;NIEROZPOZNANE #2 wpłata bez lokalu;1.00;131-1  ;   -
+BNK/0009;2;03/09/2026;NIEROZPOZNANE #3 Lokal 17A;1234.50;131-1  ;   -
+BNK/0009;3;04/09/2026;NIEROZPOZNANE #5 needsAccount bez konta;99.99;131-1  ;   -
+BNK/0009;4;01/09/2026;CZYNSZ LOKAL 12 JAN KOWALSKI;512.40;131-1  ;   -
+BNK/0009;5;01/09/2026;CZYNSZ LOKAL 12 JAN KOWALSKI;512.40;   -;204-000012
+BNK/0009;6;03/09/2026;Lokal 17A z kontem;300.00;131-1  ;   -
+BNK/0009;7;03/09/2026;Lokal 17A z kontem;300.00;   -;204-0017A
+BNK/0009;8;04/09/2026;needsAccount z kontem;100.00;131-1  ;   -
+BNK/0009;9;04/09/2026;needsAccount z kontem;100.00;   -;205-1  
+BNK/0009;10;05/09/2026;Opłata za lokal nr 12 czynsz fundusz remontowy ...;45.10;131-1  ;   -
+BNK/0009;11;05/09/2026;Opłata za lokal nr 12 czynsz fundusz remontowy ...;45.10;   -;204-000003
+BNK/0009;12;31/08/2026;Ostatni dzień sierpnia;7.00;131-1  ;   -
+BNK/0009;13;31/08/2026;Ostatni dzień sierpnia;7.00;   -;204-000120
+BNK/0009;14;12/09/2026;NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent;12.30;   -;131-1  
+BNK/0009;15;13/09/2026;NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...;0.50;   -;131-1  
+BNK/0009;16;10/09/2026;ENERGA faktura 123456;250.00;220-2  ;131-1  
+BNK/0009;17;11/09/2026;Firma sprzątająca;1999.95;201-00123;131-1  
+BNK/0009;18;01/10/2026;Opłata październikowa;80.00;850-2  ;131-1  "
+`;
+
+exports[`accounting file: 'pko-biznes' > with the other formatting options 2`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	2026-09-02	NIEROZPOZNANE #2 wpłata bez lokalu	1,00	131-1  	   -
+BNK/0009	2	2026-09-03	NIEROZPOZNANE #3 Lokal 17A	1234,50	131-1  	   -
+BNK/0009	3	2026-09-04	NIEROZPOZNANE #5 needsAccount bez konta	99,99	131-1  	   -
+BNK/0009	4	2026-09-01	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	131-1  	   -
+BNK/0009	5	2026-09-01	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	   -	204-000012
+BNK/0009	6	2026-09-03	Lokal 17A z kontem	300,00	131-1  	   -
+BNK/0009	7	2026-09-03	Lokal 17A z kontem	300,00	   -	204-0017A
+BNK/0009	8	2026-09-04	needsAccount z kontem	100,00	131-1  	   -
+BNK/0009	9	2026-09-04	needsAccount z kontem	100,00	   -	205-1  
+BNK/0009	10	2026-09-05	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	131-1  	   -
+BNK/0009	11	2026-09-05	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	   -	204-000003
+BNK/0009	12	2026-08-31	Ostatni dzień sierpnia	7,00	131-1  	   -
+BNK/0009	13	2026-08-31	Ostatni dzień sierpnia	7,00	   -	204-000120
+BNK/0009	14	2026-09-12	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	131-1  
+BNK/0009	15	2026-09-13	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...	0,50	   -	131-1  
+BNK/0009	16	2026-09-10	ENERGA faktura 123456	250,00	220-2  	131-1  
+BNK/0009	17	2026-09-11	Firma sprzątająca	1999,95	201-00123	131-1  
+BNK/0009	18	2026-10-01	Opłata październikowa	80,00	850-2  	131-1  "
+`;
+
+exports[`accounting file: 'pko-mt940' > with another account type 1`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	2.09.2026	NIEROZPOZNANE #2 wpłata bez lokalu	1,00	142-2  	   -
+BNK/0009	2	3.09.2026	NIEROZPOZNANE #3 Lokal 17A	1234,50	142-2  	   -
+BNK/0009	3	4.09.2026	NIEROZPOZNANE #5 needsAccount bez konta	99,99	142-2  	   -
+BNK/0009	4	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	142-2  	   -
+BNK/0009	5	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	   -	205-000012
+BNK/0009	6	3.09.2026	Lokal 17A z kontem	300,00	142-2  	   -
+BNK/0009	7	3.09.2026	Lokal 17A z kontem	300,00	   -	204-0017A
+BNK/0009	8	4.09.2026	needsAccount z kontem	100,00	142-2  	   -
+BNK/0009	9	4.09.2026	needsAccount z kontem	100,00	   -	205-1  
+BNK/0009	10	5.09.2026	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	142-2  	   -
+BNK/0009	11	5.09.2026	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	   -	205-000003
+BNK/0009	12	31.08.2026	Ostatni dzień sierpnia	7,00	142-2  	   -
+BNK/0009	13	31.08.2026	Ostatni dzień sierpnia	7,00	   -	205-000120
+BNK/0009	14	12.09.2026	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	142-2  
+BNK/0009	15	13.09.2026	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...	0,50	   -	142-2  
+BNK/0009	16	10.09.2026	ENERGA faktura 123456	250,00	220-2  	142-2  
+BNK/0009	17	11.09.2026	Firma sprzątająca	1999,95	201-00123	142-2  
+BNK/0009	18	1.10.2026	Opłata październikowa	80,00	850-2  	142-2  "
+`;
+
+exports[`accounting file: 'pko-mt940' > with only expenses, and with nothing at all 1`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	12.09.2026	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	131-1  
+BNK/0009	2	13.09.2026	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...	0,50	   -	131-1  
+BNK/0009	3	10.09.2026	ENERGA faktura 123456	250,00	220-2  	131-1  
+BNK/0009	4	11.09.2026	Firma sprzątająca	1999,95	201-00123	131-1  
+BNK/0009	5	1.10.2026	Opłata październikowa	80,00	850-2  	131-1  "
+`;
+
+exports[`accounting file: 'pko-mt940' > with only expenses, and with nothing at all 2`] = `"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma"`;
+
+exports[`accounting file: 'pko-mt940' > with the defaults the app uses 1`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	2.09.2026	NIEROZPOZNANE #2 wpłata bez lokalu	1,00	131-1  	   -
+BNK/0009	2	3.09.2026	NIEROZPOZNANE #3 Lokal 17A	1234,50	131-1  	   -
+BNK/0009	3	4.09.2026	NIEROZPOZNANE #5 needsAccount bez konta	99,99	131-1  	   -
+BNK/0009	4	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	131-1  	   -
+BNK/0009	5	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	   -	204-000012
+BNK/0009	6	3.09.2026	Lokal 17A z kontem	300,00	131-1  	   -
+BNK/0009	7	3.09.2026	Lokal 17A z kontem	300,00	   -	204-0017A
+BNK/0009	8	4.09.2026	needsAccount z kontem	100,00	131-1  	   -
+BNK/0009	9	4.09.2026	needsAccount z kontem	100,00	   -	205-1  
+BNK/0009	10	5.09.2026	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	131-1  	   -
+BNK/0009	11	5.09.2026	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	   -	204-000003
+BNK/0009	12	31.08.2026	Ostatni dzień sierpnia	7,00	131-1  	   -
+BNK/0009	13	31.08.2026	Ostatni dzień sierpnia	7,00	   -	204-000120
+BNK/0009	14	12.09.2026	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	131-1  
+BNK/0009	15	13.09.2026	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...	0,50	   -	131-1  
+BNK/0009	16	10.09.2026	ENERGA faktura 123456	250,00	220-2  	131-1  
+BNK/0009	17	11.09.2026	Firma sprzątająca	1999,95	201-00123	131-1  
+BNK/0009	18	1.10.2026	Opłata październikowa	80,00	850-2  	131-1  "
+`;
+
+exports[`accounting file: 'pko-mt940' > with the other formatting options 1`] = `
+"nr_dok;nr_poz;data_p;tresc;kwota;k_wn;k_ma
+BNK/0009;1;02/09/2026;NIEROZPOZNANE #2 wpłata bez lokalu;1.00;131-1  ;   -
+BNK/0009;2;03/09/2026;NIEROZPOZNANE #3 Lokal 17A;1234.50;131-1  ;   -
+BNK/0009;3;04/09/2026;NIEROZPOZNANE #5 needsAccount bez konta;99.99;131-1  ;   -
+BNK/0009;4;01/09/2026;CZYNSZ LOKAL 12 JAN KOWALSKI;512.40;131-1  ;   -
+BNK/0009;5;01/09/2026;CZYNSZ LOKAL 12 JAN KOWALSKI;512.40;   -;204-000012
+BNK/0009;6;03/09/2026;Lokal 17A z kontem;300.00;131-1  ;   -
+BNK/0009;7;03/09/2026;Lokal 17A z kontem;300.00;   -;204-0017A
+BNK/0009;8;04/09/2026;needsAccount z kontem;100.00;131-1  ;   -
+BNK/0009;9;04/09/2026;needsAccount z kontem;100.00;   -;205-1  
+BNK/0009;10;05/09/2026;Opłata za lokal nr 12 czynsz fundusz remontowy ...;45.10;131-1  ;   -
+BNK/0009;11;05/09/2026;Opłata za lokal nr 12 czynsz fundusz remontowy ...;45.10;   -;204-000003
+BNK/0009;12;31/08/2026;Ostatni dzień sierpnia;7.00;131-1  ;   -
+BNK/0009;13;31/08/2026;Ostatni dzień sierpnia;7.00;   -;204-000120
+BNK/0009;14;12/09/2026;NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent;12.30;   -;131-1  
+BNK/0009;15;13/09/2026;NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...;0.50;   -;131-1  
+BNK/0009;16;10/09/2026;ENERGA faktura 123456;250.00;220-2  ;131-1  
+BNK/0009;17;11/09/2026;Firma sprzątająca;1999.95;201-00123;131-1  
+BNK/0009;18;01/10/2026;Opłata październikowa;80.00;850-2  ;131-1  "
+`;
+
+exports[`accounting file: 'pko-mt940' > with the other formatting options 2`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	2026-09-02	NIEROZPOZNANE #2 wpłata bez lokalu	1,00	131-1  	   -
+BNK/0009	2	2026-09-03	NIEROZPOZNANE #3 Lokal 17A	1234,50	131-1  	   -
+BNK/0009	3	2026-09-04	NIEROZPOZNANE #5 needsAccount bez konta	99,99	131-1  	   -
+BNK/0009	4	2026-09-01	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	131-1  	   -
+BNK/0009	5	2026-09-01	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	   -	204-000012
+BNK/0009	6	2026-09-03	Lokal 17A z kontem	300,00	131-1  	   -
+BNK/0009	7	2026-09-03	Lokal 17A z kontem	300,00	   -	204-0017A
+BNK/0009	8	2026-09-04	needsAccount z kontem	100,00	131-1  	   -
+BNK/0009	9	2026-09-04	needsAccount z kontem	100,00	   -	205-1  
+BNK/0009	10	2026-09-05	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	131-1  	   -
+BNK/0009	11	2026-09-05	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	   -	204-000003
+BNK/0009	12	2026-08-31	Ostatni dzień sierpnia	7,00	131-1  	   -
+BNK/0009	13	2026-08-31	Ostatni dzień sierpnia	7,00	   -	204-000120
+BNK/0009	14	2026-09-12	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	131-1  
+BNK/0009	15	2026-09-13	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...	0,50	   -	131-1  
+BNK/0009	16	2026-09-10	ENERGA faktura 123456	250,00	220-2  	131-1  
+BNK/0009	17	2026-09-11	Firma sprzątająca	1999,95	201-00123	131-1  
+BNK/0009	18	2026-10-01	Opłata październikowa	80,00	850-2  	131-1  "
+`;
+
+exports[`accounting file: 'pko-sa' > with another account type 1`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	2.09.2026	NIEROZPOZNANE #2 wpłata bez lokalu	1,00	142-2  	   -
+BNK/0009	2	3.09.2026	NIEROZPOZNANE #3 Lokal 17A	1234,50	142-2  	   -
+BNK/0009	3	4.09.2026	NIEROZPOZNANE #5 needsAccount bez konta	99,99	142-2  	   -
+BNK/0009	4	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	142-2  	   -
+BNK/0009	5	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	   -	205-000012
+BNK/0009	6	3.09.2026	Lokal 17A z kontem	300,00	142-2  	   -
+BNK/0009	7	3.09.2026	Lokal 17A z kontem	300,00	   -	204-0017A
+BNK/0009	8	4.09.2026	needsAccount z kontem	100,00	142-2  	   -
+BNK/0009	9	4.09.2026	needsAccount z kontem	100,00	   -	205-1  
+BNK/0009	10	5.09.2026	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	142-2  	   -
+BNK/0009	11	5.09.2026	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	   -	205-000003
+BNK/0009	12	31.08.2026	Ostatni dzień sierpnia	7,00	142-2  	   -
+BNK/0009	13	31.08.2026	Ostatni dzień sierpnia	7,00	   -	205-000120
+BNK/0009	14	12.09.2026	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	142-2  
+BNK/0009	15	13.09.2026	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...	0,50	   -	142-2  
+BNK/0009	16	10.09.2026	ENERGA faktura 123456	250,00	220-2  	142-2  
+BNK/0009	17	11.09.2026	Firma sprzątająca	1999,95	201-00123	142-2  
+BNK/0009	18	1.10.2026	Opłata październikowa	80,00	850-2  	142-2  "
+`;
+
+exports[`accounting file: 'pko-sa' > with only expenses, and with nothing at all 1`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	12.09.2026	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	131-1  
+BNK/0009	2	13.09.2026	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...	0,50	   -	131-1  
+BNK/0009	3	10.09.2026	ENERGA faktura 123456	250,00	220-2  	131-1  
+BNK/0009	4	11.09.2026	Firma sprzątająca	1999,95	201-00123	131-1  
+BNK/0009	5	1.10.2026	Opłata październikowa	80,00	850-2  	131-1  "
+`;
+
+exports[`accounting file: 'pko-sa' > with only expenses, and with nothing at all 2`] = `"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma"`;
+
+exports[`accounting file: 'pko-sa' > with the defaults the app uses 1`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	2.09.2026	NIEROZPOZNANE #2 wpłata bez lokalu	1,00	131-1  	   -
+BNK/0009	2	3.09.2026	NIEROZPOZNANE #3 Lokal 17A	1234,50	131-1  	   -
+BNK/0009	3	4.09.2026	NIEROZPOZNANE #5 needsAccount bez konta	99,99	131-1  	   -
+BNK/0009	4	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	131-1  	   -
+BNK/0009	5	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	   -	204-000012
+BNK/0009	6	3.09.2026	Lokal 17A z kontem	300,00	131-1  	   -
+BNK/0009	7	3.09.2026	Lokal 17A z kontem	300,00	   -	204-0017A
+BNK/0009	8	4.09.2026	needsAccount z kontem	100,00	131-1  	   -
+BNK/0009	9	4.09.2026	needsAccount z kontem	100,00	   -	205-1  
+BNK/0009	10	5.09.2026	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	131-1  	   -
+BNK/0009	11	5.09.2026	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	   -	204-000003
+BNK/0009	12	31.08.2026	Ostatni dzień sierpnia	7,00	131-1  	   -
+BNK/0009	13	31.08.2026	Ostatni dzień sierpnia	7,00	   -	204-000120
+BNK/0009	14	12.09.2026	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	131-1  
+BNK/0009	15	13.09.2026	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...	0,50	   -	131-1  
+BNK/0009	16	10.09.2026	ENERGA faktura 123456	250,00	220-2  	131-1  
+BNK/0009	17	11.09.2026	Firma sprzątająca	1999,95	201-00123	131-1  
+BNK/0009	18	1.10.2026	Opłata październikowa	80,00	850-2  	131-1  "
+`;
+
+exports[`accounting file: 'pko-sa' > with the other formatting options 1`] = `
+"nr_dok;nr_poz;data_p;tresc;kwota;k_wn;k_ma
+BNK/0009;1;02/09/2026;NIEROZPOZNANE #2 wpłata bez lokalu;1.00;131-1  ;   -
+BNK/0009;2;03/09/2026;NIEROZPOZNANE #3 Lokal 17A;1234.50;131-1  ;   -
+BNK/0009;3;04/09/2026;NIEROZPOZNANE #5 needsAccount bez konta;99.99;131-1  ;   -
+BNK/0009;4;01/09/2026;CZYNSZ LOKAL 12 JAN KOWALSKI;512.40;131-1  ;   -
+BNK/0009;5;01/09/2026;CZYNSZ LOKAL 12 JAN KOWALSKI;512.40;   -;204-000012
+BNK/0009;6;03/09/2026;Lokal 17A z kontem;300.00;131-1  ;   -
+BNK/0009;7;03/09/2026;Lokal 17A z kontem;300.00;   -;204-0017A
+BNK/0009;8;04/09/2026;needsAccount z kontem;100.00;131-1  ;   -
+BNK/0009;9;04/09/2026;needsAccount z kontem;100.00;   -;205-1  
+BNK/0009;10;05/09/2026;Opłata za lokal nr 12 czynsz fundusz remontowy ...;45.10;131-1  ;   -
+BNK/0009;11;05/09/2026;Opłata za lokal nr 12 czynsz fundusz remontowy ...;45.10;   -;204-000003
+BNK/0009;12;31/08/2026;Ostatni dzień sierpnia;7.00;131-1  ;   -
+BNK/0009;13;31/08/2026;Ostatni dzień sierpnia;7.00;   -;204-000120
+BNK/0009;14;12/09/2026;NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent;12.30;   -;131-1  
+BNK/0009;15;13/09/2026;NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...;0.50;   -;131-1  
+BNK/0009;16;10/09/2026;ENERGA faktura 123456;250.00;220-2  ;131-1  
+BNK/0009;17;11/09/2026;Firma sprzątająca;1999.95;201-00123;131-1  
+BNK/0009;18;01/10/2026;Opłata październikowa;80.00;850-2  ;131-1  "
+`;
+
+exports[`accounting file: 'pko-sa' > with the other formatting options 2`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	2026-09-02	NIEROZPOZNANE #2 wpłata bez lokalu	1,00	131-1  	   -
+BNK/0009	2	2026-09-03	NIEROZPOZNANE #3 Lokal 17A	1234,50	131-1  	   -
+BNK/0009	3	2026-09-04	NIEROZPOZNANE #5 needsAccount bez konta	99,99	131-1  	   -
+BNK/0009	4	2026-09-01	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	131-1  	   -
+BNK/0009	5	2026-09-01	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	   -	204-000012
+BNK/0009	6	2026-09-03	Lokal 17A z kontem	300,00	131-1  	   -
+BNK/0009	7	2026-09-03	Lokal 17A z kontem	300,00	   -	204-0017A
+BNK/0009	8	2026-09-04	needsAccount z kontem	100,00	131-1  	   -
+BNK/0009	9	2026-09-04	needsAccount z kontem	100,00	   -	205-1  
+BNK/0009	10	2026-09-05	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	131-1  	   -
+BNK/0009	11	2026-09-05	Opłata za lokal nr 12 czynsz fundusz remontowy ...	45,10	   -	204-000003
+BNK/0009	12	2026-08-31	Ostatni dzień sierpnia	7,00	131-1  	   -
+BNK/0009	13	2026-08-31	Ostatni dzień sierpnia	7,00	   -	204-000120
+BNK/0009	14	2026-09-12	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	131-1  
+BNK/0009	15	2026-09-13	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 czynsz fundusz remontowy ...	0,50	   -	131-1  
+BNK/0009	16	2026-09-10	ENERGA faktura 123456	250,00	220-2  	131-1  
+BNK/0009	17	2026-09-11	Firma sprzątająca	1999,95	201-00123	131-1  
+BNK/0009	18	2026-10-01	Opłata październikowa	80,00	850-2  	131-1  "
+`;
+
+exports[`accounting file: 'santander-xml' > with another account type 1`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	2.09.2026	NIEROZPOZNANE #2 wpłata bez lokalu	1,00	142-2	   -
+BNK/0009	2	3.09.2026	NIEROZPOZNANE #3 Lokal 17A	1234,50	142-2	   -
+BNK/0009	3	4.09.2026	NIEROZPOZNANE #5 needsAccount bez konta	99,99	142-2	   -
+BNK/0009	4	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	142-2	   -
+BNK/0009	5	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	   -	205-000012
+BNK/0009	6	3.09.2026	Lokal 17A z kontem	300,00	142-2	   -
+BNK/0009	7	3.09.2026	Lokal 17A z kontem	300,00	   -	204-0017A
+BNK/0009	8	4.09.2026	needsAccount z kontem	100,00	142-2	   -
+BNK/0009	9	4.09.2026	needsAccount z kontem	100,00	   -	205-1
+BNK/0009	10	5.09.2026	Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu	45,10	142-2	   -
+BNK/0009	11	5.09.2026	Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu	45,10	   -	205-000003
+BNK/0009	12	31.08.2026	Ostatni dzień sierpnia	7,00	142-2	   -
+BNK/0009	13	31.08.2026	Ostatni dzień sierpnia	7,00	   -	205-000120
+BNK/0009	14	12.09.2026	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	142-2
+BNK/0009	15	13.09.2026	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu	0,50	   -	142-2
+BNK/0009	16	10.09.2026	ENERGA faktura 123456	250,00	220-2	142-2
+BNK/0009	17	11.09.2026	Firma sprzątająca	1999,95	201-00123	142-2
+BNK/0009	18	1.10.2026	Opłata październikowa	80,00	850-2	142-2"
+`;
+
+exports[`accounting file: 'santander-xml' > with only expenses, and with nothing at all 1`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	12.09.2026	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	131-1
+BNK/0009	2	13.09.2026	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu	0,50	   -	131-1
+BNK/0009	3	10.09.2026	ENERGA faktura 123456	250,00	220-2	131-1
+BNK/0009	4	11.09.2026	Firma sprzątająca	1999,95	201-00123	131-1
+BNK/0009	5	1.10.2026	Opłata październikowa	80,00	850-2	131-1"
+`;
+
+exports[`accounting file: 'santander-xml' > with only expenses, and with nothing at all 2`] = `"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma"`;
+
+exports[`accounting file: 'santander-xml' > with the defaults the app uses 1`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	2.09.2026	NIEROZPOZNANE #2 wpłata bez lokalu	1,00	131-1	   -
+BNK/0009	2	3.09.2026	NIEROZPOZNANE #3 Lokal 17A	1234,50	131-1	   -
+BNK/0009	3	4.09.2026	NIEROZPOZNANE #5 needsAccount bez konta	99,99	131-1	   -
+BNK/0009	4	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	131-1	   -
+BNK/0009	5	1.09.2026	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	   -	204-000012
+BNK/0009	6	3.09.2026	Lokal 17A z kontem	300,00	131-1	   -
+BNK/0009	7	3.09.2026	Lokal 17A z kontem	300,00	   -	204-0017A
+BNK/0009	8	4.09.2026	needsAccount z kontem	100,00	131-1	   -
+BNK/0009	9	4.09.2026	needsAccount z kontem	100,00	   -	205-1
+BNK/0009	10	5.09.2026	Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu	45,10	131-1	   -
+BNK/0009	11	5.09.2026	Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu	45,10	   -	204-000003
+BNK/0009	12	31.08.2026	Ostatni dzień sierpnia	7,00	131-1	   -
+BNK/0009	13	31.08.2026	Ostatni dzień sierpnia	7,00	   -	204-000120
+BNK/0009	14	12.09.2026	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	131-1
+BNK/0009	15	13.09.2026	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu	0,50	   -	131-1
+BNK/0009	16	10.09.2026	ENERGA faktura 123456	250,00	220-2	131-1
+BNK/0009	17	11.09.2026	Firma sprzątająca	1999,95	201-00123	131-1
+BNK/0009	18	1.10.2026	Opłata październikowa	80,00	850-2	131-1"
+`;
+
+exports[`accounting file: 'santander-xml' > with the other formatting options 1`] = `
+"nr_dok;nr_poz;data_p;tresc;kwota;k_wn;k_ma
+BNK/0009;1;02/09/2026;NIEROZPOZNANE #2 wpłata bez lokalu;1.00;131-1;   -
+BNK/0009;2;03/09/2026;NIEROZPOZNANE #3 Lokal 17A;1234.50;131-1;   -
+BNK/0009;3;04/09/2026;NIEROZPOZNANE #5 needsAccount bez konta;99.99;131-1;   -
+BNK/0009;4;01/09/2026;CZYNSZ LOKAL 12 JAN KOWALSKI;512.40;131-1;   -
+BNK/0009;5;01/09/2026;CZYNSZ LOKAL 12 JAN KOWALSKI;512.40;   -;204-000012
+BNK/0009;6;03/09/2026;Lokal 17A z kontem;300.00;131-1;   -
+BNK/0009;7;03/09/2026;Lokal 17A z kontem;300.00;   -;204-0017A
+BNK/0009;8;04/09/2026;needsAccount z kontem;100.00;131-1;   -
+BNK/0009;9;04/09/2026;needsAccount z kontem;100.00;   -;205-1
+BNK/0009;10;05/09/2026;Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu;45.10;131-1;   -
+BNK/0009;11;05/09/2026;Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu;45.10;   -;204-000003
+BNK/0009;12;31/08/2026;Ostatni dzień sierpnia;7.00;131-1;   -
+BNK/0009;13;31/08/2026;Ostatni dzień sierpnia;7.00;   -;204-000120
+BNK/0009;14;12/09/2026;NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent;12.30;   -;131-1
+BNK/0009;15;13/09/2026;NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu;0.50;   -;131-1
+BNK/0009;16;10/09/2026;ENERGA faktura 123456;250.00;220-2;131-1
+BNK/0009;17;11/09/2026;Firma sprzątająca;1999.95;201-00123;131-1
+BNK/0009;18;01/10/2026;Opłata październikowa;80.00;850-2;131-1"
+`;
+
+exports[`accounting file: 'santander-xml' > with the other formatting options 2`] = `
+"nr_dok	nr_poz	data_p	tresc	kwota	k_wn	k_ma
+BNK/0009	1	2026-09-02	NIEROZPOZNANE #2 wpłata bez lokalu	1,00	131-1	   -
+BNK/0009	2	2026-09-03	NIEROZPOZNANE #3 Lokal 17A	1234,50	131-1	   -
+BNK/0009	3	2026-09-04	NIEROZPOZNANE #5 needsAccount bez konta	99,99	131-1	   -
+BNK/0009	4	2026-09-01	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	131-1	   -
+BNK/0009	5	2026-09-01	CZYNSZ LOKAL 12 JAN KOWALSKI	512,40	   -	204-000012
+BNK/0009	6	2026-09-03	Lokal 17A z kontem	300,00	131-1	   -
+BNK/0009	7	2026-09-03	Lokal 17A z kontem	300,00	   -	204-0017A
+BNK/0009	8	2026-09-04	needsAccount z kontem	100,00	131-1	   -
+BNK/0009	9	2026-09-04	needsAccount z kontem	100,00	   -	205-1
+BNK/0009	10	2026-09-05	Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu	45,10	131-1	   -
+BNK/0009	11	2026-09-05	Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu	45,10	   -	204-000003
+BNK/0009	12	2026-08-31	Ostatni dzień sierpnia	7,00	131-1	   -
+BNK/0009	13	2026-08-31	Ostatni dzień sierpnia	7,00	   -	204-000120
+BNK/0009	14	2026-09-12	NIEROZPOZNANY KONTRAHENT #3 odrzucony kontrahent	12,30	   -	131-1
+BNK/0009	15	2026-09-13	NIEROZPOZNANY KONTRAHENT #4 Opłata za lokal nr 12 — czynsz + fundusz remontowy (09/2026) ZAKŁAD #77 @ ul. Szewczenka Nr5 długi tytuł przelewu	0,50	   -	131-1
+BNK/0009	16	2026-09-10	ENERGA faktura 123456	250,00	220-2	131-1
+BNK/0009	17	2026-09-11	Firma sprzątająca	1999,95	201-00123	131-1
+BNK/0009	18	2026-10-01	Opłata październikowa	80,00	850-2	131-1"
+`;

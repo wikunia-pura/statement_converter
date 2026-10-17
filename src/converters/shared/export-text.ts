@@ -61,6 +61,30 @@ export function bankDocNumber(yearMonths: Array<string | null>): string {
   return `BNK/${String(month).padStart(4, '0')}`;
 }
 
+// ── Titles ──────────────────────────────────────────────────
+
+/**
+ * A title as most banks' files carry it: letters (Polish ones too), digits and
+ * basic punctuation, one space between words; longer than 50 characters, cut
+ * to 47 and "..." added. Every exporter but the camt ones, whose files have
+ * always carried the whole title (see `fullTitle`).
+ */
+export function shortTitle(text: string): string {
+  let cleaned = text
+    .replace(/[^\w\sąćęłńóśźżĄĆĘŁŃÓŚŹŻ.,\-/]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (cleaned.length > 50) {
+    cleaned = cleaned.substring(0, 47) + '...';
+  }
+  return cleaned;
+}
+
+/** A title whole, one space between words, in characters Windows-1250 has (BNP Paribas / BOŚ, Santander). */
+export function fullTitle(text: string): string {
+  return toWin1250Text(text.trim().replace(/\s+/g, ' '));
+}
+
 // ── Windows-1250 text ───────────────────────────────────────
 
 /** Every character Windows-1250 can encode, read off the code page itself. */

@@ -126,7 +126,7 @@ export class PKOBiznesConverter extends BaseConverter<PKOBiznesTransaction> {
   }
 
   protected createCsvExporter(options?: any): ICsvExporter<PKOBiznesTransaction> {
-    return new CsvExporter(options) as unknown as ICsvExporter<PKOBiznesTransaction>;
+    return new CsvExporter(options);
   }
 
   // ── Hook overrides (PKO Biznes-specific behavior) ───────────────

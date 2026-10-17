@@ -108,7 +108,7 @@ export class AliorConverter extends BaseConverter<AliorTransaction> {
   }
 
   protected createCsvExporter(options?: any): ICsvExporter<AliorTransaction> {
-    return new CsvExporter(options) as unknown as ICsvExporter<AliorTransaction>;
+    return new CsvExporter(options);
   }
 
   // ── Hook overrides (Alior-specific behavior) ───────────────

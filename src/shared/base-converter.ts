@@ -213,11 +213,10 @@ export interface BaseImportResult<TRaw> {
 }
 
 /**
- * Interface for CsvExporter (both converters expose the same API).
+ * A bank's accounting-file exporter (converters/shared/base-csv-exporter.ts).
  */
 export interface ICsvExporter<TRaw> {
   export(transactions: BaseProcessedTransaction<TRaw>[]): string;
-  exportAuxiliary(transactions: BaseProcessedTransaction<TRaw>[]): string;
 }
 
 /**
@@ -1310,20 +1309,6 @@ export abstract class BaseConverter<TRaw> {
       apartmentPrefix: accountConfig?.apartmentPrefix,
     });
     return exporter.export(transactions);
-  }
-
-  exportAuxiliaryFile(
-    transactions: BaseProcessedTransaction<TRaw>[],
-    accountConfig?: { bankAccountSymbol?: string; apartmentPrefix?: string },
-  ): string {
-    const exporter = this.createCsvExporter({
-      separator: '\t',
-      dateFormat: 'D.MM.YYYY',
-      decimalSeparator: ',',
-      bankAccountSymbol: accountConfig?.bankAccountSymbol,
-      apartmentPrefix: accountConfig?.apartmentPrefix,
-    });
-    return exporter.exportAuxiliary(transactions);
   }
 
   getCacheStats() {

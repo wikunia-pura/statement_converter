@@ -96,7 +96,7 @@ export class SantanderXmlConverter extends BaseConverter<XmlTransaction> {
   }
 
   protected createCsvExporter(options?: any): ICsvExporter<XmlTransaction> {
-    return new CsvExporter(options) as unknown as ICsvExporter<XmlTransaction>;
+    return new CsvExporter(options);
   }
 
   // ── Hook overrides (Santander-specific behavior) ───────────

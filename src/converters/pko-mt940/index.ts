@@ -117,7 +117,7 @@ export class PKOBPMT940Converter extends BaseConverter<MT940Transaction> {
   }
 
   protected createCsvExporter(options?: any): ICsvExporter<MT940Transaction> {
-    return new CsvExporter(options) as unknown as ICsvExporter<MT940Transaction>;
+    return new CsvExporter(options);
   }
 
   // ── Hook overrides (PKO-specific behavior) ─────────────────

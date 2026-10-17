@@ -2762,7 +2762,9 @@ export type PortableSettings = Partial<Pick<AppSettings, PortableSettingKey>>;
  * only ones a restore or a settings import writes. A secret, a path or anything
  * tied to one computer must never be added there.
  *
- * Out of scope on purpose: `app_config` (infrastructure, not user data), the
+ * Out of scope on purpose: `app_config` and `restore_staging` (infrastructure,
+ * not user data — the second only carries a restore's rows to
+ * `restore_apply`, which empties it), the
  * ROWS of `app_users` (a trigger-maintained mirror of the Supabase auth
  * accounts, so they are rebuilt rather than restored — and the participants on
  * each meeting carry their own snapshot of the people; their NAMES are a

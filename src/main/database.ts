@@ -402,6 +402,23 @@ function keepUnknownItems<T extends object>(raw: unknown, clean: T[], key: keyof
   });
 }
 
+/** What a restore writes: each table's rows (see `DatabaseService.planRestore`). */
+export interface RestorePlan {
+  tables: { tabela: string; wiersze: Record<string, unknown>[] }[];
+  /** Tables the backup adds to without owning them: their rows it lacks stay. */
+  bezUsuwania: string[];
+}
+
+/** The live facts a restore plan needs besides the backup. */
+export interface RestoreLookups {
+  /** Now, for a timestamp a backup row lacks. */
+  now: string;
+  /** The live statement library by `nr|od|do`, and its highest id — read only for a backup with Zebrania but no library of its own. */
+  sprawozdania: { idByKey: Map<string, number>; maxId: number } | null;
+  /** The live templates by folded name — read only for a backup with Zebrania but no templates. */
+  szablonIdByNazwa: Map<string, number> | null;
+}
+
 interface CacheEntry<T> {
   data: T;
   expires: number;
@@ -5887,430 +5904,212 @@ class DatabaseService {
     }
   }
 
-  private async deleteByIds(table: string, ids: number[]): Promise<void> {
-    for (const slice of DatabaseService.chunk(ids)) {
-      const { error } = await getSupabase().from(table).delete().in('id', slice);
-      if (error) throw new Error(`restore cleanup ${table}: ${error.message}`);
-    }
-  }
+  // ------------------------------ Restore ------------------------------
 
   /**
-   * Insert the backup's rows into a referenced table while the old rows still
-   * exist, returning oldId → newId. Postgres assigns fresh ids, so rows that
-   * point at this table (adresy.bank_id, adresy.account_types values) are
-   * rewritten through this map before they're inserted.
-   */
-  private async insertRemapped(
-    table: string,
-    select: string,
-    oldIds: number[],
-    payload: Record<string, unknown>[],
-  ): Promise<Map<number, number>> {
-    const map = new Map<number, number>();
-    if (payload.length === 0) return map;
-    const { data, error } = await getSupabase().from(table).insert(payload).select(select);
-    if (error || !data) throw new Error(`restore ${table}: ${error?.message ?? 'no data returned'}`);
-    // PostgREST returns inserted rows in payload order.
-    (data as unknown as { id: number }[]).forEach((row, i) => map.set(oldIds[i], row.id));
-    return map;
-  }
-
-  /** Every id a table holds now — the rows a restore is about to replace. */
-  private async liveIds(table: string): Promise<number[]> {
-    const rows = await fetchAllPaged<{ id: number }>(`restore ${table} (id)`, (from, to) =>
-      getSupabase().from(table).select('id').order('id', { ascending: true }).range(from, to),
-    );
-    return rows.map((r) => Number(r.id));
-  }
-
-  /**
-   * Swap a table's rows for the backup's without a moment of emptiness: the
-   * ids of the rows there now are noted, the backup's rows inserted, and only
-   * then the old ones deleted. A failure part-way leaves the old rows in place
-   * (beside some new ones) — never an empty table. For tables that no other
-   * table points at by id and that have no unique key a second copy would hit.
-   */
-  private async replaceRows(table: string, rows: Record<string, unknown>[]): Promise<void> {
-    const old = await this.liveIds(table);
-    await this.insertChunked(table, rows);
-    await this.deleteByIds(table, old);
-  }
-
-  /**
-   * The same for a table with a natural unique key (`onConflict`: a community
-   * and month, a NIP and year…), where a second copy cannot even be inserted:
-   * the backup's rows are upserted on that key — a row that exists keeps its id,
-   * so whatever points at it stays pointed — and the live rows whose key the
-   * backup does not have are returned (`idColumn` values), for the caller to
-   * delete once nothing it still restores needs them.
-   */
-  private async upsertByKey(
-    table: string,
-    rows: Record<string, unknown>[],
-    onConflict: string,
-    options: { idColumn?: string; chunkSize?: number } = {},
-  ): Promise<{ stale: unknown[]; keys: Set<string> }> {
-    const idColumn = options.idColumn ?? 'id';
-    const keyColumns = onConflict.split(',').map((c) => c.trim());
-    const keyOf = (r: Record<string, unknown>) => keyColumns.map((c) => String(r[c] ?? '')).join('|');
-    // One row per key: an upsert that meets its own key twice is refused by Postgres.
-    const unique = [...new Map(rows.map((r) => [keyOf(r), r] as const)).values()];
-    for (const slice of DatabaseService.chunk(unique, options.chunkSize ?? 500)) {
-      const { error } = await getSupabase().from(table).upsert(slice, { onConflict });
-      if (error) throw new Error(`restore ${table}: ${error.message}`);
-    }
-    const keys = new Set(unique.map(keyOf));
-    const columns = [...new Set([idColumn, ...keyColumns])].join(', ');
-    const live = await fetchAllPaged<any>(`restore ${table} (klucze)`, (from, to) =>
-      getSupabase().from(table).select(columns).order(idColumn, { ascending: true }).range(from, to),
-    );
-    return { stale: live.filter((r) => !keys.has(keyOf(r))).map((r) => r[idColumn]), keys };
-  }
-
-  /**
-   * Delete rows by the values of one column, in slices. A text value with a
-   * double quote or a backslash goes one by one through `eq`: postgrest-js
-   * quotes `in(...)` values but does not escape those two, so a community named
-   * `WM "Pod Lipą"` would break the whole filter.
-   */
-  private async deleteWhereIn(table: string, column: string, values: unknown[]): Promise<void> {
-    const awkward = values.filter((v) => typeof v === 'string' && /["\\]/.test(v));
-    for (const value of awkward) {
-      const { error } = await getSupabase().from(table).delete().eq(column, value as string);
-      if (error) throw new Error(`restore cleanup ${table}: ${error.message}`);
-    }
-    const plain = values.filter((v) => !awkward.includes(v));
-    for (const slice of DatabaseService.chunk(plain, 200)) {
-      const { error } = await getSupabase().from(table).delete().in(column, slice as (string | number)[]);
-      if (error) throw new Error(`restore cleanup ${table}: ${error.message}`);
-    }
-  }
-
-  /**
-   * Bring a dictionary in line with the backup while keeping the ids of the rows
-   * the two share: each backup row is matched to a live row by its key (a name,
-   * trimmed and case-insensitive) and written over it in place; a row with no
-   * match is inserted. Returns backup id → live id, and the live ids no backup
-   * row matched — deleted by the caller at the very end, once nothing restored
-   * points at them.
+   * The rows a restore writes, table by table, as `restore_apply` takes them
+   * (supabase/restore-transakcja.sql) — built from the backup alone, with its
+   * own ids, and the few live facts in `lookups`. Pure, so a test can check
+   * every rule below without a database; the order the tables are written in
+   * is the function's, not this list's.
    *
-   * In place rather than re-inserted: what points at these rows from sections
-   * the backup does not carry keeps pointing at them (ON DELETE SET NULL would
-   * cut it), and a unique name never meets its own old copy.
+   * The rules:
+   *   - a table is in the plan only when the backup carries its section — an
+   *     older backup leaves the tables it knows nothing about alone; meeting
+   *     kinds and places only travel with the meetings;
+   *   - links by NAME stay by name: a row's community (`adres_id`) is the
+   *     backup's community of that name, a notice's template its template of
+   *     that name;
+   *   - a link the backup cannot back (a meeting, city unit or proxy it does
+   *     not carry) is dropped, never guessed;
+   *   - a unique name or key the backup holds twice (one written before the
+   *     database refused that) is written once, and links follow the row kept;
+   *   - a version's statement links its library row by community and period,
+   *     and a statement the library lacks goes back into it from the version's
+   *     own copy.
    */
-  private async mergeByKey(
-    table: string,
-    liveColumns: string,
-    liveKey: (row: any) => string,
-    backupRows: { id: number; key: string; values: Record<string, unknown> }[],
-  ): Promise<{ idMap: Map<number, number>; stale: number[] }> {
-    const live = await fetchAllPaged<any>(`restore ${table} (odczyt)`, (from, to) =>
-      getSupabase().from(table).select(liveColumns).order('id', { ascending: true }).range(from, to),
-    );
-    const byKey = new Map<string, number[]>();
-    for (const r of live) byKey.set(liveKey(r), [...(byKey.get(liveKey(r)) ?? []), Number(r.id)]);
-    const idMap = new Map<number, number>();
-    const updates: Record<string, unknown>[] = [];
-    const inserts: { oldId: number; values: Record<string, unknown> }[] = [];
-    // A backup taken before names became unique (unikalne-nazwy.sql) may hold the
-    // same name twice. Each live row is still matched once; a duplicate with no
-    // live row left to take is folded into the first row of its name instead of
-    // inserted — a second insert would hit the unique index and stop the restore
-    // half-way.
-    const firstOfKey = new Map<string, number>();
-    const folded: { id: number; into: number }[] = [];
-    for (const b of backupRows) {
-      const liveId = byKey.get(b.key)?.shift();
-      const first = firstOfKey.get(b.key);
-      if (first === undefined) firstOfKey.set(b.key, b.id);
-      if (liveId !== undefined) {
-        updates.push({ id: liveId, ...b.values });
-        idMap.set(b.id, liveId);
-      } else if (first !== undefined) {
-        folded.push({ id: b.id, into: first });
-      } else {
-        inserts.push({ oldId: b.id, values: b.values });
-      }
-    }
-    // An upsert on the primary key of rows that exist is an update of each, in one request per slice.
-    for (const slice of DatabaseService.chunk(updates)) {
-      const { error } = await getSupabase().from(table).upsert(slice, { onConflict: 'id' });
-      if (error) throw new Error(`restore ${table}: ${error.message}`);
-    }
-    for (const slice of DatabaseService.chunk(inserts)) {
-      const sliceMap = await this.insertRemapped(
-        table,
-        'id',
-        slice.map((r) => r.oldId),
-        slice.map((r) => r.values),
-      );
-      sliceMap.forEach((newId, oldId) => idMap.set(oldId, newId));
-    }
-    for (const f of folded) {
-      const target = idMap.get(f.into);
-      if (target !== undefined) idMap.set(f.id, target);
-    }
-    const matched = new Set(idMap.values());
-    return { idMap, stale: live.map((r) => Number(r.id)).filter((id) => !matched.has(id)) };
-  }
-
-  /**
-   * Replace the shared data with the backup's contents — as non-destructively
-   * as the database allows without a transaction:
-   *   - dictionaries others point at (banks, account types, city units and
-   *     their proxies, communities, meeting kinds and places) are merged in
-   *     place by name, so their ids — and every link to them — survive;
-   *   - tables with a natural unique key are upserted on it;
-   *   - the rest get their new rows inserted before the old ones are deleted;
-   *   - what the backup does not have is deleted last, once nothing restored
-   *     points at it.
-   * A failure part-way therefore leaves the old data in place (with some new
-   * rows beside it) rather than empty tables, and a section the backup does not
-   * carry is never touched. What it cannot give is all-or-nothing across tables:
-   * a failure leaves some sections restored and others not — the safety copy
-   * taken just before (main.ts) is the way back.
-   */
-  async importFullBackup(backup: BackupData): Promise<void> {
-    const {
-      banks,
-      kontrahenci,
-      adresy,
-      kontoTypy,
-      history,
-      odczytyHistory,
-      zgnJednostki,
-      zgnPelnomocnicy,
-      mailingPola,
-      mailingSzablony,
-      mailingHistory,
-      spotkaniaTypy,
-      spotkania,
-      spotkaniaLokalizacje,
-      zadania,
-      zadaniaKomentarze,
-      zadaniaNotatki,
-      appUserNames,
-      ksiegowaniaPriorytety,
-      ksiegowaniaUwagi,
-      ksiegowaniaPrzypisania,
-      ksiegowaniaPliki,
-      ksiegowaniaKonwersje,
-      notificationPrefs,
-      mailingTypy,
-      zebrania,
-      zebraniaSprawozdania,
-      zebraniaWspolnoty,
-      zebraniaUstawienia,
-      planyGospodarcze,
-      podatkiNieruchomosci,
-      podatkiStawki,
-      podatkiCit,
-      podatkiPit,
-      podatkiCitUstawienia,
-      podpisHistoria,
-      settings,
-    } = backup.data;
-
+  static planRestore(backup: BackupData, lookups: RestoreLookups): RestorePlan {
+    const d = backup.data;
+    const now = lookups.now;
+    const tables: RestorePlan['tables'] = [];
+    const bezUsuwania: string[] = [];
+    const put = (tabela: string, wiersze: Record<string, unknown>[]) => tables.push({ tabela, wiersze });
     const nameKey = (value: unknown) => String(value ?? '').trim().toLowerCase();
-    // Ids the backup does not have, deleted at the very end (see the doc above).
-    const staleAtEnd: { table: string; ids: number[] }[] = [];
+    const isId = (value: unknown): value is number => Number.isInteger(value) && (value as number) > 0;
+    // The backup's id of each row — or, for a row an old backup wrote without
+    // one, the next one free among them.
+    const idsOf = (rows: { id?: unknown }[]): number[] => {
+      let next = rows.reduce((max, r) => (isId(r.id) && r.id > max ? r.id : max), 0);
+      return rows.map((r) => (isId(r.id) ? r.id : ++next));
+    };
+    // One row per id, and per unique key: the last one, as an upsert keeps.
+    const lastPer = <T>(rows: T[], key: (row: T) => string): T[] => [
+      ...new Map(rows.map((row) => [key(row), row] as const)).values(),
+    ];
 
-    // Bypass the 60 s cache — every read below must see the live tables.
-    this.invalidateAllCaches();
+    // ---------------- Dictionaries ----------------
+    // Banks and communities carry a unique name: a name the backup holds twice
+    // is written once, and the other row's id follows it.
+    const foldByName = <T extends { id?: unknown }>(rows: T[], nameOf: (row: T) => unknown) => {
+      const ids = idsOf(rows);
+      const keptByName = new Map<string, number>();
+      const idOf = new Map<number, number>();
+      const kept: { row: T; id: number }[] = [];
+      rows.forEach((row, i) => {
+        const key = nameKey(nameOf(row));
+        const first = keptByName.get(key);
+        if (first !== undefined) {
+          idOf.set(ids[i], first);
+          return;
+        }
+        keptByName.set(key, ids[i]);
+        idOf.set(ids[i], ids[i]);
+        kept.push({ row, id: ids[i] });
+      });
+      return { kept, idOf, idByName: keptByName };
+    };
 
-    // ---------------- Dictionaries, merged in place by name ----------------
-    // Each is required in a backup (validateBackup) except the city units, and
-    // a missing one is left alone: its column is then also left out of the
-    // communities written below, so their live links stay.
-    let bankIdMap: Map<number, number> | null = null;
-    if (banks) {
-      const merged = await this.mergeByKey(
-        'banks',
-        'id, name',
-        (r) => nameKey(r.name),
-        banks.map((b) => ({
-          id: b.id,
-          key: nameKey(b.name),
-          values: {
-            name: b.name,
-            converter_id: b.converterId,
-            account_prefixes: b.accountPrefixes ?? [],
-            created_at: b.createdAt,
-          },
+    const banks = foldByName(d.banks, (b) => b.name);
+    put(
+      'banks',
+      banks.kept.map(({ row: b, id }) => ({
+        id,
+        name: b.name,
+        converter_id: b.converterId,
+        account_prefixes: b.accountPrefixes ?? [],
+        created_at: b.createdAt,
+      })),
+    );
+    const bankIdOf = (id: number | null | undefined) => (id != null ? banks.idOf.get(id) ?? null : null);
+
+    // Exactly one default: the backup's first.
+    const typIds = idsOf(d.kontoTypy);
+    const defaultTyp = d.kontoTypy.findIndex((t) => t.isDefault);
+    put(
+      'konto_typy',
+      lastPer(
+        d.kontoTypy.map((t, i) => ({
+          id: typIds[i],
+          name: t.name,
+          bank_account_symbol: t.bankAccountSymbol,
+          apartment_prefix: t.apartmentPrefix,
+          is_default: i === defaultTyp,
+          created_at: t.createdAt,
         })),
-      );
-      bankIdMap = merged.idMap;
-      staleAtEnd.push({ table: 'banks', ids: merged.stale });
-    }
-
-    let typIdMap: Map<number, number> | null = null;
-    if (kontoTypy) {
-      // Exactly one default: the backup's first, and the live one stood down
-      // before it is written (a unique index allows only one at a time).
-      const defaultId = kontoTypy.find((t) => t.isDefault)?.id;
-      if (defaultId !== undefined) await this.clearDefaultKontoTyp();
-      const merged = await this.mergeByKey(
-        'konto_typy',
-        'id, name',
-        (r) => nameKey(r.name),
-        kontoTypy.map((t) => ({
-          id: t.id,
-          key: nameKey(t.name),
-          values: {
-            name: t.name,
-            bank_account_symbol: t.bankAccountSymbol,
-            apartment_prefix: t.apartmentPrefix,
-            is_default: t.id === defaultId,
-            created_at: t.createdAt,
-          },
-        })),
-      );
-      typIdMap = merged.idMap;
-      staleAtEnd.push({ table: 'konto_typy', ids: merged.stale });
-    }
+        (r) => String(r.id),
+      ),
+    );
+    const typIdSet = new Set(typIds);
 
     // City units and their proxies (Mailing). Backups predating the module carry
     // no units: then the live ones stay, and so do the communities' links to them.
-    let zgnIdMap: Map<number, number> | null = null;
-    const zgnPelnomocnikIdMap = new Map<number, number>();
-    if (zgnJednostki) {
-      const merged = await this.mergeByKey(
+    let zgnIdSet: Set<number> | null = null;
+    let pelnomocnikIdSet = new Set<number>();
+    if (d.zgnJednostki) {
+      const zgnIds = idsOf(d.zgnJednostki);
+      zgnIdSet = new Set(zgnIds);
+      put(
         'zgn_jednostki',
-        'id, nazwa',
-        (r) => nameKey(r.nazwa),
-        zgnJednostki.map((z) => ({
-          id: z.id,
-          key: nameKey(z.nazwa),
-          values: { nazwa: z.nazwa, email: z.email, created_at: z.createdAt },
-        })),
+        d.zgnJednostki.map((z, i) => ({ id: zgnIds[i], nazwa: z.nazwa, email: z.email, created_at: z.createdAt })),
       );
-      zgnIdMap = merged.idMap;
-      // A proxy acts for one unit: matched within it by name. A backup written
-      // before proxies existed says nothing about them — the live ones stay
-      // (those of units the backup drops go with the unit, ON DELETE CASCADE).
-      if (zgnPelnomocnicy) {
-        const units = merged.idMap;
-        const proxies = await this.mergeByKey(
+      // A backup written before proxies existed says nothing about them — the
+      // live ones stay (those of units the backup drops go with the unit).
+      if (d.zgnPelnomocnicy) {
+        const units = zgnIdSet;
+        const proxies = d.zgnPelnomocnicy.filter((p) => units.has(p.jednostkaId));
+        const proxyIds = idsOf(proxies);
+        pelnomocnikIdSet = new Set(proxyIds);
+        put(
           'zgn_pelnomocnicy',
-          'id, jednostka_id, imie_nazwisko',
-          (r) => `${r.jednostka_id}|${nameKey(r.imie_nazwisko)}`,
-          zgnPelnomocnicy
-            .filter((p) => units.has(p.jednostkaId))
-            .map((p) => {
-              const unitId = units.get(p.jednostkaId)!;
-              return {
-                id: p.id,
-                key: `${unitId}|${nameKey(p.imieNazwisko)}`,
-                values: {
-                  jednostka_id: unitId,
-                  imie_nazwisko: p.imieNazwisko,
-                  email: p.email ?? '',
-                  created_at: p.createdAt,
-                },
-              };
-            }),
+          proxies.map((p, i) => ({
+            id: proxyIds[i],
+            jednostka_id: p.jednostkaId,
+            imie_nazwisko: p.imieNazwisko,
+            email: p.email ?? '',
+            created_at: p.createdAt,
+          })),
         );
-        proxies.idMap.forEach((newId, oldId) => zgnPelnomocnikIdMap.set(oldId, newId));
-        staleAtEnd.push({ table: 'zgn_pelnomocnicy', ids: proxies.stale });
       }
-      // After the communities and proxies: a stale unit takes its proxies with it.
-      staleAtEnd.push({ table: 'zgn_jednostki', ids: merged.stale });
     }
 
-    if (adresy) {
-      const merged = await this.mergeByKey(
-        'adresy',
-        'id, nazwa',
-        (r) => nameKey(r.nazwa),
-        adresy.map((a) => {
-          const values: Record<string, unknown> = {
-            nazwa: a.nazwa,
-            alternative_names: a.alternativeNames ?? [],
-            swrk_identifiers: a.swrkIdentifiers ?? [],
-            account_numbers: a.accountNumbers ?? [],
-            apartment_mappings: a.apartmentMappings ?? [],
-            // Absent in backups written before communities had a board.
-            zarzad: DatabaseService.zarzadList(a.zarzad),
-            // Absent in backups written before communities had a tax identification.
-            identyfikacja: normalizeIdentyfikacja(a.identyfikacja),
-            created_at: a.createdAt,
-          };
-          // Links into a dictionary the backup carries are re-pointed through
-          // its map; one it does not carry is left as the live row has it.
-          if (bankIdMap) values.bank_id = a.bankId != null ? bankIdMap.get(a.bankId) ?? null : null;
-          if (typIdMap) {
-            const accountTypes: Record<string, number> = {};
-            for (const [account, typId] of Object.entries(a.accountTypes ?? {})) {
-              const mapped = typIdMap.get(typId);
-              if (mapped !== undefined) accountTypes[account] = mapped;
-            }
-            values.account_types = accountTypes;
-          }
-          if (zgnIdMap) {
-            values.zgn_jednostka_id = a.zgnJednostkaId != null ? zgnIdMap.get(a.zgnJednostkaId) ?? null : null;
-          }
-          return { id: a.id, key: nameKey(a.nazwa), values };
-        }),
-      );
-      // First of the stale dictionaries to go: communities point at the others.
-      staleAtEnd.unshift({ table: 'adresy', ids: merged.stale });
-    }
-
-    // Nothing points at contractors: new rows in, then the old ones out.
-    if (kontrahenci) {
-      await this.replaceRows(
-        'kontrahenci',
-        kontrahenci.map((k) => {
-          const typy: KontrahentTyp[] = k.typy && k.typy.length > 0 ? k.typy : ['Kontrahent'];
-          return {
-            nazwa: k.nazwa,
-            konto_kontrahenta: k.kontoKontrahenta,
-            nip: k.nip || null,
-            typ: typy[0],
-            typy,
-            alternative_names: k.alternativeNames ?? [],
-            created_at: k.createdAt,
-          };
-        }),
-      );
-    }
-
-    // Rows elsewhere keep a community's NAME next to its id, and the name is what
-    // the restored rows are re-pointed through (the backup's ids may be another
-    // database's). Read after the merge: a community the backup has resolves to
-    // its live row.
-    this.invalidateCache('adresy');
-    const adresIdByNazwa = new Map(
-      (await this.getAllAdresy()).map(a => [nameKey(a.nazwa), a.id] as const),
+    const adresy = foldByName(d.adresy, (a) => a.nazwa);
+    put(
+      'adresy',
+      adresy.kept.map(({ row: a, id }) => {
+        const accountTypes: Record<string, number> = {};
+        for (const [account, typId] of Object.entries(a.accountTypes ?? {})) {
+          if (typIdSet.has(typId)) accountTypes[account] = typId;
+        }
+        return {
+          id,
+          nazwa: a.nazwa,
+          alternative_names: a.alternativeNames ?? [],
+          swrk_identifiers: a.swrkIdentifiers ?? [],
+          account_numbers: a.accountNumbers ?? [],
+          apartment_mappings: a.apartmentMappings ?? [],
+          // Absent in backups written before communities had a board.
+          zarzad: DatabaseService.zarzadList(a.zarzad),
+          // Absent in backups written before communities had a tax identification.
+          identyfikacja: normalizeIdentyfikacja(a.identyfikacja),
+          created_at: a.createdAt,
+          bank_id: bankIdOf(a.bankId),
+          account_types: accountTypes,
+          // Without units in the backup the live link stays (the column is left out).
+          ...(zgnIdSet
+            ? { zgn_jednostka_id: a.zgnJednostkaId != null && zgnIdSet.has(a.zgnJednostkaId) ? a.zgnJednostkaId : null }
+            : {}),
+        };
+      }),
     );
-    const adresIdOf = (nazwa: string | null | undefined) => (nazwa ? adresIdByNazwa.get(nameKey(nazwa)) ?? null : null);
+    // Rows elsewhere keep a community's NAME next to its id, and the name is
+    // what they are linked through.
+    const adresIdOf = (nazwa: string | null | undefined) => (nazwa ? adresy.idByName.get(nameKey(nazwa)) ?? null : null);
+
+    // Nothing points at contractors.
+    const kontrahentIds = idsOf(d.kontrahenci);
+    put(
+      'kontrahenci',
+      d.kontrahenci.map((k, i) => {
+        const typy: KontrahentTyp[] = k.typy && k.typy.length > 0 ? k.typy : ['Kontrahent'];
+        return {
+          id: kontrahentIds[i],
+          nazwa: k.nazwa,
+          konto_kontrahenta: k.kontoKontrahenta,
+          nip: k.nip || null,
+          typ: typy[0],
+          typy,
+          alternative_names: k.alternativeNames ?? [],
+          created_at: k.createdAt,
+        };
+      }),
+    );
 
     // The conversion log. No DOM tick here: the posting state lives in
-    // `ksiegowania_konwersje` (restored below), never in the clearable log.
-    if (history) {
-      await this.replaceRows(
-        'history',
-        history.map(h => ({
-          file_name: h.fileName,
-          bank_name: h.bankName,
-          converter_name: h.converterName,
-          status: h.status,
-          error_message: h.errorMessage || null,
-          input_path: h.inputPath,
-          output_path: h.outputPath,
-          converted_at: h.convertedAt,
-          adres_id: adresIdOf(h.adresNazwa),
-          adres_nazwa: h.adresNazwa ?? null,
-        })),
-      );
-    }
+    // `ksiegowania_konwersje`, never in the clearable log.
+    const historyIds = idsOf(d.history);
+    put(
+      'history',
+      d.history.map((h, i) => ({
+        id: historyIds[i],
+        file_name: h.fileName,
+        bank_name: h.bankName,
+        converter_name: h.converterName,
+        status: h.status,
+        error_message: h.errorMessage || null,
+        input_path: h.inputPath,
+        output_path: h.outputPath,
+        converted_at: h.convertedAt,
+        adres_id: adresIdOf(h.adresNazwa),
+        adres_nazwa: h.adresNazwa ?? null,
+      })),
+    );
 
-    // Backups written before the meter-readings module carry no such key; leave
-    // the existing rows alone rather than wiping them on an old restore.
-    if (odczytyHistory) {
-      await this.replaceRows(
+    if (d.odczytyHistory) {
+      const ids = idsOf(d.odczytyHistory);
+      put(
         'odczyty_history',
-        odczytyHistory.map(h => ({
+        d.odczytyHistory.map((h, i) => ({
+          id: ids[i],
           supplier: h.supplier,
           status: h.status,
           error_message: h.errorMessage || null,
@@ -6324,39 +6123,30 @@ class DatabaseService {
       );
     }
 
-    // Mailing kinds. Upserted by key rather than wiped: the built-in kind is
-    // protected by a trigger against deletion, and templates and history point at
-    // kinds by key, which survives this untouched. Kinds the backup does not know
-    // go — except the built-in one, which always exists.
-    if (mailingTypy) {
-      const rows = mailingTypy.map(typ => ({
-        klucz: typ.klucz,
-        // The built-in kind's name is fixed (a trigger refuses any other).
-        nazwa: typ.systemowy ? DatabaseService.builtinMailingTypNazwa(typ.klucz) ?? typ.nazwa : typ.nazwa,
-        systemowy: typ.systemowy === true,
-        opis: typ.opis ?? '',
-        adresaci: DatabaseService.mailingAdresaci(typ.adresaci),
-        created_at: typ.createdAt,
-      }));
-      for (const slice of DatabaseService.chunk(rows)) {
-        const { error } = await getSupabase().from('mailing_typy').upsert(slice, { onConflict: 'klucz' });
-        if (error) throw new Error(`restore mailing_typy: ${error.message}`);
-      }
-      const keep = new Set(mailingTypy.map(t => t.klucz));
-      const stale = (await this.getMailingTypy()).filter(t => !t.systemowy && !keep.has(t.klucz));
-      await this.deleteByIds('mailing_typy', stale.map(t => t.id));
+    // Mailing kinds by key: templates and history point at kinds by key. The
+    // built-in kind's name is fixed (a trigger refuses any other).
+    if (d.mailingTypy) {
+      put(
+        'mailing_typy',
+        lastPer(d.mailingTypy, (t) => t.klucz).map((typ) => ({
+          klucz: typ.klucz,
+          nazwa: typ.systemowy ? DatabaseService.builtinMailingTypNazwa(typ.klucz) ?? typ.nazwa : typ.nazwa,
+          systemowy: typ.systemowy === true,
+          opis: typ.opis ?? '',
+          adresaci: DatabaseService.mailingAdresaci(typ.adresaci),
+          created_at: typ.createdAt,
+        })),
+      );
     }
 
-    // Mailing dictionaries: each key is absent in backups written before the
-    // module existed, so a missing key leaves the live rows alone.
-    if (mailingPola) {
-      await this.replaceRows(
+    if (d.mailingPola) {
+      const ids = idsOf(d.mailingPola);
+      put(
         'mailing_pola',
-        // `jednostka` and `typ_wartosci` default for backups written before
-        // those columns existed — both are NOT NULL, so an undefined would fail
-        // the whole restore. `typ` is absent in backups written before fields
-        // could be bound to a kind: null keeps them offered everywhere.
-        mailingPola.map(p => ({
+        // `typ` is absent in backups written before fields could be bound to a
+        // kind: null keeps them offered everywhere.
+        d.mailingPola.map((p, i) => ({
+          id: ids[i],
           nazwa: p.nazwa,
           tekst: p.tekst,
           jednostka: p.jednostka ?? '',
@@ -6367,11 +6157,15 @@ class DatabaseService {
       );
     }
 
-    // Before Zebrania, whose notices find their template by name among these.
-    if (mailingSzablony) {
-      await this.replaceRows(
+    // Zebrania's notices find their template by name among these.
+    let szablonIdByNazwa = lookups.szablonIdByNazwa ?? new Map<string, number>();
+    if (d.mailingSzablony) {
+      const ids = idsOf(d.mailingSzablony);
+      szablonIdByNazwa = new Map(d.mailingSzablony.map((s, i) => [nameKey(s.nazwa), ids[i]] as const));
+      put(
         'mailing_szablony',
-        mailingSzablony.map(s => ({
+        d.mailingSzablony.map((s, i) => ({
+          id: ids[i],
           nazwa: s.nazwa,
           typ: s.typ,
           temat: s.temat,
@@ -6384,135 +6178,112 @@ class DatabaseService {
       );
     }
 
-    // Old meeting id → new one, filled by the meetings' restore below and read by
-    // the tasks', the Zebrania entries' and the mailing history's — their link to
-    // a meeting is re-pointed through it. Empty when the backup carries no
-    // meetings: the live meetings then keep ids the backup cannot be trusted to
-    // know, so such a link is dropped rather than guessed.
-    const spotkanieIdMap = new Map<number, number>();
-    // Same for locations — the Zebrania entries below point at them too.
-    let restoredLokalizacjaIdMap = new Map<number, number>();
-    // The meetings being replaced — deleted at the end, once the tasks, entries
-    // and mails that pointed at them have been replaced too.
-    let oldSpotkanieIds: number[] = [];
-
-    // Kalendarz. Gated on the meetings rather than on the types, because the two
-    // keys are written together and the types only exist to be pointed at: a
-    // backup with types but no meetings would replace the dictionary out from
-    // under live meetings, nulling their type.
-    if (spotkania) {
-      // Kinds and places merged by name, like the other dictionaries.
-      const typy = await this.mergeByKey(
-        'spotkania_typy',
-        'id, nazwa',
-        (r) => nameKey(r.nazwa),
-        (spotkaniaTypy ?? []).map(t => ({
-          id: t.id,
-          key: nameKey(t.nazwa),
-          values: {
+    // Kalendarz. Gated on the meetings: kinds and places only exist to be
+    // pointed at, and a backup with them but no meetings would replace the
+    // dictionaries out from under the live meetings. Without meetings in the
+    // backup, a link to one (from a task, an entry, a mail) is dropped.
+    let spotkanieIdSet = new Set<number>();
+    let lokalizacjaIdSet = new Set<number>();
+    if (d.spotkania) {
+      let typIdsSpotkan = new Set<number>();
+      if (d.spotkaniaTypy) {
+        const ids = idsOf(d.spotkaniaTypy);
+        typIdsSpotkan = new Set(ids);
+        put(
+          'spotkania_typy',
+          d.spotkaniaTypy.map((t, i) => ({
+            id: ids[i],
             nazwa: t.nazwa,
             kolor: t.kolor,
             opis: t.opis,
             // Absent in backups written before types had a notice period.
             dni_na_dokumenty: DatabaseService.noticeDays(t.dniNaDokumenty),
             created_at: t.createdAt,
-          },
-        })),
-      );
-      const lokalizacje = await this.mergeByKey(
-        'spotkania_lokalizacje',
-        'id, nazwa',
-        (r) => nameKey(r.nazwa),
-        (spotkaniaLokalizacje ?? []).map(l => ({
-          id: l.id,
-          key: nameKey(l.nazwa),
-          values: { nazwa: l.nazwa, adres: l.adres ?? '', opis: l.opis ?? '', created_at: l.createdAt },
-        })),
-      );
-
-      oldSpotkanieIds = await this.liveIds('spotkania');
-      // Chunked, and remapped per chunk: the tasks restored further down point at
-      // these meetings by id, and Postgres hands every one of them a fresh id.
-      for (const slice of DatabaseService.chunk(spotkania)) {
-        const sliceMap = await this.insertRemapped(
-          'spotkania',
-          'id',
-          slice.map(m => m.id),
-          slice.map(m => ({
-            nazwa: m.nazwa,
-            typ_id: m.typId != null ? typy.idMap.get(m.typId) ?? null : null,
-            // The backup's community number may be another database's; the
-            // name is what survives a restore, and what the meeting displays.
-            adres_id: adresIdOf(m.adresNazwa),
-            adres_nazwa: m.adresNazwa ?? '',
-            // Re-pointed through the merged dictionary; the name travels
-            // regardless, which is what a meeting actually displays.
-            lokalizacja_id: m.lokalizacjaId != null ? lokalizacje.idMap.get(m.lokalizacjaId) ?? null : null,
-            lokalizacja_nazwa: m.lokalizacjaNazwa ?? '',
-            starts_at: m.startsAt,
-            ends_at: m.endsAt ?? null,
-            opis: m.opis ?? '',
-            // The participants are a snapshot of accounts, whose ids are auth
-            // uuids — stable across a restore, so they travel verbatim.
-            uczestnicy: m.uczestnicy ?? [],
-            // Absent in backups written before these columns existed: a meeting
-            // from back then meant a real date and no paperwork trail.
-            termin_status: m.terminStatus === 'wstepny' ? 'wstepny' : 'potwierdzony',
-            termin_wysylki: DatabaseService.dayKeyOrNull(m.terminWysylki),
-            termin_zmieniony_at: m.terminZmienionyAt ?? null,
-            termin_zmieniony_z: m.terminZmienionyZ ?? null,
-            termin_zmieniony_by: m.terminZmienionyBy ?? null,
-            termin_zmiana_odczytana_at: m.terminZmianaOdczytanaAt ?? null,
-            termin_zmiana_odczytana_by: m.terminZmianaOdczytanaBy ?? null,
-            // Re-pointed through the units and proxies merged above; the name
-            // travels regardless. All absent in backups written before meetings
-            // could be assigned a city unit. Without units in the backup the
-            // backup's ids mean nothing here, so the link is dropped.
-            zgn_jednostka_id:
-              m.zgnJednostkaId != null ? zgnIdMap?.get(m.zgnJednostkaId) ?? null : null,
-            zgn_pelnomocnik_id:
-              m.zgnPelnomocnikId != null ? zgnPelnomocnikIdMap.get(m.zgnPelnomocnikId) ?? null : null,
-            zgn_nazwa: m.zgnNazwa ?? '',
-            // Absent in backups written before meetings carried board members.
-            zarzad: DatabaseService.spotkanieZarzad(m.zarzad),
-            // Absent in backups written before meetings had a materials status.
-            materialy_status: DatabaseService.materialyStatus(m.materialyStatus),
-            materialy_zmienione_at: m.materialyZmienioneAt ?? null,
-            materialy_zmienione_by: m.materialyZmienioneBy ?? null,
-            created_by: m.createdBy ?? '',
-            created_at: m.createdAt,
-            updated_at: m.updatedAt,
           })),
         );
-        sliceMap.forEach((newId, oldId) => spotkanieIdMap.set(oldId, newId));
       }
-      restoredLokalizacjaIdMap = lokalizacje.idMap;
-      // Kinds and places the backup does not have go after the old meetings —
-      // and only when the backup says anything about them at all.
-      if (spotkaniaTypy) staleAtEnd.push({ table: 'spotkania_typy', ids: typy.stale });
-      if (spotkaniaLokalizacje) staleAtEnd.push({ table: 'spotkania_lokalizacje', ids: lokalizacje.stale });
+      if (d.spotkaniaLokalizacje) {
+        const ids = idsOf(d.spotkaniaLokalizacje);
+        lokalizacjaIdSet = new Set(ids);
+        put(
+          'spotkania_lokalizacje',
+          d.spotkaniaLokalizacje.map((l, i) => ({
+            id: ids[i],
+            nazwa: l.nazwa,
+            adres: l.adres ?? '',
+            opis: l.opis ?? '',
+            created_at: l.createdAt,
+          })),
+        );
+      }
+      const ids = idsOf(d.spotkania);
+      spotkanieIdSet = new Set(ids);
+      const keep = (set: Set<number>, id: number | null | undefined) => (id != null && set.has(id) ? id : null);
+      put(
+        'spotkania',
+        d.spotkania.map((m, i) => ({
+          id: ids[i],
+          nazwa: m.nazwa,
+          typ_id: keep(typIdsSpotkan, m.typId),
+          // The name is what survives a restore, and what the meeting displays.
+          adres_id: adresIdOf(m.adresNazwa),
+          adres_nazwa: m.adresNazwa ?? '',
+          lokalizacja_id: keep(lokalizacjaIdSet, m.lokalizacjaId),
+          lokalizacja_nazwa: m.lokalizacjaNazwa ?? '',
+          starts_at: m.startsAt,
+          ends_at: m.endsAt ?? null,
+          opis: m.opis ?? '',
+          // The participants are a snapshot of accounts, whose ids are auth
+          // uuids — stable across a restore, so they travel verbatim.
+          uczestnicy: m.uczestnicy ?? [],
+          // Absent in backups written before these columns existed: a meeting
+          // from back then meant a real date and no paperwork trail.
+          termin_status: m.terminStatus === 'wstepny' ? 'wstepny' : 'potwierdzony',
+          termin_wysylki: DatabaseService.dayKeyOrNull(m.terminWysylki),
+          termin_zmieniony_at: m.terminZmienionyAt ?? null,
+          termin_zmieniony_z: m.terminZmienionyZ ?? null,
+          termin_zmieniony_by: m.terminZmienionyBy ?? null,
+          termin_zmiana_odczytana_at: m.terminZmianaOdczytanaAt ?? null,
+          termin_zmiana_odczytana_by: m.terminZmianaOdczytanaBy ?? null,
+          // The name travels regardless; the links only to what the backup carries.
+          zgn_jednostka_id: zgnIdSet ? keep(zgnIdSet, m.zgnJednostkaId) : null,
+          zgn_pelnomocnik_id: keep(pelnomocnikIdSet, m.zgnPelnomocnikId),
+          zgn_nazwa: m.zgnNazwa ?? '',
+          // Absent in backups written before meetings carried board members.
+          zarzad: DatabaseService.spotkanieZarzad(m.zarzad),
+          // Absent in backups written before meetings had a materials status.
+          materialy_status: DatabaseService.materialyStatus(m.materialyStatus),
+          materialy_zmienione_at: m.materialyZmienioneAt ?? null,
+          materialy_zmienione_by: m.materialyZmienioneBy ?? null,
+          created_by: m.createdBy ?? '',
+          created_at: m.createdAt,
+          updated_at: m.updatedAt,
+        })),
+      );
     }
+    const spotkanieIdOf = (id: number | null | undefined) => (id != null && spotkanieIdSet.has(id) ? id : null);
 
-    // The statement library — ahead of Zebrania, whose versions link its rows.
-    // Absent in backups written before it existed: a missing key leaves the
-    // live rows alone. Upserted on community and period, so a row both have
-    // keeps its id — and every live version linking it stays linked. Small
-    // slices: each row carries a whole statement.
+    // The statement library — its rows are linked by the Zebrania versions.
+    // Keyed by community and period (unique). A backup written before the
+    // library existed does not own it: the live rows stay, and the versions
+    // link them by key (`lookups.sprawozdania`).
     const sprawozdanieKey = (nr: number | null, od: string, doDnia: string) => `${nr}|${od}|${doDnia}`;
-    const sprawozdanieIdByKey = new Map<string, number>();
-    // The library keys the restore keeps; the rest is deleted after Zebrania.
-    let sprawozdaniaKeep: Set<string> | null = null;
-    const readSprawozdaniaIds = async () => {
+    const biblioteka: Record<string, unknown>[] = [];
+    const sprawozdanieIdByKey = new Map<string, number>(lookups.sprawozdania?.idByKey ?? []);
+    let nextSprawozdanieId = lookups.sprawozdania?.maxId ?? 0;
+    if (d.zebraniaSprawozdania) {
       sprawozdanieIdByKey.clear();
-      for (const r of await this.getSprawozdaniaLista()) {
-        const key = sprawozdanieKey(r.nrWsp, r.okresOd, r.okresDo);
-        if (!sprawozdaniaKeep || sprawozdaniaKeep.has(key)) sprawozdanieIdByKey.set(key, r.id);
-      }
-    };
-    if (zebraniaSprawozdania) {
-      const rows = zebraniaSprawozdania
-        .filter(s => s.nrWsp != null && s.okresOd && s.okresDo && s.dane)
-        .map(s => ({
+      const valid = d.zebraniaSprawozdania.filter((s) => s.nrWsp != null && s.okresOd && s.okresDo && s.dane);
+      const ids = idsOf(valid);
+      const rows = lastPer(
+        valid.map((s, i) => ({ s, id: ids[i] })),
+        ({ s }) => sprawozdanieKey(s.nrWsp, s.okresOd, s.okresDo),
+      );
+      for (const { s, id } of rows) {
+        sprawozdanieIdByKey.set(sprawozdanieKey(s.nrWsp, s.okresOd, s.okresDo), id);
+        nextSprawozdanieId = Math.max(nextSprawozdanieId, id);
+        biblioteka.push({
+          id,
           nr_wsp: s.nrWsp,
           nazwa: s.nazwa ?? '',
           okres_od: s.okresOd,
@@ -6521,261 +6292,230 @@ class DatabaseService {
           plik_nazwa: s.plikNazwa ?? '',
           imported_at: s.importedAt,
           imported_by: s.importedBy ?? '',
-        }));
-      const { keys } = await this.upsertByKey('zebrania_sprawozdania', rows, 'nr_wsp,okres_od,okres_do', {
-        chunkSize: 100,
-      });
-      // Same `nr|od|do` shape as `sprawozdanieKey`.
-      sprawozdaniaKeep = keys;
+        });
+      }
     }
-    if (zebraniaSprawozdania || zebrania) await readSprawozdaniaIds();
 
-    // Zebrania, with their versions: new entries in, then the old ones out (the
-    // versions go with them, ON DELETE CASCADE), re-pointing every link: the
-    // meeting through the meetings restored above, the community through its
-    // name, the location through the merged dictionary, and each version at its
-    // entry's new id. A notice's template id is re-pointed by the template's
-    // name — the templates were re-inserted with fresh ids too. Gated on the
-    // key: a backup written before the module existed leaves the live entries alone.
-    if (zebrania) {
-      const oldZebranieIds = await this.liveIds('zebrania');
-      const szablonIdByNazwa = new Map(
-        (await this.getMailingSzablony()).map(t => [nameKey(t.nazwa), t.id] as const),
-      );
-      // A version's statement links a library row; one the library does not
-      // hold (an older backup's copy of a print replaced since) goes back in
-      // from the copy the backup carries.
-      const kopiaKey = (k: { dane: Sprawozdanie }) => sprawozdanieKey(k.dane.nrWsp, k.dane.okresOd, k.dane.okresDo);
-      const brakujace = new Map<string, NonNullable<ReturnType<typeof sprawozdanieZKopii>>>();
-      for (const z of zebrania) {
-        for (const w of z.wersje ?? []) {
-          const kopia = sprawozdanieZKopii(w.sprawozdanie);
-          if (!kopia || kopia.dane.nrWsp == null || !kopia.dane.okresOd || !kopia.dane.okresDo) continue;
-          if (!sprawozdanieIdByKey.has(kopiaKey(kopia))) brakujace.set(kopiaKey(kopia), kopia);
+    // Zebrania, with their versions. A version's statement links the library row
+    // of its community and period; one the library lacks (an older backup's copy
+    // of a print replaced since) goes back in from the copy the version carries,
+    // under the id it had when it can.
+    if (d.zebrania) {
+      const zebranieIds = idsOf(d.zebrania);
+      const wersje = d.zebrania.flatMap((z, i) => (z.wersje ?? []).map((w) => ({ w, zebranieId: zebranieIds[i] })));
+      const wersjaIds = idsOf(wersje.map(({ w }) => w));
+      const usedLibraryIds = new Set(sprawozdanieIdByKey.values());
+      const sprawozdanieOf = (raw: unknown): { sprawozdanie_id: number; sprawozdanie: unknown } | null => {
+        const kopia = sprawozdanieZKopii(raw);
+        if (!kopia || kopia.dane.nrWsp == null || !kopia.dane.okresOd || !kopia.dane.okresDo) return null;
+        const key = sprawozdanieKey(kopia.dane.nrWsp, kopia.dane.okresOd, kopia.dane.okresDo);
+        let id = sprawozdanieIdByKey.get(key);
+        if (id === undefined) {
+          const own = (raw as { sprawozdanieId?: unknown }).sprawozdanieId;
+          id = isId(own) && !usedLibraryIds.has(own) ? own : ++nextSprawozdanieId;
+          nextSprawozdanieId = Math.max(nextSprawozdanieId, id);
+          usedLibraryIds.add(id);
+          sprawozdanieIdByKey.set(key, id);
+          biblioteka.push({
+            id,
+            nr_wsp: kopia.dane.nrWsp,
+            nazwa: kopia.dane.nazwa ?? '',
+            okres_od: kopia.dane.okresOd,
+            okres_do: kopia.dane.okresDo,
+            dane: kopia.dane,
+            plik_nazwa: kopia.plikNazwa,
+            imported_at: now,
+            imported_by: 'kopia zapasowa',
+          });
         }
-      }
-      if (brakujace.size > 0) {
-        await this.importSprawozdania(
-          [...brakujace.values()].map(k => k.dane),
-          [...brakujace.values()][0].plikNazwa,
-          'kopia zapasowa',
-        );
-        if (sprawozdaniaKeep) for (const key of brakujace.keys()) sprawozdaniaKeep.add(key);
-        await readSprawozdaniaIds();
-      }
-      for (const slice of DatabaseService.chunk(zebrania)) {
-        const idMap = await this.insertRemapped(
-          'zebrania',
-          'id',
-          slice.map(z => z.id),
-          slice.map(z => ({
-            spotkanie_id:
-              z.spotkanieId != null ? spotkanieIdMap.get(z.spotkanieId) ?? null : null,
+        return { sprawozdanie_id: id, sprawozdanie: DatabaseService.sprawozdanieMetaRow(kopia.meta) };
+      };
+      const wersjeRows = wersje.map(({ w, zebranieId }, i) => {
+        const gotowe = w.gotowe ? normalizeGotowe(w.gotowe) : gotoweForStatus(DatabaseService.zebranieStatus(w.status));
+        return {
+          id: wersjaIds[i],
+          zebranie_id: zebranieId,
+          major: w.major ?? 1,
+          minor: w.minor ?? 0,
+          nazwa: w.nazwa ?? '',
+          // Older backups have no marks: a prepared version then counts every document ready.
+          gotowe,
+          status: wersjaStatusFromGotowe(gotowe),
+          opis: w.opis ?? '',
+          materialy: normalizeMaterialy(w.materialy).map((m) => ({
+            ...m,
+            szablonId: m.szablonNazwa ? szablonIdByNazwa.get(nameKey(m.szablonNazwa)) ?? null : null,
+          })),
+          // Absent in backups written before versions carried a statement and a plan.
+          ...(sprawozdanieOf(w.sprawozdanie) ?? {
+            sprawozdanie_id: null,
+            sprawozdanie: w.sprawozdanieOdlaczone ? SPRAWOZDANIE_ODLACZONE : null,
+          }),
+          plan: normalizePlan(w.plan),
+          created_by: w.createdBy ?? '',
+          created_at: w.createdAt,
+          updated_at: w.updatedAt ?? w.createdAt,
+          updated_by: w.updatedBy ?? '',
+        };
+      });
+      // One entry per meeting at most (a unique link).
+      const linkedMeetings = new Set<number>();
+      put(
+        'zebrania',
+        d.zebrania.map((z, i) => {
+          let spotkanieId = spotkanieIdOf(z.spotkanieId);
+          if (spotkanieId !== null && linkedMeetings.has(spotkanieId)) spotkanieId = null;
+          if (spotkanieId !== null) linkedMeetings.add(spotkanieId);
+          return {
+            id: zebranieIds[i],
+            spotkanie_id: spotkanieId,
             nazwa: z.nazwa ?? '',
             adres_id: adresIdOf(z.adresNazwa),
             adres_nazwa: z.adresNazwa ?? '',
-            lokalizacja_id:
-              z.lokalizacjaId != null ? restoredLokalizacjaIdMap.get(z.lokalizacjaId) ?? null : null,
+            lokalizacja_id: z.lokalizacjaId != null && lokalizacjaIdSet.has(z.lokalizacjaId) ? z.lokalizacjaId : null,
             lokalizacja_nazwa: z.lokalizacjaNazwa ?? '',
             lokalizacja_adres: z.lokalizacjaAdres ?? '',
             starts_at: z.startsAt ?? null,
             created_by: z.createdBy ?? '',
             created_at: z.createdAt,
             updated_at: z.updatedAt ?? z.createdAt,
-          })),
-        );
-        await this.insertChunked(
-          'zebrania_wersje',
-          slice.flatMap(z => {
-            const zebranieId = idMap.get(z.id);
-            if (zebranieId === undefined) return [];
-            return (z.wersje ?? []).map(w => ({
-              zebranie_id: zebranieId,
-              major: w.major ?? 1,
-              minor: w.minor ?? 0,
-              nazwa: w.nazwa ?? '',
-              // Older backups have no marks: a prepared version then counts every document ready.
-              ...(() => {
-                const gotowe = w.gotowe
-                  ? normalizeGotowe(w.gotowe)
-                  : gotoweForStatus(DatabaseService.zebranieStatus(w.status));
-                return { gotowe, status: wersjaStatusFromGotowe(gotowe) };
-              })(),
-              opis: w.opis ?? '',
-              materialy: normalizeMaterialy(w.materialy).map(m => ({
-                ...m,
-                szablonId: m.szablonNazwa ? szablonIdByNazwa.get(nameKey(m.szablonNazwa)) ?? null : null,
-              })),
-              // Absent in backups written before versions carried a statement and a plan.
-              ...(() => {
-                const kopia = sprawozdanieZKopii(w.sprawozdanie);
-                const id = kopia ? sprawozdanieIdByKey.get(kopiaKey(kopia)) : undefined;
-                return kopia && id !== undefined
-                  ? { sprawozdanie_id: id, sprawozdanie: DatabaseService.sprawozdanieMetaRow(kopia.meta) }
-                  : { sprawozdanie_id: null, sprawozdanie: w.sprawozdanieOdlaczone ? SPRAWOZDANIE_ODLACZONE : null };
-              })(),
-              plan: normalizePlan(w.plan),
-              created_by: w.createdBy ?? '',
-              created_at: w.createdAt,
-              updated_at: w.updatedAt ?? w.createdAt,
-              updated_by: w.updatedBy ?? '',
-            }));
-          }),
-        );
-      }
-      await this.deleteByIds('zebrania', oldZebranieIds);
-    }
-    // Library rows the backup does not have — only now, once no restored
-    // version can still need them.
-    if (sprawozdaniaKeep) {
-      const keep = sprawozdaniaKeep;
-      const stale = (await this.getSprawozdaniaLista()).filter(
-        r => !keep.has(sprawozdanieKey(r.nrWsp, r.okresOd, r.okresDo)),
+          };
+        }),
       );
-      await this.deleteByIds('zebrania_sprawozdania', stale.map(r => r.id));
+      put(
+        'zebrania_wersje',
+        lastPer(wersjeRows, (r) => `${r.zebranie_id}|${r.major}|${r.minor}`),
+      );
+    }
+    if (d.zebraniaSprawozdania) {
+      put('zebrania_sprawozdania', biblioteka);
+    } else if (biblioteka.length > 0) {
+      // Added to the live library, never replacing it (see above).
+      put('zebrania_sprawozdania', biblioteka);
+      bezUsuwania.push('zebrania_sprawozdania');
     }
 
-    // The per-community data and the module settings. Each key is absent in
-    // backups written before it existed, so a missing key leaves the live rows
-    // alone. Communities are keyed by name, so no restored id is involved.
-    if (zebraniaWspolnoty) {
-      const { stale } = await this.upsertByKey(
+    // The per-community data and the module settings — keyed by name, year and
+    // NIP, nothing that points elsewhere by id.
+    if (d.zebraniaWspolnoty) {
+      put(
         'zebrania_wspolnoty',
-        zebraniaWspolnoty
-          .filter(w => w.adresNazwa)
-          .map(w => ({
-            adres_nazwa: w.adresNazwa,
-            vdom_nr: w.vdomNr ?? null,
-            udzialy: w.udzialy ?? null,
-            updated_at: w.updatedAt || new Date().toISOString(),
-            updated_by: w.updatedBy ?? '',
-          })),
-        'adres_nazwa',
-        { idColumn: 'adres_nazwa' },
+        lastPer(
+          d.zebraniaWspolnoty.filter((w) => w.adresNazwa),
+          (w) => w.adresNazwa,
+        ).map((w) => ({
+          adres_nazwa: w.adresNazwa,
+          vdom_nr: w.vdomNr ?? null,
+          udzialy: w.udzialy ?? null,
+          updated_at: w.updatedAt || now,
+          updated_by: w.updatedBy ?? '',
+        })),
       );
-      await this.deleteWhereIn('zebrania_wspolnoty', 'adres_nazwa', stale);
     }
-    if (zebraniaUstawienia !== undefined) {
-      const { error } = zebraniaUstawienia
-        ? await getSupabase()
-            .from('zebrania_ustawienia')
-            .upsert({ id: 1, dane: normalizeUstawienia(zebraniaUstawienia) })
-        : await getSupabase().from('zebrania_ustawienia').delete().eq('id', 1);
-      if (error) throw new Error(`restore zebrania_ustawienia: ${error.message}`);
+    if (d.zebraniaUstawienia !== undefined) {
+      put('zebrania_ustawienia', d.zebraniaUstawienia ? [{ id: 1, dane: normalizeUstawienia(d.zebraniaUstawienia) }] : []);
     }
-    // Plans of the Plany gospodarcze module — keyed by vDom number and year,
-    // nothing a restore renumbers.
-    if (planyGospodarcze) {
-      const { stale } = await this.upsertByKey(
-        'plany_gospodarcze',
-        planyGospodarcze
-          .map(p => ({ p, plan: normalizePlan(p.plan) }))
-          .filter(({ p, plan }) => p.nrWsp != null && plan)
-          .map(({ p, plan }) => ({
-            nr_wsp: p.nrWsp,
-            nazwa: p.nazwa ?? '',
-            rok: plan!.rok,
-            plan,
-            sprawozdanie: normalizePlanSprawozdanieMeta(p.sprawozdanie),
-            created_at: p.createdAt || new Date().toISOString(),
-            created_by: p.createdBy ?? '',
-            updated_at: p.updatedAt || new Date().toISOString(),
-            updated_by: p.updatedBy ?? '',
-          })),
-        'nr_wsp,rok',
-      );
-      await this.deleteByIds('plany_gospodarcze', stale as number[]);
+    if (d.planyGospodarcze) {
+      const ids = idsOf(d.planyGospodarcze);
+      const rows = d.planyGospodarcze
+        .map((p, i) => ({ p, id: ids[i], plan: normalizePlan(p.plan) }))
+        .filter(({ p, plan }) => p.nrWsp != null && plan)
+        .map(({ p, id, plan }) => ({
+          id,
+          nr_wsp: p.nrWsp,
+          nazwa: p.nazwa ?? '',
+          rok: plan!.rok,
+          plan,
+          sprawozdanie: normalizePlanSprawozdanieMeta(p.sprawozdanie),
+          created_at: p.createdAt || now,
+          created_by: p.createdBy ?? '',
+          updated_at: p.updatedAt || now,
+          updated_by: p.updatedBy ?? '',
+        }));
+      put('plany_gospodarcze', lastPer(rows, (r) => `${r.nr_wsp}|${r.rok}`));
     }
-    // The Podatki module: declarations keyed by NIP and year, rates by year —
-    // nothing a restore renumbers.
-    if (podatkiNieruchomosci) {
-      const { stale } = await this.upsertByKey(
-        'podatki_nieruchomosci',
-        podatkiNieruchomosci
-          .filter(p => p.nip && Number.isInteger(p.rok))
-          .map(p => ({
-            nip: tylkoCyfry(p.nip),
-            rok: p.rok,
-            dane: normalizeDane(p.dane),
-            created_at: p.createdAt || new Date().toISOString(),
-            created_by: p.createdBy ?? '',
-            updated_at: p.updatedAt || new Date().toISOString(),
-            updated_by: p.updatedBy ?? '',
-          })),
-        'nip,rok',
-      );
-      await this.deleteByIds('podatki_nieruchomosci', stale as number[]);
+    if (d.podatkiNieruchomosci) {
+      const ids = idsOf(d.podatkiNieruchomosci);
+      const rows = d.podatkiNieruchomosci
+        .map((p, i) => ({ p, id: ids[i] }))
+        .filter(({ p }) => p.nip && Number.isInteger(p.rok))
+        .map(({ p, id }) => ({
+          id,
+          nip: tylkoCyfry(p.nip),
+          rok: p.rok,
+          dane: normalizeDane(p.dane),
+          created_at: p.createdAt || now,
+          created_by: p.createdBy ?? '',
+          updated_at: p.updatedAt || now,
+          updated_by: p.updatedBy ?? '',
+        }));
+      put('podatki_nieruchomosci', lastPer(rows, (r) => `${r.nip}|${r.rok}`));
     }
-    if (podatkiStawki) {
-      const { stale } = await this.upsertByKey(
+    if (d.podatkiStawki) {
+      put(
         'podatki_stawki',
-        podatkiStawki
-          .filter(s => Number.isInteger(s.rok))
-          .map(s => ({
-            rok: s.rok,
-            stawki: normalizeStawki(s.stawki),
-            potwierdzone: s.potwierdzone === true,
-            updated_at: s.updatedAt || new Date().toISOString(),
-            updated_by: s.updatedBy ?? '',
-          })),
-        'rok',
-        { idColumn: 'rok' },
+        lastPer(
+          d.podatkiStawki.filter((s) => Number.isInteger(s.rok)),
+          (s) => String(s.rok),
+        ).map((s) => ({
+          rok: s.rok,
+          stawki: normalizeStawki(s.stawki),
+          potwierdzone: s.potwierdzone === true,
+          updated_at: s.updatedAt || now,
+          updated_by: s.updatedBy ?? '',
+        })),
       );
-      await this.deleteWhereIn('podatki_stawki', 'rok', stale);
     }
-
-    // CIT-8 returns: keyed by the community's name and the year, and the dictionary is one row.
-    if (podatkiCit) {
-      const { stale } = await this.upsertByKey(
-        'podatki_cit',
-        podatkiCit
-          .filter(p => p.adresNazwa && Number.isInteger(p.rok))
-          .map(p => ({
-            adres_nazwa: p.adresNazwa,
-            rok: p.rok,
-            dane: normalizeDaneCit(p.dane),
-            created_at: p.createdAt || new Date().toISOString(),
-            created_by: p.createdBy ?? '',
-            updated_at: p.updatedAt || new Date().toISOString(),
-            updated_by: p.updatedBy ?? '',
-          })),
-        'adres_nazwa,rok',
+    // CIT-8 returns: keyed by the community's name and the year.
+    if (d.podatkiCit) {
+      const ids = idsOf(d.podatkiCit);
+      const rows = d.podatkiCit
+        .map((p, i) => ({ p, id: ids[i] }))
+        .filter(({ p }) => p.adresNazwa && Number.isInteger(p.rok))
+        .map(({ p, id }) => ({
+          id,
+          adres_nazwa: p.adresNazwa,
+          rok: p.rok,
+          dane: normalizeDaneCit(p.dane),
+          created_at: p.createdAt || now,
+          created_by: p.createdBy ?? '',
+          updated_at: p.updatedAt || now,
+          updated_by: p.updatedBy ?? '',
+        }));
+      put('podatki_cit', lastPer(rows, (r) => `${r.adres_nazwa}|${r.rok}`));
+    }
+    // PIT: one row per community (NIP) and year.
+    if (d.podatkiPit) {
+      const ids = idsOf(d.podatkiPit);
+      const rows = d.podatkiPit
+        .map((p, i) => ({ p, id: ids[i] }))
+        .filter(({ p }) => p.nip && Number.isInteger(p.rok))
+        .map(({ p, id }) => ({
+          id,
+          nip: tylkoCyfry(p.nip),
+          rok: p.rok,
+          dane: normalizeDanePit(p.dane),
+          created_at: p.createdAt || now,
+          created_by: p.createdBy ?? '',
+          updated_at: p.updatedAt || now,
+          updated_by: p.updatedBy ?? '',
+        }));
+      put('podatki_pit', lastPer(rows, (r) => `${r.nip}|${r.rok}`));
+    }
+    if (d.podatkiCitUstawienia !== undefined) {
+      put(
+        'podatki_cit_ustawienia',
+        d.podatkiCitUstawienia ? [{ id: 1, dane: normalizeCitUstawienia(d.podatkiCitUstawienia) }] : [],
       );
-      await this.deleteByIds('podatki_cit', stale as number[]);
     }
-    // PIT: one row per community and year, the people and the PIT-4R inside `dane`.
-    if (podatkiPit) {
-      const { stale } = await this.upsertByKey(
-        'podatki_pit',
-        podatkiPit
-          .filter(p => p.nip && Number.isInteger(p.rok))
-          .map(p => ({
-            nip: tylkoCyfry(p.nip),
-            rok: p.rok,
-            dane: normalizeDanePit(p.dane),
-            created_at: p.createdAt || new Date().toISOString(),
-            created_by: p.createdBy ?? '',
-            updated_at: p.updatedAt || new Date().toISOString(),
-            updated_by: p.updatedBy ?? '',
-          })),
-        'nip,rok',
-      );
-      await this.deleteByIds('podatki_pit', stale as number[]);
-    }
-    if (podatkiCitUstawienia !== undefined) {
-      const { error } = podatkiCitUstawienia
-        ? await getSupabase()
-            .from('podatki_cit_ustawienia')
-            .upsert({ id: 1, dane: normalizeCitUstawienia(podatkiCitUstawienia) })
-        : await getSupabase().from('podatki_cit_ustawienia').delete().eq('id', 1);
-      if (error) throw new Error(`restore podatki_cit_ustawienia: ${error.message}`);
-    }
-    // The Podpis module's runs: one row per run, nothing that points elsewhere.
-    if (podpisHistoria) {
-      await this.replaceRows(
+    // The Podpis module's runs: nothing that points elsewhere.
+    if (d.podpisHistoria) {
+      const ids = idsOf(d.podpisHistoria);
+      put(
         'podpisy_historia',
-        podpisHistoria.map(h => ({
-          signed_at: h.signedAt || new Date().toISOString(),
+        d.podpisHistoria.map((h, i) => ({
+          id: ids[i],
+          signed_at: h.signedAt || now,
           signed_by: h.signedBy ?? '',
           podmiot: h.podpis?.podmiot ?? '',
           wystawca: h.podpis?.wystawca ?? '',
@@ -6787,51 +6527,45 @@ class DatabaseService {
       );
     }
 
-    // Księgowania priorities and notes. Each key is absent in backups written
-    // before they existed, so a missing key leaves the live rows alone. The
-    // community link is re-pointed through the name, like history and meetings.
-    if (ksiegowaniaPriorytety) {
-      const { stale } = await this.upsertByKey(
-        'ksiegowania_priorytety',
-        ksiegowaniaPriorytety.map(p => ({
-          month_key: p.monthKey,
-          adres_id: adresIdOf(p.adresNazwa),
-          adres_nazwa: p.adresNazwa,
-          position: p.position,
-          notatka: p.notatka ?? '',
-          // Absent in backups written before notes had an author.
-          notatka_by: p.notatkaBy || null,
-          // Absent in backups written before notes could tag people.
-          mentions: DatabaseService.komentarzMentions(p.mentions),
-          created_by: p.createdBy ?? '',
-          created_at: p.createdAt,
-        })),
-        'month_key,adres_nazwa',
-      );
-      await this.deleteByIds('ksiegowania_priorytety', stale as number[]);
+    // Księgowania. Each key is absent in backups written before it existed.
+    if (d.ksiegowaniaPriorytety) {
+      const ids = idsOf(d.ksiegowaniaPriorytety);
+      const rows = d.ksiegowaniaPriorytety.map((p, i) => ({
+        id: ids[i],
+        month_key: p.monthKey,
+        adres_id: adresIdOf(p.adresNazwa),
+        adres_nazwa: p.adresNazwa,
+        position: p.position,
+        notatka: p.notatka ?? '',
+        // Absent in backups written before notes had an author.
+        notatka_by: p.notatkaBy || null,
+        // Absent in backups written before notes could tag people.
+        mentions: DatabaseService.komentarzMentions(p.mentions),
+        created_by: p.createdBy ?? '',
+        created_at: p.createdAt,
+      }));
+      put('ksiegowania_priorytety', lastPer(rows, (r) => `${r.month_key}|${r.adres_nazwa}`));
     }
-
-    // Who posts which community in which month — re-pointed through the name.
-    if (ksiegowaniaPrzypisania) {
-      const { stale } = await this.upsertByKey(
-        'ksiegowania_przypisania',
-        ksiegowaniaPrzypisania.map(p => ({
-          month_key: p.monthKey,
-          adres_id: adresIdOf(p.adresNazwa),
-          adres_nazwa: p.adresNazwa,
-          email: p.email,
-          assigned_by: p.assignedBy || null,
-          assigned_at: p.assignedAt,
-        })),
-        'month_key,adres_nazwa',
-      );
-      await this.deleteByIds('ksiegowania_przypisania', stale as number[]);
+    // Who posts which community in which month.
+    if (d.ksiegowaniaPrzypisania) {
+      const ids = idsOf(d.ksiegowaniaPrzypisania);
+      const rows = d.ksiegowaniaPrzypisania.map((p, i) => ({
+        id: ids[i],
+        month_key: p.monthKey,
+        adres_id: adresIdOf(p.adresNazwa),
+        adres_nazwa: p.adresNazwa,
+        email: p.email,
+        assigned_by: p.assignedBy || null,
+        assigned_at: p.assignedAt,
+      }));
+      put('ksiegowania_przypisania', lastPer(rows, (r) => `${r.month_key}|${r.adres_nazwa}`));
     }
-
-    if (ksiegowaniaUwagi) {
-      await this.replaceRows(
+    if (d.ksiegowaniaUwagi) {
+      const ids = idsOf(d.ksiegowaniaUwagi);
+      put(
         'ksiegowania_uwagi',
-        ksiegowaniaUwagi.map(u => ({
+        d.ksiegowaniaUwagi.map((u, i) => ({
+          id: ids[i],
           adres_id: adresIdOf(u.adresNazwa),
           adres_nazwa: u.adresNazwa,
           tresc: u.tresc,
@@ -6843,21 +6577,18 @@ class DatabaseService {
         })),
       );
     }
-
     // The dashboard's conversion records — the posting state with its DOM ticks.
-    // Absent in backups written before it had its own table: then the live
-    // records stay as they are (the history above is only the log).
-    if (ksiegowaniaKonwersje) {
-      // The manual flag goes on every row or on none: a bulk insert gives a
-      // column some rows lack NULL, not its default, and `recznie` is NOT NULL.
-      // None when the backup has no manual mark, so it still restores into a
-      // database that has not had ksiegowania-recznie.sql run yet.
-      const anyManual = ksiegowaniaKonwersje.some(h => h.manual === true);
-      // The same for discarded duplicates and ksiegowania-odrzucone.sql.
-      const anyDiscarded = ksiegowaniaKonwersje.some(h => !!h.discardedAt);
-      await this.replaceRows(
+    if (d.ksiegowaniaKonwersje) {
+      // The manual flag and the discard columns go on every row or on none, so
+      // a backup without any still restores into a database that has not had
+      // ksiegowania-recznie.sql / ksiegowania-odrzucone.sql run.
+      const anyManual = d.ksiegowaniaKonwersje.some((h) => h.manual === true);
+      const anyDiscarded = d.ksiegowaniaKonwersje.some((h) => !!h.discardedAt);
+      const ids = idsOf(d.ksiegowaniaKonwersje);
+      put(
         'ksiegowania_konwersje',
-        ksiegowaniaKonwersje.map(h => ({
+        d.ksiegowaniaKonwersje.map((h, i) => ({
+          id: ids[i],
           file_name: h.fileName,
           bank_name: h.bankName,
           converter_name: h.converterName,
@@ -6880,147 +6611,124 @@ class DatabaseService {
         })),
       );
     }
+    // Files pinned by the folder scan — records only; the files stay in the folder.
+    if (d.ksiegowaniaPliki) {
+      const ids = idsOf(d.ksiegowaniaPliki);
+      const rows = d.ksiegowaniaPliki.map((p, i) => ({
+        id: ids[i],
+        month_key: p.monthKey,
+        kind: p.kind,
+        status: p.status,
+        error_message: p.errorMessage ?? null,
+        adres_id: adresIdOf(p.adresNazwa),
+        adres_nazwa: p.adresNazwa,
+        account_number: p.accountNumber ?? null,
+        account_type_name: p.accountTypeName ?? null,
+        bank_id: bankIdOf(p.bankId),
+        bank_name: p.bankName ?? null,
+        converter_id: p.converterId ?? null,
+        rel_path: p.relPath,
+        file_name: p.fileName,
+        original_name: p.originalName ?? null,
+        file_size: p.fileSize ?? 0,
+        file_mtime: p.fileMtime,
+        file_hash: p.fileHash,
+        ignored_hashes: p.ignoredHashes ?? [],
+        period_from: p.periodFrom ?? null,
+        period_to: p.periodTo ?? null,
+        scanned_at: p.scannedAt,
+        scanned_by: p.scannedBy ?? null,
+      }));
+      put('ksiegowania_pliki', lastPer(rows, (r) => `${r.kind}|${r.rel_path}`));
+    }
 
-    // Files pinned by the folder scan — records only; the files themselves stay
-    // in the statements folder. Upserted on (kind, path), the table's own key.
-    // The community is re-pointed through its name and the bank through the
-    // merged dictionary (or left out when the backup has no banks).
-    if (ksiegowaniaPliki) {
-      const { stale } = await this.upsertByKey(
-        'ksiegowania_pliki',
-        ksiegowaniaPliki.map(p => ({
-          month_key: p.monthKey,
-          kind: p.kind,
-          status: p.status,
-          error_message: p.errorMessage ?? null,
-          adres_id: adresIdOf(p.adresNazwa),
-          adres_nazwa: p.adresNazwa,
-          account_number: p.accountNumber ?? null,
-          account_type_name: p.accountTypeName ?? null,
-          bank_id: p.bankId != null ? bankIdMap?.get(p.bankId) ?? null : null,
-          bank_name: p.bankName ?? null,
-          converter_id: p.converterId ?? null,
-          rel_path: p.relPath,
-          file_name: p.fileName,
-          original_name: p.originalName ?? null,
-          file_size: p.fileSize ?? 0,
-          file_mtime: p.fileMtime,
-          file_hash: p.fileHash,
-          ignored_hashes: p.ignoredHashes ?? [],
-          period_from: p.periodFrom ?? null,
-          period_to: p.periodTo ?? null,
-          scanned_at: p.scannedAt,
-          scanned_by: p.scannedBy ?? null,
+    // Zadania with their comments. The attachment files are not touched: the
+    // restored cards describe the same objects in the bucket. A backup that has
+    // cards but no comments (written before comments existed) restores the
+    // board with empty conversations.
+    if (d.zadania) {
+      const ids = idsOf(d.zadania);
+      const zadanieIdSet = new Set(ids);
+      put(
+        'zadania',
+        d.zadania.map((z, i) => ({
+          id: ids[i],
+          tytul: z.tytul,
+          opis: z.opis ?? '',
+          status: DatabaseService.zadanieStatus(z.status),
+          // Absent in backups written before tasks had a priority.
+          priorytet: DatabaseService.zadaniePriorytet(z.priorytet),
+          // Absent in backups written before cards could be reordered.
+          pozycja: Number.isFinite(z.pozycja) ? z.pozycja : 0,
+          przypisany_email: z.przypisanyEmail ?? null,
+          // Absent in backups written before tasks had a deadline and files.
+          termin: DatabaseService.zadanieTermin(z.termin),
+          zalaczniki: DatabaseService.zadanieZalaczniki(z.zalaczniki),
+          // Absent in backups written before tasks could be archived.
+          zarchiwizowane: z.zarchiwizowane === true,
+          // Absent in backups written before tasks could belong to a meeting.
+          spotkanie_id: spotkanieIdOf(z.spotkanieId),
+          created_by: z.createdBy ?? '',
+          created_at: z.createdAt,
+          updated_at: z.updatedAt,
+          updated_by: z.updatedBy ?? '',
         })),
-        'kind,rel_path',
       );
-      await this.deleteByIds('ksiegowania_pliki', stale as number[]);
-    }
-
-    // Zadania: the new cards in, their comments re-pointed at them through an
-    // old id → new id map, then the old cards out (their comments with them, ON
-    // DELETE CASCADE). The attachment files are not touched: the restored cards
-    // describe the same objects in the bucket. Gated on the key: a backup
-    // written before the board existed must leave live cards alone. A backup
-    // that has cards but no comments (written before comments existed)
-    // restores the board with empty conversations.
-    if (zadania) {
-      const oldZadanieIds = await this.liveIds('zadania');
-      const zadanieIdMap = new Map<number, number>();
-      for (const slice of DatabaseService.chunk(zadania)) {
-        const sliceMap = await this.insertRemapped(
-          'zadania',
-          'id',
-          slice.map(z => z.id),
-          slice.map(z => ({
-            tytul: z.tytul,
-            opis: z.opis ?? '',
-            status: DatabaseService.zadanieStatus(z.status),
-            // Absent in backups written before tasks had a priority.
-            priorytet: DatabaseService.zadaniePriorytet(z.priorytet),
-            // Absent in backups written before cards could be reordered.
-            pozycja: Number.isFinite(z.pozycja) ? z.pozycja : 0,
-            przypisany_email: z.przypisanyEmail ?? null,
-            // Absent in backups written before tasks had a deadline and files.
-            termin: DatabaseService.zadanieTermin(z.termin),
-            zalaczniki: DatabaseService.zadanieZalaczniki(z.zalaczniki),
-            // Absent in backups written before tasks could be archived.
-            zarchiwizowane: z.zarchiwizowane === true,
-            // Re-pointed through the meetings restored above. Absent in backups
-            // written before tasks could belong to a meeting.
-            spotkanie_id:
-              z.spotkanieId != null ? spotkanieIdMap.get(z.spotkanieId) ?? null : null,
-            created_by: z.createdBy ?? '',
-            created_at: z.createdAt,
-            updated_at: z.updatedAt,
-            updated_by: z.updatedBy ?? '',
-          })),
-        );
-        sliceMap.forEach((newId, oldId) => zadanieIdMap.set(oldId, newId));
-      }
-      await this.insertChunked(
+      // A comment whose card is not in the backup has nowhere to live.
+      const komentarze = (d.zadaniaKomentarze ?? []).filter((k) => zadanieIdSet.has(k.zadanieId));
+      const komentarzIds = idsOf(komentarze);
+      put(
         'zadania_komentarze',
-        (zadaniaKomentarze ?? []).flatMap(k => {
-          const zadanieId = zadanieIdMap.get(k.zadanieId);
-          // A comment whose card is not in the backup has nowhere to live.
-          if (zadanieId === undefined) return [];
-          return [
-            {
-              zadanie_id: zadanieId,
-              autor_email: k.autorEmail ?? '',
-              tresc: k.tresc,
-              mentions: DatabaseService.komentarzMentions(k.mentions),
-              created_at: k.createdAt,
-            },
-          ];
-        }),
+        komentarze.map((k, i) => ({
+          id: komentarzIds[i],
+          zadanie_id: k.zadanieId,
+          autor_email: k.autorEmail ?? '',
+          tresc: k.tresc,
+          mentions: DatabaseService.komentarzMentions(k.mentions),
+          created_at: k.createdAt,
+        })),
       );
-      await this.deleteByIds('zadania', oldZadanieIds);
     }
-
-    // Notes pinned to the board. Pointed at by nothing; gated on the key, so a
-    // backup from before they existed leaves the live notes alone.
-    if (zadaniaNotatki) {
-      await this.replaceRows(
+    // Notes pinned to the board.
+    if (d.zadaniaNotatki) {
+      const ids = idsOf(d.zadaniaNotatki);
+      put(
         'zadania_notatki',
-        zadaniaNotatki.map(n => ({
+        d.zadaniaNotatki.map((n, i) => ({
+          id: ids[i],
           tresc: n.tresc,
           autor_email: n.autorEmail ?? '',
           created_at: n.createdAt,
         })),
       );
     }
-
-    // Each person's notification switches, keyed by mailbox. Gated on the key —
-    // a backup from before the switches existed must not reset everybody's choices.
-    if (notificationPrefs) {
-      const { stale } = await this.upsertByKey(
+    // Each person's notification switches, keyed by mailbox.
+    if (d.notificationPrefs) {
+      put(
         'notification_prefs',
-        notificationPrefs.map(r => ({
-          email: r.email.trim().toLowerCase(),
-          prefs: DatabaseService.notificationPrefsClean(r.prefs),
-        })),
-        'email',
-        { idColumn: 'email' },
+        lastPer(
+          d.notificationPrefs.map((r) => ({
+            email: r.email.trim().toLowerCase(),
+            prefs: DatabaseService.notificationPrefsClean(r.prefs),
+          })),
+          (r) => r.email,
+        ),
       );
-      await this.deleteWhereIn('notification_prefs', 'email', stale);
     }
-
-    // The mailing history — after the meetings, so a mail sent from a meeting
-    // is re-pointed at the meeting's new id (and its community through the
-    // name). Without meetings in the backup the backup's meeting ids mean
-    // nothing here, and the link is dropped; the row keeps every detail of
-    // what was sent.
-    if (mailingHistory) {
-      await this.replaceRows(
+    // The mailing history: a mail sent from a meeting keeps the meeting when the
+    // backup carries it; the row keeps every detail of what was sent regardless.
+    if (d.mailingHistory) {
+      const ids = idsOf(d.mailingHistory);
+      put(
         'mailing_history',
-        mailingHistory.map(h => ({
+        d.mailingHistory.map((h, i) => ({
+          id: ids[i],
           typ: h.typ,
           template_name: h.templateName,
           status: h.status,
           error_message: h.errorMessage || null,
           adres_id: adresIdOf(h.adresNazwa),
-          spotkanie_id: h.spotkanieId != null ? spotkanieIdMap.get(h.spotkanieId) ?? null : null,
+          spotkanie_id: spotkanieIdOf(h.spotkanieId),
           adres_nazwa: h.adresNazwa,
           jednostka_nazwa: h.jednostkaNazwa,
           jednostka_email: h.jednostkaEmail,
@@ -7037,38 +6745,133 @@ class DatabaseService {
       );
     }
 
-    // Names of the accounts. Applied one by one rather than replaced: the rows
-    // belong to the auth trigger, so a restore can only ever say "this mailbox
-    // is called X" (and only these columns may be written). A name for an
-    // account that no longer exists here simply matches nothing — deliberately
-    // not an error, since a backup may predate a person leaving.
-    if (appUserNames && appUserNames.length > 0) {
-      const idByEmail = new Map(
-        (await this.getAppUsers()).map(u => [u.email.trim().toLowerCase(), u.id]),
+    // Names of the accounts: only "this mailbox is called X" — the rows belong to
+    // the sign-in. A name for an account that no longer exists matches nothing.
+    // The colour only when the backup says anything about it: one written before
+    // colours existed leaves a colour chosen since untouched.
+    if (d.appUserNames && d.appUserNames.length > 0) {
+      put(
+        'app_users',
+        d.appUserNames.map((person) => ({
+          email: person.email.trim().toLowerCase(),
+          first_name: person.firstName?.trim() || null,
+          last_name: person.lastName?.trim() || null,
+          ...(person.color !== undefined
+            ? {
+                color:
+                  typeof person.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(person.color)
+                    ? person.color.toLowerCase()
+                    : null,
+              }
+            : {}),
+        })),
       );
-      const known = appUserNames.filter(person => idByEmail.has(person.email.trim().toLowerCase()));
-      for (const slice of DatabaseService.chunk(known, 10)) {
-        await Promise.all(
-          slice.map(async person => {
-            const id = idByEmail.get(person.email.trim().toLowerCase())!;
-            await this.setAppUserName(id, person.firstName ?? null, person.lastName ?? null);
-            // Only when the backup says something about it: one written before
-            // colours existed must leave a colour chosen since untouched.
-            if (person.color !== undefined) await this.setAppUserColor(id, person.color ?? null);
-          }),
-        );
-      }
     }
 
-    // Last: what the backup does not have. The old meetings first (everything
-    // restored now points at the new ones), then the dictionaries' leftovers —
-    // communities before the banks, types and units they point at.
-    await this.deleteByIds('spotkania', oldSpotkanieIds);
-    for (const { table, ids } of staleAtEnd) await this.deleteByIds(table, ids);
+    return { tables, bezUsuwania };
+  }
 
-    this.importSettings({ settings });
+  /** How much of a table's rows one staging request carries — well under any request limit. */
+  private static readonly RESTORE_SLICE_BYTES = 1_500_000;
 
+  /** `rows` in slices of at most `maxBytes` of JSON each (a row bigger than that alone). */
+  private static byteSlices<T>(rows: T[], maxBytes: number): T[][] {
+    const out: T[][] = [];
+    let slice: T[] = [];
+    let bytes = 0;
+    for (const row of rows) {
+      const size = Buffer.byteLength(JSON.stringify(row), 'utf8');
+      if (slice.length > 0 && bytes + size > maxBytes) {
+        out.push(slice);
+        slice = [];
+        bytes = 0;
+      }
+      slice.push(row);
+      bytes += size;
+    }
+    if (slice.length > 0) out.push(slice);
+    return out;
+  }
+
+  /** A restore's database error; the one a missing migration gives says which file to run. */
+  private static restoreError(step: string, message: string): Error {
+    if (/restore_staging|restore_apply/.test(message) && /does not exist|Could not find/i.test(message)) {
+      return new Error(
+        'Baza nie ma jeszcze funkcji przywracania kopii — uruchom w Supabase supabase/restore-transakcja.sql i spróbuj ponownie. Nic nie zostało zmienione.',
+      );
+    }
+    return new Error(`restore (${step}): ${message}`);
+  }
+
+  /**
+   * Make the shared tables equal to the backup (the sections it carries) in ONE
+   * database transaction: the rows go to `restore_staging` in slices, then
+   * `restore_apply` writes them all or nothing (supabase/restore-transakcja.sql).
+   * A failure anywhere leaves the data exactly as it was; the safety copy taken
+   * just before (main.ts) remains the way back from restoring the wrong file.
+   *
+   * Every row keeps the backup's id, so links between restored rows hold as
+   * they were. Rows the backup does not have are deleted — a community added
+   * after the backup was taken goes with it.
+   */
+  async importFullBackup(backup: BackupData): Promise<void> {
+    const d = backup.data;
+    // Every read below must see the live tables.
     this.invalidateAllCaches();
+    const nameKey = (value: unknown) => String(value ?? '').trim().toLowerCase();
+    // The few live facts a backup without its own library or templates still
+    // links its versions through.
+    const liveLibrary = d.zebrania && !d.zebraniaSprawozdania ? await this.getSprawozdaniaLista() : null;
+    const lookups: RestoreLookups = {
+      now: new Date().toISOString(),
+      sprawozdania: liveLibrary
+        ? {
+            idByKey: new Map(liveLibrary.map((r) => [`${r.nrWsp}|${r.okresOd}|${r.okresDo}`, r.id] as const)),
+            maxId: liveLibrary.reduce((max, r) => Math.max(max, r.id), 0),
+          }
+        : null,
+      szablonIdByNazwa:
+        d.zebrania && !d.mailingSzablony
+          ? new Map((await this.getMailingSzablony()).map((t) => [nameKey(t.nazwa), t.id] as const))
+          : null,
+    };
+    const plan = DatabaseService.planRestore(backup, lookups);
+
+    const restoreId = randomUUID();
+    try {
+      let seq = 0;
+      for (const { tabela, wiersze } of plan.tables) {
+        for (const slice of DatabaseService.byteSlices(wiersze, DatabaseService.RESTORE_SLICE_BYTES)) {
+          const { error } = await getSupabase()
+            .from('restore_staging')
+            .insert({ restore_id: restoreId, seq: seq++, tabela, wiersze: slice });
+          if (error) throw DatabaseService.restoreError('staging', error.message);
+        }
+      }
+      const { data, error } = await getSupabase().rpc('restore_apply', {
+        p_restore_id: restoreId,
+        p_tabele: plan.tables.map((t) => t.tabela),
+        p_bez_usuwania: plan.bezUsuwania,
+      });
+      if (error) throw DatabaseService.restoreError('apply', error.message);
+      log.info(`[BACKUP] restore_apply wrote: ${JSON.stringify(data)}`);
+    } catch (error) {
+      // The function empties the staging itself — but not when it failed (its
+      // transaction is rolled back) or was never reached.
+      await getSupabase()
+        .from('restore_staging')
+        .delete()
+        .eq('restore_id', restoreId)
+        .then(
+          () => undefined,
+          () => undefined,
+        );
+      throw error;
+    } finally {
+      this.invalidateAllCaches();
+    }
+
+    this.importSettings({ settings: d.settings });
   }
 
   close(): void {

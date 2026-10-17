@@ -176,7 +176,9 @@ export const RELEASES: Release[] = [
         where: ['Ustawienia', 'Kopie zapasowe'],
         expect: [
           'Gdy zmienisz serwer albo użytkownika poczty, zapisane hasło jest czyszczone — wpisz je ponownie.',
-          'Jeśli kopii brakuje jakiejś sekcji (np. tabela jeszcze nie istnieje w bazie), podsumowanie to mówi. Przywracanie nie usuwa już danych przed wstawieniem nowych, więc błąd w połowie nie zostawia pustych tabel.',
+          'Jeśli kopii brakuje jakiejś sekcji (np. tabela jeszcze nie istnieje w bazie), podsumowanie to mówi.',
+          'Przywracanie działa jako jedna operacja w bazie: albo przywraca się cała kopia, albo — przy jakimkolwiek błędzie — nic się nie zmienia.',
+          'Po przywróceniu dane są dokładnie takie jak w kopii: wspólnota, spotkanie czy zadanie dodane już po zrobieniu kopii znika (jak wszystko inne z tego okresu). Kopia bezpieczeństwa robiona tuż przed przywróceniem nadal pozwala to cofnąć.',
         ],
       },
       {

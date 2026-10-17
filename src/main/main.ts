@@ -3083,8 +3083,9 @@ function setupIpcHandlers() {
       fs.writeFileSync(safetyPath, JSON.stringify(preRestore, null, 2), 'utf-8');
       log.info(`[BACKUP] Pre-restore safety copy: ${safetyPath}`);
 
-      // Every row gets a fresh id: the notifier would announce the whole
-      // restored board as news. Its next poll takes a new picture instead.
+      // The restored rows keep the backup's ids, but their contents (and the
+      // rows the backup lacks) change at once: the notifier would announce the
+      // whole board as news. Its next poll takes a new picture instead.
       notifier?.beginRestore();
       try {
         await database.importFullBackup(backup);

@@ -85,7 +85,7 @@ export interface Release {
 export const RELEASES: Release[] = [
   {
     version: '11.0.0',
-    date: '2026-10-15',
+    date: '2026-10-17',
     title: 'Pewniejsze księgowanie wyciągów, bezpieczniejsze wysyłki CIT i nowy silnik aplikacji',
     tagline:
       'Konwerter nie gubi już po cichu linii wyciągu ani nie zgaduje kontrahenta po fragmencie słowa — wątpliwe pozycje czekają na Twoje potwierdzenie. Wysyłka CIT-8 nie złoży zeznania dwa razy, kopie zapasowe nie przenoszą ustawień tego komputera, a aplikacja działa na nowej, wspieranej wersji Electrona.',
@@ -247,6 +247,7 @@ export const RELEASES: Release[] = [
         ],
         expect: [
           'Zmiany zapisane na innym komputerze pojawiają się u Ciebie najpóźniej po minucie, tak jak to już było z kontrahentami i adresami. Twoje własne zmiany widzisz od razu.',
+          'Gdy widok wczytuje dane, okno zostaje widoczne pod lekkim rozmyciem, a pasek postępu biegnie przez jego środek. Menu boczne działa w tym czasie normalnie.',
         ],
       },
       {

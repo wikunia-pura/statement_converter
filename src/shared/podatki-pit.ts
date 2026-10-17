@@ -591,14 +591,24 @@ export function obliczPit4R(p: PitPit4R): PitPit4RKwoty {
 
 /* ================================== Problems ================================= */
 
-/** `blad` stops the XML / PDF / signature; `uwaga` is shown and lets the file through. */
+/**
+ * `blad` stops the XML / PDF / signature; `uwaga` is shown and lets the file through. `rodzaj: 'przeglad'`
+ * marks the "review after import" error: the form shows those notes in a callout of their own (with the
+ * button that clears them), so its list of errors leaves this one out — by the marker, not by its text.
+ */
 export interface PitProblem {
   poziom: 'blad' | 'uwaga';
   tekst: string;
+  rodzaj?: 'przeglad';
 }
 
 const blad = (tekst: string): PitProblem => ({ poziom: 'blad', tekst });
 const uwaga = (tekst: string): PitProblem => ({ poziom: 'uwaga', tekst });
+const doPrzegladu = (notatki: string[]): PitProblem => ({
+  poziom: 'blad',
+  tekst: `Do przeglądu po imporcie: ${notatki.join('; ')}`,
+  rodzaj: 'przeglad',
+});
 
 const kodUrzeduPit11 = (kod: string) => kod in PIT11_URZEDY;
 const kodUrzeduPit4R = (kod: string) => kod in PIT11_URZEDY || kod in PIT4R_URZEDY_DODATKOWE;
@@ -609,7 +619,7 @@ const NIP_JAKO_PESEL = /^\d{10}$/;
 export function problemyOsoby(o: PitOsoba, rok: number): PitProblem[] {
   const out: PitProblem[] = [];
   if (!pitWzor(rok)) out.push(blad(`Dla roku ${rok} nie ma wzoru PIT-11 w aplikacji.`));
-  if (o.przeglad.length > 0) out.push(blad(`Do przeglądu po imporcie: ${o.przeglad.join('; ')}`));
+  if (o.przeglad.length > 0) out.push(doPrzegladu(o.przeglad));
   if (!o.imie || !o.nazwisko) out.push(blad('Brak imienia lub nazwiska.'));
   if (!o.dataUrodzenia) out.push(blad('Brak daty urodzenia.'));
   if (!o.adres.miejscowosc) out.push(blad('Brak miejscowości w adresie (schemat jej wymaga).'));
@@ -673,7 +683,7 @@ export function problemyPit4R(dane: PitDane, rok: number): PitProblem[] {
   const p = dane.pit4r;
   if (!p) return out;
   if (!pitWzor(rok)) out.push(blad(`Dla roku ${rok} nie ma wzoru PIT-4R w aplikacji.`));
-  if (p.przeglad.length > 0) out.push(blad(`Do przeglądu po imporcie: ${p.przeglad.join('; ')}`));
+  if (p.przeglad.length > 0) out.push(doPrzegladu(p.przeglad));
   if (!dane.nazwa) out.push(blad('Brak nazwy płatnika.'));
   if (!kodUrzeduPit4R(dane.urzadPlatnika)) out.push(blad(`Urząd skarbowy płatnika ${dane.urzadPlatnika} nie ma na liście MF.`));
   if (p.cel === 2 && !p.przyczyna) out.push(blad('Korekta wymaga uzasadnienia przyczyn (ORD-ZU).'));

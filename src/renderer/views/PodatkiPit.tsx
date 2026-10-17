@@ -53,7 +53,7 @@ import { foldText } from '../../shared/plan-gospodarczy';
 import { formatStamp } from '../../shared/calendar';
 import { tylkoCyfry } from '../../shared/podatki';
 import { Language, translations } from '../translations';
-import { PIT_TEXTS, PitT } from './podatkiPitTexts';
+import { ipcErrorMessage } from '../ipcError';
 import { plural } from '../plural';
 import { useNotify } from '../components/Notifications';
 import { FormField, FormRow, FormSection } from '../components/FormSection';
@@ -70,6 +70,8 @@ import { DomSlot, LiczbaInput, baseName } from './PodatkiNieruchomosci';
 import './podatkiPit.css';
 
 /* ================================== Helpers =================================== */
+
+type T = (typeof translations)['pl'];
 
 const zl0 = (n: number) => `${Math.round(n).toLocaleString('pl-PL')} zł`;
 const zl2 = (n: number) => `${n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł`;
@@ -113,7 +115,7 @@ const KwotaPole: React.FC<{
   decimals?: number;
   prev?: { rok: number; wartosc: number | null } | null;
   hint?: string;
-  t: PitT;
+  t: T;
   required?: boolean;
 }> = ({ id, label, value, onChange, decimals = 2, prev, hint, t, required }) => (
   <FormField
@@ -124,10 +126,10 @@ const KwotaPole: React.FC<{
       <>
         {hint && <span>{hint} </span>}
         {prev && (
-          <span className="pit-prev" data-tip={sub(t.prevYear, { rok: prev.rok, kwota: '' })}>
+          <span className="pit-prev" data-tip={sub(t.pitPrevYear, { rok: prev.rok, kwota: '' })}>
             {prev.wartosc === null
-              ? sub(t.prevYearNone, { rok: prev.rok })
-              : sub(t.prevYear, { rok: prev.rok, kwota: decimals === 0 ? zl0(prev.wartosc) : zl2(prev.wartosc) })}
+              ? sub(t.pitPrevYearNone, { rok: prev.rok })
+              : sub(t.pitPrevYear, { rok: prev.rok, kwota: decimals === 0 ? zl0(prev.wartosc) : zl2(prev.wartosc) })}
           </span>
         )}
       </>
@@ -139,13 +141,13 @@ const KwotaPole: React.FC<{
 
 /* ================================== One person ================================== */
 
-const TYTUL_ETYKIETA = (t: PitT, k: PitTytul) =>
-  ({ zarzad: t.tytul_zarzad, zlecenie: t.tytul_zlecenie, etat: t.tytul_etat, art13: t.tytul_art13 })[k];
+const TYTUL_ETYKIETA = (t: T, k: PitTytul) =>
+  ({ zarzad: t.pitTytul_zarzad, zlecenie: t.pitTytul_zlecenie, etat: t.pitTytul_etat, art13: t.pitTytul_art13 })[k];
 
 const maTytul = (o: PitOsoba, k: PitTytul) => o[k] !== null;
 
 const OsobaForm: React.FC<{
-  t: PitT;
+  t: T;
   locale: string;
   rok: number;
   osoba: PitOsoba;
@@ -174,8 +176,10 @@ const OsobaForm: React.FC<{
     if (key === 'art13') onChange({ art13: on ? { przychod: null, zaliczka: null } : null });
   };
   const adres = (key: keyof PitOsoba['adres'], value: string) => onChange({ adres: { ...o.adres, [key]: value } });
-  const nazwa = nazwaOsoby(o) || t.newPerson;
+  const nazwa = nazwaOsoby(o) || t.pitNewPerson;
   const bledy = (ocena?.problemy ?? []).filter((p) => p.poziom === 'blad');
+  // The review-after-import notes have their own callout above the errors.
+  const bledyBezPrzegladu = bledy.filter((p) => p.rodzaj !== 'przeglad');
   const uwagi = (ocena?.problemy ?? []).filter((p) => p.poziom === 'uwaga');
   const tytuly = PIT_TYTULY.filter((x) => maTytul(o, x)).map((x) => TYTUL_ETYKIETA(t, x));
   const dataPesel = o.pesel ? dataZPesela(o.pesel) : null;
@@ -190,12 +194,12 @@ const OsobaForm: React.FC<{
       badge={
         o.zlozone ? (
           <span className="pit-tone-ok" data-tip={filedTitle(t, o.zlozone, locale)}>
-            {t.filedDone}
+            {t.pitFiledDone}
           </span>
         ) : bledy.length > 0 ? (
-          <span className="pit-tone-warn">{t.statusError}</span>
+          <span className="pit-tone-warn">{t.pitStatusError}</span>
         ) : uwagi.length > 0 ? (
-          <span className="pit-tone-info">{t.statusWarn}</span>
+          <span className="pit-tone-info">{t.pitStatusWarn}</span>
         ) : undefined
       }
       aside={
@@ -203,58 +207,56 @@ const OsobaForm: React.FC<{
           {saved && (
             <>
               <button type="button" className="button button-small button-secondary" onClick={onFiles}>
-                <Icon name="download" size={13} /> {t.docDownload}
+                <Icon name="download" size={13} /> {t.pitDocDownload}
               </button>
               <button type="button" className="button button-small button-secondary" onClick={onSign}>
-                <Icon name="signature" size={13} /> {t.docSign}
+                <Icon name="signature" size={13} /> {t.pitDocSign}
               </button>
               {o.zlozone ? (
                 <button type="button" className="button button-small button-ghost" onClick={() => onFiled(false)}>
-                  {t.filedUndo}
+                  {t.pitFiledUndo}
                 </button>
               ) : (
                 <button type="button" className="button button-small button-ghost" onClick={() => onFiled(true)}>
-                  <Icon name="check-circle" size={13} /> {t.filedMark}
+                  <Icon name="check-circle" size={13} /> {t.pitFiledMark}
                 </button>
               )}
             </>
           )}
-          <button type="button" className="button button-small button-ghost icon-danger" onClick={onRemove} data-tip={t.personRemove} aria-label={t.personRemove}>
+          <button type="button" className="button button-small button-ghost icon-danger" onClick={onRemove} data-tip={t.pitPersonRemove} aria-label={t.pitPersonRemove}>
             <Icon name="trash" size={13} />
           </button>
         </span>
       }
       collapsible
       defaultCollapsed={zwinieta}
-      collapsedSummary={tytuly.join(' · ') || t.newPerson}
+      collapsedSummary={tytuly.join(' · ') || t.pitNewPerson}
     >
       {o.przeglad.length > 0 && (
         <div className="callout callout--danger" role="alert">
           <Icon name="alert-triangle" size={16} />
           <div className="callout__body">
-            <strong>{t.review}.</strong> {t.reviewDesc}
+            <strong>{t.pitReview}.</strong> {t.pitReviewDesc}
             <ul className="pod-problems">
               {o.przeglad.map((p, i) => (
                 <li key={i}>{p}</li>
               ))}
             </ul>
             <button type="button" className="button button-small button-secondary" onClick={() => onChange({ przeglad: [] })}>
-              <Icon name="check" size={13} /> {t.reviewDone}
+              <Icon name="check" size={13} /> {t.pitReviewDone}
             </button>
           </div>
         </div>
       )}
-      {bledy.filter((p) => !p.tekst.startsWith('Do przeglądu')).length > 0 && (
+      {bledyBezPrzegladu.length > 0 && (
         <div className="callout callout--warning">
           <Icon name="alert-triangle" size={16} />
           <div className="callout__body">
-            {t.problemsTitle}
+            {t.pitProblemsTitle}
             <ul className="pod-problems">
-              {bledy
-                .filter((p) => !p.tekst.startsWith('Do przeglądu'))
-                .map((p, i) => (
-                  <li key={i}>{p.tekst}</li>
-                ))}
+              {bledyBezPrzegladu.map((p, i) => (
+                <li key={i}>{p.tekst}</li>
+              ))}
             </ul>
           </div>
         </div>
@@ -263,7 +265,7 @@ const OsobaForm: React.FC<{
         <div className="callout">
           <Icon name="info" size={16} />
           <div className="callout__body">
-            {t.warningsTitle}
+            {t.pitWarningsTitle}
             <ul className="pod-problems">
               {uwagi.map((p, i) => (
                 <li key={i}>{p.tekst}</li>
@@ -273,17 +275,17 @@ const OsobaForm: React.FC<{
         </div>
       )}
 
-      <div className="pit-sub">{t.identitySec}</div>
+      <div className="pit-sub">{t.pitIdentitySec}</div>
       <FormRow>
-        <FormField label={t.nazwisko} htmlFor={`${id}-nazwisko`} required>
+        <FormField label={t.pitNazwisko} htmlFor={`${id}-nazwisko`} required>
           <input id={`${id}-nazwisko`} type="text" value={o.nazwisko} onChange={(e) => onChange({ nazwisko: e.target.value })} />
         </FormField>
-        <FormField label={t.imie} htmlFor={`${id}-imie`} required>
+        <FormField label={t.pitImie} htmlFor={`${id}-imie`} required>
           <input id={`${id}-imie`} type="text" value={o.imie} onChange={(e) => onChange({ imie: e.target.value })} />
         </FormField>
       </FormRow>
       <FormRow>
-        <FormField label={t.pesel} htmlFor={`${id}-pesel`} hint={t.peselHint}>
+        <FormField label={t.pitPesel} htmlFor={`${id}-pesel`} hint={t.pitPeselHint}>
           <input
             id={`${id}-pesel`}
             type="text"
@@ -293,7 +295,7 @@ const OsobaForm: React.FC<{
             onChange={(e) => onChange({ pesel: tylkoCyfry(e.target.value).slice(0, 11) })}
           />
         </FormField>
-        <FormField label={t.nipOsoby} htmlFor={`${id}-nip`}>
+        <FormField label={t.pitNipOsoby} htmlFor={`${id}-nip`}>
           <input
             id={`${id}-nip`}
             type="text"
@@ -304,12 +306,12 @@ const OsobaForm: React.FC<{
           />
         </FormField>
         <FormField
-          label={t.dataUr}
+          label={t.pitDataUr}
           htmlFor={`${id}-data`}
           action={
             dataPesel && dataPesel !== o.dataUrodzenia ? (
               <button type="button" className="button button-small button-ghost" onClick={() => onChange({ dataUrodzenia: dataPesel })}>
-                {t.dataFromPesel}
+                {t.pitDataFromPesel}
               </button>
             ) : undefined
           }
@@ -322,34 +324,34 @@ const OsobaForm: React.FC<{
           />
         </FormField>
       </FormRow>
-      <FormField label={t.urzadOsoby} hint={t.urzadOsobyHint}>
+      <FormField label={t.pitUrzadOsoby} hint={t.pitUrzadOsobyHint}>
         <SearchableSelect
           overlay
           value={o.urzad}
-          placeholder={t.urzadPick}
+          placeholder={t.pitUrzadPick}
           options={urzedyOpcje(false)}
           onChange={(v) => onChange({ urzad: v })}
-          ariaLabel={t.urzadOsoby}
-                  searchPlaceholder={t.pickSearch}
-                  emptyText={t.pickEmpty}
+          ariaLabel={t.pitUrzadOsoby}
+                  searchPlaceholder={t.pitPickSearch}
+                  emptyText={t.pitPickEmpty}
         />
       </FormField>
       <details className="pit-details" open={o.nrId !== ''}>
-        <summary>{t.foreign}</summary>
+        <summary>{t.pitForeign}</summary>
         <FormRow>
-          <FormField label={t.nrId} htmlFor={`${id}-nrid`}>
+          <FormField label={t.pitNrId} htmlFor={`${id}-nrid`}>
             <input id={`${id}-nrid`} type="text" value={o.nrId} onChange={(e) => onChange({ nrId: e.target.value })} />
           </FormField>
-          <FormField label={t.rodzajNrId}>
+          <FormField label={t.pitRodzajNrId}>
             <Select
               overlay
               value={o.rodzajNrId === null ? '' : String(o.rodzajNrId)}
               options={[{ value: '', label: '—' }, ...PIT_RODZAJE_NR_ID.map((r) => ({ value: String(r.id), label: `${r.id} — ${r.opis}` }))]}
               onChange={(v) => onChange({ rodzajNrId: v === '' ? null : Number(v) })}
-              ariaLabel={t.rodzajNrId}
+              ariaLabel={t.pitRodzajNrId}
             />
           </FormField>
-          <FormField label={t.krajWydania} htmlFor={`${id}-kraj`}>
+          <FormField label={t.pitKrajWydania} htmlFor={`${id}-kraj`}>
             <input
               id={`${id}-kraj`}
               type="text"
@@ -362,23 +364,23 @@ const OsobaForm: React.FC<{
         </FormRow>
       </details>
 
-      <div className="pit-sub">{t.addressSec}</div>
+      <div className="pit-sub">{t.pitAddressSec}</div>
       <FormRow>
-        <FormField label={t.ulica} htmlFor={`${id}-ulica`}>
+        <FormField label={t.pitUlica} htmlFor={`${id}-ulica`}>
           <input id={`${id}-ulica`} type="text" value={o.adres.ulica} onChange={(e) => adres('ulica', e.target.value)} />
         </FormField>
-        <FormField label={t.nrDomu} htmlFor={`${id}-dom`}>
+        <FormField label={t.pitNrDomu} htmlFor={`${id}-dom`}>
           <input id={`${id}-dom`} type="text" value={o.adres.nrDomu} onChange={(e) => adres('nrDomu', e.target.value)} />
         </FormField>
-        <FormField label={t.nrLokalu} htmlFor={`${id}-lok`}>
+        <FormField label={t.pitNrLokalu} htmlFor={`${id}-lok`}>
           <input id={`${id}-lok`} type="text" value={o.adres.nrLokalu} onChange={(e) => adres('nrLokalu', e.target.value)} />
         </FormField>
       </FormRow>
       <FormRow>
-        <FormField label={t.miejscowosc} htmlFor={`${id}-msc`}>
+        <FormField label={t.pitMiejscowosc} htmlFor={`${id}-msc`}>
           <input id={`${id}-msc`} type="text" value={o.adres.miejscowosc} onChange={(e) => adres('miejscowosc', e.target.value)} />
         </FormField>
-        <FormField label={t.kod} htmlFor={`${id}-kod`}>
+        <FormField label={t.pitKod} htmlFor={`${id}-kod`}>
           <input
             id={`${id}-kod`}
             type="text"
@@ -390,15 +392,15 @@ const OsobaForm: React.FC<{
       </FormRow>
       {wInnych > 0 && (
         <div className="pit-apply">
-          <button type="button" className="button button-small button-ghost" onClick={onApply} data-tip={sub(t.applyHint, { n: wInnych })}>
-            <Icon name="copy" size={13} /> {t.apply}
+          <button type="button" className="button button-small button-ghost" onClick={onApply} data-tip={sub(t.pitApplyHint, { n: wInnych })}>
+            <Icon name="copy" size={13} /> {t.pitApply}
           </button>
         </div>
       )}
 
-      <div className="pit-sub">{t.titlesSec}</div>
-      <p className="pod-note">{t.titlesDesc}</p>
-      <div className="pit-tytuly" role="group" aria-label={t.titlesSec}>
+      <div className="pit-sub">{t.pitTitlesSec}</div>
+      <p className="pod-note">{t.pitTitlesDesc}</p>
+      <div className="pit-tytuly" role="group" aria-label={t.pitTitlesSec}>
         {PIT_TYTULY.map((key) => (
           <label key={key} className={`pit-tytul${maTytul(o, key) ? ' is-on' : ''}`}>
             <input type="checkbox" checked={maTytul(o, key)} onChange={(e) => setTytul(key, e.target.checked)} />
@@ -410,7 +412,7 @@ const OsobaForm: React.FC<{
       {o.zarzad && (
         <div className="pit-title-block">
           <FormRow>
-            <FormField label={t.zarzadOpis} htmlFor={`${id}-zopis`}>
+            <FormField label={t.pitZarzadOpis} htmlFor={`${id}-zopis`}>
               <input
                 id={`${id}-zopis`}
                 type="text"
@@ -421,7 +423,7 @@ const OsobaForm: React.FC<{
             <KwotaPole
               t={t}
               id={`${id}-zkwota`}
-              label={t.zarzadKwota}
+              label={t.pitZarzadKwota}
               required
               value={o.zarzad.kwota}
               onChange={(v) => onChange({ zarzad: { ...o.zarzad!, kwota: v } })}
@@ -433,12 +435,12 @@ const OsobaForm: React.FC<{
 
       {o.zlecenie && (
         <div className="pit-title-block">
-          <div className="pit-title-block__name">{t.tytul_zlecenie}</div>
+          <div className="pit-title-block__name">{t.pitTytul_zlecenie}</div>
           <FormRow>
             <KwotaPole
               t={t}
               id={`${id}-zl-przychod`}
-              label={t.przychod}
+              label={t.pitPrzychod}
               required
               value={o.zlecenie.przychod}
               onChange={(v) => onChange({ zlecenie: { ...o.zlecenie!, przychod: v } })}
@@ -447,35 +449,35 @@ const OsobaForm: React.FC<{
             <KwotaPole
               t={t}
               id={`${id}-zl-koszty`}
-              label={t.koszty}
+              label={t.pitKoszty}
               value={o.zlecenie.koszty}
               onChange={(v) => onChange({ zlecenie: { ...o.zlecenie!, koszty: v } })}
-              hint={zlecenieRegula !== null ? sub(t.kosztyHint, { kwota: zl2(zlecenieRegula), limit }) : undefined}
+              hint={zlecenieRegula !== null ? sub(t.pitKosztyHint, { kwota: zl2(zlecenieRegula), limit }) : undefined}
             />
             <KwotaPole
               t={t}
               id={`${id}-zl-zaliczka`}
-              label={t.zaliczka}
+              label={t.pitZaliczka}
               required
               decimals={0}
               value={o.zlecenie.zaliczka}
               onChange={(v) => onChange({ zlecenie: { ...o.zlecenie!, zaliczka: v === null ? null : Math.round(v) } })}
-              hint={t.zaliczkaHintPayroll}
+              hint={t.pitZaliczkaHintPayroll}
               prev={prevHint(kp?.zlecenie?.zaliczka)}
             />
           </FormRow>
-          {k.zlecenie && <p className="pod-note">{sub(t.dochodLine, { koszty: zl2(k.zlecenie.koszty), dochod: zl2(k.zlecenie.dochod) })}</p>}
+          {k.zlecenie && <p className="pod-note">{sub(t.pitDochodLine, { koszty: zl2(k.zlecenie.koszty), dochod: zl2(k.zlecenie.dochod) })}</p>}
         </div>
       )}
 
       {o.etat && (
         <div className="pit-title-block">
-          <div className="pit-title-block__name">{t.tytul_etat}</div>
+          <div className="pit-title-block__name">{t.pitTytul_etat}</div>
           <FormRow>
             <KwotaPole
               t={t}
               id={`${id}-et-przychod`}
-              label={t.przychod}
+              label={t.pitPrzychod}
               required
               value={o.etat.przychod}
               onChange={(v) => onChange({ etat: { ...o.etat!, przychod: v } })}
@@ -484,35 +486,35 @@ const OsobaForm: React.FC<{
             <KwotaPole
               t={t}
               id={`${id}-et-koszty`}
-              label={t.koszty}
+              label={t.pitKoszty}
               value={o.etat.koszty}
               onChange={(v) => onChange({ etat: { ...o.etat!, koszty: v } })}
-              hint={sub(t.kosztyHintEtat, { limit })}
+              hint={sub(t.pitKosztyHintEtat, { limit })}
             />
             <KwotaPole
               t={t}
               id={`${id}-et-zaliczka`}
-              label={t.zaliczka}
+              label={t.pitZaliczka}
               required
               decimals={0}
               value={o.etat.zaliczka}
               onChange={(v) => onChange({ etat: { ...o.etat!, zaliczka: v === null ? null : Math.round(v) } })}
-              hint={t.zaliczkaHintPayroll}
+              hint={t.pitZaliczkaHintPayroll}
               prev={prevHint(kp?.etat?.zaliczka)}
             />
           </FormRow>
-          {k.etat && <p className="pod-note">{sub(t.dochodLine, { koszty: zl2(k.etat.koszty), dochod: zl2(k.etat.dochod) })}</p>}
+          {k.etat && <p className="pod-note">{sub(t.pitDochodLine, { koszty: zl2(k.etat.koszty), dochod: zl2(k.etat.dochod) })}</p>}
         </div>
       )}
 
       {o.art13 && (
         <div className="pit-title-block">
-          <div className="pit-title-block__name">{t.tytul_art13}</div>
+          <div className="pit-title-block__name">{t.pitTytul_art13}</div>
           <FormRow>
             <KwotaPole
               t={t}
               id={`${id}-a13-przychod`}
-              label={t.przychod}
+              label={t.pitPrzychod}
               required
               value={o.art13.przychod}
               onChange={(v) => onChange({ art13: { ...o.art13!, przychod: v } })}
@@ -521,15 +523,15 @@ const OsobaForm: React.FC<{
             <KwotaPole
               t={t}
               id={`${id}-a13-zaliczka`}
-              label={t.zaliczka}
+              label={t.pitZaliczka}
               decimals={0}
               value={o.art13.zaliczka}
               onChange={(v) => onChange({ art13: { ...o.art13!, zaliczka: v === null ? null : Math.round(v) } })}
-              hint={k.art13 ? sub(t.zaliczkaHintArt13, { kwota: zaliczkaArt13(k.art13.dochod) }) : undefined}
+              hint={k.art13 ? sub(t.pitZaliczkaHintArt13, { kwota: zaliczkaArt13(k.art13.dochod) }) : undefined}
               prev={prevHint(kp?.art13?.zaliczka)}
             />
           </FormRow>
-          {k.art13 && <p className="pod-note">{sub(t.dochodLine, { koszty: zl2(k.art13.koszty), dochod: zl2(k.art13.dochod) })}</p>}
+          {k.art13 && <p className="pod-note">{sub(t.pitDochodLine, { koszty: zl2(k.art13.koszty), dochod: zl2(k.art13.dochod) })}</p>}
         </div>
       )}
 
@@ -539,7 +541,7 @@ const OsobaForm: React.FC<{
             <KwotaPole
               t={t}
               id={`${id}-skladki`}
-              label={t.skladki}
+              label={t.pitSkladki}
               value={o.skladki}
               onChange={(v) => onChange({ skladki: v })}
               prev={prevHint(kp?.skladki)}
@@ -547,7 +549,7 @@ const OsobaForm: React.FC<{
             <KwotaPole
               t={t}
               id={`${id}-zdrowotna`}
-              label={t.zdrowotna}
+              label={t.pitZdrowotna}
               value={o.zdrowotna}
               onChange={(v) => onChange({ zdrowotna: v })}
               prev={prevHint(kp?.zdrowotna)}
@@ -555,15 +557,15 @@ const OsobaForm: React.FC<{
           </FormRow>
           <label className="pit-check">
             <input type="checkbox" checked={o.kosztyPodwyzszone} onChange={(e) => onChange({ kosztyPodwyzszone: e.target.checked })} />
-            <span>{t.podwyzszone}</span>
+            <span>{t.pitPodwyzszone}</span>
           </label>
         </div>
       )}
 
-      <div className="pit-sub">{t.correctionSec}</div>
+      <div className="pit-sub">{t.pitCorrectionSec}</div>
       <FormRow>
-        <FormField label={t.cel}>
-          <div className="zad-seg" role="radiogroup" aria-label={t.cel}>
+        <FormField label={t.pitCel}>
+          <div className="zad-seg" role="radiogroup" aria-label={t.pitCel}>
             {([1, 2] as const).map((c) => (
               <button
                 key={c}
@@ -573,14 +575,14 @@ const OsobaForm: React.FC<{
                 className={`zad-seg__btn${o.cel === c ? ' is-active' : ''}`}
                 onClick={() => onChange({ cel: c })}
               >
-                {c === 1 ? t.cel1 : t.cel2}
+                {c === 1 ? t.pitCel1 : t.pitCel2}
               </button>
             ))}
           </div>
         </FormField>
       </FormRow>
       {o.cel === 2 && (
-        <FormField label={t.przyczyna} htmlFor={`${id}-przyczyna`} hint={t.przyczynaHint} required>
+        <FormField label={t.pitPrzyczyna} htmlFor={`${id}-przyczyna`} hint={t.pitPrzyczynaHint} required>
           <textarea
             id={`${id}-przyczyna`}
             rows={2}
@@ -590,19 +592,19 @@ const OsobaForm: React.FC<{
           />
         </FormField>
       )}
-      <FormField label={t.uwagi} htmlFor={`${id}-uwagi`}>
+      <FormField label={t.pitUwagi} htmlFor={`${id}-uwagi`}>
         <input id={`${id}-uwagi`} type="text" value={o.uwagi} onChange={(e) => onChange({ uwagi: e.target.value })} />
       </FormField>
       {o.pobrania.length > 0 && (
         <div className="pod-pdf-history">
-          <span className="pod-pdf-history__title">{t.historyTitle}</span>
+          <span className="pod-pdf-history__title">{t.pitHistoryTitle}</span>
           <ul>
             {[...o.pobrania]
               .reverse()
               .slice(0, 3)
               .map((p, i) => (
                 <li key={i} data-tip={p.plik}>
-                  {sub(t.historyItem, { when: formatStamp(p.at, locale), who: p.by || '—', plik: p.plik })}
+                  {sub(t.pitHistoryItem, { when: formatStamp(p.at, locale), who: p.by || '—', plik: p.plik })}
                 </li>
               ))}
           </ul>
@@ -612,17 +614,17 @@ const OsobaForm: React.FC<{
   );
 };
 
-const filedTitle = (t: PitT, z: { at: string; by: string; numerRef: string }, locale: string) =>
-  sub(t.filedBy, {
+const filedTitle = (t: T, z: { at: string; by: string; numerRef: string }, locale: string) =>
+  sub(t.pitFiledBy, {
     when: formatStamp(z.at, locale),
     who: z.by || '—',
-    ref: z.numerRef ? sub(t.filedRef, { ref: z.numerRef }) : '',
+    ref: z.numerRef ? sub(t.pitFiledRef, { ref: z.numerRef }) : '',
   });
 
 /* ================================== PIT-4R grid ================================== */
 
 const Pit4RForm: React.FC<{
-  t: PitT;
+  t: T;
   locale: string;
   rok: number;
   dane: PitDane;
@@ -639,10 +641,10 @@ const Pit4RForm: React.FC<{
   const k = p ? obliczPit4R(p) : null;
   const kPrev = prev ? obliczPit4R(prev.pit4r) : null;
   const wiersze: { key: 'etatLiczba' | 'etatKwota' | 'art41' | 'inne'; label: string; liczba: boolean }[] = [
-    { key: 'etatLiczba', label: t.pit4rRowEtatLiczba, liczba: true },
-    { key: 'etatKwota', label: t.pit4rRowEtatKwota, liczba: false },
-    { key: 'art41', label: t.pit4rRowArt41, liczba: false },
-    { key: 'inne', label: t.pit4rRowInne, liczba: false },
+    { key: 'etatLiczba', label: t.pitPit4rRowEtatLiczba, liczba: true },
+    { key: 'etatKwota', label: t.pitPit4rRowEtatKwota, liczba: false },
+    { key: 'art41', label: t.pitPit4rRowArt41, liczba: false },
+    { key: 'inne', label: t.pitPit4rRowInne, liczba: false },
   ];
   const ustaw = (key: 'etatLiczba' | 'etatKwota' | 'art41' | 'inne', mies: number, v: number | null) => {
     if (!p) return;
@@ -658,12 +660,12 @@ const Pit4RForm: React.FC<{
   return (
     <FormSection
       icon="table"
-      title={t.pit4rSec}
-      description={t.pit4rDesc}
+      title={t.pitPit4rSec}
+      description={t.pitPit4rDesc}
       badge={
         p?.zlozone ? (
           <span className="pit-tone-ok" data-tip={filedTitle(t, p.zlozone, locale)}>
-            {t.filedDone}
+            {t.pitFiledDone}
           </span>
         ) : undefined
       }
@@ -672,53 +674,53 @@ const Pit4RForm: React.FC<{
           {p && saved && (
             <>
               <button type="button" className="button button-small button-secondary" onClick={onFiles}>
-                <Icon name="download" size={13} /> {t.docDownload}
+                <Icon name="download" size={13} /> {t.pitDocDownload}
               </button>
               <button type="button" className="button button-small button-secondary" onClick={onSign}>
-                <Icon name="signature" size={13} /> {t.docSign}
+                <Icon name="signature" size={13} /> {t.pitDocSign}
               </button>
               {p.zlozone ? (
                 <button type="button" className="button button-small button-ghost" onClick={() => onFiled(false)}>
-                  {t.filedUndo}
+                  {t.pitFiledUndo}
                 </button>
               ) : (
                 <button type="button" className="button button-small button-ghost" onClick={() => onFiled(true)}>
-                  <Icon name="check-circle" size={13} /> {t.filedMark}
+                  <Icon name="check-circle" size={13} /> {t.pitFiledMark}
                 </button>
               )}
             </>
           )}
           {p ? (
             <button type="button" className="button button-small button-ghost icon-danger" onClick={() => onChange(null)}>
-              <Icon name="trash" size={13} /> {t.pit4rRemove}
+              <Icon name="trash" size={13} /> {t.pitPit4rRemove}
             </button>
           ) : (
             <button type="button" className="button button-small button-secondary" onClick={() => onChange(pustePit4R())}>
-              <Icon name="plus" size={13} /> {t.pit4rAdd}
+              <Icon name="plus" size={13} /> {t.pitPit4rAdd}
             </button>
           )}
         </span>
       }
       collapsible
       persistKey="podatki-pit-pit4r"
-      collapsedSummary={p && k ? sub(t.rowPit4r, { kwota: zl0(k.rokSuma) }) : t.pit4rNone}
+      collapsedSummary={p && k ? sub(t.pitRowPit4r, { kwota: zl0(k.rokSuma) }) : t.pitPit4rNone}
     >
       {!p || !k ? (
-        <p className="pod-note">{t.pit4rNone}</p>
+        <p className="pod-note">{t.pitPit4rNone}</p>
       ) : (
         <>
           {p.przeglad.length > 0 && (
             <div className="callout callout--danger" role="alert">
               <Icon name="alert-triangle" size={16} />
               <div className="callout__body">
-                <strong>{t.review}.</strong> {t.reviewDesc}
+                <strong>{t.pitReview}.</strong> {t.pitReviewDesc}
                 <ul className="pod-problems">
                   {p.przeglad.map((x, i) => (
                     <li key={i}>{x}</li>
                   ))}
                 </ul>
                 <button type="button" className="button button-small button-secondary" onClick={() => onChange({ ...p, przeglad: [] })}>
-                  <Icon name="check" size={13} /> {t.reviewDone}
+                  <Icon name="check" size={13} /> {t.pitReviewDone}
                 </button>
               </div>
             </div>
@@ -731,7 +733,7 @@ const Pit4RForm: React.FC<{
                   {MIESIACE_SKROT.map((m) => (
                     <th key={m}>{m}</th>
                   ))}
-                  <th>{t.pit4rTotal}</th>
+                  <th>{t.pitPit4rTotal}</th>
                 </tr>
               </thead>
               <tbody>
@@ -752,7 +754,7 @@ const Pit4RForm: React.FC<{
                   </tr>
                 ))}
                 <tr className="pit-mies__calc">
-                  <th scope="row">{t.pit4rRowSuma}</th>
+                  <th scope="row">{t.pitPit4rRowSuma}</th>
                   {k.suma.map((v, i) => (
                     <td key={i}>{v === 0 ? '' : v.toLocaleString('pl-PL')}</td>
                   ))}
@@ -761,28 +763,28 @@ const Pit4RForm: React.FC<{
               </tbody>
             </table>
           </div>
-          {prev && kPrev && <p className="pod-note">{sub(t.pit4rPrev, { rok: prev.rok, kwota: zl0(kPrev.rokSuma) })}</p>}
+          {prev && kPrev && <p className="pod-note">{sub(t.pitPit4rPrev, { rok: prev.rok, kwota: zl0(kPrev.rokSuma) })}</p>}
 
           <div className="pit-check-box">
-            <strong>{t.pit4rCheckTitle}</strong>
+            <strong>{t.pitPit4rCheckTitle}</strong>
             {roznicaEtat === 0 && roznicaArt41 === 0 ? (
               <p className="pit-ok">
-                <Icon name="check-circle" size={14} /> {t.pit4rCheckOk}
+                <Icon name="check-circle" size={14} /> {t.pitPit4rCheckOk}
               </p>
             ) : (
               <ul className="pod-problems">
-                {roznicaEtat !== 0 && <li>{sub(t.pit4rCheckEtat, { pit4r: k.rokEtat, pit11: sumy.etat })}</li>}
-                {roznicaArt41 !== 0 && <li>{sub(t.pit4rCheckArt41, { pit4r: k.rokArt41, pit11: sumy.art41 })}</li>}
+                {roznicaEtat !== 0 && <li>{sub(t.pitPit4rCheckEtat, { pit4r: k.rokEtat, pit11: sumy.etat })}</li>}
+                {roznicaArt41 !== 0 && <li>{sub(t.pitPit4rCheckArt41, { pit4r: k.rokArt41, pit11: sumy.art41 })}</li>}
               </ul>
             )}
             <div className="pit-fill">
               <Select
                 overlay
                 value={miesiacWstaw}
-                placeholder={t.pit4rFillMonth}
+                placeholder={t.pitPit4rFillMonth}
                 options={MIESIACE_SKROT.map((m, i) => ({ value: String(i), label: m }))}
                 onChange={setMiesiacWstaw}
-                ariaLabel={t.pit4rFill}
+                ariaLabel={t.pitPit4rFill}
               />
               <button
                 type="button"
@@ -796,15 +798,15 @@ const Pit4RForm: React.FC<{
                   onChange(nowe);
                 }}
               >
-                {t.pit4rFill}
+                {t.pitPit4rFill}
               </button>
             </div>
           </div>
 
-          <div className="pit-sub">{t.correctionSec}</div>
+          <div className="pit-sub">{t.pitCorrectionSec}</div>
           <FormRow>
-            <FormField label={t.cel}>
-              <div className="zad-seg" role="radiogroup" aria-label={t.cel}>
+            <FormField label={t.pitCel}>
+              <div className="zad-seg" role="radiogroup" aria-label={t.pitCel}>
                 {([1, 2] as const).map((c) => (
                   <button
                     key={c}
@@ -814,14 +816,14 @@ const Pit4RForm: React.FC<{
                     className={`zad-seg__btn${p.cel === c ? ' is-active' : ''}`}
                     onClick={() => onChange({ ...p, cel: c })}
                   >
-                    {c === 1 ? t.cel1 : t.cel2}
+                    {c === 1 ? t.pitCel1 : t.pitCel2}
                   </button>
                 ))}
               </div>
             </FormField>
           </FormRow>
           {p.cel === 2 && (
-            <FormField label={t.przyczyna} htmlFor="pit4r-przyczyna" hint={t.przyczynaHint} required>
+            <FormField label={t.pitPrzyczyna} htmlFor="pit4r-przyczyna" hint={t.pitPrzyczynaHint} required>
               <textarea
                 id="pit4r-przyczyna"
                 rows={2}
@@ -833,14 +835,14 @@ const Pit4RForm: React.FC<{
           )}
           {p.pobrania.length > 0 && (
             <div className="pod-pdf-history">
-              <span className="pod-pdf-history__title">{t.historyTitle}</span>
+              <span className="pod-pdf-history__title">{t.pitHistoryTitle}</span>
               <ul>
                 {[...p.pobrania]
                   .reverse()
                   .slice(0, 3)
                   .map((x, i) => (
                     <li key={i} data-tip={x.plik}>
-                      {sub(t.historyItem, { when: formatStamp(x.at, locale), who: x.by || '—', plik: x.plik })}
+                      {sub(t.pitHistoryItem, { when: formatStamp(x.at, locale), who: x.by || '—', plik: x.plik })}
                     </li>
                   ))}
               </ul>
@@ -889,8 +891,7 @@ interface Rejestr {
 const maPitRoku = (r: Rejestr, wiersze: PodatekPit[]) => wiersze.some((w) => r.rdzenie.includes(rdzenWspolnoty(w.dane.nazwa)));
 
 const WspolnotaScreen: React.FC<{
-  language: Language;
-  t: PitT;
+  t: T;
   locale: string;
   rok: number;
   rekord: PodatekPit | null;
@@ -905,9 +906,8 @@ const WspolnotaScreen: React.FC<{
   onFiles: (ids: string[]) => void;
   onSign: (ids: string[]) => void;
   onFiled: (ids: string[], zlozone: boolean) => void;
-}> = ({ language, t, locale, rok, rekord, wszystkie, rejestr, wstepnie, onBack, onSaved, onDeleted, onChangedElsewhere, onFiles, onSign, onFiled }) => {
+}> = ({ t, locale, rok, rekord, wszystkie, rejestr, wstepnie, onBack, onSaved, onDeleted, onChangedElsewhere, onFiles, onSign, onFiled }) => {
   const notify = useNotify();
-  const tMain = translations[language];
   const [nip, setNip] = useState(rekord?.nip ?? wstepnie?.nip ?? '');
   const [dane, setDane] = useState<PitDane>(
     rekord?.dane ?? { ...pusteDanePit(), nazwa: wstepnie?.platnik ?? '', urzadPlatnika: wstepnie?.kodUrzedu || URZAD_DOMYSLNY },
@@ -967,10 +967,10 @@ const WspolnotaScreen: React.FC<{
   const back = async () => {
     if (dirty) {
       const canSave = !!rekord || canAdd;
-      const choice = await notify.unsaved(canSave ? t.unsavedConfirm : t.unsavedNoSave, {
-        saveLabel: t.unsavedSave,
-        discardLabel: t.unsavedDiscard,
-        keepLabel: t.unsavedKeep,
+      const choice = await notify.unsaved(canSave ? t.pitUnsavedConfirm : t.pitUnsavedNoSave, {
+        saveLabel: t.pitUnsavedSave,
+        discardLabel: t.pitUnsavedDiscard,
+        keepLabel: t.pitUnsavedKeep,
         canSave,
       });
       if (choice === 'keep' || (choice === 'save' && !(await save()))) return;
@@ -987,11 +987,11 @@ const WspolnotaScreen: React.FC<{
       setNip(saved.nip);
       setDane(saved.dane);
       setBaseline({ nip: saved.nip, dane: saved.dane });
-      notify.success(t.saved);
+      notify.success(t.pitSaved);
       onSaved(saved);
       return true;
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.saveError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.pitSaveError);
       return false;
     } finally {
       setBusy(null);
@@ -1001,9 +1001,9 @@ const WspolnotaScreen: React.FC<{
   const remove = async () => {
     if (!rekord) return;
     if (
-      !(await notify.confirm(sub(t.deleteConfirm, { name: dane.nazwa || rekord.nip, rok }), {
+      !(await notify.confirm(sub(t.pitDeleteConfirm, { name: dane.nazwa || rekord.nip, rok }), {
         danger: true,
-        confirmLabel: t.delete,
+        confirmLabel: t.pitDelete,
       }))
     ) {
       return;
@@ -1011,10 +1011,10 @@ const WspolnotaScreen: React.FC<{
     setBusy('delete');
     try {
       await window.electronAPI.deletePodatekPit(rekord.id);
-      notify.success(t.deleted);
+      notify.success(t.pitDeleted);
       onDeleted();
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err));
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
       setBusy(null);
     }
   };
@@ -1037,10 +1037,10 @@ const WspolnotaScreen: React.FC<{
         );
         n += 1;
       }
-      notify.success(sub(t.applied, { n }));
+      notify.success(sub(t.pitApplied, { n }));
       onChangedElsewhere();
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.applyError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.pitApplyError);
     } finally {
       setBusy(null);
     }
@@ -1053,40 +1053,40 @@ const WspolnotaScreen: React.FC<{
   const note =
     !rekord && !canAdd ? (
       <span className="action-note">
-        <Icon name="info" size={13} /> {t.newNeeds}
+        <Icon name="info" size={13} /> {t.pitNewNeeds}
       </span>
     ) : dirty ? (
       <span className="action-note action-note--warning">
-        <Icon name="alert-triangle" size={13} /> {t.unsaved}
+        <Icon name="alert-triangle" size={13} /> {t.pitUnsaved}
       </span>
     ) : (
       <span className="action-note">
-        <Icon name="check" size={13} /> {t.allSaved}
+        <Icon name="check" size={13} /> {t.pitAllSaved}
       </span>
     );
-  const zablokowane = dirty || !rekord ? t.saveFirst : null;
+  const zablokowane = dirty || !rekord ? t.pitSaveFirst : null;
 
   return (
     <>
       <div className="zeb-screen-head">
         <div className="zeb-screen-head__row">
           <ScreenTitle
-            backLabel={t.back}
+            backLabel={t.pitBack}
             crumb={`PIT · ${rok}`}
             onBack={() => void back()}
-            title={dane.nazwa || t.new}
+            title={dane.nazwa || t.pitNew}
             meta={
               <>
                 <span>
-                  <Icon name="calendar" size={13} /> {sub(t.metaYear, { rok })}
+                  <Icon name="calendar" size={13} /> {sub(t.pitMetaYear, { rok })}
                 </span>
                 {nip && (
                   <span>
-                    <Icon name="file-text" size={13} /> {sub(t.rowNip, { nip })}
+                    <Icon name="file-text" size={13} /> {sub(t.pitRowNip, { nip })}
                   </span>
                 )}
                 <span>
-                  <Icon name="users" size={13} /> {sub(t.rowPeople, { n: dane.osoby.length })}
+                  <Icon name="users" size={13} /> {sub(t.pitRowPeople, { n: dane.osoby.length })}
                 </span>
               </>
             }
@@ -1099,7 +1099,7 @@ const WspolnotaScreen: React.FC<{
                 onClick={() => void remove()}
                 disabled={busy !== null}
               >
-                <Icon name="trash" size={13} /> {t.delete}
+                <Icon name="trash" size={13} /> {t.pitDelete}
               </button>
               <span className="toolbar-divider" aria-hidden="true" />
               <button
@@ -1109,7 +1109,7 @@ const WspolnotaScreen: React.FC<{
                 disabled={zablokowane !== null || busy !== null}
                 data-tip={zablokowane ?? undefined}
               >
-                <Icon name="download" size={13} /> {t.downloadAll}
+                <Icon name="download" size={13} /> {t.pitDownloadAll}
               </button>
               <button
                 type="button"
@@ -1118,7 +1118,7 @@ const WspolnotaScreen: React.FC<{
                 disabled={zablokowane !== null || busy !== null}
                 data-tip={zablokowane ?? undefined}
               >
-                <Icon name="signature" size={13} /> {sub(t.batchSign, { n: wszystkieDokumenty.length })}
+                <Icon name="signature" size={13} /> {sub(t.pitBatchSign, { n: wszystkieDokumenty.length })}
               </button>
             </div>
           )}
@@ -1130,17 +1130,17 @@ const WspolnotaScreen: React.FC<{
           {!wzor && (
             <div className="callout callout--danger" role="alert">
               <Icon name="alert-circle" size={16} />
-              <div className="callout__body">{sub(t.formMissing, { rok })}</div>
+              <div className="callout__body">{sub(t.pitFormMissing, { rok })}</div>
             </div>
           )}
 
-          <FormSection icon="landmark" title={t.platnikTitle} description={t.platnikDesc}>
+          <FormSection icon="landmark" title={t.pitPlatnikTitle} description={t.pitPlatnikDesc}>
             {!rekord && rejestr.length > 0 && (
-              <FormField label={t.platnikPick}>
+              <FormField label={t.pitPlatnikPick}>
                 <SearchableSelect
                   overlay
                   value=""
-                  placeholder={t.platnikPickPlaceholder}
+                  placeholder={t.pitPlatnikPickPlaceholder}
                   options={rejestr
                     .filter((r) => !maPitRoku(r, wszystkie.filter((w) => w.rok === rok)))
                     .map((r) => ({ value: r.nazwa, label: r.nazwa }))}
@@ -1150,14 +1150,14 @@ const WspolnotaScreen: React.FC<{
                     if (r.nip) setNip(r.nip);
                     setDane((d) => ({ ...d, nazwa: r.platnik, urzadPlatnika: r.kodUrzedu || d.urzadPlatnika }));
                   }}
-                  ariaLabel={t.platnikPick}
-                  searchPlaceholder={t.pickSearch}
-                  emptyText={t.pickEmpty}
+                  ariaLabel={t.pitPlatnikPick}
+                  searchPlaceholder={t.pitPickSearch}
+                  emptyText={t.pitPickEmpty}
                 />
               </FormField>
             )}
             <FormRow>
-              <FormField label={t.nip} htmlFor="pit-nip" required>
+              <FormField label={t.pitNip} htmlFor="pit-nip" required>
                 <input
                   id="pit-nip"
                   type="text"
@@ -1168,65 +1168,65 @@ const WspolnotaScreen: React.FC<{
                   onChange={(e) => setNip(tylkoCyfry(e.target.value).slice(0, 10))}
                 />
               </FormField>
-              <FormField label={t.nazwa} htmlFor="pit-nazwa" required hint={t.nazwaHint}>
+              <FormField label={t.pitNazwa} htmlFor="pit-nazwa" required hint={t.pitNazwaHint}>
                 <input id="pit-nazwa" type="text" value={dane.nazwa} onChange={(e) => setDane((d) => ({ ...d, nazwa: e.target.value }))} />
               </FormField>
             </FormRow>
-            <FormField label={t.urzadPlatnika}>
+            <FormField label={t.pitUrzadPlatnika}>
               <SearchableSelect
                 overlay
                 value={dane.urzadPlatnika}
                 options={urzedyOpcje(true)}
                 onChange={(v) => setDane((d) => ({ ...d, urzadPlatnika: v }))}
-                ariaLabel={t.urzadPlatnika}
-                  searchPlaceholder={t.pickSearch}
-                  emptyText={t.pickEmpty}
+                ariaLabel={t.pitUrzadPlatnika}
+                  searchPlaceholder={t.pitPickSearch}
+                  emptyText={t.pitPickEmpty}
               />
             </FormField>
           </FormSection>
 
           <FormSection
             icon="users"
-            title={t.osobyTitle}
-            description={t.osobyDesc}
+            title={t.pitOsobyTitle}
+            description={t.pitOsobyDesc}
             aside={
               <span className="pit-aside">
                 {doWyboru.length > 0 && (
                   <SearchableSelect
                     overlay
                     value={pickOsoba}
-                    placeholder={t.addPersonFromPlaceholder}
+                    placeholder={t.pitAddPersonFromPlaceholder}
                     options={doWyboru.map((o) => ({ value: kluczOsoby(o), label: nazwaOsoby(o) }))}
                     onChange={(v) => {
                       const o = doWyboru.find((x) => kluczOsoby(x) === v);
                       setPickOsoba('');
                       if (o) dodajOsobe(o);
                     }}
-                    ariaLabel={t.addPersonFrom}
-                  searchPlaceholder={t.pickSearch}
-                  emptyText={t.pickEmpty}
+                    ariaLabel={t.pitAddPersonFrom}
+                  searchPlaceholder={t.pitPickSearch}
+                  emptyText={t.pitPickEmpty}
                   />
                 )}
                 {dane.osoby.length > 1 && (
                   <>
                     <button type="button" className="button button-small button-ghost" onClick={() => setZwin((z) => ({ wersja: z.wersja + 1, wszystkie: false }))}>
-                      <Icon name="chevron-down" size={13} /> {t.expandAll}
+                      <Icon name="chevron-down" size={13} /> {t.pitExpandAll}
                     </button>
                     <button type="button" className="button button-small button-ghost" onClick={() => {
                         noweKlucze.current.clear();
                         setZwin((z) => ({ wersja: z.wersja + 1, wszystkie: true }));
                       }}>
-                      <Icon name="chevron-right" size={13} /> {t.collapseAll}
+                      <Icon name="chevron-right" size={13} /> {t.pitCollapseAll}
                     </button>
                   </>
                 )}
                 <button type="button" className="button button-small button-secondary" onClick={() => dodajOsobe()}>
-                  <Icon name="plus" size={13} /> {t.addPerson}
+                  <Icon name="plus" size={13} /> {t.pitAddPerson}
                 </button>
               </span>
             }
           >
-            {dane.osoby.length === 0 && <p className="pod-note">{t.noPeople}</p>}
+            {dane.osoby.length === 0 && <p className="pod-note">{t.pitNoPeople}</p>}
           </FormSection>
 
           {[...dane.osoby]
@@ -1247,7 +1247,7 @@ const WspolnotaScreen: React.FC<{
                   zwinieta={zwin.wszystkie && !noweKlucze.current.has(o.klucz)}
                   onChange={(patch) => setOsoba(o.klucz, patch)}
                   onRemove={async () => {
-                    if (await notify.confirm(sub(t.personRemoveConfirm, { name: nazwaOsoby(o) || t.newPerson }), { danger: true, confirmLabel: t.delete })) {
+                    if (await notify.confirm(sub(t.pitPersonRemoveConfirm, { name: nazwaOsoby(o) || t.pitNewPerson }), { danger: true, confirmLabel: t.pitDelete })) {
                       setDane((d) => ({ ...d, osoby: d.osoby.filter((x) => x.klucz !== o.klucz) }));
                     }
                   }}
@@ -1277,15 +1277,15 @@ const WspolnotaScreen: React.FC<{
             className="page-action-bar"
             note={note}
             onSubmit={() => void save()}
-            submitLabel={rekord ? t.save : t.add}
+            submitLabel={rekord ? t.pitSave : t.pitAdd}
             submitIcon={rekord ? 'save' : 'plus'}
             submitDisabled={!dirty || (!rekord && !canAdd)}
-            submitTitle={!rekord && !canAdd ? t.newNeeds : undefined}
+            submitTitle={!rekord && !canAdd ? t.pitNewNeeds : undefined}
             busy={busy === 'save'}
           />
         </div>
       </div>
-      {busy === 'apply' && <BusyOverlay label={tMain.loading} />}
+      {busy === 'apply' && <BusyOverlay label={t.loading} />}
     </>
   );
 };
@@ -1301,51 +1301,50 @@ const Licznik: React.FC<{ value: number; label: string; tone: 'success' | 'warni
 
 /** After "Pobierz" or "Podpisz": what was written — each file one click from opening — and what was held back and why. */
 const Podsumowanie: React.FC<{
-  t: PitT;
-  tMain: ReturnType<typeof useTMain>;
+  t: T;
   rok: number;
   podpisano: boolean;
   wynik: PodatkiPitPlikiResult;
   onZaznacz: (ids: string[]) => void;
   onClose: () => void;
-}> = ({ t, tMain, rok, podpisano, wynik, onZaznacz, onClose }) => {
+}> = ({ t, rok, podpisano, wynik, onZaznacz, onClose }) => {
   const notify = useNotify();
   const { folder, zapisane, pominiete, niepodpisane, przerwano, podpis } = wynik;
   const reszta = [...pominiete, ...niepodpisane].map((x) => x.id);
   const otworz = async (sciezka: string) => {
-    if (!(await window.electronAPI.openFile(sciezka))) notify.error(t.sumFileMissing);
+    if (!(await window.electronAPI.openFile(sciezka))) notify.error(t.pitSumFileMissing);
   };
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
-        <ModalDismiss onClose={onClose} ariaLabel={tMain.close} />
+        <ModalDismiss onClose={onClose} ariaLabel={t.close} />
         <ModalHeader
           icon={zapisane.length > 0 && reszta.length === 0 ? 'check-circle' : 'alert-triangle'}
           tone={zapisane.length === 0 ? 'danger' : 'accent'}
-          title={podpisano ? t.sumSigned : t.sumFiles}
-          subtitle={podpisano && podpis ? sub(t.sumSignedSub, { rok, kto: podpis.podmiot }) : sub(t.sumFilesSub, { rok })}
+          title={podpisano ? t.pitSumSigned : t.pitSumFiles}
+          subtitle={podpisano && podpis ? sub(t.pitSumSignedSub, { rok, kto: podpis.podmiot }) : sub(t.pitSumFilesSub, { rok })}
         />
         <div className="modal-body modal-body--sectioned">
           <div className="podpis-sum__stats">
-            <Licznik value={zapisane.length} label={t.sumSaved} tone="success" />
-            <Licznik value={pominiete.length} label={t.sumSkipped} tone="warning" />
-            {podpisano && <Licznik value={niepodpisane.length} label={t.sumUnsigned} tone="danger" />}
+            <Licznik value={zapisane.length} label={t.pitSumSaved} tone="success" />
+            <Licznik value={pominiete.length} label={t.pitSumSkipped} tone="warning" />
+            {podpisano && <Licznik value={niepodpisane.length} label={t.pitSumUnsigned} tone="danger" />}
           </div>
           {zapisane.length === 0 && (
             <div className="callout callout--danger" role="alert">
               <Icon name="alert-circle" size={16} />
-              <div className="callout__body">{t.sumNothing}</div>
+              <div className="callout__body">{t.pitSumNothing}</div>
             </div>
           )}
           {przerwano && (
             <div className="callout callout--warning">
               <Icon name="alert-triangle" size={16} />
-              <div className="callout__body">{sub(t.sumStopped, { reason: przerwano })}</div>
+              <div className="callout__body">{sub(t.pitSumStopped, { reason: przerwano })}</div>
             </div>
           )}
           {zapisane.length > 0 && (
-            <FormSection icon={podpisano ? 'signature' : 'download'} title={sub(t.sumSavedList, { n: zapisane.length })}>
-              {folder && <div className="podpis-sum__folder">{sub(t.sumFolder, { folder })}</div>}
+            <FormSection icon={podpisano ? 'signature' : 'download'} title={sub(t.pitSumSavedList, { n: zapisane.length })}>
+              {folder && <div className="podpis-sum__folder">{sub(t.pitSumFolder, { folder })}</div>}
               <ul className="podpis-sum__list">
                 {zapisane.slice(0, 60).map((p, i) => (
                   <li key={`${p.id}${i}`}>
@@ -1355,12 +1354,12 @@ const Podsumowanie: React.FC<{
                     </button>
                   </li>
                 ))}
-                {zapisane.length > 60 && <li className="podpis-sum__name">{sub(t.signMore, { n: zapisane.length - 60 })}</li>}
+                {zapisane.length > 60 && <li className="podpis-sum__name">{sub(t.pitSignMore, { n: zapisane.length - 60 })}</li>}
               </ul>
             </FormSection>
           )}
           {pominiete.length > 0 && (
-            <FormSection icon="alert-triangle" title={sub(t.sumSkippedList, { n: pominiete.length })}>
+            <FormSection icon="alert-triangle" title={sub(t.pitSumSkippedList, { n: pominiete.length })}>
               <ul className="podpis-sum__list">
                 {pominiete.map((p) => (
                   <li key={p.id}>
@@ -1372,7 +1371,7 @@ const Podsumowanie: React.FC<{
             </FormSection>
           )}
           {niepodpisane.length > 0 && (
-            <FormSection icon="clock" title={sub(t.sumUnsignedList, { n: niepodpisane.length })}>
+            <FormSection icon="clock" title={sub(t.pitSumUnsignedList, { n: niepodpisane.length })}>
               <ul className="podpis-sum__list">
                 {niepodpisane.map((p) => (
                   <li key={p.id}>
@@ -1385,7 +1384,7 @@ const Podsumowanie: React.FC<{
         </div>
         <ModalFooter
           onCancel={onClose}
-          cancelLabel={tMain.close}
+          cancelLabel={t.close}
           secondaryAction={
             reszta.length > 0 ? (
               <button
@@ -1396,12 +1395,12 @@ const Podsumowanie: React.FC<{
                   onClose();
                 }}
               >
-                <Icon name="check-circle" size={14} /> {sub(t.sumSelectRest, { n: reszta.length })}
+                <Icon name="check-circle" size={14} /> {sub(t.pitSumSelectRest, { n: reszta.length })}
               </button>
             ) : undefined
           }
           onSubmit={folder ? () => void otworz(folder) : undefined}
-          submitLabel={t.sumOpenFolder}
+          submitLabel={t.pitSumOpenFolder}
           submitIcon="folder"
           autoFocus={folder ? 'submit' : 'cancel'}
         />
@@ -1410,12 +1409,9 @@ const Podsumowanie: React.FC<{
   );
 };
 
-const useTMain = (language: Language) => translations[language];
-
 /** "Oznacz jako złożone": the gateway's reference number, one for the whole selection (or none). */
-const ZlozoneModal: React.FC<{ t: PitT; tMain: ReturnType<typeof useTMain>; n: number; onSubmit: (ref: string) => void; onClose: () => void }> = ({
+const ZlozoneModal: React.FC<{ t: T; n: number; onSubmit: (ref: string) => void; onClose: () => void }> = ({
   t,
-  tMain,
   n,
   onSubmit,
   onClose,
@@ -1424,24 +1420,23 @@ const ZlozoneModal: React.FC<{ t: PitT; tMain: ReturnType<typeof useTMain>; n: n
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal--sm" onClick={(e) => e.stopPropagation()}>
-        <ModalDismiss onClose={onClose} ariaLabel={tMain.close} />
-        <ModalHeader icon="check-circle" tone="accent" title={t.filedTitle} subtitle={sub(t.filedSubtitle, { n })} />
+        <ModalDismiss onClose={onClose} ariaLabel={t.close} />
+        <ModalHeader icon="check-circle" tone="accent" title={t.pitFiledTitle} subtitle={sub(t.pitFiledSubtitle, { n })} />
         <div className="modal-body">
-          <p className="pod-note">{t.filedDesc}</p>
-          <FormField label={t.filedRefLabel} htmlFor="pit-ref" hint={t.filedRefHint}>
+          <p className="pod-note">{t.pitFiledDesc}</p>
+          <FormField label={t.pitFiledRefLabel} htmlFor="pit-ref" hint={t.pitFiledRefHint}>
             <input id="pit-ref" type="text" className="input-mono" value={ref} onChange={(e) => setRef(e.target.value)} autoFocus />
           </FormField>
         </div>
-        <ModalFooter onCancel={onClose} cancelLabel={tMain.close} onSubmit={() => onSubmit(ref.trim())} submitLabel={t.filedSubmit} submitIcon="check" />
+        <ModalFooter onCancel={onClose} cancelLabel={t.close} onSubmit={() => onSubmit(ref.trim())} submitLabel={t.pitFiledSubmit} submitIcon="check" />
       </div>
     </div>
   );
 };
 
 /** "Zasil z XML": the year of the files to load, then the folder is picked. */
-const ZasilModal: React.FC<{ t: PitT; tMain: ReturnType<typeof useTMain>; rok: number; onSubmit: (zRoku: number) => void; onClose: () => void }> = ({
+const ZasilModal: React.FC<{ t: T; rok: number; onSubmit: (zRoku: number) => void; onClose: () => void }> = ({
   t,
-  tMain,
   rok,
   onSubmit,
   onClose,
@@ -1452,19 +1447,19 @@ const ZasilModal: React.FC<{ t: PitT; tMain: ReturnType<typeof useTMain>; rok: n
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal--sm" onClick={(e) => e.stopPropagation()}>
-        <ModalDismiss onClose={onClose} ariaLabel={tMain.close} />
-        <ModalHeader icon="upload" tone="accent" title={sub(t.seedTitle, { rok })} />
+        <ModalDismiss onClose={onClose} ariaLabel={t.close} />
+        <ModalHeader icon="upload" tone="accent" title={sub(t.pitSeedTitle, { rok })} />
         <div className="modal-body">
-          <p className="pod-note">{sub(t.seedDesc, { rok })}</p>
-          <FormField label={t.seedYear} htmlFor="pit-seed-rok">
+          <p className="pod-note">{sub(t.pitSeedDesc, { rok })}</p>
+          <FormField label={t.pitSeedYear} htmlFor="pit-seed-rok">
             <input id="pit-seed-rok" type="text" inputMode="numeric" className="input-mono" value={zRoku} onChange={(e) => setZRoku(tylkoCyfry(e.target.value).slice(0, 4))} />
           </FormField>
         </div>
         <ModalFooter
           onCancel={onClose}
-          cancelLabel={tMain.close}
+          cancelLabel={t.close}
           onSubmit={() => onSubmit(wartosc)}
-          submitLabel={t.seedSubmit}
+          submitLabel={t.pitSeedSubmit}
           submitIcon="upload"
           submitDisabled={!ok}
         />
@@ -1478,8 +1473,7 @@ const ZasilModal: React.FC<{ t: PitT; tMain: ReturnType<typeof useTMain>; rok: n
 const domyslnyRok = (lata: number[]) => (lata.length > 0 ? Math.max(...lata) : new Date().getFullYear());
 
 const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
-  const t = PIT_TEXTS[language];
-  const tMain = translations[language];
+  const t = translations[language];
   const notify = useNotify();
   const locale = language === 'en' ? 'en-GB' : 'pl-PL';
 
@@ -1517,7 +1511,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
       setLista(rows);
       setAdresy(adr);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.loadError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.pitLoadError);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -1685,13 +1679,13 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
       if (!wynik) return;
       const { folder, dodane, istniejace, osoby, plikow, doPrzegladu, pominiete } = wynik;
       if (dodane === 0) {
-        notify.info(sub(t.importedNothing, { folder, n: ileWspolnot(istniejace) }));
+        notify.info(sub(t.pitImportedNothing, { folder, n: ileWspolnot(istniejace) }));
       } else {
         notify.success(
           [
-            sub(t.imported, { folder, n: ileWspolnotBiernik(dodane), osoby: `${osoby} PIT-11`, pliki: `${plikow} plików` }),
-            doPrzegladu > 0 ? sub(t.importedReview, { n: doPrzegladu }) : '',
-            pominiete.length > 0 ? sub(t.importedSkipped, { n: pominiete.length }) : '',
+            sub(t.pitImported, { folder, n: ileWspolnotBiernik(dodane), osoby: `${osoby} PIT-11`, pliki: `${plikow} plików` }),
+            doPrzegladu > 0 ? sub(t.pitImportedReview, { n: doPrzegladu }) : '',
+            pominiete.length > 0 ? sub(t.pitImportedSkipped, { n: pominiete.length }) : '',
           ]
             .filter(Boolean)
             .join(' '),
@@ -1700,7 +1694,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
       setRokWybrany(rok);
       await load(true);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.importError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.pitImportError);
     } finally {
       setBusy(null);
     }
@@ -1711,11 +1705,11 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
     setBusy('carry');
     try {
       const n = await window.electronAPI.przeniesPitNaRok(rokPoprzedni, rok);
-      notify.success(sub(t.carried, { rok, n: ileWspolnotBiernik(n) }));
+      notify.success(sub(t.pitCarried, { rok, n: ileWspolnotBiernik(n) }));
       setRokWybrany(rok);
       await load(true);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.carryError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.pitCarryError);
     } finally {
       setBusy(null);
     }
@@ -1729,12 +1723,12 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
       const wynik = await window.electronAPI.importPitXml(zRoku);
       if (!wynik) return;
       if (zRoku !== rok) await window.electronAPI.przeniesPitNaRok(zRoku, rok);
-      notify.success(sub(t.seedDone, { zrok: zRoku, rok, n: ileWspolnotBiernik(wynik.dodane + wynik.istniejace) }));
-      if (wynik.doPrzegladu > 0) notify.warning(sub(t.importedReview, { n: wynik.doPrzegladu }));
+      notify.success(sub(t.pitSeedDone, { zrok: zRoku, rok, n: ileWspolnotBiernik(wynik.dodane + wynik.istniejace) }));
+      if (wynik.doPrzegladu > 0) notify.warning(sub(t.pitImportedReview, { n: wynik.doPrzegladu }));
       setRokWybrany(rok);
       await load(true);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.seedError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.pitSeedError);
     } finally {
       setBusy(null);
     }
@@ -1744,9 +1738,9 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
     setBusy('excel');
     try {
       const r = await window.electronAPI.pitExcelSzablon(rok);
-      if (r) notify.success(sub(t.excelSaved, { file: baseName(r.filePath) }), { file: r.filePath });
+      if (r) notify.success(sub(t.pitExcelSaved, { file: baseName(r.filePath) }), { file: r.filePath });
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.excelTemplateError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.pitExcelTemplateError);
     } finally {
       setBusy(null);
     }
@@ -1758,16 +1752,16 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
       const r = await window.electronAPI.pitExcelWczytaj(rok);
       if (!r) return;
       const czesci = [
-        r.zmienione > 0 ? sub(t.excelRead_ok, { file: r.plikNazwa, n: r.zmienione }) : sub(t.excelRead_none, { file: r.plikNazwa }),
-        r.pominiete.length > 0 ? sub(t.excelRead_skipped, { n: r.pominiete.length }) : '',
-        r.ostrzezenia.length > 0 ? sub(t.excelRead_warn, { list: r.ostrzezenia.slice(0, 3).join('; ') }) : '',
+        r.zmienione > 0 ? sub(t.pitExcelRead_ok, { file: r.plikNazwa, n: r.zmienione }) : sub(t.pitExcelRead_none, { file: r.plikNazwa }),
+        r.pominiete.length > 0 ? sub(t.pitExcelRead_skipped, { n: r.pominiete.length }) : '',
+        r.ostrzezenia.length > 0 ? sub(t.pitExcelRead_warn, { list: r.ostrzezenia.slice(0, 3).join('; ') }) : '',
       ].filter(Boolean);
       const tekst = czesci.join(' ');
       if (r.pominiete.length > 0 || r.ostrzezenia.length > 0) notify.warning(tekst);
       else notify.success(tekst);
       await load(true);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.excelReadError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.pitExcelReadError);
     } finally {
       setBusy(null);
     }
@@ -1782,7 +1776,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
       setPodsumowanie({ rok, podpisano: false, wynik });
       await load(true);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.filesError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.pitFilesError);
     } finally {
       setBusy(null);
     }
@@ -1805,9 +1799,9 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
       const rows = await window.electronAPI.setPitZlozone(ids, zlozone, numerRef);
       const poId = new Map(rows.map((r) => [r.id, r]));
       setLista((prev) => prev.map((r) => poId.get(r.id) ?? r));
-      notify.success(sub(zlozone ? t.filedMarked : t.filedUnmarked, { n: ids.length }));
+      notify.success(sub(zlozone ? t.pitFiledMarked : t.pitFiledUnmarked, { n: ids.length }));
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.filedError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.pitFiledError);
       await load(true);
     } finally {
       setBusy(null);
@@ -1822,7 +1816,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
   if (isLoading) {
     return (
       <div className="content-body">
-        <Loader label={tMain.loading} />
+        <Loader label={t.loading} />
       </div>
     );
   }
@@ -1835,8 +1829,8 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
       {podpisIds && (
         <PodpisKartaModal
           language={language}
-          title={t.signTitle}
-          subtitle={sub(t.signSubtitle, { rok, n: ileDokumentow(podpisIds.length) })}
+          title={t.pitSignTitle}
+          subtitle={sub(t.pitSignSubtitle, { rok, n: ileDokumentow(podpisIds.length) })}
           extra={(_cert: PodpisCertyfikat | null) => {
             const wiersze = new Map(lista.filter((w) => w.rok === rok).map((w) => [w.id, w]));
             const braki: string[] = [];
@@ -1856,46 +1850,45 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
               }
             }
             return (
-              <FormSection icon="file-check" title={sub(t.signReady, { n: gotowe })} description={t.signXmlNote}>
+              <FormSection icon="file-check" title={sub(t.pitSignReady, { n: gotowe })} description={t.pitSignXmlNote}>
                 {gotowe === 0 && (
                   <div className="callout callout--danger" role="alert">
                     <Icon name="alert-circle" size={16} />
-                    <div className="callout__body">{t.signNothing}</div>
+                    <div className="callout__body">{t.pitSignNothing}</div>
                   </div>
                 )}
                 {braki.length > 0 && (
                   <div className="callout callout--warning">
                     <Icon name="alert-triangle" size={16} />
                     <div className="callout__body">
-                      {sub(t.signSkipped, { n: braki.length })}
+                      {sub(t.pitSignSkipped, { n: braki.length })}
                       <ul className="podpis-gotowosc__list">
-                        {(braki.length <= 6 ? braki : [...braki.slice(0, 5), sub(t.signMore, { n: braki.length - 5 })]).map((b, i) => (
+                        {(braki.length <= 6 ? braki : [...braki.slice(0, 5), sub(t.pitSignMore, { n: braki.length - 5 })]).map((b, i) => (
                           <li key={i}>{b}</li>
                         ))}
                       </ul>
                     </div>
                   </div>
                 )}
-                <PodpiszTezPdf checked={pdfPodpisany} onChange={setPdfPodpisany} label={t.signPdfOption} hint={t.signPdfOptionHint} />
+                <PodpiszTezPdf checked={pdfPodpisany} onChange={setPdfPodpisany} label={t.pitSignPdfOption} hint={t.pitSignPdfOptionHint} />
               </FormSection>
             );
           }}
-          submitLabel={sub(t.signSubmit, {
+          submitLabel={sub(t.pitSignSubmit, {
             n: ileDokumentow(podpisIds.filter((id) => oceny.has(id) && !maBlad(oceny.get(id)!.problemy)).length),
           })}
           submitDisabled={podpisIds.every((id) => !oceny.has(id) || maBlad(oceny.get(id)!.problemy))}
-          pinHint={sub(t.signPinHint, { n: ileDokumentow(podpisIds.length) })}
+          pinHint={sub(t.pitSignPinHint, { n: ileDokumentow(podpisIds.length) })}
           postep={postep}
           onPrzerwij={() => void window.electronAPI.przerwijPodpisPit()}
           onPodpisz={podpiszWiele}
           onClose={() => setPodpisIds(null)}
         />
       )}
-      {zasilOtwarte && <ZasilModal t={t} tMain={tMain} rok={rok} onSubmit={(z) => void zasil(z)} onClose={() => setZasilOtwarte(false)} />}
+      {zasilOtwarte && <ZasilModal t={t} rok={rok} onSubmit={(z) => void zasil(z)} onClose={() => setZasilOtwarte(false)} />}
       {zlozoneIds && (
         <ZlozoneModal
           t={t}
-          tMain={tMain}
           n={zlozoneIds.length}
           onClose={() => setZlozoneIds(null)}
           onSubmit={(ref) => {
@@ -1908,7 +1901,6 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
       {podsumowanie && (
         <Podsumowanie
           t={t}
-          tMain={tMain}
           rok={podsumowanie.rok}
           podpisano={podsumowanie.podpisano}
           wynik={podsumowanie.wynik}
@@ -1919,9 +1911,9 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
           onClose={() => setPodsumowanie(null)}
         />
       )}
-      {busy === 'import' && <BusyOverlay label={t.importing} />}
-      {busy === 'files' && <BusyOverlay label={t.downloadingAll} />}
-      {busy === 'excel' && <BusyOverlay label={t.excelReading} />}
+      {busy === 'import' && <BusyOverlay label={t.pitImporting} />}
+      {busy === 'files' && <BusyOverlay label={t.pitDownloadingAll} />}
+      {busy === 'excel' && <BusyOverlay label={t.pitExcelReading} />}
     </>
   );
 
@@ -1930,7 +1922,6 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
       <>
         <WspolnotaScreen
           key={detail}
-          language={language}
           t={t}
           locale={locale}
           rok={otwarty?.rok ?? rok}
@@ -1976,7 +1967,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
         <span className="ksieg-row__select">
           <label
             className={`ks-check${isSelected ? ' is-on' : ''}`}
-            data-tip={t.selectFor}
+            data-tip={t.pitSelectFor}
             onMouseDown={(e) => {
               if (e.shiftKey) e.preventDefault();
             }}
@@ -1986,7 +1977,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
               className="ks-check__input"
               checked={isSelected}
               onChange={(e) => toggle([dok.id], (e.nativeEvent as MouseEvent).shiftKey === true, dok.id)}
-              aria-label={`${t.selectFor}: ${dok.osoba ? nazwaOsoby(dok.osoba) : 'PIT-4R'}`}
+              aria-label={`${t.pitSelectFor}: ${dok.osoba ? nazwaOsoby(dok.osoba) : 'PIT-4R'}`}
             />
             <span className="ks-check__box" aria-hidden="true">
               <Icon name="check" size={12} strokeWidth={3} />
@@ -2005,17 +1996,17 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
             }
           }}
         >
-          <span className="pit-doc__kind">{dok.osoba ? t.docPit11 : t.docPit4r}</span>
-          <span className="pit-doc__name">{dok.osoba ? nazwaOsoby(dok.osoba) || t.newPerson : sub(t.rowPit4r, { kwota: zl0(zaliczki) })}</span>
+          <span className="pit-doc__kind">{dok.osoba ? t.pitDocPit11 : t.pitDocPit4r}</span>
+          <span className="pit-doc__name">{dok.osoba ? nazwaOsoby(dok.osoba) || t.pitNewPerson : sub(t.pitRowPit4r, { kwota: zl0(zaliczki) })}</span>
           <span className="pit-doc__meta">
             {tytuly.join(' · ')}
             {przychod !== null && przychod > 0 && <> · {zl2(przychod)}</>}
-            {dok.osoba && zaliczki > 0 && <> · {t.rowAdvances} {zl0(zaliczki)}</>}
-            {korekta && <> · {t.docCorrection}</>}
+            {dok.osoba && zaliczki > 0 && <> · {t.pitRowAdvances} {zl0(zaliczki)}</>}
+            {korekta && <> · {t.pitDocCorrection}</>}
             {doPrzegladu && (
               <span className="pod-meta-warning">
                 {' '}
-                · <Icon name="alert-triangle" size={12} /> {t.rowReview}
+                · <Icon name="alert-triangle" size={12} /> {t.pitRowReview}
               </span>
             )}
           </span>
@@ -2025,19 +2016,19 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
           data-tip={(o?.problemy ?? []).map((p) => p.tekst).join('\n') || undefined}
           hidden={stan === 'zlozone'}
         >
-          {stan === 'blad' ? t.statusError : stan === 'uwagi' ? t.statusWarn : t.statusReady}
+          {stan === 'blad' ? t.pitStatusError : stan === 'uwagi' ? t.pitStatusWarn : t.pitStatusReady}
         </span>
         <div className="pod-row__dom">
           <DomSlot
-            t={tMain}
+            t={t}
             locale={locale}
             dom={zlozone ? { at: zlozone.at, by: zlozone.by } : null}
             busy={busy === 'filed'}
             onSet={(z) => zadajZlozone([dok.id], z)}
             labels={{
-              done: t.filedDone,
-              mark: t.filedMark,
-              undo: t.filedUndo,
+              done: t.pitFiledDone,
+              mark: t.pitFiledMark,
+              undo: t.pitFiledUndo,
               doneBy: zlozone ? filedTitle(t, zlozone, locale) : '',
             }}
           />
@@ -2062,7 +2053,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
       <li key={w.id} className="pit-wsp">
         <div className="pod-item">
           <span className="ksieg-row__select">
-            <label className={`ks-check${wszystkie ? ' is-on' : ''}${czesc ? ' is-mixed' : ''}`} data-tip={t.selectFor}>
+            <label className={`ks-check${wszystkie ? ' is-on' : ''}${czesc ? ' is-mixed' : ''}`} data-tip={t.pitSelectFor}>
               <input
                 type="checkbox"
                 className="ks-check__input"
@@ -2071,7 +2062,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
                   if (el) el.indeterminate = czesc;
                 }}
                 onChange={() => toggle(idy)}
-                aria-label={`${t.selectFor}: ${nazwa}`}
+                aria-label={`${t.pitSelectFor}: ${nazwa}`}
               />
               <span className="ks-check__box" aria-hidden="true">
                 <Icon name={czesc ? 'minus' : 'check'} size={12} strokeWidth={3} />
@@ -2091,8 +2082,8 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
                 }
               }}
             >
-              <div className="zeb-date pod-kwota" data-tip={t.rowAdvances}>
-                <span className="pod-kwota__label">{t.rowAdvances}</span>
+              <div className="zeb-date pod-kwota" data-tip={t.pitRowAdvances}>
+                <span className="pod-kwota__label">{t.pitRowAdvances}</span>
                 <span className={`pod-kwota__value${sumaZal >= 100000 ? ' is-s' : sumaZal >= 10000 ? ' is-m' : ''}`}>
                   {Math.round(sumaZal).toLocaleString('pl-PL').replace(/\s/g, ' ')}
                   <span className="pod-kwota__unit">zł</span>
@@ -2102,24 +2093,24 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
                 <span className="zeb-row__name">{nazwa}</span>
                 <span className="zeb-row__meta">
                   <span>
-                    <Icon name="file-text" size={13} /> {sub(t.rowNip, { nip: w.nip })}
+                    <Icon name="file-text" size={13} /> {sub(t.pitRowNip, { nip: w.nip })}
                   </span>
                   <span>
-                    <Icon name="users" size={13} /> {sub(t.rowPeople, { n: w.dane.osoby.length })}
+                    <Icon name="users" size={13} /> {sub(t.pitRowPeople, { n: w.dane.osoby.length })}
                   </span>
                   <span>
-                    <Icon name="table" size={13} /> {k4 ? sub(t.rowPit4r, { kwota: zl0(k4.rokSuma) }) : t.rowNoPit4r}
+                    <Icon name="table" size={13} /> {k4 ? sub(t.pitRowPit4r, { kwota: zl0(k4.rokSuma) }) : t.pitRowNoPit4r}
                   </span>
                   {s.doPrzegladu && (
                     <span className="pod-meta-warning">
-                      <Icon name="alert-triangle" size={13} /> {t.rowReview}
+                      <Icon name="alert-triangle" size={13} /> {t.pitRowReview}
                     </span>
                   )}
                 </span>
               </div>
               <div className="zeb-row__side">
                 <span className={`status-badge ${s.blad ? 'status-pending' : s.wszystkoZlozone ? 'status-success' : 'status-neutral'}`}>
-                  {s.blad ? t.statusError : s.wszystkoZlozone ? t.filedDone : `${zlozoneN}/${dok.length} ${t.filterFiled.toLowerCase()}`}
+                  {s.blad ? t.pitStatusError : s.wszystkoZlozone ? t.pitFiledDone : `${zlozoneN}/${dok.length} ${t.pitFilterFiled.toLowerCase()}`}
                 </span>
               </div>
             </div>
@@ -2135,10 +2126,10 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
                     return next;
                   })
                 }
-                data-tip={rozw ? t.rowCollapse : t.rowExpand}
+                data-tip={rozw ? t.pitRowCollapse : t.pitRowExpand}
                 aria-expanded={rozw}
               >
-                <Icon name={rozw ? 'chevron-down' : 'chevron-right'} size={14} /> {sub(t.rowDocsButton, { n: dok.length })}
+                <Icon name={rozw ? 'chevron-down' : 'chevron-right'} size={14} /> {sub(t.pitRowDocsButton, { n: dok.length })}
               </button>
             </div>
           </div>
@@ -2149,11 +2140,11 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
   };
 
   const filtrEtykieta: Record<Filtr, string> = {
-    all: t.filterAll,
-    errors: t.filterErrors,
-    ready: t.filterReady,
-    waiting: t.filterWaiting,
-    filed: t.filterFiled,
+    all: t.pitFilterAll,
+    errors: t.pitFilterErrors,
+    ready: t.pitFilterReady,
+    waiting: t.pitFilterWaiting,
+    filed: t.pitFilterFiled,
   };
   const minRok = Math.min(...lata);
   const maxRok = Math.max(...lata);
@@ -2164,12 +2155,12 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
   const procent = dokumentyRoku.length > 0 ? Math.round((dokZlozone / dokumentyRoku.length) * 100) : 0;
   const fakty =
     wRoku.length === 0
-      ? [t.heroEmpty]
+      ? [t.pitHeroEmpty]
       : [
-          sub(t.heroCount, { n: wRoku.length }),
-          sub(t.heroPeople, { n: osoby }),
-          sub(t.heroAdvances, { kwota: zl0(zaliczkiRazem) }),
-          ...(doPrzegladu > 0 ? [sub(t.heroReview, { n: doPrzegladu })] : []),
+          sub(t.pitHeroCount, { n: wRoku.length }),
+          sub(t.pitHeroPeople, { n: osoby }),
+          sub(t.pitHeroAdvances, { kwota: zl0(zaliczkiRazem) }),
+          ...(doPrzegladu > 0 ? [sub(t.pitHeroReview, { n: doPrzegladu })] : []),
         ];
   const zaznaczoneZlozone = zaznaczone.filter((id) => oceny.get(id)?.stan === 'zlozone');
   const zaznaczoneNiezlozone = zaznaczone.filter((id) => oceny.get(id)?.stan !== 'zlozone');
@@ -2184,27 +2175,27 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
         </div>
         <div className="ksieg-hero__id">
           <span className="ksieg-hero__eyebrow">
-            <Icon name="briefcase" size={13} /> {t.title}
+            <Icon name="briefcase" size={13} /> {t.pitTitle}
           </span>
           <h1 className="ksieg-hero__month">
             {rok}
-            <span>{t.heroYear}</span>
+            <span>{t.pitHeroYear}</span>
           </h1>
           <p className="ksieg-hero__facts">{fakty.join(' · ')}</p>
         </div>
         <div className="ksieg-hero__nav">
-          <button type="button" className="ksieg-nav-arrow" onClick={() => zmienRok(rok - 1)} disabled={rok <= minRok} data-tip={t.yearPrev} aria-label={t.yearPrev}>
+          <button type="button" className="ksieg-nav-arrow" onClick={() => zmienRok(rok - 1)} disabled={rok <= minRok} data-tip={t.pitYearPrev} aria-label={t.pitYearPrev}>
             <Icon name="chevron-left" size={17} />
           </button>
           <Select
             overlay
             value={String(rok)}
-            options={lata.map((r) => ({ value: String(r), label: lataZDanymi.includes(r) ? String(r) : sub(t.yearNew, { rok: r }) }))}
+            options={lata.map((r) => ({ value: String(r), label: lataZDanymi.includes(r) ? String(r) : sub(t.pitYearNew, { rok: r }) }))}
             onChange={(v) => zmienRok(Number(v))}
-            ariaLabel={t.year}
+            ariaLabel={t.pitYear}
             className="ksieg-nav-select"
           />
-          <button type="button" className="ksieg-nav-arrow" onClick={() => zmienRok(rok + 1)} disabled={rok >= maxRok} data-tip={t.yearNext} aria-label={t.yearNext}>
+          <button type="button" className="ksieg-nav-arrow" onClick={() => zmienRok(rok + 1)} disabled={rok >= maxRok} data-tip={t.pitYearNext} aria-label={t.pitYearNext}>
             <Icon name="chevron-right" size={17} />
           </button>
           <button
@@ -2212,21 +2203,21 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
             className="ksieg-scan-btn"
             onClick={() => void pliki(dokumentyRoku)}
             disabled={busy !== null || wRoku.length === 0}
-            data-tip={sub(t.downloadAllHint, { rok })}
+            data-tip={sub(t.pitDownloadAllHint, { rok })}
           >
             <Icon name={busy === 'files' ? 'loader' : 'download'} size={15} />
-            <span>{t.downloadAll}</span>
+            <span>{t.pitDownloadAll}</span>
           </button>
-          <button type="button" className="ksieg-nav-arrow" onClick={() => void load(true)} disabled={isRefreshing} data-tip={t.refresh} aria-label={t.refresh}>
+          <button type="button" className="ksieg-nav-arrow" onClick={() => void load(true)} disabled={isRefreshing} data-tip={t.pitRefresh} aria-label={t.pitRefresh}>
             <Icon name="refresh" size={16} />
           </button>
         </div>
         {wRoku.length > 0 && (
           <div className="ksieg-hero__progress">
             <div className="ksieg-progress__head">
-              <span className="ksieg-progress__label">{t.filterFiled}</span>
+              <span className="ksieg-progress__label">{t.pitFilterFiled}</span>
               <span className="ksieg-progress__value">
-                {sub(t.heroFiled, { done: dokZlozone, total: dokumentyRoku.length })}
+                {sub(t.pitHeroFiled, { done: dokZlozone, total: dokumentyRoku.length })}
                 <strong>{procent}%</strong>
               </span>
             </div>
@@ -2240,15 +2231,15 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
       <div className="zeb-toolbar">
         <div className="ksieg-search">
           <Icon name="search" size={15} />
-          <input type="text" placeholder={t.search} value={search} onChange={(e) => setSearch(e.target.value)} />
+          <input type="text" placeholder={t.pitSearch} value={search} onChange={(e) => setSearch(e.target.value)} />
           {search.trim() && (
-            <button type="button" onClick={() => setSearch('')} data-tip={tMain.close} aria-label={tMain.close}>
+            <button type="button" onClick={() => setSearch('')} data-tip={t.close} aria-label={t.close}>
               <Icon name="x" size={14} />
             </button>
           )}
         </div>
         {wRoku.length > 0 && (
-          <div className="zad-seg" role="group" aria-label={t.filterLabel}>
+          <div className="zad-seg" role="group" aria-label={t.pitFilterLabel}>
             {FILTRY.map((f) => (
               <button
                 key={f}
@@ -2264,24 +2255,24 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
           </div>
         )}
         <div className="pod-toolbar-end">
-          <button type="button" className="button button-secondary" onClick={() => void importXml()} disabled={busy !== null} data-tip={t.importXmlHint}>
-            <Icon name={busy === 'import' ? 'loader' : 'upload'} size={14} /> {t.importXml}
+          <button type="button" className="button button-secondary" onClick={() => void importXml()} disabled={busy !== null} data-tip={t.pitImportXmlHint}>
+            <Icon name={busy === 'import' ? 'loader' : 'upload'} size={14} /> {t.pitImportXml}
           </button>
-          <button type="button" className="button button-secondary" onClick={() => void excelSzablon()} disabled={busy !== null || wRoku.length === 0} data-tip={t.excelTemplateHint}>
-            <Icon name="table" size={14} /> {t.excelTemplate}
+          <button type="button" className="button button-secondary" onClick={() => void excelSzablon()} disabled={busy !== null || wRoku.length === 0} data-tip={t.pitExcelTemplateHint}>
+            <Icon name="table" size={14} /> {t.pitExcelTemplate}
           </button>
-          <button type="button" className="button button-secondary" onClick={() => void excelWczytaj()} disabled={busy !== null || wRoku.length === 0} data-tip={t.excelReadHint}>
-            <Icon name="upload" size={14} /> {t.excelRead}
+          <button type="button" className="button button-secondary" onClick={() => void excelWczytaj()} disabled={busy !== null || wRoku.length === 0} data-tip={t.pitExcelReadHint}>
+            <Icon name="upload" size={14} /> {t.pitExcelRead}
           </button>
           <button
             type="button"
             className="button button-primary"
             onClick={() => {
               setNowaZ(null);
-              navItem.open('nowy', t.new);
+              navItem.open('nowy', t.pitNew);
             }}
           >
-            <Icon name="plus" size={14} /> {t.add}
+            <Icon name="plus" size={14} /> {t.pitAdd}
           </button>
         </div>
       </div>
@@ -2290,7 +2281,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
         {!wzor && (
           <div className="callout callout--danger" role="alert">
             <Icon name="alert-circle" size={16} />
-            <div className="callout__body">{sub(t.formMissing, { rok })}</div>
+            <div className="callout__body">{sub(t.pitFormMissing, { rok })}</div>
           </div>
         )}
 
@@ -2299,22 +2290,22 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
             <span className="zeb-tab-empty__icon">
               <Icon name="briefcase" size={22} />
             </span>
-            <strong>{sub(t.emptyTitle, { rok })}</strong>
+            <strong>{sub(t.pitEmptyTitle, { rok })}</strong>
             {rokPoprzedni !== null ? (
               <>
-                <p>{sub(t.emptyCarry, { prev: rokPoprzedni, rok })}</p>
+                <p>{sub(t.pitEmptyCarry, { prev: rokPoprzedni, rok })}</p>
                 <button type="button" className="button button-primary" onClick={() => void carry()} disabled={busy !== null}>
-                  <Icon name={busy === 'carry' ? 'loader' : 'copy'} size={14} /> {sub(t.emptyCarryBtn, { prev: rokPoprzedni })}
+                  <Icon name={busy === 'carry' ? 'loader' : 'copy'} size={14} /> {sub(t.pitEmptyCarryBtn, { prev: rokPoprzedni })}
                 </button>
               </>
             ) : (
               <>
-                <p>{t.emptyText}</p>
+                <p>{t.pitEmptyText}</p>
                 <button type="button" className="button button-primary" onClick={() => setZasilOtwarte(true)} disabled={busy !== null}>
-                  <Icon name={busy === 'import' ? 'loader' : 'upload'} size={14} /> {sub(t.seedBtn, { rok })}
+                  <Icon name={busy === 'import' ? 'loader' : 'upload'} size={14} /> {sub(t.pitSeedBtn, { rok })}
                 </button>
                 <button type="button" className="button button-secondary" onClick={() => void importXml()} disabled={busy !== null}>
-                  <Icon name="upload" size={14} /> {t.importXml}
+                  <Icon name="upload" size={14} /> {t.pitImportXml}
                 </button>
               </>
             )}
@@ -2324,15 +2315,15 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
             {brakujace.length > 0 && rokPoprzedni !== null && (
               <div className="callout">
                 <Icon name="info" size={16} />
-                <div className="callout__body">{sub(t.carryMissing, { prev: rokPoprzedni, n: ileWspolnot(brakujace.length), rok })}</div>
+                <div className="callout__body">{sub(t.pitCarryMissing, { prev: rokPoprzedni, n: ileWspolnot(brakujace.length), rok })}</div>
                 <button type="button" className="button button-small button-secondary" onClick={() => void carry()} disabled={busy !== null}>
-                  <Icon name={busy === 'carry' ? 'loader' : 'copy'} size={13} /> {t.carryMissingBtn}
+                  <Icon name={busy === 'carry' ? 'loader' : 'copy'} size={13} /> {t.pitCarryMissingBtn}
                 </button>
               </div>
             )}
             {visible.length === 0 ? (
               <div className="zeb-nomatch">
-                <Icon name="search" size={18} /> {t.noMatch}
+                <Icon name="search" size={18} /> {t.pitNoMatch}
               </div>
             ) : (
               <>
@@ -2347,7 +2338,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
                           if (el) el.indeterminate = czesciowo;
                         }}
                         onChange={toggleAllVisible}
-                        aria-label={tMain.ksSelectAll}
+                        aria-label={t.ksSelectAll}
                       />
                       <span className="ks-check__box" aria-hidden="true">
                         <Icon name={czesciowo ? 'minus' : 'check'} size={12} strokeWidth={3} />
@@ -2355,15 +2346,15 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
                     </label>
                   </span>
                   <button type="button" className="ksieg-selall__label" onClick={toggleAllVisible}>
-                    {wszystkieZaznaczone ? tMain.ksSelectNone : tMain.ksSelectAll}
+                    {wszystkieZaznaczone ? t.ksSelectNone : t.ksSelectAll}
                   </button>
-                  <span className="ksieg-selall__hint">{tMain.ksSelectRangeHint}</span>
+                  <span className="ksieg-selall__hint">{t.ksSelectRangeHint}</span>
                   <span className="pit-selall__expand">
                     <button type="button" className="button button-small button-ghost" onClick={() => setRozwiniete(new Set(visible.map((w) => w.id)))}>
-                      <Icon name="chevron-down" size={13} /> {t.expandAll}
+                      <Icon name="chevron-down" size={13} /> {t.pitExpandAll}
                     </button>
                     <button type="button" className="button button-small button-ghost" onClick={() => setRozwiniete(new Set())}>
-                      <Icon name="chevron-right" size={13} /> {t.collapseAll}
+                      <Icon name="chevron-right" size={13} /> {t.pitCollapseAll}
                     </button>
                   </span>
                 </div>
@@ -2372,8 +2363,8 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
             )}
             {bezPit.length > 0 && (
               <details className="pit-adresy">
-                <summary>{sub(t.adresyBezPit, { n: bezPit.length, rok })}</summary>
-                <p className="pod-note">{t.adresyBezPitHint}</p>
+                <summary>{sub(t.pitAdresyBezPit, { n: bezPit.length, rok })}</summary>
+                <p className="pod-note">{t.pitAdresyBezPitHint}</p>
                 <ul className="pit-adresy__list">
                   {bezPit.map((r) => (
                     <li key={r.nazwa}>
@@ -2386,7 +2377,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
                           navItem.open('nowy', r.nazwa);
                         }}
                       >
-                        <Icon name="plus" size={13} /> {t.adresyDodaj}
+                        <Icon name="plus" size={13} /> {t.pitAdresyDodaj}
                       </button>
                     </li>
                   ))}
@@ -2399,7 +2390,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
         {zaznaczone.length > 0 && (
           <div className="ksieg-selbar">
             <Icon name="check-circle" size={16} />
-            <span className="ksieg-selbar__text">{sub(t.selectionBar, { n: zaznaczone.length })}</span>
+            <span className="ksieg-selbar__text">{sub(t.pitSelectionBar, { n: zaznaczone.length })}</span>
             <button
               type="button"
               className="ksieg-selbar__clear"
@@ -2408,23 +2399,23 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
                 lastTickedRef.current = null;
               }}
             >
-              {tMain.ksSelectClear}
+              {t.ksSelectClear}
             </button>
             {zaznaczoneZlozone.length > 0 && (
               <button type="button" className="button button-small button-ghost" disabled={busy !== null} onClick={() => void ustawZlozone(zaznaczoneZlozone, false, '')}>
-                {sub(t.batchUnfiled, { n: zaznaczoneZlozone.length })}
+                {sub(t.pitBatchUnfiled, { n: zaznaczoneZlozone.length })}
               </button>
             )}
             <button type="button" className="button button-secondary" disabled={busy !== null} onClick={() => void pliki(zaznaczone)}>
-              <Icon name="download" size={14} /> {sub(t.batchFiles, { n: zaznaczone.length })}
+              <Icon name="download" size={14} /> {sub(t.pitBatchFiles, { n: zaznaczone.length })}
             </button>
             <button type="button" className="button button-secondary" disabled={busy !== null || podpisIds !== null} onClick={() => setPodpisIds(zaznaczone)}>
-              <Icon name="signature" size={14} /> {sub(t.batchSign, { n: zaznaczone.length })}
+              <Icon name="signature" size={14} /> {sub(t.pitBatchSign, { n: zaznaczone.length })}
             </button>
             {zaznaczoneNiezlozone.length > 0 && (
               <button type="button" className="ksieg-book ksieg-book--sm" disabled={busy !== null} onClick={() => setZlozoneIds(zaznaczoneNiezlozone)}>
                 <Icon name="check-circle" size={14} />
-                <span>{sub(t.batchFiled, { n: zaznaczoneNiezlozone.length })}</span>
+                <span>{sub(t.pitBatchFiled, { n: zaznaczoneNiezlozone.length })}</span>
               </button>
             )}
           </div>

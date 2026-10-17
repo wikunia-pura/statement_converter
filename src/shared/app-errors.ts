@@ -400,8 +400,8 @@ export const APP_ERRORS = {
     en: 'The version does not exist — it may have been deleted.',
   },
   wersjaNumberFailed: {
-    pl: 'addZebranieWersja: nie udało się nadać numeru wersji.',
-    en: 'addZebranieWersja: a version number could not be assigned.',
+    pl: 'Nie udało się nadać numeru nowej wersji — ktoś w tym samym czasie dodawał wersję tego zebrania. Spróbuj ponownie.',
+    en: 'A number for the new version could not be assigned — somebody was adding a version of this meeting at the same time. Try again.',
   },
   wersjaNoSprawozdanie: {
     pl: 'Ta wersja nie ma jeszcze sprawozdania.',
@@ -480,8 +480,8 @@ export const APP_ERRORS = {
     en: 'There is nothing to save — the plan is empty.',
   },
   planUnreadable: {
-    pl: 'addPlanWlasny: zapisany plan jest nieczytelny.',
-    en: 'addPlanWlasny: the saved plan cannot be read.',
+    pl: 'Plan został zapisany, ale nie da się go odczytać. Odśwież widok i sprawdź go na liście.',
+    en: 'The plan was saved but cannot be read back. Refresh the view and check it on the list.',
   },
   planSprawozdanieColumnMissing: {
     pl: 'Baza nie ma jeszcze miejsca na sprawozdanie planu — uruchom w Supabase plik plany-gospodarcze-sprawozdanie.sql.',
@@ -614,8 +614,8 @@ export const APP_ERRORS = {
     en: 'This return no longer exists — it may have been deleted.',
   },
   citChangedMeanwhile: {
-    pl: '{op}: zeznanie zmieniało się w tym samym czasie na innym komputerze — spróbuj ponownie.',
-    en: '{op}: the return was being changed on another computer at the same time — try again.',
+    pl: 'Zeznanie zmieniało się w tym samym czasie na innym komputerze — spróbuj ponownie.',
+    en: 'The return was being changed on another computer at the same time — try again.',
   },
   citUpoMissing: {
     pl: 'Ta wysyłka nie ma jeszcze UPO.',

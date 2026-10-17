@@ -3681,6 +3681,7 @@ class DatabaseService {
       await this.syncSpotkanieFromWersja(zebranie.spotkanieId, 'w_przygotowaniu', who);
       return (await this.zebranieWersjeRows([data]))[0];
     }
+    log.warn(`[DB] addZebranieWersja: no free version number for zebranie ${zebranieId}`);
     throw new AppError('wersjaNumberFailed');
   }
 
@@ -4183,7 +4184,10 @@ class DatabaseService {
       .single();
     if (error) throw DatabaseService.planWlasnyError('addPlanWlasny', error);
     const row = DatabaseService.planWlasnyRow(data);
-    if (!row) throw new AppError('planUnreadable');
+    if (!row) {
+      log.warn('[DB] addPlanWlasny: the saved row does not read as a plan');
+      throw new AppError('planUnreadable');
+    }
     return row;
   }
 
@@ -4891,7 +4895,8 @@ class DatabaseService {
       if (data && data.length > 0) return DatabaseService.citRow(data[0]);
       await new Promise((r) => setTimeout(r, 50 + Math.random() * 150 * (proba + 1)));
     }
-    throw new AppError('citChangedMeanwhile', { op });
+    log.warn(`[DB] ${op}: gave up after repeated writes lost to another computer`);
+    throw new AppError('citChangedMeanwhile');
   }
 
   /** Save an edited return; the download record, the sends and the "filed" tick are kept from the stored row. */

@@ -648,8 +648,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ensureZebranieForSpotkanie: (spotkanieId: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIE_ENSURE_FOR_SPOTKANIE, spotkanieId),
   addZebranie: (input: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ADD_ZEBRANIE, input),
-  updateZebranie: (id: number, input: unknown) =>
-    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_ZEBRANIE, id, input),
+  updateZebranie: (id: number, input: unknown, expected?: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.UPDATE_ZEBRANIE, id, input, expected ?? null),
   deleteZebranie: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ZEBRANIE, id),
   deleteZebranieWersja: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ZEBRANIE_WERSJA, id),
   addZebranieWersja: (zebranieId: number) =>
@@ -674,8 +674,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIE_SPRAWOZDANIE_WSTEP_AI, cel, wskazowki),
   proponujZaliczkeAi: (plan: unknown, rodzaj: string, wskazowki: string, dataZebrania: string | null) =>
     ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_PLAN_ZALICZKA_AI, plan, rodzaj, wskazowki, dataZebrania),
-  setZebranieWersjaPlan: (wersjaId: number, plan: unknown, expectedUpdatedAt?: string | null) =>
-    ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIE_WERSJA_SET_PLAN, wersjaId, plan, expectedUpdatedAt ?? null),
+  setZebranieWersjaPlan: (wersjaId: number, plan: unknown, expected?: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIE_WERSJA_SET_PLAN, wersjaId, plan, expected ?? null),
   getZebraniaWspolnoty: () => ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_WSPOLNOTY_GET),
   setZebraniaWspolnota: (adresNazwa: string, patch: unknown) =>
     ipcRenderer.invoke(IPC_CHANNELS.ZEBRANIA_WSPOLNOTA_SET, adresNazwa, patch),
@@ -691,8 +691,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getPlanyWlasne: () => ipcRenderer.invoke(IPC_CHANNELS.PLANY_WLASNE_GET),
   addPlanWlasny: (nrWsp: number, nazwa: string, plan: unknown) =>
     ipcRenderer.invoke(IPC_CHANNELS.PLAN_WLASNY_ADD, nrWsp, nazwa, plan),
-  setPlanWlasny: (id: number, plan: unknown, expectedUpdatedAt?: string | null) =>
-    ipcRenderer.invoke(IPC_CHANNELS.PLAN_WLASNY_SET, id, plan, expectedUpdatedAt ?? null),
+  setPlanWlasny: (id: number, plan: unknown, expected?: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PLAN_WLASNY_SET, id, plan, expected ?? null),
   deletePlanWlasny: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.PLAN_WLASNY_DELETE, id),
   exportPlanWlasny: (request: unknown) => ipcRenderer.invoke(IPC_CHANNELS.PLAN_WLASNY_EXPORT, request),
   // Podatki — nieruchomości (DN-1)

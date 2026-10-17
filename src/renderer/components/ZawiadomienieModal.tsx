@@ -33,6 +33,7 @@ import { formatStamp } from '../../shared/calendar';
 import { localeOf } from '../../shared/format';
 import { translations, Language } from '../translations';
 import { ipcErrorMessage } from '../ipcError';
+import { changeWersjaMaterialy } from '../zebranieMaterialy';
 import { useNotify } from './Notifications';
 import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
 import { FormSection } from './FormSection';
@@ -312,29 +313,28 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
    * Store the notice in its version. Re-reads the version first and keeps what
    * this screen does not own — the revision note, any other material, and the
    * download record (someone may have downloaded in the meantime) — so a save
-   * here can only ever change the notice's own text and recipients.
+   * here can only ever change the notice's own text and recipients. A write
+   * landing in between is built on, not overwritten (changeWersjaMaterialy).
    */
   const writeMaterial = async (
     material: ZebranieMaterial,
     base: Zebranie,
     target: ZebranieWersja
   ): Promise<ZebranieMaterial> => {
-    const fresh = await window.electronAPI.getZebranie(base.id);
-    const freshWersja = fresh?.wersje.find((w) => w.id === target.id);
-    if (!fresh || !freshWersja) throw new Error(t.zawVersionGone);
-    const stored = freshWersja.materialy.find((m) => m.id === material.id);
-    const next: ZebranieMaterial = {
-      ...material,
-      pobrania: stored?.pobrania ?? material.pobrania,
-      updatedAt: new Date().toISOString(),
-      updatedBy: userEmail,
-    };
-    // One notice per version: a notice started again from a template replaces the old one.
-    const others = freshWersja.materialy.filter(
-      (m) => m.id !== material.id && m.rodzaj !== material.rodzaj
-    );
-    const materialy = [...others, next];
-    await window.electronAPI.updateZebranieWersja(target.id, { opis: freshWersja.opis, materialy });
+    let next = material;
+    const written = await changeWersjaMaterialy(base.id, target.id, (current) => {
+      const stored = current.find((m) => m.id === material.id);
+      next = {
+        ...material,
+        pobrania: stored?.pobrania ?? material.pobrania,
+        updatedAt: new Date().toISOString(),
+        updatedBy: userEmail,
+      };
+      // One notice per version: a notice started again from a template replaces the old one.
+      return [...current.filter((m) => m.id !== material.id && m.rodzaj !== material.rodzaj), next];
+    });
+    if (!written) throw new Error(t.zawVersionGone);
+    const { zebranie: fresh, materialy } = written;
     setZebranie({
       ...fresh,
       wersje: fresh.wersje.map((w) => (w.id === target.id ? { ...w, materialy } : w)),
@@ -550,16 +550,10 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
     if (!ok) return;
     setBusy('save');
     try {
-      const fresh = await window.electronAPI.getZebranie(zebranie.id);
-      const freshWersja = fresh?.wersje.find((w) => w.id === wersja.id);
-      if (!fresh || !freshWersja) throw new Error(t.zawVersionGone);
-      const materialy = freshWersja.materialy.filter(
-        (m) => m.id !== draft.id && m.rodzaj !== draft.rodzaj
+      const written = await changeWersjaMaterialy(zebranie.id, wersja.id, (current) =>
+        current.filter((m) => m.id !== draft.id && m.rodzaj !== draft.rodzaj)
       );
-      await window.electronAPI.updateZebranieWersja(wersja.id, {
-        opis: freshWersja.opis,
-        materialy,
-      });
+      if (!written) throw new Error(t.zawVersionGone);
       onChanged?.();
       notify.success(t.zawDeleted);
       onClose();

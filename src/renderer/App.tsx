@@ -38,6 +38,7 @@ import { NotificationProvider } from './components/Notifications';
 import TipLayer from './components/TipLayer';
 import { ConversionSessionProvider } from './conversionSession';
 import { translations, Language } from './translations';
+import { setIpcErrorLanguage } from './ipcError';
 import { AppUser, FileEntry, NotificationTarget } from '../shared/types';
 import {
   BookingFilter,
@@ -743,6 +744,9 @@ const App: React.FC = () => {
     setBookingsCollapsed(next);
     void window.electronAPI.setBookingsCollapsed(next);
   };
+
+  // Refusals from the main process (AppError) read in the app's language.
+  useEffect(() => setIpcErrorLanguage(language), [language]);
 
   const t = translations[language];
   const navLabels = useMemo(

@@ -43,7 +43,6 @@ import {
   Zadanie,
   ZadanieInput,
   ZadaniePatch,
-  ZADANIE_CONFLICT_MESSAGE,
   ZadanieStatus,
   ZadanieZalacznik,
   ZadanieKomentarz,
@@ -100,7 +99,7 @@ import {
   ZebranieDokument,
   ZebranieSprawozdanie,
 } from '../shared/types';
-import type { ZebranieStatusRow } from '../shared/types';
+import type { PlanExpected, ZebranieStatusRow } from '../shared/types';
 import { normalizePlan, normalizePobrania, normalizeUstawienia } from '../shared/plan-gospodarczy';
 import { daneNaKolejnyRok, normalizeDane, normalizeStawki, tylkoCyfry } from '../shared/podatki';
 import { daneCitNaKolejnyRok, normalizeCitUstawienia, normalizeDaneCit, oznaczAutorowRegul } from '../shared/podatki-cit';
@@ -142,6 +141,7 @@ import {
   zrodloSzablonu,
 } from '../shared/zebrania';
 import { randomUUID } from 'crypto';
+import { AppError } from '../shared/app-errors';
 import { getSupabase, onTableWrite } from './supabaseClient';
 import { removeAttachments } from './zadaniaStorage';
 import { ZADANIE_ATTACHMENT_MAX_BYTES, ZADANIE_STORAGE_KEY, isValidDayKey } from '../shared/zadania';
@@ -345,15 +345,18 @@ function sameInstant(a: string, b: string): boolean {
   return a === b || Date.parse(a) === Date.parse(b);
 }
 
+/** Two optional version stamps naming the same version: both absent, or the same instant. */
+function sameStamp(a: string | null, b: string | null): boolean {
+  return a == null || b == null ? a == null && b == null : sameInstant(a, b);
+}
+
+/** A plan's own version: when it was last saved; null for no plan. Downloads do not move it. */
+function planStamp(raw: unknown): string | null {
+  return raw ? (normalizePlan(raw)?.zmieniono ?? null) : null;
+}
+
 /** How many times a write that lost a race re-reads and applies itself again (see `casUpdate`). */
 const CAS_ATTEMPTS = 5;
-
-/**
- * Why a save made from a form was refused: the row was saved by somebody else
- * after the form loaded it (the caller passed the `updatedAt` it loaded).
- */
-const CONCURRENT_EDIT_MESSAGE =
-  'Te dane zmieniły się w międzyczasie (ktoś inny je zapisał). Odśwież widok i wprowadź zmiany ponownie.';
 
 /**
  * The `updated_at` of a write that only NOTES something — a download, a DOM
@@ -519,7 +522,10 @@ class DatabaseService {
    * edit to now, a note by a millisecond — `stamp`), so of two writers that read
    * the same version only one lands; the other re-reads and applies its change
    * again on top. With `expectedUpdatedAt` (what a form loaded) a newer row is
-   * not merged into but refused with `CONCURRENT_EDIT_MESSAGE`.
+   * not merged into but refused with the `concurrentEdit` AppError.
+   * `expectedVersion` does the same for one part of the row with a stamp of
+   * its own (a plan's `zmieniono`), so a download noted on the row or another
+   * document marked ready is no conflict for an editor of that part.
    *
    * Returns the row the landed write was built on and, with `returning`, the
    * written row; null when the row does not exist.
@@ -533,6 +539,7 @@ class DatabaseService {
     options: {
       stamp?: 'edit' | 'note';
       expectedUpdatedAt?: string | null;
+      expectedVersion?: { value: string | null; of: (row: R) => string | null };
       /** The row already read (bulk), used for the first attempt. */
       initial?: R;
       /** Columns of the written row to return. */
@@ -556,11 +563,14 @@ class DatabaseService {
         }
         row = data as unknown as R;
       }
-      if (options.expectedUpdatedAt && !sameInstant(options.expectedUpdatedAt, row.updated_at)) {
+      if (
+        (options.expectedUpdatedAt && !sameInstant(options.expectedUpdatedAt, row.updated_at)) ||
+        (options.expectedVersion && !sameStamp(options.expectedVersion.of(row), options.expectedVersion.value))
+      ) {
         // Refused before any write, so nothing reported the table: somebody
         // else's save is exactly what the cached list is missing.
         this.invalidateTable(table);
-        throw new Error(CONCURRENT_EDIT_MESSAGE);
+        throw new AppError('concurrentEdit');
       }
       const patch = apply(row);
       if (!patch) return { row, written: null };
@@ -576,7 +586,8 @@ class DatabaseService {
       // Written by somebody else since the read: read again, apply again on top.
       row = null;
     }
-    throw new Error(`${op}: zapis się nie udał — te dane zmieniały się w tym czasie kilka razy z rzędu. Spróbuj ponownie.`);
+    log.warn(`[DB] ${op}: gave up after ${CAS_ATTEMPTS} writes lost to other writers`);
+    throw new AppError('concurrentRetriesExhausted');
   }
 
   constructor() {
@@ -2473,7 +2484,7 @@ class DatabaseService {
    * Guarded twice against overwriting what somebody else saved meanwhile: the
    * card must still be at the `updatedAt` the form was opened on (when the form
    * says so), and the write itself only lands while the row is still the one
-   * just read. Either failing refuses the save with `ZADANIE_CONFLICT_MESSAGE`.
+   * just read. Either failing refuses the save with the `zadanieConflict` AppError.
    *
    * Files are deleted from the bucket only when the person removed them in this
    * edit (`removedAttachments`) — and only if the card really had them and the
@@ -2497,7 +2508,7 @@ class DatabaseService {
     const stored = before as { zalaczniki: unknown; status: string; updated_at: string };
     if (input.expectedUpdatedAt && !sameInstant(input.expectedUpdatedAt, stored.updated_at)) {
       this.invalidateTable('zadania');
-      throw new Error(ZADANIE_CONFLICT_MESSAGE);
+      throw new AppError('zadanieConflict');
     }
 
     // A card the form sends to another column lands on top of it, like one moved
@@ -2515,7 +2526,8 @@ class DatabaseService {
     if (error) throw new Error(`updateZadanie: ${error.message}`);
     if (!written || written.length === 0) {
       // Saved by somebody else between the read and the write — or deleted.
-      throw new Error((await this.zadanieExists(id)) ? ZADANIE_CONFLICT_MESSAGE : DatabaseService.ZADANIE_GONE);
+      if (await this.zadanieExists(id)) throw new AppError('zadanieConflict');
+      throw new Error(DatabaseService.ZADANIE_GONE);
     }
 
     // Only once the row no longer points at them: a file dropped from the form
@@ -3524,21 +3536,54 @@ class DatabaseService {
    * date and place are the meeting's, edited in the Kalendarz — so it is refused
    * rather than given a second copy that would silently disagree.
    */
-  async updateZebranie(id: number, input: ZebranieInput): Promise<void> {
-    const { data: before, error: readError } = await getSupabase()
-      .from('zebrania')
-      .select('spotkanie_id')
-      .eq('id', id)
-      .maybeSingle();
-    if (readError) throw new Error(`updateZebranie (odczyt): ${readError.message}`);
-    if ((before as { spotkanie_id?: number | null } | null)?.spotkanie_id != null) {
-      throw new Error('To zebranie jest powiązane ze spotkaniem — termin i miejsce zmienia się w Kalendarzu.');
-    }
-    const { error } = await getSupabase()
-      .from('zebrania')
-      .update({ ...DatabaseService.zebraniePayload(input), updated_at: new Date().toISOString() })
-      .eq('id', id);
-    if (error) throw new Error(`updateZebranie: ${error.message}`);
+  /**
+   * Save a standalone entry's own fields. `expected`: those fields as the form
+   * loaded them — changed since by somebody else, the save is refused with
+   * `concurrentEdit`. Only these fields count: a version saved meanwhile (which
+   * moves the entry's `updated_at` too) is no conflict for this form.
+   */
+  async updateZebranie(id: number, input: ZebranieInput, expected?: ZebranieInput | null): Promise<void> {
+    const payload = DatabaseService.zebraniePayload(input);
+    const fieldsKey = (r: Record<string, unknown>) =>
+      JSON.stringify([
+        String(r.nazwa ?? '').trim(),
+        r.adres_id ?? null,
+        String(r.adres_nazwa ?? '').trim(),
+        r.lokalizacja_id ?? null,
+        String(r.lokalizacja_nazwa ?? '').trim(),
+        String(r.lokalizacja_adres ?? '').trim(),
+        // Supabase writes "+00:00" where the app writes "Z": compared as instants.
+        r.starts_at ? Date.parse(String(r.starts_at)) : null,
+      ]);
+    const result = await this.casUpdate<Record<string, unknown> & { spotkanie_id: number | null; updated_at: string }>(
+      'zebrania',
+      id,
+      'spotkanie_id, nazwa, adres_id, adres_nazwa, lokalizacja_id, lokalizacja_nazwa, lokalizacja_adres, starts_at',
+      'updateZebranie',
+      (row) => {
+        if (row.spotkanie_id != null) {
+          throw new Error('To zebranie jest powiązane ze spotkaniem — termin i miejsce zmienia się w Kalendarzu.');
+        }
+        return payload;
+      },
+      {
+        expectedVersion: expected
+          ? {
+              value: fieldsKey({
+                nazwa: expected.nazwa,
+                adres_id: expected.adresId,
+                adres_nazwa: expected.adresNazwa,
+                lokalizacja_id: expected.lokalizacjaId,
+                lokalizacja_nazwa: expected.lokalizacjaNazwa,
+                lokalizacja_adres: expected.lokalizacjaAdres,
+                starts_at: expected.startsAt,
+              }),
+              of: fieldsKey,
+            }
+          : undefined,
+      },
+    );
+    if (!result) throw new Error('Zebranie nie istnieje — mogło zostać usunięte.');
   }
 
   /** Delete an entry and its versions (ON DELETE CASCADE). The meeting is left as it is. */
@@ -3909,13 +3954,15 @@ class DatabaseService {
   /**
    * Save a version's plan (or remove it with null). The download record is
    * kept from the stored row, so saving an edit cannot drop a download noted
-   * meanwhile.
+   * meanwhile. `expected`: the plan the editor started from — its `zmieniono`,
+   * null when the version had none; a plan saved (or drafted) since by
+   * somebody else is refused with `concurrentEdit` instead of overwritten.
    */
   async setZebranieWersjaPlan(
     wersjaId: number,
     value: PlanGospodarczy | null,
     who: string,
-    expectedUpdatedAt?: string | null,
+    expected?: PlanExpected | null,
   ): Promise<void> {
     const normalized = value ? normalizePlan(value) : null;
     const zmieniono = new Date().toISOString();
@@ -3930,7 +3977,7 @@ class DatabaseService {
           : null,
         updated_by: who,
       }),
-      { expectedUpdatedAt },
+      { expectedVersion: expected ? { value: expected.zmieniono, of: (row) => planStamp(row.plan) } : undefined },
     );
     if (!result) throw new Error('Tej wersji już nie ma — mogła zostać usunięta.');
     await this.touchZebranie(result.row.zebranie_id);
@@ -4137,13 +4184,13 @@ class DatabaseService {
   /**
    * Save an edited plan. The year follows the plan's own, and the download
    * record is kept from the stored row, like a version's plan — the row as it is
-   * when the write lands (see casUpdate).
+   * when the write lands (see casUpdate). `expected`: as for a version's plan.
    */
   async setPlanWlasny(
     id: number,
     value: PlanGospodarczy,
     who: string,
-    expectedUpdatedAt?: string | null,
+    expected?: PlanExpected | null,
   ): Promise<void> {
     const normalized = normalizePlan(value);
     if (!normalized) throw new Error('Nie ma czego zapisać — plan jest pusty.');
@@ -4163,7 +4210,12 @@ class DatabaseService {
         },
         updated_by: who,
       }),
-      { expectedUpdatedAt, mapError: (error) => DatabaseService.planWlasnyError('setPlanWlasny', error) },
+      {
+        expectedVersion: expected
+          ? { value: expected.zmieniono, of: (row) => planStamp(row.plan) }
+          : undefined,
+        mapError: (error) => DatabaseService.planWlasnyError('setPlanWlasny', error),
+      },
     );
     if (!result) throw new Error('Tego planu już nie ma — mógł zostać usunięty.');
   }

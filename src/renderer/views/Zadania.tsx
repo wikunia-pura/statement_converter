@@ -15,7 +15,6 @@ import {
   ZADANIE_STATUSES,
   ZADANIE_PRIORYTETY,
   DEFAULT_ZADANIE_PRIORYTET,
-  ZADANIE_CONFLICT_MESSAGE,
 } from '../../shared/types';
 import {
   DEFAULT_ZADANIA_FILTER,
@@ -41,7 +40,7 @@ import SearchableSelect from '../components/SearchableSelect';
 import ZadanieKomentarze, { CommentText } from '../components/ZadanieKomentarze';
 import ZadaniaNotatki from '../components/ZadaniaNotatki';
 import SpotkaniePreviewModal from '../components/SpotkaniePreviewModal';
-import { ipcErrorMessage } from '../ipcError';
+import { ipcErrorMessage, isIpcError } from '../ipcError';
 
 interface Props {
   language: Language;
@@ -1290,8 +1289,7 @@ const Zadania: React.FC<Props> = ({
       }
       setFormState(null);
     } catch (err: unknown) {
-      const message = ipcErrorMessage(err, '');
-      if (message.includes(ZADANIE_CONFLICT_MESSAGE)) {
+      if (isIpcError(err, 'zadanieConflict')) {
         // Saved by somebody else since the form opened: nothing is written. The
         // form stays open with the person's edits and is rebased on the card as
         // it now is (see ZadanieFormModal), so "Zapisz" again saves on top of it.
@@ -1305,7 +1303,7 @@ const Zadania: React.FC<Props> = ({
           await load();
         }
       } else {
-        setError(message || t.zadSaveError);
+        setError(ipcErrorMessage(err, t.zadSaveError));
       }
     } finally {
       setIsSaving(false);

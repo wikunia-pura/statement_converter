@@ -1745,6 +1745,15 @@ export interface PlanZaliczkaAiPropozycja {
 }
 
 /**
+ * The plan an editor started from, sent with its save: the plan's `zmieniono`
+ * as loaded (null = there was no plan yet). A plan saved since by somebody
+ * else is refused instead of overwritten.
+ */
+export interface PlanExpected {
+  zmieniono: string | null;
+}
+
+/**
  * A budget plan of the Plany gospodarcze module — made outside any meeting,
  * from a library statement, for a community and year Zebrania has no plan for.
  */
@@ -2538,21 +2547,13 @@ export type ZadanieInput = Pick<
   removedAttachments?: string[];
   /**
    * Edit only: the card's `updatedAt` as the form was opened on it. A save over
-   * a card changed since is refused with `ZADANIE_CONFLICT_MESSAGE`.
+   * a card changed since is refused with the `zadanieConflict` AppError.
    */
   expectedUpdatedAt?: string | null;
 };
 
 /** A quick edit on the board: only the fields given are written. */
 export type ZadaniePatch = Partial<Pick<ZadanieInput, 'tytul' | 'przypisanyEmail' | 'termin' | 'priorytet'>>;
-
-/**
- * Why a full save of a card was refused: somebody saved the card after the form
- * was opened. The renderer recognises it by this exact text, words it in the
- * user's language and reloads the board.
- */
-export const ZADANIE_CONFLICT_MESSAGE =
-  'To zadanie zmieniło się w międzyczasie (ktoś inny je zapisał). Otwórz je ponownie, żeby zobaczyć aktualną wersję.';
 
 /**
  * One comment in a task's conversation.

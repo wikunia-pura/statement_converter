@@ -24,6 +24,7 @@ import {
   ZebranieDane,
   wersjaStatusFromGotowe,
   zrodloSzablonu,
+  zebranieInputOf,
 } from '../../shared/zebrania';
 import { formatStamp, formatTime, partsToIso, toParts } from '../../shared/calendar';
 import { translations, Language } from '../translations';
@@ -57,6 +58,7 @@ import { useNavItem } from '../navigation';
 import { useRequestSeq } from '../hooks/useRequestSeq';
 import { defaultUstawienia, foldText } from '../../shared/plan-gospodarczy';
 import { reloadFromServer } from '../dataCache';
+import { ipcErrorMessage, isIpcError } from '../ipcError';
 
 type T = (typeof translations)['pl'];
 
@@ -491,11 +493,14 @@ const ZebranieScreen: React.FC<{
       const rok = Number(s.dane.okresDo.slice(0, 4)) + 1;
       const udzialy = await udzialyNaStart(s.dane.nrWsp ?? wspolnota?.vdomNr ?? null, rok, wspolnota, zebrania);
       const plan = planNaStart(s.dane, ustawienia, { wskaznik: szablonPlan.plan.wskaznik, ...udzialy }, null, szablonPlan);
-      await window.electronAPI.setZebranieWersjaPlan(w.id, plan);
+      // Only onto a version still without a plan: one drafted meanwhile is kept.
+      await window.electronAPI.setZebranieWersjaPlan(w.id, plan, { zmieniono: null });
       await zapamietajUdzialy(dane.adresNazwa, wspolnota, plan);
       notify.info(t.zebSzablonPlanAuto.replace('{nazwa}', szablonPlan.nazwa).replace('{rok}', String(rok)));
     } catch (err: unknown) {
-      notify.warning(`${t.zebSzablonPlanAutoError} ${err instanceof Error ? err.message : String(err)}`);
+      // A plan drafted meanwhile by somebody else is theirs to keep — nothing to say.
+      if (isIpcError(err, 'concurrentEdit')) return;
+      notify.warning(`${t.zebSzablonPlanAutoError} ${ipcErrorMessage(err, t.errorUnexpected)}`);
     }
   };
 
@@ -1027,7 +1032,8 @@ const Zebrania: React.FC<Props> = ({
       let savedId: number;
       if (form.editing) {
         savedId = form.editing.id;
-        await window.electronAPI.updateZebranie(form.editing.id, input);
+        // Over the entry as the form loaded it: fields saved since by somebody else are not overwritten.
+        await window.electronAPI.updateZebranie(form.editing.id, input, zebranieInputOf(form.editing));
         notify.success(t.zebraniaSaved);
       } else {
         const created = await window.electronAPI.addZebranie(input);
@@ -1038,7 +1044,16 @@ const Zebrania: React.FC<Props> = ({
       setForm(null);
       await reloadCore(savedId);
     } catch (err: unknown) {
-      setFormError(err instanceof Error ? err.message : t.zebraniaSaveError);
+      if (form.editing && isIpcError(err, 'concurrentEdit')) {
+        // Nothing was written. The form keeps the person's fields and takes the
+        // entry as it now is, so "Zapisz" again saves over it knowingly.
+        const id = form.editing.id;
+        const fresh = await window.electronAPI.getZebranie(id).catch(() => null);
+        if (fresh) setForm((prev) => (prev?.editing?.id === id ? { editing: fresh } : prev));
+        setFormError(t.zebraniaConflict);
+      } else {
+        setFormError(ipcErrorMessage(err, t.zebraniaSaveError));
+      }
     } finally {
       setFormSaving(false);
     }

@@ -9,7 +9,7 @@ import type {
   PodatkiPitPlikiResult,
   PodatkiPitPostep,
 } from '../shared/types';
-import type { ZebranieStatusRow } from '../shared/types';
+import type { PlanExpected, ZebranieStatusRow } from '../shared/types';
 import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, ZgnPelnomocnik, ZarzadOsoba, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent, AppUser, SpotkanieTyp, SpotkanieLokalizacja, Spotkanie, SpotkanieInput, KalendarzPdfRequest, SpotkanieMailing, SpotkanieTerminStatus, SpotkanieMaterialyStatus, SpotkanieMaterialyKrok, KsiegowaniePriorytet,
   KsiegowaniePrzypisanie, KsiegowanieUwaga, KsiegowaniePlik, ScanDecision, ScanProgress, ScanReport, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik, ZadanieKomentarz, ZadanieKomentarzInput, ZadanieKomentarzPodsumowanie, ZadanieNotatka, MailingAdresaci, MailingTypDef, MailingKalendarzContext, MailingZebranieContext, MailingExportRequest, MailingExportResult, Zebranie, ZebranieInput, ZebranieDokumentKlucz, ZebranieWersja, ZebranieWersjaInput, SprawozdaniaImportResult, SprawozdanieExportRequest, PlanWlasny, PlanWlasnyExportRequest, PodatekNieruchomosci, PodatekNieruchomosciDane, PodatkiImportResult, PodatkiPdfWszystkieResult, PodatkiPodpisPostep, PodatkiPodpisWieleResult, PodatkiStawki, PodatkiStawkiDane, AdresIdentyfikacja, AdresyZasilenieResult, PodatekCit, PodatekCitDane, PodatkiCitPlikiResult, PodatkiCitUpoResult, PodatkiCitUstawienia, CitAiPozycja, CitAiPrzyklad, CitAiWynik, PodpisKartaStan, PodpisSlad, PodpisWybor, PodpisPdfAnaliza, PodpisPdfWynik, PodpisHistoriaEntry, ZebraniePakietRequest, SprawozdanieZapisane, SprawozdanieWstepTekst, SprawozdanieLaczenie, SprawozdanieLaczeniePropozycja, SprawozdanieGrupowanie, SprawozdanieCel, PlanGospodarczy, PlanZaliczkaAiPropozycja, ZebraniaWspolnota, AdresUdzialy, ZebraniaUstawienia, ZebranieDokumentRequest } from '../shared/types';
 import type { BackupSectionKey, ZadaniePatch } from '../shared/types';
@@ -563,8 +563,12 @@ interface ElectronAPI {
   ensureZebranieForSpotkanie: (spotkanieId: number) => Promise<Zebranie>;
   /** A standalone entry, not linked to a meeting. */
   addZebranie: (input: ZebranieInput) => Promise<Zebranie>;
-  /** Standalone entries only — a linked one is edited in the Kalendarz. */
-  updateZebranie: (id: number, input: ZebranieInput) => Promise<boolean>;
+  /**
+   * Standalone entries only — a linked one is edited in the Kalendarz.
+   * `expected`: the entry's fields as the form loaded them; changed since by
+   * somebody else, the save is refused with the `concurrentEdit` AppError.
+   */
+  updateZebranie: (id: number, input: ZebranieInput, expected?: ZebranieInput | null) => Promise<boolean>;
   deleteZebranie: (id: number) => Promise<boolean>;
   /** A new revision (1.0 → 1.1), copied from the newest version; the meeting goes back to "to prepare". */
   addZebranieWersja: (zebranieId: number) => Promise<ZebranieWersja>;
@@ -606,12 +610,15 @@ interface ElectronAPI {
     wskazowki: string,
     dataZebrania: string | null
   ) => Promise<PlanZaliczkaAiPropozycja>;
-  /** Save (or with null remove) a version's budget plan. */
-  /** `expectedUpdatedAt`: as for `updateZebranieWersja`. */
+  /**
+   * Save (or with null remove) a version's budget plan. `expected`: the plan the
+   * editor started from (`zmieniono`, null = none yet); a plan saved since by
+   * somebody else is refused with the `concurrentEdit` AppError.
+   */
   setZebranieWersjaPlan: (
     wersjaId: number,
     plan: PlanGospodarczy | null,
-    expectedUpdatedAt?: string | null,
+    expected?: PlanExpected | null,
   ) => Promise<boolean>;
   getZebraniaWspolnoty: () => Promise<ZebraniaWspolnota[]>;
   setZebraniaWspolnota: (
@@ -639,8 +646,8 @@ interface ElectronAPI {
   /** Refused when Zebrania has a plan of this community (vDom number) and year. */
   addPlanWlasny: (nrWsp: number, nazwa: string, plan: PlanGospodarczy) => Promise<PlanWlasny>;
   /** Refused when the (changed) year is one Zebrania has a plan for. */
-  /** `expectedUpdatedAt`: the plan's `updatedAt` as loaded; a plan saved since by somebody else is refused. */
-  setPlanWlasny: (id: number, plan: PlanGospodarczy, expectedUpdatedAt?: string | null) => Promise<boolean>;
+  /** `expected`: as for `setZebranieWersjaPlan`. */
+  setPlanWlasny: (id: number, plan: PlanGospodarczy, expected?: PlanExpected | null) => Promise<boolean>;
   deletePlanWlasny: (id: number) => Promise<boolean>;
   /** Write a module plan to Downloads as PDF or Excel; the path of the file. */
   exportPlanWlasny: (request: PlanWlasnyExportRequest) => Promise<{ filePath: string }>;

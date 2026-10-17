@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AdresUdzialy,
+  PlanExpected,
   PlanGospodarczy,
   PlanPozycja,
   Sprawozdanie,
@@ -45,6 +46,7 @@ import { planyZZebran, udzialyDlaNowegoPlanu } from '../../shared/plany';
 import { formatStamp } from '../../shared/calendar';
 import { translations, Language } from '../translations';
 import { useNotify } from './Notifications';
+import { ipcErrorMessage, isIpcError } from '../ipcError';
 import { FormField, FormRow, FormSection } from './FormSection';
 import { ModalFooter } from './Modal';
 import OverflowMenu from './OverflowMenu';
@@ -1317,8 +1319,12 @@ export const PlanWorkspace: React.FC<{
   actions?: React.ReactNode;
   /** A box below the plan (the version's final status). */
   bottom?: React.ReactNode;
-  /** Store the plan, or with null remove it. Throws when that fails. */
-  persist: (plan: PlanGospodarczy | null) => Promise<void>;
+  /**
+   * Store the plan, or with null remove it. Throws when that fails. `expected`
+   * is the plan the edits started from: a plan saved since by somebody else is
+   * refused (`concurrentEdit`), not overwritten.
+   */
+  persist: (plan: PlanGospodarczy | null, expected: PlanExpected) => Promise<void>;
   onChanged: () => Promise<void> | void;
   onOpenUstawienia: () => void;
 }> = ({
@@ -1343,28 +1349,49 @@ export const PlanWorkspace: React.FC<{
   const notify = useNotify();
   const [draft, setDraft] = useState<PlanGospodarczy>(stored);
   const [base, setBase] = useState<string>(contentOf(stored));
+  // The stored plan the edits started from — what a save expects to still be
+  // there. A plan somebody else saved meanwhile is a conflict, not overwritten.
+  const [baseStamp, setBaseStamp] = useState<string | null>(stored.zmieniono);
+  // After a conflict: the next stored plan becomes the base the edits now
+  // knowingly go over, so "Zapisz" again saves them.
+  const adoptNextStamp = useRef(false);
   const [busy, setBusy] = useState(false);
   const dirty = !readOnly && contentOf(draft) !== base;
+
+  const resetToStored = () => {
+    setDraft(stored);
+    setBase(contentOf(stored));
+    setBaseStamp(stored.zmieniono);
+  };
 
   // A reload brings the stored plan; it replaces the screen unless there are unsaved edits.
   useEffect(() => {
     if (!dirty) {
-      setDraft(stored);
-      setBase(contentOf(stored));
+      resetToStored();
+    } else if (adoptNextStamp.current) {
+      setBaseStamp(stored.zmieniono);
     }
+    adoptNextStamp.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeKey, stored.zmieniono]);
 
   const save = async (plan: PlanGospodarczy | null, done: string): Promise<boolean> => {
     setBusy(true);
     try {
-      await persist(plan);
+      await persist(plan, { zmieniono: baseStamp });
       if (plan) setBase(contentOf(plan));
       await onChanged();
       notify.success(done);
       return true;
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err));
+      if (isIpcError(err, 'concurrentEdit')) {
+        // Nothing was written; the edits stay on screen over the plan as it now is.
+        notify.error(t.zplanConflict);
+        adoptNextStamp.current = true;
+        await onChanged();
+      } else {
+        notify.error(ipcErrorMessage(err, t.errorUnexpected));
+      }
       return false;
     } finally {
       setBusy(false);
@@ -1661,7 +1688,7 @@ export const PlanWorkspace: React.FC<{
         <ModalFooter
           className="page-action-bar"
           note={dirty ? t.zplanUnsavedBadge : t.zplanAllSaved}
-          onCancel={dirty ? () => setDraft(stored) : undefined}
+          onCancel={dirty ? resetToStored : undefined}
           cancelLabel={t.zplanDiscard}
           onSubmit={() => void save(draft, t.zplanSaved)}
           submitLabel={t.zplanSave}
@@ -1766,8 +1793,8 @@ const ZebraniePlan: React.FC<{
   }, [stored == null, nrWsp, rokNowego, wspolnota?.udzialy?.miastoM2, wspolnota?.udzialy?.pozytkiM2]);
 
   /** Store the plan with the version; the ownership split is remembered for the community. */
-  const persist = async (plan: PlanGospodarczy | null) => {
-    await window.electronAPI.setZebranieWersjaPlan(wersja.id, plan);
+  const persist = async (plan: PlanGospodarczy | null, expected: PlanExpected) => {
+    await window.electronAPI.setZebranieWersjaPlan(wersja.id, plan, expected);
     if (plan) await zapamietajUdzialy(adresNazwa, wspolnota, plan);
   };
 
@@ -1775,11 +1802,17 @@ const ZebraniePlan: React.FC<{
     if (!spr) return;
     setBusy(true);
     try {
-      await persist(planNaStart(spr, ustawienia, zalozenia, pogrupowane, szablon));
+      // Only onto a version still without a plan: one drafted meanwhile elsewhere is not replaced.
+      await persist(planNaStart(spr, ustawienia, zalozenia, pogrupowane, szablon), { zmieniono: null });
       await onChanged();
       notify.success(t.zplanCreated);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err));
+      if (isIpcError(err, 'concurrentEdit')) {
+        notify.error(t.zplanCreateConflict);
+        await onChanged();
+      } else {
+        notify.error(ipcErrorMessage(err, t.errorUnexpected));
+      }
     } finally {
       setBusy(false);
     }

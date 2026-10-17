@@ -3,12 +3,40 @@
  * from `ipcMain.handle` as "Error invoking remote method 'db:…': Error: <message>"
  * — the channel name means nothing to the user, the main process's own message
  * does. Every `notify.error` fed from a caught IPC error goes through this.
+ *
+ * A refusal the main process raised as an `AppError` (shared/app-errors.ts)
+ * carries a code: it is shown in the app's language, and `ipcErrorCode` lets a
+ * view react to one refusal (a save conflict) without matching its text.
  */
+import { AppErrorCode, hasAppErrorCode, localizeErrorMessage, parseAppError } from '../shared/app-errors';
+import type { Language } from './translations';
 
 const ELECTRON_PREFIX = /^Error invoking remote method '[^']*': (?:Error: )?/;
 
-/** The main process's message without Electron's prefix; `fallback` when there is none. */
+// The app's language, set by App whenever it changes — the helpers below are
+// called from event handlers all over the renderer, which have no hook to read it.
+let errorLanguage: Language = 'pl';
+
+export function setIpcErrorLanguage(language: Language): void {
+  errorLanguage = language;
+}
+
+function rawMessage(err: unknown): string {
+  return err instanceof Error ? err.message : typeof err === 'string' ? err : '';
+}
+
+/** The main process's message without Electron's prefix, in the app's language; `fallback` when there is none. */
 export function ipcErrorMessage(err: unknown, fallback: string): string {
-  const raw = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
-  return raw.replace(ELECTRON_PREFIX, '').trim() || fallback;
+  const raw = rawMessage(err);
+  return localizeErrorMessage(raw.replace(ELECTRON_PREFIX, ''), errorLanguage).trim() || fallback;
+}
+
+/** The code of a coded refusal (`AppError` in main), or null for any other failure. */
+export function ipcErrorCode(err: unknown): AppErrorCode | null {
+  return parseAppError(rawMessage(err))?.code ?? null;
+}
+
+/** Whether the failure is the main process's refusal `code`. */
+export function isIpcError(err: unknown, code: AppErrorCode): boolean {
+  return hasAppErrorCode(rawMessage(err), code);
 }

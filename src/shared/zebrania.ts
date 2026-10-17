@@ -21,6 +21,7 @@ import {
   SpotkanieLokalizacja,
   SpotkanieMaterialyStatus,
   Zebranie,
+  ZebranieInput,
   ZebranieMaterial,
   ZebranieMaterialRodzaj,
   ZEBRANIE_DOKUMENTY,
@@ -52,6 +53,19 @@ export function wersjaLabel(wersja: Pick<ZebranieWersja, 'major' | 'minor'>): st
 /** Oldest first — the order the module lists them in, and the order `wersje` is kept in. */
 export function sortWersje(wersje: ZebranieWersja[]): ZebranieWersja[] {
   return [...wersje].sort((a, b) => a.major - b.major || a.minor - b.minor || a.id - b.id);
+}
+
+/** An entry's own fields, as its edit form submits them — what a save expects to find unchanged. */
+export function zebranieInputOf(z: Zebranie): ZebranieInput {
+  return {
+    nazwa: z.nazwa,
+    adresId: z.adresId,
+    adresNazwa: z.adresNazwa,
+    lokalizacjaId: z.lokalizacjaId,
+    lokalizacjaNazwa: z.lokalizacjaNazwa,
+    lokalizacjaAdres: z.lokalizacjaAdres,
+    startsAt: z.startsAt,
+  };
 }
 
 /** The current version: the highest number. Null only for an entry with none. */

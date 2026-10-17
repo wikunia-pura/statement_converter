@@ -28,6 +28,7 @@ import {
   ZebranieDokumentKlucz,
   ZebranieWersjaInput,
   PlanGospodarczy,
+  PlanExpected,
   SprawozdanieWstepTekst,
   SprawozdanieLaczenie,
   SprawozdanieGrupowanie,
@@ -3620,10 +3621,13 @@ function setupIpcHandlers() {
     return await database.addZebranie(input, await zebraniaWho());
   });
 
-  ipcMain.handle(IPC_CHANNELS.UPDATE_ZEBRANIE, async (_, id: number, input: ZebranieInput) => {
-    await database.updateZebranie(id, input);
-    return true;
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.UPDATE_ZEBRANIE,
+    async (_, id: number, input: ZebranieInput, expected?: ZebranieInput | null) => {
+      await database.updateZebranie(id, input, expected ?? null);
+      return true;
+    },
+  );
 
   ipcMain.handle(IPC_CHANNELS.DELETE_ZEBRANIE, async (_, id: number) => {
     await database.deleteZebranie(id);
@@ -3846,8 +3850,8 @@ function setupIpcHandlers() {
 
   ipcMain.handle(
     IPC_CHANNELS.ZEBRANIE_WERSJA_SET_PLAN,
-    async (_, wersjaId: number, plan: PlanGospodarczy | null, expectedUpdatedAt?: string | null) => {
-      await database.setZebranieWersjaPlan(wersjaId, plan, await zebraniaWho(), expectedUpdatedAt ?? null);
+    async (_, wersjaId: number, plan: PlanGospodarczy | null, expected?: PlanExpected | null) => {
+      await database.setZebranieWersjaPlan(wersjaId, plan, await zebraniaWho(), expected ?? null);
       return true;
     },
   );
@@ -3950,11 +3954,11 @@ function setupIpcHandlers() {
 
   ipcMain.handle(
     IPC_CHANNELS.PLAN_WLASNY_SET,
-    async (_, id: number, plan: PlanGospodarczy, expectedUpdatedAt?: string | null) => {
+    async (_, id: number, plan: PlanGospodarczy, expected?: PlanExpected | null) => {
       const stored = await database.getPlanWlasny(id);
       if (!stored) throw new Error('Tego planu już nie ma — mógł zostać usunięty.');
       await assertPlanNieWZebraniach(stored.nrWsp, plan.rok);
-      await database.setPlanWlasny(id, plan, await zebraniaWho(), expectedUpdatedAt ?? null);
+      await database.setPlanWlasny(id, plan, await zebraniaWho(), expected ?? null);
       return true;
     },
   );

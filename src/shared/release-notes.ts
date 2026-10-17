@@ -183,11 +183,24 @@ export const RELEASES: Release[] = [
         id: 'zadania-zapis-dwoch-osob',
         kind: 'fixed',
         icon: 'clipboard',
-        title: 'Zadania: zapis dwóch osób naraz nie kasuje załączników',
+        title: 'Zapis dwóch osób naraz nie nadpisuje cudzych zmian',
         summary:
-          'Szybka zmiana na tablicy (tytuł, osoba, termin, priorytet) zapisuje tylko to, co zmieniłeś. Gdy ktoś zapisał kartę, kiedy miałeś otwarty formularz, aplikacja o tym mówi, a formularz zostaje otwarty z Twoimi zmianami i aktualnymi załącznikami.',
-        where: ['Zadania'],
-        expect: ['Plik jest usuwany z karty tylko wtedy, gdy sam go usunąłeś w formularzu.'],
+          'Szybka zmiana na tablicy zadań (tytuł, osoba, termin, priorytet) zapisuje tylko to, co zmieniłeś. Gdy ktoś inny zapisał kartę zadania, spotkanie, dane zebrania albo plan gospodarczy, kiedy miałeś je otwarte, aplikacja o tym mówi i nic nie nadpisuje — formularz zostaje otwarty z Twoimi zmianami.',
+        where: ['Zadania', 'Kalendarz', 'Zebrania', 'Plany gospodarcze'],
+        steps: [
+          {
+            do: 'Zapisz formularz, który ktoś inny zapisał w tym czasie na swoim komputerze.',
+            then: 'Pojawia się komunikat „Ktoś inny zapisał…”. Twoje zmiany zostają w formularzu.',
+          },
+          {
+            do: 'Sprawdź je i kliknij „Zapisz” jeszcze raz.',
+            then: 'Twoja wersja zastępuje tamtą. W planie gospodarczym możesz zamiast tego kliknąć „Odrzuć zmiany” i zobaczyć plan zapisany przez drugą osobę.',
+          },
+        ],
+        expect: [
+          'Plik jest usuwany z karty zadania tylko wtedy, gdy sam go usunąłeś w formularzu.',
+          'Zawiadomienie, uchwały i szablon zebrania zapisują się na aktualną wersję zebrania, więc materiał dodany w tej samej chwili przez kogoś innego nie znika.',
+        ],
       },
       {
         id: 'podatki-poprawki',

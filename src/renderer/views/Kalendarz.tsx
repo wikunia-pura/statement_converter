@@ -23,11 +23,11 @@ import {
   ZgnPelnomocnik,
   SpotkanieZarzadOsoba,
   Zebranie,
-  ZADANIE_CONFLICT_MESSAGE,
   ZebranieStatusRow,
 } from '../../shared/types';
 import { latestWersja } from '../../shared/zebrania';
 import { useRequestSeq } from '../hooks/useRequestSeq';
+import { ipcErrorMessage, isIpcError } from '../ipcError';
 import { useStableCallback } from '../hooks/useStableCallback';
 import { comparePeople, personLabel, personName } from '../../shared/app-users';
 import { translations, Language } from '../translations';
@@ -697,8 +697,7 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
       closeTask();
       onZadaniaChanged();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : '';
-      if (taskForm?.editing && message.includes(ZADANIE_CONFLICT_MESSAGE)) {
+      if (taskForm?.editing && isIpcError(err, 'zadanieConflict')) {
         // Saved elsewhere meanwhile: the form keeps the edits and is rebased on
         // the card as it now is (ZadanieFormModal), so the next save goes through.
         setTaskError(t.zadConflict);
@@ -707,7 +706,7 @@ const SpotkanieFormModal: React.FC<FormProps> = ({
         if (card) setTaskForm((prev) => (prev?.editing?.id === id ? { editing: card } : prev));
         onZadaniaChanged();
       } else {
-        setTaskError(message || t.zadSaveError);
+        setTaskError(ipcErrorMessage(err, t.zadSaveError));
       }
     } finally {
       setTaskSaving(false);
@@ -2321,6 +2320,8 @@ export const SpotkanieEditModal: React.FC<{
   const [loaded, setLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The meeting the form edits: after a save conflict, the one now stored.
+  const [current, setCurrent] = useState(spotkanie);
 
   const loadZadania = async () => {
     try {
@@ -2379,8 +2380,9 @@ export const SpotkanieEditModal: React.FC<{
     setIsSaving(true);
     setError(null);
     try {
-      await window.electronAPI.updateSpotkanie(spotkanie.id, input);
-      const was = spotkanie.materialyStatus;
+      // Only over the meeting as the form loaded it: one saved since by somebody else is refused.
+      await window.electronAPI.updateSpotkanie(spotkanie.id, input, current.updatedAt);
+      const was = current.materialyStatus;
       if (!materialyPotrzebne && was !== 'brak') {
         await window.electronAPI.setSpotkanieMaterialy(spotkanie.id, 'brak');
       } else if (materialyPotrzebne && was === 'brak') {
@@ -2390,15 +2392,20 @@ export const SpotkanieEditModal: React.FC<{
         try {
           await window.electronAPI.ensureZebranieForSpotkanie(spotkanie.id);
         } catch (err: unknown) {
-          notify.error(
-            `${t.zebraniaAutoCreateError}${err instanceof Error ? `: ${err.message}` : ''}`,
-          );
+          notify.error(`${t.zebraniaAutoCreateError}: ${ipcErrorMessage(err, t.errorUnexpected)}`);
         }
       }
       notify.success(t.kalUpdated);
       onSaved();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      if (isIpcError(err, 'concurrentEdit')) {
+        // As in the calendar's own form: the fields stay, the meeting is the one now stored.
+        const fresh = await window.electronAPI.getSpotkanie(spotkanie.id).catch(() => null);
+        if (fresh) setCurrent(fresh);
+        setError(t.kalConflict);
+      } else {
+        setError(ipcErrorMessage(err, t.errorUnexpected));
+      }
     } finally {
       setIsSaving(false);
     }
@@ -2421,7 +2428,7 @@ export const SpotkanieEditModal: React.FC<{
   return (
     <SpotkanieFormModal
       language={language}
-      editing={spotkanie}
+      editing={current}
       defaultDay={toDayKey(spotkanie.startsAt)}
       typy={typy}
       lokalizacje={lokalizacje}
@@ -2998,7 +3005,8 @@ const Kalendarz: React.FC<Props> = ({
       let saved: Spotkanie | null;
       if (form?.editing) {
         savedId = form.editing.id;
-        saved = await window.electronAPI.updateSpotkanie(form.editing.id, input);
+        // Only over the meeting as the form loaded it: one saved since by somebody else is refused.
+        saved = await window.electronAPI.updateSpotkanie(form.editing.id, input, form.editing.updatedAt);
         // The form only says needed or not: unticking drops the materials,
         // ticking a meeting that had none makes them needed, and a meeting
         // already under way keeps the step it reached.
@@ -3044,7 +3052,19 @@ const Kalendarz: React.FC<Props> = ({
       selectDay(toDayKey(input.startsAt));
       notify.success(form?.editing ? t.kalUpdated : t.kalSaved);
     } catch (err: unknown) {
-      setFormError(err instanceof Error ? err.message : 'Unknown error');
+      if (form?.editing && isIpcError(err, 'concurrentEdit')) {
+        // Nothing was written. The form keeps the person's fields and takes the
+        // meeting as it now is, so "Zapisz" again saves over it knowingly.
+        const id = form.editing.id;
+        const fresh = await window.electronAPI.getSpotkanie(id).catch(() => null);
+        if (fresh) {
+          putSpotkanie(id, fresh);
+          setForm((prev) => (prev?.editing?.id === id ? { ...prev, editing: fresh } : prev));
+        }
+        setFormError(t.kalConflict);
+      } else {
+        setFormError(ipcErrorMessage(err, t.errorUnexpected));
+      }
     } finally {
       setIsSaving(false);
     }
@@ -3203,8 +3223,7 @@ const Kalendarz: React.FC<Props> = ({
       setCardTask(null);
       await loadZadania();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : '';
-      if (cardTask.editing && message.includes(ZADANIE_CONFLICT_MESSAGE)) {
+      if (cardTask.editing && isIpcError(err, 'zadanieConflict')) {
         // As in the meeting form above: keep the edits, rebase on the fresh card.
         setCardTaskError(t.zadConflict);
         const id = cardTask.editing.id;
@@ -3212,7 +3231,7 @@ const Kalendarz: React.FC<Props> = ({
         if (card) setCardTask((prev) => (prev?.editing?.id === id ? { ...prev, editing: card } : prev));
         await loadZadania();
       } else {
-        setCardTaskError(message || t.zadSaveError);
+        setCardTaskError(ipcErrorMessage(err, t.zadSaveError));
       }
     } finally {
       setCardTaskSaving(false);

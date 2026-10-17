@@ -15,6 +15,7 @@ import { formatStamp } from '../../shared/calendar';
 import { translations, Language } from '../translations';
 import { pluralFormPl } from '../plural';
 import { ipcErrorMessage } from '../ipcError';
+import { changeWersjaMaterialy } from '../zebranieMaterialy';
 import { useNotify } from './Notifications';
 import ModalDismiss, { ModalFooter, ModalHeader } from './Modal';
 import { FormSection } from './FormSection';
@@ -291,29 +292,35 @@ export const ZebraniaSzablonModal: React.FC<{
     const bledy: string[] = [];
     for (const { zebranie, dane, wersja } of zaznaczone) {
       try {
-        let materialy = wersja.materialy;
         const zmienione: ZebranieDokumentKlucz[] = [];
         // A part the template lacks is removed: the meeting ends up as the template is.
-        if (czesci.zawiadomienie && (tplZaw || zawiadomienieOf(wersja))) {
-          materialy = [
-            ...(tplZaw ? materialyZeSzablonu([tplZaw], userEmail) : []),
-            ...materialy.filter((m) => m.rodzaj !== 'zawiadomienie'),
-          ];
-          zmienione.push('zawiadomienie');
-        }
-        if (czesci.uchwaly && (tplUchwaly.length > 0 || uchwalyOf(wersja).length > 0)) {
-          materialy = withUchwaly(materialy, materialyZeSzablonu(tplUchwaly, userEmail));
-          zmienione.push('uchwaly');
-        }
-        if (materialy !== wersja.materialy) {
-          await window.electronAPI.updateZebranieWersja(wersja.id, { opis: wersja.opis, materialy });
+        const zawiadomienie = czesci.zawiadomienie && (!!tplZaw || !!zawiadomienieOf(wersja));
+        const uchwaly = czesci.uchwaly && (tplUchwaly.length > 0 || uchwalyOf(wersja).length > 0);
+        if (zawiadomienie || uchwaly) {
+          // Onto the version as stored now: a material written since this list
+          // was loaded is kept (the template replaces only its own parts).
+          const written = await changeWersjaMaterialy(zebranie.id, wersja.id, (current) => {
+            let materialy = current;
+            if (zawiadomienie) {
+              materialy = [
+                ...(tplZaw ? materialyZeSzablonu([tplZaw], userEmail) : []),
+                ...materialy.filter((m) => m.rodzaj !== 'zawiadomienie'),
+              ];
+            }
+            if (uchwaly) materialy = withUchwaly(materialy, materialyZeSzablonu(tplUchwaly, userEmail));
+            return materialy;
+          });
+          if (!written) throw new Error(t.zawVersionGone);
+          if (zawiadomienie) zmienione.push('zawiadomienie');
+          if (uchwaly) zmienione.push('uchwaly');
         }
         // A version without a plan has none to change: the template's assumptions apply when it is drafted.
         if (czesci.plan && tplPlan && wersja.plan) {
           const plan = planZeSzablonu(wersja.plan, tplPlan, ustawienia.zaokraglenie);
           // Already on the template's assumptions: nothing to write, and its ready mark stays.
           if (JSON.stringify(plan) !== JSON.stringify(wersja.plan)) {
-            await window.electronAPI.setZebranieWersjaPlan(wersja.id, plan);
+            // Built on the plan as this list shows it: one edited since is refused, not overwritten.
+            await window.electronAPI.setZebranieWersjaPlan(wersja.id, plan, { zmieniono: wersja.plan.zmieniono });
             zmienione.push('plan');
           }
         }

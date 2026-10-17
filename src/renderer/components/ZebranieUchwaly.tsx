@@ -22,6 +22,7 @@ import {
 import { translations, Language } from '../translations';
 import { useNotify } from './Notifications';
 import { ipcErrorMessage } from '../ipcError';
+import { changeWersjaMaterialy } from '../zebranieMaterialy';
 import { FormSection } from './FormSection';
 import Icon from './Icon';
 import Loader from './Loader';
@@ -129,19 +130,16 @@ const ZebranieUchwaly: React.FC<{
   /**
    * Change the resolution list. The version is re-read first and only the
    * resolutions are written back, so the notice, the revision's note and any
-   * download recorded meanwhile are kept as they are stored.
+   * download recorded meanwhile are kept as they are stored — and a write that
+   * lands in between makes the change again on top of it (changeWersjaMaterialy).
    */
   const writeList = async (
     change: (current: ZebranieMaterial[]) => ZebranieMaterial[]
   ): Promise<void> => {
-    const fresh = await window.electronAPI.getZebranie(zebranie.id);
-    const freshWersja = fresh?.wersje.find((w) => w.id === wersja.id);
-    if (!freshWersja) throw new Error(t.zawVersionGone);
-    const next = change(uchwalyOf(freshWersja));
-    await window.electronAPI.updateZebranieWersja(wersja.id, {
-      opis: freshWersja.opis,
-      materialy: withUchwaly(freshWersja.materialy, next),
-    });
+    const written = await changeWersjaMaterialy(zebranie.id, wersja.id, (materialy, fresh) =>
+      withUchwaly(materialy, change(uchwalyOf(fresh)))
+    );
+    if (!written) throw new Error(t.zawVersionGone);
     await onChanged();
   };
 

@@ -3580,6 +3580,13 @@ export const translations = {
     alreadyProcessedUnknown: 'Nie można sprawdzić, czy ten plik był już przetworzony',
     zadConflict:
       'Ktoś inny zapisał to zadanie, kiedy był otwarty formularz, więc nic jeszcze nie zapisano. Formularz ma Twoje zmiany i aktualne załączniki zadania — sprawdź je i kliknij „Zapisz” jeszcze raz.',
+    kalConflict:
+      'Ktoś inny zapisał to spotkanie, kiedy był otwarty formularz, więc nic jeszcze nie zapisano. Formularz ma Twoje zmiany — sprawdź je i kliknij „Zapisz” jeszcze raz, żeby zapisać je zamiast tamtych.',
+    zplanConflict:
+      'Ktoś inny zapisał ten plan w trakcie Twojej edycji, więc nic jeszcze nie zapisano. Twoje zmiany są nadal na ekranie: kliknij „Zapisz” jeszcze raz, żeby zapisać je zamiast tamtych, albo „Odrzuć zmiany”, żeby zobaczyć plan zapisany przez tę osobę.',
+    zplanCreateConflict: 'Ktoś inny założył już plan dla tej wersji — pokazuję go zamiast nowego.',
+    zebraniaConflict:
+      'Ktoś inny zmienił dane tego zebrania, kiedy był otwarty formularz, więc nic jeszcze nie zapisano. Formularz ma Twoje zmiany — sprawdź je i kliknij „Zapisz” jeszcze raz, żeby zapisać je zamiast tamtych.',
     backupSkippedSections:
       'Kopia nie zawiera sekcji, których tabel nie ma jeszcze w bazie (nie uruchomiono ich migracji SQL): {sections}',
     backupRestoreSkippedSections:
@@ -7229,6 +7236,13 @@ export const translations = {
     alreadyProcessedUnknown: 'Cannot check whether this file was already processed',
     zadConflict:
       'Someone else saved this task while the form was open, so nothing has been saved yet. The form keeps your changes and the task\'s current attachments — check them and click “Save” again.',
+    kalConflict:
+      'Someone else saved this meeting while the form was open, so nothing has been saved yet. The form keeps your changes — check them and click “Save” again to save them over theirs.',
+    zplanConflict:
+      'Someone else saved this plan while you were editing it, so nothing has been saved yet. Your changes are still on screen: click “Save” again to save them over theirs, or “Discard changes” to see the plan they saved.',
+    zplanCreateConflict: 'Someone else has already drafted a plan for this version — showing theirs instead of a new one.',
+    zebraniaConflict:
+      'Someone else changed this meeting\'s details while the form was open, so nothing has been saved yet. The form keeps your changes — check them and click “Save” again to save them over theirs.',
     backupSkippedSections:
       'The backup leaves out sections whose tables do not exist in the database yet (their SQL migration was not run): {sections}',
     backupRestoreSkippedSections:

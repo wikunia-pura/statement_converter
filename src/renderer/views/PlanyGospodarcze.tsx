@@ -598,12 +598,12 @@ const PlanScreen: React.FC<{
                 </div>
               ) : undefined
             }
-            persist={async (plan) => {
+            persist={async (plan, expected) => {
               if (!plan) {
                 await window.electronAPI.deletePlanWlasny(wpis.wlasny.id);
                 return;
               }
-              await window.electronAPI.setPlanWlasny(wpis.wlasny.id, plan);
+              await window.electronAPI.setPlanWlasny(wpis.wlasny.id, plan, expected);
               if (wspolnota) await zapamietajUdzialy(wspolnota.adresNazwa, wspolnota, plan);
             }}
             onChanged={onReload}

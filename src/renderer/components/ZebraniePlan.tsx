@@ -50,6 +50,7 @@ import { ModalFooter } from './Modal';
 import OverflowMenu from './OverflowMenu';
 import Icon from './Icon';
 import KwotaInput from './KwotaInput';
+import Select from './Select';
 import ZebranieDokumentActions, { DokumentZrodlo } from './ZebranieDokumentActions';
 import { bezPrefiksu } from './PodpisKarta';
 import MergedBadge from './MergedBadge';
@@ -181,19 +182,15 @@ const OkresyEditor: React.FC<{
             ) : (
               <span className="zplan-okres">
                 <span>{t.zplanPeriodFrom}</span>
-                <select
+                <Select
+                  overlay
+                  size="sm"
                   className="zplan-month"
                   value={nowy}
-                  onChange={(e) => setNowy(Number(e.target.value))}
-                  aria-label={t.zplanPeriodFrom}
-                  autoFocus
-                >
-                  {wolne.map((m) => (
-                    <option key={m} value={m}>
-                      {nazwy[m - 1]}
-                    </option>
-                  ))}
-                </select>
+                  options={wolne.map((m) => ({ value: String(m), label: nazwy[m - 1] }))}
+                  onChange={(v) => setNowy(Number(v))}
+                  ariaLabel={t.zplanPeriodFrom}
+                />
                 <button type="button" className="button button-small button-primary" onClick={dodaj}>
                   <Icon name="check" size={12} /> {t.zplanPeriodAdd}
                 </button>

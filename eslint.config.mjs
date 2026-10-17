@@ -22,6 +22,17 @@ const NO_NATIVE_TOOLTIP = [
   },
 ];
 
+/**
+ * A native <select> opens an OS popup that CSS cannot restyle; the app's
+ * dropdowns are components/Select.tsx and SearchableSelect.tsx.
+ */
+const NO_NATIVE_SELECT = [
+  {
+    selector: 'JSXOpeningElement[name.name="select"]',
+    message: 'Native <select> is not used: use <Select> (components/Select.tsx) or <SearchableSelect>.',
+  },
+];
+
 const HELP_CURSOR_MESSAGE = `The "?" help cursor is not used. ${TIP_HINT}`;
 
 const NO_HELP_CURSOR = [
@@ -119,7 +130,7 @@ export default defineConfig(
   {
     files: ['src/renderer/**/*.tsx'],
     rules: {
-      'no-restricted-syntax': ['error', ...NO_NATIVE_TOOLTIP, ...NO_HELP_CURSOR],
+      'no-restricted-syntax': ['error', ...NO_NATIVE_TOOLTIP, ...NO_NATIVE_SELECT, ...NO_HELP_CURSOR],
     },
   },
 

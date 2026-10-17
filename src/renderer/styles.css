@@ -12793,7 +12793,7 @@ body.dark-mode .mve-subject .ff-chip__missing {
 .zplan-warn { margin-left: var(--s-3); }
 
 /* The month a stretch of the advance starts in. */
-.zplan-month { width: auto; min-width: 0; padding-top: 2px; padding-bottom: 2px; }
+.zplan-month { width: auto; min-width: 9.5rem; }
 
 /* A statement cost's growth over last year: the others' share of the index, or its own (highlighted). */
 .zplan-growth {

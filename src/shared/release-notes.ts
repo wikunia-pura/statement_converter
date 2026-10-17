@@ -91,7 +91,7 @@ export const RELEASES: Release[] = [
       'Konwerter nie gubi już po cichu linii wyciągu ani nie zgaduje kontrahenta po fragmencie słowa — wątpliwe pozycje czekają na Twoje potwierdzenie. Wysyłka CIT-8 nie złoży zeznania dwa razy, kopie zapasowe nie przenoszą ustawień tego komputera, a aplikacja działa na nowej, wspieranej wersji Electrona.',
     stats: [
       { value: '2', label: 'nowe funkcje' },
-      { value: '6', label: 'usprawnień' },
+      { value: '5', label: 'usprawnienia' },
       { value: '3', label: 'poprawki' },
     ],
     highlights: [
@@ -242,33 +242,6 @@ export const RELEASES: Release[] = [
         where: ['Homebanking'],
       },
       {
-        id: 'pulpit-konto-konwersji',
-        kind: 'improved',
-        icon: 'check-circle',
-        title: 'Pulpit pokazuje, na jakie konto wyciąg został zaksięgowany',
-        summary:
-          'Każdy plik księgowy na Pulpicie mówi, kiedy go skonwertowano i na jakie konto — np. „Eksploatacja 2 (131-2)”. Widać od razu, czy ponowna konwersja tego samego wyciągu poszła na inne konto niż ta już zaksięgowana.',
-        where: ['Pulpit', 'Konwerter'],
-        steps: [
-          {
-            do: 'Rozwiń wspólnotę na Pulpicie.',
-            then: 'Przy każdym pliku księgowym jest „Skonwertowany {data}” i konto: zielone „W DOM na …”, gdy plik jest już w DOM, albo „Na konto …”, gdy czeka.',
-          },
-          {
-            do: 'Spójrz na „Pliki z folderu”.',
-            then: 'Pod każdym wyciągiem z folderu są jego konwersje, a konwersje plików spoza folderu — w osobnej grupie „Inne konwersje”. Przy wyciągu widać, ile razy go skonwertowano i kiedy (np. „Skonwertowany 3× · 02.10 – 16.10”), i stan każdego konta: „W DOM na Eksploatacja (131-1)”, „Na konto Eksploatacja 2 (131-2)”.',
-          },
-        ],
-        details: [
-          'Konwersja zrobiona drugi raz przez pomyłkę (ten sam wyciąg, to samo konto) ma w menu „⋯” opcję „Odrzuć — duplikat”: plik zostaje i da się go otworzyć, ale nie liczy się już do zaksięgowania, więc wspólnota nie wisi na „Częściowo”. „Przywróć” cofa odrzucenie.',
-        ],
-        expect: [
-          'Konwerter rozpoznaje wyciąg skonwertowany już wcześniej po jego treści, nie po nazwie pliku. Pod nazwą pliku pisze, na jakie konto i kiedy wyciąg poszedł: na czerwono „Ten wyciąg jest już w DOM na …”, a na żółto, gdy był tylko skonwertowany. Konwersji nie blokuje — ponowna konwersja może być celową poprawką na inne konto.',
-          'Plik o tej samej nazwie, ale innej treści (np. „operacje (1).xml” z kolejnego miesiąca), nie wywołuje już ostrzeżenia.',
-          'Pliki utworzone, zanim w aplikacji pojawiły się typy kont, nie mają znacznika konta.',
-        ],
-      },
-      {
         id: 'bezpieczenstwo-i-silnik',
         kind: 'improved',
         icon: 'shield',
@@ -285,6 +258,85 @@ export const RELEASES: Release[] = [
           type: 'warning',
           text: 'Wymagania: macOS 13 lub nowszy, Windows 10/11 w wersji 64-bitowej.',
         },
+      },
+    ],
+  },
+  {
+    version: '10.2.0',
+    date: '2026-10-16',
+    title: 'Pulpit pokazuje, na jakie konto poszedł wyciąg, a Konwerter ostrzega przed ponowną konwersją',
+    tagline:
+      'Na Pulpicie konwersje stoją pod wyciągiem, z którego powstały, i każda mówi, kiedy ją zrobiono i na jakie konto. Konwersję zrobioną drugi raz przez pomyłkę odrzucisz jednym kliknięciem, a Konwerter rozpoznaje wyciąg, który jest już w DOM.',
+    stats: [
+      { value: '1', label: 'nowa funkcja' },
+      { value: '2', label: 'usprawnienia' },
+    ],
+    highlights: [
+      {
+        id: 'pulpit-konto-konwersji',
+        kind: 'improved',
+        icon: 'check-circle',
+        title: 'Pulpit pokazuje, na jakie konto wyciąg został zaksięgowany',
+        summary:
+          'Każdy plik księgowy na Pulpicie mówi, kiedy go skonwertowano i na jakie konto — np. „Eksploatacja 2 (131-2)”. Widać od razu, czy ponowna konwersja tego samego wyciągu poszła na inne konto niż ta już zaksięgowana.',
+        where: ['Pulpit'],
+        steps: [
+          {
+            do: 'Rozwiń wspólnotę na Pulpicie.',
+            then: 'Każdy wyciąg z „Pliki z folderu” jest osobną kartą, a pod nim stoją jego konwersje. Konwersje plików spoza folderu są w osobnej grupie „Inne konwersje”.',
+          },
+          {
+            do: 'Spójrz na znaczniki przy pliku księgowym.',
+            then: '„Skonwertowany {data}” i konto: zielone „W DOM na …”, gdy plik jest już w DOM, albo „Na konto …”, gdy czeka.',
+          },
+          {
+            do: 'Spójrz na wyciąg z folderu.',
+            then: 'Widać, ile razy go skonwertowano i kiedy (np. „Skonwertowany 3× · 02.10 – 16.10” — po najechaniu wszystkie godziny), i stan każdego konta: „W DOM na Eksploatacja (131-1)”, „Na konto Eksploatacja 2 (131-2)”.',
+          },
+        ],
+        expect: [
+          'Nazwy plików są teraz prostokątami, a stany — zaokrąglonymi znacznikami, więc jedno nie myli się z drugim.',
+          'Pliki utworzone, zanim w aplikacji pojawiły się typy kont, nie mają znacznika konta.',
+        ],
+      },
+      {
+        id: 'pulpit-odrzuc-duplikat',
+        kind: 'new',
+        icon: 'x-circle',
+        title: 'Odrzucanie konwersji zrobionej drugi raz przez pomyłkę',
+        summary:
+          'Ten sam wyciąg skonwertowany ponownie na to samo konto nie musi już blokować wspólnoty na „Częściowo”. Odrzucona konwersja zostaje na liście i da się ją otworzyć, ale nie liczy się do zaksięgowania.',
+        where: ['Pulpit'],
+        steps: [
+          {
+            do: 'W wierszu konwersji, która nie jest jeszcze w DOM, kliknij „⋯” → „Odrzuć — duplikat” i potwierdź.',
+            then: 'Wiersz robi się szary, a w kolumnie W DOM pojawia się „Odrzucone”. Wspólnota przestaje na niego czekać.',
+          },
+          {
+            do: 'Pomyliłeś się? Kliknij „Przywróć” w tym samym wierszu.',
+            then: 'Konwersja znów czeka na zaksięgowanie.',
+          },
+        ],
+        expect: ['Nie księguj odrzuconego pliku w DOM — to ten sam wyciąg, który już tam jest.'],
+      },
+      {
+        id: 'konwerter-wyciag-juz-w-dom',
+        kind: 'improved',
+        icon: 'alert-triangle',
+        title: 'Konwerter mówi, gdzie wyciąg już poszedł',
+        summary:
+          'Konwerter rozpoznaje wyciąg skonwertowany wcześniej po jego treści, nie po nazwie pliku, i pisze pod nazwą pliku, na jakie konto i kiedy już poszedł.',
+        where: ['Konwerter'],
+        steps: [
+          {
+            do: 'Wczytaj wyciąg, który był już konwertowany.',
+            then: 'Na czerwono: „Ten wyciąg jest już w DOM na Eksploatacja (131-1) — oznaczony …”. Na żółto, gdy był tylko skonwertowany: „…nie jest jeszcze w DOM”.',
+          },
+        ],
+        expect: [
+          'Konwersji nie blokuje — ponowna konwersja może być celową poprawką na inne konto.',
+          'Plik o tej samej nazwie, ale innej treści (np. „operacje (1).xml” z kolejnego miesiąca), nie wywołuje już ostrzeżenia, a ten sam wyciąg pod inną nazwą — tak.',
+        ],
       },
     ],
   },

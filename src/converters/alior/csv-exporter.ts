@@ -4,7 +4,6 @@
 
 import { AliorTransaction } from './types';
 import { BaseCsvExporter } from '../shared/base-csv-exporter';
-import { shortTitle } from '../shared/export-text';
 
 export type { CsvExportOptions } from '../shared/base-csv-exporter';
 
@@ -24,6 +23,6 @@ export class CsvExporter extends BaseCsvExporter<AliorTransaction> {
   }
 
   protected title(raw: AliorTransaction): string {
-    return shortTitle(raw.details.description.join(''));
+    return raw.details.description.join('');
   }
 }

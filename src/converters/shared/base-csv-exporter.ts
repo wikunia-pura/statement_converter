@@ -11,14 +11,13 @@
  * `bankDocNumber`).
  *
  * A bank's exporter only says where its parser keeps what the file needs: the
- * date and its layout, the amount, the title — and how its file has always
- * written the title and the accounts (see `title` and `padAccounts`), which
- * stay as they were so no bank's file changes under this class.
+ * date and its layout, the amount, the title. Every bank's file is written the
+ * same way: the whole title (`fullTitle`) and the account symbols as they are.
  */
 
 import { resolveApartmentAccount } from '../../shared/apartment-account';
 import type { MatchedContractor } from '../../shared/contractor-matcher';
-import { ExportDateLayout, bankDocNumber, yearMonthOf } from './export-text';
+import { ExportDateLayout, bankDocNumber, fullTitle, yearMonthOf } from './export-text';
 
 export interface CsvExportOptions {
   separator?: string;
@@ -51,12 +50,6 @@ export abstract class BaseCsvExporter<TRaw> {
   /** The layout the bank's dates come in. */
   protected abstract readonly dateLayout: ExportDateLayout;
 
-  /**
-   * Account symbols padded to 7 characters. Every bank's file has always had
-   * them so, except the camt ones (BNP Paribas / BOŚ, Santander).
-   */
-  protected readonly padAccounts: boolean = true;
-
   constructor(options: CsvExportOptions = {}) {
     this.options = {
       separator: options.separator || '\t',
@@ -76,7 +69,7 @@ export abstract class BaseCsvExporter<TRaw> {
   /** The amount of an expense as the file prints it — without its sign. */
   protected abstract expenseAmount(raw: TRaw): number;
 
-  /** The `tresc` column: the row's title, cleaned for the file (`shortTitle` or `fullTitle`). */
+  /** The row's title as the statement has it; the `tresc` column is it whole (see `fullTitle`). */
   protected abstract title(raw: TRaw): string;
 
   export(transactions: ExportRow<TRaw>[]): string {
@@ -95,8 +88,8 @@ export abstract class BaseCsvExporter<TRaw> {
           this.formatDate(this.dateOf(raw)),
           tresc,
           this.formatAmount(kwota),
-          this.account(k_wn),
-          this.account(k_ma),
+          k_wn,
+          k_ma,
         ].join(this.options.separator),
       );
 
@@ -106,6 +99,7 @@ export abstract class BaseCsvExporter<TRaw> {
     const incomeNo = new Map(incomes.map((t, i) => [t, i + 1]));
     const expenseNo = new Map(expenses.map((t, i) => [t, i + 1]));
     const bank = this.options.bankAccountSymbol;
+    const tytul = (t: ExportRow<TRaw>) => fullTitle(this.title(t.original));
 
     // ========== INCOME ==========
     // Unrecognized when there is no apartment *or* when no account symbol may be
@@ -113,12 +107,12 @@ export abstract class BaseCsvExporter<TRaw> {
     const accounts = new Map(incomes.map((t) => [t, this.resolveAccount(t)] as const));
     for (const t of incomes) {
       if (accounts.get(t) !== null) continue;
-      line(t.original, `NIEROZPOZNANE #${incomeNo.get(t)} ` + this.title(t.original), this.incomeAmount(t.original), bank, NO_ACCOUNT);
+      line(t.original, `NIEROZPOZNANE #${incomeNo.get(t)} ` + tytul(t), this.incomeAmount(t.original), bank, NO_ACCOUNT);
     }
     for (const t of incomes) {
       const account = accounts.get(t);
       if (account == null) continue;
-      const tresc = this.title(t.original);
+      const tresc = tytul(t);
       const kwota = this.incomeAmount(t.original);
       line(t.original, tresc, kwota, bank, NO_ACCOUNT);
       line(t.original, tresc, kwota, NO_ACCOUNT, account);
@@ -129,7 +123,7 @@ export abstract class BaseCsvExporter<TRaw> {
       if (t.matchedContractor?.contractor) continue;
       line(
         t.original,
-        `NIEROZPOZNANY KONTRAHENT #${expenseNo.get(t)} ` + this.title(t.original),
+        `NIEROZPOZNANY KONTRAHENT #${expenseNo.get(t)} ` + tytul(t),
         this.expenseAmount(t.original),
         NO_ACCOUNT,
         bank,
@@ -138,7 +132,7 @@ export abstract class BaseCsvExporter<TRaw> {
     for (const t of expenses) {
       const contractor = t.matchedContractor?.contractor;
       if (!contractor) continue;
-      line(t.original, this.title(t.original), this.expenseAmount(t.original), contractor.kontoKontrahenta, bank);
+      line(t.original, tytul(t), this.expenseAmount(t.original), contractor.kontoKontrahenta, bank);
     }
 
     return lines.join('\n');
@@ -146,10 +140,6 @@ export abstract class BaseCsvExporter<TRaw> {
 
   private createHeader(): string {
     return ['nr_dok', 'nr_poz', 'data_p', 'tresc', 'kwota', 'k_wn', 'k_ma'].join(this.options.separator);
-  }
-
-  private account(symbol: string): string {
-    return symbol === NO_ACCOUNT || !this.padAccounts ? symbol : symbol.padEnd(7, ' ');
   }
 
   /**

@@ -4,7 +4,6 @@
 
 import { PKOBiznesTransaction } from './types';
 import { BaseCsvExporter } from '../shared/base-csv-exporter';
-import { shortTitle } from '../shared/export-text';
 
 export type { CsvExportOptions } from '../shared/base-csv-exporter';
 
@@ -24,6 +23,6 @@ export class CsvExporter extends BaseCsvExporter<PKOBiznesTransaction> {
   }
 
   protected title(raw: PKOBiznesTransaction): string {
-    return shortTitle(raw.description);
+    return raw.description;
   }
 }

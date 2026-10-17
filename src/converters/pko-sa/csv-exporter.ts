@@ -4,7 +4,6 @@
 
 import { PKOSATransaction } from './types';
 import { BaseCsvExporter } from '../shared/base-csv-exporter';
-import { shortTitle } from '../shared/export-text';
 
 export type { CsvExportOptions } from '../shared/base-csv-exporter';
 
@@ -24,6 +23,6 @@ export class CsvExporter extends BaseCsvExporter<PKOSATransaction> {
   }
 
   protected title(raw: PKOSATransaction): string {
-    return shortTitle(raw.description);
+    return raw.description;
   }
 }

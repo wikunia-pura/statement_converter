@@ -5,7 +5,6 @@
 
 import { INGTransaction } from './types';
 import { BaseCsvExporter } from '../shared/base-csv-exporter';
-import { shortTitle } from '../shared/export-text';
 
 export type { CsvExportOptions } from '../shared/base-csv-exporter';
 
@@ -25,6 +24,6 @@ export class CsvExporter<TRaw extends INGTransaction = INGTransaction> extends B
   }
 
   protected title(raw: TRaw): string {
-    return shortTitle(raw.details.description.join(''));
+    return raw.details.description.join('');
   }
 }

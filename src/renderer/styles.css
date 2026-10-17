@@ -3054,28 +3054,70 @@ body.dark-mode .modal-overlay {
 .ks-check--sm .ks-check__box { width: 16px; height: 16px; border-radius: 4px; }
 
 /* Blocks the window during an import — see BusyOverlay in Loader.tsx. */
+/* The window stays readable under a light veil; clicks are still blocked. */
 .busy-overlay {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(17, 20, 28, 0.55);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
+  background: color-mix(in srgb, var(--bg-app) 40%, transparent);
+  cursor: progress;
+  animation: overlayFade 0.15s ease-out;
 }
-.busy-overlay__box {
-  display: flex;
-  align-items: center;
-  gap: var(--s-4);
-  padding: var(--s-5) var(--s-6);
+.busy-overlay__label {
+  position: absolute;
+  top: var(--s-4);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--s-1) var(--s-3);
   border: 1px solid var(--border-default);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-pill);
   background: var(--bg-surface);
-  box-shadow: var(--shadow-xl);
+  box-shadow: var(--shadow-md);
+  font-size: var(--fs-md);
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
-.busy-overlay__text { font-size: var(--fs-base); font-weight: 500; color: var(--text-primary); }
+
+/* Indeterminate progress: a short accent segment running left to right over
+   a faint track. Shared by the view loader and the busy overlay. */
+.progress-line {
+  position: relative;
+  height: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.progress-line::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, transparent, var(--accent) 30%, var(--accent) 70%, transparent);
+  animation: progress-line-run 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+.progress-line--window {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+}
+@keyframes progress-line-run {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+@keyframes progress-line-pulse {
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress-line::before {
+    width: 100%;
+    animation: progress-line-pulse 1.6s ease-in-out infinite;
+  }
+}
 
 /* Records as rows of a framed list — the modal-friendly alternative to a
    table: main line, secondary line, actions on the right. */
@@ -4164,19 +4206,23 @@ body.dark-mode .modal-overlay {
   to { transform: rotate(360deg); }
 }
 
-/* Full-view loader shown while a view fetches its data on entry. */
+/* Full-view loader shown while a view fetches its data on entry: the progress
+   line along the top of the content area, the caption under it. It fades in a
+   beat late, so a fast fetch never flashes it. */
 .view-loader {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: var(--s-4);
+  gap: var(--s-3);
   min-height: 55vh;
-  padding: var(--s-8);
+  animation: overlayFade 0.2s ease-out 0.12s both;
+}
+.view-loader > .progress-line {
+  align-self: stretch;
 }
 
 .view-loader__text {
-  font-size: var(--fs-base);
+  font-size: var(--fs-md);
   color: var(--text-tertiary);
 }
 

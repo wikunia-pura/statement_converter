@@ -291,14 +291,18 @@ const CASES: Case[] = [
     heldBack: false,
   },
   {
-    // Non-Warsaw code: the pattern is NN-NNN, not 0N-NNN.
-    name: 'kod pocztowy spoza Warszawy: M.8322-300 to lokal 83',
+    // A non-Warsaw code (NN-NNN, not 0N-NNN) splits off the same way — see the
+    // unit test of stripAddressCodes. But "M.83" here follows the payer's own
+    // street in Krasnystaw (UL.PCK 25): their home, not an apartment of
+    // Puławska 116, so it is not taken (FOREIGN_STREET_BEFORE_APARTMENT, 7.0.1).
+    // This case expected 83 from before that guard existed.
+    name: 'kod pocztowy spoza Warszawy po obcej ulicy: M.8322-300 to nie lokal wspólnoty',
     addresses: pulawska,
     description: 'CZYNSZ',
     counterparty: 'ALEKSANDRA JANECZEKUL.PCK 25 M.8322-300 KRASNYSTAW',
-    apartment: '83',
-    account: '204-000083',
-    heldBack: false,
+    apartment: null,
+    account: null,
+    heldBack: true,
   },
   {
     // A NIP's dashes contain a false postal code ("521-332-10-09" → "21-332"),

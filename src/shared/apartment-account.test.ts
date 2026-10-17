@@ -123,6 +123,8 @@ describe('glue guard — address codes and glued text', () => {
   it('postal codes and dashed NIPs are taken out before reading the apartment', () => {
     // "M.202-620" is apartment 2 in 02-620, not apartment 202.
     expect(stripAddressCodes('TESTOWA 5 M.202-620 WARSZAWA')).toBe('TESTOWA 5 M.2  WARSZAWA');
+    // A code outside Warsaw (NN-NNN) splits the same way: "M.8322-300" is apartment 83 in 22-300.
+    expect(stripAddressCodes('TESTOWA 5 M.8322-300 KRASNYSTAW')).toBe('TESTOWA 5 M.83  KRASNYSTAW');
     // The NIP goes first, so its dashes do not form a false postal code.
     expect(stripAddressCodes('NIP 123-456-32-18 LOK 7')).toBe('NIP   LOK 7');
     expect(stripAddressCodes(null)).toBe('');

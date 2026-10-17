@@ -13512,6 +13512,12 @@ input[type='text'].zplan-input--rate { width: 84px; }
 .ksieg-plik-chip--warn { color: var(--warning); background: var(--warning-bg); border-color: var(--warning-border); }
 .ksieg-plik-chip--err  { color: var(--danger); background: var(--danger-bg); border-color: var(--danger-border); }
 .ksieg-plik-chip--discarded { color: var(--text-tertiary); border-style: dashed; }
+/* The account a conversion waits to be posted to: neutral, but filled — a tint
+   of the text colour stands out from whatever card it sits on, in both themes. */
+.ksieg-plik-chip--account {
+  background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
+  border-color: color-mix(in srgb, var(--text-secondary) 32%, transparent);
+}
 
 /* A discarded duplicate: still there and openable, but out of the count — faded. */
 .ksieg-file.is-discarded .ksieg-file__when,

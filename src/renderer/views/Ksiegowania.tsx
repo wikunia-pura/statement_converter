@@ -2528,7 +2528,7 @@ function conversionChips(
     <>
       {withDate && converted}
       {label && (
-        <span key="account" className="ksieg-plik-chip" data-tip={t.ksAccountChipHint}>
+        <span key="account" className="ksieg-plik-chip ksieg-plik-chip--account" data-tip={t.ksAccountChipHint}>
           {t.ksAccountChip.replace('{account}', label)}
         </span>
       )}

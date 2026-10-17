@@ -4,8 +4,8 @@ import {
   markSignedIn,
   markSignedOut,
   reportSessionLost,
-  SESSION_EXPIRED_MESSAGE,
 } from './supabaseClient';
+import { AppError } from '../shared/app-errors';
 
 export interface SessionInfo {
   email: string;
@@ -25,7 +25,7 @@ export async function signIn(email: string, password: string): Promise<
 > {
   const { data, error } = await getSupabase().auth.signInWithPassword({ email, password });
   if (error) return { ok: false, error: error.message };
-  if (!data.user) return { ok: false, error: 'Nie zwrócono użytkownika.' };
+  if (!data.user) return { ok: false, error: new AppError('signInNoUser').message };
   markSignedIn();
   return {
     ok: true,
@@ -65,7 +65,7 @@ export async function getSession(): Promise<SessionInfo | null> {
  */
 export async function requireSession(): Promise<SessionInfo> {
   const session = await getSession();
-  if (!session) throw new Error(SESSION_EXPIRED_MESSAGE);
+  if (!session) throw new AppError('sessionExpired');
   return session;
 }
 

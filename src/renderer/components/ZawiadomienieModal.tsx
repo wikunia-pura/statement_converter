@@ -434,7 +434,7 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
         attachPdf: source?.attachPdf ?? true,
       });
       if (!result.success) {
-        notify.error(result.error, t.zawDownloadError);
+        notify.error(ipcErrorMessage(result.error, t.errorUnexpected), t.zawDownloadError);
         return;
       }
       setLastFiles(result.files);
@@ -502,12 +502,12 @@ const ZawiadomienieModal: React.FC<ZawiadomienieModalProps> = ({
         wykluczeni: material.wykluczeni,
       });
       if (response.error) {
-        notify.error(response.error, t.mailingSendError);
+        notify.error(ipcErrorMessage(response.error, t.errorUnexpected), t.mailingSendError);
         return;
       }
       const result = response.results?.[0];
       if (!result || result.status !== 'success') {
-        notify.error(result?.errorMessage || t.mailingSendError, t.mailingSendError);
+        notify.error(ipcErrorMessage(result?.errorMessage, t.mailingSendError), t.mailingSendError);
         return;
       }
       notify.success(

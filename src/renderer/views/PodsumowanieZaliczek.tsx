@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { translations, Language } from '../translations';
+import { ipcErrorMessage } from '../ipcError';
 import { FormSection } from '../components/FormSection';
 import Icon from '../components/Icon';
 import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
@@ -237,7 +238,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
         prev.map((f) => {
           if (f.filePath !== entry.filePath) return f;
           if (resp.error) {
-            return { ...f, status: 'error', error: resp.error };
+            return { ...f, status: 'error', error: ipcErrorMessage(resp.error, t.errorUnexpected) };
           }
           const result = resp.data!;
           if (result.month === null) {
@@ -348,7 +349,7 @@ const PodsumowanieZaliczek: React.FC<Props> = ({
     setIsGenerating(false);
     if (res.canceled) return;
     if (res.error) {
-      setStatusMessage(`${t.zaliczkiGenerateError}: ${res.error}`);
+      setStatusMessage(`${t.zaliczkiGenerateError}: ${ipcErrorMessage(res.error, t.errorUnexpected)}`);
       setStatusIsError(true);
       return;
     }

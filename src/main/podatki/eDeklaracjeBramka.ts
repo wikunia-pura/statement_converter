@@ -10,6 +10,7 @@
  */
 
 import { BRAMKA_URL, EDeklaracjeSrodowisko } from '../../shared/e-deklaracje';
+import { AppError, hasAppErrorCode } from '../../shared/app-errors';
 
 const NS = 'https://bramka.e-deklaracje.mf.gov.pl/xsd';
 const LIMIT_MS = 60_000;
@@ -82,10 +83,10 @@ export function pole(xml: string, nazwa: string): string | null {
 /** Status and description of an answer; a fault or an answer without a status is an error. */
 export function odczytajOdpowiedz(xml: string, http: number): OdpowiedzBramki {
   const fault = pole(xml, 'faultstring');
-  if (fault !== null) throw new BramkaNiePrzyjela(`Bramka e-Deklaracji odrzuciła żądanie: ${fault.trim() || `HTTP ${http}`}`);
+  if (fault !== null) throw new BramkaNiePrzyjela(new AppError('bramkaRejected', { detail: fault.trim() || `HTTP ${http}` }).message);
   const status = pole(xml, 'status');
   if (status === null || !/^\d+$/.test(status.trim())) {
-    throw new Error(`Bramka e-Deklaracji odpowiedziała nieoczekiwanie (HTTP ${http}).`);
+    throw new AppError('bramkaUnexpectedAnswer', { http });
   }
   return { status: Number(status.trim()), opis: (pole(xml, 'statusOpis') ?? '').trim() };
 }
@@ -108,13 +109,13 @@ async function wywolaj(
     const text = await res.text();
     // A SOAP fault comes with HTTP 500 — its text says more than the code.
     if (!res.ok && pole(text, 'faultstring') === null) {
-      throw new Error(`Bramka e-Deklaracji nie odpowiedziała poprawnie (HTTP ${res.status}).`);
+      throw new AppError('bramkaBadStatus', { http: res.status });
     }
     return text;
   } catch (error: unknown) {
-    if (ctrl.signal.aborted) throw new Error('Bramka e-Deklaracji nie odpowiedziała w ciągu minuty.');
-    if (error instanceof Error && error.message.startsWith('Bramka')) throw error;
-    const tekst = `Nie udało się połączyć z bramką e-Deklaracji: ${error instanceof Error ? error.message : String(error)}`;
+    if (ctrl.signal.aborted) throw new AppError('bramkaTimeout');
+    if (hasAppErrorCode(error, 'bramkaBadStatus')) throw error;
+    const tekst = new AppError('bramkaUnreachable', { detail: error instanceof Error ? error.message : String(error) }).message;
     throw bezPolaczenia(error) ? new BramkaNiePrzyjela(tekst) : new Error(tekst);
   } finally {
     clearTimeout(timer);

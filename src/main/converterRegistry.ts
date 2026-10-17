@@ -24,6 +24,7 @@ import { MatchCache } from '../shared/match-cache';
 import { matchExpensesWithAI } from '../shared/expense-ai-matcher';
 import DatabaseService from './database';
 import { conversionCache } from './conversionCache';
+import { AppError } from '../shared/app-errors';
 
 export interface ConvertResult {
   success: boolean;
@@ -939,7 +940,7 @@ class ConverterRegistry {
       ? this.aiConfig?.ai?.anthropic_api_key
       : this.aiConfig?.ai?.openai_api_key;
     if (!apiKey) {
-      throw new Error('AI nie jest skonfigurowane — brak klucza API.');
+      throw new AppError('aiNotConfiguredShort');
     }
 
     // Deduplicated: a repeated index would be sent to the AI twice and billed twice.
@@ -954,7 +955,7 @@ class ConverterRegistry {
 
     const contractors = dbInstance ? await dbInstance.getAllKontrahenci() : [];
     if (contractors.length === 0) {
-      throw new Error('Brak kontrahentów w bazie — nie ma z czego wybierać.');
+      throw new AppError('noKontrahenci');
     }
 
     const contractorMatcher = new ContractorMatcher(contractors);

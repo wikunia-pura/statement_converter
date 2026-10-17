@@ -1,5 +1,6 @@
 import { PDFDict, PDFDocument, PDFName } from 'pdf-lib';
 import type { PodpisPdfAnaliza } from '../../shared/types';
+import { AppError } from '../../shared/app-errors';
 
 /*
  * Whether a PDF dropped into the Podpis module can be signed by this app.
@@ -18,21 +19,21 @@ const CONTENTS = PDFName.of('Contents');
 
 export async function analizujPdf(bytes: Uint8Array): Promise<PodpisPdfAnaliza> {
   const rozmiar = bytes.length;
-  if (rozmiar === 0) return { rozmiar, strony: null, blokada: 'Plik jest pusty.' };
+  if (rozmiar === 0) return { rozmiar, strony: null, blokada: new AppError('fileEmpty').message };
 
   let pdf: PDFDocument;
   try {
     pdf = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
   } catch (error: unknown) {
     const powod = error instanceof Error ? error.message : String(error);
-    return { rozmiar, strony: null, blokada: `Nie udało się odczytać tego pliku jako PDF (${powod}).` };
+    return { rozmiar, strony: null, blokada: new AppError('pdfUnreadable', { detail: powod }).message };
   }
 
   const strony = pdf.getPageCount();
   if (pdf.isEncrypted) {
-    return { rozmiar, strony, blokada: 'PDF jest zabezpieczony hasłem — nie da się go podpisać. Zdejmij zabezpieczenie i dodaj plik ponownie.' };
+    return { rozmiar, strony, blokada: new AppError('pdfEncrypted').message };
   }
-  if (strony === 0) return { rozmiar, strony, blokada: 'PDF nie ma ani jednej strony.' };
+  if (strony === 0) return { rozmiar, strony, blokada: new AppError('pdfNoPages').message };
 
   // A signature dictionary is the only place /ByteRange and /Contents sit
   // together; objects packed in object streams are visible here too.
@@ -41,7 +42,7 @@ export async function analizujPdf(bytes: Uint8Array): Promise<PodpisPdfAnaliza> 
       return {
         rozmiar,
         strony,
-        blokada: 'Ten plik ma już podpis — dołożenie drugiego unieważniłoby poprzedni. Podpisywanie plików już podpisanych nie jest jeszcze obsługiwane.',
+        blokada: new AppError('pdfAlreadySigned').message,
       };
     }
   }

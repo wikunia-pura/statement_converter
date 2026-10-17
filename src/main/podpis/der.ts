@@ -65,20 +65,20 @@ export interface Tlv {
 
 /** The element starting at `at`. Throws on anything a DER certificate cannot contain. */
 export function read(buf: Buffer, at = 0): Tlv {
-  if (at + 2 > buf.length) throw new Error('DER: koniec danych');
+  if (at + 2 > buf.length) throw new Error('DER: unexpected end of data');
   const tag = buf[at];
-  if ((tag & 0x1f) === 0x1f) throw new Error('DER: znacznik wielobajtowy');
+  if ((tag & 0x1f) === 0x1f) throw new Error('DER: multi-byte tag');
   let len = buf[at + 1];
   let head = 2;
   if (len & 0x80) {
     const n = len & 0x7f;
-    if (n === 0 || n > 4) throw new Error('DER: nieobsługiwana długość');
+    if (n === 0 || n > 4) throw new Error('DER: unsupported length');
     len = 0;
     for (let i = 0; i < n; i++) len = len * 256 + buf[at + 2 + i];
     head += n;
   }
   const end = at + head + len;
-  if (end > buf.length) throw new Error('DER: element dłuższy niż dane');
+  if (end > buf.length) throw new Error('DER: element longer than the data');
   return { tag, raw: buf.subarray(at, end), body: buf.subarray(at + head, end) };
 }
 

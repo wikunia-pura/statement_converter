@@ -131,7 +131,7 @@ const UchwalaEditorModal: React.FC<{
       const material = await saveIfDirty();
       const result = await downloadUchwalaPdf(zebranie, wersja, dane, material, userEmail, zebranieCtx);
       if (!result.ok) {
-        notify.error(result.error, t.zfinDownloadError);
+        notify.error(ipcErrorMessage(result.error, t.errorUnexpected), t.zfinDownloadError);
         return;
       }
       setLastFiles(result.files);

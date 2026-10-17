@@ -1,5 +1,6 @@
 import type { PodpisPdfAnaliza } from '../../shared/types';
 import { przeszkodaPodpisuXml } from './xades';
+import { AppError } from '../../shared/app-errors';
 
 /*
  * Whether an XML dropped into the Podpis module can be signed by this app —
@@ -17,19 +18,19 @@ const ENCODING = /^\s*<\?xml\s[^?]*\bencoding\s*=\s*["']([^"']+)["']/;
 
 /** The file as text — or why it cannot be read as UTF-8 XML. */
 export function odczytajXml(bytes: Uint8Array): { tekst: string } | { blokada: string } {
-  if (bytes.length === 0) return { blokada: 'Plik jest pusty.' };
+  if (bytes.length === 0) return { blokada: new AppError('fileEmpty').message };
   if ((bytes[0] === 0xff && bytes[1] === 0xfe) || (bytes[0] === 0xfe && bytes[1] === 0xff)) {
-    return { blokada: 'Plik XML jest zapisany w UTF-16 — podpisuję tylko pliki w UTF-8.' };
+    return { blokada: new AppError('xmlUtf16').message };
   }
   let tekst: string;
   try {
     tekst = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   } catch {
-    return { blokada: 'Plik nie jest poprawnym tekstem UTF-8 — podpisuję tylko pliki XML w UTF-8.' };
+    return { blokada: new AppError('xmlNotUtf8').message };
   }
   const deklarowane = ENCODING.exec(tekst.replace(/^﻿/, ''))?.[1];
   if (deklarowane && !/^utf-?8$/i.test(deklarowane)) {
-    return { blokada: `Plik XML jest w kodowaniu ${deklarowane} — podpisuję tylko pliki w UTF-8.` };
+    return { blokada: new AppError('xmlEncoding', { encoding: deklarowane }).message };
   }
   return { tekst };
 }

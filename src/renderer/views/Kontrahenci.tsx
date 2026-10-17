@@ -186,7 +186,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
         notify.success(message);
         loadData();
       } else if (result.error) {
-        notify.error(`${t.importKontrahenciError}: ${result.error}`);
+        notify.error(`${t.importKontrahenciError}: ${ipcErrorMessage(result.error, t.errorUnexpected)}`);
       }
     } catch (error) {
       notify.error(t.importKontrahenciError);
@@ -206,7 +206,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
         notify.success(message);
         loadData();
       } else if (result.error) {
-        notify.error(`${t.importKontrahenciError}: ${result.error}`);
+        notify.error(`${t.importKontrahenciError}: ${ipcErrorMessage(result.error, t.errorUnexpected)}`);
       }
       // If success is false but no error, user canceled - do nothing
     } catch (error) {
@@ -225,7 +225,7 @@ const Kontrahenci: React.FC<KontrahenciProps> = ({ language }) => {
           file: result.filePath,
         });
       } else if (result.error) {
-        notify.error(`${t.exportKontrahenciError}: ${result.error}`);
+        notify.error(`${t.exportKontrahenciError}: ${ipcErrorMessage(result.error, t.errorUnexpected)}`);
       }
     } catch (error) {
       notify.error(t.exportKontrahenciError);

@@ -144,7 +144,7 @@ export const SpotkanieEditModal: React.FC<{
       await window.electronAPI.deleteZadanie(z.id);
       notify.success(t.kalTaskDeleted);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : t.zadSaveError);
+      notify.error(ipcErrorMessage(err, t.zadSaveError));
     }
     await loadZadania();
   };

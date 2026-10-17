@@ -3,6 +3,7 @@ import { ConversionReviewData, FileEntry, ReviewDecision } from '../shared/types
 import { translations, Language } from './translations';
 import { useNotify } from './components/Notifications';
 import { useStableCallback } from './hooks/useStableCallback';
+import { ipcErrorMessage } from './ipcError';
 
 /**
  * A run of conversions — "Konwertuj wszystkie", or one file's "Konwertuj" —
@@ -52,6 +53,9 @@ export const useConversionSession = (): ConversionSession => {
 // NOT a bank/converter misconfiguration — the file is fine, the review
 // session is just gone. Tell the user plainly and let them re-run the file.
 const isExpiredConversionError = (err?: string) => !!err && err.includes('not found or expired');
+
+/** A failure main returned as data, as the user reads it: a coded refusal in the app's language. */
+const shownError = (raw?: string) => (raw ? ipcErrorMessage(raw, raw) : raw);
 
 export const ConversionSessionProvider: React.FC<{
   files: FileEntry[];
@@ -129,18 +133,19 @@ export const ConversionSessionProvider: React.FC<{
     notify.error(
       t.convRecordNotSaved
         .replace('{file}', result.outputPath ?? '')
-        .replace('{error}', result.recordError)
+        .replace('{error}', ipcErrorMessage(result.recordError, result.recordError))
     );
   };
 
   const reportFinalizeFailure = (fileName: string, rawError?: string) => {
     const expired = isExpiredConversionError(rawError);
     const isBillingError = rawError?.includes('💸') || rawError?.includes('Brak kasiory');
+    const shown = shownError(rawError);
     const errorMsg = expired
       ? `${t.conversionFailed}: ${t.reviewSessionExpired}`
       : isBillingError
-        ? `${t.conversionFailed}: ${rawError}`
-        : `${t.conversionFailed}: ${rawError}\n${t.checkBankConverter}`;
+        ? `${t.conversionFailed}: ${shown}`
+        : `${t.conversionFailed}: ${shown}\n${t.checkBankConverter}`;
     notify.error(errorMsg);
     setFiles((prevFiles) =>
       prevFiles.map((f) =>
@@ -150,7 +155,7 @@ export const ConversionSessionProvider: React.FC<{
               // file selectable (pending) rather than marking it failed.
               ...f,
               status: expired ? ('pending' as const) : ('error' as const),
-              errorMessage: expired ? undefined : rawError,
+              errorMessage: expired ? undefined : shown,
             }
           : f
       )
@@ -271,7 +276,7 @@ export const ConversionSessionProvider: React.FC<{
               setFiles((prevFiles) =>
                 prevFiles.map((f) =>
                   f.id === fileId
-                    ? { ...f, status: 'error' as const, errorMessage: finalizeResult.error }
+                    ? { ...f, status: 'error' as const, errorMessage: shownError(finalizeResult.error) }
                     : f
                 )
               );
@@ -279,7 +284,7 @@ export const ConversionSessionProvider: React.FC<{
             processNextInQueue();
             return;
           } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            const errorMessage = ipcErrorMessage(err, t.errorUnexpected);
             setFiles((prevFiles) =>
               prevFiles.map((f) =>
                 f.id === fileId
@@ -340,15 +345,15 @@ export const ConversionSessionProvider: React.FC<{
         setFiles((prevFiles) =>
           prevFiles.map((f) =>
             f.id === fileId
-              ? { ...f, status: 'error' as const, errorMessage: result.error }
+              ? { ...f, status: 'error' as const, errorMessage: shownError(result.error) }
               : f
           )
         );
         // Don't show "check bank/converter" for billing errors
         const isBillingError = result.error?.includes('💸') || result.error?.includes('Brak kasiory');
         const errorMsg = isBillingError
-          ? `${t.conversionFailed}: ${result.error}`
-          : `${t.conversionFailed}: ${result.error}\n${t.checkBankConverter}`;
+          ? `${t.conversionFailed}: ${shownError(result.error)}`
+          : `${t.conversionFailed}: ${shownError(result.error)}\n${t.checkBankConverter}`;
         notify.error(errorMsg);
 
         // Process next file even on error
@@ -362,7 +367,7 @@ export const ConversionSessionProvider: React.FC<{
         await new Promise(resolve => setTimeout(resolve, remainingTime));
       }
 
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = ipcErrorMessage(error, t.errorUnexpected);
       setFiles((prevFiles) =>
         prevFiles.map((f) =>
           f.id === fileId
@@ -400,7 +405,7 @@ export const ConversionSessionProvider: React.FC<{
         reportFinalizeFailure(reviewData.fileName, result.error);
       }
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = ipcErrorMessage(error, t.errorUnexpected);
       reportFinalizeFailure(reviewData.fileName, errorMessage);
     }
     setReviewData(null);

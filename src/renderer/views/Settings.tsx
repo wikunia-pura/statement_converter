@@ -356,7 +356,7 @@ const Settings: React.FC<SettingsProps> = ({
           setContractorSortOrder(settings.contractorSortOrder ?? 'name-asc');
           onSettingsRestored?.();
         } else if (result.error) {
-          notify.error(`${t.importError}: ${result.error}`);
+          notify.error(`${t.importError}: ${ipcErrorMessage(result.error, t.errorUnexpected)}`);
         }
       } catch (error) {
         notify.error(t.importError);
@@ -403,7 +403,7 @@ const Settings: React.FC<SettingsProps> = ({
       await persistSmtp();
       const result = await window.electronAPI.mailingTestSmtp();
       if (result.ok) notify.success(t.smtpTestOk);
-      else notify.error(`${t.smtpTestFailed}: ${result.error}`);
+      else notify.error(`${t.smtpTestFailed}: ${ipcErrorMessage(result.error, t.errorUnexpected)}`);
     } catch (error: unknown) {
       notify.error(ipcErrorMessage(error, t.smtpTestFailed));
     } finally {
@@ -467,7 +467,7 @@ const Settings: React.FC<SettingsProps> = ({
       } else if (result.unsupported) {
         notify.warning(t.setInstallerUnsupported);
       } else {
-        notify.error(`${t.setInstallerError}: ${result.error}`);
+        notify.error(`${t.setInstallerError}: ${ipcErrorMessage(result.error, t.errorUnexpected)}`);
       }
     } catch (error) {
       notify.error(`${t.setInstallerError}: ${ipcErrorMessage(error, t.errorUnexpected)}`);
@@ -491,7 +491,7 @@ const Settings: React.FC<SettingsProps> = ({
           notify.warning(t.backupSkippedSections.replace('{sections}', result.skippedSections.join(', ')));
         }
       } else if (result.error) {
-        notify.error(`${t.backupError}: ${result.error}`);
+        notify.error(`${t.backupError}: ${ipcErrorMessage(result.error, t.errorUnexpected)}`);
       }
     } catch (error) {
       notify.error(t.backupError);
@@ -520,7 +520,7 @@ const Settings: React.FC<SettingsProps> = ({
       } else if (result.missingSections?.length) {
         notify.error(t.backupRestoreSafetyIncomplete.replace('{sections}', result.missingSections.join(', ')));
       } else if (result.error) {
-        notify.error(`${t.backupError}: ${result.error}`);
+        notify.error(`${t.backupError}: ${ipcErrorMessage(result.error, t.errorUnexpected)}`);
       }
     } catch (error) {
       notify.error(t.backupError);
@@ -818,7 +818,7 @@ const Settings: React.FC<SettingsProps> = ({
                 if (result.message) {
                   notify.info(result.message);
                 } else if (result.error) {
-                  notify.error(`${t.setUpdateError}: ${result.error}`);
+                  notify.error(`${t.setUpdateError}: ${ipcErrorMessage(result.error, t.errorUnexpected)}`);
                 } else if (result.available) {
                   notify.info(t.setUpdateAvailable);
                 } else {

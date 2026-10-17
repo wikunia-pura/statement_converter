@@ -291,10 +291,10 @@ const WIERSZE = Object.keys(WIERSZ_Y).map(Number);
 export function pit4rKomorka(poz: number): Komorka {
   const start = [...WIERSZE].reverse().find((s) => s <= poz);
   if (start === undefined || (poz > 157 && poz < 159) || poz > 182) {
-    throw new Error(`Pozycja ${poz} PIT-4R nie ma komórki w układzie formularza.`);
+    throw new Error(`PIT-4R position ${poz} has no cell in the form layout`);
   }
   const kol = poz - start;
-  if (kol < 0 || kol > 5) throw new Error(`Pozycja ${poz} PIT-4R nie ma komórki w układzie formularza.`);
+  if (kol < 0 || kol > 5) throw new Error(`PIT-4R position ${poz} has no cell in the form layout`);
   const y = WIERSZ_Y[start];
   if (poz >= 159) return fg(MIESIAC_ZL_D[kol], MIESIAC_GR_D[kol], y, MIESIAC_OD[kol]);
   return { zl: MIESIAC_ZL[kol], gr: null, y, od: MIESIAC_OD[kol], grOd: 0 };

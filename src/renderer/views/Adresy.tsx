@@ -29,6 +29,7 @@ import { ZarzadEditor, ZarzadModal } from '../components/adresy/Zarzad';
 import { ZgnUnitsPanel, ZgnUnitsModal } from '../components/adresy/ZgnUnits';
 import { IdentyfikacjaSection } from '../components/adresy/IdentyfikacjaSection';
 import { AdresRow } from '../components/adresy/AdresRow';
+import { ipcErrorMessage } from '../ipcError';
 
 interface AdresyProps {
   language: Language;
@@ -135,7 +136,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     try {
       await window.electronAPI.setAdresIdentyfikacja(id, normalizeIdentyfikacja(value));
     } catch (error: unknown) {
-      notify.error(error instanceof Error ? error.message : String(error), t.adresIdentSaveError);
+      notify.error(ipcErrorMessage(error, t.errorUnexpected), t.adresIdentSaveError);
     }
   };
 
@@ -144,7 +145,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     try {
       await window.electronAPI.setAdresZarzad(id, value);
     } catch (error: unknown) {
-      notify.error(error instanceof Error ? error.message : String(error), t.adresZarzadSaveError);
+      notify.error(ipcErrorMessage(error, t.errorUnexpected), t.adresZarzadSaveError);
     }
   };
 
@@ -181,7 +182,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
       setShowAddAdres(false);
       loadData();
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = ipcErrorMessage(error, t.errorUnexpected);
       notify.error(`${t.errorAddingAdres}: ${errorMessage}`);
     }
   };
@@ -225,7 +226,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
       setEditingAdres(null);
       loadData();
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = ipcErrorMessage(error, t.errorUnexpected);
       notify.error(`${t.errorUpdatingAdres}: ${errorMessage}`);
     }
   };
@@ -236,7 +237,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
         await window.electronAPI.deleteAdres(id);
         loadData();
       } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const errorMessage = ipcErrorMessage(error, t.errorUnexpected);
         notify.error(`${t.errorDeletingAdres}: ${errorMessage}`);
       }
     }
@@ -329,7 +330,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
         }
         loadData();
       } else if (result.error) {
-        notify.error(`${t.importAdresyError}: ${result.error}`);
+        notify.error(`${t.importAdresyError}: ${ipcErrorMessage(result.error, t.errorUnexpected)}`);
       }
     } catch (error) {
       notify.error(t.importAdresyError);
@@ -346,7 +347,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
           file: result.filePath,
         });
       } else if (result.error) {
-        notify.error(`${t.exportAdresyError}: ${result.error}`);
+        notify.error(`${t.exportAdresyError}: ${ipcErrorMessage(result.error, t.errorUnexpected)}`);
       }
     } catch (error) {
       notify.error(t.exportAdresyError);
@@ -359,7 +360,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
         await window.electronAPI.deleteAllAdresy();
         loadData();
       } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const errorMessage = ipcErrorMessage(error, t.errorUnexpected);
         notify.error(`${t.errorDeletingAdres}: ${errorMessage}`);
       }
     }

@@ -95,7 +95,7 @@ const PinOstrzezenie: React.FC<{ t: T; karta: NonNullable<PodpisCzytnik['karta']
  * card that could not be read, as one callout; null when all is well.
  */
 const Przeszkoda: React.FC<{ t: T; stan: PodpisKartaStan; action?: React.ReactNode }> = ({ t, stan, action }) => {
-  if (!stan.biblioteka) return <Callout tone="danger" action={action}>{stan.blad}</Callout>;
+  if (!stan.biblioteka) return <Callout tone="danger" action={action}>{stan.blad && bezPrefiksu(stan.blad)}</Callout>;
   if (stan.czytniki.length === 0) return <Callout tone="warning">{t.podpisNoReader}</Callout>;
   const zKarta = stan.czytniki.filter((c) => c.karta || c.blad);
   if (zKarta.length === 0) return <Callout tone="warning">{t.podpisNoCard}</Callout>;
@@ -106,7 +106,7 @@ const Przeszkoda: React.FC<{ t: T; stan: PodpisKartaStan; action?: React.ReactNo
       <Callout tone="danger">
         {bledy.map((c) => (
           <div key={c.slot}>
-            {c.nazwa}: {c.blad}
+            {c.nazwa}: {c.blad && bezPrefiksu(c.blad)}
           </div>
         ))}
       </Callout>
@@ -494,7 +494,7 @@ export const PodpisKartaUstawienia: React.FC<{ language: Language }> = ({ langua
                       : t.podpisReaderEmpty}
                   </span>
                 </div>
-                {c.blad && <Callout tone="danger">{c.blad}</Callout>}
+                {c.blad && <Callout tone="danger">{bezPrefiksu(c.blad)}</Callout>}
                 {c.karta && <PinOstrzezenie t={t} karta={c.karta} />}
                 {c.karta && !c.blad && c.certyfikaty.length === 0 && <Callout tone="warning">{t.podpisNoCert}</Callout>}
                 {c.certyfikaty.map((cert) => (

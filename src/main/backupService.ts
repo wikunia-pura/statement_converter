@@ -6,6 +6,7 @@ import os from 'os';
 import yaml from 'js-yaml';
 import { BackupData } from '../shared/types';
 import DatabaseService from './database';
+import { AppError } from '../shared/app-errors';
 
 // Safety net: the app snapshots all shared data into userData/backups at least
 // every AUTO_BACKUP_INTERVAL_MS while it runs (the main process asks every few
@@ -59,14 +60,14 @@ export function getBackupsDir(): string {
 export function validateBackup(parsed: unknown): BackupData {
   const b = parsed as Partial<BackupData> | null;
   if (!b || b.format !== 'filefunky-backup' || !b.data) {
-    throw new Error('To nie jest plik kopii zapasowej FileFunky.');
+    throw new AppError('backupNotFileFunky');
   }
   if (b.formatVersion !== 1) {
-    throw new Error(`Nieobsługiwana wersja kopii zapasowej (${b.formatVersion}).`);
+    throw new AppError('backupVersionUnsupported', { version: String(b.formatVersion) });
   }
   const d = b.data;
   for (const key of ['banks', 'kontrahenci', 'adresy', 'kontoTypy', 'history'] as const) {
-    if (!Array.isArray(d[key])) throw new Error(`Uszkodzona kopia zapasowa: brak sekcji "${key}".`);
+    if (!Array.isArray(d[key])) throw new AppError('backupSectionMissing', { section: key });
   }
   return b as BackupData;
 }

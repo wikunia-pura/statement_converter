@@ -3,6 +3,7 @@ import Store from 'electron-store';
 import WebSocket from 'ws';
 import log from 'electron-log';
 import { openSecret, sealSecret } from './secretStorage';
+import { AppError } from '../shared/app-errors';
 
 // Electron 28 ships Node 18, which has no global WebSocket. Supabase's realtime
 // module initializes eagerly even though we don't use realtime, and dies without
@@ -62,10 +63,11 @@ const electronStorageAdapter = {
 // REST request that isn't carrying a user token, and say why.
 // ---------------------------------------------------------------------------
 
-/** Shown to the user whenever a dead session is what actually failed. */
-export const SESSION_EXPIRED_MESSAGE =
-  'Sesja wygasła — zaloguj się ponownie. Wspólne dane (banki, adresy, kontrahenci, historia) ' +
-  'są widoczne tylko dla zalogowanego użytkownika.';
+/**
+ * Shown to the user whenever a dead session is what actually failed — coded, so
+ * it reads in the app's language also inside a `${op}: ${message}` wrap.
+ */
+export const SESSION_EXPIRED_MESSAGE = new AppError('sessionExpired').message;
 
 /** PostgREST-style code carried by the synthetic 401 below. */
 const SESSION_EXPIRED_CODE = 'session_expired';

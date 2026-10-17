@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { translations, Language } from '../translations';
+import { ipcErrorMessage } from '../ipcError';
 import { FormSection } from '../components/FormSection';
 import Icon from '../components/Icon';
 import { ModalFooter } from '../components/Modal';
@@ -55,7 +56,7 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
       prev.map((f) => {
         if (f.filePath !== filePath) return f;
         if (res.error || !res.data) {
-          return { ...f, status: 'error' as const, error: res.error ?? t.errorUnexpected };
+          return { ...f, status: 'error' as const, error: ipcErrorMessage(res.error, t.errorUnexpected) };
         }
         return applyAnalyzed(f, res.data);
       }),
@@ -158,7 +159,7 @@ const ScalanieWplat: React.FC<Props> = ({ language, files, setFiles }) => {
     const res = await window.electronAPI.scalanieMerge(payload, outputDir);
     setIsProcessing(false);
     if (res.error || !res.result) {
-      setStatusMessage(`${t.scalanieMergeError}: ${res.error ?? t.errorUnexpected}`);
+      setStatusMessage(`${t.scalanieMergeError}: ${ipcErrorMessage(res.error, t.errorUnexpected)}`);
       setStatusIsError(true);
       return;
     }

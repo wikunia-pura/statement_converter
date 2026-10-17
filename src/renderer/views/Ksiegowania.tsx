@@ -67,6 +67,7 @@ import {
 import { plural } from '../plural';
 import { useRequestSeq } from '../hooks/useRequestSeq';
 import { useStableCallback } from '../hooks/useStableCallback';
+import { ipcErrorMessage } from '../ipcError';
 
 /** The "Kto" filter: everyone, the signed-in person, nobody, or one person. */
 type WhoFilter = { kind: 'all' } | { kind: 'mine' } | { kind: 'none' } | { kind: 'person'; email: string };
@@ -431,7 +432,7 @@ const Ksiegowania: React.FC<Props> = ({
     } catch (err: unknown) {
       // Said out loud: a dashboard quietly showing stale numbers is worse than none.
       if (loadSeq.isLatest(ticket)) {
-        notify.error(`${t.ksLoadError}\n${err instanceof Error ? err.message : String(err)}`);
+        notify.error(`${t.ksLoadError}\n${ipcErrorMessage(err, t.errorUnexpected)}`);
       }
     } finally {
       // An older load ending must not end the newer one's loader.
@@ -615,7 +616,7 @@ const Ksiegowania: React.FC<Props> = ({
     try {
       const result = await window.electronAPI.setKsiegowanieBookedInDom(ids, booked);
       if (!result.success) {
-        notify.error(`${t.ksMarkError}: ${result.error ?? ''}`.trim());
+        notify.error(`${t.ksMarkError}: ${ipcErrorMessage(result.error, '')}`.trim());
         await load(true);
         return;
       }
@@ -882,7 +883,7 @@ const Ksiegowania: React.FC<Props> = ({
       });
       if (!ok) return;
       const result = await window.electronAPI.markKsiegowaniePlikBooked(plik.id);
-      if (!result.success) notify.error(`${t.ksFileMarkBookedError}${result.error ? `\n${result.error}` : ''}`);
+      if (!result.success) notify.error(`${t.ksFileMarkBookedError}${result.error ? `\n${ipcErrorMessage(result.error, '')}` : ''}`);
       else notify.success(t.ksFileMarkBookedDone);
       await load(true);
     },
@@ -893,7 +894,7 @@ const Ksiegowania: React.FC<Props> = ({
       });
       if (!ok) return;
       const result = await window.electronAPI.undoKsiegowanieManual(row.entry.id);
-      if (!result.success) notify.error(`${t.ksManualUndoError}${result.error ? `\n${result.error}` : ''}`);
+      if (!result.success) notify.error(`${t.ksManualUndoError}${result.error ? `\n${ipcErrorMessage(result.error, '')}` : ''}`);
       await load(true);
     },
     discard: async (row, discarded) => {
@@ -906,7 +907,7 @@ const Ksiegowania: React.FC<Props> = ({
         if (!ok) return;
       }
       const result = await window.electronAPI.setKsiegowanieDiscarded(row.entry.id, discarded);
-      if (!result.success) notify.error(`${t.ksDiscardError}${result.error ? `\n${result.error}` : ''}`);
+      if (!result.success) notify.error(`${t.ksDiscardError}${result.error ? `\n${ipcErrorMessage(result.error, '')}` : ''}`);
       await load(true);
     },
   };
@@ -1054,7 +1055,7 @@ const Ksiegowania: React.FC<Props> = ({
     try {
       await window.electronAPI.setKsiegowaniePrzypisanie(monthKey, group.adresId, nazwa, email);
     } catch (err: unknown) {
-      notify.error(`${t.ksAssignError}\n${err instanceof Error ? err.message : String(err)}`);
+      notify.error(`${t.ksAssignError}\n${ipcErrorMessage(err, t.errorUnexpected)}`);
     }
     try {
       setPrzypisania(await window.electronAPI.getKsiegowaniaPrzypisania());
@@ -2733,7 +2734,7 @@ const PlikiSection: React.FC<{
             </div>
             <span className="ksieg-plik__meta">
               {plik.accountTypeName && <span>{plik.accountTypeName}</span>}
-              <span className="ksieg-plik__error">{plik.errorMessage}</span>
+              <span className="ksieg-plik__error">{plik.errorMessage && ipcErrorMessage(plik.errorMessage, '')}</span>
             </span>
           </div>
           <div className="ksieg-plik__actions">{unpin(plik)}</div>
@@ -2889,7 +2890,7 @@ const FileRow: React.FC<{
           {entry.converterName && <span>{entry.converterName}</span>}
           {stamp() && <span className="ksieg-file__stamp">{stamp()}</span>}
           {entry.status === 'error' && entry.errorMessage && (
-            <span className="ksieg-file__error">{entry.errorMessage}</span>
+            <span className="ksieg-file__error">{ipcErrorMessage(entry.errorMessage, '')}</span>
           )}
         </div>
       </div>

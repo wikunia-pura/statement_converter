@@ -60,6 +60,7 @@ import DatabaseService from '../database';
 import { MailingSender, SmtpCredentials, validateSmtp } from './sender';
 import { renderHtmlToPdf } from './pdf';
 import { safeFileName } from '../pathGuards';
+import { AppError } from '../../shared/app-errors';
 
 export interface MailingSendRequest {
   typ: MailingTyp;
@@ -216,9 +217,9 @@ export async function sendMailing(
   const smtpError = validateSmtp(smtp);
   if (smtpError) return { error: smtpError };
   if (!outputFolder.trim()) {
-    return { error: 'Folder wyjściowy nie jest ustawiony (Ustawienia → Folder wyjściowy).' };
+    return { error: new AppError('outputFolderNotSet').message };
   }
-  if (request.adresIds.length === 0) return { error: 'Nie wybrano żadnej wspólnoty.' };
+  if (request.adresIds.length === 0) return { error: new AppError('mailingNoAdres').message };
 
   const [szablony, pola, adresy, jednostki, pelnomocnicy, spotkanie, adresaci] = await Promise.all([
     database.getMailingSzablony(),
@@ -231,7 +232,7 @@ export async function sendMailing(
   ]);
 
   const template = szablony.find((s) => s.id === request.templateId);
-  if (!template) return { error: 'Wybrany szablon nie istnieje — odśwież listę szablonów.' };
+  if (!template) return { error: new AppError('mailingTemplateGone').message };
 
   const adresById = new Map<number, Adres>(adresy.map((a) => [a.id, a]));
 
@@ -315,7 +316,7 @@ export async function sendMailing(
         await record(
           {
             status: 'error',
-            errorMessage: 'Adres nie istnieje — mógł zostać usunięty.',
+            errorMessage: new AppError('adresGone').message,
             jednostkaNazwa: '',
             jednostkaEmail: '',
             subject: '',
@@ -561,7 +562,7 @@ export async function exportMailing(
 ): Promise<MailingExportResult> {
   const { database } = deps;
   if (!request.formats || request.formats.length === 0) {
-    throw new Error('Wybierz, w jakiej postaci pobrać wiadomość.');
+    throw new AppError('mailingFormatRequired');
   }
   const { adresNazwa, typNazwa, subject, renderedBody, odbiorcy } = await prepareLetter(database, request);
 

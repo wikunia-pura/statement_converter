@@ -1,6 +1,7 @@
 import { PDFDocument, PDFHexString, PDFName, PDFNumber, PDFString } from 'pdf-lib';
 import { atrybutyPodpisane, sha256, zlozCms } from './cades';
 import type { Certyfikat } from './certyfikat';
+import { AppError } from '../../shared/app-errors';
 
 /*
  * PAdES: the PDF gets an invisible signature field whose dictionary holds the
@@ -63,18 +64,18 @@ export async function podpiszPdf(bytes: Uint8Array, o: PodpisPdf): Promise<Buffe
 
   const zera = `<${'0'.repeat(MIEJSCE * 2)}>`;
   const start = text.indexOf(zera);
-  if (start < 0 || text.indexOf(zera, start + 1) >= 0) throw new Error('PDF: nie znaleziono miejsca na podpis.');
+  if (start < 0 || text.indexOf(zera, start + 1) >= 0) throw new AppError('padesNoPlaceholder');
   const end = start + zera.length;
 
   const br = /\/ByteRange\s*\[\s*0\s+\/\*{10}\s+\/\*{10}\s+\/\*{10}\s*\]/.exec(text);
-  if (!br) throw new Error('PDF: nie znaleziono zakresu podpisu.');
+  if (!br) throw new AppError('padesNoByteRange');
   const zakres = `/ByteRange [0 ${start} ${end} ${out.length - end}]`;
-  if (zakres.length > br[0].length) throw new Error('PDF: plik za duży na podpis.');
+  if (zakres.length > br[0].length) throw new AppError('padesTooLarge');
   out.write(zakres.padEnd(br[0].length, ' '), br.index, 'latin1');
 
   const atrybuty = atrybutyPodpisane(sha256(out.subarray(0, start), out.subarray(end)), o.cert);
   const cms = zlozCms({ atrybuty, podpis: await o.podpisz(atrybuty), cert: o.cert, lancuch: o.lancuch });
-  if (cms.length > MIEJSCE) throw new Error('PDF: podpis nie mieści się w miejscu na niego przeznaczonym.');
+  if (cms.length > MIEJSCE) throw new AppError('padesSignatureTooLarge');
   out.write(cms.toString('hex').padEnd(MIEJSCE * 2, '0'), start + 1, 'latin1');
   return out;
 }

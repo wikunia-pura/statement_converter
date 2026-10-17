@@ -43,6 +43,7 @@ import {
 } from '../../shared/podatki-pit';
 import { doGroszy, tylkoCyfry } from '../../shared/podatki';
 import { foldText } from '../../shared/text';
+import { AppError } from '../../shared/app-errors';
 
 /* ================================== Contract ================================== */
 
@@ -692,7 +693,7 @@ export async function wczytajPit(buf: Buffer, wiersze: PodatekPit[], rok: number
   try {
     await wb.xlsx.load(buf as unknown as ExcelJS.Buffer);
   } catch {
-    throw new Error('Nie udało się otworzyć pliku — to nie jest prawidłowy skoroszyt Excela (.xlsx).');
+    throw new AppError('xlsxInvalid');
   }
   const wynik: PitExcelWynik = {
     zmiany: [],
@@ -704,7 +705,7 @@ export async function wczytajPit(buf: Buffer, wiersze: PodatekPit[], rok: number
   const wKwoty = znajdzArkusz(wb, ARKUSZ_KWOTY);
   const wPit4R = znajdzArkusz(wb, ARKUSZ_PIT4R);
   if (!wKwoty && !wPit4R) {
-    throw new Error('W pliku nie ma arkuszy „Kwoty” ani „PIT-4R” — wczytaj szablon wyeksportowany z aplikacji.');
+    throw new AppError('pitExcelNoSheets');
   }
 
   const znacznik = (wb.subject ?? '').trim();
@@ -728,15 +729,15 @@ export async function wczytajPit(buf: Buffer, wiersze: PodatekPit[], rok: number
 function czytajKwoty(ws: ExcelJS.Worksheet, poNip: Map<string, PodatekPit>, rok: number, wynik: PitExcelWynik): void {
   const pominiecie = (wiersz: number, powod: string) => wynik.pominiete.push({ arkusz: 'Kwoty', wiersz, powod });
   const naglowki = znajdzNaglowki(ws, [NAGL_NIP, NAGL_OSOBA, NAGL_ID, ...POLA.map((p) => p.naglowek)], 3);
-  if (!naglowki) throw new Error('Arkusz „Kwoty” nie ma wiersza nagłówków szablonu — wczytaj plik wyeksportowany z aplikacji.');
+  if (!naglowki) throw new AppError('pitExcelNoHeader');
   const kol = (n: string) => naglowki.kolumny.get(fold(n));
   const kNip = kol(NAGL_NIP);
   const kOsoba = kol(NAGL_OSOBA);
   const kId = kol(NAGL_ID);
-  if (kNip === undefined) throw new Error('Arkusz „Kwoty” nie ma kolumny „NIP wspólnoty”.');
-  if (kOsoba === undefined && kId === undefined) throw new Error('Arkusz „Kwoty” nie ma kolumny „Identyfikator” ani „Osoba (Nazwisko Imię)”.');
+  if (kNip === undefined) throw new AppError('pitExcelNoNipColumn');
+  if (kOsoba === undefined && kId === undefined) throw new AppError('pitExcelNoPersonColumn');
   const kolumnyPol = POLA.map((p) => ({ pole: p, kol: kol(p.naglowek) })).filter((x): x is { pole: PoleKwot; kol: number } => x.kol !== undefined);
-  if (kolumnyPol.length === 0) throw new Error('Arkusz „Kwoty” nie ma żadnej kolumny z kwotami.');
+  if (kolumnyPol.length === 0) throw new AppError('pitExcelNoAmountColumns');
 
   const widziane = new Set<string>();
 

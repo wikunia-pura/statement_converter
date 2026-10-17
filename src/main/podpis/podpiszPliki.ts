@@ -6,6 +6,7 @@ import { BladKarty, zKartaDoPodpisu, type SesjaPodpisu } from './karta';
 import { podpiszPdf } from './pades';
 import { podpiszXml } from './xades';
 import { analizujXml, odczytajXml } from './xmlAnaliza';
+import { AppError } from '../../shared/app-errors';
 
 /*
  * The Podpis module's run: the given PDFs and XMLs signed one by one under a
@@ -66,7 +67,7 @@ export async function podpiszPliki(o: PodpisPlikowOpcje): Promise<PodpisPdfWynik
       if (blokada) pominiete.push({ zrodlo, nazwa: nazwa(zrodlo), powod: blokada });
       else gotowe.push({ zrodlo, bytes });
     } catch (error: unknown) {
-      const powod = (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'Pliku już nie ma w tym miejscu — mógł zostać przeniesiony.' : komunikat(error);
+      const powod = (error as NodeJS.ErrnoException).code === 'ENOENT' ? new AppError('podpisFileMoved').message : komunikat(error);
       pominiete.push({ zrodlo, nazwa: nazwa(zrodlo), powod });
     }
   }
@@ -81,7 +82,7 @@ export async function podpiszPliki(o: PodpisPlikowOpcje): Promise<PodpisPdfWynik
     slad = { podmiot: sesja.cert.podmiot, wystawca: sesja.cert.wystawca, numerSeryjny: sesja.cert.numerSeryjny };
     for (const { zrodlo, bytes } of gotowe) {
       if (o.czyPrzerwano()) {
-        przerwano = 'Podpisywanie przerwane na Twoje polecenie.';
+        przerwano = new AppError('podpisStopped').message;
         break;
       }
       o.postep(przetworzone, gotowe.length, nazwa(zrodlo));

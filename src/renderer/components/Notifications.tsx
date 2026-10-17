@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon';
+import { shownText } from '../ipcError';
 import { ModalCloseLabelContext, ModalFooter, ModalHeader } from './Modal';
 
 /**
@@ -153,7 +154,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
     (level: ToastLevel, message: string, options?: ToastOptions) => {
       const id = ++idRef.current;
       const file = options?.file || undefined;
-      setToasts((prev) => [...prev, { id, level, message, file }]);
+      setToasts((prev) => [...prev, { id, level, message: shownText(message), file }]);
       setTimeout(() => removeToast(id), file ? FILE_TOAST_TTL_MS : TOAST_TTL_MS);
     },
     [removeToast]
@@ -180,7 +181,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({
       info: (message: string, options?: ToastOptions) => pushToast('info', message, options),
       warning: (message: string, options?: ToastOptions) => pushToast('warning', message, options),
       error: (message: string, title?: string) =>
-        setErrors((prev) => [...prev, { id: ++idRef.current, title, message }]),
+        setErrors((prev) => [...prev, { id: ++idRef.current, title, message: shownText(message) }]),
       confirm: (message: string, options: ConfirmOptions = {}) =>
         new Promise<boolean>((resolve) => {
           setConfirms((prev) => [

@@ -8,6 +8,7 @@ import Icon from '../Icon';
 import ModalDismiss, { ModalFooter, ModalHeader } from '../Modal';
 import { plural } from '../../plural';
 import { foldSummary } from './adresyShared';
+import { ipcErrorMessage } from '../../ipcError';
 
 /** An e-mail that wraps after its "@" first, rather than at an arbitrary letter, in a narrow column. */
 const breakableEmail = (email: string): React.ReactNode => {
@@ -485,7 +486,7 @@ export const ZgnUnitsPanel: React.FC<ZgnUnitsPanelProps> = ({
       setProxyForm(null);
       await loadPelnomocnicy();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(ipcErrorMessage(err, t.errorUnexpected));
     } finally {
       setIsSaving(false);
     }
@@ -501,7 +502,7 @@ export const ZgnUnitsPanel: React.FC<ZgnUnitsPanelProps> = ({
       await window.electronAPI.deleteZgnPelnomocnik(p.id);
       await loadPelnomocnicy();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(ipcErrorMessage(err, t.errorUnexpected));
     } finally {
       setIsSaving(false);
     }
@@ -530,7 +531,7 @@ export const ZgnUnitsPanel: React.FC<ZgnUnitsPanelProps> = ({
       setFormState(null);
       onSaved();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(ipcErrorMessage(err, t.errorUnexpected));
     } finally {
       setIsSaving(false);
     }
@@ -552,7 +553,7 @@ export const ZgnUnitsPanel: React.FC<ZgnUnitsPanelProps> = ({
       if (formState?.editing?.id === jednostka.id) setFormState(null);
       onSaved();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(ipcErrorMessage(err, t.errorUnexpected));
     } finally {
       setIsSaving(false);
     }

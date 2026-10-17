@@ -5,6 +5,8 @@
  * positions appear, in which order — live in pitXml.ts and citXml.ts.
  */
 
+import { AppError } from '../../shared/app-errors';
+
 /**
  * Text for an element or an attribute. The C0 control characters XML 1.0 forbids (all but tab, LF, CR) are
  * dropped: one pasted into a name would make the file unparseable — after the card has signed it.
@@ -24,7 +26,7 @@ const esc = (s: string): string =>
  */
 const nieujemna = (grosze: number, x: number): void => {
   if (grosze < 0) {
-    throw new Error(`Kwota ${x.toFixed(2)} zł jest ujemna, a pola kwot e-Deklaracji przyjmują tylko kwoty nieujemne.`);
+    throw new AppError('eDeklaracjeNegativeAmount', { amount: x.toFixed(2) });
   }
 };
 

@@ -19,6 +19,7 @@ import * as XLSX from 'xlsx';
 import { GruntRodzaj, PodatekAdres, PodatekGrunt, PodatekNieruchomosciDane } from '../../shared/types';
 import { FORMY_WLADANIA, czysc, pusteDane, pustyGrunt, tylkoCyfry } from '../../shared/podatki';
 import { foldText } from '../../shared/plan-gospodarczy';
+import { AppError } from '../../shared/app-errors';
 
 export interface PodatekZPliku {
   nip: string;
@@ -83,7 +84,7 @@ const POWIERZCHNIA_D1: Record<string, GruntRodzaj> = {
 export function parsePodatkiXlsx(buffer: Buffer): PodatkiXlsx {
   const wb = XLSX.read(buffer, { type: 'buffer' });
   const ws = wb.Sheets[wb.SheetNames[0]];
-  if (!ws || !ws['!ref']) throw new Error('Plik nie ma arkusza z danymi.');
+  if (!ws || !ws['!ref']) throw new AppError('xlsxNoSheet');
   const range = XLSX.utils.decode_range(ws['!ref']);
   const cellAt = (r: number, c: number) => ws[XLSX.utils.encode_cell({ r, c })] as XLSX.CellObject | undefined;
 
@@ -99,7 +100,7 @@ export function parsePodatkiXlsx(buffer: Buffer): PodatkiXlsx {
     if (!target.has(t)) target.set(t, c);
   }
   if (!dn1.has('1') || !dn1.has('3')) {
-    throw new Error('To nie wygląda na tabelę do DN-1: w pierwszym wierszu nie ma kolumn „1” (NIP) i „3” (rok).');
+    throw new AppError('dn1TableNotRecognized');
   }
 
   const byKey = new Map<string, PodatekZPliku>();

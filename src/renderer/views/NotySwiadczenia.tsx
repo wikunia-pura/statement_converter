@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { translations, Language } from '../translations';
+import { ipcErrorMessage } from '../ipcError';
 import { FormSection } from '../components/FormSection';
 import Icon from '../components/Icon';
 import { ModalFooter } from '../components/Modal';
@@ -89,7 +90,7 @@ const NotySwiadczenia: React.FC<Props> = ({ language, files, setFiles }) => {
       prev.map((f) => {
         if (f.filePath !== filePath) return f;
         if (res.canceled) return { ...f, status: 'pending' };
-        if (res.error) return { ...f, status: 'error', error: res.error };
+        if (res.error) return { ...f, status: 'error', error: ipcErrorMessage(res.error, t.errorUnexpected) };
         return { ...f, status: 'done', outputPath: res.filePath, error: undefined };
       }),
     );
@@ -97,7 +98,7 @@ const NotySwiadczenia: React.FC<Props> = ({ language, files, setFiles }) => {
       setStatusMessage(`${t.notyConvertSuccess}: ${res.filePath}`);
       setStatusIsError(false);
     } else if (res.error) {
-      setStatusMessage(`${t.notyConvertError}: ${res.error}`);
+      setStatusMessage(`${t.notyConvertError}: ${ipcErrorMessage(res.error, t.errorUnexpected)}`);
       setStatusIsError(true);
     }
     setIsProcessing(false);
@@ -129,7 +130,7 @@ const NotySwiadczenia: React.FC<Props> = ({ language, files, setFiles }) => {
           if (f.filePath !== entry.filePath) return f;
           if (res.error) {
             errCount++;
-            return { ...f, status: 'error', error: res.error };
+            return { ...f, status: 'error', error: ipcErrorMessage(res.error, t.errorUnexpected) };
           }
           okCount++;
           return { ...f, status: 'done', outputPath: res.filePath, error: undefined };

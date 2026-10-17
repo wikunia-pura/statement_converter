@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { PodpisHistoriaEntry, PodpisHistoriaPlik } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { localizeErrorMessage } from '../../shared/app-errors';
 import { localeOf } from '../../shared/format';
 import { useNotify } from './Notifications';
 import Icon from './Icon';
@@ -60,8 +61,8 @@ const PodpisHistoryTimeline: React.FC<Props> = ({ history, language }) => {
         entry.podpis?.podmiot,
         entry.podpis?.wystawca,
         entry.podpis?.numerSeryjny,
-        entry.przerwano,
-        ...entry.pliki.flatMap((p) => [p.nazwa, p.zrodlo, p.wynik, p.powod]),
+        entry.przerwano && localizeErrorMessage(entry.przerwano, language),
+        ...entry.pliki.flatMap((p) => [p.nazwa, p.zrodlo, p.wynik, p.powod && localizeErrorMessage(p.powod, language)]),
         new Date(entry.signedAt).toLocaleString(locale),
       ]
         .filter(Boolean)
@@ -69,7 +70,7 @@ const PodpisHistoryTimeline: React.FC<Props> = ({ history, language }) => {
         .toLowerCase();
       return terms.every((term) => haystack.includes(term));
     });
-  }, [history, searchTerm, locale]);
+  }, [history, searchTerm, locale, language]);
 
   const days = useMemo<DayGroup[]>(() => {
     const dayMap = new Map<string, PodpisHistoriaEntry[]>();
@@ -180,7 +181,7 @@ const PodpisHistoryTimeline: React.FC<Props> = ({ history, language }) => {
                       </div>
                       {entry.signedBy && <div className="odczyty-history-entry-sources">{t.podpisPdfHistoryBy.replace('{kto}', entry.signedBy)}</div>}
                       {entry.przerwano && (
-                        <div className="history-entry-error">{t.podpisPdfHistoryStopped.replace('{reason}', entry.przerwano)}</div>
+                        <div className="history-entry-error">{t.podpisPdfHistoryStopped.replace('{reason}', localizeErrorMessage(entry.przerwano, language))}</div>
                       )}
                       <table className="odczyty-history-outputs">
                         <tbody>
@@ -188,7 +189,7 @@ const PodpisHistoryTimeline: React.FC<Props> = ({ history, language }) => {
                             <tr key={p.zrodlo + p.wynik}>
                               <td className="cell-wrap form-table__label">
                                 {p.nazwa}
-                                {p.powod && <div className="cell-warning is-danger cell-wrap">{p.powod}</div>}
+                                {p.powod && <div className="cell-warning is-danger cell-wrap">{localizeErrorMessage(p.powod, language)}</div>}
                               </td>
                               <td className="nowrap">
                                 <span className={`status-badge ${STATUS_CLASS[p.status]}`}>{statusLabel[p.status]}</span>

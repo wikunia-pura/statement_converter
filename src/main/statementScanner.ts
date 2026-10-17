@@ -73,6 +73,7 @@ import { PKOBiznesConverter } from '../converters/pko-biznes';
 import { PKOSAConverter } from '../converters/pko-sa';
 import { INGConverter } from '../converters/ing';
 import { PocztowyConverter } from '../converters/pocztowy';
+import { AppError } from '../shared/app-errors';
 
 /** The persistence the scan needs — `DatabaseService` satisfies it. */
 export interface ScanStore {
@@ -326,7 +327,7 @@ const FAMILY_LABEL: Record<string, string> = {
  */
 export async function statementPeriodOf(converterId: string, absPath: string) {
   const inspector = inspectorFor(converterId);
-  if (!inspector) throw new Error(`brak konwertera ${converterId}`);
+  if (!inspector) throw new Error(`no inspector for converter ${converterId}`);
   const transactions = await inspector.inspect(contentFor(converterId, absPath));
   return periodOfDates(transactions.map((t) => parseLooseDate(t.exeDate) ?? parseLooseDate(t.creatDate)));
 }
@@ -866,7 +867,7 @@ export async function resolveScanConflicts(
       }
       // The file must still be the one the user was shown.
       if (!fs.existsSync(c.absPath) || (await sha1(c.absPath)) !== c.draft.fileHash) {
-        failed.push({ relPath: c.draft.relPath, message: 'Plik zmienił się od skanowania — uruchom skan ponownie.' });
+        failed.push({ relPath: c.draft.relPath, message: new AppError('scanFileChanged').message });
         continue;
       }
       const renameFailures: ScanReport['renameFailures'] = [];

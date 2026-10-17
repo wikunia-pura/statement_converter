@@ -5,6 +5,7 @@ import type * as Pkcs11Js from 'pkcs11js';
 import type { PodpisCzytnik, PodpisKartaStan, PodpisWybor } from '../../shared/types';
 import { ecdsaDer, sha256 } from './cades';
 import { czytajCertyfikat, type Certyfikat } from './certyfikat';
+import { AppError } from '../../shared/app-errors';
 
 /*
  * The signing card through PKCS#11 — the library Szafir installs for KIR cards
@@ -27,9 +28,7 @@ function pkcs11js(): Pkcs11 {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       modul = require('pkcs11js') as Pkcs11;
     } catch (error: unknown) {
-      throw new Error(
-        `Moduł obsługi kart (pkcs11js) nie wczytał się: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      throw new AppError('cardModuleNotLoaded', { detail: error instanceof Error ? error.message : String(error) });
     }
   }
   return modul;
@@ -97,11 +96,10 @@ function kandydaci(): string[] {
 }
 
 /** "Not found", naming where Szafir keeps it — the file to pick by hand if it is elsewhere. */
-const brakBiblioteki = (): string =>
+const brakBiblioteki = (): AppError =>
   process.platform === 'win32'
-    ? `Nie znaleziono biblioteki karty. Szafir 2 trzyma ją w „C:\\Program Files\\${SZAFIR_WIN.join('\\')}”. ` +
-      'Zainstaluj Szafir 2 (64-bit) albo wskaż ten plik w Ustawieniach → Podpis kwalifikowany.'
-    : 'Nie znaleziono biblioteki karty. Zainstaluj Szafir 2 albo wskaż plik biblioteki w Ustawieniach → Podpis kwalifikowany.';
+    ? new AppError('cardLibraryNotFoundWindows', { path: `C:\\Program Files\\${SZAFIR_WIN.join('\\')}` })
+    : new AppError('cardLibraryNotFound');
 
 /** The library to use: the one picked in Settings if it still exists, else the first one next to Szafir. */
 function biblioteka(wskazana: string): { sciezka: string; wskazana: boolean } | null {
@@ -178,26 +176,33 @@ const kod = (error: unknown): number | undefined =>
     ? (error as { code: number }).code
     : undefined;
 
-/** The card's error in words; the PKCS#11 name stays in the log, not on screen. */
+/**
+ * The card's error in words — a coded refusal's message, so it reads in the
+ * app's language; the PKCS#11 name stays in the log, not on screen.
+ */
 function komunikat(error: unknown, k: Pkcs11): string {
+  return refusal(error, k).message;
+}
+
+function refusal(error: unknown, k: Pkcs11): AppError {
   switch (kod(error)) {
     case k.CKR_PIN_INCORRECT:
-      return 'Błędny PIN.';
+      return new AppError('pinIncorrect');
     case k.CKR_PIN_LEN_RANGE:
-      return 'PIN ma niewłaściwą długość.';
+      return new AppError('pinLength');
     case k.CKR_PIN_LOCKED:
-      return 'PIN jest zablokowany. Odblokuj go kodem PUK w programie do zarządzania kartą.';
+      return new AppError('pinLocked');
     case k.CKR_PIN_EXPIRED:
-      return 'PIN wygasł. Ustaw nowy w programie do zarządzania kartą.';
+      return new AppError('pinExpired');
     case k.CKR_TOKEN_NOT_PRESENT:
     case k.CKR_DEVICE_REMOVED:
-      return 'Karta została wyjęta z czytnika.';
+      return new AppError('cardRemoved');
     case k.CKR_FUNCTION_CANCELED:
-      return 'Wpisywanie PIN-u na czytniku zostało przerwane.';
+      return new AppError('pinEntryCancelled');
     case k.CKR_DEVICE_ERROR:
-      return 'Błąd czytnika albo karty. Wyjmij kartę i włóż ją ponownie.';
+      return new AppError('cardDeviceError');
     default:
-      return `Błąd karty: ${error instanceof Error ? error.message : String(error)}`;
+      return new AppError('cardError', { detail: error instanceof Error ? error.message : String(error) });
   }
 }
 
@@ -302,7 +307,7 @@ export async function stanKarty(wskazana: string): Promise<PodpisKartaStan> {
     return {
       reczna: wskazana,
       biblioteka: null,
-      blad: brakBiblioteki(),
+      blad: brakBiblioteki().message,
       czytniki: [],
     };
   }
@@ -325,7 +330,10 @@ export async function stanKarty(wskazana: string): Promise<PodpisKartaStan> {
     return {
       reczna: wskazana,
       biblioteka: null,
-      blad: `Nie udało się wczytać biblioteki karty ${lib.sciezka}: ${error instanceof Error ? error.message : String(error)}`,
+      blad: new AppError('cardLibraryLoadFailed', {
+        path: lib.sciezka,
+        detail: error instanceof Error ? error.message : String(error),
+      }).message,
       czytniki: [],
     };
   }
@@ -365,29 +373,29 @@ export function zKartaDoPodpisu<T>(
   praca: (sesja: SesjaPodpisu) => Promise<T>,
 ): Promise<T> {
   const lib = biblioteka(wskazana);
-  if (!lib) return Promise.reject(new Error(brakBiblioteki()));
+  if (!lib) return Promise.reject(brakBiblioteki());
 
   return zBiblioteka(lib.sciezka, async (p11, k) => {
     const slot = Buffer.from(wybor.slot, 'hex');
-    if (!p11.C_GetSlotList(true).some((s) => s.equals(slot))) throw new Error('W czytniku nie ma karty. Włóż kartę i spróbuj ponownie.');
+    if (!p11.C_GetSlotList(true).some((s) => s.equals(slot))) throw new AppError('cardNotInReader');
 
     let session: Buffer;
     try {
       session = p11.C_OpenSession(slot, k.CKF_SERIAL_SESSION);
     } catch (error: unknown) {
-      throw new Error(komunikat(error, k));
+      throw refusal(error, k);
     }
     let zalogowany = false;
     try {
       const certs = certyfikaty(p11, k, session);
       const wybrany = certs.find((c) => c.id === wybor.certId && !c.cert.ca);
-      if (!wybrany) throw new Error('Tego certyfikatu nie ma już na karcie. Sprawdź kartę ponownie.');
+      if (!wybrany) throw new AppError('certGone');
       const { cert } = wybrany;
       const teraz = Date.now();
       if (teraz < Date.parse(cert.waznyOd) || teraz > Date.parse(cert.waznyDo)) {
-        throw new Error(`Certyfikat jest nieważny (ważny do ${cert.waznyDo.slice(0, 10)}).`);
+        throw new AppError('certExpired', { date: cert.waznyDo.slice(0, 10) });
       }
-      if (cert.klucz === 'inny') throw new Error('Klucz tego certyfikatu nie jest ani RSA, ani EC — nie umiem nim podpisać.');
+      if (cert.klucz === 'inny') throw new AppError('certKeyUnsupported');
 
       /** A card call, its failure as `BladKarty` in words. */
       const naKarcie = <R>(call: () => R): R => {
@@ -407,10 +415,11 @@ export function zKartaDoPodpisu<T>(
           if (kod(error) === k.CKR_USER_ALREADY_LOGGED_IN) return;
           let msg = komunikat(error, k);
           if (kod(error) === k.CKR_PIN_INCORRECT) {
+            // A warning about the tries left is its own text, not one added to the code's.
             const flags = p11.C_GetTokenInfo(slot).flags;
             if (flags & k.CKF_USER_PIN_LOCKED) msg = komunikat({ code: k.CKR_PIN_LOCKED }, k);
-            else if (flags & k.CKF_USER_PIN_FINAL_TRY) msg += ' Została ostatnia próba — kolejny błędny PIN zablokuje kartę.';
-            else if (flags & k.CKF_USER_PIN_COUNT_LOW) msg += ' Uważaj: karta liczy błędne próby i po kilku się zablokuje.';
+            else if (flags & k.CKF_USER_PIN_FINAL_TRY) msg = new AppError('pinIncorrectFinalTry').message;
+            else if (flags & k.CKF_USER_PIN_COUNT_LOW) msg = new AppError('pinIncorrectCountLow').message;
           }
           throw new BladKarty(msg);
         }
@@ -424,7 +433,7 @@ export function zKartaDoPodpisu<T>(
         if (token.flags & k.CKF_USER_PIN_LOCKED) throw new BladKarty(komunikat({ code: k.CKR_PIN_LOCKED }, k));
         const naCzytniku = (token.flags & k.CKF_PROTECTED_AUTHENTICATION_PATH) !== 0;
         pin = naCzytniku ? undefined : wybor.pin ?? '';
-        if (!naCzytniku && !pin) throw new BladKarty('Wpisz PIN.');
+        if (!naCzytniku && !pin) throw new BladKarty(new AppError('pinRequired').message);
 
         zaloguj(k.CKU_USER);
         zalogowany = true;
@@ -440,7 +449,7 @@ export function zKartaDoPodpisu<T>(
             p11.C_FindObjectsFinal(session);
           }
         });
-        if (!klucz) throw new BladKarty('Na karcie nie ma klucza prywatnego do tego certyfikatu.');
+        if (!klucz) throw new BladKarty(new AppError('cardNoPrivateKey').message);
 
         // A qualified key often wants the PIN again right before each signature;
         // the PIN given for this run is presented again, one signature at a time.
@@ -456,9 +465,9 @@ export function zKartaDoPodpisu<T>(
         if (cert.klucz === 'rsa') {
           if (mechs.includes(k.CKM_SHA256_RSA_PKCS)) return { klucz, mechanism: k.CKM_SHA256_RSA_PKCS, zawszePin };
           if (mechs.includes(k.CKM_RSA_PKCS)) return { klucz, mechanism: k.CKM_RSA_PKCS, zawszePin };
-          throw new BladKarty('Karta nie obsługuje podpisu RSA PKCS#1 v1.5.');
+          throw new BladKarty(new AppError('cardNoRsa').message);
         }
-        if (!mechs.includes(k.CKM_ECDSA)) throw new BladKarty('Karta nie obsługuje podpisu ECDSA.');
+        if (!mechs.includes(k.CKM_ECDSA)) throw new BladKarty(new AppError('cardNoEcdsa').message);
         return { klucz, mechanism: k.CKM_ECDSA, zawszePin };
       };
 

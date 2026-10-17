@@ -18,6 +18,7 @@ import { formatData, formatKwota } from '../../shared/sprawozdanie';
 import { INTER_EJ_PROMPT, nazwaInterEj, zakazInterEj } from '../../shared/inter-ej';
 import { toDayKey } from '../../shared/calendar';
 import { PlanGospodarczy, PlanOkresZaliczki, PlanPozycja, PlanZaliczkaAiPropozycja } from '../../shared/types';
+import { AppError } from '../../shared/app-errors';
 
 const ANSWER_TOKENS = 1500;
 /** What the user may add to the prompt — a few sentences of guidance, not a document. */
@@ -201,7 +202,7 @@ function fakty(plan: PlanGospodarczy, x: ZaliczkaRodzaj, dataZebrania: string | 
 function jsonOdpowiedzi(text: string): unknown {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
-  if (start < 0 || end <= start) throw new Error('AI nie zwróciło odpowiedzi w oczekiwanym formacie.');
+  if (start < 0 || end <= start) throw new AppError('aiBadFormat');
   return JSON.parse(text.slice(start, end + 1));
 }
 
@@ -217,7 +218,7 @@ function okresyOdpowiedzi(raw: unknown): PlanOkresZaliczki[] {
       (o) => Number.isInteger(o.miesiace) && o.miesiace >= 1 && Number.isFinite(o.stawka) && o.stawka >= 0 && o.stawka <= MAX_STAWKA,
     ) &&
     okresy.reduce((n, o) => n + o.miesiace, 0) === 12;
-  if (!valid) throw new Error('AI zaproponowało stawkę, która nie obejmuje pełnego roku albo ma niepoprawne kwoty.');
+  if (!valid) throw new AppError('aiZaliczkaInvalid');
   return okresy;
 }
 
@@ -247,7 +248,7 @@ export async function proponujZaliczkeAi(
   const parsed = jsonOdpowiedzi(text) as { okresy?: unknown; uzasadnienie?: unknown };
   const okresy = okresyOdpowiedzi(parsed.okresy);
   const uzasadnienie = typeof parsed.uzasadnienie === 'string' ? parsed.uzasadnienie.trim() : '';
-  if (!uzasadnienie) throw new Error('AI nie podało uzasadnienia stawki.');
+  if (!uzasadnienie) throw new AppError('aiZaliczkaNoReason');
   zakazInterEj(uzasadnienie);
   logger.info(`[PLAN-ZALICZKA-AI] ${x}: ${okresy.map((o) => `${o.miesiace}×${o.stawka}`).join(' + ')} by ${model}`);
   return { okresy, uzasadnienie };

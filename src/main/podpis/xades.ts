@@ -1,6 +1,7 @@
 import { createHash, randomUUID, verify, X509Certificate, type KeyObject } from 'crypto';
 import type { Certyfikat } from './certyfikat';
 import { children, oidText, read, stringText, type Tlv } from './der';
+import { AppError } from '../../shared/app-errors';
 
 /*
  * XAdES-BES, enveloped: the e-Deklaracje gateway takes the declaration XML with
@@ -75,7 +76,7 @@ export interface XmlDocument {
   after: XmlPi[];
 }
 
-const bad = (what: string, at: number): Error => new Error(`Niepoprawny XML (znak ${at}): ${what}.`);
+const bad = (what: string, at: number): Error => new AppError('xmlInvalid', { at, what });
 
 const WS = /[ \t\n]/;
 const NAME_STOP = /[\s/>=<"'&?!]/;
@@ -368,7 +369,7 @@ export function ecdsaDerNaRs(der: Buffer, rozmiar: number): Buffer {
   const fit = (t: Tlv): Buffer => {
     let b = t.body;
     while (b.length > rozmiar && b[0] === 0) b = b.subarray(1);
-    if (b.length > rozmiar) throw new Error('Podpis ECDSA ma nieoczekiwaną długość.');
+    if (b.length > rozmiar) throw new Error('ECDSA signature of unexpected length');
     return Buffer.concat([Buffer.alloc(rozmiar - b.length), b]);
   };
   return Buffer.concat([fit(r), fit(s)]);
@@ -496,13 +497,13 @@ function miejscePodpisu(source: string): { doc: XmlDocument; at: number } | stri
     return error instanceof Error ? error.message : String(error);
   }
   if (szukaj(doc.root, NS_DS, 'Signature')) {
-    return 'Ten plik XML ma już podpis — dołożenie drugiego nie jest obsługiwane.';
+    return new AppError('xmlAlreadySigned').message;
   }
   // The signature goes before the root's closing tag; anything but whitespace and PIs/comments may not follow it.
   const closing = `</${doc.root.name}`;
   const at = source.lastIndexOf(closing);
   if (at < 0 || !/^\s*>/.test(source.slice(at + closing.length))) {
-    return 'Nie da się podpisać tego XML: element główny musi mieć osobny znacznik zamykający.';
+    return new AppError('xmlRootNotClosed').message;
   }
   return { doc, at };
 }
@@ -526,7 +527,7 @@ export async function podpiszXml(xml: string, o: PodpisXml): Promise<string> {
   const miejsce = miejscePodpisu(source);
   if (typeof miejsce === 'string') throw new Error(miejsce);
   const { doc, at } = miejsce;
-  if (o.cert.klucz === 'inny') throw new Error('Klucz tego certyfikatu nie jest ani RSA, ani EC — nie umiem nim podpisać.');
+  if (o.cert.klucz === 'inny') throw new AppError('certKeyUnsupported');
   const rsa = o.cert.klucz === 'rsa';
 
   const uuid = () => `ID-${randomUUID()}`;
@@ -551,22 +552,22 @@ export async function podpiszXml(xml: string, o: PodpisXml): Promise<string> {
   // Reference 2: SignedProperties, canonicalized in place (it inherits the root's namespace declarations).
   const withProperties = parsujXml(insert(compose(placeholder, placeholder)));
   const last = withProperties.root.children.filter((c): c is XmlElement => c.kind === 'element').pop();
-  if (!last || !jestPodpisem(last)) throw new Error('Nie da się podpisać tego XML: podpis nie trafił na koniec elementu głównego.');
+  if (!last || !jestPodpisem(last)) throw new Error('XAdES: the signature did not land at the end of the root element');
   const properties = szukaj(withProperties.root, NS_XADES, 'SignedProperties');
-  if (!properties) throw new Error('XAdES: nie złożono SignedProperties.');
+  if (!properties) throw new Error('XAdES: SignedProperties not assembled');
   const skrotWlasciwosci = sha256(utf8(kanoniczny(properties))).toString('base64');
 
   // The signature over SignedInfo as it will be written, digests included.
   const withInfo = parsujXml(insert(compose(skrotWlasciwosci, placeholder)));
   const signedInfo = szukaj(withInfo.root, NS_DS, 'SignedInfo');
-  if (!signedInfo) throw new Error('XAdES: nie złożono SignedInfo.');
+  if (!signedInfo) throw new Error('XAdES: SignedInfo not assembled');
   const dane = utf8(kanoniczny(signedInfo));
   const raw = await o.podpisz(dane);
   const podpis = rsa ? raw : ecdsaDerNaRs(raw, o.cert.rozmiarKlucza);
 
   const key = new X509Certificate(o.cert.der).publicKey;
   if (!weryfikujPodpis(key, dane, podpis)) {
-    throw new Error('Karta zwróciła podpis, który nie pasuje do certyfikatu. Sprawdź, czy wybrano właściwy certyfikat.');
+    throw new AppError('cardSignatureMismatch');
   }
   return insert(compose(skrotWlasciwosci, base64Zawiniete(podpis)));
 }

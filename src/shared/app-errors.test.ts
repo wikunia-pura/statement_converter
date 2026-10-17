@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { APP_ERRORS, AppError, appErrorText, hasAppErrorCode, localizeErrorMessage, parseAppError } from './app-errors';
+import {
+  APP_ERRORS,
+  AppError,
+  appErrorText,
+  hasAppErrorCode,
+  localizeEmbeddedErrors,
+  localizeErrorMessage,
+  parseAppError,
+} from './app-errors';
 
 describe('AppError', () => {
   it('carries the Polish text for the log and the code for the renderer', () => {
@@ -35,5 +43,35 @@ describe('AppError', () => {
       expect(text.pl, code).toBeTruthy();
       expect(text.en, code).toBeTruthy();
     }
+  });
+
+  it('every code names the same placeholders in both languages', () => {
+    const names = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+    for (const [code, text] of Object.entries(APP_ERRORS)) {
+      expect(names(text.en), code).toEqual(names(text.pl));
+    }
+  });
+
+  it('words a refusal with params in either language after a round trip', () => {
+    const err = new AppError('mailingTypHasTemplates', { name: 'Zawiadomienie', count: 3 });
+    expect(err.message.startsWith('Typ „Zawiadomienie” ma przypisane szablony (3).')).toBe(true);
+    const wrapped = `Error invoking remote method 'db:delete-mailing-typ': Error: ${err.message}`;
+    expect(localizeErrorMessage(wrapped, 'en')).toBe(
+      'The type “Zawiadomienie” has templates assigned (3). Move them to another type or delete them before you delete the type.',
+    );
+    expect(localizeErrorMessage(wrapped, 'pl')).toBe(appErrorText('mailingTypHasTemplates', { name: 'Zawiadomienie', count: 3 }, 'pl'));
+  });
+});
+
+describe('localizeEmbeddedErrors', () => {
+  it('words a refusal inside a longer text and keeps the text around it', () => {
+    const inner = new AppError('concurrentEdit').message;
+    expect(localizeEmbeddedErrors(`Nie udało się zapisać: ${inner}`, 'en')).toBe(
+      `Nie udało się zapisać: ${APP_ERRORS.concurrentEdit.en}`,
+    );
+    expect(localizeEmbeddedErrors(`a: ${inner}\nb: ${new AppError('zadanieConflict').message}`, 'pl')).toBe(
+      `a: ${APP_ERRORS.concurrentEdit.pl}\nb: ${APP_ERRORS.zadanieConflict.pl}`,
+    );
+    expect(localizeEmbeddedErrors('zwykły tekst', 'en')).toBe('zwykły tekst');
   });
 });

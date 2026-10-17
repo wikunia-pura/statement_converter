@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { MailingHistoryEntry, MailingTypDef } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { ipcErrorMessage } from '../ipcError';
+import { localizeErrorMessage } from '../../shared/app-errors';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
 import { FormSection } from '../components/FormSection';
@@ -69,7 +71,7 @@ const MailingHistoria: React.FC<Props> = ({ language }) => {
     if (!(await notify.confirm(message, { danger: true }))) return;
     const result = await window.electronAPI.mailingCleanupFiles();
     if (result.error) {
-      notify.error(`${t.mailingCleanupError}: ${result.error}`);
+      notify.error(`${t.mailingCleanupError}: ${ipcErrorMessage(result.error, t.errorUnexpected)}`);
       return;
     }
     notify.success(
@@ -207,7 +209,7 @@ const MailingHistoria: React.FC<Props> = ({ language }) => {
                           <Icon name="check-circle" size={14} /> {t.mailingStatusSent}
                         </span>
                       ) : (
-                        <span className="result-status is-error" data-tip={h.errorMessage}>
+                        <span className="result-status is-error" data-tip={h.errorMessage && localizeErrorMessage(h.errorMessage, language)}>
                           <Icon name="x-circle" size={14} /> {t.mailingStatusError}
                         </span>
                       )}

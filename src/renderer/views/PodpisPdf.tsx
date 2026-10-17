@@ -101,7 +101,7 @@ const PodsumowaniePodpisow: React.FC<{
           {przerwano && (
             <div className="callout callout--warning">
               <Icon name="alert-triangle" size={16} />
-              <div className="callout__body">{t.podSumStopped.replace('{reason}', przerwano)}</div>
+              <div className="callout__body">{t.podSumStopped.replace('{reason}', ipcErrorMessage(przerwano, przerwano))}</div>
             </div>
           )}
 
@@ -134,7 +134,7 @@ const PodsumowaniePodpisow: React.FC<{
                 {pominiete.map((p) => (
                   <li key={p.zrodlo}>
                     <span className="podpis-sum__name">{p.nazwa}</span>
-                    <span className="podpis-sum__reason">{p.powod}</span>
+                    <span className="podpis-sum__reason">{ipcErrorMessage(p.powod, p.powod)}</span>
                   </li>
                 ))}
               </ul>
@@ -216,7 +216,7 @@ const PodpisPdf: React.FC<Props> = ({ language, files, setFiles }) => {
         status: a.blokada ? 'blocked' : 'ready',
         rozmiar: a.rozmiar,
         strony: a.strony,
-        blokada: a.blokada,
+        blokada: a.blokada && ipcErrorMessage(a.blokada, a.blokada),
       });
     } catch (error: unknown) {
       patch(filePath, { status: 'blocked', blokada: ipcErrorMessage(error, t.errorUnexpected) });
@@ -319,7 +319,7 @@ const PodpisPdf: React.FC<Props> = ({ language, files, setFiles }) => {
     setDoPodpisu(null);
     setPostep(null);
     const signed = new Map(wynik.podpisane.map((p) => [p.zrodlo, p.sciezka]));
-    const failed = new Map(wynik.pominiete.map((p) => [p.zrodlo, p.powod]));
+    const failed = new Map(wynik.pominiete.map((p) => [p.zrodlo, ipcErrorMessage(p.powod, p.powod)]));
     setFiles((prev) =>
       prev.map((f) => {
         const sciezka = signed.get(f.filePath);

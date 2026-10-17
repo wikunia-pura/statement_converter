@@ -24,6 +24,7 @@ import { CIT8_PDF_BASE64, CIT8O_PDF_BASE64 } from './cit8Wzory';
 import { ARIMO_TTF_BASE64 } from './dn1Font';
 import { CIT8, CIT8O, ZNAK_KRATKI_CIT8 } from './cit8Layout';
 import { Pole, Strona, dataNaKratki } from './formularz';
+import { AppError } from '../../shared/app-errors';
 
 export interface Cit8Wejscie {
   rok: number;
@@ -48,9 +49,7 @@ export async function cit8Pdf(we: Cit8Wejscie): Promise<Uint8Array> {
   const nip = d.nip;
   const problemy = problemyCIT8({ rok, dane: d }, slownik);
   if (problemy.length > 0) {
-    throw new Error(
-      `Zeznania nie da się jeszcze wydrukować: ${problemy.map((p) => opisProblemuCit(p, rok)).join('; ')}.`
-    );
+    throw new AppError('citPrintBlocked', { problems: problemy.map((p) => opisProblemuCit(p, rok)).join('; ') });
   }
   const wynik = obliczCIT8(d, pozycjeZeSprawozdania(d, slownik));
   const poz = (n: number): number => wynik.poz[n] ?? 0;

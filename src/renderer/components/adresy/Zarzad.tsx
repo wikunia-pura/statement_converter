@@ -6,6 +6,7 @@ import { useNotify } from '../Notifications';
 import { FormField, FormRow, FormSection, RequiredNote } from '../FormSection';
 import Icon from '../Icon';
 import ModalDismiss, { ModalFooter, ModalHeader } from '../Modal';
+import { ipcErrorMessage } from '../../ipcError';
 
 interface ZarzadPersonFormModalProps {
   language: Language;
@@ -275,7 +276,7 @@ export const ZarzadModal: React.FC<{
       onSaved();
       return true;
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Unknown error');
+      setError(ipcErrorMessage(e, t.errorUnexpected));
       return false;
     } finally {
       setIsSaving(false);

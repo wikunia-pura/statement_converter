@@ -16,6 +16,7 @@ import { maxTokensFor, modelRequestFields } from '../../shared/ai-models';
 import { formatKwota, okresLabel, sprawozdanieWstep } from '../../shared/sprawozdanie';
 import { INTER_EJ_PROMPT, ukryteKwotyInterEj, zakazInterEj } from '../../shared/inter-ej';
 import { Sprawozdanie } from '../../shared/types';
+import { AppError } from '../../shared/app-errors';
 
 const ANSWER_TOKENS = 1500;
 /** What the user may add to the prompt — a few sentences of guidance, not a document. */
@@ -110,7 +111,7 @@ export async function napiszWstepAi(
     .join('')
     .replace(/^```[a-z]*\n?|\n?```$/g, '')
     .trim();
-  if (!text) throw new Error('AI nie zwróciło tekstu wstępu.');
+  if (!text) throw new AppError('aiWstepEmpty');
   zakazInterEj(text);
   logger.info(`[SPR-WSTEP-AI] ${text.length} chars by ${model}`);
   return text;

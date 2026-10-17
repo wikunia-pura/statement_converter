@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { translations, Language } from '../translations';
+import { ipcErrorMessage } from '../ipcError';
 import { useNotify } from '../components/Notifications';
 import { FormSection } from '../components/FormSection';
 import Icon from '../components/Icon';
@@ -100,7 +101,7 @@ const OdczytyLicznikow: React.FC<Props> = ({
       prev.map((f) => {
         if (f.filePath !== filePath) return f;
         if (res.error || !res.data) {
-          return { ...f, status: 'error' as const, error: res.error ?? t.odczytyUnknownSupplier };
+          return { ...f, status: 'error' as const, error: ipcErrorMessage(res.error, t.odczytyUnknownSupplier) };
         }
         return applyAnalyzed(f, res.data);
       }),
@@ -218,7 +219,7 @@ const OdczytyLicznikow: React.FC<Props> = ({
     setIsProcessing(false);
     setConvertingPath(null);
     if (res.error || !res.result) {
-      setStatusMessage(`${t.odczytyError}: ${res.error ?? t.errorUnexpected}`);
+      setStatusMessage(`${t.odczytyError}: ${ipcErrorMessage(res.error, t.errorUnexpected)}`);
       setStatusIsError(true);
       return;
     }

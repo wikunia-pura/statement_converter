@@ -13,6 +13,7 @@ import ApartmentTargetsEditor, {
 import { FormField, FormSection, RequiredNote } from '../FormSection';
 import Icon from '../Icon';
 import ModalDismiss, { ModalFooter, ModalHeader } from '../Modal';
+import { ipcErrorMessage } from '../../ipcError';
 
 const newMappingId = () =>
   (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
@@ -320,7 +321,7 @@ export const ApartmentMappingsModal: React.FC<ApartmentMappingsModalProps> = ({
       onSaved();
       return true;
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Unknown error');
+      setError(ipcErrorMessage(e, t.errorUnexpected));
       return false;
     } finally {
       setIsSaving(false);

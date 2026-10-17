@@ -23,6 +23,7 @@
  */
 
 import * as XLSX from 'xlsx';
+import { AppError } from '../../shared/app-errors';
 
 export type OdczytySupplierId = 'piaskan' | 'techem' | 'metrona' | 'ista';
 
@@ -515,9 +516,7 @@ export function parseOdczytyFile(filePath: string): OdczytyParseResult {
   }
 
   if (!supplier) {
-    throw new Error(
-      'Nie rozpoznano formatu pliku. Obsługiwane są odczyty od: PIASKAN, TECHEM, METRONA, ISTA.',
-    );
+    throw new AppError('odczytyFormatUnknown');
   }
 
   const communities: string[] = [];

@@ -40,6 +40,7 @@ import {
   sprawozdanieHtml,
   stampPages,
 } from './dokumenty';
+import { AppError } from '../../shared/app-errors';
 
 /** One part of the package, as listed on the cover. */
 interface Czesc {
@@ -124,9 +125,9 @@ export async function eksportujPakiet(
 ): Promise<string> {
   const { database } = deps;
   const wersja = await database.getZebranieWersja(req.wersjaId);
-  if (!wersja) throw new Error('Tej wersji już nie ma — mogła zostać usunięta.');
+  if (!wersja) throw new AppError('wersjaGone');
   const zebranie = await database.getZebranie(wersja.zebranieId);
-  if (!zebranie) throw new Error('Tego zebrania już nie ma — mogło zostać usunięte.');
+  if (!zebranie) throw new AppError('zebranieGone');
   const [spotkania, lokalizacje] = await Promise.all([
     database.getSpotkania(),
     database.getSpotkaniaLokalizacje(),
@@ -139,26 +140,26 @@ export async function eksportujPakiet(
 
   const material = req.zawiadomienie ? zawiadomienieOf(wersja) : undefined;
   if (req.zawiadomienie && !material) {
-    throw new Error('Ta wersja nie ma jeszcze zawiadomienia — przygotuj je w zakładce „Zawiadomienie o zebraniu”.');
+    throw new AppError('pakietNoZawiadomienie');
   }
   const spr = req.sprawozdanie && wersja.sprawozdanie
     ? { ...wersja.sprawozdanie, dane: sprawozdanieWersji(wersja.sprawozdanie) }
     : null;
   if (req.sprawozdanie && !spr) {
-    throw new Error('Ta wersja nie ma jeszcze sprawozdania — dołącz je w zakładce „Sprawozdania finansowe”.');
+    throw new AppError('pakietNoSprawozdanie');
   }
   const plan = req.plan ? wersja.plan : null;
   if (req.plan && !plan) {
-    throw new Error('Ta wersja nie ma jeszcze planu gospodarczego — utwórz go w zakładce „Plan gospodarczy”.');
+    throw new AppError('pakietNoPlan');
   }
   const uchwaly = req.uchwaly
     ? uchwalyOf(wersja).filter((u) => !req.uchwalyIds || req.uchwalyIds.includes(u.id))
     : [];
   if (req.uchwaly && uchwaly.length === 0) {
-    throw new Error('Ta wersja nie ma wybranych uchwał — dodaj je albo zaznacz w zakładce „Uchwały”.');
+    throw new AppError('pakietNoUchwaly');
   }
   if (!material && !spr && !plan && uchwaly.length === 0) {
-    throw new Error('Wybierz co najmniej jedną część materiałów.');
+    throw new AppError('pakietNothingChosen');
   }
 
   if (material) {
@@ -176,9 +177,7 @@ export async function eksportujPakiet(
       material.tresc,
     );
     if (missing.length > 0) {
-      throw new Error(
-        `W zawiadomieniu nie wypełniono: ${missing.join(', ')}. Uzupełnij je w zakładce „Zawiadomienie o zebraniu” albo pobierz pakiet bez zawiadomienia.`,
-      );
+      throw new AppError('pakietZawiadomienieIncomplete', { fields: missing.join(', ') });
     }
   }
 
@@ -191,11 +190,9 @@ export async function eksportujPakiet(
       }))
       .filter((u) => u.missing.length > 0);
     if (niekompletne.length > 0) {
-      throw new Error(
-        `W uchwałach nie wypełniono pól: ${niekompletne
-          .map((u) => `${u.tytul} (${u.missing.join(', ')})`)
-          .join('; ')}. Uzupełnij je w zakładce „Uchwały” albo pobierz pakiet bez uchwał.`,
-      );
+      throw new AppError('pakietUchwalyIncomplete', {
+        fields: niekompletne.map((u) => `${u.tytul} (${u.missing.join(', ')})`).join('; '),
+      });
     }
   }
 

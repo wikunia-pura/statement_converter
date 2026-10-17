@@ -257,7 +257,7 @@ const MailingTypy: React.FC<Props> = ({ language }) => {
       // Refusals (templates still use it) come back as a message, not a throw.
       const result = await window.electronAPI.mailingDeleteTyp(typ.id);
       if (result.error) {
-        notify.error(result.error);
+        notify.error(ipcErrorMessage(result.error, t.errorUnexpected));
         return;
       }
       if (formState?.editing?.id === typ.id) setFormState(null);

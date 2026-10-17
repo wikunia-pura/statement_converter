@@ -15,6 +15,7 @@ import Icon from './Icon';
 import SearchableSelect, { SearchableOption } from './SearchableSelect';
 import { ModalFooter, ModalHeader } from './Modal';
 import { FormField, FormRow, FormSection } from './FormSection';
+import { ipcErrorMessage } from '../ipcError';
 
 /** Card text for a row held for review whatever it matched. */
 const HOLD_REASON_KEYS = {
@@ -567,7 +568,7 @@ const TransactionCard = React.memo(function TransactionCard({
       setRuleSaved(true);
       setRuleFormOpen(false);
     } catch (e: unknown) {
-      setRuleError(e instanceof Error ? e.message : 'Unknown error');
+      setRuleError(ipcErrorMessage(e, t.errorUnexpected));
     } finally {
       setRuleSaving(false);
     }
@@ -598,7 +599,7 @@ const TransactionCard = React.memo(function TransactionCard({
       setAltSaved(true);
       setAltFormOpen(false);
     } catch (e: unknown) {
-      setAltError(e instanceof Error ? e.message : 'Unknown error');
+      setAltError(ipcErrorMessage(e, t.errorUnexpected));
     } finally {
       setAltSaving(false);
     }
@@ -1409,7 +1410,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
       );
 
       if (!result.success) {
-        notify.error(`${t.rerunExpenseAIFailed}: ${result.error ?? ''}`);
+        notify.error(`${t.rerunExpenseAIFailed}: ${ipcErrorMessage(result.error, '')}`);
         return;
       }
 
@@ -1437,7 +1438,7 @@ export const TransactionReviewScreen: React.FC<TransactionReviewScreenProps> = (
       }
     } catch (error) {
       notify.error(
-        `${t.rerunExpenseAIFailed}: ${error instanceof Error ? error.message : String(error)}`,
+        `${t.rerunExpenseAIFailed}: ${ipcErrorMessage(error, t.errorUnexpected)}`,
       );
     } finally {
       setIsRerunningExpenseAI(false);

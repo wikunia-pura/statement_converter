@@ -15,6 +15,7 @@
 import { CitSlownikRegula, PodatekCitDane } from '../../shared/types';
 import { citWzor, obliczCIT8, opisProblemuCit, pozycjeZeSprawozdania, problemyCIT8Xml } from '../../shared/podatki-cit';
 import { Wezel, duze, el, gr, kwota2, kwotaC, zlozXml } from './eDeklaracjeXml';
+import { AppError } from '../../shared/app-errors';
 
 export interface Cit8XmlWejscie {
   rok: number;
@@ -27,7 +28,7 @@ export function cit8Xml(we: Cit8XmlWejscie): string {
   const { rok, dane: d, slownik } = we;
   const problemy = problemyCIT8Xml({ rok, dane: d }, slownik);
   if (problemy.length > 0) {
-    throw new Error(`XML CIT-8 nie da się jeszcze wygenerować: ${problemy.map((p) => opisProblemuCit(p, rok)).join('; ')}.`);
+    throw new AppError('citXmlBlocked', { problems: problemy.map((p) => opisProblemuCit(p, rok)).join('; ') });
   }
   const wzor = citWzor(rok)!;
   const w = obliczCIT8(d, pozycjeZeSprawozdania(d, slownik));

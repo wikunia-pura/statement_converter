@@ -131,6 +131,8 @@ import { formatData, normalizeWstepTekst, sprawozdanieWersji, zastosujLaczenia }
 import { planWZebraniach, planyZZebran } from '../shared/plany';
 import { eksportujPakiet } from './zebrania/pakiet';
 import { wersjaLabel } from '../shared/zebrania';
+import { AppError, localizeErrorMessage } from '../shared/app-errors';
+import { errorTextIn } from './errorText';
 import { dn1Pdf } from './podatki/dn1Pdf';
 import { cit8Pdf } from './podatki/cit8Pdf';
 import { cit8Xml } from './podatki/citXml';
@@ -634,7 +636,7 @@ function setupIpcHandlers() {
       const content = fs.readFileSync(result.filePaths[0], 'utf-8');
       const parsed = JSON.parse(content);
       if (!Array.isArray(parsed)) {
-        return { success: false, error: 'Nieprawidłowy format pliku' };
+        return { success: false, error: new AppError('fileFormatInvalid').message };
       }
 
       const banks = parsed.map((b: any, idx: number) => ({
@@ -1132,7 +1134,7 @@ function setupIpcHandlers() {
 
       const parsed = JSON.parse(fs.readFileSync(result.filePaths[0], 'utf-8'));
       if (!Array.isArray(parsed)) {
-        return { success: false, error: 'Nieprawidłowy format pliku' };
+        return { success: false, error: new AppError('fileFormatInvalid').message };
       }
 
       const rows = parsed
@@ -1576,9 +1578,7 @@ function setupIpcHandlers() {
     async (_event, filePath: string, force?: boolean) => {
       const apiKey = converterRegistry.getAnthropicApiKey();
       if (!apiKey) {
-        return {
-          error: 'Brak klucza Anthropic API — dodaj wpis anthropic_api_key w tabeli app_config (Supabase) lub lokalnie w config/ai-config.yml.',
-        };
+        return { error: new AppError('aiKeyMissing').message };
       }
       try {
         const extraction = await extractZaliczkiFromPdf(filePath, apiKey, database.getAiModel(), {
@@ -1649,7 +1649,7 @@ function setupIpcHandlers() {
     async (_event, filePath: string, outputDir: string | null) => {
       try {
         if (!fs.existsSync(filePath)) {
-          return { error: 'Plik PDF nie istnieje lub został usunięty' };
+          return { error: new AppError('pdfFileGone').message };
         }
         const data = await extractNotaFromPdf(filePath);
         const buffer = await buildNotaWorkbook(data);
@@ -1660,7 +1660,7 @@ function setupIpcHandlers() {
         let targetPath: string;
         if (outputDir) {
           if (!isAllowedOutputDir(outputDir)) {
-            return { error: 'Folder docelowy nie został wybrany w oknie wyboru — wybierz go ponownie.' };
+            return { error: new AppError('outputDirNotPicked').message };
           }
           // Never over an existing file: a second note with the same name gets "-1".
           targetPath = uniquePath(outputDir, defaultName);
@@ -1706,7 +1706,7 @@ function setupIpcHandlers() {
   ipcMain.handle(IPC_CHANNELS.SCALANIE_ANALYZE_FILE, async (_event, filePath: string) => {
     try {
       if (!fs.existsSync(filePath)) {
-        return { error: 'Plik nie istnieje lub został usunięty' };
+        return { error: new AppError('fileGone').message };
       }
       const analyzed = scalanieAnalyzeFile(filePath);
       return { data: analyzed };
@@ -1722,14 +1722,14 @@ function setupIpcHandlers() {
     async (_event, files: ScalanieMergeFileInput[], outputDir: string) => {
       try {
         if (!files || files.length === 0) {
-          return { error: 'Brak plików do scalenia' };
+          return { error: new AppError('noFilesToMerge').message };
         }
         if (!outputDir || !fs.existsSync(outputDir)) {
-          return { error: 'Folder docelowy nie istnieje' };
+          return { error: new AppError('outputDirMissing').message };
         }
         // The configured SWRK folder, or one picked in the dialog — nothing else.
         if (!isAllowedOutputDir(outputDir, 'swrkFolder')) {
-          return { error: 'Folder docelowy nie został wybrany w oknie wyboru — wybierz go ponownie.' };
+          return { error: new AppError('outputDirNotPicked').message };
         }
         const result = scalanieMergeFiles(files, outputDir);
         return { success: true, result };
@@ -1761,7 +1761,7 @@ function setupIpcHandlers() {
   ipcMain.handle(IPC_CHANNELS.HOMEBANKING_ANALYZE_FILE, async (_event, filePath: string) => {
     try {
       if (!fs.existsSync(filePath)) {
-        return { error: 'Plik nie istnieje lub został usunięty' };
+        return { error: new AppError('fileGone').message };
       }
       const banks = await database.getAllBanks();
       const adresy = await database.getAllAdresy();
@@ -1783,13 +1783,13 @@ function setupIpcHandlers() {
     ) => {
       try {
         if (!files || files.length === 0) {
-          return { error: 'Brak plików do scalenia' };
+          return { error: new AppError('noFilesToMerge').message };
         }
         if (!outputDir || !fs.existsSync(outputDir)) {
-          return { error: 'Folder docelowy nie istnieje' };
+          return { error: new AppError('outputDirMissing').message };
         }
         if (!isAllowedOutputDir(outputDir)) {
-          return { error: 'Folder docelowy nie został wybrany w oknie wyboru — wybierz go ponownie.' };
+          return { error: new AppError('outputDirNotPicked').message };
         }
         const banks = await database.getAllBanks();
         const adresy = await database.getAllAdresy();
@@ -1841,7 +1841,7 @@ function setupIpcHandlers() {
   ipcMain.handle(IPC_CHANNELS.ODCZYTY_ANALYZE_FILE, async (_event, filePath: string) => {
     try {
       if (!fs.existsSync(filePath)) {
-        return { error: 'Plik nie istnieje lub został usunięty' };
+        return { error: new AppError('fileGone').message };
       }
       const parsed = parseOdczytyFile(filePath);
       return {
@@ -1869,19 +1869,17 @@ function setupIpcHandlers() {
     async (_event, filePaths: string[], outputDirOverride: string | null) => {
       try {
         if (!filePaths || filePaths.length === 0) {
-          return { error: 'Brak plików do konwersji' };
+          return { error: new AppError('noFilesToConvert').message };
         }
         // The IMPEX folder is the module's home; the override only kicks in when
         // the user hasn't configured one yet and picked a folder in the dialog.
         const outputDir =
           outputDirOverride?.trim() || (database.getSetting('impexFolder') || '').trim();
         if (!outputDir) {
-          return {
-            error: 'Folder IMPEX nie jest skonfigurowany (Ustawienia → Folder IMPEX).',
-          };
+          return { error: new AppError('impexFolderNotSet').message };
         }
         if (!isAllowedOutputDir(outputDir, 'impexFolder')) {
-          return { error: 'Folder docelowy nie został wybrany w oknie wyboru — wybierz go ponownie.' };
+          return { error: new AppError('outputDirNotPicked').message };
         }
 
         const readings: OdczytReading[] = [];
@@ -1899,7 +1897,7 @@ function setupIpcHandlers() {
           const fileName = path.basename(filePath);
           try {
             if (!fs.existsSync(filePath)) {
-              throw new Error('Plik nie istnieje lub został usunięty');
+              throw new AppError('fileGone');
             }
             const parsed = parseOdczytyFile(filePath);
             readings.push(...parsed.readings);
@@ -1928,7 +1926,7 @@ function setupIpcHandlers() {
 
         if (readings.length === 0) {
           const firstError = sources.find((s) => s.error)?.error;
-          return { error: firstError ?? 'Żaden z plików nie zawiera odczytów.' };
+          return { error: firstError ?? new AppError('odczytyNoneInFiles').message };
         }
 
         const files: OdczytyOutputFile[] = writeOdczytyFiles(readings, outputDir);
@@ -2068,7 +2066,7 @@ function setupIpcHandlers() {
         if (!converter) {
           const availableConverters = converterRegistry.getAllConverters().map(c => c.id).join(', ');
           log.error(`[CONVERT] Converter '${bank.converterId}' not found. Available: ${availableConverters}`);
-          throw new Error(`Konwerter '${bank.converterId}' nie został znaleziony. Bank: '${bank.name}'. Dostępne konwertery: ${availableConverters}`);
+          throw new AppError('converterNotFound', { converter: bank.converterId, bank: bank.name, available: availableConverters });
         }
 
         const outputFolder = database.getSetting('outputFolder');
@@ -2262,7 +2260,7 @@ function setupIpcHandlers() {
         if (!converter) {
           const availableConverters = converterRegistry.getAllConverters().map(c => c.id).join(', ');
           log.error(`[CONVERT_AI] Converter '${bank.converterId}' not found. Available: ${availableConverters}`);
-          throw new Error(`Konwerter '${bank.converterId}' nie został znaleziony. Bank: '${bank.name}'. Dostępne konwertery: ${availableConverters}`);
+          throw new AppError('converterNotFound', { converter: bank.converterId, bank: bank.name, available: availableConverters });
         }
 
         const outputFolder = database.getSetting('outputFolder');
@@ -2782,7 +2780,7 @@ function setupIpcHandlers() {
         const imported = database.importSettings(data);
         return { success: true, imported };
       } catch (error) {
-        return { success: false, error: 'Nieprawidłowy format pliku' };
+        return { success: false, error: new AppError('fileFormatInvalid').message };
       }
     }
     return { success: false };
@@ -2833,7 +2831,7 @@ function setupIpcHandlers() {
 
       const parsed = JSON.parse(fs.readFileSync(result.filePaths[0], 'utf-8'));
       if (!Array.isArray(parsed)) {
-        return { success: false, error: 'Nieprawidłowy format pliku' };
+        return { success: false, error: new AppError('fileFormatInvalid').message };
       }
 
       const rows = parsed
@@ -3074,7 +3072,7 @@ function setupIpcHandlers() {
         return {
           success: false,
           missingSections,
-          error: `kopia bezpieczeństwa byłaby niepełna (brak tabel: ${missingSections.join(', ')})`,
+          error: new AppError('backupSafetyCopyIncomplete', { tables: missingSections.join(', ') }).message,
         };
       }
       const dir = getBackupsDir();
@@ -3157,7 +3155,7 @@ function setupIpcHandlers() {
     return new Promise((resolve) => {
       // Timeout po 30 sekundach
       const timeout = setTimeout(() => {
-        resolve({ available: false, error: 'Timeout - brak odpowiedzi z serwera' });
+        resolve({ available: false, error: new AppError('updateCheckTimeout').message });
       }, 30000);
 
       // Nasłuchuj na dostępność aktualizacji
@@ -3417,9 +3415,9 @@ function setupIpcHandlers() {
       if (refused.length > 0) {
         log.warn('[MAILING] refused attachments:', refused.map((a) => String(a?.filePath)).join(', '));
         return {
-          error: `Załącznik spoza wybranych plików: ${refused
-            .map((a) => path.basename(String(a?.fileName || a?.filePath || '')))
-            .join(', ')} — dodaj go ponownie przyciskiem „Dodaj załącznik”.`,
+          error: new AppError('mailingAttachmentNotPicked', {
+            files: refused.map((a) => path.basename(String(a?.fileName || a?.filePath || ''))).join(', '),
+          }).message,
         };
       }
       const result = await sendMailing(
@@ -3525,7 +3523,7 @@ function setupIpcHandlers() {
   );
 
   // Refusals (built-in kind, kind still used by templates) come back as an
-  // error message the UI shows as it is — they are answers, not crashes.
+  // error message the UI shows in its language — they are answers, not crashes.
   ipcMain.handle(IPC_CHANNELS.MAILING_DELETE_TYP, async (_, id: number) => {
     try {
       await database.deleteMailingTyp(id);
@@ -3673,9 +3671,7 @@ function setupIpcHandlers() {
     const filePath = result.filePaths[0];
     const lista = await parseSprawozdaniaPdf(filePath);
     if (lista.length === 0) {
-      throw new Error(
-        'W tym pliku nie ma sprawozdań z vDom. Wybierz wydruk „RozliczenieWsp” zapisany jako PDF z tekstem (nie skan).',
-      );
+      throw new AppError('sprawozdaniaPdfEmpty');
     }
     return { lista, plikNazwa: path.basename(filePath) };
   };
@@ -3715,7 +3711,7 @@ function setupIpcHandlers() {
   ipcMain.handle(IPC_CHANNELS.SPRAWOZDANIE_EXPORT, async (_, request: SprawozdanieExportRequest) => {
     const row = await database.getSprawozdanie(request.sprawozdanieId);
     const spr = row?.dane;
-    if (!spr) throw new Error('Tego sprawozdania nie ma już w bibliotece — mogło zostać usunięte.');
+    if (!spr) throw new AppError('sprawozdanieGoneFromLibrary');
     // The letterhead names the community as the app knows it, when its vDom
     // number has been matched to one; otherwise as vDom printed it.
     const wspolnota =
@@ -3761,14 +3757,14 @@ function setupIpcHandlers() {
   const sprawozdanieCelu = async (cel: SprawozdanieCel): Promise<ZebranieSprawozdanie> => {
     if ('planId' in cel) {
       const row = await database.getPlanWlasny(cel.planId);
-      if (!row) throw new Error('Tego planu już nie ma — mógł zostać usunięty.');
+      if (!row) throw new AppError('planGone');
       const { od, do: doDnia } = row.plan.sprawozdanieOkres;
       const spr = await database.getSprawozdanieOkresu(row.nrWsp, od, doDnia);
-      if (!spr?.dane) throw new Error('Sprawozdania, z którego powstał ten plan, nie ma w module Sprawozdania.');
+      if (!spr?.dane) throw new AppError('planSprawozdanieMissing');
       return { ...row.sprawozdanie, dane: spr.dane, plikNazwa: spr.plikNazwa, sprawozdanieId: spr.id, dodano: '', dodal: '' };
     }
     const wersja = await database.getZebranieWersja(cel.wersjaId);
-    if (!wersja?.sprawozdanie) throw new Error('Ta wersja nie ma jeszcze sprawozdania.');
+    if (!wersja?.sprawozdanie) throw new AppError('wersjaNoSprawozdanie');
     return wersja.sprawozdanie;
   };
 
@@ -3801,7 +3797,7 @@ function setupIpcHandlers() {
    */
   ipcMain.handle(IPC_CHANNELS.ZEBRANIE_SPRAWOZDANIE_LACZENIA_AI, async (_, target: unknown, rodzaj: SprawozdanieGrupowanie) => {
     const apiKey = converterRegistry.getAnthropicApiKey();
-    if (!apiKey) throw new Error('AI nie jest skonfigurowane — brak klucza API Anthropic.');
+    if (!apiKey) throw new AppError('aiNotConfigured');
     const spr = await sprawozdanieCelu(celSprawozdania(target));
     // Subcategories are made over the merged rows, so they are proposed over them too.
     return rodzaj === 'podkategorie'
@@ -3816,7 +3812,7 @@ function setupIpcHandlers() {
    */
   ipcMain.handle(IPC_CHANNELS.ZEBRANIE_SPRAWOZDANIE_WSTEP_AI, async (_, target: unknown, wskazowki: unknown) => {
     const apiKey = converterRegistry.getAnthropicApiKey();
-    if (!apiKey) throw new Error('AI nie jest skonfigurowane — brak klucza API Anthropic.');
+    if (!apiKey) throw new AppError('aiNotConfigured');
     const spr = await sprawozdanieCelu(celSprawozdania(target));
     return napiszWstepAi(
       sprawozdanieWersji(spr),
@@ -3835,9 +3831,9 @@ function setupIpcHandlers() {
     IPC_CHANNELS.ZEBRANIA_PLAN_ZALICZKA_AI,
     async (_, plan: unknown, rodzaj: unknown, wskazowki: unknown, dataZebrania: unknown) => {
       const apiKey = converterRegistry.getAnthropicApiKey();
-      if (!apiKey) throw new Error('AI nie jest skonfigurowane — brak klucza API Anthropic.');
+      if (!apiKey) throw new AppError('aiNotConfigured');
       const p = normalizePlan(plan);
-      if (!p) throw new Error('Brak planu do policzenia stawki.');
+      if (!p) throw new AppError('planMissingForRate');
       return proponujZaliczkeAi(
         p,
         rodzaj === 'B' ? 'B' : 'A',
@@ -3880,7 +3876,7 @@ function setupIpcHandlers() {
    */
   ipcMain.handle(IPC_CHANNELS.ZEBRANIA_DOKUMENT_EXPORT, async (_, request: ZebranieDokumentRequest) => {
     const wersja = await database.getZebranieWersja(request.wersjaId);
-    if (!wersja) throw new Error('Tej wersji już nie ma — mogła zostać usunięta.');
+    if (!wersja) throw new AppError('wersjaGone');
     const dir = app.getPath('downloads');
     // The community's address for the letterhead — the entry's own, the
     // statement's printed name when the entry has none.
@@ -3888,7 +3884,7 @@ function setupIpcHandlers() {
     let filePath: string;
     if (request.dokument === 'sprawozdanie') {
       const spr = wersja.sprawozdanie ? sprawozdanieWersji(wersja.sprawozdanie) : null;
-      if (!spr) throw new Error('Ta wersja nie ma jeszcze sprawozdania.');
+      if (!spr) throw new AppError('wersjaNoSprawozdanie');
       filePath = await writeSprawozdanie(spr, request.format, {
         adres: zebranie?.adresNazwa || nazwaNieruchomosci(spr.nazwa),
         wstep: request.wstep !== false,
@@ -3896,7 +3892,7 @@ function setupIpcHandlers() {
       });
     } else {
       const plan = wersja.plan;
-      if (!plan) throw new Error('Ta wersja nie ma jeszcze planu gospodarczego.');
+      if (!plan) throw new AppError('wersjaNoPlan');
       const name = nazwaPliku(`Plan gospodarczy ${plan.rok} - ${plan.nieruchomosc}`);
       filePath = uniquePath(dir, `${name}.${request.format}`);
       const ctx = { dataZebrania: request.dataZebrania, adres: zebranie?.adresNazwa || plan.nieruchomosc };
@@ -3937,9 +3933,11 @@ function setupIpcHandlers() {
     ]);
     const hit = planWZebraniach(planyZZebran(zebrania, wspolnoty), nrWsp, rok);
     if (hit) {
-      throw new Error(
-        `Zebrania mają już plan gospodarczy tej wspólnoty na ${rok} rok („${hit.zebranie.nazwa || hit.zebranie.adresNazwa}”, wersja ${wersjaLabel(hit.wersja)}) — to on obowiązuje.`,
-      );
+      throw new AppError('planInZebrania', {
+        rok,
+        zebranie: hit.zebranie.nazwa || hit.zebranie.adresNazwa,
+        wersja: wersjaLabel(hit.wersja),
+      });
     }
   };
 
@@ -3957,7 +3955,7 @@ function setupIpcHandlers() {
     IPC_CHANNELS.PLAN_WLASNY_SET,
     async (_, id: number, plan: PlanGospodarczy, expected?: PlanExpected | null) => {
       const stored = await database.getPlanWlasny(id);
-      if (!stored) throw new Error('Tego planu już nie ma — mógł zostać usunięty.');
+      if (!stored) throw new AppError('planGone');
       await assertPlanNieWZebraniach(stored.nrWsp, plan.rok);
       await database.setPlanWlasny(id, plan, await zebraniaWho(), expected ?? null);
       return true;
@@ -3972,7 +3970,7 @@ function setupIpcHandlers() {
   /** A module plan, or its statement, as PDF or Excel — read from what is stored, not from the screen. */
   ipcMain.handle(IPC_CHANNELS.PLAN_WLASNY_EXPORT, async (_, request: PlanWlasnyExportRequest) => {
     const row = await database.getPlanWlasny(request.planId);
-    if (!row) throw new Error('Tego planu już nie ma — mógł zostać usunięty.');
+    if (!row) throw new AppError('planGone');
     const plan = row.plan;
     const wspolnota = (await database.getZebraniaWspolnoty().catch(() => [])).find((w) => w.vdomNr === row.nrWsp);
     const dokument = request.dokument === 'sprawozdanie' ? 'sprawozdanie' : 'plan';
@@ -4035,7 +4033,7 @@ function setupIpcHandlers() {
     const filePath = result.filePaths[0];
     const { rekordy, pominiete } = parsePodatkiXlsx(fs.readFileSync(filePath));
     if (rekordy.length === 0) {
-      throw new Error('W tym pliku nie ma żadnej wspólnoty z NIP-em i rokiem — nic nie zaimportowano.');
+      throw new AppError('dn1ImportEmpty');
     }
     const { dodane, istniejace } = await database.addPodatkiNieruchomosciBrakujace(rekordy, await zebraniaWho());
     log.info(`[PODATKI] imported ${dodane}/${rekordy.length} declarations from ${path.basename(filePath)}`);
@@ -4072,9 +4070,7 @@ function setupIpcHandlers() {
     const folder = database.getSettings().podatkiFolder ?? '';
     if (!folder) return null;
     if (!fs.existsSync(folder)) {
-      throw new Error(
-        `Folder na deklaracje ustawiony w Ustawieniach nie istnieje: ${folder}. Podłącz dysk albo zmień folder w Ustawieniach.`,
-      );
+      throw new AppError('podatkiFolderMissing', { folder });
     }
     const rokFolder = path.join(folder, `${prefiks} ${rok}`);
     fs.mkdirSync(rokFolder, { recursive: true });
@@ -4084,7 +4080,7 @@ function setupIpcHandlers() {
   /** One declaration as PDF — read from the stored data, not from the screen. */
   ipcMain.handle(IPC_CHANNELS.PODATKI_NIER_PDF, async (_, id: number) => {
     const rek = await database.getPodatekNieruchomosci(id);
-    if (!rek) throw new Error('Tej deklaracji już nie ma — mogła zostać usunięta.');
+    if (!rek) throw new AppError('dn1Gone');
     const bytes = await dn1Pdf({ nip: rek.nip, rok: rek.rok, dane: rek.dane, stawki: await stawkiRoku(rek.rok) });
     const filePath = uniquePath(podatkiRokFolder(rek.rok) ?? app.getPath('downloads'), podatekPlik(rek));
     fs.writeFileSync(filePath, bytes);
@@ -4109,7 +4105,7 @@ function setupIpcHandlers() {
    */
   ipcMain.handle(IPC_CHANNELS.PODATKI_NIER_PODPISZ, async (_, id: number, wybor: PodpisWybor) => {
     const rek = await database.getPodatekNieruchomosci(id);
-    if (!rek) throw new Error('Tej deklaracji już nie ma — mogła zostać usunięta.');
+    if (!rek) throw new AppError('dn1Gone');
     // Before the PIN: a missing folder must not cost a signature.
     const dir = podatkiRokFolder(rek.rok) ?? app.getPath('downloads');
     const bytes = await dn1Pdf({
@@ -4189,7 +4185,7 @@ function setupIpcHandlers() {
         slad = podpis;
         for (const rek of gotowe) {
           if (podpisyPrzerwane) {
-            przerwano = 'Podpisywanie przerwane na Twoje polecenie.';
+            przerwano = errorTextIn(database, new AppError('podpisStopped'));
             break;
           }
           postep(przetworzone, nazwa(rek));
@@ -4206,10 +4202,10 @@ function setupIpcHandlers() {
           } catch (error: unknown) {
             if (error instanceof BladKarty) {
               if (podpisane.length === 0) throw error;
-              przerwano = error.message;
+              przerwano = errorTextIn(database, error);
               break;
             }
-            pominiete.push({ id: rek.id, nazwa: nazwa(rek), powod: error instanceof Error ? error.message : String(error) });
+            pominiete.push({ id: rek.id, nazwa: nazwa(rek), powod: errorTextIn(database, error) });
           }
           przetworzone += 1;
         }
@@ -4270,7 +4266,7 @@ function setupIpcHandlers() {
             log.warn('[PODATKI] download not recorded:', error instanceof Error ? error.message : error);
           });
         } catch (error: unknown) {
-          pominiete.push({ nazwa, powod: error instanceof Error ? error.message : String(error) });
+          pominiete.push({ nazwa, powod: errorTextIn(database, error) });
         }
       }
       log.info(`[PODATKI] ${zapisane}/${rekordy.length} declarations of ${rok} saved to ${folder}`);
@@ -4338,7 +4334,7 @@ function setupIpcHandlers() {
     IPC_CHANNELS.PODATKI_CIT_KLASYFIKUJ_AI,
     async (_, pozycje: CitAiPozycja[], przyklady?: CitAiPrzyklad[]) => {
       const apiKey = converterRegistry.getAnthropicApiKey();
-      if (!apiKey) throw new Error('AI nie jest skonfigurowane — brak klucza API Anthropic.');
+      if (!apiKey) throw new AppError('aiNotConfigured');
       const lista = (Array.isArray(pozycje) ? pozycje : []).filter(
         (p) => p && typeof p.klucz === 'string' && typeof p.nazwa === 'string' && (p.strona === 'przychod' || p.strona === 'koszt'),
       );
@@ -4373,7 +4369,7 @@ function setupIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_PDF, async (_, id: number) => {
     const rek = await database.getPodatekCit(id);
-    if (!rek) throw new Error('Tego zeznania już nie ma — mogło zostać usunięte.');
+    if (!rek) throw new AppError('citGone');
     const bytes = await citBytes(rek);
     const filePath = uniquePath(podatkiRokFolder(rek.rok, 'CIT-8') ?? app.getPath('downloads'), citPlik(rek));
     fs.writeFileSync(filePath, bytes);
@@ -4384,7 +4380,7 @@ function setupIpcHandlers() {
   /** The XML of one return as e-Deklaracje takes it, unsigned — next to its PDF. */
   ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_XML, async (_, id: number) => {
     const rek = await database.getPodatekCit(id);
-    if (!rek) throw new Error('Tego zeznania już nie ma — mogło zostać usunięte.');
+    if (!rek) throw new AppError('citGone');
     const xml = cit8Xml({ rok: rek.rok, dane: rek.dane, slownik: await citSlownik() });
     const filePath = uniquePath(podatkiRokFolder(rek.rok, 'CIT-8') ?? app.getPath('downloads'), citPlik(rek, '', 'xml'));
     fs.writeFileSync(filePath, xml, 'utf8');
@@ -4422,7 +4418,8 @@ function setupIpcHandlers() {
       opis: string,
       extra: Pick<PodatkiWysylkaWynik, 'niepewna' | 'niezapisana'> = {},
     ): PodatkiWysylkaWynik => ({ id: rek.id, nazwa, srodowisko, refId, status, opis, ...extra });
-    const blad = (error: unknown) => (error instanceof Error ? error.message : String(error));
+    // Stored on the return, worded in Polish like the gateway's own answers around it.
+    const blad = (error: unknown) => localizeErrorMessage(error instanceof Error ? error.message : String(error), 'pl');
     const prod = srodowisko === 'prod';
     // The purpose the signed XML carries — the return may have been edited since.
     const cel = rek.dane.cel;
@@ -4575,7 +4572,7 @@ function setupIpcHandlers() {
               zmiana: status !== w.status,
             });
           } catch (error: unknown) {
-            bledy.push({ id: rek.id, nazwa, powod: error instanceof Error ? error.message : String(error) });
+            bledy.push({ id: rek.id, nazwa, powod: errorTextIn(database, error) });
           }
         }
       }
@@ -4664,9 +4661,9 @@ function setupIpcHandlers() {
   /** "Pobierz UPO": the UPO kept on a send, written into the year's folder (or found there) — its path. */
   ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_UPO_POBIERZ, async (_, id: number, refId: string) => {
     const rek = await database.getPodatekCit(id);
-    if (!rek) throw new Error('Tego zeznania już nie ma — mogło zostać usunięte.');
+    if (!rek) throw new AppError('citGone');
     const w = rek.dane.wysylki.find((x) => x.refId === refId);
-    if (!w?.upo?.tresc) throw new Error('Ta wysyłka nie ma jeszcze UPO.');
+    if (!w?.upo?.tresc) throw new AppError('citUpoMissing');
     return { filePath: zapiszUpoPlik(rek, w, w.upo.tresc) };
   });
 
@@ -4676,7 +4673,7 @@ function setupIpcHandlers() {
    * longer waited for. Found by its `at` — an uncertain send has no refId. The return as it now is.
    */
   ipcMain.handle(IPC_CHANNELS.PODATKI_CIT_WYSYLKA_ROZSTRZYGNIJ, async (_, id: number, at: string, jak: unknown) => {
-    if (jak !== 'nie_dotarla' && jak !== 'dotarla' && jak !== 'porzucona') throw new Error('Nieznane rozstrzygnięcie wysyłki.');
+    if (jak !== 'nie_dotarla' && jak !== 'dotarla' && jak !== 'porzucona') throw new AppError('citSettlementUnknown');
     const rek = await database.rozstrzygnijPodatekCitWysylke(id, String(at), jak, await zebraniaWho());
     log.info(`[CIT] send ${at} of return ${id} settled by hand: ${jak}`);
     return rek;
@@ -4754,7 +4751,7 @@ function setupIpcHandlers() {
         slad = podpis;
         for (const rek of gotowe) {
           if (citPodpisyPrzerwane) {
-            przerwano = 'Podpisywanie przerwane na Twoje polecenie.';
+            przerwano = errorTextIn(database, new AppError('podpisStopped'));
             break;
           }
           postep(przetworzone, nazwa(rek));
@@ -4787,17 +4784,14 @@ function setupIpcHandlers() {
           } catch (error: unknown) {
             if (error instanceof BladKarty) {
               if (podpisaneZeznania === 0) throw error;
-              przerwano = error.message;
+              przerwano = errorTextIn(database, error);
               break;
             }
-            const powod = error instanceof Error ? error.message : String(error);
+            const powod = errorTextIn(database, error);
             pominiete.push({
               id: rek.id,
               nazwa: nazwa(rek),
-              powod:
-                etap === 'pdf'
-                  ? `Nie udało się podpisać PDF (${powod}) — zeznania nie zapisano ani nie wysłano. Spróbuj ponownie albo bez podpisanego PDF.`
-                  : powod,
+              powod: etap === 'pdf' ? errorTextIn(database, new AppError('citPdfSignFailed', { detail: powod })) : powod,
             });
           }
           przetworzone += 1;
@@ -4871,7 +4865,7 @@ function setupIpcHandlers() {
             await zapisz(rek, citPlik(rek), await cit8Pdf({ rok, dane: rek.dane, slownik }));
             cos = true;
           } catch (error: unknown) {
-            powody.push(error instanceof Error ? error.message : String(error));
+            powody.push(errorTextIn(database, error));
           }
         }
         if (tryb !== 'pdf') {
@@ -4879,7 +4873,7 @@ function setupIpcHandlers() {
             await zapisz(rek, citPlik(rek, '', 'xml'), cit8Xml({ rok, dane: rek.dane, slownik }));
             cos = true;
           } catch (error: unknown) {
-            powody.push(error instanceof Error ? error.message : String(error));
+            powody.push(errorTextIn(database, error));
           }
         }
         if (cos) zapisane += 1;
@@ -4936,7 +4930,10 @@ function setupIpcHandlers() {
       return {
         rozmiar: 0,
         strony: null,
-        blokada: brak ? 'Nie ma takiego pliku — mógł zostać przeniesiony.' : `Nie udało się odczytać pliku: ${error instanceof Error ? error.message : String(error)}`,
+        blokada: (brak
+          ? new AppError('podpisFileMissing')
+          : new AppError('podpisFileUnreadable', { detail: error instanceof Error ? error.message : String(error) })
+        ).message,
       };
     }
   });
@@ -5290,13 +5287,8 @@ function setupIpcHandlers() {
   ipcMain.handle(IPC_CHANNELS.KALENDARZ_PDF_EXPORT, async (_, request: KalendarzPdfRequest) => {
     const problem = kalendarzOkresProblem(request?.okresOd, request?.okresDo);
     if (problem) {
-      throw new Error(
-        {
-          format: 'Nieprawidłowy okres.',
-          kolejnosc: 'Data końca okresu jest wcześniejsza niż data początku.',
-          'za-dlugi': `Okres może obejmować najwyżej ${KALENDARZ_PDF_MAX_MIESIECY} miesiące.`,
-        }[problem],
-      );
+      if (problem === 'za-dlugi') throw new AppError('kalendarzPeriodTooLong', { max: KALENDARZ_PDF_MAX_MIESIECY });
+      throw new AppError(problem === 'format' ? 'kalendarzPeriodInvalid' : 'kalendarzPeriodReversed');
     }
     const [spotkania, typy, lokalizacje, session] = await Promise.all([
       database.getSpotkania(),

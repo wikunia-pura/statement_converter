@@ -29,7 +29,7 @@ const Login: React.FC<LoginProps> = ({ onSignedIn, notice, language = 'pl' }) =>
       if (result.ok) {
         onSignedIn();
       } else {
-        setError(result.error);
+        setError(ipcErrorMessage(result.error, t.loginUnknownError));
       }
     } catch (err) {
       setError(ipcErrorMessage(err, t.loginUnknownError));

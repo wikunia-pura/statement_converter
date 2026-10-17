@@ -6,15 +6,16 @@
 
 import nodemailer, { Transporter } from 'nodemailer';
 import { MailingAttachment, MailingSmtpConfig } from '../../shared/types';
+import { AppError } from '../../shared/app-errors';
 
 export type SmtpCredentials = MailingSmtpConfig & { pass: string };
 
-/** Everything missing before a send can even be attempted, in Polish. */
+/** Everything missing before a send can even be attempted, as a coded refusal's message. */
 export function validateSmtp(config: SmtpCredentials): string | null {
-  if (!config.host.trim()) return 'Brak serwera SMTP (Ustawienia → Skrzynka do wysyłki).';
-  if (!config.user.trim()) return 'Brak adresu e-mail nadawcy (Ustawienia → Skrzynka do wysyłki).';
-  if (!config.pass) return 'Brak hasła do skrzynki (Ustawienia → Skrzynka do wysyłki).';
-  if (!Number.isFinite(config.port) || config.port <= 0) return 'Nieprawidłowy port SMTP.';
+  if (!config.host.trim()) return new AppError('smtpHostMissing').message;
+  if (!config.user.trim()) return new AppError('smtpUserMissing').message;
+  if (!config.pass) return new AppError('smtpPasswordMissing').message;
+  if (!Number.isFinite(config.port) || config.port <= 0) return new AppError('smtpPortInvalid').message;
   return null;
 }
 

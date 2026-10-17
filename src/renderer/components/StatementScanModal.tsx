@@ -180,7 +180,7 @@ const StatementScanModal: React.FC<{
               ? t.ksScanErrMissing.replace('{folder}', result.folder ?? '')
               : result.error === 'busy'
                 ? t.ksScanErrBusy
-                : `${t.ksScanErrGeneric}: ${result.error}`,
+                : `${t.ksScanErrGeneric}: ${ipcErrorMessage(result.error, t.errorUnexpected)}`,
         );
         setStep('setup');
         return;
@@ -590,7 +590,7 @@ const StatementScanModal: React.FC<{
                 <li key={f.relPath} className="ks-rep-file">
                   <div className="ks-rep-file__main">
                     <div className="ks-rep-file__name">{f.relPath}</div>
-                    <div className="ks-rep-file__error">{f.message}</div>
+                    <div className="ks-rep-file__error">{ipcErrorMessage(f.message, f.message)}</div>
                   </div>
                 </li>
               ))}

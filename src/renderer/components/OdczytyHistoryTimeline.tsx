@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { OdczytyHistoryEntry } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { localizeErrorMessage } from '../../shared/app-errors';
 import { localeOf } from '../../shared/format';
 import { useNotify } from './Notifications';
 import Icon from './Icon';
@@ -68,7 +69,7 @@ const OdczytyHistoryTimeline: React.FC<Props> = ({
         entry.supplier,
         entry.status,
         entry.status === 'success' ? t.success : t.error,
-        entry.errorMessage,
+        entry.errorMessage && localizeErrorMessage(entry.errorMessage, language),
         entry.outputDir,
         ...entry.sources.map((s) => s.fileName),
         ...entry.outputs.map((o) => `${o.wm} ${o.fileName} ${o.date}`),
@@ -80,7 +81,7 @@ const OdczytyHistoryTimeline: React.FC<Props> = ({
         .toLowerCase();
       return terms.every((term) => haystack.includes(term));
     });
-  }, [history, searchTerm, t, locale]);
+  }, [history, searchTerm, t, locale, language]);
 
   const days = useMemo<DayGroup[]>(() => {
     const dayMap = new Map<string, OdczytyHistoryEntry[]>();
@@ -349,7 +350,7 @@ const OdczytyHistoryTimeline: React.FC<Props> = ({
                                 </div>
 
                                 {entry.status === 'error' && entry.errorMessage && (
-                                  <div className="history-entry-error">{entry.errorMessage}</div>
+                                  <div className="history-entry-error">{localizeErrorMessage(entry.errorMessage, language)}</div>
                                 )}
 
                                 {entry.outputs.length > 0 && (

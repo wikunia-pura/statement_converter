@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ConversionHistory } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { localizeErrorMessage } from '../../shared/app-errors';
 import { localeOf } from '../../shared/format';
 import { useNotify } from './Notifications';
 import Icon from './Icon';
@@ -101,7 +102,7 @@ const ConversionHistoryTimeline: React.FC<ConversionHistoryTimelineProps> = ({
         entry.converterName,
         entry.status,
         statusLabel,
-        entry.errorMessage,
+        entry.errorMessage && localizeErrorMessage(entry.errorMessage, language),
         entry.inputPath,
         entry.outputPath,
         entry.convertedAt,
@@ -112,7 +113,7 @@ const ConversionHistoryTimeline: React.FC<ConversionHistoryTimelineProps> = ({
         .toLowerCase();
       return terms.every((term) => haystack.includes(term));
     });
-  }, [history, searchTerm, t, locale]);
+  }, [history, searchTerm, t, locale, language]);
 
   // Group filtered entries by day → bank, both ordered most-recent-first.
   const days = useMemo<DayGroup[]>(() => {
@@ -336,7 +337,7 @@ const ConversionHistoryTimeline: React.FC<ConversionHistoryTimelineProps> = ({
                                     <span className="history-entry-converter">{entry.converterName}</span>
                                   )}
                                   {entry.status === 'error' && entry.errorMessage && (
-                                    <span className="history-entry-error">{entry.errorMessage}</span>
+                                    <span className="history-entry-error">{localizeErrorMessage(entry.errorMessage, language)}</span>
                                   )}
                                 </div>
                                 <span

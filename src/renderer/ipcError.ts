@@ -5,10 +5,10 @@
  * does. Every `notify.error` fed from a caught IPC error goes through this.
  *
  * A refusal the main process raised as an `AppError` (shared/app-errors.ts)
- * carries a code: it is shown in the app's language, and `ipcErrorCode` lets a
+ * carries a code: it is shown in the app's language, and `isIpcError` lets a
  * view react to one refusal (a save conflict) without matching its text.
  */
-import { AppErrorCode, hasAppErrorCode, localizeErrorMessage, parseAppError } from '../shared/app-errors';
+import { AppErrorCode, hasAppErrorCode, localizeEmbeddedErrors, localizeErrorMessage } from '../shared/app-errors';
 import type { Language } from './translations';
 
 const ELECTRON_PREFIX = /^Error invoking remote method '[^']*': (?:Error: )?/;
@@ -31,9 +31,13 @@ export function ipcErrorMessage(err: unknown, fallback: string): string {
   return localizeErrorMessage(raw.replace(ELECTRON_PREFIX, ''), errorLanguage).trim() || fallback;
 }
 
-/** The code of a coded refusal (`AppError` in main), or null for any other failure. */
-export function ipcErrorCode(err: unknown): AppErrorCode | null {
-  return parseAppError(rawMessage(err))?.code ?? null;
+/**
+ * A text about to be shown, with any coded refusal inside it worded in the
+ * app's language — the notifications' last guard, so a message built from a
+ * raw `err.message` never shows the code marker.
+ */
+export function shownText(text: string): string {
+  return localizeEmbeddedErrors(text, errorLanguage);
 }
 
 /** Whether the failure is the main process's refusal `code`. */

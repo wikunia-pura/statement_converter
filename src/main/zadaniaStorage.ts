@@ -5,6 +5,7 @@ import log from 'electron-log';
 import { getSupabase } from './supabaseClient';
 import { ZadanieZalacznik } from '../shared/types';
 import { ZADANIE_ATTACHMENT_MAX_BYTES, ZADANIE_STORAGE_KEY } from '../shared/zadania';
+import { AppError } from '../shared/app-errors';
 
 /** Private bucket created by supabase/zadania-termin-zalaczniki.sql. */
 export const ZADANIA_BUCKET = 'zadania-zalaczniki';
@@ -63,7 +64,7 @@ export async function uploadAttachment(filePath: string, who: string): Promise<Z
 }
 
 export async function downloadAttachment(sciezka: string): Promise<Buffer> {
-  if (!ZADANIE_STORAGE_KEY.test(sciezka)) throw new Error('Nieprawidłowy załącznik.');
+  if (!ZADANIE_STORAGE_KEY.test(sciezka)) throw new AppError('zalacznikInvalid');
   const { data, error } = await getSupabase().storage.from(ZADANIA_BUCKET).download(sciezka);
   if (error || !data) throw new Error(`downloadAttachment: ${error?.message ?? 'brak danych'}`);
   return Buffer.from(await data.arrayBuffer());

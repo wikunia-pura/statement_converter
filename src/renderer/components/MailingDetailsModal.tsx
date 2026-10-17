@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { MailingHistoryEntry, MailingTypDef } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { localizeErrorMessage } from '../../shared/app-errors';
 import { useNotify } from './Notifications';
 import Icon from './Icon';
 import { FormSection } from './FormSection';
@@ -92,11 +93,11 @@ const MailingDetailsModal: React.FC<DetailsModalProps> = ({ entry, language, onC
                   </span>
                 ) : (
                   <span className="result-status is-error">
-                    <Icon name="x-circle" size={14} /> {entry.errorMessage ?? t.mailingStatusError}
+                    <Icon name="x-circle" size={14} /> {entry.errorMessage ? localizeErrorMessage(entry.errorMessage, language) : t.mailingStatusError}
                   </span>
                 )}
                 {entry.status === 'success' && entry.errorMessage && (
-                  <div className="form-field__error">{entry.errorMessage}</div>
+                  <div className="form-field__error">{localizeErrorMessage(entry.errorMessage, language)}</div>
                 )}
               </dd>
             </dl>

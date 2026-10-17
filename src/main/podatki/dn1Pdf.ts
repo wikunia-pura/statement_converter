@@ -33,6 +33,7 @@ import { DN1_PDF_BASE64, ZDN1_PDF_BASE64 } from './dn1Wzory';
 import { ARIMO_TTF_BASE64 } from './dn1Font';
 import { DN1, ZDN1 } from './dn1Layout';
 import { Pole, Strona, ZNAK_KRATKI_DN1, dataNaKratki, duze } from './formularz';
+import { AppError } from '../../shared/app-errors';
 
 export interface DN1Wejscie {
   nip: string;
@@ -51,9 +52,7 @@ export async function dn1Pdf(we: DN1Wejscie): Promise<Uint8Array> {
   const { nip, rok, dane: d, stawki } = we;
   const problemy = problemyDN1({ nip, dane: d }, stawki);
   if (problemy.length > 0) {
-    throw new Error(
-      `Deklaracji nie da się jeszcze wydrukować: ${problemy.map((p) => opisProblemu(p, rok)).join('; ')}.`
-    );
+    throw new AppError('dn1PrintBlocked', { problems: problemy.map((p) => opisProblemu(p, rok)).join('; ') });
   }
   const wynik = obliczDN1(d, stawki);
 

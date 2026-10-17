@@ -41,6 +41,8 @@ import { wczytajPit, zastosujZmianyPit, zbudujSzablonPit } from './pitExcel';
 import { podpiszXml } from '../podpis/xades';
 import { podpiszPdf } from '../podpis/pades';
 import { BladKarty, zKartaDoPodpisu } from '../podpis/karta';
+import { AppError } from '../../shared/app-errors';
+import { errorTextIn } from '../errorText';
 
 export interface PitDeps {
   getMainWindow: () => BrowserWindow | null;
@@ -182,7 +184,7 @@ export function registerPitHandlers(deps: PitDeps): void {
     const folder = wybor.filePaths[0];
     const wynik = await importujPitFolder(folder, rok);
     if (wynik.wiersze.length === 0) {
-      throw new Error(`W tym folderze nie ma żadnego PIT-11 ani PIT-4R za ${rok} — nic nie zaimportowano.`);
+      throw new AppError('pitImportEmpty', { rok });
     }
     const { dodane, istniejace } = await database.addPodatkiPitBrakujace(wynik.wiersze, await deps.who());
     const osoby = wynik.wiersze.reduce((n, w) => n + w.dane.osoby.length, 0);
@@ -205,7 +207,7 @@ export function registerPitHandlers(deps: PitDeps): void {
 
   ipcMain.handle(IPC_CHANNELS.PODATKI_PIT_EXCEL_SZABLON, async (_, rok: number) => {
     const wiersze = await database.getPodatkiPit();
-    if (!wiersze.some(w => w.rok === rok)) throw new Error(`Rok ${rok} nie ma jeszcze żadnej wspólnoty — najpierw przenieś go z poprzedniego roku.`);
+    if (!wiersze.some(w => w.rok === rok)) throw new AppError('pitYearEmpty', { rok });
     const bufor = await zbudujSzablonPit(wiersze, rok);
     const wybor = await dialog.showSaveDialog(deps.getMainWindow()!, {
       title: 'Szablon kwot PIT',
@@ -259,7 +261,7 @@ export function registerPitHandlers(deps: PitDeps): void {
     async (_, rok: number, ids: string[], tryb: 'xml' | 'pdf' | 'oba'): Promise<PodatkiPitPlikiResult> => {
       const wiersze = await database.getPodatkiPit();
       const { dokumenty, brak } = dokumentyZIdow(wiersze, rok, ids);
-      const pominiete: PodatkiPitPlikiResult['pominiete'] = brak.map(id => ({ id, nazwa: id, powod: 'Tego dokumentu już nie ma.' }));
+      const pominiete: PodatkiPitPlikiResult['pominiete'] = brak.map(id => ({ id, nazwa: id, powod: errorTextIn(database, new AppError('pitDocumentGone')) }));
       const zapisane: PodatkiPitPlikiResult['zapisane'] = [];
       const gotowe = dokumenty.filter(d => {
         if (!maBlad(d.problemy)) return true;
@@ -293,7 +295,7 @@ export function registerPitHandlers(deps: PitDeps): void {
             wpisy.set(d.wiersz.id, lista);
           }
         } catch (error: unknown) {
-          pominiete.push({ id: d.id, nazwa: d.nazwa, powod: error instanceof Error ? error.message : String(error) });
+          pominiete.push({ id: d.id, nazwa: d.nazwa, powod: errorTextIn(database, error) });
         }
       }
       for (const [wierszId, lista] of wpisy) {
@@ -333,7 +335,7 @@ export function registerPitHandlers(deps: PitDeps): void {
       przerwane = false;
       const wiersze = await database.getPodatkiPit();
       const { dokumenty, brak } = dokumentyZIdow(wiersze, rok, ids);
-      const pominiete: PodatkiPitPlikiResult['pominiete'] = brak.map(id => ({ id, nazwa: id, powod: 'Tego dokumentu już nie ma.' }));
+      const pominiete: PodatkiPitPlikiResult['pominiete'] = brak.map(id => ({ id, nazwa: id, powod: errorTextIn(database, new AppError('pitDocumentGone')) }));
       const gotowe = dokumenty.filter(d => {
         if (!maBlad(d.problemy)) return true;
         pominiete.push({ id: d.id, nazwa: d.nazwa, powod: powod(d) });
@@ -361,7 +363,7 @@ export function registerPitHandlers(deps: PitDeps): void {
         slad = podpis;
         for (const d of gotowe) {
           if (przerwane) {
-            przerwano = 'Podpisywanie przerwane na Twoje polecenie.';
+            przerwano = errorTextIn(database, new AppError('podpisStopped'));
             break;
           }
           postep(przetworzone, d.nazwa);
@@ -395,10 +397,10 @@ export function registerPitHandlers(deps: PitDeps): void {
           } catch (error: unknown) {
             if (error instanceof BladKarty) {
               if (podpisane === 0) throw error;
-              przerwano = error.message;
+              przerwano = errorTextIn(database, error);
               break;
             }
-            pominiete.push({ id: d.id, nazwa: d.nazwa, powod: error instanceof Error ? error.message : String(error) });
+            pominiete.push({ id: d.id, nazwa: d.nazwa, powod: errorTextIn(database, error) });
           }
           przetworzone += 1;
         }

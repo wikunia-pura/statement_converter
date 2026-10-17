@@ -23,6 +23,7 @@ import {
   PitDane,
 } from '../../shared/podatki-pit';
 import { Wezel, duze, el, gr, kwota2, kwotaC, zlozXml } from './eDeklaracjeXml';
+import { AppError } from '../../shared/app-errors';
 
 function naglowek(
   wzor: PitWzor['pit11'],
@@ -81,15 +82,16 @@ export function pit11Xml(we: Pit11XmlWejscie): string {
   const { rok, platnik, osoba: o } = we;
   const problemy = problemyOsoby(o, rok);
   if (maBlad(problemy)) {
-    throw new Error(
-      `PIT-11 nie da się jeszcze wygenerować (${nazwaOsoby(o)}): ${problemy
+    throw new AppError('pit11XmlBlocked', {
+      osoba: nazwaOsoby(o),
+      problems: problemy
         .filter((p) => p.poziom === 'blad')
         .map((p) => p.tekst)
-        .join('; ')}`,
-    );
+        .join('; '),
+    });
   }
   const wzor = pitWzor(rok);
-  if (!wzor) throw new Error(`Dla roku ${rok} nie ma wzoru PIT-11 w aplikacji.`);
+  if (!wzor) throw new AppError('pit11NoWzor', { rok });
   const w = wzor.pit11;
   const k = obliczOsobe(o);
 
@@ -180,10 +182,10 @@ export function pit4rXml(we: Pit4RXmlWejscie): string {
   const dane: PitDane = { nazwa: platnik.nazwa, urzadPlatnika, osoby: [], pit4r: p };
   const problemy = problemyPit4R(dane, rok).filter((x) => x.poziom === 'blad');
   if (problemy.length > 0) {
-    throw new Error(`PIT-4R nie da się jeszcze wygenerować: ${problemy.map((x) => x.tekst).join('; ')}`);
+    throw new AppError('pit4rXmlBlocked', { problems: problemy.map((x) => x.tekst).join('; ') });
   }
   const wzor = pitWzor(rok);
-  if (!wzor) throw new Error(`Dla roku ${rok} nie ma wzoru PIT-4R w aplikacji.`);
+  if (!wzor) throw new AppError('pit4rNoWzor', { rok });
   const w = wzor.pit4r;
   const k = obliczPit4R(p);
 

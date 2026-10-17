@@ -13,6 +13,7 @@ import fs from 'fs';
 import path from 'path';
 import { writeFileWin1250 } from '../../shared/encoding';
 import { OdczytReading } from './parser';
+import { AppError } from '../../shared/app-errors';
 
 export interface OdczytyOutputFile {
   wm: string;
@@ -69,10 +70,10 @@ export function writeOdczytyFiles(
   outputDir: string,
 ): OdczytyOutputFile[] {
   if (readings.length === 0) {
-    throw new Error('Plik nie zawiera żadnych odczytów do zapisania.');
+    throw new AppError('odczytyNothingToWrite');
   }
   if (!outputDir) {
-    throw new Error('Folder IMPEX nie jest skonfigurowany (Ustawienia → Folder IMPEX).');
+    throw new AppError('impexFolderNotSet');
   }
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });

@@ -233,7 +233,7 @@ const ZebranieUchwaly: React.FC<{
     try {
       const result = await downloadUchwalaPdf(zebranie, wersja, dane, row.u, userEmail, zebranieCtx);
       if (!result.ok) {
-        notify.error(result.error, t.zfinDownloadError);
+        notify.error(ipcErrorMessage(result.error, t.errorUnexpected), t.zfinDownloadError);
         return;
       }
       notify.success(

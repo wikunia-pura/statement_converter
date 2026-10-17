@@ -141,7 +141,7 @@ import {
   zrodloSzablonu,
 } from '../shared/zebrania';
 import { randomUUID } from 'crypto';
-import { AppError } from '../shared/app-errors';
+import { AppError, type AppErrorCode } from '../shared/app-errors';
 import { getSupabase, onTableWrite } from './supabaseClient';
 import { removeAttachments } from './zadaniaStorage';
 import { ZADANIE_ATTACHMENT_MAX_BYTES, ZADANIE_STORAGE_KEY, isValidDayKey } from '../shared/zadania';
@@ -677,7 +677,7 @@ class DatabaseService {
       })
       .select(BANK_COLS)
       .single();
-    if ((error as { code?: string } | null)?.code === '23505') throw new Error(DatabaseService.BANK_TAKEN);
+    if ((error as { code?: string } | null)?.code === '23505') throw new AppError('bankTaken');
     const bank = unwrap(data, error, 'addBank') as Bank;
     this.invalidateCache('banks');
     return bank;
@@ -697,14 +697,10 @@ class DatabaseService {
         account_prefixes: accountPrefixes ?? [],
       })
       .eq('id', id);
-    if ((error as { code?: string } | null)?.code === '23505') throw new Error(DatabaseService.BANK_TAKEN);
+    if ((error as { code?: string } | null)?.code === '23505') throw new AppError('bankTaken');
     if (error) throw new Error(`updateBank: ${error.message}`);
     this.invalidateCache('banks');
   }
-
-  /** What a second bank (or community, below) of one name hits once unikalne-nazwy.sql has run. */
-  private static readonly BANK_TAKEN = 'Bank o tej nazwie już istnieje.';
-  private static readonly ADRES_TAKEN = 'Wspólnota o tej nazwie już istnieje.';
 
   async deleteBank(id: number): Promise<void> {
     const { error } = await getSupabase().from('banks').delete().eq('id', id);
@@ -899,7 +895,7 @@ class DatabaseService {
     const canonical: string[] = [];
     for (const value of raw) {
       const norm = normalizeAccount(value);
-      if (!norm) throw new Error(`Nieprawidłowy numer konta: "${value}" (oczekiwano 26 cyfr).`);
+      if (!norm) throw new AppError('accountNumberInvalid', { value: String(value) });
       if (!canonical.includes(norm)) canonical.push(norm);
     }
 
@@ -909,9 +905,7 @@ class DatabaseService {
         a => a.id !== excludeAdresId && (a.accountNumbers ?? []).some(x => normalizeAccount(x) === acc),
       );
       if (owner) {
-        throw new Error(
-          `Numer konta ${acc} jest już przypisany do adresu „${owner.nazwa}". Jedno konto może należeć tylko do jednego adresu.`,
-        );
+        throw new AppError('accountNumberTaken', { account: acc, adres: owner.nazwa });
       }
     }
     return canonical;
@@ -996,7 +990,7 @@ class DatabaseService {
       })
       .select(ADRES_COLS)
       .single();
-    if ((error as { code?: string } | null)?.code === '23505') throw new Error(DatabaseService.ADRES_TAKEN);
+    if ((error as { code?: string } | null)?.code === '23505') throw new AppError('adresTaken');
     const adres = unwrap(data, error, 'addAdres') as Adres;
     this.invalidateCache('adresy');
     return adres;
@@ -1096,7 +1090,7 @@ class DatabaseService {
       patch.apartment_mappings = this.sanitizeApartmentMappings(apartmentMappings);
     }
     const { error } = await getSupabase().from('adresy').update(patch).eq('id', id);
-    if ((error as { code?: string } | null)?.code === '23505') throw new Error(DatabaseService.ADRES_TAKEN);
+    if ((error as { code?: string } | null)?.code === '23505') throw new AppError('adresTaken');
     if (error) throw new Error(`updateAdres: ${error.message}`);
     this.invalidateCache('adresy');
   }
@@ -1425,7 +1419,7 @@ class DatabaseService {
     const { data, error } = await query.select('id');
     if (error) {
       if (missingColumn(error.message, ['odrzucone_at', 'odrzucone_by'])) {
-        throw new Error('Brak kolumny odrzucone_at — uruchom supabase/ksiegowania-odrzucone.sql');
+        throw new AppError('ksDiscardColumnMissing');
       }
       throw new Error(`setKsiegowanieDiscarded: ${error.message}`);
     }
@@ -1690,7 +1684,7 @@ class DatabaseService {
     email: string,
   ): Promise<ZgnPelnomocnik> {
     const name = (imieNazwisko ?? '').trim();
-    if (!name) throw new Error('Pełnomocnik musi mieć imię i nazwisko.');
+    if (!name) throw new AppError('pelnomocnikNameRequired');
     const { data, error } = await getSupabase()
       .from('zgn_pelnomocnicy')
       .insert({ jednostka_id: jednostkaId, imie_nazwisko: name, email: (email ?? '').trim() })
@@ -1701,7 +1695,7 @@ class DatabaseService {
 
   async updateZgnPelnomocnik(id: number, imieNazwisko: string, email: string): Promise<void> {
     const name = (imieNazwisko ?? '').trim();
-    if (!name) throw new Error('Pełnomocnik musi mieć imię i nazwisko.');
+    if (!name) throw new AppError('pelnomocnikNameRequired');
     const { error } = await getSupabase()
       .from('zgn_pelnomocnicy')
       .update({ imie_nazwisko: name, email: (email ?? '').trim() })
@@ -1820,7 +1814,7 @@ class DatabaseService {
 
   async addMailingTyp(nazwa: string, opis: string, adresaci: MailingAdresaci): Promise<MailingTypDef> {
     const name = (nazwa ?? '').trim();
-    if (!name) throw new Error('Typ mailingu musi mieć nazwę.');
+    if (!name) throw new AppError('mailingTypNameRequired');
     const { data, error } = await getSupabase()
       .from('mailing_typy')
       .insert({
@@ -1853,7 +1847,7 @@ class DatabaseService {
     if (readError) throw new Error(`updateMailingTyp (odczyt): ${readError.message}`);
     const systemowy = (before as { systemowy?: boolean } | null)?.systemowy === true;
     const name = (nazwa ?? '').trim();
-    if (!systemowy && !name) throw new Error('Typ mailingu musi mieć nazwę.');
+    if (!systemowy && !name) throw new AppError('mailingTypNameRequired');
     const { error } = await getSupabase()
       .from('mailing_typy')
       .update({
@@ -1880,7 +1874,7 @@ class DatabaseService {
     if (!row) return;
     const typ = row as { klucz: string; nazwa: string; systemowy: boolean };
     if (typ.systemowy) {
-      throw new Error(`Typ „${typ.nazwa}” jest wbudowany i nie może zostać usunięty.`);
+      throw new AppError('mailingTypBuiltIn', { name: typ.nazwa });
     }
     const { count, error: countError } = await getSupabase()
       .from('mailing_szablony')
@@ -1888,9 +1882,7 @@ class DatabaseService {
       .eq('typ', typ.klucz);
     if (countError) throw new Error(`deleteMailingTyp (szablony): ${countError.message}`);
     if ((count ?? 0) > 0) {
-      throw new Error(
-        `Typ „${typ.nazwa}” ma przypisane szablony (${count}). Przenieś je do innego typu albo usuń, zanim usuniesz typ.`,
-      );
+      throw new AppError('mailingTypHasTemplates', { name: typ.nazwa, count: count ?? 0 });
     }
     // Fields bound to the kind go back to "every kind" rather than staying bound
     // to a key no template can carry — they would be offered nowhere.
@@ -2316,7 +2308,7 @@ class DatabaseService {
   /** An unknown status is a bug upstream; refusing it beats filing a card nowhere. */
   private static zadanieStatus(status: string): ZadanieStatus {
     if (!(ZADANIE_STATUSES as readonly string[]).includes(status)) {
-      throw new Error(`Nieznany status zadania: ${status}`);
+      throw new AppError('zadanieStatusUnknown', { status });
     }
     return status as ZadanieStatus;
   }
@@ -2325,7 +2317,7 @@ class DatabaseService {
   private static zadaniePriorytet(value: string | null | undefined): ZadaniePriorytet {
     if (value == null || value === '') return DEFAULT_ZADANIE_PRIORYTET;
     if (!(ZADANIE_PRIORYTETY as readonly string[]).includes(value)) {
-      throw new Error(`Nieznany priorytet zadania: ${value}`);
+      throw new AppError('zadaniePriorytetUnknown', { value });
     }
     return value as ZadaniePriorytet;
   }
@@ -2333,7 +2325,7 @@ class DatabaseService {
   private static zadanieTermin(value: string | null | undefined): string | null {
     const termin = (value ?? '').trim();
     if (!termin) return null;
-    if (!isValidDayKey(termin)) throw new Error(`Nieprawidłowy termin zadania: ${termin}`);
+    if (!isValidDayKey(termin)) throw new AppError('zadanieTerminInvalid', { termin });
     return termin;
   }
 
@@ -2344,7 +2336,7 @@ class DatabaseService {
    */
   private static zadanieZalaczniki(value: unknown): ZadanieZalacznik[] {
     if (value == null) return [];
-    if (!Array.isArray(value)) throw new Error('Nieprawidłowe załączniki zadania.');
+    if (!Array.isArray(value)) throw new AppError('zadanieZalacznikiInvalid');
     return value.map((raw): ZadanieZalacznik => {
       const z = (raw ?? {}) as Partial<ZadanieZalacznik>;
       const rozmiar = Number(z.rozmiar);
@@ -2356,7 +2348,7 @@ class DatabaseService {
         rozmiar < 0 ||
         rozmiar > ZADANIE_ATTACHMENT_MAX_BYTES
       ) {
-        throw new Error('Nieprawidłowy załącznik zadania.');
+        throw new AppError('zadanieZalacznikInvalid');
       }
       return {
         id: z.id,
@@ -2371,7 +2363,7 @@ class DatabaseService {
 
   private static zadaniePayload(input: ZadanieInput): Record<string, unknown> {
     const tytul = (input.tytul ?? '').trim();
-    if (!tytul) throw new Error('Zadanie musi mieć tytuł.');
+    if (!tytul) throw new AppError('zadanieTitleRequired');
     return {
       tytul,
       opis: (input.opis ?? '').trim(),
@@ -2388,7 +2380,7 @@ class DatabaseService {
   private static zadanieSpotkanieId(value: unknown): number | null {
     if (value == null) return null;
     const id = Number(value);
-    if (!Number.isInteger(id) || id <= 0) throw new Error(`Nieprawidłowe spotkanie zadania: ${value}`);
+    if (!Number.isInteger(id) || id <= 0) throw new AppError('zadanieSpotkanieInvalid', { value: String(value) });
     return id;
   }
 
@@ -2492,9 +2484,6 @@ class DatabaseService {
     return DatabaseService.zadanieFromRow(unwrap(data, error, 'addZadanie'));
   }
 
-  /** A card that is gone by the time it is written to. */
-  private static readonly ZADANIE_GONE = 'Tego zadania już nie ma — mogło zostać usunięte.';
-
   /**
    * The form's full save of a card.
    *
@@ -2520,7 +2509,7 @@ class DatabaseService {
     // table: the board's cached list is the one missing somebody else's change.
     if (!before) {
       this.invalidateTable('zadania');
-      throw new Error(DatabaseService.ZADANIE_GONE);
+      throw new AppError('zadanieGone');
     }
     const stored = before as { zalaczniki: unknown; status: string; updated_at: string };
     if (input.expectedUpdatedAt && !sameInstant(input.expectedUpdatedAt, stored.updated_at)) {
@@ -2544,7 +2533,7 @@ class DatabaseService {
     if (!written || written.length === 0) {
       // Saved by somebody else between the read and the write — or deleted.
       if (await this.zadanieExists(id)) throw new AppError('zadanieConflict');
-      throw new Error(DatabaseService.ZADANIE_GONE);
+      throw new AppError('zadanieGone');
     }
 
     // Only once the row no longer points at them: a file dropped from the form
@@ -2569,7 +2558,7 @@ class DatabaseService {
     const values: Record<string, unknown> = {};
     if (patch.tytul !== undefined) {
       const tytul = String(patch.tytul ?? '').trim();
-      if (!tytul) throw new Error('Zadanie musi mieć tytuł.');
+      if (!tytul) throw new AppError('zadanieTitleRequired');
       values.tytul = tytul;
     }
     if (patch.przypisanyEmail !== undefined) {
@@ -2585,7 +2574,7 @@ class DatabaseService {
       .select(ZADANIE_COLS)
       .maybeSingle();
     if (error) throw new Error(`patchZadanie: ${error.message}`);
-    if (!data) throw new Error(DatabaseService.ZADANIE_GONE);
+    if (!data) throw new AppError('zadanieGone');
     return DatabaseService.zadanieFromRow(data);
   }
 
@@ -2618,7 +2607,7 @@ class DatabaseService {
   ): Promise<string | null> {
     const target = DatabaseService.zadanieStatus(status);
     const ids = [...new Set(orderedIds.filter((n) => Number.isInteger(n)))];
-    if (!ids.includes(id)) throw new Error('Przenoszona karta musi być w nowej kolejności.');
+    if (!ids.includes(id)) throw new AppError('zadanieMoveNotInOrder');
 
     const { data: current, error: readError } = await getSupabase()
       .from('zadania')
@@ -2628,7 +2617,7 @@ class DatabaseService {
     if (readError) throw new Error(`moveZadanie (odczyt): ${readError.message}`);
     if (!current) {
       this.invalidateTable('zadania');
-      throw new Error(DatabaseService.ZADANIE_GONE);
+      throw new AppError('zadanieGone');
     }
     // The card's new `updated_at` when the column changed, so the board can keep
     // its copy current — a form opened on it later must not look stale.
@@ -2678,7 +2667,7 @@ class DatabaseService {
       .select(ZADANIE_COLS)
       .maybeSingle();
     if (error) throw new Error(`setZadanieArchived: ${error.message}`);
-    if (!data) throw new Error(DatabaseService.ZADANIE_GONE);
+    if (!data) throw new AppError('zadanieGone');
     return DatabaseService.zadanieFromRow(data);
   }
 
@@ -2829,9 +2818,9 @@ class DatabaseService {
     autorEmail: string,
   ): Promise<ZadanieKomentarz> {
     const tresc = (input.tresc ?? '').trim();
-    if (!tresc) throw new Error('Komentarz nie może być pusty.');
-    if (tresc.length > ZADANIE_KOMENTARZ_MAX_LENGTH) throw new Error('Komentarz jest za długi.');
-    if (!autorEmail) throw new Error('Brak zalogowanego użytkownika.');
+    if (!tresc) throw new AppError('commentEmpty');
+    if (tresc.length > ZADANIE_KOMENTARZ_MAX_LENGTH) throw new AppError('commentTooLong');
+    if (!autorEmail) throw new AppError('notSignedIn');
     const { data, error } = await getSupabase()
       .from('zadania_komentarze')
       .insert({
@@ -2858,7 +2847,7 @@ class DatabaseService {
       .select('id');
     if (error) throw new Error(`deleteZadanieKomentarz: ${error.message}`);
     if (!data || data.length === 0) {
-      throw new Error('Tego komentarza nie można usunąć — już go nie ma albo nie jest Twój.');
+      throw new AppError('commentNotDeletable');
     }
   }
 
@@ -2878,9 +2867,9 @@ class DatabaseService {
 
   async addZadanieNotatka(tresc: string, autorEmail: string): Promise<ZadanieNotatka> {
     const text = tresc.trim();
-    if (!text) throw new Error('Notatka nie może być pusta.');
-    if (text.length > ZADANIE_NOTATKA_MAX_LENGTH) throw new Error('Notatka jest za długa.');
-    if (!autorEmail) throw new Error('Brak zalogowanego użytkownika.');
+    if (!text) throw new AppError('noteEmpty');
+    if (text.length > ZADANIE_NOTATKA_MAX_LENGTH) throw new AppError('noteTooLong');
+    if (!autorEmail) throw new AppError('notSignedIn');
     const { data, error } = await getSupabase()
       .from('zadania_notatki')
       .insert({ tresc: text, autor_email: autorEmail })
@@ -2892,8 +2881,8 @@ class DatabaseService {
   /** Only the author's own note: the filter is the rule, not a courtesy of the UI. */
   async updateZadanieNotatka(id: number, tresc: string, autorEmail: string): Promise<void> {
     const text = tresc.trim();
-    if (!text) throw new Error('Notatka nie może być pusta.');
-    if (text.length > ZADANIE_NOTATKA_MAX_LENGTH) throw new Error('Notatka jest za długa.');
+    if (!text) throw new AppError('noteEmpty');
+    if (text.length > ZADANIE_NOTATKA_MAX_LENGTH) throw new AppError('noteTooLong');
     const { data, error } = await getSupabase()
       .from('zadania_notatki')
       .update({ tresc: text })
@@ -2902,7 +2891,7 @@ class DatabaseService {
       .select('id');
     if (error) throw new Error(`updateZadanieNotatka: ${error.message}`);
     if (!data || data.length === 0) {
-      throw new Error('Tej notatki nie można zmienić — już jej nie ma albo nie jest Twoja.');
+      throw new AppError('noteNotEditable');
     }
   }
 
@@ -2916,7 +2905,7 @@ class DatabaseService {
       .select('id');
     if (error) throw new Error(`deleteZadanieNotatka: ${error.message}`);
     if (!data || data.length === 0) {
-      throw new Error('Tej notatki nie można usunąć — już jej nie ma albo nie jest Twoja.');
+      throw new AppError('noteNotDeletable');
     }
   }
 
@@ -2989,13 +2978,13 @@ class DatabaseService {
    */
   private static spotkaniePayload(input: SpotkanieInput): Record<string, unknown> {
     const nazwa = input.nazwa.trim();
-    if (!nazwa) throw new Error('Spotkanie musi mieć nazwę.');
-    if (!input.startsAt) throw new Error('Spotkanie musi mieć datę i godzinę.');
+    if (!nazwa) throw new AppError('spotkanieNameRequired');
+    if (!input.startsAt) throw new AppError('spotkanieStartRequired');
     if (
       input.endsAt &&
       new Date(input.endsAt).getTime() <= new Date(input.startsAt).getTime()
     ) {
-      throw new Error('Godzina zakończenia musi być późniejsza niż godzina rozpoczęcia.');
+      throw new AppError('spotkanieEndBeforeStart');
     }
     return {
       nazwa,
@@ -3077,7 +3066,7 @@ class DatabaseService {
       },
       { expectedUpdatedAt, returning: SPOTKANIE_COLS },
     );
-    if (!result) throw new Error('Tego spotkania już nie ma — mogło zostać usunięte.');
+    if (!result) throw new AppError('spotkanieGone');
     return DatabaseService.spotkanieRow(result.written);
   }
 
@@ -3147,7 +3136,7 @@ class DatabaseService {
     who: string,
   ): Promise<void> {
     if (!SPOTKANIE_MATERIALY_STATUSES.includes(status)) {
-      throw new Error(`Nieznany status materiałów: ${status}`);
+      throw new AppError('materialyStatusUnknown', { status });
     }
     const now = new Date().toISOString();
     const { error } = await getSupabase()
@@ -3494,7 +3483,7 @@ class DatabaseService {
     const existing = await this.getZebranieBySpotkanie(spotkanieId);
     if (existing) return existing;
     const snapshot = await this.spotkanieSnapshot(spotkanieId);
-    if (!snapshot) throw new Error('Spotkanie nie istnieje — mogło zostać usunięte.');
+    if (!snapshot) throw new AppError('spotkanieMissing');
     const { materialy_status: materialyStatus, ...columns } = snapshot;
 
     const { data, error } = await getSupabase()
@@ -3522,7 +3511,7 @@ class DatabaseService {
 
   private static zebraniePayload(input: ZebranieInput): Record<string, unknown> {
     const nazwa = (input.nazwa ?? '').trim();
-    if (!nazwa) throw new Error('Zebranie musi mieć nazwę.');
+    if (!nazwa) throw new AppError('zebranieNameRequired');
     return {
       nazwa,
       adres_id: input.adresId ?? null,
@@ -3579,7 +3568,7 @@ class DatabaseService {
       'updateZebranie',
       (row) => {
         if (row.spotkanie_id != null) {
-          throw new Error('To zebranie jest powiązane ze spotkaniem — termin i miejsce zmienia się w Kalendarzu.');
+          throw new AppError('zebranieLinkedToSpotkanie');
         }
         return payload;
       },
@@ -3600,7 +3589,7 @@ class DatabaseService {
           : undefined,
       },
     );
-    if (!result) throw new Error('Zebranie nie istnieje — mogło zostać usunięte.');
+    if (!result) throw new AppError('zebranieMissing');
   }
 
   /** Delete an entry and its versions (ON DELETE CASCADE). The meeting is left as it is. */
@@ -3626,7 +3615,7 @@ class DatabaseService {
     const before = await this.getZebranie(zebranieId);
     if (!before) return;
     if (before.wersje.length <= 1) {
-      throw new Error('To jedyna wersja tego zebrania — usuń całe zebranie zamiast niej.');
+      throw new AppError('zebranieOnlyWersja');
     }
     const { error: delError } = await getSupabase().from('zebrania_wersje').delete().eq('id', id);
     if (delError) throw new Error(`deleteZebranieWersja: ${delError.message}`);
@@ -3654,7 +3643,7 @@ class DatabaseService {
   async addZebranieWersja(zebranieId: number, who: string): Promise<ZebranieWersja> {
     for (let attempt = 0; attempt < 2; attempt++) {
       const zebranie = await this.getZebranie(zebranieId);
-      if (!zebranie) throw new Error('Zebranie nie istnieje — mogło zostać usunięte.');
+      if (!zebranie) throw new AppError('zebranieMissing');
       const from = latestWersja(zebranie);
       const { major, minor } = nextWersjaNumber(zebranie.wersje);
       const { data, error } = await getSupabase()
@@ -3692,7 +3681,7 @@ class DatabaseService {
       await this.syncSpotkanieFromWersja(zebranie.spotkanieId, 'w_przygotowaniu', who);
       return (await this.zebranieWersjeRows([data]))[0];
     }
-    throw new Error('addZebranieWersja: nie udało się nadać numeru wersji.');
+    throw new AppError('wersjaNumberFailed');
   }
 
   /**
@@ -3726,7 +3715,7 @@ class DatabaseService {
       },
       { expectedUpdatedAt },
     );
-    if (!result) throw new Error('Tej wersji już nie ma — mogła zostać usunięta.');
+    if (!result) throw new AppError('wersjaGone');
     await this.touchZebranie(result.row.zebranie_id);
   }
 
@@ -3746,7 +3735,7 @@ class DatabaseService {
       .select('zebranie_id')
       .maybeSingle();
     if (error) throw new Error(`setZebranieWersjaNazwa: ${error.message}`);
-    if (!data) throw new Error('Tej wersji już nie ma — mogła zostać usunięta.');
+    if (!data) throw new AppError('wersjaGone');
     await this.touchZebranie((data as { zebranie_id: number }).zebranie_id);
   }
 
@@ -3792,7 +3781,7 @@ class DatabaseService {
     gotowe: boolean,
     who: string,
   ): Promise<void> {
-    if (!ZEBRANIE_DOKUMENTY.includes(dokument)) throw new Error(`Nieznany dokument zebrania: ${dokument}`);
+    if (!ZEBRANIE_DOKUMENTY.includes(dokument)) throw new AppError('zebranieDokumentUnknown', { dokument });
     // One mark among several: applied to the marks as they are when the write
     // lands, so two people marking two documents at once both count.
     let status: ZebranieStatus = 'w_przygotowaniu';
@@ -3807,7 +3796,7 @@ class DatabaseService {
         return { gotowe: clean, status, updated_by: who };
       },
     );
-    if (!result) throw new Error('Wersja nie istnieje — mogła zostać usunięta.');
+    if (!result) throw new AppError('wersjaMissing');
     const zebranie = await this.getZebranie(result.row.zebranie_id);
     if (!zebranie) return;
     await this.touchZebranie(zebranie.id);
@@ -3870,7 +3859,7 @@ class DatabaseService {
       .eq('id', sprawozdanieId)
       .maybeSingle();
     if (rowError) throw new Error(`attachZebranieSprawozdanie (odczyt): ${rowError.message}`);
-    if (!row) throw new Error('Tego sprawozdania nie ma już w module Sprawozdania — mogło zostać usunięte.');
+    if (!row) throw new AppError('sprawozdanieGoneFromModule');
     await this.writeZebranieWersjaSprawozdanie(
       wersjaId,
       sprawozdanieId,
@@ -3913,7 +3902,7 @@ class DatabaseService {
       .select('zebranie_id')
       .maybeSingle();
     if (error) throw new Error(`writeZebranieWersjaSprawozdanie: ${error.message}`);
-    if (!data) throw new Error('Tej wersji już nie ma — mogła zostać usunięta.');
+    if (!data) throw new AppError('wersjaGone');
     await this.touchZebranie((data as { zebranie_id: number }).zebranie_id);
   }
 
@@ -3958,13 +3947,13 @@ class DatabaseService {
       sprawozdanie_id: number | null;
       updated_at: string;
     }>('zebrania_wersje', wersjaId, 'zebranie_id, sprawozdanie, sprawozdanie_id', op, (row) => {
-      if (row.sprawozdanie_id == null) throw new Error('Ta wersja nie ma już sprawozdania.');
+      if (row.sprawozdanie_id == null) throw new AppError('wersjaSprawozdanieGone');
       return {
         sprawozdanie: DatabaseService.sprawozdanieMetaRow({ ...normalizeSprawozdanieMeta(row.sprawozdanie), ...patch }),
         updated_by: who,
       };
     });
-    if (!result) throw new Error('Tej wersji już nie ma — mogła zostać usunięta.');
+    if (!result) throw new AppError('wersjaGone');
     await this.touchZebranie(result.row.zebranie_id);
   }
 
@@ -3996,7 +3985,7 @@ class DatabaseService {
       }),
       { expectedVersion: expected ? { value: expected.zmieniono, of: (row) => planStamp(row.plan) } : undefined },
     );
-    if (!result) throw new Error('Tej wersji już nie ma — mogła zostać usunięta.');
+    if (!result) throw new AppError('wersjaGone');
     await this.touchZebranie(result.row.zebranie_id);
   }
 
@@ -4082,11 +4071,11 @@ class DatabaseService {
       .eq('sprawozdanie_id', id);
     if (linkError) throw new Error(`deleteSprawozdanie (powiązania): ${linkError.message}`);
     if ((count ?? 0) > 0) {
-      throw new Error('To sprawozdanie jest powiązane z zebraniem — odłącz je najpierw w Zebraniach.');
+      throw new AppError('sprawozdanieLinked');
     }
     const { data, error } = await getSupabase().from('zebrania_sprawozdania').delete().eq('id', id).select('id');
     if (error) throw new Error(`deleteSprawozdanie: ${error.message}`);
-    if (!data || data.length === 0) throw new Error('Tego sprawozdania już nie ma — mogło zostać usunięte.');
+    if (!data || data.length === 0) throw new AppError('sprawozdanieGone');
   }
 
   /** The library, without the statements themselves — newest period first. */
@@ -4150,7 +4139,7 @@ class DatabaseService {
   /** A second plan of one community and year — the unique key says no. */
   private static planWlasnyError(op: string, error: { code?: string; message: string }): Error {
     return error.code === '23505'
-      ? new Error('Plan tej wspólnoty na ten rok już jest w Planach gospodarczych — otwórz go zamiast tworzyć drugi.')
+      ? new AppError('planTaken')
       : new Error(`${op}: ${error.message}`);
   }
 
@@ -4176,7 +4165,7 @@ class DatabaseService {
 
   async addPlanWlasny(nrWsp: number, nazwa: string, value: PlanGospodarczy, who: string): Promise<PlanWlasny> {
     const plan = normalizePlan(value);
-    if (!plan) throw new Error('Nie ma czego zapisać — plan jest pusty.');
+    if (!plan) throw new AppError('planEmpty');
     const now = new Date().toISOString();
     const { data, error } = await getSupabase()
       .from('plany_gospodarcze')
@@ -4194,7 +4183,7 @@ class DatabaseService {
       .single();
     if (error) throw DatabaseService.planWlasnyError('addPlanWlasny', error);
     const row = DatabaseService.planWlasnyRow(data);
-    if (!row) throw new Error('addPlanWlasny: zapisany plan jest nieczytelny.');
+    if (!row) throw new AppError('planUnreadable');
     return row;
   }
 
@@ -4210,7 +4199,7 @@ class DatabaseService {
     expected?: PlanExpected | null,
   ): Promise<void> {
     const normalized = normalizePlan(value);
-    if (!normalized) throw new Error('Nie ma czego zapisać — plan jest pusty.');
+    if (!normalized) throw new AppError('planEmpty');
     const now = new Date().toISOString();
     const result = await this.casUpdate<any>(
       'plany_gospodarcze',
@@ -4234,7 +4223,7 @@ class DatabaseService {
         mapError: (error) => DatabaseService.planWlasnyError('setPlanWlasny', error),
       },
     );
-    if (!result) throw new Error('Tego planu już nie ma — mógł zostać usunięty.');
+    if (!result) throw new AppError('planGone');
   }
 
   async deletePlanWlasny(id: number): Promise<void> {
@@ -4283,7 +4272,7 @@ class DatabaseService {
       'patchPlanWlasnySprawozdanie',
       (row) => {
         const stored = DatabaseService.planWlasnyRow(row);
-        if (!stored) throw new Error('Tego planu już nie ma — mógł zostać usunięty.');
+        if (!stored) throw new AppError('planGone');
         return {
           sprawozdanie: normalizePlanSprawozdanieMeta({ ...stored.sprawozdanie, ...patch }),
           updated_by: who,
@@ -4291,14 +4280,12 @@ class DatabaseService {
       },
       {
         mapError: (error) =>
-          new Error(
-            /sprawozdanie/.test(error.message)
-              ? 'Baza nie ma jeszcze miejsca na sprawozdanie planu — uruchom w Supabase plik plany-gospodarcze-sprawozdanie.sql.'
-              : `patchPlanWlasnySprawozdanie: ${error.message}`,
-          ),
+          /sprawozdanie/.test(error.message)
+            ? new AppError('planSprawozdanieColumnMissing')
+            : new Error(`patchPlanWlasnySprawozdanie: ${error.message}`),
       },
     );
-    if (!result) throw new Error('Tego planu już nie ma — mógł zostać usunięty.');
+    if (!result) throw new AppError('planGone');
   }
 
   /* ------------------------ Podatki — nieruchomości (DN-1) ------------------------ */
@@ -4319,7 +4306,7 @@ class DatabaseService {
   /** A second declaration of one community and year — the unique key says no. */
   private static podatekError(op: string, error: { code?: string; message: string }): Error {
     return error.code === '23505'
-      ? new Error('Ta wspólnota (ten NIP) ma już deklarację na ten rok — otwórz ją zamiast dodawać drugą.')
+      ? new AppError('dn1Taken')
       : new Error(`${op}: ${error.message}`);
   }
 
@@ -4392,7 +4379,7 @@ class DatabaseService {
       },
       { returning: '*', mapError: (error) => DatabaseService.podatekError('setPodatekNieruchomosci', error) },
     );
-    if (!result?.written) throw new Error('Tej deklaracji już nie ma — mogła zostać usunięta.');
+    if (!result?.written) throw new AppError('dn1Gone');
     return DatabaseService.podatekRow(result.written);
   }
 
@@ -4579,7 +4566,7 @@ class DatabaseService {
   /** A second PIT of one community and year — the unique key says no. */
   private static pitError(op: string, error: { code?: string; message: string }): Error {
     return error.code === '23505'
-      ? new Error('Ta wspólnota (ten NIP) ma już PIT na ten rok — otwórz go zamiast dodawać drugi.')
+      ? new AppError('pitTaken')
       : new Error(`${op}: ${error.message}`);
   }
 
@@ -4658,7 +4645,7 @@ class DatabaseService {
       }),
       { returning: '*', mapError: (error) => DatabaseService.pitError('setPodatekPit', error) },
     );
-    if (!result?.written) throw new Error('Tego PIT-u już nie ma — mógł zostać usunięty.');
+    if (!result?.written) throw new AppError('pitGone');
     return DatabaseService.pitRow(result.written);
   }
 
@@ -4823,7 +4810,7 @@ class DatabaseService {
   /** A second return of one community and year — the unique key says no. */
   private static citError(op: string, error: { code?: string; message: string }): Error {
     return error.code === '23505'
-      ? new Error('Ta wspólnota ma już zeznanie CIT-8 na ten rok — otwórz je zamiast dodawać drugie.')
+      ? new AppError('citTaken')
       : new Error(`${op}: ${error.message}`);
   }
 
@@ -4904,7 +4891,7 @@ class DatabaseService {
       if (data && data.length > 0) return DatabaseService.citRow(data[0]);
       await new Promise((r) => setTimeout(r, 50 + Math.random() * 150 * (proba + 1)));
     }
-    throw new Error(`${op}: zeznanie zmieniało się w tym samym czasie na innym komputerze — spróbuj ponownie.`);
+    throw new AppError('citChangedMeanwhile', { op });
   }
 
   /** Save an edited return; the download record, the sends and the "filed" tick are kept from the stored row. */
@@ -4918,7 +4905,7 @@ class DatabaseService {
       (stored) => ({ ...dane, pobrania: stored.dane.pobrania, wysylki: stored.dane.wysylki, zlozone: stored.dane.zlozone }),
       who,
     );
-    if (!po) throw new Error('Tego zeznania już nie ma — mogło zostać usunięte.');
+    if (!po) throw new AppError('citGone');
     return po;
   }
 
@@ -5011,16 +4998,16 @@ class DatabaseService {
     jak: WysylkaRozstrzygniecie['jak'],
     who: string,
   ): Promise<PodatekCit> {
-    const stan: { odmowa: string | null } = { odmowa: null };
+    const stan: { odmowa: AppErrorCode | null } = { odmowa: null };
     const po = await this.zmienDaneCit(id, 'rozstrzygnijPodatekCitWysylke', (stored) => {
       stan.odmowa = null;
       const w = stored.dane.wysylki.find((x) => x.at === at);
       if (!w) {
-        stan.odmowa = 'Tej wysyłki już nie ma na liście — odśwież zeznanie.';
+        stan.odmowa = 'citWysylkaGone';
         return null;
       }
       if (!(jak === 'porzucona' ? czekaNaUpo(w) : niepewnaOtwarta(w))) {
-        stan.odmowa = 'Ta wysyłka ma już odpowiedź bramki albo została rozstrzygnięta — odśwież zeznanie.';
+        stan.odmowa = 'citWysylkaSettled';
         return null;
       }
       const stamp = { at: new Date().toISOString(), by: who };
@@ -5028,8 +5015,8 @@ class DatabaseService {
       const zlozone = jak === 'dotarla' && w.srodowisko === 'prod' ? stored.dane.zlozone ?? stamp : stored.dane.zlozone;
       return { ...stored.dane, wysylki, zlozone };
     });
-    if (!po) throw new Error('Tego zeznania już nie ma — mogło zostać usunięte.');
-    if (stan.odmowa) throw new Error(stan.odmowa);
+    if (!po) throw new AppError('citGone');
+    if (stan.odmowa) throw new AppError(stan.odmowa);
     return po;
   }
 
@@ -5145,7 +5132,7 @@ class DatabaseService {
     who: string,
   ): Promise<void> {
     const nazwa = adresNazwa.trim();
-    if (!nazwa) throw new Error('Zebranie nie ma wybranej wspólnoty.');
+    if (!nazwa) throw new AppError('zebranieNoAdres');
     const row: Record<string, unknown> = { adres_nazwa: nazwa, updated_at: new Date().toISOString(), updated_by: who };
     if (patch.vdomNr !== undefined) row.vdom_nr = patch.vdomNr;
     if (patch.udzialy !== undefined) {
@@ -5238,8 +5225,8 @@ class DatabaseService {
     assignedBy: string,
   ): Promise<KsiegowaniePrzypisanie | null> {
     const nazwa = adresNazwa.trim();
-    if (!/^\d{4}-\d{2}$/.test(monthKey)) throw new Error('Nieprawidłowy miesiąc.');
-    if (!nazwa) throw new Error('Przypisanie musi dotyczyć wspólnoty.');
+    if (!/^\d{4}-\d{2}$/.test(monthKey)) throw new AppError('monthInvalid');
+    if (!nazwa) throw new AppError('ksAssignmentNeedsAdres');
     const mailbox = email?.trim() ?? '';
     if (!mailbox) {
       const { error } = await getSupabase()
@@ -5285,8 +5272,8 @@ class DatabaseService {
     createdBy: string,
   ): Promise<KsiegowaniePriorytet> {
     const nazwa = adresNazwa.trim();
-    if (!/^\d{4}-\d{2}$/.test(monthKey)) throw new Error('Nieprawidłowy miesiąc.');
-    if (!nazwa) throw new Error('Priorytet musi dotyczyć wspólnoty.');
+    if (!/^\d{4}-\d{2}$/.test(monthKey)) throw new AppError('monthInvalid');
+    if (!nazwa) throw new AppError('ksPriorytetNeedsAdres');
 
     const { data: existing, error: readError } = await getSupabase()
       .from('ksiegowania_priorytety')
@@ -5449,8 +5436,8 @@ class DatabaseService {
   ): Promise<KsiegowanieUwaga> {
     const nazwa = adresNazwa.trim();
     const text = tresc.trim();
-    if (!nazwa) throw new Error('Uwaga musi dotyczyć wspólnoty.');
-    if (!text) throw new Error('Uwaga nie może być pusta.');
+    if (!nazwa) throw new AppError('ksUwagaNeedsAdres');
+    if (!text) throw new AppError('ksUwagaEmpty');
     const { data, error } = await getSupabase()
       .from('ksiegowania_uwagi')
       .insert({
@@ -5468,7 +5455,7 @@ class DatabaseService {
 
   async updateKsiegowanieUwaga(id: number, tresc: string, mentions: string[]): Promise<void> {
     const text = tresc.trim();
-    if (!text) throw new Error('Uwaga nie może być pusta.');
+    if (!text) throw new AppError('ksUwagaEmpty');
     const { error } = await getSupabase()
       .from('ksiegowania_uwagi')
       .update({ tresc: text, mentions: DatabaseService.komentarzMentions(mentions) })
@@ -5628,7 +5615,7 @@ class DatabaseService {
   /** Flip one switch, keeping the person's others. */
   async setNotificationPref(email: string, id: NotificationId, enabled: boolean): Promise<void> {
     const key = email.trim().toLowerCase();
-    if (!key) throw new Error('Brak zalogowanego użytkownika.');
+    if (!key) throw new AppError('notSignedIn');
     const prefs = { ...(await this.getNotificationPrefs(key)), [id]: enabled };
     const { error } = await getSupabase()
       .from('notification_prefs')
@@ -6796,9 +6783,7 @@ class DatabaseService {
   /** A restore's database error; the one a missing migration gives says which file to run. */
   private static restoreError(step: string, message: string): Error {
     if (/restore_staging|restore_apply/.test(message) && /does not exist|Could not find/i.test(message)) {
-      return new Error(
-        'Baza nie ma jeszcze funkcji przywracania kopii — uruchom w Supabase supabase/restore-transakcja.sql i spróbuj ponownie. Nic nie zostało zmienione.',
-      );
+      return new AppError('restoreMigrationMissing');
     }
     return new Error(`restore (${step}): ${message}`);
   }

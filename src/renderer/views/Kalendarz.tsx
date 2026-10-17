@@ -678,7 +678,7 @@ const Kalendarz: React.FC<Props> = ({
       });
       setPdfOpen(false);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err), t.kalPdfError);
+      notify.error(ipcErrorMessage(err, t.errorUnexpected), t.kalPdfError);
     } finally {
       setPdfBusy(false);
     }
@@ -776,7 +776,7 @@ const Kalendarz: React.FC<Props> = ({
       if (!had) notify.success(t.zebraniaAutoCreated);
     } catch (err: unknown) {
       notify.error(
-        `${t.zebraniaAutoCreateError}${err instanceof Error ? `: ${err.message}` : ''}`,
+        `${t.zebraniaAutoCreateError}: ${ipcErrorMessage(err, t.errorUnexpected)}`,
       );
     }
   };
@@ -824,7 +824,7 @@ const Kalendarz: React.FC<Props> = ({
           try {
             await window.electronAPI.addZadanie({ ...z, spotkanieId: created.id });
           } catch (err: unknown) {
-            notify.error(err instanceof Error ? err.message : t.zadSaveError);
+            notify.error(ipcErrorMessage(err, t.zadSaveError));
           }
         }
       }
@@ -874,7 +874,7 @@ const Kalendarz: React.FC<Props> = ({
       await Promise.all([loadZebrania(), loadZadania()]);
       notify.success(t.kalDeleted);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : 'Unknown error');
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
     }
   };
 
@@ -898,7 +898,7 @@ const Kalendarz: React.FC<Props> = ({
       await Promise.all([refreshSpotkanie(id), zebraniaToo ? loadZebrania() : null]);
       notify.success(done);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : 'Unknown error');
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
     } finally {
       setBusyId(null);
     }
@@ -937,7 +937,7 @@ const Kalendarz: React.FC<Props> = ({
       created = await window.electronAPI.zebranieFromSpotkanie(spotkanie.id);
       await Promise.all([refreshSpotkanie(spotkanie.id), loadZebrania()]);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : 'Unknown error');
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
     } finally {
       setBusyId(null);
     }
@@ -980,7 +980,7 @@ const Kalendarz: React.FC<Props> = ({
       }
       setMailingDetails(entry);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : 'Unknown error');
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
     }
   };
 
@@ -993,7 +993,7 @@ const Kalendarz: React.FC<Props> = ({
       await window.electronAPI.deleteZadanie(z.id);
       notify.success(t.kalTaskDeleted);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : t.zadSaveError);
+      notify.error(ipcErrorMessage(err, t.zadSaveError));
     }
     await loadZadania();
   };

@@ -24,6 +24,7 @@ import { maxTokensFor, modelRequestFields } from '../../shared/ai-models';
 import { kategorieDlaStrony } from '../../shared/podatki-cit';
 import { nazwaInterEj, wspominaInterEj } from '../../shared/inter-ej';
 import { CitAiPozycja, CitAiPropozycja, CitAiPrzyklad, CitAiWynik, CitKategoria } from '../../shared/types';
+import { AppError } from '../../shared/app-errors';
 
 /** Rows per request: ~25 tokens a row in, ~40 out, so a batch stays far from any limit. */
 const BATCH_SIZE = 60;
@@ -98,7 +99,7 @@ function prompt(batch: Wiersz[]): string {
 function jsonOdpowiedzi(text: string): unknown {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
-  if (start < 0 || end <= start) throw new Error('AI nie zwróciło odpowiedzi w oczekiwanym formacie.');
+  if (start < 0 || end <= start) throw new AppError('aiBadFormat');
   return JSON.parse(text.slice(start, end + 1));
 }
 

@@ -38,7 +38,7 @@ export async function splitPdfPages(pdfPath: string): Promise<PdfPage[]> {
   });
 
   const pageCount = source.getPageCount();
-  if (pageCount === 0) throw new Error('PDF nie zawiera żadnej strony.');
+  if (pageCount === 0) throw new Error('the PDF has no pages');
 
   const pages: PdfPage[] = [];
   for (let index = 0; index < pageCount; index++) {

@@ -5,6 +5,7 @@ import { useNotify } from '../Notifications';
 import { FormField, FormRow, FormSection, RequiredNote } from '../FormSection';
 import Icon from '../Icon';
 import ModalDismiss, { ModalFooter, ModalHeader } from '../Modal';
+import { ipcErrorMessage } from '../../ipcError';
 
 interface AccountTypeFormModalProps {
   language: Language;
@@ -170,7 +171,7 @@ export const AccountTypesPanel: React.FC<AccountTypesPanelProps> = ({ language, 
       onSaved();
       setFormState(null);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Unknown error');
+      setError(ipcErrorMessage(e, t.errorUnexpected));
     } finally {
       setIsSaving(false);
     }
@@ -184,7 +185,7 @@ export const AccountTypesPanel: React.FC<AccountTypesPanelProps> = ({ language, 
       await window.electronAPI.deleteKontoTyp(id);
       onSaved();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Unknown error');
+      setError(ipcErrorMessage(e, t.errorUnexpected));
     } finally {
       setIsSaving(false);
     }
@@ -203,10 +204,10 @@ export const AccountTypesPanel: React.FC<AccountTypesPanelProps> = ({ language, 
         );
         onSaved();
       } else if (result.error) {
-        setError(result.error);
+        setError(ipcErrorMessage(result.error, t.errorUnexpected));
       }
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Unknown error');
+      setError(ipcErrorMessage(e, t.errorUnexpected));
     } finally {
       setIsSaving(false);
     }
@@ -220,10 +221,10 @@ export const AccountTypesPanel: React.FC<AccountTypesPanelProps> = ({ language, 
           file: result.filePath,
         });
       } else if (result.error) {
-        setError(result.error);
+        setError(ipcErrorMessage(result.error, t.errorUnexpected));
       }
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Unknown error');
+      setError(ipcErrorMessage(e, t.errorUnexpected));
     }
   };
 

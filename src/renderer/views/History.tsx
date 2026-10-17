@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ConversionHistory } from '../../shared/types';
 import { translations, Language } from '../translations';
+import { ipcErrorMessage } from '../ipcError';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
 import ConversionHistoryTimeline from '../components/ConversionHistoryTimeline';
@@ -57,7 +58,7 @@ const History: React.FC<HistoryProps> = ({ language, searchSeed }) => {
         );
         loadHistory();
       } else if (result.error) {
-        notify.error(`${t.importHistoryError}: ${result.error}`);
+        notify.error(`${t.importHistoryError}: ${ipcErrorMessage(result.error, t.errorUnexpected)}`);
       }
     } catch (error) {
       notify.error(t.importHistoryError);
@@ -72,7 +73,7 @@ const History: React.FC<HistoryProps> = ({ language, searchSeed }) => {
           file: result.filePath,
         });
       } else if (result.error) {
-        notify.error(`${t.exportHistoryError}: ${result.error}`);
+        notify.error(`${t.exportHistoryError}: ${ipcErrorMessage(result.error, t.errorUnexpected)}`);
       }
     } catch (error) {
       notify.error(t.exportHistoryError);

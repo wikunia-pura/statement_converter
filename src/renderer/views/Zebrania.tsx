@@ -1067,7 +1067,7 @@ const Zebrania: React.FC<Props> = ({
       await reloadCore(id);
       notify.success(done);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err));
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
     } finally {
       setBusy(false);
     }
@@ -1081,7 +1081,7 @@ const Zebrania: React.FC<Props> = ({
       setUstawienia(next);
       notify.success(szablonAdresNazwa ? t.zebSzablonSaved.replace('{nazwa}', szablonAdresNazwa) : t.zebSzablonCleared);
     } catch (err: unknown) {
-      notify.error(err instanceof Error ? err.message : String(err));
+      notify.error(ipcErrorMessage(err, t.errorUnexpected));
     } finally {
       setBusy(false);
     }

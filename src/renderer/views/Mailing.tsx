@@ -22,6 +22,8 @@ import MailingRecipientsEditor, {
   adresaciSummary,
 } from '../components/MailingRecipientsEditor';
 import { translations, Language } from '../translations';
+import { ipcErrorMessage } from '../ipcError';
+import { localizeErrorMessage } from '../../shared/app-errors';
 import { plural } from '../plural';
 import { useNotify } from '../components/Notifications';
 import Loader from '../components/Loader';
@@ -688,7 +690,7 @@ const Mailing: React.FC<Props> = ({
         wykluczeni: draft.wykluczeni,
       });
       if (response.error) {
-        notify.error(`${t.mailingSendError}: ${response.error}`);
+        notify.error(`${t.mailingSendError}: ${ipcErrorMessage(response.error, t.errorUnexpected)}`);
         return;
       }
       const sent = response.results ?? [];
@@ -717,7 +719,7 @@ const Mailing: React.FC<Props> = ({
       }
     } catch (err: unknown) {
       notify.error(
-        `${t.mailingSendError}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        `${t.mailingSendError}: ${ipcErrorMessage(err, t.errorUnexpected)}`,
       );
     } finally {
       setIsSending(false);
@@ -1298,8 +1300,8 @@ const Mailing: React.FC<Props> = ({
                           <Icon name="check-circle" size={14} /> {t.mailingStatusSent}
                         </span>
                       ) : (
-                        <span className="result-status is-error" data-tip={r.errorMessage}>
-                          <Icon name="x-circle" size={14} /> {r.errorMessage ?? t.mailingStatusError}
+                        <span className="result-status is-error" data-tip={r.errorMessage && localizeErrorMessage(r.errorMessage, language)}>
+                          <Icon name="x-circle" size={14} /> {r.errorMessage ? localizeErrorMessage(r.errorMessage, language) : t.mailingStatusError}
                         </span>
                       )}
                     </td>

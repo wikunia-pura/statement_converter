@@ -26,6 +26,7 @@ import { parseExtractionResponse } from './jsonExtract';
 import { PROMPT_VERSION, readCachedPage, writeCachedPage } from './extractionCache';
 import { splitPdfPages } from './pdfSplitter';
 import { hasHardError, validateProperties, ZaliczkiWarning } from './validator';
+import { AppError } from '../../shared/app-errors';
 
 /**
  * Model used to re-ask a page whose numbers contradict the totals printed on it.
@@ -606,7 +607,7 @@ export async function extractZaliczkiFromPdf(
   const { force = false, cacheOnly = false, onProgress } = options;
 
   if (!apiKey && !cacheOnly) {
-    throw new Error('Brak klucza Anthropic API — dodaj wpis anthropic_api_key w tabeli app_config (Supabase) lub lokalnie w config/ai-config.yml.');
+    throw new AppError('aiKeyMissing');
   }
 
   const filename = pdfPath.split(/[\\/]/).pop() ?? pdfPath;
@@ -749,11 +750,9 @@ export async function extractZaliczkiFromPdf(
   // In cache-only mode an empty result is a legitimate answer ("nothing cached
   // yet"), so the harness gets a report instead of an exception.
   if (properties.length === 0 && !cacheOnly) {
-    throw new Error(
-      failed > 0
-        ? `Nie odczytano żadnej strony (${failed} z ${pages.length} zakończyło się błędem). Zobacz logi.`
-        : 'Model nie zwrócił żadnej wspólnoty.',
-    );
+    throw failed > 0
+      ? new AppError('zaliczkiNoPageRead', { failed, pages: pages.length })
+      : new AppError('zaliczkiNoProperty');
   }
 
   return {

@@ -139,7 +139,7 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
         notify.success(t.importBanksSuccess.replace('{count}', String(result.count)));
         loadData();
       } else if (result.error) {
-        notify.error(`${t.importBanksError}: ${result.error}`);
+        notify.error(`${t.importBanksError}: ${ipcErrorMessage(result.error, t.errorUnexpected)}`);
       }
     } catch {
       notify.error(t.importBanksError);
@@ -156,7 +156,7 @@ const Banki: React.FC<BankiProps> = ({ language }) => {
           file: result.filePath,
         });
       } else if (result.error) {
-        notify.error(`${t.exportBanksError}: ${result.error}`);
+        notify.error(`${t.exportBanksError}: ${ipcErrorMessage(result.error, t.errorUnexpected)}`);
       }
     } catch {
       notify.error(t.exportBanksError);

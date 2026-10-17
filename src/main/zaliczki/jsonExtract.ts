@@ -26,6 +26,7 @@
  */
 
 import logger from '../../shared/logger';
+import { AppError } from '../../shared/app-errors';
 
 /** One balanced `{...}` run found in the response text. */
 interface Candidate {
@@ -332,9 +333,7 @@ export function parseExtractionResponse(text: string, label: string): ParsedExtr
     logger.error(
       `[ZALICZKI] ${label}: brak JSON w odpowiedzi modelu. Surowa odpowiedź:\n${text}`,
     );
-    throw new Error(
-      `Model nie zwrócił JSON. Początek odpowiedzi: ${text.slice(0, 200)}`,
-    );
+    throw new AppError('zaliczkiNoJson', { start: text.slice(0, 200) });
   }
 
   const combined = combine(usable);
@@ -350,7 +349,7 @@ export function parseExtractionResponse(text: string, label: string): ParsedExtr
     logger.error(
       `[ZALICZKI] ${label}: JSON bez żadnej pozycji. Surowa odpowiedź:\n${text}`,
     );
-    throw new Error('Model zwrócił JSON, ale bez żadnej wspólnoty (pusta lista properties).');
+    throw new AppError('zaliczkiJsonEmpty');
   }
 
   return { ...combined, note: notes };

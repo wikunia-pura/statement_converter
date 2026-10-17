@@ -12,6 +12,7 @@
 
 import { PDFFont, PDFPage, degrees, rgb } from 'pdf-lib';
 import { formatZl, zlGr } from '../../shared/podatki';
+import { AppError } from '../../shared/app-errors';
 
 /** A text box: left edge, baseline, and the right edge the text must stay within. */
 export interface Pole {
@@ -95,10 +96,7 @@ export function sprawdzZnaki(font: PDFFont, text: string, nazwa: string): void {
     if (/\s/.test(ch)) continue;
     const cp = ch.codePointAt(0)!;
     if (!znaki.has(cp)) {
-      throw new Error(
-        `Pole „${nazwa}” zawiera znak „${ch}” (U+${cp.toString(16).toUpperCase().padStart(4, '0')}), ` +
-          'którego czcionka formularza nie ma — usuń go albo wpisz wartość literami alfabetu łacińskiego.',
-      );
+      throw new AppError('fieldCharMissing', { field: nazwa, char: ch, code: cp.toString(16).toUpperCase().padStart(4, '0') });
     }
   }
 }
@@ -159,7 +157,7 @@ export class Strona {
     let s = size;
     while (s > min && this.szerokosc(text, s) > width) s -= 0.25;
     if (this.szerokosc(text, s) > width) {
-      throw new Error(`Pole „${nazwa}” jest za długie, żeby zmieścić się w formularzu — skróć je.`);
+      throw new AppError('fieldTooLong', { field: nazwa });
     }
     return s;
   }
@@ -243,7 +241,7 @@ export class Strona {
     k.segmenty.forEach((cells, s) => {
       const value = parts[s] ?? '';
       if (value.length > cells)
-        throw new Error(`Pole „${nazwa}” ma więcej znaków niż kratek w formularzu.`);
+        throw new AppError('fieldTooManyChars', { field: nazwa });
       sprawdzZnaki(this.font, value, nazwa);
       [...value].forEach((ch, i) => {
         if (ch === ' ') return;

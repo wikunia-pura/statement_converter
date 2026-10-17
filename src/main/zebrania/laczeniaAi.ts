@@ -21,6 +21,7 @@ import {
   SprawozdanieLaczenie,
   SprawozdanieLaczeniePropozycja,
 } from '../../shared/types';
+import { AppError } from '../../shared/app-errors';
 
 const ANSWER_TOKENS_PER_ROW = 40;
 
@@ -81,7 +82,7 @@ interface Sekcja {
 function jsonOdpowiedzi(text: string): unknown {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
-  if (start < 0 || end <= start) throw new Error('AI nie zwróciło odpowiedzi w oczekiwanym formacie.');
+  if (start < 0 || end <= start) throw new AppError('aiBadFormat');
   return JSON.parse(text.slice(start, end + 1));
 }
 

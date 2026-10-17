@@ -38,6 +38,7 @@ import { PIT11_PDF_BASE64, PIT4R_PDF_BASE64 } from './pitWzory';
 import { ARIMO_TTF_BASE64 } from './dn1Font';
 import { Komorka, PIT11, PIT4R, ZNAK_KRATKI_PIT11, ZNAK_KRATKI_PIT4R, pit4rKomorka } from './pitLayout';
 import { ROZMIAR, Strona, dataNaKratki, duze, sprawdzZnaki } from './formularz';
+import { AppError } from '../../shared/app-errors';
 
 export interface Pit11Wejscie {
   rok: number;
@@ -66,21 +67,21 @@ const urzadDoDruku = (kod: string): string => `${kod} ${nazwaUrzedu(kod)}`.trim(
 function sprawdzPlatnika(p: { nip: string; nazwa: string }): string {
   const nip = tylkoCyfry(p.nip);
   if (!nipPoprawny(nip)) {
-    throw new Error(`NIP płatnika „${p.nip}” jest nieprawidłowy — formularza nie da się wydrukować.`);
+    throw new AppError('payerNipInvalid', { nip: p.nip });
   }
-  if (!p.nazwa.trim()) throw new Error('Brak nazwy płatnika — formularza nie da się wydrukować.');
+  if (!p.nazwa.trim()) throw new AppError('payerNameMissing');
   return nip;
 }
 
-function odmowa(co: string, problemy: PitProblem[]): never {
+function odmowa(code: 'pit11PrintBlocked' | 'pit4rPrintBlocked', problemy: PitProblem[]): never {
   const bledy = problemy.filter((p) => p.poziom === 'blad').map((p) => p.tekst.replace(/[.\s]+$/, ''));
-  throw new Error(`${co} nie da się jeszcze wydrukować: ${bledy.join('; ')}.`);
+  throw new AppError(code, { problems: bledy.join('; ') });
 }
 
 /** Whole złoty and grosze as digits, no separators; negative amounts have no place in these forms. */
 function zlGrCyfry(value: number, nazwa: string): { zl: string; gr: string } {
   const v = doGroszy(value);
-  if (!(v >= 0)) throw new Error(`Pole „${nazwa}” ma wartość ujemną — formularz tego nie przewiduje.`);
+  if (!(v >= 0)) throw new AppError('fieldNegative', { field: nazwa });
   const grosze = Math.round(v * 100);
   return { zl: String(Math.floor(grosze / 100)), gr: String(grosze % 100).padStart(2, '0') };
 }
@@ -93,7 +94,7 @@ function kwotaK(s: Strona, k: Komorka, value: number, nazwa: string) {
   const { zl, gr } = zlGrCyfry(value, nazwa);
   s.wPrawo(zl, k.zl, k.y, s.rozmiar(zl, k.zl - k.od, nazwa, ROZMIAR, ROZMIAR_KWOTY_MIN));
   if (k.gr === null) {
-    if (gr !== '00') throw new Error(`Pole „${nazwa}” musi być w pełnych złotych.`);
+    if (gr !== '00') throw new AppError('fieldWholeZloty', { field: nazwa });
     return;
   }
   s.wPrawo(gr, k.gr, k.y, s.rozmiar(gr, k.gr - k.grOd, `${nazwa} (grosze)`, ROZMIAR_GROSZE, ROZMIAR_KWOTY_MIN));
@@ -102,7 +103,7 @@ function kwotaK(s: Strona, k: Komorka, value: number, nazwa: string) {
 /** A whole number (taxpayers, whole-złoty advances) in a cell that has no grosze. */
 function calkowitaK(s: Strona, k: Komorka, value: number, nazwa: string) {
   if (!Number.isInteger(value) || value < 0) {
-    throw new Error(`Pole „${nazwa}” musi być nieujemną liczbą całkowitą.`);
+    throw new AppError('fieldWholeNumber', { field: nazwa });
   }
   const text = String(value);
   s.wPrawo(text, k.zl, k.y, s.rozmiar(text, k.zl - k.od, nazwa, ROZMIAR, ROZMIAR_KWOTY_MIN));
@@ -178,7 +179,7 @@ function stronaUzasadnienia(
   we: { dotyczy: string; rok: number; platnik: { nip: string; nazwa: string }; podatnik?: string; przyczyna: string }
 ) {
   const przyczyna = we.przyczyna.trim();
-  if (!przyczyna) throw new Error('Korekta wymaga uzasadnienia przyczyn (ORD-ZU) — brak tekstu.');
+  if (!przyczyna) throw new AppError('ordZuMissing');
   // Drawn straight onto the page, past `Strona`'s check — a character the font lacks would be a blank box.
   sprawdzZnaki(font, przyczyna, 'Uzasadnienie korekty (ORD-ZU)');
   sprawdzZnaki(font, duze(we.platnik.nazwa), 'Nazwa płatnika');
@@ -192,7 +193,7 @@ function stronaUzasadnienia(
 
   const linia = (text: string, size: number, kolor = czarny) => {
     if (y - size < dol) {
-      throw new Error('Uzasadnienie korekty jest za długie, żeby zmieścić się na jednej stronie — skróć je.');
+      throw new AppError('ordZuTooLongShorten');
     }
     if (text) page.drawText(text, { x: MARGINES, y: y - size, size, font, color: kolor });
     y -= size * 1.45;
@@ -214,7 +215,7 @@ function stronaUzasadnienia(
   ];
   const kolumna = MARGINES + 90;
   for (const [etykieta, wartosc] of fakty) {
-    if (y - 11 < dol) throw new Error('Uzasadnienie korekty jest za długie, żeby zmieścić się na jednej stronie.');
+    if (y - 11 < dol) throw new AppError('ordZuTooLong');
     page.drawText(etykieta, { x: MARGINES, y: y - 11, size: 11, font, color: szary });
     const zawiniete = zawin(font, wartosc, 11, width - 90);
     zawiniete.forEach((l) => {
@@ -242,7 +243,7 @@ function stronaUzasadnienia(
 export async function pit11Pdf(we: Pit11Wejscie): Promise<Uint8Array> {
   const { rok, osoba: o } = we;
   const problemy = problemyOsoby(o, rok);
-  if (maBlad(problemy)) odmowa('Informacji PIT-11', problemy);
+  if (maBlad(problemy)) odmowa('pit11PrintBlocked', problemy);
   const nip = sprawdzPlatnika(we.platnik);
   const k = obliczOsobe(o);
 
@@ -356,7 +357,7 @@ export async function pit4rPdf(we: Pit4rWejscie): Promise<Uint8Array> {
   const dane: PitDane = { nazwa: we.platnik.nazwa, urzadPlatnika: we.urzadPlatnika, osoby: [], pit4r: p };
   // The cross-check against the PIT-11s is the caller's (it only warns); the blocking checks are all here.
   const problemy = problemyPit4R(dane, rok);
-  if (maBlad(problemy)) odmowa('Deklaracji PIT-4R', problemy);
+  if (maBlad(problemy)) odmowa('pit4rPrintBlocked', problemy);
   const nip = sprawdzPlatnika(we.platnik);
   const k = obliczPit4R(p);
 

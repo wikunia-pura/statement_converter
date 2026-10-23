@@ -1,12 +1,13 @@
 import { createHash } from 'crypto';
 import type { Certyfikat } from './certyfikat';
-import { alg, ctx, nul, octets, oid, seq, setOf, small, uint } from './der';
+import { alg, ctx, nul, octets, oid, seq, setOf, small, uint, utcTime } from './der';
 
 /*
- * A detached CAdES signature (CMS SignedData) at the PAdES baseline B-B level,
- * ETSI EN 319 142-1: content-type, message-digest and signing-certificate-v2 as
- * signed attributes. No signing-time attribute — PAdES puts the time in the
- * signature dictionary's /M instead.
+ * A detached CAdES signature (CMS SignedData) at the baseline B-B level:
+ * content-type, message-digest and signing-certificate-v2 as signed
+ * attributes. PAdES (EN 319 142-1) leaves signing-time out — the time goes in
+ * the signature dictionary's /M instead; a plain CAdES-B (TS 103 173, what
+ * ZUS's ASiC-S container takes) carries it, so `czas` adds it.
  */
 
 const SHA256 = '2.16.840.1.101.3.4.2.1';
@@ -14,6 +15,7 @@ const ID_DATA = '1.2.840.113549.1.7.1';
 const ID_SIGNED_DATA = '1.2.840.113549.1.7.2';
 const ATTR_CONTENT_TYPE = '1.2.840.113549.1.9.3';
 const ATTR_MESSAGE_DIGEST = '1.2.840.113549.1.9.4';
+const ATTR_SIGNING_TIME = '1.2.840.113549.1.9.5';
 const ATTR_SIGNING_CERTIFICATE_V2 = '1.2.840.113549.1.9.16.2.47';
 const SHA256_WITH_RSA = '1.2.840.113549.1.1.11';
 const ECDSA_WITH_SHA256 = '1.2.840.10045.4.3.2';
@@ -26,8 +28,8 @@ export const sha256 = (...parts: Buffer[]): Buffer => {
 
 const atrybut = (type: string, value: Buffer): Buffer => seq(oid(type), setOf(value));
 
-/** The signed attributes as a DER SET — exactly the bytes the card signs. */
-export function atrybutyPodpisane(skrotDokumentu: Buffer, cert: Certyfikat): Buffer {
+/** The signed attributes as a DER SET — exactly the bytes the card signs. `czas`: add signing-time (not for PAdES). */
+export function atrybutyPodpisane(skrotDokumentu: Buffer, cert: Certyfikat, czas?: Date): Buffer {
   const essCertIdV2 = seq(
     // hashAlgorithm left out: it is DEFAULT sha256, and DER omits defaults.
     octets(sha256(cert.der)),
@@ -38,6 +40,7 @@ export function atrybutyPodpisane(skrotDokumentu: Buffer, cert: Certyfikat): Buf
     atrybut(ATTR_CONTENT_TYPE, oid(ID_DATA)),
     atrybut(ATTR_MESSAGE_DIGEST, octets(skrotDokumentu)),
     atrybut(ATTR_SIGNING_CERTIFICATE_V2, seq(seq(essCertIdV2))),
+    ...(czas ? [atrybut(ATTR_SIGNING_TIME, utcTime(czas))] : []),
   );
 }
 

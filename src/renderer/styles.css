@@ -1263,7 +1263,10 @@ body.dark-mode .ui-select__trigger {
   box-shadow: var(--shadow-lg);
 }
 
+/* `flex: none`: in the scrolling column menu a clipped (`overflow: hidden`) option
+   would otherwise shrink to fit a long list and show half its text, not scroll. */
 .ui-select__option {
+  flex: none;
   padding: 7px 10px;
   border-radius: var(--r-sm);
   font-size: var(--fs-md);
@@ -2951,6 +2954,30 @@ body.dark-mode .modal-overlay {
 .form-table__value { width: 34%; }
 .form-table__label { font-weight: 500; color: var(--text-primary); }
 .form-table__sub { font-size: var(--fs-sm); color: var(--text-tertiary); }
+/* A wide one scrolls sideways inside its frame: the frame draws the border, so
+   the rounded corners survive the scroll (the table's own `overflow: hidden` would not). */
+.form-table-frame { border: 1px solid var(--border-default); border-radius: var(--r-md); }
+.form-table-frame > .form-table { border: none; border-radius: 0; overflow: visible; }
+/* A grid of inputs (PIT-4R months, ZUS contributions): compact fields so a row
+   stays one line high, headers that wrap rather than widen, totals in the foot. */
+.form-table--edit th { padding: 8px 10px; white-space: normal; vertical-align: bottom; line-height: 1.3; }
+.form-table--edit td { padding: 6px 10px; }
+.form-table--edit td input[type='text'],
+.form-table--edit td input[type='number'] {
+  height: 30px;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-md);
+}
+.form-table--edit .pod-num input { padding-right: 8px; }
+.form-table__num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.form-table--edit tfoot td {
+  background: var(--bg-surface-sunken);
+  border-top: 1px solid var(--border-default);
+  border-bottom: none;
+  font-weight: 600;
+  color: var(--text-primary);
+}
 
 /* Above the letter: whose letter it is, and the mailbox it goes to. */
 .preview-bar {
@@ -3053,87 +3080,135 @@ body.dark-mode .modal-overlay {
 /* The app checkbox, one step smaller — for rows inside a nested list. */
 .ks-check--sm .ks-check__box { width: 16px; height: 16px; border-radius: 4px; }
 
-/* Blocks the window during an import — see BusyOverlay in Loader.tsx. */
-/* Window-wide loaders: the window stays visible under a soft blur, with no
-   tint. The progress line runs across the full width of the window at its
-   vertical middle, what is happening right under it.
-   - .busy-overlay (a long operation, e.g. an import) blocks clicks;
-   - .view-loader (a view fetching its data on entry) lets them through, so the
-     sidebar still works, sits under the modals, and fades in a beat late so a
-     fast fetch never flashes it. */
+/* Loaders — see Loader.tsx. Each shows the spinner with the caption under it:
+   - .view-loader (a view fetching its data on entry) sits in the middle of the
+     content area, lets clicks through so the sidebar still works, stays under
+     the modals, and fades in a beat late so a fast fetch never flashes it;
+   - .busy-overlay (a long operation, e.g. an import) covers the window and
+     blocks clicks;
+   - .inline-loader draws a smaller spinner inside a modal or a section.
+   The knobs: --sp-size (the spinner's diameter), --sp-speed (one turn) and
+   --loader-veil (how much of the window shows through behind it). */
+.view-loader,
 .busy-overlay,
-.view-loader {
-  position: fixed;
-  inset: 0;
-  background: transparent;
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+.inline-loader {
+  --sp-size: 44px;
+  --sp-speed: 1.4s;
+  --loader-veil: 60%;
+  display: grid;
+  place-items: center;
 }
+.view-loader,
 .busy-overlay {
-  z-index: 9999;
-  cursor: progress;
-  animation: overlayFade 0.15s ease-out;
+  inset: 0;
+  background: color-mix(in srgb, var(--bg-app) var(--loader-veil), transparent);
 }
 .view-loader {
+  position: absolute;
   z-index: 900;
   pointer-events: none;
-  animation: overlayFade 0.2s ease-out 0.12s both;
+  animation: overlayFade 0.25s ease-out 0.15s both;
 }
-.busy-overlay > .progress-line,
-.view-loader > .progress-line {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  right: 0;
-  transform: translateY(-50%);
+.busy-overlay {
+  position: fixed;
+  z-index: 9999;
+  cursor: progress;
+  --loader-veil: 68%;
+  animation: overlayFade 0.15s ease-out;
 }
-.busy-overlay__label,
-.view-loader__text {
-  position: absolute;
-  top: calc(50% + var(--s-4));
-  left: 50%;
-  transform: translateX(-50%);
-  padding: var(--s-1) var(--s-3);
-  border: 1px solid var(--border-default);
-  border-radius: var(--r-pill);
-  background: var(--bg-surface);
-  box-shadow: var(--shadow-md);
-  font-size: var(--fs-md);
-  font-weight: 500;
-  color: var(--text-secondary);
-  white-space: nowrap;
+.inline-loader {
+  --sp-size: 32px;
+  min-height: 160px;
+  padding: var(--s-4) 0;
+  animation: overlayFade 0.25s ease-out 0.15s both;
 }
 
-/* Indeterminate progress: an accent segment running left to right across the
-   full width of its container, over a faint track. Shared by the view loader
-   and the busy overlay. */
-.progress-line {
-  position: relative;
-  height: 3px;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+.loader-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-3);
+  max-width: min(380px, 90%);
+  text-align: center;
 }
-.progress-line::before {
-  content: '';
+.loader-caption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.loader-caption__label {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.inline-loader .loader-caption__label {
+  font-size: var(--fs-md);
+}
+.loader-caption__quip {
+  min-height: 1.5em;
+  font-size: var(--fs-md);
+  color: var(--text-tertiary);
+  animation: loader-quip-in 0.45s cubic-bezier(0.2, 0, 0, 1) both;
+}
+.loader-caption__sr {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 30%;
-  background: linear-gradient(90deg, transparent, var(--accent) 30%, var(--accent) 70%, transparent);
-  animation: progress-line-run 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
-@keyframes progress-line-run {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(340%); }
+@keyframes loader-quip-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: none; }
 }
-@keyframes progress-line-pulse {
-  50% { opacity: 0.35; }
+
+/* The spinner: an accent arc over a faint track, turning steadily while it
+   stretches and shrinks — the arc never stops, so it reads right whenever the
+   loader is cut off. */
+.loader-spinner-ring {
+  display: block;
+  width: var(--sp-size);
+  height: var(--sp-size);
+  animation: loader-ring-turn var(--sp-speed) linear infinite;
+}
+.loader-spinner-ring__track,
+.loader-spinner-ring__arc {
+  fill: none;
+  stroke-width: 3.5;
+}
+.loader-spinner-ring__track {
+  stroke: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.loader-spinner-ring__arc {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-dasharray: 1 125;
+  stroke-dashoffset: 0;
+  animation: loader-ring-stretch calc(var(--sp-speed) * 1.05) ease-in-out infinite;
+}
+@keyframes loader-ring-turn {
+  to { transform: rotate(360deg); }
+}
+/* The circle's length is ~126 (r = 20); the arc grows to about three quarters
+   of it, then its tail catches up. */
+@keyframes loader-ring-stretch {
+  0% { stroke-dasharray: 1 125; stroke-dashoffset: 0; }
+  50% { stroke-dasharray: 90 125; stroke-dashoffset: -30; }
+  100% { stroke-dasharray: 90 125; stroke-dashoffset: -124; }
+}
+@keyframes loader-ring-still {
+  50% { opacity: 0.45; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .progress-line::before {
-    width: 100%;
-    animation: progress-line-pulse 1.6s ease-in-out infinite;
+  .loader-spinner-ring,
+  .loader-caption__quip {
+    animation: none;
+  }
+  .loader-spinner-ring__arc {
+    stroke-dasharray: 32 125;
+    animation: loader-ring-still 1.6s ease-in-out infinite;
   }
 }
 
@@ -3251,6 +3326,10 @@ body.dark-mode .modal-overlay {
 .choice-card__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .choice-card__label { font-size: var(--fs-md); font-weight: 600; color: var(--text-primary); }
 .choice-card__hint { font-size: var(--fs-sm); line-height: 1.4; color: var(--text-tertiary); }
+.choice-cards--stacked { grid-template-columns: 1fr; }
+/* The pick-one mark: a round box with a dot. */
+.ks-check--radio .ks-check__box { border-radius: 50%; }
+.ks-check__dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 
 /* Contractor kinds as badges — the pill box shared by every badge. */
 .typ-badge {
@@ -4222,25 +4301,6 @@ body.dark-mode .modal-overlay {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
-}
-
-/* Loader inside a modal or a section: the progress line across the box, the
-   caption under it. */
-.inline-loader {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--s-3);
-  min-height: 160px;
-  animation: overlayFade 0.2s ease-out 0.12s both;
-}
-.inline-loader > .progress-line {
-  align-self: stretch;
-}
-.inline-loader__text {
-  font-size: var(--fs-md);
-  color: var(--text-tertiary);
 }
 
 .loader-content {
@@ -12890,7 +12950,37 @@ body.dark-mode .mve-subject .ff-chip__missing {
 .zplan-adv-proposal ul { margin: var(--s-2) 0; padding-left: var(--s-5); }
 .zplan-adv-proposal p { margin: var(--s-2) 0 0; }
 
-.zplan-private { margin: var(--s-2) 0 0; }
+/* "Nagłówek planu" read-only: the property, resolution and year in the columns
+   their fields take when the plan is edited — label over value. */
+.zplan-ident { margin: 0; }
+.zplan-ident dt { margin-bottom: 6px; font-size: var(--fs-sm); color: var(--text-tertiary); }
+.zplan-ident dd { margin: 0; font-size: var(--fs-md); font-weight: 500; color: var(--text-primary); overflow-wrap: anywhere; }
+
+/* The plan's areas: a small table of their own under the header fields — the
+   total, its city and private parts indented, then the leased area; m² lined up
+   on the right, the shares beside them. Not `.facts`: a page section would
+   spread those over columns. */
+.zplan-areas { padding-top: var(--s-4); border-top: 1px solid var(--border-subtle); }
+.zplan-areas__title {
+  margin-bottom: var(--s-2);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.zplan-areas__list {
+  display: grid;
+  grid-template-columns: max-content max-content max-content;
+  justify-content: start;
+  gap: 6px var(--s-6);
+  margin: 0;
+  font-size: var(--fs-md);
+}
+.zplan-areas__list dt { color: var(--text-tertiary); }
+.zplan-areas__list dt.is-part { padding-left: var(--s-4); }
+.zplan-areas__list dd { margin: 0; color: var(--text-primary); font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; }
+.zplan-areas__list dd.zplan-areas__share { color: var(--text-tertiary); font-weight: 400; text-align: left; }
 
 .zplan-create { display: flex; justify-content: flex-end; margin-top: var(--s-4); }
 
@@ -14111,6 +14201,63 @@ body.dark-mode .ksieg-selbar .ksieg-convert:hover { color: #0d0e24; }
 
 .pod-note { margin: 0; font-size: var(--fs-sm); color: var(--text-tertiary); }
 
+/* The communities a tax list leaves out (PodatkiPozostale): a count pill in the section's
+   header, then a grid of cards — icon, name, the one action that brings it in. */
+.pod-rest-group { display: flex; flex-direction: column; gap: var(--s-2); margin-top: var(--s-6); }
+.pod-rest-group > .ksieg-queue-divider { margin: 0 0 var(--s-1); }
+/* Quieter than the list's cards: a dashed frame on the page's own background, a neutral icon. */
+.pod-rest-wrap > .form-section { border-style: dashed; background: transparent; }
+.pod-rest-wrap > .form-section .form-section__icon { background: var(--bg-surface-sunken); color: var(--text-secondary); }
+.pod-rest-wrap > .form-section .form-section__title { font-size: var(--fs-md); }
+.pod-rest__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-pill);
+  background: var(--bg-surface-sunken);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.pod-rest {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--s-2);
+}
+.pod-rest__item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  padding: 6px 6px 6px var(--s-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  transition: border-color var(--t-fast);
+}
+.pod-rest__item:hover { border-color: var(--border-strong); }
+.pod-rest__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-sm);
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+.pod-rest__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: var(--text-primary); }
+.pod-rest__item > .button { flex-shrink: 0; }
+
 /* The tax worked out: each line's sum to the right, the liability in bold. */
 .pod-calc { align-items: baseline; }
 .pod-calc dd { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s-2) var(--s-4); }
@@ -14230,6 +14377,26 @@ body.dark-mode .ksieg-selbar .ksieg-convert:hover { color: #0d0e24; }
 .podpis-sum__list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; font-size: 13px; }
 .podpis-sum__name { font-weight: 600; }
 .podpis-sum__reason { font-size: var(--fs-sm); color: var(--text-secondary); }
+/* Skipped documents as cards: the name over its reasons, each on its own line. */
+.podpis-sum__list--skipped { gap: var(--s-2); }
+.podpis-sum__list--skipped li {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--r-md);
+  background: var(--bg-surface-sunken);
+}
+.podpis-sum__list--skipped .podpis-sum__reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  line-height: 1.45;
+  color: var(--text-primary);
+}
+.podpis-sum__list--skipped .podpis-sum__reason > svg { flex-shrink: 0; margin-top: 2px; color: var(--warning); }
 .podpis-sum__file {
   display: inline-flex;
   align-items: center;

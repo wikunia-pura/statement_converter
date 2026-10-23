@@ -25,6 +25,7 @@ const HOLD_REASON_KEYS = {
   'ai-answer-missing': 'revHoldAiMissing',
   'glued-name': 'revHoldGluedName',
   'short-name': 'revHoldShortName',
+  'foreign-address': 'revHoldForeignAddress',
   'virtual-account-debit': 'revHoldVirtualAccountDebit',
 } as const satisfies Record<ReviewHoldReason, string>;
 

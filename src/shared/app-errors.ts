@@ -674,6 +674,86 @@ export const APP_ERRORS = {
     en: 'Could not connect to the e-Deklaracje gateway: {detail}',
   },
 
+  // ---------------- Taxes: ZUS — sending through EWD ----------------
+  ewdRejected: {
+    pl: 'Serwer ZUS (EWD) odrzucił żądanie: {detail}',
+    en: 'The ZUS server (EWD) rejected the request: {detail}',
+  },
+  ewdUnexpectedAnswer: {
+    pl: 'Serwer ZUS (EWD) odpowiedział nieoczekiwanie (HTTP {http}).',
+    en: 'The ZUS server (EWD) gave an unexpected answer (HTTP {http}).',
+  },
+  ewdBadStatus: {
+    pl: 'Serwer ZUS (EWD) nie odpowiedział poprawnie (HTTP {http}).',
+    en: 'The ZUS server (EWD) did not answer correctly (HTTP {http}).',
+  },
+  ewdTimeout: {
+    pl: 'Serwer ZUS (EWD) nie odpowiedział w ciągu minuty.',
+    en: 'The ZUS server (EWD) did not answer within a minute.',
+  },
+  ewdUnreachable: {
+    pl: 'Nie udało się połączyć z serwerem ZUS (EWD): {detail}',
+    en: 'Could not connect to the ZUS server (EWD): {detail}',
+  },
+  ewdDigestMismatch: {
+    pl: 'Skrót przesyłki {id} policzony przez ZUS nie zgadza się z wysłanym — dane uszkodziły się po drodze. Sprawdź potwierdzenie albo wyślij ponownie.',
+    en: 'The digest ZUS computed for przesyłka {id} does not match the one sent — the data was damaged on the way. Check the confirmation or send again.',
+  },
+  ewdConfirmationUnreadable: {
+    pl: 'Nie udało się odczytać potwierdzenia z ZUS ({detail}).',
+    en: 'The confirmation from ZUS could not be read ({detail}).',
+  },
+  zusCertZusExpired: {
+    pl: 'Certyfikat ZUS do szyfrowania przesyłek wygasł {date} — zaktualizuj aplikację (nowy certyfikat ZUS publikuje na zus.pl, w BIP: „Wymagania dla oprogramowania interfejsowego”). Do tego czasu wyślij plik KEDU przez ePłatnika.',
+    en: 'ZUS’s certificate for encrypting przesyłki expired on {date} — update the app (ZUS publishes the new one on zus.pl, BIP: “Wymagania dla oprogramowania interfejsowego”). Until then, send the KEDU file through ePłatnik.',
+  },
+  zusWysylkaGone: {
+    pl: 'Tej wysyłki już nie ma — odśwież listę.',
+    en: 'This send no longer exists — refresh the list.',
+  },
+  zusWysylkaSettled: {
+    pl: 'Ta wysyłka ma już odpowiedź ZUS albo została rozstrzygnięta — odśwież listę.',
+    en: 'This send already has ZUS’s answer or has been settled — refresh the list.',
+  },
+  zusSettlementUnknown: {
+    pl: 'Nieznany sposób rozstrzygnięcia wysyłki.',
+    en: 'Unknown way of settling the send.',
+  },
+  zusPotwierdzenieMissing: {
+    pl: 'Ta wysyłka nie ma jeszcze potwierdzenia z ZUS.',
+    en: 'This send has no confirmation from ZUS yet.',
+  },
+
+  // ---------------- Taxes: ZUS ----------------
+  zusTaken: {
+    pl: 'Ten płatnik (ten NIP) jest już w ZUS — otwórz go zamiast dodawać drugiego.',
+    en: 'This payer (this NIP) is already in ZUS — open it instead of adding a second one.',
+  },
+  zusGone: {
+    pl: 'Tego płatnika już nie ma w ZUS — mógł zostać usunięty.',
+    en: 'This payer is no longer in ZUS — it may have been deleted.',
+  },
+  zusRozliczenieTaken: {
+    pl: 'Ten miesiąc ma już rozliczenie z tym identyfikatorem — odśwież listę.',
+    en: 'This month already has a settlement with this identifier — refresh the list.',
+  },
+  zusRozliczenieGone: {
+    pl: 'Tego rozliczenia już nie ma — mogło zostać usunięte.',
+    en: 'This settlement no longer exists — it may have been deleted.',
+  },
+  zusDocumentGone: {
+    pl: 'Tego dokumentu już nie ma.',
+    en: 'This document no longer exists.',
+  },
+  zusImportEmpty: {
+    pl: 'W wybranych plikach nie ma żadnego dokumentu ZUS (KEDU) — nic nie zaimportowano.',
+    en: 'The chosen files hold no ZUS document (KEDU) — nothing was imported.',
+  },
+  zusKorektaNotSent: {
+    pl: 'Korektę robi się z rozliczenia oznaczonego jako wysłane — to jeszcze można po prostu poprawić.',
+    en: 'A correction is made of a settlement marked as sent — this one can simply be edited.',
+  },
+
   // ---------------- Taxes: PIT ----------------
   pitTaken: {
     pl: 'Ta wspólnota (ten NIP) ma już PIT na ten rok — otwórz go zamiast dodawać drugi.',
@@ -686,6 +766,14 @@ export const APP_ERRORS = {
   pitDocumentGone: {
     pl: 'Tego dokumentu już nie ma.',
     en: 'This document no longer exists.',
+  },
+  pitWysylkaGone: {
+    pl: 'Tej wysyłki już nie ma na liście — odśwież dokument.',
+    en: 'This submission is no longer on the list — refresh the document.',
+  },
+  pitWysylkaSettled: {
+    pl: 'Ta wysyłka ma już odpowiedź bramki albo została rozstrzygnięta — odśwież dokument.',
+    en: 'This submission already has the gateway’s answer or has been settled — refresh the document.',
   },
   pitImportEmpty: {
     pl: 'W tym folderze nie ma żadnego PIT-11 ani PIT-4R za {rok} — nic nie zaimportowano.',

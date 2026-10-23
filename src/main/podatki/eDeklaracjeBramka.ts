@@ -38,7 +38,8 @@ export class BramkaNiePrzyjela extends Error {}
 const PRZED_POLACZENIEM =
   /ERR_(NAME_NOT_RESOLVED|NAME_RESOLUTION_FAILED|INTERNET_DISCONNECTED|CONNECTION_REFUSED|CONNECTION_TIMED_OUT|ADDRESS_UNREACHABLE|ADDRESS_INVALID|PROXY_CONNECTION_FAILED|TUNNEL_CONNECTION_FAILED|NETWORK_ACCESS_DENIED|CERT_|SSL_)|ENOTFOUND|ECONNREFUSED|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH/;
 
-const bezPolaczenia = (error: unknown): boolean => {
+/** The request never left: no connection, no DNS, refused, a TLS failure. ZUS's client (zusEwd.ts) reads it too. */
+export const bezPolaczenia = (error: unknown): boolean => {
   const cause = (error as { cause?: { code?: unknown; message?: unknown } } | null)?.cause;
   const tekst = `${error instanceof Error ? error.message : String(error)} ${String(cause?.code ?? '')} ${String(cause?.message ?? '')}`;
   return PRZED_POLACZENIEM.test(tekst);

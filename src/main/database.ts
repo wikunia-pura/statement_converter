@@ -114,6 +114,15 @@ import {
   normalizeDanePit,
 } from '../shared/podatki-pit';
 import {
+  PodatekZusPlatnik,
+  PodatekZusRozliczenie,
+  ZusPlatnikDane,
+  ZusRozliczenieDane,
+  ZusZnak,
+  normalizeDaneRozliczenia,
+  normalizeDaneZusPlatnika,
+} from '../shared/podatki-zus';
+import {
   SPRAWOZDANIE_ODLACZONE,
   isSprawozdanieOdlaczone,
   normalizeSprawozdanieDane,
@@ -153,6 +162,7 @@ import { buildApartmentMapping, mappingTargets } from '../shared/apartment-mappi
 import { DEFAULT_AI_MODEL, resolveAiModel } from '../shared/ai-models';
 import { EDeklaracjeSrodowisko, EDeklaracjeWysylka, normalizeSrodowisko } from '../shared/e-deklaracje';
 import { WysylkaRozstrzygniecie, czekaNaUpo, niepewnaOtwarta } from '../shared/e-deklaracje';
+import { ZusSrodowisko, ZusWysylka, blokujeDokument, kluczWysylki, normalizeDaneWysylki, normalizeZusSrodowisko } from '../shared/zus-ewd';
 
 // Settings remain machine-local: dark mode, folder paths, language, etc. are
 // per-user-machine UI prefs that shouldn't sync across installs.
@@ -191,6 +201,8 @@ interface SettingsStoreSchema {
     podpisBiblioteka: string;
     /** The e-Deklaracje gateway signed returns go to ('test' unless switched in Administracja). */
     eDeklaracjeSrodowisko: EDeklaracjeSrodowisko;
+    /** ZUS's EWD service documents go to ('test' unless switched in Administracja). */
+    zusSrodowisko: ZusSrodowisko;
   };
 }
 
@@ -644,6 +656,7 @@ class DatabaseService {
           podatkiFolder: '',
           podpisBiblioteka: '',
           eDeklaracjeSrodowisko: 'test',
+          zusSrodowisko: 'test',
         },
       },
     });
@@ -4613,18 +4626,23 @@ class DatabaseService {
     return data ? DatabaseService.pitRow(data) : null;
   }
 
-  /** What a save from the screen must not overwrite: what was filed and downloaded, kept per person. */
+  /**
+   * What a save from the screen must not overwrite: what was filed, downloaded and sent to the gateway, kept
+   * per person — a send recorded meanwhile carries the refId, the UPO and the guard against a second filing.
+   */
   private static pitZachowaj(nowe: PitDane, zapisane: PitDane): PitDane {
     const stare = new Map(zapisane.osoby.map(o => [o.klucz, o]));
     const osoby = nowe.osoby.map((o): PitOsoba => {
       const poprzednia = stare.get(o.klucz);
-      return poprzednia ? { ...o, zlozone: poprzednia.zlozone, pobrania: poprzednia.pobrania } : { ...o, zlozone: null, pobrania: [] };
+      return poprzednia
+        ? { ...o, zlozone: poprzednia.zlozone, pobrania: poprzednia.pobrania, wysylki: poprzednia.wysylki }
+        : { ...o, zlozone: null, pobrania: [], wysylki: [] };
     });
     const pit4r =
       nowe.pit4r && zapisane.pit4r
-        ? { ...nowe.pit4r, zlozone: zapisane.pit4r.zlozone, pobrania: zapisane.pit4r.pobrania }
+        ? { ...nowe.pit4r, zlozone: zapisane.pit4r.zlozone, pobrania: zapisane.pit4r.pobrania, wysylki: zapisane.pit4r.wysylki }
         : nowe.pit4r
-          ? { ...nowe.pit4r, zlozone: null, pobrania: [] }
+          ? { ...nowe.pit4r, zlozone: null, pobrania: [], wysylki: [] }
           : null;
     return { ...nowe, osoby, pit4r };
   }
@@ -4683,16 +4701,76 @@ class DatabaseService {
     });
   }
 
-  /** Store data the app itself worked out (Excel read back) — as given, nothing kept from the stored row. */
+  /**
+   * Store data the app itself worked out (Excel read back) — the amounts as given, the filed marks, downloads
+   * and sends as stored when the write lands: the Excel was read moments ago, and a send recorded meanwhile
+   * must not be wiped by it.
+   */
   async zapiszDanePit(id: number, dane: PitDane, who: string): Promise<PodatekPit> {
-    const { data, error } = await getSupabase()
-      .from('podatki_pit')
-      .update({ dane: normalizeDanePit(dane), updated_at: new Date().toISOString(), updated_by: who })
-      .eq('id', id)
-      .select('*')
-      .single();
-    if (error) throw DatabaseService.pitError('zapiszDanePit', error);
-    return DatabaseService.pitRow(data);
+    const result = await this.casUpdate<{ dane: unknown; updated_at: string }>(
+      'podatki_pit',
+      id,
+      'dane',
+      'zapiszDanePit',
+      (row) => ({
+        dane: DatabaseService.pitKeepUnknown(row.dane, DatabaseService.pitZachowaj(normalizeDanePit(dane), normalizeDanePit(row.dane))),
+        updated_by: who,
+      }),
+      { returning: '*', mapError: (error) => DatabaseService.pitError('zapiszDanePit', error) },
+    );
+    if (!result?.written) throw new AppError('pitGone');
+    return DatabaseService.pitRow(result.written);
+  }
+
+  /**
+   * Change the sends and the filed mark of PIT documents of one row — every send, its answer, the UPO pass and
+   * a person's settling go through here, under casUpdate (the row also takes the form's saves and downloads).
+   * `zmiana` gets each document named in `klucze` (a person's key, null = the PIT-4R) as stored at the moment
+   * of writing — null when it is no longer there — and returns its new sends and mark, or null to leave it.
+   * It may run more than once (a lost race is read again), so it must not count anything outside itself.
+   * Null when the row is gone.
+   */
+  async zmienWysylkiPit(
+    wierszId: number,
+    klucze: (string | null)[],
+    op: string,
+    zmiana: (
+      klucz: string | null,
+      dokument: { cel: 1 | 2; wysylki: EDeklaracjeWysylka[]; zlozone: PitZlozone | null } | null,
+    ) => { wysylki: EDeklaracjeWysylka[]; zlozone: PitZlozone | null } | null,
+  ): Promise<PodatekPit | null> {
+    const result = await this.casUpdate<any>(
+      'podatki_pit',
+      wierszId,
+      '*',
+      op,
+      (row) => {
+        const stored = normalizeDanePit(row.dane);
+        let zmienione = false;
+        const nowe = new Map<string | null, { wysylki: EDeklaracjeWysylka[]; zlozone: PitZlozone | null }>();
+        for (const klucz of klucze) {
+          const doc = klucz === null ? stored.pit4r : (stored.osoby.find(o => o.klucz === klucz) ?? null);
+          const po = zmiana(klucz, doc ? { cel: doc.cel, wysylki: doc.wysylki, zlozone: doc.zlozone } : null);
+          if (po && doc) {
+            nowe.set(klucz, po);
+            zmienione = true;
+          }
+        }
+        if (!zmienione) return null;
+        const dane: PitDane = {
+          ...stored,
+          osoby: stored.osoby.map(o => {
+            const po = nowe.get(o.klucz);
+            return po ? { ...o, wysylki: po.wysylki, zlozone: po.zlozone } : o;
+          }),
+          pit4r: stored.pit4r && nowe.has(null) ? { ...stored.pit4r, ...nowe.get(null)! } : stored.pit4r,
+        };
+        return { dane: DatabaseService.pitKeepUnknown(row.dane, dane) };
+      },
+      { stamp: 'note', returning: '*' },
+    );
+    if (!result) return null;
+    return DatabaseService.pitRow(result.written ?? result.row);
   }
 
   async deletePodatekPit(id: number): Promise<void> {
@@ -4814,6 +4892,435 @@ class DatabaseService {
       who,
     );
     return dodane;
+  }
+
+  /* ------------------------------- Podatki — ZUS ------------------------------- */
+
+  private static zusRow(r: any): PodatekZusPlatnik {
+    return {
+      id: r.id,
+      nip: r.nip ?? '',
+      dane: normalizeDaneZusPlatnika(r.dane),
+      createdAt: r.created_at ?? '',
+      createdBy: r.created_by ?? '',
+      updatedAt: r.updated_at ?? '',
+      updatedBy: r.updated_by ?? '',
+    };
+  }
+
+  private static zusRozliczenieRow(r: any): PodatekZusRozliczenie {
+    return {
+      id: r.id,
+      nip: r.nip ?? '',
+      okres: r.okres ?? '',
+      identyfikator: r.identyfikator ?? 1,
+      dane: normalizeDaneRozliczenia(r.dane),
+      createdAt: r.created_at ?? '',
+      createdBy: r.created_by ?? '',
+      updatedAt: r.updated_at ?? '',
+      updatedBy: r.updated_by ?? '',
+    };
+  }
+
+  /** A second payer of one NIP, or a second set of one month and identifier — the unique keys say no. */
+  private static zusError(op: string, kod: 'zusTaken' | 'zusRozliczenieTaken', error: { code?: string; message: string }): Error {
+    return error.code === '23505' ? new AppError(kod) : new Error(`${op}: ${error.message}`);
+  }
+
+  /** Every payer of the ZUS register, in the order they were added. */
+  async getPodatkiZus(): Promise<PodatekZusPlatnik[]> {
+    const rows = await fetchAllPaged<any>('getPodatkiZus', (from, to) =>
+      getSupabase().from('podatki_zus').select('*').order('id', { ascending: true }).range(from, to),
+    );
+    return rows.map(DatabaseService.zusRow);
+  }
+
+  /** Every monthly set of every payer — newest month first, versions in order. */
+  async getPodatkiZusRozliczenia(): Promise<PodatekZusRozliczenie[]> {
+    const rows = await fetchAllPaged<any>('getPodatkiZusRozliczenia', (from, to) =>
+      getSupabase()
+        .from('podatki_zus_rozliczenia')
+        .select('*')
+        .order('okres', { ascending: false })
+        .order('identyfikator', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
+    return rows.map(DatabaseService.zusRozliczenieRow);
+  }
+
+  /**
+   * What a save from the screen must not overwrite: the "sent" marks and the downloads of each title and family
+   * member, kept from the stored row (they are written by their own calls).
+   */
+  private static zusZachowaj(nowe: ZusPlatnikDane, zapisane: ZusPlatnikDane): ZusPlatnikDane {
+    const osoby = new Map(zapisane.ubezpieczeni.map((o) => [o.klucz, o]));
+    return {
+      ...nowe,
+      ubezpieczeni: nowe.ubezpieczeni.map((o) => {
+        const stara = osoby.get(o.klucz);
+        const tytuly = new Map((stara?.tytuly ?? []).map((t) => [t.klucz, t]));
+        const czlonkowie = new Map((stara?.czlonkowie ?? []).map((c) => [c.klucz, c]));
+        return {
+          ...o,
+          tytuly: o.tytuly.map((t) => {
+            const s = tytuly.get(t.klucz);
+            return { ...t, zgloszenie: s?.zgloszenie ?? null, wyrejestrowanie: s?.wyrejestrowanie ?? null, pobrania: s?.pobrania ?? [] };
+          }),
+          czlonkowie: o.czlonkowie.map((c) => {
+            const s = czlonkowie.get(c.klucz);
+            return { ...c, zgloszenie: s?.zgloszenie ?? null, wyrejestrowanie: s?.wyrejestrowanie ?? null, pobrania: s?.pobrania ?? [] };
+          }),
+        };
+      }),
+    };
+  }
+
+  /** ZUS data over the stored object: unknown keys kept at the top, on each person, title and family member. */
+  private static zusKeepUnknown(raw: unknown, dane: ZusPlatnikDane): ZusPlatnikDane {
+    const stored = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+    const storedOsoby = new Map<string, Record<string, unknown>>();
+    if (Array.isArray(stored.ubezpieczeni)) {
+      for (const o of stored.ubezpieczeni) if (o && typeof o === 'object' && typeof o.klucz === 'string') storedOsoby.set(o.klucz, o);
+    }
+    const ubezpieczeni = keepUnknownItems(stored.ubezpieczeni, dane.ubezpieczeni, 'klucz').map((o) => {
+      const s = storedOsoby.get(o.klucz) ?? {};
+      return { ...o, tytuly: keepUnknownItems(s.tytuly, o.tytuly, 'klucz'), czlonkowie: keepUnknownItems(s.czlonkowie, o.czlonkowie, 'klucz') };
+    });
+    return keepUnknownKeys(raw, { ...dane, ubezpieczeni });
+  }
+
+  async addPodatekZus(nip: string, value: ZusPlatnikDane, who: string): Promise<PodatekZusPlatnik> {
+    const now = new Date().toISOString();
+    const { data, error } = await getSupabase()
+      .from('podatki_zus')
+      .insert({
+        nip: tylkoCyfry(nip),
+        dane: DatabaseService.zusZachowaj(normalizeDaneZusPlatnika(value), normalizeDaneZusPlatnika(null)),
+        created_at: now,
+        created_by: who,
+        updated_at: now,
+        updated_by: who,
+      })
+      .select('*')
+      .single();
+    if (error) throw DatabaseService.zusError('addPodatekZus', 'zusTaken', error);
+    return DatabaseService.zusRow(data);
+  }
+
+  /** Save an edited payer; the marks and downloads stay as stored when the write lands (see casUpdate). */
+  async setPodatekZus(id: number, value: ZusPlatnikDane, who: string): Promise<PodatekZusPlatnik> {
+    const result = await this.casUpdate<{ dane: unknown; updated_at: string }>(
+      'podatki_zus',
+      id,
+      'dane',
+      'setPodatekZus',
+      (row) => ({
+        dane: DatabaseService.zusKeepUnknown(row.dane, DatabaseService.zusZachowaj(normalizeDaneZusPlatnika(value), normalizeDaneZusPlatnika(row.dane))),
+        updated_by: who,
+      }),
+      { returning: '*', mapError: (error) => DatabaseService.zusError('setPodatekZus', 'zusTaken', error) },
+    );
+    if (!result?.written) throw new AppError('zusGone');
+    return DatabaseService.zusRow(result.written);
+  }
+
+  /** The payer and every monthly set of its NIP. */
+  async deletePodatekZus(id: number): Promise<void> {
+    const { data, error } = await getSupabase().from('podatki_zus').delete().eq('id', id).select('nip');
+    if (error) throw new Error(`deletePodatekZus: ${error.message}`);
+    const nip = (data ?? [])[0]?.nip;
+    if (nip) {
+      const { error: e2 } = await getSupabase().from('podatki_zus_rozliczenia').delete().eq('nip', nip);
+      if (e2) throw new Error(`deletePodatekZus (rozliczenia): ${e2.message}`);
+      const { error: e3 } = await getSupabase().from('podatki_zus_wysylki').delete().eq('nip', nip);
+      if (e3) throw new Error(`deletePodatekZus (wysyłki): ${e3.message}`);
+    }
+  }
+
+  async addZusRozliczenie(nip: string, okres: string, identyfikator: number, value: ZusRozliczenieDane, who: string): Promise<PodatekZusRozliczenie> {
+    const now = new Date().toISOString();
+    const { data, error } = await getSupabase()
+      .from('podatki_zus_rozliczenia')
+      .insert({
+        nip: tylkoCyfry(nip),
+        okres,
+        identyfikator,
+        dane: { ...normalizeDaneRozliczenia(value), wyslane: null, pobrania: [] },
+        created_at: now,
+        created_by: who,
+        updated_at: now,
+        updated_by: who,
+      })
+      .select('*')
+      .single();
+    if (error) throw DatabaseService.zusError('addZusRozliczenie', 'zusRozliczenieTaken', error);
+    return DatabaseService.zusRozliczenieRow(data);
+  }
+
+  /** Save an edited month; its "sent" mark and downloads stay as stored. */
+  async setZusRozliczenie(id: number, value: ZusRozliczenieDane, who: string): Promise<PodatekZusRozliczenie> {
+    const result = await this.casUpdate<{ dane: unknown; updated_at: string }>(
+      'podatki_zus_rozliczenia',
+      id,
+      'dane',
+      'setZusRozliczenie',
+      (row) => {
+        const stored = normalizeDaneRozliczenia(row.dane);
+        return {
+          dane: keepUnknownKeys(row.dane, { ...normalizeDaneRozliczenia(value), wyslane: stored.wyslane, pobrania: stored.pobrania }),
+          updated_by: who,
+        };
+      },
+      { returning: '*' },
+    );
+    if (!result?.written) throw new AppError('zusRozliczenieGone');
+    return DatabaseService.zusRozliczenieRow(result.written);
+  }
+
+  async deleteZusRozliczenie(id: number): Promise<void> {
+    const { error } = await getSupabase().from('podatki_zus_rozliczenia').delete().eq('id', id);
+    if (error) throw new Error(`deleteZusRozliczenie: ${error.message}`);
+  }
+
+  /** Apply `zmien` to the stored data of each payer in `wpisy` (by id), under casUpdate. */
+  private async zmienZusPlatnikow<W extends { platnikId: number }>(
+    wpisy: W[],
+    op: string,
+    zmien: (dane: ZusPlatnikDane, moje: W[]) => ZusPlatnikDane,
+  ): Promise<PodatekZusPlatnik[]> {
+    const ids = [...new Set(wpisy.map((w) => w.platnikId))];
+    const out: PodatekZusPlatnik[] = [];
+    for (const id of ids) {
+      const result = await this.casUpdate<{ dane: unknown; updated_at: string }>(
+        'podatki_zus',
+        id,
+        'dane',
+        op,
+        (row) => ({ dane: DatabaseService.zusKeepUnknown(row.dane, zmien(normalizeDaneZusPlatnika(row.dane), wpisy.filter((w) => w.platnikId === id))) }),
+        { stamp: 'note', returning: '*' },
+      );
+      if (result?.written) out.push(DatabaseService.zusRow(result.written));
+    }
+    return out;
+  }
+
+  /** Note the files made of registrations (on the title / family member) and of monthly sets. */
+  async recordZusPliki(
+    rejestr: { platnikId: number; kluczOsoby: string; klucz: string; entry: PodatekPobranie }[],
+    rozliczenia: { rozliczenieId: number; entry: PodatekPobranie }[],
+  ): Promise<void> {
+    if (rejestr.length > 0) {
+      await this.zmienZusPlatnikow(rejestr, 'recordZusPliki', (dane, moje) => ({
+        ...dane,
+        ubezpieczeni: dane.ubezpieczeni.map((o) => ({
+          ...o,
+          tytuly: o.tytuly.map((t) => {
+            const nowe = moje.filter((w) => w.kluczOsoby === o.klucz && w.klucz === t.klucz).map((w) => w.entry);
+            return nowe.length > 0 ? { ...t, pobrania: [...t.pobrania, ...nowe] } : t;
+          }),
+          czlonkowie: o.czlonkowie.map((c) => {
+            const nowe = moje.filter((w) => w.kluczOsoby === o.klucz && w.klucz === c.klucz).map((w) => w.entry);
+            return nowe.length > 0 ? { ...c, pobrania: [...c.pobrania, ...nowe] } : c;
+          }),
+        })),
+      }));
+    }
+    for (const id of [...new Set(rozliczenia.map((r) => r.rozliczenieId))]) {
+      await this.casUpdate<{ dane: unknown; updated_at: string }>(
+        'podatki_zus_rozliczenia',
+        id,
+        'dane',
+        'recordZusPliki',
+        (row) => {
+          const stored = normalizeDaneRozliczenia(row.dane);
+          const nowe = rozliczenia.filter((r) => r.rozliczenieId === id).map((r) => r.entry);
+          return { dane: keepUnknownKeys(row.dane, { ...stored, pobrania: [...stored.pobrania, ...nowe] }) };
+        },
+        { stamp: 'note' },
+      );
+    }
+  }
+
+  /**
+   * Mark documents as sent to ZUS (`znak`) or take the mark off (null): registrations on their title / family
+   * member, monthly sets on the set. Returns what the rows now are.
+   */
+  async setZusWyslane(
+    rejestr: { platnikId: number; typ: 'z' | 'w' | 'c'; kluczOsoby: string; klucz: string; zdarzenie?: 'z' | 'w' }[],
+    rozliczenia: number[],
+    znak: ZusZnak | null,
+  ): Promise<{ platnicy: PodatekZusPlatnik[]; rozliczenia: PodatekZusRozliczenie[] }> {
+    const platnicy = await this.zmienZusPlatnikow(rejestr, 'setZusWyslane', (dane, moje) => ({
+      ...dane,
+      ubezpieczeni: dane.ubezpieczeni.map((o) => ({
+        ...o,
+        tytuly: o.tytuly.map((t) => {
+          const m = moje.filter((w) => w.kluczOsoby === o.klucz && w.klucz === t.klucz);
+          return {
+            ...t,
+            zgloszenie: m.some((w) => w.typ === 'z') ? znak : t.zgloszenie,
+            wyrejestrowanie: m.some((w) => w.typ === 'w') ? znak : t.wyrejestrowanie,
+          };
+        }),
+        czlonkowie: o.czlonkowie.map((c) => {
+          const m = moje.filter((w) => w.typ === 'c' && w.kluczOsoby === o.klucz && w.klucz === c.klucz);
+          return {
+            ...c,
+            zgloszenie: m.some((w) => w.zdarzenie === 'z') ? znak : c.zgloszenie,
+            wyrejestrowanie: m.some((w) => w.zdarzenie === 'w') ? znak : c.wyrejestrowanie,
+          };
+        }),
+      })),
+    }));
+    const zmienione: PodatekZusRozliczenie[] = [];
+    for (const id of [...new Set(rozliczenia)]) {
+      const result = await this.casUpdate<{ dane: unknown; updated_at: string }>(
+        'podatki_zus_rozliczenia',
+        id,
+        'dane',
+        'setZusWyslane',
+        (row) => ({ dane: keepUnknownKeys(row.dane, { ...normalizeDaneRozliczenia(row.dane), wyslane: znak }) }),
+        { stamp: 'note', returning: '*' },
+      );
+      if (result?.written) zmienione.push(DatabaseService.zusRozliczenieRow(result.written));
+    }
+    return { platnicy, rozliczenia: zmienione };
+  }
+
+  private static zusWysylkaRow(r: any): ZusWysylka {
+    return {
+      id: r.id,
+      nip: r.nip ?? '',
+      okres: r.okres ?? '',
+      dokument: r.dokument ?? '',
+      srodowisko: normalizeZusSrodowisko(r.srodowisko),
+      at: r.at ?? '',
+      ...normalizeDaneWysylki(r.dane),
+    };
+  }
+
+  /** The row of a send: the columns the queries and the unique index read, the rest in `dane`. */
+  private static zusWysylkaKolumny(w: Omit<ZusWysylka, 'id'>) {
+    const { nip, okres, dokument, srodowisko, at, ...dane } = w;
+    return {
+      nip,
+      okres,
+      dokument,
+      klucz: kluczWysylki(dokument, w.identyfikator),
+      srodowisko,
+      aktywna: blokujeDokument({ ...w, id: 0 }),
+      at,
+      dane,
+    };
+  }
+
+  /** Every send of documents to ZUS, oldest first. */
+  async getZusWysylki(): Promise<ZusWysylka[]> {
+    const rows = await fetchAllPaged<any>('getZusWysylki', (from, to) =>
+      getSupabase().from('podatki_zus_wysylki').select('*').order('id', { ascending: true }).range(from, to),
+    );
+    return rows.map(DatabaseService.zusWysylkaRow);
+  }
+
+  /**
+   * Record a send before it goes. Null when another production send of the same document is still in the
+   * air or waiting for its confirmation — the unique index says so, even for one made on another computer a
+   * moment ago.
+   */
+  async dodajZusWysylke(w: Omit<ZusWysylka, 'id'>): Promise<ZusWysylka | null> {
+    const { data, error } = await getSupabase()
+      .from('podatki_zus_wysylki')
+      .insert({ ...DatabaseService.zusWysylkaKolumny(w), updated_at: new Date().toISOString() })
+      .select('*')
+      .single();
+    if (error?.code === '23505') return null;
+    if (error) throw new Error(`dodajZusWysylke: ${error.message}`);
+    return DatabaseService.zusWysylkaRow(data);
+  }
+
+  /**
+   * Change a stored send: `zmien` gets it as stored now and returns the new one (null = leave it). Under
+   * casUpdate, so the automat writing a confirmation and a person settling the send never lose each other's
+   * word. Null when the send is gone.
+   */
+  async zmienZusWysylke(id: number, op: string, zmien: (w: ZusWysylka) => ZusWysylka | null): Promise<ZusWysylka | null> {
+    let po: ZusWysylka | null = null;
+    const result = await this.casUpdate<any>(
+      'podatki_zus_wysylki',
+      id,
+      '*',
+      op,
+      (row) => {
+        const teraz = DatabaseService.zusWysylkaRow(row);
+        const nowa = zmien(teraz);
+        po = nowa ?? teraz;
+        if (!nowa) return null;
+        const { aktywna, dane } = DatabaseService.zusWysylkaKolumny(nowa);
+        return { aktywna, dane: keepUnknownKeys(row.dane, dane) };
+      },
+      { stamp: 'note', returning: '*' },
+    );
+    if (!result) return null;
+    return result.written ? DatabaseService.zusWysylkaRow(result.written) : po;
+  }
+
+  /**
+   * Write what an import of KEDU files worked out: new payers inserted, the ones it added people or titles to
+   * replaced with the merged data (read and merged moments before — a save landing in between wins and the
+   * import's additions to that payer are lost, which the summary then shows as fewer additions), months added.
+   */
+  async zapiszImportZus(
+    nowi: { nip: string; dane: ZusPlatnikDane }[],
+    zmienieni: { id: number; dane: ZusPlatnikDane; updatedAt: string }[],
+    rozliczenia: { nip: string; okres: string; identyfikator: number; dane: ZusRozliczenieDane }[],
+    who: string,
+  ): Promise<{ dodaniPlatnicy: number; zmienieniPlatnicy: number; dodaneRozliczenia: number }> {
+    const now = new Date().toISOString();
+    await this.insertChunked(
+      'podatki_zus',
+      nowi.map((p) => ({ nip: p.nip, dane: normalizeDaneZusPlatnika(p.dane), created_at: now, created_by: who, updated_at: now, updated_by: who })),
+    );
+    let zmienieniPlatnicy = 0;
+    for (const p of zmienieni) {
+      try {
+        const result = await this.casUpdate<{ dane: unknown; updated_at: string }>(
+          'podatki_zus',
+          p.id,
+          'dane',
+          'zapiszImportZus',
+          (row) => ({ dane: DatabaseService.zusKeepUnknown(row.dane, normalizeDaneZusPlatnika(p.dane)), updated_by: who }),
+          { expectedUpdatedAt: p.updatedAt },
+        );
+        if (result?.written) zmienieniPlatnicy += 1;
+      } catch (error: unknown) {
+        if (!(error instanceof AppError)) throw error;
+        log.warn('[ZUS] import: a payer changed meanwhile — its additions were not written');
+      }
+    }
+    // A month written meanwhile (same payer, month and identifier) is skipped by the unique key.
+    let dodaneRozliczenia = 0;
+    for (const slice of DatabaseService.chunk(rozliczenia, 200)) {
+      const { data, error } = await getSupabase()
+        .from('podatki_zus_rozliczenia')
+        .upsert(
+          slice.map((r) => ({
+            nip: r.nip,
+            okres: r.okres,
+            identyfikator: r.identyfikator,
+            dane: normalizeDaneRozliczenia(r.dane),
+            created_at: now,
+            created_by: who,
+            updated_at: now,
+            updated_by: who,
+          })),
+          { onConflict: 'nip,okres,identyfikator', ignoreDuplicates: true },
+        )
+        .select('id');
+      if (error) throw new Error(`zapiszImportZus: ${error.message}`);
+      dodaneRozliczenia += (data ?? []).length;
+    }
+    return { dodaniPlatnicy: nowi.length, zmienieniPlatnicy, dodaneRozliczenia };
   }
 
   /* ------------------------------ Podatki — CIT-8 ------------------------------ */
@@ -5688,6 +6195,11 @@ class DatabaseService {
     return normalizeSrodowisko(this.getSetting('eDeklaracjeSrodowisko'));
   }
 
+  /** ZUS's EWD service to send to — test unless switched, like the gateway above. */
+  getZusSrodowisko(): ZusSrodowisko {
+    return normalizeZusSrodowisko(this.getSetting('zusSrodowisko'));
+  }
+
   setSetting(key: string, value: string): void {
     const settings = this.settingsStore.get('settings');
     this.settingsStore.set('settings', { ...settings, [key]: value });
@@ -5801,6 +6313,9 @@ class DatabaseService {
       podatkiStawki,
       podatkiCit,
       podatkiPit,
+      podatkiZus,
+      podatkiZusRozliczenia,
+      podatkiZusWysylki,
       podatkiCitUstawienia,
       podpisHistoria,
     ] = await Promise.all([
@@ -5838,6 +6353,9 @@ class DatabaseService {
       optionalSection('podatkiStawki', () => this.getPodatkiStawki()),
       optionalSection('podatkiCit', () => this.getPodatkiCit()),
       optionalSection('podatkiPit', () => this.getPodatkiPit()),
+      optionalSection('podatkiZus', () => this.getPodatkiZus()),
+      optionalSection('podatkiZusRozliczenia', () => this.getPodatkiZusRozliczenia()),
+      optionalSection('podatkiZusWysylki', () => this.getZusWysylki()),
       optionalSection('podatkiCitUstawienia', () => this.getPodatkiCitUstawieniaRow()),
       optionalSection('podpisHistoria', () => this.getPodpisHistoria()),
     ]);
@@ -5881,6 +6399,9 @@ class DatabaseService {
         podatkiStawki,
         podatkiCit,
         podatkiPit,
+        podatkiZus,
+        podatkiZusRozliczenia,
+        podatkiZusWysylki,
         podatkiCitUstawienia,
         podpisHistoria,
         // The `app_users` ROWS are deliberately absent: they mirror the Supabase
@@ -6517,6 +7038,63 @@ class DatabaseService {
           updated_by: p.updatedBy ?? '',
         }));
       put('podatki_pit', lastPer(rows, (r) => `${r.nip}|${r.rok}`));
+    }
+    // ZUS: the register one row per payer (NIP), the monthly sets per payer, month and identifier.
+    if (d.podatkiZus) {
+      const ids = idsOf(d.podatkiZus);
+      const rows = d.podatkiZus
+        .map((p, i) => ({ p, id: ids[i] }))
+        .filter(({ p }) => /^\d{10}$/.test(tylkoCyfry(p.nip)))
+        .map(({ p, id }) => ({
+          id,
+          nip: tylkoCyfry(p.nip),
+          dane: normalizeDaneZusPlatnika(p.dane),
+          created_at: p.createdAt || now,
+          created_by: p.createdBy ?? '',
+          updated_at: p.updatedAt || now,
+          updated_by: p.updatedBy ?? '',
+        }));
+      put('podatki_zus', lastPer(rows, (r) => r.nip));
+    }
+    if (d.podatkiZusRozliczenia) {
+      const ids = idsOf(d.podatkiZusRozliczenia);
+      const rows = d.podatkiZusRozliczenia
+        .map((p, i) => ({ p, id: ids[i] }))
+        .filter(({ p }) => /^\d{10}$/.test(tylkoCyfry(p.nip)) && /^\d{4}-(0[1-9]|1[0-2])$/.test(p.okres) && Number.isInteger(p.identyfikator))
+        .map(({ p, id }) => ({
+          id,
+          nip: tylkoCyfry(p.nip),
+          okres: p.okres,
+          identyfikator: p.identyfikator,
+          dane: normalizeDaneRozliczenia(p.dane),
+          created_at: p.createdAt || now,
+          created_by: p.createdBy ?? '',
+          updated_at: p.updatedAt || now,
+          updated_by: p.updatedBy ?? '',
+        }));
+      put('podatki_zus_rozliczenia', lastPer(rows, (r) => `${r.nip}|${r.okres}|${r.identyfikator}`));
+    }
+    // ZUS sends: history with the confirmations; `aktywna` worked out again from the send itself.
+    if (d.podatkiZusWysylki) {
+      const ids = idsOf(d.podatkiZusWysylki);
+      put(
+        'podatki_zus_wysylki',
+        d.podatkiZusWysylki
+          .map((w, i) => ({ w, id: ids[i] }))
+          .filter(({ w }) => /^\d{10}$/.test(tylkoCyfry(w.nip)) && /^\d{4}-(0[1-9]|1[0-2])$/.test(w.okres) && !!w.dokument && !!w.at)
+          .map(({ w, id }) => {
+            const wysylka: ZusWysylka = {
+              ...normalizeDaneWysylki(w),
+              id,
+              nip: tylkoCyfry(w.nip),
+              okres: w.okres,
+              dokument: w.dokument,
+              srodowisko: normalizeZusSrodowisko(w.srodowisko),
+              at: w.at,
+            };
+            return { id, ...DatabaseService.zusWysylkaKolumny(wysylka), updated_at: now };
+          }),
+      );
     }
     if (d.podatkiCitUstawienia !== undefined) {
       put(

@@ -29,6 +29,15 @@ export const nul = (): Buffer => Buffer.from([0x05, 0x00]);
 /** [n] EXPLICIT, or the constructed [n] IMPLICIT of a SET/SEQUENCE body. */
 export const ctx = (n: number, ...parts: Buffer[]): Buffer => tlv(0xa0 | n, ...parts);
 
+/** [n] IMPLICIT of a primitive type (an OCTET STRING's bytes as CMS's encryptedContent). */
+export const ctxPrim = (n: number, body: Buffer): Buffer => tlv(0x80 | n, body);
+
+/** UTCTime, YYMMDDHHMMSSZ — what CMS's signing-time uses for dates before 2050. */
+export const utcTime = (d: Date): Buffer => {
+  const s = d.toISOString(); // 2026-10-23T18:38:05.123Z
+  return tlv(0x17, Buffer.from(`${s.slice(2, 4)}${s.slice(5, 7)}${s.slice(8, 10)}${s.slice(11, 13)}${s.slice(14, 16)}${s.slice(17, 19)}Z`, 'latin1'));
+};
+
 export const small = (n: number): Buffer => tlv(0x02, Buffer.from([n]));
 
 /** An unsigned big-endian integer as DER INTEGER: no extra leading zeros, a 0x00 before a high bit. */

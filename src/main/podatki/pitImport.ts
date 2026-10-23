@@ -50,9 +50,9 @@ export interface PitImportWynik {
   ostrzezenia: string[];
 }
 
-/* ================================ Tiny XML tree ============================== */
+/* ============================ Tiny XML tree (also zusImport) ========================= */
 
-interface XNode {
+export interface XNode {
   /** Local name, the namespace prefix cut off. */
   name: string;
   attrs: Record<string, string>;
@@ -78,7 +78,7 @@ const ATRYBUT = /([^\s=]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 const lokalna = (n: string): string => n.replace(/^.*:/, '');
 
 /** Throws on a file that is not well-formed — the caller reports it as unreadable. */
-function parsujXml(zrodlo: string): XNode {
+export function parsujXml(zrodlo: string): XNode {
   const korzen: XNode = { name: '#root', attrs: {}, text: '', kids: [] };
   const stos: XNode[] = [korzen];
   let ostatni = 0;
@@ -107,7 +107,7 @@ function parsujXml(zrodlo: string): XNode {
   return wezlyGlowne[0];
 }
 
-const dziecko = (n: XNode | undefined, ...sciezka: string[]): XNode | undefined => {
+export const dziecko = (n: XNode | undefined, ...sciezka: string[]): XNode | undefined => {
   let w = n;
   for (const nazwa of sciezka) {
     w = w?.kids.find((k) => k.name === nazwa);
@@ -117,7 +117,7 @@ const dziecko = (n: XNode | undefined, ...sciezka: string[]): XNode | undefined 
 };
 
 /** Trimmed text of the element; undefined when the element is missing, '' when it is empty. */
-const tekst = (n: XNode | undefined, ...sciezka: string[]): string | undefined => {
+export const tekst = (n: XNode | undefined, ...sciezka: string[]): string | undefined => {
   const w = dziecko(n, ...sciezka);
   return w === undefined ? undefined : w.text.trim();
 };

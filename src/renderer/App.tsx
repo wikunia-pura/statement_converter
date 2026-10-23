@@ -19,7 +19,7 @@ import ModuleTabs from './components/ModuleTabs';
 import CoNowego from './views/CoNowego';
 import Login from './views/Login';
 import Logo from './components/Logo';
-import Loader from './components/Loader';
+import Loader, { LoaderTextContext } from './components/Loader';
 import ErrorBoundary from './components/ErrorBoundary';
 import SplashScreen from './components/SplashScreen';
 import SidebarWelcome from './components/SidebarWelcome';
@@ -90,6 +90,7 @@ const MailingTypy = lazyView(() => import('./views/MailingTypy'));
 const PodatkiNieruchomosci = lazyView(() => import('./views/PodatkiNieruchomosci'));
 const PodatkiCit = lazyView(() => import('./views/PodatkiCit'));
 const PodatkiPit = lazyView(() => import('./views/PodatkiPit'));
+const PodatkiZus = lazyView(() => import('./views/PodatkiZus'));
 const PodpisPdf = lazyView(() => import('./views/PodpisPdf'));
 const PodpisHistoria = lazyView(() => import('./views/PodpisHistoria'));
 
@@ -348,7 +349,7 @@ const App: React.FC = () => {
   const [odczytyTab, setOdczytyTab] = useState<'convert' | 'history'>('convert');
   const [mailingTab, setMailingTab] = useState<'send' | 'templates' | 'types' | 'fields' | 'history'>('send');
   const [kalendarzTab, setKalendarzTab] = useState<'calendar' | 'types' | 'places'>('calendar');
-  const [podatkiTab, setPodatkiTab] = useState<'nieruchomosci' | 'cit' | 'pit'>('nieruchomosci');
+  const [podatkiTab, setPodatkiTab] = useState<'nieruchomosci' | 'cit' | 'pit' | 'zus'>('nieruchomosci');
   const [podpisTab, setPodpisTab] = useState<'sign' | 'history'>('sign');
   // Kalendarz: the month lives here so a detour to "Typy spotkań" — or to any
   // other module — comes back to the month the user was looking at.
@@ -382,8 +383,6 @@ const App: React.FC = () => {
   // When the Converter asks "+ Add address with this account", we switch to the
   // Adresy view and pass this value through one render so the modal can prefill it.
   const [adresyPrefillAccount, setAdresyPrefillAccount] = useState<string | null>(null);
-  // A budget plan's "Edytuj w Adresach": the address whose edit modal Adresy opens on arrival.
-  const [adresyOpenId, setAdresyOpenId] = useState<number | null>(null);
   const [appVersion, setAppVersion] = useState<string>('1.0.0');
   const [session, setSession] = useState<{ email: string; userId: string } | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
@@ -496,12 +495,6 @@ const App: React.FC = () => {
       // Straight onto the meeting's screen, one step: Back returns to where the
       // link was clicked. The view names the entry once the meeting is loaded.
       navigate('zebrania', undefined, { id: String(zebranieId), label: '' });
-    });
-
-  const openAdres = (adresId: number) =>
-    leaveThen(() => {
-      setAdresyOpenId(adresId);
-      navigateNow('adresy');
     });
 
   /** The bell's list sends a click to the same place its desktop toast would. */
@@ -1054,6 +1047,7 @@ const App: React.FC = () => {
 
   return (
     <NotificationProvider errorTitle={t.error} okLabel={t.errorOk} cancelLabel={t.cancel} dismissLabel={t.close} openFileLabel={t.toastOpenFile} fileMissingLabel={t.toastFileMissing} confirmTitle={t.confirmTitle} confirmDangerTitle={t.confirmDangerTitle} confirmLabel={t.confirmOk} errorSubtitle={t.errorSubtitle} confirmSubtitle={t.confirmSubtitle} confirmDangerSubtitle={t.confirmDangerSubtitle}>
+    <LoaderTextContext.Provider value={t}>
     <NavigationProvider
       canGoBack={canGoBack}
       canGoForward={canGoForward}
@@ -1256,8 +1250,6 @@ const App: React.FC = () => {
             language={language}
             prefillAccountNumber={adresyPrefillAccount}
             onPrefillConsumed={() => setAdresyPrefillAccount(null)}
-            openAdresId={adresyOpenId}
-            onOpenAdresConsumed={() => setAdresyOpenId(null)}
           />
         )}
         {currentView === 'banki' && <Banki language={language} />}
@@ -1397,7 +1389,6 @@ const App: React.FC = () => {
               })
             }
             onOpenSzablony={() => navigate('mailing', 'templates')}
-            onOpenAdres={openAdres}
             onOpenSprawozdanie={(id) =>
               // Straight onto the statement's screen; the view names it once loaded.
               navigate('sprawozdania', undefined, id != null ? { id: String(id), label: '' } : undefined)
@@ -1411,7 +1402,6 @@ const App: React.FC = () => {
           <PlanyGospodarcze
             language={language}
             onOpenZebranie={(id) => openZebranie(id, 'plan')}
-            onOpenAdres={openAdres}
           />
         )}
         {currentView === 'podatki' && (
@@ -1421,6 +1411,7 @@ const App: React.FC = () => {
                 { id: 'nieruchomosci', label: t.podTabNieruchomosci, icon: 'building' },
                 { id: 'cit', label: t.citTab, icon: 'landmark' },
                 { id: 'pit', label: t.pitTab, icon: 'briefcase' },
+                { id: 'zus', label: t.zusTab, icon: 'shield' },
               ]}
               active={podatkiTab}
               onChange={(id) => navigate('podatki', id)}
@@ -1428,6 +1419,7 @@ const App: React.FC = () => {
             {podatkiTab === 'nieruchomosci' && <PodatkiNieruchomosci language={language} />}
             {podatkiTab === 'cit' && <PodatkiCit language={language} />}
             {podatkiTab === 'pit' && <PodatkiPit language={language} />}
+            {podatkiTab === 'zus' && <PodatkiZus language={language} />}
           </>
         )}
         {currentView === 'podpis' && (
@@ -1522,6 +1514,7 @@ const App: React.FC = () => {
     </div>
     </ConversionSessionProvider>
     </NavigationProvider>
+    </LoaderTextContext.Provider>
     </NotificationProvider>
   );
 };

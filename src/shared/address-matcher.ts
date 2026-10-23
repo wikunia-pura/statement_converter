@@ -135,10 +135,12 @@ const APT_PATTERNS = {
  * Requires the "ul."/"al." marker (rather than any word+number pair) to keep
  * false positives rare: Polish bank statements consistently prefix a real
  * street name this way, so requiring it only misses the guard for addresses
- * written without it, never adds a false trigger.
+ * written without it, never adds a false trigger. The marker need not start a
+ * word — banks glue it to the payer's name ("JANECZEKUL.PCK 25") — and the
+ * building number may be glued to the street ("UL.KLONOWA112 M.2A").
  */
 const FOREIGN_STREET_BEFORE_APARTMENT = new RegExp(
-  String.raw`(?:ulica|aleja|ul\.?|al\.?)\s*[a-z]{3,}(?:[-\s][a-z]{3,})?\s+\d{1,4}[a-z]?\s*$`,
+  String.raw`(?:ulica|aleja|ul\.?|al\.?)\s*[a-z]{3,}(?:[-\s][a-z]{3,})?\s*\d{1,4}[a-z]?\s*$`,
   'i',
 );
 
@@ -824,6 +826,46 @@ export class AddressMatcher {
   private gluedToForeignStreet(text: string, matchIndex: number): boolean {
     const before = this.normalizePolishChars(text.slice(0, matchIndex));
     return FOREIGN_STREET_BEFORE_APARTMENT.test(before);
+  }
+
+  /**
+   * True when every place the text names `apartment` is an "m."/"lok." glued to
+   * a street clause that is not one of this matcher's addresses — the payer's
+   * own home ("UL.SOSNOWA 109A M.89" on a payment to Puławska 117).
+   *
+   * extractApartmentNumber already refuses that number, but only for its own
+   * reading. A row it refuses goes on to the AI, which reads the same "M.89" as
+   * apartment 89 at its own confidence — and that answer is cached and served
+   * back on the next conversion. So the evidence is re-read from the text for
+   * whatever produced the number, the way the glue and split guards are.
+   *
+   * The community's own street is not foreign: "UL.PUŁAWSKA 117 M.12" in the
+   * payer's address on a Puławska 117 payment is apartment 12. A number the text
+   * also names some other way ("lokal 89", "117/89") has its own support and is
+   * not doubted; one the text does not name at all is reported clean.
+   */
+  apartmentAtForeignStreet(text: string, apartment: string | null | undefined): boolean {
+    const apt = (apartment ?? '').trim();
+    // Digits plus at most one letter — safe to interpolate for that reason.
+    if (!/^\d+[A-Za-z]?$/.test(apt)) return false;
+
+    const scan = this.normalizePolishChars(stripAddressCodes(text));
+    const markers = new RegExp(
+      String.raw`(\/|\bm\.?\s*|\blok\.?\s*|\bloc\.?\s*|\blokal\s*|\blokalu[:\s]*|\bmieszkanie\s*)${apt}(?![0-9])`,
+      'gi',
+    );
+    let found = false;
+    for (const match of scan.matchAll(markers)) {
+      found = true;
+      if (match[1] === '/') return false;
+      const clause = scan.slice(0, match.index).match(FOREIGN_STREET_BEFORE_APARTMENT);
+      if (!clause) return false;
+      const own = this.compiled.some(c =>
+        c.variations.some(v => v.streetPattern?.test(clause[0].toLowerCase())),
+      );
+      if (own) return false;
+    }
+    return found;
   }
 
   // ============================================================

@@ -88,17 +88,10 @@
 .pit-check small { color: var(--text-tertiary); }
 .pit-prev { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
 
-/* PIT-4R: twelve months across, the typed rows above the computed one. Never scrolls
-   sideways: the columns share the width, and the row labels wrap instead of stretching it. */
-.pit-mies { table-layout: fixed; border-collapse: collapse; width: 100%; font-size: var(--fs-sm); }
-.pit-mies th, .pit-mies td { padding: 3px 2px; border-bottom: 1px solid var(--border-subtle); text-align: right; }
-.pit-mies thead th { color: var(--text-tertiary); font-weight: 600; }
-.pit-mies thead th:first-child { width: clamp(110px, 18%, 190px); }
-.pit-mies thead th:last-child { width: 64px; }
-.pit-mies tbody th { text-align: left; font-weight: 500; color: var(--text-secondary); padding-right: 8px; line-height: 1.25; overflow-wrap: anywhere; }
-.pit-mies .pod-num input { padding: 4px 3px; min-width: 0; }
-.pit-mies__sum { font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.pit-mies__calc td, .pit-mies__calc th { background: var(--bg-surface-sunken); font-variant-numeric: tabular-nums; }
+/* PIT-4R: one row per month, the declaration's rows as columns, the year's totals in the foot. */
+.pit-mies td.cell-title { width: 1%; white-space: nowrap; padding-right: var(--s-4); }
+.pit-mies .pod-num { min-width: 96px; }
+.pit-mies__sum { font-weight: 700; color: var(--text-primary); }
 .pit-check-box {
   display: flex;
   flex-direction: column;
@@ -109,13 +102,11 @@
 }
 .pit-ok { display: flex; align-items: center; gap: var(--s-2); margin: 0; color: var(--success); }
 .pit-fill { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; }
-.pit-fill .select { min-width: 120px; }
+.pit-fill__label { font-size: var(--fs-sm); color: var(--text-secondary); }
+/* Beats `.ui-select`'s full width whatever order the stylesheets load in. */
+.ui-select.pit-fill__select { width: 200px; min-width: 0; flex: 0 0 auto; }
 
 /* Communities of Adresy that have no PIT yet in the year: a folded list under the rows. */
-.pit-adresy { margin-top: var(--s-4); }
-.pit-adresy > summary { cursor: pointer; font-weight: 600; color: var(--text-secondary); padding: var(--s-2) 0; }
-.pit-adresy__list { list-style: none; margin: var(--s-2) 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--s-2); }
-.pit-adresy__list li { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); padding: var(--s-2) var(--s-3); border: 1px solid var(--border-subtle); border-radius: var(--r-md); background: var(--bg-surface); }
 
 .pit-selall__expand { margin-left: auto; display: flex; align-items: center; gap: var(--s-1); }
 
@@ -123,3 +114,17 @@
    pill by what it holds, instead of a second pill inside it. */
 .form-section__badge:has(> .pit-tone-ok) { border-color: var(--success-border); background: var(--success-bg); color: var(--success); }
 .form-section__badge:has(> .pit-tone-info) { border-color: var(--accent-border); background: var(--accent-subtle); color: var(--accent); }
+
+/* A document's sends to e-Deklaracje, at the top of its card. */
+.pit-wysylki {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  margin-bottom: var(--s-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+}
+.pit-wysylki__head { display: flex; align-items: center; gap: var(--s-2); font-size: var(--fs-sm); }
+.pit-wysylki__head .button { margin-left: auto; }

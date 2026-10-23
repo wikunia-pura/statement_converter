@@ -58,6 +58,8 @@ import { PocztowyMT940Parser } from '../src/converters/pocztowy/parser';
 import { parseLine61, walkMt940Entries } from '../src/converters/shared/mt940';
 import { ContractorMatcher } from '../src/shared/contractor-matcher';
 import { RegexExtractor as INGRegexExtractor } from '../src/converters/ing/regex-extractor';
+import { INGMT940Parser } from '../src/converters/ing/parser';
+import { INGConverter } from '../src/converters/ing';
 import { readFileWithEncoding } from '../src/shared/encoding';
 import { Adres } from '../src/shared/types';
 
@@ -83,6 +85,23 @@ const bachmacka: Adres[] = [{ id: 2, nazwa: 'Bachmacka 6A', createdAt: '' }];
 const pulawska: Adres[] = [{ id: 4, nazwa: 'Puławska 116', createdAt: '' }];
 /** The Bank Pocztowy community, whose payers' titles arrive cut into fixed-width lines. */
 const kwiatowa: Adres[] = [{ id: 5, nazwa: 'Kwiatowa 24A', createdAt: '' }];
+
+/**
+ * The statement files: test-data/ERSTE holds a whole quarter of real statements,
+ * every bank, one folder per bank (and per month inside). Not in git.
+ */
+const DATA = path.join(__dirname, '..', 'test-data', 'ERSTE');
+
+/** Files under DATA/<bank> whose name matches, in every month folder, sorted. */
+function statementFiles(bank: string, name: RegExp): string[] {
+  const walk = (dir: string): string[] =>
+    fs.existsSync(dir)
+      ? fs.readdirSync(dir, { withFileTypes: true }).flatMap(e =>
+          e.isDirectory() ? walk(path.join(dir, e.name)) : name.test(e.name) ? [path.join(dir, e.name)] : [],
+        )
+      : [];
+  return walk(path.join(DATA, bank)).sort();
+}
 const withRules: Adres[] = [
   {
     id: 1,
@@ -615,19 +634,21 @@ if (CASES_ONLY) {
 
 // ── 3. Whole pipeline over the real statement files ────────────────────────
 
-const DIR = path.join(__dirname, '..', 'test-data', 'Wierzbno');
-const FILES = fs.existsSync(DIR)
-  ? fs.readdirSync(DIR).filter(f => /^pko_MT940_.*\.TXT$/i.test(f)).sort()
-  : [];
+// The Bogunki 5 account at PKO BP: its payer "BOGUNKI 5M17A" is the 17A case.
+// The community is configured as itself — under any other name the payer's
+// "UL.BOGUNKI 5 M.17A" is a home address on a foreign street, and rightly read
+// as no apartment at all.
+const FILES = statementFiles('PKO BP ZWYKŁE', /^pko_MT940_34102010260000160202148963_.*\.TXT$/i);
+const bogunki: Adres[] = [{ id: 2, nazwa: 'Bogunki 5', createdAt: '' }];
 
 console.log('\n3. Cały przebieg na plikach MT940');
 if (FILES.length === 0) {
-  console.log('  (pominięto — brak plików w test-data/Wierzbno)');
+  console.log('  (pominięto — brak plików Bogunki 5 w test-data/ERSTE/PKO BP ZWYKŁE)');
 } else {
   for (const file of FILES) {
-    const content = readFileWithEncoding(path.join(DIR, file));
+    const content = readFileWithEncoding(file);
     const stmt = new PKOBPMT940Parser().parse(content);
-    const extractor = new RegexExtractor(testowa);
+    const extractor = new RegexExtractor(bogunki);
 
     const processed = stmt.transactions.map(t => ({
       original: t,
@@ -643,8 +664,8 @@ if (FILES.length === 0) {
     const lettered = income.filter(p => isLetteredApartment(p.extracted.apartmentNumber || ''));
     const bookedTo17 = output.split('\n').filter(l => l.includes('204-000017'));
 
-    console.log(`\n  ${file} — ${stmt.transactions.length} transakcji, ${income.length} wpłat`);
-    check('rozpoznane lokale z literą', lettered.map(p => p.extracted.apartmentNumber), ['17A']);
+    console.log(`\n  ${path.basename(file)} — ${stmt.transactions.length} transakcji, ${income.length} wpłat`);
+    check('rozpoznane lokale z literą', [...new Set(lettered.map(p => p.extracted.apartmentNumber))], ['17A']);
     check('żadna wpłata nie trafiła na 204-000017', bookedTo17.length, 0);
     check(
       'lokal z literą wylądował w NIEROZPOZNANYCH',
@@ -672,9 +693,9 @@ if (FILES.length === 0) {
 
 console.log('\n4. Reguła wielolokalowa na prawdziwym pliku');
 if (FILES.length === 0) {
-  console.log('  (pominięto — brak plików w test-data/Wierzbno)');
+  console.log('  (pominięto — brak plików Bogunki 5 w test-data/ERSTE/PKO BP ZWYKŁE)');
 } else {
-  const content = readFileWithEncoding(path.join(DIR, FILES[0]));
+  const content = readFileWithEncoding(FILES[0]);
   const stmt = new PKOBPMT940Parser().parse(content);
   const incomeRaw = stmt.transactions.filter(t => t.debitCredit === 'C');
   // A payer whose name the plain matcher resolves on its own — so any change in
@@ -735,13 +756,11 @@ if (FILES.length === 0) {
 // number. The extractor returns null for a held-back row — that is what sends it
 // to the user instead of the books — so "null" here is the pass condition.
 
-const POCZTOWY_FILES = ['08M_2026 (1).mt940', '07M_2026 (1).mt940']
-  .map(f => path.join(__dirname, '..', 'test-data', f))
-  .filter(f => fs.existsSync(f));
+const POCZTOWY_FILES = statementFiles('POCZTOWY', /\.mt940$/i);
 
 console.log('\n5. Rozcięte tytuły na plikach Bank Pocztowy');
 if (POCZTOWY_FILES.length === 0) {
-  console.log('  (pominięto — brak plików 0xM_2026 (1).mt940 w test-data)');
+  console.log('  (pominięto — brak plików w test-data/ERSTE/POCZTOWY)');
 } else {
   for (const file of POCZTOWY_FILES) {
     const stmt = new PocztowyMT940Parser().parse(fs.readFileSync(file));
@@ -772,6 +791,79 @@ if (POCZTOWY_FILES.length === 0) {
         );
       }
     }
+  }
+}
+
+// ── 6. Home addresses and lettered apartments on the ING files ─────────────
+//
+// For a payer the matcher refuses, the AI decides — and an AI answer, or the
+// cache replaying an old one, arrives at full confidence. So each row the
+// matcher refuses is replayed here as the AI read it: the number after the
+// payer's "M." (89 from "UL.<street> 109A M.89"), or with the letter dropped
+// (7 from "M 7A"), and must come back held all the same. On the files in test-data:
+//
+//  - Puławska 117: a payer's home in Łódź, "UL.<street> 109A M.89" — held;
+//    the community's own "UL.PUŁAWSKA117 M.12" still booked to 12.
+//  - Naruszewicza 2: a payer's home in Wrocław, "UL.<street>112 M.2A", the
+//    building glued to the street — held, even read as plain 2.
+//  - Naruszewicza 5: 7A, 7B and 5A of the community, also paying beside the
+//    plain 5 of the same owner — never booked as 7 or 5.
+
+type ReplayedRow = { text: string; status: string; apartment: string | null; hold: string | null };
+
+function replayIng(file: string, nazwa: string, dropLetter: boolean): ReplayedRow[] {
+  const stmt = new INGMT940Parser().parse(fs.readFileSync(file));
+  const converter = new INGConverter({ addresses: [{ id: 1, nazwa, createdAt: '' }], aiProvider: 'none', useCache: false }) as unknown as {
+    normalize(t: unknown): { descBase: string; descOpt: string };
+    extractWithRegex(t: unknown): { apartmentNumber: string | null } | null;
+    createProcessedTransaction(t: unknown, e: unknown, kind: 'income'): {
+      status: string;
+      extracted: { apartmentNumber: string | null; holdReason?: string | null };
+    };
+  };
+  return stmt.transactions
+    .filter(t => t.debitCredit === 'C')
+    .map(t => {
+      const n = converter.normalize(t);
+      const text = `${n.descBase} ${n.descOpt}`;
+      const read = text.match(/\bM\.?\s*(\d+)([A-Z]?)\b/i);
+      const answer = converter.extractWithRegex(t) ?? {
+        streetName: null,
+        buildingNumber: null,
+        apartmentNumber: read ? read[1] + (dropLetter ? '' : read[2]) : null,
+        fullAddress: null,
+        tenantName: null,
+        confidence: { address: 95, apartment: 95, tenantName: 95, overall: 95 },
+        extractionMethod: 'ai',
+        warnings: [],
+      };
+      const p = converter.createProcessedTransaction(t, answer, 'income');
+      return { text, status: p.status, apartment: p.extracted.apartmentNumber, hold: p.extracted.holdReason ?? null };
+    });
+}
+
+const ING_CASES: Array<{ file: RegExp; nazwa: string; payer: RegExp; expect: (r: ReplayedRow) => boolean; label: string }> = [
+  { file: /^Statement_9258682567_/, nazwa: 'Puławska 117', payer: /LUTOMIER/, label: 'adres domowy w Łodzi wstrzymany (foreign-address)',
+    expect: r => r.status !== 'auto-approved' && r.hold === 'foreign-address' },
+  { file: /^Statement_9258682567_/, nazwa: 'Puławska 117', payer: /PU[ŁL]AWSKA\s*117\s*M\.?\s*12\b/i, label: 'UL.PUŁAWSKA117 M.12 dalej na lokal 12 automatycznie',
+    expect: r => r.status === 'auto-approved' && r.apartment === '12' },
+  { file: /^Statement_2301224255_/, nazwa: 'Naruszewicza 2', payer: /UL\.[A-ZĄĆĘŁŃÓŚŹŻ]{3,}\d+[A-Z]?\s+M\.?\s*2A\b/i, label: 'adres domowy we Wrocławiu wstrzymany (foreign-address)',
+    expect: r => r.status !== 'auto-approved' && r.hold === 'foreign-address' },
+  { file: /^Statement_9224770884_/, nazwa: 'Naruszewicza 5', payer: /M\.?\s*[57]\s?[AB]\b/i, label: 'lokal z literą nigdy nie idzie automatycznie',
+    expect: r => r.status !== 'auto-approved' },
+];
+
+console.log('\n6. Adresy domowe i lokale z literą na plikach ING');
+for (const c of ING_CASES) {
+  const files = statementFiles('ING', /\.sta$/i).filter(f => c.file.test(path.basename(f)));
+  for (const dropLetter of [false, true]) {
+    const rows = files.flatMap(f => replayIng(f, c.nazwa, dropLetter)).filter(r => c.payer.test(r.text));
+    if (rows.length === 0) {
+      console.log(`  (pominięto — brak wpłat ${c.payer} w plikach ${c.nazwa})`);
+      break;
+    }
+    const wrong = rows.filter(r => !c.expect(r));
+    check(`${c.nazwa}: ${c.label}${dropLetter ? ' — AI zgubiło literę' : ''} (${rows.length} wpł.)`, wrong.map(r => `${r.apartment} ${r.status} | ${r.text.slice(0, 60)}`), []);
   }
 }
 

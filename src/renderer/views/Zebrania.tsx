@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Adres,
+  AdresPowierzchnie,
   SprawozdanieZapisane,
   Spotkanie,
   SpotkanieLokalizacja,
@@ -74,8 +75,6 @@ interface Props {
   onOpenSzablony?: () => void;
   /** The Sprawozdania module — on one statement, or on its list with null. */
   onOpenSprawozdanie?: (sprawozdanieId: number | null) => void;
-  /** Adresy, on one address's form — where a plan's areas are changed. */
-  onOpenAdres?: (adresId: number) => void;
 }
 
 type StatusFilter = 'all' | ZebranieStatus;
@@ -417,7 +416,7 @@ const ZebranieScreen: React.FC<{
   onOpenNotice: (wersja: ZebranieWersja) => void;
   onOpenSzablony?: () => void;
   onOpenSprawozdanie?: (sprawozdanieId: number | null) => void;
-  onOpenAdres?: (adresId: number) => void;
+  onPowierzchnieAdresu?: (adresId: number, powierzchnie: AdresPowierzchnie) => void;
 }> = ({
   language,
   locale,
@@ -448,7 +447,7 @@ const ZebranieScreen: React.FC<{
   onOpenNotice,
   onOpenSzablony,
   onOpenSprawozdanie,
-  onOpenAdres,
+  onPowierzchnieAdresu,
 }) => {
   const t = translations[language];
   const notify = useNotify();
@@ -507,8 +506,8 @@ const ZebranieScreen: React.FC<{
   const tabs: (ModuleTab & { id: ZebranieTab; icon: NonNullable<ModuleTab['icon']> })[] = [
     { id: 'podsumowanie', label: t.zebraniaTabSummary, icon: 'clipboard' },
     { id: 'zawiadomienie', label: t.zebraniaTabNotice, icon: 'mail' },
-    { id: 'sprawozdania', label: t.zebraniaTabReports, icon: 'bar-chart' },
-    { id: 'plan', label: t.zebraniaTabPlan, icon: 'wallet' },
+    { id: 'sprawozdania', label: t.zebraniaTabReports, icon: 'book' },
+    { id: 'plan', label: t.zebraniaTabPlan, icon: 'coins' },
     { id: 'uchwaly', label: t.zebraniaTabResolutions, icon: 'file-text' },
   ];
   const activeTab = tabs.find((x) => x.id === tab) ?? tabs[0];
@@ -743,7 +742,7 @@ const ZebranieScreen: React.FC<{
             locale={locale}
             wersja={wersja}
             adres={adres}
-            onOpenAdres={onOpenAdres}
+            onPowierzchnieAdresu={onPowierzchnieAdresu}
             ustawienia={ustawienia}
             dataZebrania={dane.startsAt}
             onChanged={onReload}
@@ -795,7 +794,6 @@ const Zebrania: React.FC<Props> = ({
   onOpenSpotkanie,
   onOpenSzablony,
   onOpenSprawozdanie,
-  onOpenAdres,
 }) => {
   const t = translations[language];
   const notify = useNotify();
@@ -950,6 +948,10 @@ const Zebrania: React.FC<Props> = ({
       })(),
     ]);
   };
+
+  /** Areas saved from a plan's header: that one address in step, nothing reloaded under the open plan. */
+  const onPowierzchnieAdresu = (adresId: number, powierzchnie: AdresPowierzchnie) =>
+    setAdresy((prev) => prev.map((a) => (a.id === adresId ? { ...a, powierzchnie } : a)));
 
   // "Otwórz w Zebraniach" from a meeting card: open that entry once it is loaded.
   useEffect(() => {
@@ -1439,7 +1441,7 @@ const Zebrania: React.FC<Props> = ({
           onOpenNotice={(w) => setNotice({ zebranie: detail.zebranie, wersjaId: w.id })}
           onOpenSzablony={onOpenSzablony}
           onOpenSprawozdanie={onOpenSprawozdanie}
-          onOpenAdres={onOpenAdres}
+          onPowierzchnieAdresu={onPowierzchnieAdresu}
         />
         {modals}
       </>

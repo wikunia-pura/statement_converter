@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
-import { AdresPowierzchnie } from '../../../shared/types';
+import { createPortal } from 'react-dom';
+import { Adres, AdresPowierzchnie } from '../../../shared/types';
+import { normalizePowierzchnie } from '../../../shared/adres-powierzchnie';
 import { formatKwota } from '../../../shared/format';
 import { translations } from '../../translations';
 import { FormField, FormRow, FormSection } from '../FormSection';
+import Icon from '../Icon';
+import ModalDismiss, { ModalFooter, ModalHeader } from '../Modal';
 import { LiczbaInput } from '../../views/PodatkiNieruchomosci';
+import { ipcErrorMessage } from '../../ipcError';
 
 type T = (typeof translations)['pl'];
 
@@ -121,5 +126,71 @@ export const PowierzchnieSection: React.FC<{
         />
       </FormRow>
     </FormSection>
+  );
+};
+
+/**
+ * The address's areas on their own, over the screen that asked for them (a
+ * budget plan's header) — so they can be put right without leaving for Adresy.
+ * In the body: it may open over another modal, and a section around the button
+ * would pin the overlay to itself.
+ */
+export const PowierzchnieModal: React.FC<{
+  t: T;
+  adres: Adres;
+  onClose: () => void;
+  /** The address now holds these areas. */
+  onSaved: (powierzchnie: AdresPowierzchnie) => void;
+}> = ({ t, adres, onClose, onSaved }) => {
+  const [value, setValue] = useState<AdresPowierzchnie>(() => normalizePowierzchnie(adres.powierzchnie));
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async () => {
+    const next = normalizePowierzchnie(value);
+    setIsSaving(true);
+    setError(null);
+    try {
+      await window.electronAPI.setAdresPowierzchnie(adres.id, next);
+      onSaved(next);
+      onClose();
+    } catch (e: unknown) {
+      setError(ipcErrorMessage(e, t.errorUnexpected));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return createPortal(
+    <div
+      className="modal-overlay"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
+      style={{ zIndex: 1100 }}
+    >
+      <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
+        <ModalDismiss onClose={onClose} />
+        <ModalHeader icon="home" title={t.adresSectionPow} subtitle={adres.nazwa} />
+        <div className="modal-body modal-body--sectioned">
+          <PowierzchnieSection t={t} value={value} onChange={setValue} editing={false} />
+          {error && (
+            <div className="callout callout--danger" role="alert">
+              <Icon name="alert-triangle" size={16} />
+              <div className="callout__body">{error}</div>
+            </div>
+          )}
+        </div>
+        <ModalFooter
+          onCancel={onClose}
+          cancelLabel={t.cancel}
+          onSubmit={() => void save()}
+          submitLabel={t.save}
+          busy={isSaving}
+        />
+      </div>
+    </div>,
+    document.body
   );
 };

@@ -72,6 +72,7 @@ const IPC_CHANNELS = {
   SET_ALWAYS_USE_AI: 'settings:set-always-use-ai',
   SET_AI_MODEL: 'settings:set-ai-model',
   SET_E_DEKLARACJE_SRODOWISKO: 'settings:set-e-deklaracje-srodowisko',
+  SET_ZUS_SRODOWISKO: 'settings:set-zus-srodowisko',
   SET_CONTRACTOR_SORT_ORDER: 'settings:set-contractor-sort-order',
   SET_SIDEBAR_COLLAPSED: 'settings:set-sidebar-collapsed',
   SET_SIDEBAR_ORDER: 'settings:set-sidebar-order',
@@ -229,6 +230,27 @@ const IPC_CHANNELS = {
   PODATKI_PIT_SET_ZLOZONE: 'podatki:pit-set-zlozone',
   PODATKI_PIT_PODPISZ_WIELE: 'podatki:pit-podpisz-wiele',
   PODATKI_PIT_PODPISZ_PRZERWIJ: 'podatki:pit-podpisz-przerwij',
+  PODATKI_PIT_UPO: 'podatki:pit-upo',
+  PODATKI_PIT_UPO_POBIERZ: 'podatki:pit-upo-pobierz',
+  PODATKI_PIT_WYSYLKA_ROZSTRZYGNIJ: 'podatki:pit-wysylka-rozstrzygnij',
+  PODATKI_ZUS_LISTA: 'podatki:zus-lista',
+  PODATKI_ZUS_ADD: 'podatki:zus-add',
+  PODATKI_ZUS_SET: 'podatki:zus-set',
+  PODATKI_ZUS_DELETE: 'podatki:zus-delete',
+  PODATKI_ZUS_ROZL_ADD: 'podatki:zus-rozl-add',
+  PODATKI_ZUS_ROZL_SET: 'podatki:zus-rozl-set',
+  PODATKI_ZUS_ROZL_DELETE: 'podatki:zus-rozl-delete',
+  PODATKI_ZUS_PRZYGOTUJ: 'podatki:zus-przygotuj',
+  PODATKI_ZUS_KOREKTA: 'podatki:zus-korekta',
+  PODATKI_ZUS_IMPORT: 'podatki:zus-import',
+  PODATKI_ZUS_PLIKI: 'podatki:zus-pliki',
+  PODATKI_ZUS_SET_WYSLANE: 'podatki:zus-set-wyslane',
+  PODATKI_ZUS_WYSLIJ: 'podatki:zus-wyslij',
+  PODATKI_ZUS_WYSLIJ_PRZERWIJ: 'podatki:zus-wyslij-przerwij',
+  PODATKI_ZUS_POTWIERDZENIA: 'podatki:zus-potwierdzenia',
+  PODATKI_ZUS_POTWIERDZENIE_POBIERZ: 'podatki:zus-potwierdzenie-pobierz',
+  PODATKI_ZUS_WYSYLKA_ROZSTRZYGNIJ: 'podatki:zus-wysylka-rozstrzygnij',
+  PODATKI_ZUS_POLACZENIE: 'podatki:zus-polaczenie',
   PODPIS_KARTA_STAN: 'podpis:karta-stan',
   PODPIS_BIBLIOTEKA_WSKAZ: 'podpis:biblioteka-wskaz',
   PODPIS_BIBLIOTEKA_AUTO: 'podpis:biblioteka-auto',
@@ -277,6 +299,7 @@ const IPC_CHANNELS = {
   ZADANIA_PICK_ATTACHMENT: 'zadania:pick-attachment',
   ZADANIA_UPLOAD_ATTACHMENT: 'zadania:upload-attachment',
   ZADANIA_DOWNLOAD_ATTACHMENT: 'zadania:download-attachment',
+  ZADANIA_DOWNLOAD_ALL_ATTACHMENTS: 'zadania:download-all-attachments',
   ZADANIA_DISCARD_ATTACHMENTS: 'zadania:discard-attachments',
   GET_ZADANIE_KOMENTARZE: 'zadania:get-komentarze',
   GET_ZADANIA_NOTATKI: 'zadania:get-notatki',
@@ -469,6 +492,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.SET_AI_MODEL, model),
   setEDeklaracjeSrodowisko: (srodowisko: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_E_DEKLARACJE_SRODOWISKO, srodowisko),
+  setZusSrodowisko: (srodowisko: string) => ipcRenderer.invoke(IPC_CHANNELS.SET_ZUS_SRODOWISKO, srodowisko),
   setContractorSortOrder: (sortOrder: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_CONTRACTOR_SORT_ORDER, sortOrder),
   setSidebarCollapsed: (collapsed: boolean) =>
@@ -786,14 +810,55 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.PODATKI_PIT_PLIKI, rok, ids, tryb),
   setPitZlozone: (ids: string[], zlozone: boolean, numerRef: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.PODATKI_PIT_SET_ZLOZONE, ids, zlozone, numerRef),
-  podpiszPit: (rok: number, ids: string[], wybor: unknown, opcje: { pdfPodpisany: boolean }) =>
+  podpiszPit: (rok: number, ids: string[], wybor: unknown, opcje: { pdfPodpisany: boolean; wyslij?: boolean; potwierdzoneKorekty?: string[] }) =>
     ipcRenderer.invoke(IPC_CHANNELS.PODATKI_PIT_PODPISZ_WIELE, rok, ids, wybor, opcje),
+  sprawdzUpoPit: (rok: number, ids?: string[]) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_PIT_UPO, rok, ids),
+  pobierzUpoPit: (dokumentId: string, refId: string) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_PIT_UPO_POBIERZ, dokumentId, refId),
+  rozstrzygnijWysylkePit: (dokumentId: string, at: string, jak: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_PIT_WYSYLKA_ROZSTRZYGNIJ, dokumentId, at, jak),
+  onPitUpo: (callback: (wynik: any) => void) => {
+    const listener = (_event: unknown, wynik: any) => callback(wynik);
+    ipcRenderer.on('podatki:pit-upo-zmiana', listener);
+    return () => ipcRenderer.off('podatki:pit-upo-zmiana', listener);
+  },
   przerwijPodpisPit: () => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_PIT_PODPISZ_PRZERWIJ),
   onPodatkiPitPostep: (callback: (postep: any) => void) => {
     const listener = (_event: unknown, postep: any) => callback(postep);
     ipcRenderer.on('podatki:pit-podpis-postep', listener);
     return () => ipcRenderer.off('podatki:pit-podpis-postep', listener);
   },
+
+  // Podatki — ZUS (register, registrations, DRA + RCA + RSA)
+  getPodatkiZus: () => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_ZUS_LISTA),
+  addPodatekZus: (nip: string, dane: unknown) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_ZUS_ADD, nip, dane),
+  setPodatekZus: (id: number, dane: unknown) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_ZUS_SET, id, dane),
+  deletePodatekZus: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_ZUS_DELETE, id),
+  addZusRozliczenie: (nip: string, okres: string, identyfikator: number, dane: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_ZUS_ROZL_ADD, nip, okres, identyfikator, dane),
+  setZusRozliczenie: (id: number, dane: unknown) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_ZUS_ROZL_SET, id, dane),
+  deleteZusRozliczenie: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_ZUS_ROZL_DELETE, id),
+  przygotujZus: (okres: string, nips?: string[]) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_ZUS_PRZYGOTUJ, okres, nips),
+  korektaZus: (rozliczenieId: number) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_ZUS_KOREKTA, rozliczenieId),
+  importZusKedu: () => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_ZUS_IMPORT),
+  zusPliki: (okres: string, ids: string[], opcje: unknown) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_ZUS_PLIKI, okres, ids, opcje),
+  setZusWyslane: (ids: string[], wyslane: boolean) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_ZUS_SET_WYSLANE, ids, wyslane),
+  wyslijZus: (okres: string, ids: string[], wybor: unknown) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_ZUS_WYSLIJ, okres, ids, wybor),
+  przerwijWysylkeZus: () => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_ZUS_WYSLIJ_PRZERWIJ),
+  onZusPostep: (callback: (postep: any) => void) => {
+    const listener = (_event: unknown, postep: any) => callback(postep);
+    ipcRenderer.on('podatki:zus-postep', listener);
+    return () => ipcRenderer.off('podatki:zus-postep', listener);
+  },
+  sprawdzPotwierdzeniaZus: (wysylkaIds?: number[]) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_ZUS_POTWIERDZENIA, wysylkaIds),
+  pobierzPotwierdzenieZus: (wysylkaId: number) => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_ZUS_POTWIERDZENIE_POBIERZ, wysylkaId),
+  rozstrzygnijWysylkeZus: (wysylkaId: number, jak: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.PODATKI_ZUS_WYSYLKA_ROZSTRZYGNIJ, wysylkaId, jak),
+  onZusPotwierdzenie: (callback: (wynik: any) => void) => {
+    const listener = (_event: unknown, wynik: any) => callback(wynik);
+    ipcRenderer.on('podatki:zus-potwierdzenie', listener);
+    return () => ipcRenderer.off('podatki:zus-potwierdzenie', listener);
+  },
+  sprawdzPolaczenieZus: () => ipcRenderer.invoke(IPC_CHANNELS.PODATKI_ZUS_POLACZENIE),
 
   // Podpis kwalifikowany (karta Szafir)
   getPodpisKarta: () => ipcRenderer.invoke(IPC_CHANNELS.PODPIS_KARTA_STAN),
@@ -888,6 +953,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.ZADANIA_UPLOAD_ATTACHMENT, token),
   zadaniaDownloadAttachment: (zalacznik: { sciezka: string; nazwa: string }) =>
     ipcRenderer.invoke(IPC_CHANNELS.ZADANIA_DOWNLOAD_ATTACHMENT, zalacznik),
+  zadaniaDownloadAllAttachments: (zalaczniki: { sciezka: string; nazwa: string }[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.ZADANIA_DOWNLOAD_ALL_ATTACHMENTS, zalaczniki),
   zadaniaDiscardAttachments: (paths: string[]) =>
     ipcRenderer.invoke(IPC_CHANNELS.ZADANIA_DISCARD_ATTACHMENTS, paths),
   /** A notification about Księgowania (priority, note) was clicked — open the dashboard. */

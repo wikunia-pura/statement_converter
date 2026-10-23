@@ -24,7 +24,13 @@ import { type T } from './citShared';
  * "Wyślij do e-Deklaracji" in a signing window, with the gateway of Settings → Administracja in plain sight —
  * read when the window opens, so TEST or PRODUKCJA is on screen before the PIN.
  */
-export const WyslijOpcja: React.FC<{ t: T; checked: boolean; onChange: (v: boolean) => void }> = ({ t, checked, onChange }) => {
+export const WyslijOpcja: React.FC<{
+  t: T;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  /** The hint under the option — another form's words (PIT); the CIT-8's by default. */
+  hint?: string;
+}> = ({ t, checked, onChange, hint }) => {
   const [srodowisko, setSrodowisko] = useState<EDeklaracjeSrodowisko | null>(null);
   useEffect(() => {
     void window.electronAPI.getSettings().then((s) => setSrodowisko(normalizeSrodowisko(s.eDeklaracjeSrodowisko)));
@@ -32,7 +38,7 @@ export const WyslijOpcja: React.FC<{ t: T; checked: boolean; onChange: (v: boole
   const prod = srodowisko === 'prod';
   return (
     <>
-      <PodpiszTezPdf checked={checked} onChange={onChange} label={t.citSendOption} hint={t.citSendOptionHint} />
+      <PodpiszTezPdf checked={checked} onChange={onChange} label={t.citSendOption} hint={hint ?? t.citSendOptionHint} />
       {checked && srodowisko && (
         <div className={`callout ${prod ? 'callout--warning' : ''}`}>
           <Icon name={prod ? 'alert-triangle' : 'info'} size={16} />
@@ -56,23 +62,51 @@ export function etapWysylki(t: T, w: EDeklaracjeWysylka): { text: string; klasa:
   return { text: etapWysylkiText(t, w.status, w.refId, niepewna), klasa: klasaEtapu(w.status, w.refId, niepewna) };
 }
 
+/** What a send list does about a send — the CIT-8's calls by default, another form's (PIT) when given. */
+export interface WysylkiAkcje {
+  pobierzUpo: (refId: string) => Promise<{ filePath: string }>;
+  rozstrzygnij: (at: string, jak: 'nie_dotarla' | 'dotarla' | 'porzucona') => Promise<unknown>;
+}
+
+/** The settling texts that name the document — the CIT-8's speak of a return; a PIT-11 is not one. */
+export interface WysylkiTeksty {
+  resolveHint: string;
+  resolveNotArrivedConfirm: string;
+  resolveArrivedConfirm: string;
+  /** With `{ref}`. */
+  resolveAbandonConfirm: string;
+}
+
 /**
- * The return's sends to the gateway, newest first — a send with its UPO offers it for download. A send the
+ * The document's sends to the gateway, newest first — a send with its UPO offers it for download. A send the
  * app could not settle offers the person's decision: an uncertain one (no answer — it may have been filed)
- * did not or did reach the gateway; one stuck "in progress" is no longer waited for.
+ * did not or did reach the gateway; one stuck "in progress" is no longer waited for. `id`: the CIT-8 return
+ * whose calls are the default `akcje`.
  */
-export const WysylkiLista: React.FC<{ t: T; locale: string; id: number; wysylki: EDeklaracjeWysylka[]; onZmiana: () => void }> = ({
-  t,
-  locale,
-  id,
-  wysylki,
-  onZmiana,
-}) => {
+export const WysylkiLista: React.FC<{
+  t: T;
+  locale: string;
+  id?: number;
+  wysylki: EDeklaracjeWysylka[];
+  onZmiana: () => void;
+  akcje?: WysylkiAkcje;
+  teksty?: WysylkiTeksty;
+}> = ({ t, locale, id, wysylki, onZmiana, akcje, teksty }) => {
   const notify = useNotify();
   const [busy, setBusy] = useState<string | null>(null);
+  const zrob: WysylkiAkcje = akcje ?? {
+    pobierzUpo: (refId) => window.electronAPI.pobierzUpoCit(id!, refId),
+    rozstrzygnij: (at, jak) => window.electronAPI.rozstrzygnijWysylkeCit(id!, at, jak),
+  };
+  const tx: WysylkiTeksty = teksty ?? {
+    resolveHint: t.citResolveHint,
+    resolveNotArrivedConfirm: t.citResolveNotArrivedConfirm,
+    resolveArrivedConfirm: t.citResolveArrivedConfirm,
+    resolveAbandonConfirm: t.citResolveAbandonConfirm,
+  };
   const pobierz = async (refId: string) => {
     try {
-      const { filePath } = await window.electronAPI.pobierzUpoCit(id, refId);
+      const { filePath } = await zrob.pobierzUpo(refId);
       notify.success(t.citUpoSaved.replace('{file}', baseName(filePath)), { file: filePath });
     } catch (err: unknown) {
       notify.error(bezPrefiksu(err), t.citUpoError);
@@ -81,14 +115,14 @@ export const WysylkiLista: React.FC<{ t: T; locale: string; id: number; wysylki:
   const rozstrzygnij = async (w: EDeklaracjeWysylka, jak: 'nie_dotarla' | 'dotarla' | 'porzucona') => {
     const pytanie =
       jak === 'nie_dotarla'
-        ? t.citResolveNotArrivedConfirm
+        ? tx.resolveNotArrivedConfirm
         : jak === 'dotarla'
-          ? t.citResolveArrivedConfirm
-          : t.citResolveAbandonConfirm.replace('{ref}', w.refId ?? '—');
+          ? tx.resolveArrivedConfirm
+          : tx.resolveAbandonConfirm.replace('{ref}', w.refId ?? '—');
     if (!(await notify.confirm(pytanie, { danger: jak !== 'dotarla' }))) return;
     setBusy(w.at);
     try {
-      await window.electronAPI.rozstrzygnijWysylkeCit(id, w.at, jak);
+      await zrob.rozstrzygnij(w.at, jak);
       notify.success(t.citResolveDone);
       onZmiana();
     } catch (err: unknown) {
@@ -146,7 +180,7 @@ export const WysylkiLista: React.FC<{ t: T; locale: string; id: number; wysylki:
             <Icon name="x" size={13} /> {t.citResolveAbandon}
           </button>
         )}
-        {doRozstrzygniecia && <span className="cit-wysylki__opis">{t.citResolveHint}</span>}
+        {doRozstrzygniecia && <span className="cit-wysylki__opis">{tx.resolveHint}</span>}
         {czekaNaUpo(w) && swiezaWysylka(w) && <span className="cit-wysylki__opis">{t.citUpoAuto}</span>}
         {w.opis && <span className="cit-wysylki__opis">{w.opis}</span>}
         {w.sprawdzono && <span className="cit-wysylki__opis">{t.citSendChecked.replace('{when}', formatStamp(w.sprawdzono, locale))}</span>}
@@ -202,29 +236,44 @@ const blokadaText = (t: T, b: BlokadaWysylki): string =>
 /**
  * Before a signing run that sends: the corrections an earlier production send holds back — one still waiting
  * for its UPO, or an earlier correction that reached the gateway — are named and the person decides, before
- * anything is signed. Only for the production gateway (the test one files nothing). The ids confirmed go to
- * the run; a correction left unconfirmed is signed but not sent, and the summary says why.
+ * anything is signed. Only for the production gateway (the test one files nothing). The keys confirmed go to
+ * the run; a correction left unconfirmed is signed but not sent, and the summary says why. Any document with a
+ * purpose, its sends and its filed mark — a CIT-8 return, a PIT-11, a PIT-4R.
  */
-export async function potwierdzKorekty(
+export async function potwierdzKorektyDokumentow<K>(
   t: T,
   notify: ReturnType<typeof useNotify>,
-  rekordy: PodatekCit[],
+  dokumenty: { klucz: K; nazwa: string; cel: 1 | 2; wysylki: EDeklaracjeWysylka[]; zlozone: unknown }[],
   wyslij: boolean,
-): Promise<number[]> {
+): Promise<K[]> {
   if (!wyslij) return [];
-  const doPotwierdzenia = rekordy
-    .filter((r) => r.dane.cel === 2)
-    .map((r) => ({ r, blokady: blokadyWysylkiProd(r.dane).filter(blokadaDoPotwierdzenia) }))
+  const doPotwierdzenia = dokumenty
+    .filter((d) => d.cel === 2)
+    .map((d) => ({ d, blokady: blokadyWysylkiProd(d).filter(blokadaDoPotwierdzenia) }))
     .filter((x) => x.blokady.length > 0);
   if (doPotwierdzenia.length === 0) return [];
   const settings = await window.electronAPI.getSettings();
   if (normalizeSrodowisko(settings.eDeklaracjeSrodowisko) !== 'prod') return [];
   const lista = doPotwierdzenia
-    .map(({ r, blokady }) => `${r.adresNazwa}: ${blokady.map((b) => blokadaText(t, b)).join('; ')}`)
+    .map(({ d, blokady }) => `${d.nazwa}: ${blokady.map((b) => blokadaText(t, b)).join('; ')}`)
     .join('\n');
   const ok = await notify.confirm(t.citCorrectionConfirm.replace('{list}', lista), {
     title: t.citCorrectionConfirmTitle,
     confirmLabel: t.citCorrectionConfirmYes,
   });
-  return ok ? doPotwierdzenia.map(({ r }) => r.id) : [];
+  return ok ? doPotwierdzenia.map(({ d }) => d.klucz) : [];
 }
+
+/** `potwierdzKorektyDokumentow` for CIT-8 returns. */
+export const potwierdzKorekty = (
+  t: T,
+  notify: ReturnType<typeof useNotify>,
+  rekordy: PodatekCit[],
+  wyslij: boolean,
+): Promise<number[]> =>
+  potwierdzKorektyDokumentow(
+    t,
+    notify,
+    rekordy.map((r) => ({ klucz: r.id, nazwa: r.adresNazwa, cel: r.dane.cel, wysylki: r.dane.wysylki, zlozone: r.dane.zlozone })),
+    wyslij,
+  );

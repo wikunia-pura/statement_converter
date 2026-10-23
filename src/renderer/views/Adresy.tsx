@@ -39,9 +39,6 @@ interface AdresyProps {
   /** When set, opens the "add address" modal with this account number pre-filled. The parent should clear it once consumed. */
   prefillAccountNumber?: string | null;
   onPrefillConsumed?: () => void;
-  /** When set, opens this address's edit modal (e.g. from a budget plan, whose areas come from here). The parent should clear it once consumed. */
-  openAdresId?: number | null;
-  onOpenAdresConsumed?: () => void;
 }
 
 /** Whether anything is filled in — an untouched form is not worth a write. */
@@ -71,8 +68,6 @@ const Adresy: React.FC<AdresyProps> = ({
   language,
   prefillAccountNumber,
   onPrefillConsumed,
-  openAdresId,
-  onOpenAdresConsumed,
 }) => {
   const t = translations[language];
   const notify = useNotify();
@@ -128,19 +123,6 @@ const Adresy: React.FC<AdresyProps> = ({
   useEffect(() => {
     loadData();
   }, []);
-
-  // Asked to open one address (a budget plan's "Edytuj w Adresach"): its edit modal, once the list is in.
-  useEffect(() => {
-    if (openAdresId == null || isLoading) return;
-    const adres = adresy.find((a) => a.id === openAdresId);
-    if (adres) {
-      setTab('lista');
-      setShowAddAdres(false);
-      handleEditAdres(adres);
-    }
-    onOpenAdresConsumed?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openAdresId, isLoading]);
 
   // The units modal opens over this form, and its unit form can re-assign this
   // very address. Follow such a change, so saving the address does not quietly

@@ -17,6 +17,7 @@ import { FormField, FormRow, FormSection } from '../components/FormSection';
 import { PodpisKartaUstawienia } from '../components/PodpisKarta';
 import { AI_MODELS, DEFAULT_AI_MODEL } from '../../shared/ai-models';
 import EDeklaracjeUstawienia from '../components/EDeklaracjeUstawienia';
+import ZusUstawienia from '../components/ZusUstawienia';
 import { ipcErrorMessage } from '../ipcError';
 
 interface SettingsProps {
@@ -450,6 +451,9 @@ const Settings: React.FC<SettingsProps> = ({
       .replace('{podpisHistoria}', String(counts.podpisHistoria))
       .replace('{podatkiCit}', String(counts.podatkiCit))
       .replace('{podatkiPit}', String(counts.podatkiPit))
+      .replace('{podatkiZus}', String(counts.podatkiZus))
+      .replace('{podatkiZusRozliczenia}', String(counts.podatkiZusRozliczenia))
+      .replace('{podatkiZusWysylki}', String(counts.podatkiZusWysylki))
       .replace('{podatkiCitUstawienia}', String(counts.podatkiCitUstawienia));
   };
 
@@ -876,8 +880,9 @@ const Settings: React.FC<SettingsProps> = ({
             />
           </FormSection>
 
-          {/* e-Deklaracje — which gateway signed returns go to (machine-local, test by default) */}
+          {/* e-Deklaracje and ZUS — which service signed documents go to (machine-local, test by default) */}
           <EDeklaracjeUstawienia language={language} />
+          <ZusUstawienia language={language} />
 
           {/* Mailing — SMTP of the mailbox we send from (machine-local) */}
           <FormSection icon="mail" title={t.smtpTitle} description={t.smtpHint}>

@@ -1,0 +1,84 @@
+/* ============================== Podatki — ZUS ============================== */
+
+/* The month's RCA table: one row per person and title, the payer's share under the insured's. */
+/* The person: the name on its line, under it the title's code (and FP / health-only) as quiet facts. */
+.zus-osoba { min-width: 190px; }
+.zus-osoba > .cell-title { display: block; line-height: 1.3; }
+.zus-osoba__meta { display: flex; flex-wrap: wrap; gap: 0 var(--s-2); margin-top: 2px; font-size: var(--fs-xs); color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.zus-osoba__meta > span + span::before { content: '·'; margin-right: var(--s-2); }
+/* Ten columns must fit the card: tighter cells than the shared grid, headers wrap. */
+.form-table--edit.zus-table th, .form-table--edit.zus-table td { padding-left: 8px; padding-right: 8px; }
+.zus-table small { color: var(--text-tertiary); font-weight: 400; }
+.zus-table .zus-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.zus-num small { display: block; }
+/* As in PIT-4R: the field fills its column, so it lines up under the right-aligned header; 96px is its floor. */
+.zus-input { width: 1%; }
+.zus-input .pod-num { min-width: 96px; }
+.zus-strong { font-weight: 700; color: var(--text-primary); }
+
+/* What the month costs, in tiles. */
+.zus-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--s-2); margin-top: var(--s-3); }
+.zus-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+}
+.zus-summary span { font-size: var(--fs-xs); color: var(--text-tertiary); }
+.zus-summary strong { font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.zus-summary .is-total { border-color: var(--accent-border); background: var(--accent-subtle); }
+.zus-summary .is-total strong { color: var(--accent); }
+
+.zus-empty-set { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s-2); }
+
+/* The payer's earlier months under the set. */
+.zus-history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.zus-history li { display: grid; grid-template-columns: 1fr auto auto; gap: var(--s-3); align-items: center; padding: var(--s-1) 0; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.zus-history li + li { border-top: 1px solid var(--border-subtle); }
+.zus-history__open { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-align: left; font: inherit; }
+.zus-history__open:hover { text-decoration: underline; }
+.zus-ok { color: var(--success); }
+.zus-muted { color: var(--text-tertiary); }
+
+/* A title / family member block: its head line and the documents it makes. */
+.pit-title-block.is-active { border-color: var(--accent-border); }
+.zus-title-head { display: flex; align-items: center; gap: var(--s-3); }
+.zus-title-head .pit-title-block__name { flex: 1; min-width: 0; }
+.zus-doclines { display: flex; flex-direction: column; gap: var(--s-1); margin-top: var(--s-2); }
+.zus-docline {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+  padding: var(--s-1) var(--s-2);
+  border-left: 3px solid var(--border-default);
+  border-radius: var(--r-sm);
+  background: var(--bg-surface);
+}
+.zus-docline--blad { border-left-color: var(--warning); }
+.zus-docline--uwagi { border-left-color: var(--info); }
+.zus-docline--wyslane { border-left-color: var(--success); }
+.zus-docline__kind { font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.04em; color: var(--text-tertiary); min-width: 110px; }
+.zus-docline .pit-aside { margin-left: auto; }
+.zus-fraction { display: flex; align-items: center; gap: var(--s-2); max-width: 200px; }
+.zus-check-inline { align-self: flex-end; padding-bottom: var(--s-2); }
+
+/* A document's newest send to ZUS (EWD): its stage, TEST when it went to the test server, and what to do. */
+.zus-wysylka { display: inline-flex; align-items: center; flex-wrap: wrap; gap: var(--s-1); }
+.zus-wysylka .status-badge { white-space: nowrap; }
+.zus-wysylka__env {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  margin-right: 6px;
+  padding: 0 4px;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, currentColor 16%, transparent);
+}
+.zus-wysylka--kompakt .button { padding-inline: var(--s-2); }
+.pit-aside .zus-wysylka { margin-right: var(--s-1); }
+/* The row's actions: "Podpisz i wyślij do ZUS" beside the "sent" mark. */
+.zus-row-actions { gap: var(--s-2); }

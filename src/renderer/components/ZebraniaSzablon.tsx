@@ -185,7 +185,7 @@ export const ZebraniaSzablonSekcja: React.FC<{
                 }
               >
                 <span className={`status-badge ${zrodlo.plan ? 'status-info' : 'status-neutral'}`}>
-                  <Icon name="wallet" size={11} /> {planOpis(t, zrodlo.plan)}
+                  <Icon name="coins" size={11} /> {planOpis(t, zrodlo.plan)}
                   {zrodlo.planZ && (
                     <span className="zeb-szablon__from">
                       {' '}

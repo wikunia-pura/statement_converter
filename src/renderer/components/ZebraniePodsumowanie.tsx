@@ -196,7 +196,7 @@ const ZebraniePodsumowanie: React.FC<{
     },
     {
       tab: 'sprawozdania',
-      icon: 'bar-chart',
+      icon: 'book',
       title: t.zebraniaTabReports,
       stan: spr ? 'gotowe' : 'brak',
       detail: spr
@@ -207,7 +207,7 @@ const ZebraniePodsumowanie: React.FC<{
     },
     {
       tab: 'plan',
-      icon: 'wallet',
+      icon: 'coins',
       title: t.zebraniaTabPlan,
       stan: !plan ? 'brak' : planNieaktualny ? 'uzupelnij' : 'gotowe',
       detail: !plan
@@ -329,7 +329,7 @@ const ZebraniePodsumowanie: React.FC<{
 
       {spr && (
         <FormSection
-          icon="bar-chart"
+          icon="book"
           title={t.zpodStatementShort}
           description={t.zpodPeriod.replace('{okres}', okresLabel(spr.dane.okresOd, spr.dane.okresDo))}
         >
@@ -339,7 +339,7 @@ const ZebraniePodsumowanie: React.FC<{
 
       {plan && (
         <FormSection
-          icon="wallet"
+          icon="coins"
           title={t.zpodPlanShort.replace('{rok}', String(plan.rok))}
           description={t.zpodPlanShortDesc}
         >

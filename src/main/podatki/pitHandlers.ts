@@ -17,6 +17,7 @@ import {
   PodatkiPitExcelResult,
   PodatkiPitImportResult,
   PodatkiPitPlikiResult,
+  PodatkiPitWysylkaWynik,
   PodpisSlad,
   PodpisWybor,
 } from '../../shared/types';
@@ -43,6 +44,8 @@ import { podpiszPdf } from '../podpis/pades';
 import { BladKarty, zKartaDoPodpisu } from '../podpis/karta';
 import { AppError } from '../../shared/app-errors';
 import { errorTextIn } from '../errorText';
+import type { FetchLike } from './eDeklaracjeBramka';
+import { DokumentPitDoWysylki, registerPitWysylki } from './pitWysylki';
 
 export interface PitDeps {
   getMainWindow: () => BrowserWindow | null;
@@ -55,6 +58,8 @@ export interface PitDeps {
   uniquePath: (dir: string, name: string) => string;
   /** Path of the card library picked in Settings ('' = look next to Szafir). */
   podpisBiblioteka: () => string;
+  /** The network for the e-Deklaracje gateway (Electron's, so the system proxy applies). */
+  fetch: FetchLike;
 }
 
 /** One document as the handlers see it: the row, what it is, its name and what blocks it. */
@@ -152,6 +157,7 @@ const powod = (d: Dokument): string =>
 
 export function registerPitHandlers(deps: PitDeps): void {
   const { database } = deps;
+  const wysylki = registerPitWysylki(deps);
 
   ipcMain.handle(IPC_CHANNELS.PODATKI_PIT_LISTA, async () => database.getPodatkiPit());
 
@@ -328,11 +334,23 @@ export function registerPitHandlers(deps: PitDeps): void {
    * when asked. A document that cannot be made yet is skipped with the reason before the card is touched; a
    * card failure (wrong PIN, card pulled out) stops the run — rejecting while nothing is signed, so the
    * window can ask for the PIN again.
+   *
+   * With `wyslij` each signed XML then goes to the e-Deklaracje gateway of Settings → Administracja (test unless
+   * switched) — after the card is let go, so no network wait holds it (pitWysylki.ts). A correction an earlier
+   * production send holds back goes only when its id is in `potwierdzoneKorekty` — the window asks before the PIN.
    */
   ipcMain.handle(
     IPC_CHANNELS.PODATKI_PIT_PODPISZ_WIELE,
-    async (event, rok: number, ids: string[], wybor: PodpisWybor, opcje: { pdfPodpisany: boolean }): Promise<PodatkiPitPlikiResult> => {
+    async (
+      event,
+      rok: number,
+      ids: string[],
+      wybor: PodpisWybor,
+      opcje: { pdfPodpisany: boolean; wyslij?: boolean; potwierdzoneKorekty?: string[] },
+    ): Promise<PodatkiPitPlikiResult> => {
       przerwane = false;
+      const srodowisko = database.getEDeklaracjeSrodowisko();
+      const potwierdzone = new Set(Array.isArray(opcje?.potwierdzoneKorekty) ? opcje.potwierdzoneKorekty : []);
       const wiersze = await database.getPodatkiPit();
       const { dokumenty, brak } = dokumentyZIdow(wiersze, rok, ids);
       const pominiete: PodatkiPitPlikiResult['pominiete'] = brak.map(id => ({ id, nazwa: id, powod: errorTextIn(database, new AppError('pitDocumentGone')) }));
@@ -357,6 +375,8 @@ export function registerPitHandlers(deps: PitDeps): void {
       let przerwano: string | null = null;
       let slad: PodpisSlad | null = null;
       let podpisane = 0;
+      /** The signed XMLs to send once the card is let go. */
+      const doWyslania: { d: DokumentPitDoWysylki; xml: string; plik: string }[] = [];
 
       await zKartaDoPodpisu(deps.podpisBiblioteka(), wybor, async sesja => {
         const podpis = { podmiot: sesja.cert.podmiot, wystawca: sesja.cert.wystawca, numerSeryjny: sesja.cert.numerSeryjny };
@@ -394,6 +414,18 @@ export function registerPitHandlers(deps: PitDeps): void {
               ...(wpisy.get(d.wiersz.id) ?? []),
               { klucz: d.osoba?.klucz ?? null, entry: { at: new Date().toISOString(), by: who, plik: path.basename(sciezkaPdf), ...(opcje.pdfPodpisany ? { podpis } : {}) } },
             ]);
+            // Queued only once both files are written — a document listed as skipped never goes to the gateway.
+            doWyslania.push({
+              d: {
+                id: d.id,
+                wierszId: d.wiersz.id,
+                klucz: d.osoba?.klucz ?? null,
+                nazwa: d.nazwa,
+                cel: d.osoba ? d.osoba.cel : d.wiersz.dane.pit4r!.cel,
+              },
+              xml: podpisanyXml,
+              plik: path.basename(sciezkaXml),
+            });
           } catch (error: unknown) {
             if (error instanceof BladKarty) {
               if (podpisane === 0) throw error;
@@ -413,6 +445,21 @@ export function registerPitHandlers(deps: PitDeps): void {
         });
       }
       log.info(`[PIT] ${podpisane}/${gotowe.length} documents of ${rok} signed with one login` + (przerwano ? ` — stopped: ${przerwano}` : ''));
+
+      const wyniki: PodatkiPitWysylkaWynik[] = [];
+      if (opcje?.wyslij) {
+        for (const [i, { d, xml, plik }] of doWyslania.entries()) {
+          if (przerwane) {
+            wyniki.push({ id: d.id, nazwa: d.nazwa, srodowisko, refId: null, status: null, opis: 'Nie wysłano: przerwane na Twoje polecenie. Podpisany plik jest zapisany.' });
+            continue;
+          }
+          postep(i, `${d.nazwa} — e-Deklaracje`);
+          wyniki.push(await wysylki.wyslij(d, xml, plik, srodowisko, who, potwierdzone.has(d.id)));
+        }
+        postep(doWyslania.length, '');
+        log.info(`[PIT] ${wyniki.filter((w) => w.refId).length}/${doWyslania.length} documents of ${rok} sent (${srodowisko})`);
+        if (wyniki.some((w) => w.refId)) wysylki.kopnij();
+      }
       return {
         folder: podpisane > 0 ? folder : '',
         zapisane,
@@ -421,6 +468,7 @@ export function registerPitHandlers(deps: PitDeps): void {
         przerwano,
         // The run stopped at `przetworzone`: that one and the rest are left.
         niepodpisane: gotowe.slice(przetworzone).map(d => ({ id: d.id, nazwa: d.nazwa })),
+        ...(opcje?.wyslij ? { wysylki: wyniki } : {}),
       };
     },
   );

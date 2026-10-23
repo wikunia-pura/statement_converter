@@ -84,24 +84,128 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    version: '11.0.2',
+    // Carries everything in 11.0.2 (released the same day) as well, so users who
+    // update from 11.0.1 or earlier see all of it in one entry.
+    version: '12.0.0',
     date: '2026-10-23',
-    title: 'Powierzchnie w Adresach, czytelniejsze plany i pliki z dysku sieciowego',
+    title: 'Rozliczenia ZUS, PIT-y prosto do e-Deklaracji i powierzchnie w Adresach',
     tagline:
-      'Powierzchnie wspólnoty wpisujesz raz, w Adresach — plany gospodarcze biorą je stamtąd i pomijają pozycje z samymi zerami. Wyciągi z dysku sieciowego znów się otwierają, a aplikacja nie wylogowuje po wybudzeniu komputera.',
+      'Nowa zakładka „ZUS” w Podatkach prowadzi rejestr ubezpieczonych wspólnot i co miesiąc liczy DRA z RCA — do Płatnika jako plik KEDU albo prosto do ZUS z Twoim podpisem. PIT-11 i PIT-4R wysyłasz do e-Deklaracji tak jak CIT-8, powierzchnie wspólnoty wpisujesz raz, w Adresach, a Konwerter nie bierze już numeru lokalu z domowego adresu wpłacającego.',
     stats: [
-      { value: '1', label: 'nowa funkcja' },
-      { value: '1', label: 'usprawnienie' },
+      { value: '4', label: 'nowe funkcje' },
+      { value: '7', label: 'usprawnień' },
       { value: '2', label: 'poprawki' },
     ],
     highlights: [
+      {
+        id: 'zus-rozliczenia',
+        kind: 'new',
+        icon: 'shield',
+        title: 'Rozliczenia ZUS wspólnot',
+        summary:
+          'Nowa zakładka „ZUS” w module Podatki: rejestr płatników i ubezpieczonych (zgłoszenia ZUA, ZZA, ZWUA, ZCNA) oraz miesięczne rozliczenia DRA z raportami RCA i RSA. Wpisujesz podstawy, a składki aplikacja liczy sama.',
+        details: [
+          'Na start nie trzeba niczego przepisywać: rejestr odtwarza się z plików KEDU wyeksportowanych z Płatnika. Każdy kolejny miesiąc powstaje z poprzedniego — poprawiasz tylko to, co się zmieniło.',
+        ],
+        where: ['Podatki', 'ZUS'],
+        steps: [
+          {
+            do: 'W Płatniku wyeksportuj dokumenty wszystkich wspólnot do plików KEDU (zgłoszenia ZUA / ZZA / ZWUA, ZCNA i ostatnie DRA z RCA). W aplikacji kliknij „Importuj KEDU z Płatnika” i wskaż te pliki.',
+            then: 'Powstaje rejestr: płatnicy z NIP-em, REGON-em i nazwą skróconą, ubezpieczeni z tytułami ubezpieczenia i członkami rodziny, a do tego miesiące z DRA i RCA. Nic, co już jest w module, nie zostaje nadpisane; to, czego import nie rozstrzygnął, czeka u płatnika w sekcji „Do przeglądu po imporcie”.',
+          },
+          {
+            do: 'Wybierz miesiąc strzałkami „Poprzedni miesiąc” / „Następny miesiąc” i kliknij „Przygotuj miesiąc”.',
+            then: 'Każda wspólnota, która ma w tym miesiącu ubezpieczonych, dostaje rozliczenie DRA + RCA z podstawami przepisanymi z poprzedniego miesiąca.',
+          },
+          {
+            do: 'Kliknij „Otwórz” przy wspólnocie i w sekcji „Rozliczenie za …” popraw podstawy oraz ewentualne wynagrodzenie chorobowe. Zwolnienia lekarskie i urlopy bezpłatne wpisz w „RSA — przerwy i świadczenia”, potem kliknij „Zapisz”.',
+            then: 'Składki emerytalne, rentowe, chorobowe, wypadkowe, zdrowotna i Fundusz Pracy liczą się same; pod tabelą widać „Do zapłaty” i termin.',
+          },
+          {
+            do: 'Nową osobę dodasz w sekcji „Ubezpieczeni” przyciskiem „Dodaj osobę” (albo „Dodaj z innej wspólnoty…”), a jej umowę — przyciskiem „Umowa zlecenia (0411)”, „Umowa o pracę (0110)” lub „Zlecenie — tylko zdrowotne (ZZA)”.',
+            then: 'Data początku ubezpieczenia to zgłoszenie ZUA (albo ZZA), a wpisany ostatni dzień ubezpieczenia — wyrejestrowanie ZWUA. Członków rodziny zgłaszasz w „Członkowie rodziny (ZCNA)”.',
+          },
+          {
+            do: 'Wróć do listy, zaznacz dokumenty i kliknij „Pobierz · <liczba>” (albo „Pobierz KEDU” dla całego miesiąca).',
+            then: 'Wybierasz jeden plik KEDU dla wszystkich wspólnot albo osobny dla każdego dokumentu, a do tego wydruk rozliczenia (PDF). Plik KEDU importujesz w Płatniku albo w ePłatniku i stamtąd wysyłasz — potem kliknij „Oznacz jako wysłane”.',
+          },
+        ],
+        expect: [
+          'Przy każdej wspólnocie lista miesiąca pokazuje stan dokumentów: „Braki”, „Uwagi”, „Gotowe”, „Nieprzygotowane” albo „Wysłane”. Filtr „Stan” zawęża ją do dokumentów z błędami, gotowych, do wysłania albo wysłanych.',
+          'Wysłane rozliczenie zmieniasz korektą: przycisk „Korekta” tworzy następną wersję (identyfikator 02, 03…), a jej RCA obejmuje tylko osoby, których kwoty się zmieniły.',
+          'Pliki trafiają do folderu deklaracji podatkowych z Ustawień, do podfolderu „ZUS <rok>” i miesiąca (bez ustawionego folderu — do Pobranych). Wydruk rozliczenia to zestawienie składek wspólnoty: osoby, składki, kwota do zapłaty, termin i rachunek — nie formularz ZUS.',
+          'Wspólnoty z Adresów, które nie są jeszcze płatnikami, są pod listą, w części „Poza listą” — „Dodaj” otwiera nowego płatnika z danymi tej wspólnoty.',
+        ],
+        note: {
+          type: 'tip',
+          text: 'Stopę składki wypadkowej każdego płatnika sprawdź co roku od kwietnia — jest w danych płatnika, w polu „Stopa składki wypadkowej”.',
+        },
+      },
+      {
+        id: 'zus-wysylka',
+        kind: 'new',
+        icon: 'upload',
+        title: 'Wysyłka do ZUS prosto z aplikacji',
+        summary:
+          'Dokumenty ZUS podpiszesz kartą i wyślesz bez Płatnika i ePłatnika — tym samym kanałem, którego używa Płatnik. Potwierdzenia z ZUS aplikacja pobiera sama.',
+        where: ['Podatki', 'ZUS'],
+        steps: [
+          {
+            do: 'Na liście miesiąca zaznacz dokumenty i kliknij „Podpisz i wyślij do ZUS (<liczba>)” — albo „Podpisz i wyślij” przy jednym dokumencie.',
+            then: 'Okno pokazuje, co pójdzie i na który serwer ZUS (testowy czy produkcyjny). Dokumenty z brakami są wymienione osobno i zostają pominięte.',
+          },
+          {
+            do: 'Kliknij „Podpisz i wyślij (<liczba>)” i wpisz PIN karty.',
+            then: 'Jednym PIN-em podpiszesz wszystkie dokumenty, a każdy idzie do ZUS osobną przesyłką. Podsumowanie dzieli je na przyjęte przez serwer ZUS, bez odpowiedzi, niewysłane i pominięte.',
+          },
+          {
+            do: 'Wróć do listy i spójrz na stan przy dokumencie: „W ZUS — czeka na potwierdzenie”, „Przyjęty przez ZUS” albo „Odrzucony przez ZUS”. „Sprawdź potwierdzenia” pyta ZUS od razu.',
+            then: 'Dokument przyjęty na serwerze produkcyjnym sam dostaje oznaczenie „Wysłane”. Przycisk „Potwierdzenie” zapisuje potwierdzenie z ZUS w folderze miesiąca.',
+          },
+        ],
+        expect: [
+          'Przesyłka, na którą ZUS nie odpowiedział, blokuje ponowne wysłanie tego dokumentu, dopóki nie sprawdzisz w eZUS i nie rozstrzygniesz przy dokumencie: „Dotarła”, „Nie dotarła” albo „Przestań czekać”. Dzięki temu nic nie zostanie złożone dwa razy — także z dwóch komputerów naraz.',
+          'Na serwerze testowym aplikacja pobiera potwierdzenia i pokazuje wynik, ale nie oznacza dokumentów jako wysłane.',
+        ],
+        note: {
+          type: 'warning',
+          text: 'Na start wysyłka idzie na serwer TESTOWY ZUS — nic nie zostaje złożone. Produkcję włączysz w Ustawienia → Administracja → „Wysyłka do ZUS” → „Wysyłaj do serwera produkcyjnego ZUS” („Sprawdź połączenie” sprawdza łączność). Podpisujący musi być płatnikiem (np. członkiem zarządu wspólnoty) albo mieć pełnomocnictwo ZUS-PEL od każdej wspólnoty — inaczej ZUS odpowie odmową.',
+        },
+      },
+      {
+        id: 'pit-wysylka',
+        kind: 'new',
+        icon: 'mail',
+        title: 'PIT-11 i PIT-4R wysyłane prosto do e-Deklaracji, z UPO',
+        summary:
+          'Tak jak CIT-8: podpisane PIT-y aplikacja sama wysyła do bramki e-Deklaracji i sama odbiera UPO — bez wczytywania XML-i w e-Formularzu.',
+        where: ['Podatki', 'PIT'],
+        steps: [
+          {
+            do: 'Zaznacz dokumenty na liście roku, kliknij „Podpisz (<liczba>)” i w oknie podpisu zaznacz „Wyślij do e-Deklaracji”.',
+            then: 'Po podpisaniu wszystkich dokumentów podpisane XML-e idą do bramki, a podsumowanie pokazuje ich numery referencyjne.',
+          },
+          {
+            do: 'Otwórz wspólnotę: przy osobie (PIT-11) i w PIT-4R jest lista „Wysyłki do e-Deklaracji” ze stanem każdej wysyłki.',
+            then: 'UPO aplikacja sprawdza sama w tle, a „Sprawdź UPO” pyta bramkę od razu. Dokument z UPO z bramki produkcyjnej sam zostaje oznaczony jako złożony, z numerem referencyjnym.',
+          },
+        ],
+        expect: [
+          'Wysyłka, na którą bramka nie odpowiedziała, blokuje kolejną wysyłkę produkcyjną tego dokumentu, dopóki jej nie rozstrzygniesz („Dotarła”, „Nie dotarła — pozwól wysłać ponownie”, „Przestań czekać”). Sprawdź najpierw w e-Urzędzie Skarbowym.',
+          'Bramkę (test albo produkcja) wybiera ten sam przełącznik co dla CIT: Ustawienia → Administracja → „Wysyłka e-Deklaracji”.',
+        ],
+        note: {
+          type: 'warning',
+          text: 'Na produkcji urząd przyjmie PIT tylko wtedy, gdy podpisujący ma złożone pełnomocnictwo UPL-1 od każdej wspólnoty, za którą wysyła.',
+        },
+      },
       {
         id: 'adresy-powierzchnie',
         kind: 'new',
         icon: 'home',
         title: 'Powierzchnie wspólnoty w Adresach',
         summary:
-          'Powierzchnia użytkowa całkowita, powierzchnia M.St. Warszawa i pożytki są teraz częścią adresu wspólnoty. Plany gospodarcze biorą nagłówek stąd — w planie tych wartości się już nie zmienia.',
+          'Powierzchnia użytkowa całkowita, powierzchnia M.St. Warszawa i pożytki są teraz częścią adresu wspólnoty. Plany gospodarcze biorą nagłówek stąd — w samym planie tych wartości się nie wpisuje.',
         where: ['Adresy', 'Powierzchnie'],
         steps: [
           {
@@ -127,9 +231,13 @@ export const RELEASES: Release[] = [
         icon: 'file-text',
         title: 'Plan gospodarczy: powierzchnie z adresu, bez pozycji z samymi zerami',
         summary:
-          'Nagłówek planu pokazuje powierzchnie z adresu wspólnoty, a kategorie i pozycje z samymi zerami (np. kredyt wspólnoty bez kredytu) są pomijane — w podglądzie, w PDF i w Excelu.',
+          'Nagłówek planu pokazuje powierzchnie z adresu wspólnoty w jednej tabelce — całkowitą, w tym M.St. Warszawa i własność osób fizycznych z udziałami, oraz pożytki. Kategorie i pozycje z samymi zerami (np. kredyt wspólnoty bez kredytu) są pomijane w podglądzie, w PDF i w Excelu.',
         where: ['Zebrania', 'Plan gospodarczy', 'Nagłówek planu'],
         steps: [
+          {
+            do: 'W nagłówku planu kliknij „Edytuj powierzchnie”.',
+            then: 'Powierzchnie adresu otwierają się w okienku na miejscu — bez przechodzenia do Adresów. Po zapisaniu są i w adresie, i od razu w otwartym planie; zapisz plan.',
+          },
           {
             do: 'Otwórz plan wspólnoty, której powierzchnie zmieniły się w Adresach.',
             then: 'Nagłówek mówi, że adres ma teraz inne powierzchnie niż plan.',
@@ -141,8 +249,115 @@ export const RELEASES: Release[] = [
         ],
         expect: [
           'Spłatę kredytu i inne wpływy dodajesz przyciskami „Dodaj spłatę kredytu” / „Dodaj inne wpływy”, gdy wspólnota je ma.',
-          'Wyjście z niezapisanego planu, deklaracji DN-1, PIT albo zeznania CIT — także przez menu boczne albo Wstecz — najpierw pyta, czy zapisać zmiany.',
+          'Wyjście z niezapisanego planu, deklaracji DN-1, PIT, zeznania CIT albo płatnika ZUS — także przez menu boczne albo Wstecz — najpierw pyta, czy zapisać zmiany.',
         ],
+      },
+      {
+        id: 'pit-4r-miesiace',
+        kind: 'improved',
+        icon: 'table',
+        title: 'PIT-4R: zaliczki w jednej tabeli, miesiąc po miesiącu',
+        summary:
+          'Miesięczne zaliczki PIT-4R wpisujesz w tabeli: miesiące w wierszach, a w kolumnach liczba podatników, stosunek pracy, art. 41, inne i suma.',
+        where: ['Podatki', 'PIT', 'PIT-4R — zaliczki miesiąc po miesiącu'],
+        steps: [
+          {
+            do: 'Otwórz wspólnotę i przejdź do sekcji „PIT-4R — zaliczki miesiąc po miesiącu”.',
+            then: 'Tabela ma wiersz na każdy miesiąc i wiersz „Razem”. Po najechaniu na nagłówek kolumny widać, któremu wierszowi deklaracji odpowiada.',
+          },
+          {
+            do: 'Przy „Wstaw sumy z PIT-11 do miesiąca” wybierz miesiąc i kliknij „Wstaw”.',
+            then: 'Roczne sumy zaliczek z PIT-11 wspólnoty trafiają do wybranego miesiąca.',
+          },
+        ],
+      },
+      {
+        id: 'pit-skladki-z-zus',
+        kind: 'improved',
+        icon: 'coins',
+        title: 'PIT-11: składki z rozliczeń ZUS do poz. 95 i 122',
+        summary:
+          'Gdy osoba ma rozliczenia w zakładce ZUS, przy polach „Składki ZUS odliczone (poz. 95)” i „Składka zdrowotna (poz. 122)” widać sumy z ZUS za ten rok.',
+        where: ['Podatki', 'PIT'],
+        steps: [
+          {
+            do: 'Otwórz wspólnotę w zakładce PIT i przejdź do osoby, za którą wspólnota płaci składki.',
+            then: 'Pod polami poz. 95 i 122 jest linia „Z rozliczeń ZUS (…): społeczne …, zdrowotna …” — albo „zgodne z ZUS”, gdy kwoty już się zgadzają.',
+          },
+          {
+            do: 'Kliknij „Wstaw z ZUS”, a potem zapisz.',
+            then: 'Kwoty z rozliczeń ZUS są w PIT-11.',
+          },
+        ],
+        expect: [
+          'Osobę w ZUS aplikacja rozpoznaje po PESEL-u i sumuje te miesiące roku, które mają rozliczenia w zakładce ZUS. Aplikacja tylko podpowiada — nic nie zmienia się samo.',
+        ],
+      },
+      {
+        id: 'podatki-poza-lista',
+        kind: 'improved',
+        icon: 'archive',
+        title: 'PIT i ZUS: wspólnoty spoza listy w części „Poza listą”',
+        summary:
+          'Wspólnoty bez PIT w danym roku, bez płatnika ZUS albo bez dokumentów ZUS w miesiącu są pod listą, w zwiniętych sekcjach z liczbą — przy każdej wspólnocie jeden przycisk, który ją dodaje.',
+        where: ['Podatki', 'PIT', 'Poza listą'],
+        steps: [
+          {
+            do: 'Przewiń pod listę i rozwiń „Wspólnoty z Adresów bez PIT w <rok>” (w ZUS: „Wspólnoty z Adresów bez płatnika ZUS” albo „Płatnicy bez dokumentów za …”).',
+            then: 'Widzisz te wspólnoty jako kafelki.',
+          },
+          {
+            do: 'Kliknij „Dodaj” przy wspólnocie (przy płatnikach bez dokumentów — „Otwórz”).',
+            then: 'Otwiera się nowy wpis tej wspólnoty z jej danymi z Adresów (przy płatniku bez dokumentów — jego ekran). Po zapisaniu wspólnota jest na liście.',
+          },
+        ],
+      },
+      {
+        id: 'zadania-pobierz-wszystkie',
+        kind: 'improved',
+        icon: 'paperclip',
+        title: 'Zadania: wszystkie załączniki jednym kliknięciem',
+        summary:
+          'Karta z co najmniej dwoma załącznikami ma przycisk „Pobierz wszystkie” — na tablicy, w podglądzie i w edycji zadania.',
+        where: ['Zadania', 'Załączniki'],
+        steps: [
+          {
+            do: 'Kliknij „Pobierz wszystkie” na karcie zadania albo w sekcji „Załączniki” w podglądzie lub edycji.',
+            then: 'Wybierasz folder, a wszystkie pliki karty zapisują się do niego naraz. Komunikat mówi, ile się zapisało, i pozwala otworzyć folder.',
+          },
+        ],
+        expect: [
+          'Gdy któregoś pliku nie da się pobrać, komunikat wymienia go z nazwy, a reszta i tak się zapisuje.',
+        ],
+      },
+      {
+        id: 'konwerter-adres-domowy',
+        kind: 'improved',
+        icon: 'alert-triangle',
+        title: 'Konwerter: numer lokalu z domowego adresu wpłacającego czeka na Ciebie',
+        summary:
+          'Gdy jedyny numer lokalu w opisie to „M.” z domowego adresu wpłacającego przy innej ulicy (np. „UL. SOSNOWA 109A M.89” we wpłacie na zupełnie inną wspólnotę), wpłata nie jest już księgowana automatycznie na ten lokal — trafia do przeglądu.',
+        details: [
+          'Do tej pory taki numer mogło podsunąć AI albo pamięć poprzednich konwersji i wpłata szła na obcy lokal. Teraz to sprawdzenie działa niezależnie od tego, kto podał numer — także wtedy, gdy bank skleił ulicę z numerem budynku („UL.KLONOWA112 M.2A”).',
+        ],
+        where: ['Konwerter', 'Przegląd transakcji'],
+        steps: [
+          {
+            do: 'Po konwersji otwórz „Przegląd transakcji”.',
+            then: 'Taka wpłata ma opis „Numer lokalu pochodzi z adresu przy innej ulicy (zwykle domowego adresu wpłacającego) — wskaż właściwy lokal.” Numer z adresu zostaje jako podpowiedź.',
+          },
+        ],
+        expect: [
+          'Adres przy ulicy samej wspólnoty — „UL. <ulica wspólnoty> <numer> M.12” — dalej księguje się automatycznie na lokal 12.',
+        ],
+      },
+      {
+        id: 'nowy-wskaznik-ladowania',
+        kind: 'improved',
+        icon: 'loader',
+        title: 'Nowy wskaźnik ładowania',
+        summary:
+          'Gdy widok wczytuje dane, na środku kręci się kółko z podpisem, co się ładuje, a pod nim co kilka sekund zmienia się krótki tekst („Liczę grosze…”, „Uzgadniam salda…”). Menu boczne działa przez cały czas.',
       },
       {
         id: 'sesja-po-wybudzeniu',
@@ -167,7 +382,7 @@ export const RELEASES: Release[] = [
           },
         ],
         expect: [
-          'Plik, który to tylko wygląda na dokument, a w rzeczywistości jest skrótem do programu, dalej nie zostanie otwarty.',
+          'Plik, który tylko wygląda na dokument, a w rzeczywistości jest skrótem do programu, dalej nie zostanie otwarty.',
         ],
         note: {
           type: 'warning',

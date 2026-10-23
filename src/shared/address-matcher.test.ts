@@ -58,3 +58,35 @@ describe('AddressMatcher — a building numbered "5/7"', () => {
     expect(match(m, 'Czynsz Lotników 5/7', 'JAN NOWAK').apartmentNumber).toBe('7');
   });
 });
+
+describe('AddressMatcher — apartment of the payer\'s own home address', () => {
+  const m = new AddressMatcher([community('Puławska 117')]);
+  const homeInLodz =
+    'WSPÓLNOTA PUŁAWSKA 117 -ZALICZKA NA ZARZĄD ŚWIADCZENIA I FR PIOTR TESTOWY UL.SOSNOWA 109A M.89 90-001 ŁÓDŹ';
+
+  it('flags the "M.89" glued to a street that is not the community\'s', () => {
+    expect(m.apartmentAtForeignStreet(homeInLodz, '89')).toBe(true);
+    expect(m.apartmentAtForeignStreet('CZYNSZ JAN NOWAK UL. SOS NOWA 109A LOK. 89', '89')).toBe(true);
+    // The payer's bank dropped the space between street and building.
+    expect(m.apartmentAtForeignStreet('NAJEM PAWEŁ PRÓBNY UL.KLONOWA112 M.2A 50-001 WROCŁAW', '2')).toBe(true);
+  });
+
+
+  it('does not flag the community\'s own street; another building on it is foreign', () => {
+    expect(
+      m.apartmentAtForeignStreet('CZYNSZ PUŁAWSKA 117/12 ANNA WZORCOWA UL.PUŁAWSKA 117 M.12 02-707 WARSZAWA', '12'),
+    ).toBe(false);
+    expect(m.apartmentAtForeignStreet('CZYNSZ JAN NOWAK UL.PUŁAWSKA 115 M.3', '3')).toBe(true);
+  });
+
+  it('does not flag a number the text also names another way, or does not name at all', () => {
+    expect(m.apartmentAtForeignStreet(`CZYNSZ LOKAL 89 ${homeInLodz}`, '89')).toBe(false);
+    expect(m.apartmentAtForeignStreet(`PUŁAWSKA 117/89 ${homeInLodz}`, '89')).toBe(false);
+    expect(m.apartmentAtForeignStreet(homeInLodz, '5')).toBe(false);
+    expect(m.apartmentAtForeignStreet(homeInLodz, null)).toBe(false);
+  });
+
+  it('matches what the matcher itself refuses', () => {
+    expect(match(m, 'WSPÓLNOTA PUŁAWSKA 117 -ZALICZKA NA ZARZĄD', 'PIOTR TESTOWY UL.SOSNOWA 109A M.89 90-001 ŁÓDŹ').apartmentNumber).toBeNull();
+  });
+});

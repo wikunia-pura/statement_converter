@@ -2,10 +2,16 @@
 
 import type { NotificationPrefs } from '../shared/notifications';
 import type { PitDane, PodatekPit } from '../shared/podatki-pit';
+import type { PodatekZusPlatnik, PodatekZusRozliczenie, ZusPlatnikDane, ZusRozliczenieDane } from '../shared/podatki-zus';
+import type { ZusSrodowisko, ZusWysylka } from '../shared/zus-ewd';
+import type { PodatkiPitUpoResult, PodatkiZusPotwierdzeniaResult, PodatkiZusWyslijResult } from '../shared/types';
 import type { CitPrzegladPozycja } from '../shared/podatki-cit';
 import type {
   PodatkiPitExcelResult,
   PodatkiPitImportResult,
+  PodatkiZusImportResult,
+  PodatkiZusPlikiOpcje,
+  PodatkiZusPlikiResult,
   PodatkiPitPlikiResult,
   PodatkiPitPostep,
 } from '../shared/types';
@@ -304,6 +310,8 @@ interface ElectronAPI {
   setAiModel: (model: string) => Promise<boolean>;
   /** Switch the e-Deklaracje gateway of this computer ('test' / 'prod'); the value now in force. */
   setEDeklaracjeSrodowisko: (srodowisko: 'test' | 'prod') => Promise<'test' | 'prod'>;
+  /** Switch ZUS's EWD service of this computer ('test' / 'prod'); the value now in force. */
+  setZusSrodowisko: (srodowisko: ZusSrodowisko) => Promise<ZusSrodowisko>;
   setContractorSortOrder: (sortOrder: string) => Promise<boolean>;
   setSidebarCollapsed: (collapsed: boolean) => Promise<boolean>;
   /** The menu's order as view ids; null restores the default. */
@@ -778,17 +786,70 @@ interface ElectronAPI {
   pitPliki: (rok: number, ids: string[], tryb: 'xml' | 'pdf' | 'oba') => Promise<PodatkiPitPlikiResult>;
   /** Mark documents as filed with the tax office (with the gateway's reference number) or take it off; the rows as they now are. */
   setPitZlozone: (ids: string[], zlozone: boolean, numerRef: string) => Promise<PodatekPit[]>;
-  /** Sign the ticked documents' XML (XAdES) with one PIN, plus their PDFs (PAdES when `pdfPodpisany`). Rejects only when nothing got signed. */
+  /**
+   * Sign the ticked documents' XML (XAdES) with one PIN, plus their PDFs (PAdES when `pdfPodpisany`); with
+   * `wyslij` each signed XML then goes to the e-Deklaracje gateway. Rejects only when nothing got signed.
+   */
   podpiszPit: (
     rok: number,
     ids: string[],
     wybor: PodpisWybor,
-    opcje: { pdfPodpisany: boolean },
+    opcje: { pdfPodpisany: boolean; wyslij?: boolean; potwierdzoneKorekty?: string[] },
   ) => Promise<PodatkiPitPlikiResult>;
   /** Stop the signing run after the document in hand. */
   przerwijPodpisPit: () => Promise<boolean>;
   /** Progress of the signing run; returns the unsubscribe. */
   onPodatkiPitPostep: (callback: (postep: PodatkiPitPostep) => void) => () => void;
+  /** Ask the gateway about the year's waiting sends (or those of the rows of the given documents). */
+  sprawdzUpoPit: (rok: number, ids?: string[]) => Promise<PodatkiPitUpoResult>;
+  /** The UPO kept on a send, written next to the document's files; its path. */
+  pobierzUpoPit: (dokumentId: string, refId: string) => Promise<{ filePath: string }>;
+  /** A person settles a send the app could not; the row as it now is. */
+  rozstrzygnijWysylkePit: (dokumentId: string, at: string, jak: 'nie_dotarla' | 'dotarla' | 'porzucona') => Promise<PodatekPit>;
+  /** UPOs the background automat received. */
+  onPitUpo: (callback: (wynik: PodatkiPitUpoResult) => void) => () => void;
+
+  // Podatki — ZUS (register, registrations, DRA + RCA + RSA)
+  /** The whole ZUS register, every monthly set and every send to ZUS. */
+  getPodatkiZus: () => Promise<{ platnicy: PodatekZusPlatnik[]; rozliczenia: PodatekZusRozliczenie[]; wysylki: ZusWysylka[] }>;
+  /** Refused when the NIP is already in the register. */
+  addPodatekZus: (nip: string, dane: ZusPlatnikDane) => Promise<PodatekZusPlatnik>;
+  /** Save an edited payer; the "sent" marks and downloads are kept from the stored row. */
+  setPodatekZus: (id: number, dane: ZusPlatnikDane) => Promise<PodatekZusPlatnik>;
+  /** The payer and all its monthly sets. */
+  deletePodatekZus: (id: number) => Promise<boolean>;
+  addZusRozliczenie: (nip: string, okres: string, identyfikator: number, dane: ZusRozliczenieDane) => Promise<PodatekZusRozliczenie>;
+  /** Save an edited month; its "sent" mark and downloads are kept from the stored row. */
+  setZusRozliczenie: (id: number, dane: ZusRozliczenieDane) => Promise<PodatekZusRozliczenie>;
+  deleteZusRozliczenie: (id: number) => Promise<boolean>;
+  /** A set for every payer (or the given NIPs) with a title in force in the month and none yet; how many were made. */
+  przygotujZus: (okres: string, nips?: string[]) => Promise<number>;
+  /** A correction (next identifier) of a sent set. */
+  korektaZus: (rozliczenieId: number) => Promise<PodatekZusRozliczenie>;
+  /** Pick Płatnik's KEDU files and merge them into the register; null when cancelled. */
+  importZusKedu: () => Promise<PodatkiZusImportResult | null>;
+  /** Write the KEDU and / or the printout of the ticked documents into the month's folder. */
+  zusPliki: (okres: string, ids: string[], opcje: PodatkiZusPlikiOpcje) => Promise<PodatkiZusPlikiResult>;
+  /** Mark documents as sent to ZUS or take it off; the rows as they now are. */
+  setZusWyslane: (ids: string[], wyslane: boolean) => Promise<{ platnicy: PodatekZusPlatnik[]; rozliczenia: PodatekZusRozliczenie[] }>;
+  /**
+   * Sign the ticked documents with one PIN and send each to ZUS (EWD, the service of Settings → Administracja).
+   * Rejects only when nothing was signed (wrong PIN, no card) — the window then asks again.
+   */
+  wyslijZus: (okres: string, ids: string[], wybor: PodpisWybor) => Promise<PodatkiZusWyslijResult>;
+  /** Stop a send run after the document in hand. */
+  przerwijWysylkeZus: () => Promise<boolean>;
+  onZusPostep: (callback: (postep: PodatkiPodpisPostep) => void) => () => void;
+  /** Ask ZUS for the confirmations of the given sends (or of every one waiting). */
+  sprawdzPotwierdzeniaZus: (wysylkaIds?: number[]) => Promise<PodatkiZusPotwierdzeniaResult>;
+  /** The confirmation kept on a send, written into the month's folder; its path. */
+  pobierzPotwierdzenieZus: (wysylkaId: number) => Promise<{ filePath: string }>;
+  /** A person settles a send the app could not; the send as it now is. */
+  rozstrzygnijWysylkeZus: (wysylkaId: number, jak: 'nie_dotarla' | 'dotarla' | 'porzucona') => Promise<ZusWysylka>;
+  /** Confirmations the background automat received. */
+  onZusPotwierdzenie: (callback: (wynik: PodatkiZusPotwierdzeniaResult) => void) => () => void;
+  /** CheckTransmision on the service of the switch; the service it reached. */
+  sprawdzPolaczenieZus: () => Promise<ZusSrodowisko>;
 
   // Podpis kwalifikowany (karta Szafir)
   /** The signing library in use and every reader with its card and certificates — read fresh each call. */
@@ -878,6 +939,13 @@ interface ElectronAPI {
   /** Save dialog, then the file. false = the user cancelled. */
   /** Where the attachment was saved, or null when the save dialog was cancelled. */
   zadaniaDownloadAttachment: (zalacznik: { sciezka: string; nazwa: string }) => Promise<string | null>;
+  /**
+   * Folder dialog, then every file of the card into it (an existing name gets a
+   * suffix, nothing is overwritten). null = the dialog was cancelled.
+   */
+  zadaniaDownloadAllAttachments: (
+    zalaczniki: { sciezka: string; nazwa: string }[],
+  ) => Promise<{ folder: string; saved: number; failed: string[] } | null>;
   /** Remove uploads that never reached a card (a cancelled form). */
   zadaniaDiscardAttachments: (paths: string[]) => Promise<boolean>;
   onOpenKsiegowania: (callback: () => void) => () => void;

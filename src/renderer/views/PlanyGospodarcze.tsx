@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Adres,
+  AdresPowierzchnie,
   PlanGospodarczy,
   PlanWlasny,
   Spotkanie,
@@ -116,10 +117,10 @@ const NowyPlanModal: React.FC<{
   wpisy: Wpis[];
   onOpenWpis: (id: string) => void;
   onOpenUstawienia: () => void;
-  onOpenAdres?: (adresId: number) => void;
+  onPowierzchnieAdresu?: (adresId: number, powierzchnie: AdresPowierzchnie) => void;
   onCreated: (plan: PlanWlasny) => void;
   onClose: () => void;
-}> = ({ t, lista, wspolnoty, adresy, ustawienia, wpisy, onOpenWpis, onOpenUstawienia, onOpenAdres, onCreated, onClose }) => {
+}> = ({ t, lista, wspolnoty, adresy, ustawienia, wpisy, onOpenWpis, onOpenUstawienia, onPowierzchnieAdresu, onCreated, onClose }) => {
   const notify = useNotify();
   const [nr, setNr] = useState<string | null>(null);
   const [sprId, setSprId] = useState<string | null>(null);
@@ -207,7 +208,7 @@ const NowyPlanModal: React.FC<{
         <ModalDismiss onClose={onClose} ariaLabel={t.close} />
         <ModalHeader icon="coins" title={t.planyNewTitle} subtitle={t.planyNewSubtitle} />
         <div className="modal-body modal-body--sectioned">
-          <FormSection icon="bar-chart" title={t.planyNewStatement} description={t.planyNewStatementHint}>
+          <FormSection icon="book" title={t.planyNewStatement} description={t.planyNewStatementHint}>
             {lista.length === 0 ? (
               <p className="form-empty">{t.planyNewNoStatements}</p>
             ) : (
@@ -295,7 +296,7 @@ const NowyPlanModal: React.FC<{
                 {...powierzchnieNowegoPlanu({ powierzchnia: sprPowierzchnia }, adres)}
                 adres={adres}
                 nowy
-                onOpenAdres={onOpenAdres}
+                onPowierzchnieAdresu={onPowierzchnieAdresu}
               />
             )}
           </FormSection>
@@ -330,7 +331,7 @@ const PlanScreen: React.FC<{
   onReload: () => Promise<void>;
   onOpenUstawienia: () => void;
   onOpenZebranie: (zebranieId: number) => void;
-  onOpenAdres?: (adresId: number) => void;
+  onPowierzchnieAdresu?: (adresId: number, powierzchnie: AdresPowierzchnie) => void;
 }> = ({
   language,
   locale,
@@ -345,7 +346,7 @@ const PlanScreen: React.FC<{
   onReload,
   onOpenUstawienia,
   onOpenZebranie,
-  onOpenAdres,
+  onPowierzchnieAdresu,
 }) => {
   const t = translations[language];
   const notify = useNotify();
@@ -452,8 +453,8 @@ const PlanScreen: React.FC<{
   const wspolnota = wspolnoty.find((w) => w.vdomNr != null && w.vdomNr === wpis.nrWsp) ?? null;
   const adres = adresPoNazwie(adresy, wspolnota?.adresNazwa);
   const tabs: ModuleTab[] = [
-    { id: 'sprawozdanie', label: t.zebraniaTabReports, icon: 'bar-chart' },
-    { id: 'plan', label: t.zebraniaTabPlan, icon: 'wallet' },
+    { id: 'sprawozdanie', label: t.zebraniaTabReports, icon: 'book' },
+    { id: 'plan', label: t.zebraniaTabPlan, icon: 'coins' },
   ];
 
   return (
@@ -482,7 +483,7 @@ const PlanScreen: React.FC<{
                 </span>
               )}
               <span>
-                <Icon name="bar-chart" size={13} />{' '}
+                <Icon name="book" size={13} />{' '}
                 {t.planySprawozdanie.replace(
                   '{okres}',
                   okresLabel(wpis.plan.sprawozdanieOkres.od, wpis.plan.sprawozdanieOkres.do)
@@ -574,10 +575,10 @@ const PlanScreen: React.FC<{
             />
           ) : (
             <div className="page-form zeb-page">
-              <FormSection icon="bar-chart" title={t.zebraniaTabReports}>
+              <FormSection icon="book" title={t.zebraniaTabReports}>
                 <div className="uch-empty zfin-empty-state">
                   <span className="zeb-tab-empty__icon">
-                    <Icon name="bar-chart" size={22} />
+                    <Icon name="book" size={22} />
                   </span>
                   <strong>{sprLoading ? t.loading : t.planySprawozdanieBrakTitle}</strong>
                   {!sprLoading && (
@@ -664,7 +665,7 @@ const PlanScreen: React.FC<{
             onChanged={onReload}
             onOpenUstawienia={onOpenUstawienia}
             adres={adres}
-            onOpenAdres={onOpenAdres}
+            onPowierzchnieAdresu={onPowierzchnieAdresu}
           />
         )}
       </div>
@@ -686,9 +687,7 @@ const PlanScreen: React.FC<{
 const PlanyGospodarcze: React.FC<{
   language: Language;
   onOpenZebranie: (zebranieId: number) => void;
-  /** Adresy, on one address's form — where a plan's areas are changed. */
-  onOpenAdres?: (adresId: number) => void;
-}> = ({ language, onOpenZebranie, onOpenAdres }) => {
+}> = ({ language, onOpenZebranie }) => {
   const t = translations[language];
   const notify = useNotify();
   const locale = localeOf(language);
@@ -747,6 +746,11 @@ const PlanyGospodarcze: React.FC<{
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Areas saved from a plan's header: that one address in step — a reload would
+  // put the loader over the plan being edited.
+  const onPowierzchnieAdresu = (adresId: number, powierzchnie: AdresPowierzchnie) =>
+    setAdresy((prev) => prev.map((a) => (a.id === adresId ? { ...a, powierzchnie } : a)));
 
   const wpisy = useMemo<Wpis[]>(() => {
     const zZebran = planyZZebran(zebrania, wspolnoty);
@@ -836,7 +840,7 @@ const PlanyGospodarcze: React.FC<{
             navItem.open(id, labelOf(id));
           }}
           onOpenUstawienia={() => setUstawieniaOpen(true)}
-          onOpenAdres={onOpenAdres}
+          onPowierzchnieAdresu={onPowierzchnieAdresu}
           onCreated={(plan) => {
             setCreating(false);
             void load(true).then(() => navItem.open(`w-${plan.id}`, ''));
@@ -884,7 +888,7 @@ const PlanyGospodarcze: React.FC<{
           onReload={() => load(true)}
           onOpenUstawienia={() => setUstawieniaOpen(true)}
           onOpenZebranie={onOpenZebranie}
-          onOpenAdres={onOpenAdres}
+          onPowierzchnieAdresu={onPowierzchnieAdresu}
         />
         {modals}
       </>
@@ -934,7 +938,7 @@ const PlanyGospodarcze: React.FC<{
                 </span>
               )}
               <span>
-                <Icon name="bar-chart" size={13} />{' '}
+                <Icon name="book" size={13} />{' '}
                 {t.planySprawozdanie.replace(
                   '{okres}',
                   okresLabel(w.plan.sprawozdanieOkres.od, w.plan.sprawozdanieOkres.do)

@@ -135,8 +135,64 @@ function useAttachmentDownload(t: (typeof translations)['pl']) {
       setBusyId(null);
     }
   };
-  return { busyId, download };
+  /** Every file of the card into one folder; `busyId` reads 'all' meanwhile. */
+  const downloadAll = async (list: ZadanieZalacznik[]) => {
+    if (busyId || list.length === 0) return;
+    setBusyId(ALL_ATTACHMENTS);
+    try {
+      const result = await window.electronAPI.zadaniaDownloadAllAttachments(
+        list.map((z) => ({ sciezka: z.sciezka, nazwa: z.nazwa })),
+      );
+      if (!result) return;
+      if (result.saved === 0) {
+        notify.error(t.zadAttachDownloadAllNone.replace('{list}', result.failed.join(', ')));
+      } else if (result.failed.length > 0) {
+        notify.warning(
+          t.zadAttachSavedSome
+            .replace('{saved}', String(result.saved))
+            .replace('{total}', String(list.length))
+            .replace('{list}', result.failed.join(', ')),
+          { file: result.folder },
+        );
+      } else {
+        notify.success(t.zadAttachSavedAll.replace('{count}', String(result.saved)), {
+          file: result.folder,
+        });
+      }
+    } catch {
+      notify.error(t.zadAttachDownloadError);
+    } finally {
+      setBusyId(null);
+    }
+  };
+  return { busyId, download, downloadAll };
 }
+
+/** `busyId` while every file of a card is coming down — never an attachment's uuid. */
+const ALL_ATTACHMENTS = 'all';
+
+/** "Pobierz wszystkie", offered wherever a card's files are listed and there are two or more. */
+const DownloadAllButton: React.FC<{
+  zalaczniki: ZadanieZalacznik[];
+  busyId: string | null;
+  onClick: () => void;
+  t: (typeof translations)['pl'];
+}> = ({ zalaczniki, busyId, onClick, t }) =>
+  zalaczniki.length < 2 ? null : (
+    <button
+      type="button"
+      className="button button-small button-subtle"
+      disabled={busyId !== null}
+      onClick={onClick}
+    >
+      <Icon
+        name={busyId === ALL_ATTACHMENTS ? 'loader' : 'download'}
+        size={13}
+        className={busyId === ALL_ATTACHMENTS ? 'icon-spin' : undefined}
+      />{' '}
+      {t.zadAttachDownloadAll}
+    </button>
+  );
 
 interface FormModalProps {
   language: Language;
@@ -272,7 +328,7 @@ export const ZadanieFormModal: React.FC<FormModalProps> = ({
     else removedHere.current.add(z.sciezka);
   };
 
-  const { busyId, download: handleDownload } = useAttachmentDownload(t);
+  const { busyId, download: handleDownload, downloadAll } = useAttachmentDownload(t);
 
   const handleCancel = () => {
     discard([...uploadedHere.current]);
@@ -461,7 +517,19 @@ export const ZadanieFormModal: React.FC<FormModalProps> = ({
             </FormRow>
           </FormSection>
 
-          <FormSection icon="paperclip" title={t.zadSectionFiles} description={t.zadSectionFilesDesc}>
+          <FormSection
+            icon="paperclip"
+            title={t.zadSectionFiles}
+            description={t.zadSectionFilesDesc}
+            aside={
+              <DownloadAllButton
+                zalaczniki={zalaczniki}
+                busyId={busyId}
+                onClick={() => void downloadAll(zalaczniki)}
+                t={t}
+              />
+            }
+          >
             <FormField label={t.zadFieldAttachments} hint={t.zadAttachHint}>
               {/* The add button lives inside the list's frame, as in every file list. */}
               <div className={`file-list${zalaczniki.length === 0 ? ' is-empty' : ''}`}>
@@ -694,7 +762,7 @@ export const ZadaniePreviewModal: React.FC<PreviewModalProps> = ({
 }) => {
   const t = translations[language];
   const locale = language === 'en' ? 'en' : 'pl';
-  const { busyId, download } = useAttachmentDownload(t);
+  const { busyId, download, downloadAll } = useAttachmentDownload(t);
   const statusLabels: Record<ZadanieStatus, string> = {
     todo: t.zadColTodo,
     in_progress: t.zadColInProgress,
@@ -751,7 +819,18 @@ export const ZadaniePreviewModal: React.FC<PreviewModalProps> = ({
             </dl>
           </FormSection>
           {z.zalaczniki.length > 0 && (
-            <FormSection icon="paperclip" title={t.zadSectionFiles}>
+            <FormSection
+              icon="paperclip"
+              title={t.zadSectionFiles}
+              aside={
+                <DownloadAllButton
+                  zalaczniki={z.zalaczniki}
+                  busyId={busyId}
+                  onClick={() => void downloadAll(z.zalaczniki)}
+                  t={t}
+                />
+              }
+            >
               <div className="file-list">
                 {z.zalaczniki.map((a) => (
                   <div key={a.id} className="file-list__row">
@@ -994,7 +1073,11 @@ const Zadania: React.FC<Props> = ({
 }) => {
   const t = translations[language];
   const notify = useNotify();
-  const { busyId: downloadingId, download: downloadAttachment } = useAttachmentDownload(t);
+  const {
+    busyId: downloadingId,
+    download: downloadAttachment,
+    downloadAll: downloadAllAttachments,
+  } = useAttachmentDownload(t);
   const [zadania, setZadania] = useState<Zadanie[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
   // Only to name the meeting a card belongs to.
@@ -1795,6 +1878,22 @@ const Zadania: React.FC<Props> = ({
                               }}
                             >
                               {t.zadDashMore.replace('{count}', String(z.zalaczniki.length - 3))}
+                            </button>
+                          )}
+                          {z.zalaczniki.length > 1 && (
+                            <button
+                              type="button"
+                              className={`zad-card__file zad-card__file--more${downloadingId === ALL_ATTACHMENTS ? ' is-busy' : ''}`}
+                              data-tip={t.zadAttachCount.replace(
+                                '{count}',
+                                String(z.zalaczniki.length)
+                              )}
+                              disabled={downloadingId !== null}
+                              draggable={false}
+                              onClick={() => void downloadAllAttachments(z.zalaczniki)}
+                            >
+                              <Icon name="download" size={13} />
+                              {t.zadAttachDownloadAll}
                             </button>
                           )}
                         </div>

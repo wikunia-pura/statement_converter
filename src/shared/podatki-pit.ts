@@ -18,6 +18,7 @@
  */
 
 import type { PodatekPobranie } from './types';
+import { EDeklaracjeWysylka, normalizeWysylki } from './e-deklaracje';
 import { PIT11_URZEDY, PIT4R_URZEDY_DODATKOWE } from './pit-urzedy';
 import { czysc, doGroszy, doZlotych, nipPoprawny, tylkoCyfry } from './podatki';
 import { foldText } from './text';
@@ -179,6 +180,8 @@ export interface PitOsoba {
   zlozone: PitZlozone | null;
   /** Every XML / PDF made of this PIT-11, oldest first. */
   pobrania: PodatekPobranie[];
+  /** Every send of this PIT-11 to the e-Deklaracje gateway, oldest first (the CIT-8's way of keeping them). */
+  wysylki: EDeklaracjeWysylka[];
 }
 
 /** Twelve months, January first; null = nothing entered. */
@@ -202,6 +205,8 @@ export interface PitPit4R {
   pomniejszenie: PitMiesiace;
   zlozone: PitZlozone | null;
   pobrania: PodatekPobranie[];
+  /** Every send of this PIT-4R to the e-Deklaracje gateway, oldest first. */
+  wysylki: EDeklaracjeWysylka[];
   przeglad: string[];
 }
 
@@ -307,6 +312,7 @@ export const pustaOsoba = (): PitOsoba => ({
   uwagi: '',
   zlozone: null,
   pobrania: [],
+  wysylki: [],
 });
 
 export const OPIS_ZARZADU = 'WYNAGRODZENIE CZŁONKA ZARZĄDU WSPÓLNOTY MIESZKANIOWEJ';
@@ -369,6 +375,7 @@ export function normalizeOsoba(raw: unknown): PitOsoba {
     uwagi: str(r.uwagi).trim(),
     zlozone: normalizeZlozone(r.zlozone),
     pobrania: normalizePobrania(r.pobrania),
+    wysylki: normalizeWysylki(r.wysylki),
   };
 }
 
@@ -383,6 +390,7 @@ export const pustePit4R = (): PitPit4R => ({
   pomniejszenie: pusteMiesiace(),
   zlozone: null,
   pobrania: [],
+  wysylki: [],
   przeglad: [],
 });
 
@@ -400,6 +408,7 @@ export function normalizePit4R(raw: unknown): PitPit4R | null {
     pomniejszenie: normalizeMiesiace(r.pomniejszenie),
     zlozone: normalizeZlozone(r.zlozone),
     pobrania: normalizePobrania(r.pobrania),
+    wysylki: normalizeWysylki(r.wysylki),
     przeglad: Array.isArray(r.przeglad) ? r.przeglad.map(czysc).filter((s) => s !== '') : [],
   };
 }
@@ -757,7 +766,7 @@ const pustyMiesiace = (n: PitMiesiace) => n.every((v) => v === null);
  * A community's draft for a later year: everything of the earlier one carried over — people, titles, amounts,
  * the PIT-4R's months. The amounts are knowingly last-known ones (the wages of caretakers and boards change
  * little, and there is no fresher source), to be corrected by hand; the earlier year stays beside the fields as
- * the hint. What belongs to the earlier filing does not travel: filed marks, downloads, a correction's reason,
+ * the hint. What belongs to the earlier filing does not travel: filed marks, downloads, sends, a correction's reason,
  * the import's review flags.
  */
 export function daneNaKolejnyRok(d: PitDane): PitDane {
@@ -771,8 +780,11 @@ export function daneNaKolejnyRok(d: PitDane): PitDane {
       przeglad: [],
       zlozone: null,
       pobrania: [],
+      wysylki: [],
     })),
-    pit4r: d.pit4r ? { ...normalizePit4R(d.pit4r)!, cel: 1, rodzajKorekty: 1, przyczyna: '', zlozone: null, pobrania: [], przeglad: [] } : null,
+    pit4r: d.pit4r
+      ? { ...normalizePit4R(d.pit4r)!, cel: 1, rodzajKorekty: 1, przyczyna: '', zlozone: null, pobrania: [], wysylki: [], przeglad: [] }
+      : null,
   };
 }
 

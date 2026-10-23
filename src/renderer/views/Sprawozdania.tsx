@@ -269,7 +269,7 @@ const SprawozdanieScreen: React.FC<{
         ) : (
           <div className="page-form zeb-page">
             <FormSection
-              icon="bar-chart"
+              icon="book"
               title={t.sprawFactsTitle}
               description={t.zfinStatementDesc
                 .replace('{okres}', okresLabel(spr.okresOd, spr.okresDo))

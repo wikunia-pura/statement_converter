@@ -19,6 +19,7 @@ import * as path from 'path';
 import { AIExtractor } from './ai-extractor';
 import { ExtractionCache, extractionCacheScope } from './extraction-cache';
 import { MatchCache } from './match-cache';
+import { AddressMatcher } from './address-matcher';
 import { ContractorMatcher, MatchedContractor, GLUED_MATCH_CONFIDENCE, SHORT_MATCH_CONFIDENCE } from './contractor-matcher';
 import {
   EXPENSE_MATCH_TYPES,
@@ -53,6 +54,7 @@ const HOLD_WARNINGS: Record<ReviewHoldReason, string> = {
   'ai-answer-missing': 'AI returned no usable answer for this transaction - held for review',
   'glued-name': 'Contractor name glued to the neighbouring text - confirm the contractor',
   'short-name': 'Contractor found only by a two-character name - confirm the contractor',
+  'foreign-address': 'Apartment number taken from an address on another street (the payer\'s own home?) - confirm the apartment',
   'virtual-account-debit': 'Debit marked as a virtual-account (SWRK) movement - check it before booking',
 };
 
@@ -301,6 +303,8 @@ export abstract class BaseConverter<TRaw> {
   protected matchCache: MatchCache;
   protected config: BaseConverterConfig;
   protected contractorMatcher?: ContractorMatcher;
+  /** The community's own streets, for the foreign-address re-check of income rows. */
+  private addressMatcher: AddressMatcher;
   private onProgress?: ConversionProgressCallback;
   private signal?: AbortSignal;
   private aiBatchesCompleted = 0;
@@ -336,6 +340,7 @@ export abstract class BaseConverter<TRaw> {
     // Scoped to the community this converter was built for, so one community's
     // answer for "CZYNSZ LOKAL 12" is never served to another.
     this.cache = new ExtractionCache(this.config.cachePath, extractionCacheScope(this.config.addresses));
+    this.addressMatcher = new AddressMatcher(this.config.addresses ?? []);
     // Contractor matches live in their own file next to the extraction cache, so
     // every converter gets one without threading a second path through all the
     // construction sites in converterRegistry.
@@ -1121,12 +1126,30 @@ export abstract class BaseConverter<TRaw> {
       // exist for exactly the payers whose titles say something odd ("lok 12A"
       // for apartment 99), so only the value the rule gave is checked.
       const ruleDecided = extracted.matchedByManualMapping === true;
+      const text = `${normalized.descBase} ${normalized.descOpt}`;
+      // Same place, same reason: an apartment that is only the "m." of the payer's
+      // own home address ("UL.SOSNOWA 109A M.89") is held for the user. The
+      // matcher refuses that number itself, but then the AI or the cache supplies
+      // it. The number stays as the suggestion; only the user decides.
+      if (!ruleDecided && this.addressMatcher.apartmentAtForeignStreet(text, extracted.apartmentNumber)) {
+        const hold = extracted.holdReason ?? this.holdReason(transaction) ?? 'foreign-address';
+        extracted = {
+          ...extracted,
+          holdReason: hold,
+          warnings: extracted.holdReason ? extracted.warnings : [...(extracted.warnings ?? []), HOLD_WARNINGS[hold]],
+          confidence: {
+            ...extracted.confidence,
+            apartment: Math.min(extracted.confidence.apartment, HELD_BACK_CONFIDENCE),
+            overall: Math.min(extracted.confidence.overall, HELD_BACK_CONFIDENCE),
+          },
+        };
+      }
       const needsAccount =
         extracted.needsAccount === true ||
         needsExplicitAccount(
           extracted.apartmentNumber,
           extracted.accountOverride,
-          ruleDecided ? null : `${normalized.descBase} ${normalized.descOpt}`
+          ruleDecided ? null : text
         );
       if (needsAccount) {
         extracted = {

@@ -60,6 +60,7 @@ import { bezPrefiksu } from './PodpisKarta';
 import MergedBadge from './MergedBadge';
 import Tip from './Tip';
 import { AiWorking, AiWskazowkiPanel } from './AiPanel';
+import { PowierzchnieModal } from './adresy/PowierzchnieSection';
 
 type T = (typeof translations)['pl'];
 
@@ -608,39 +609,47 @@ export interface PlanOryginal {
 
 /* ================================ The editor ================================ */
 
-/** The three areas as a plan prints them; the city's and the leased one 0 = "brak". */
+/**
+ * The areas as a plan prints them, one small table: the total, what of it is the
+ * city's and the private owners', then the leased area; the city's and the
+ * leased one 0 = "brak". The shares are `planSumy`'s — the private one is 100
+ * less the city's, so the two always add up.
+ */
 const PowierzchnieFakty: React.FC<{ t: T; powierzchnia: number; miastoM2: number; pozytkiM2: number }> = ({
   t,
   powierzchnia,
   miastoM2,
   pozytkiM2,
-}) => (
-  <dl className="facts">
-    <dt>{t.zplanArea}</dt>
-    <dd>{formatKwota(powierzchnia)}</dd>
-    <dt>{t.zplanCityArea}</dt>
-    <dd>
-      {miastoM2 > 0 ? (
-        <>
-          {formatKwota(miastoM2)}{' '}
-          <span className="zeb-muted">
-            ({t.zplanShare.replace('{p}', String(powierzchnia > 0 ? Math.round((miastoM2 / powierzchnia) * 100) : 0))})
-          </span>
-        </>
-      ) : (
-        t.adresPowBrak
-      )}
-    </dd>
-    <dt>{t.zplanLeaseArea}</dt>
-    <dd>{pozytkiM2 > 0 ? formatKwota(pozytkiM2) : t.adresPowBrak}</dd>
-  </dl>
-);
+}) => {
+  const udzialMiasta = powierzchnia > 0 ? Math.round((miastoM2 / powierzchnia) * 100) : 0;
+  const m2 = (v: number) => formatKwota(v, { suffix: 'm²' });
+  const udzial = (p: number) => t.zplanShare.replace('{p}', String(p));
+  return (
+    <div className="zplan-areas">
+      <div className="zplan-areas__title">{t.zplanAreas}</div>
+      <dl className="zplan-areas__list">
+        <dt>{t.zplanArea}</dt>
+        <dd>{m2(powierzchnia)}</dd>
+        <dd className="zplan-areas__share" />
+        <dt className="is-part">{t.zplanCityArea}</dt>
+        <dd>{miastoM2 > 0 ? m2(miastoM2) : t.adresPowBrak}</dd>
+        <dd className="zplan-areas__share">{miastoM2 > 0 && udzial(udzialMiasta)}</dd>
+        <dt className="is-part">{t.zplanPrivateArea}</dt>
+        <dd>{m2(Math.max(0, powierzchnia - miastoM2))}</dd>
+        <dd className="zplan-areas__share">{powierzchnia > 0 && udzial(100 - udzialMiasta)}</dd>
+        <dt>{t.zplanLeaseArea}</dt>
+        <dd>{pozytkiM2 > 0 ? m2(pozytkiM2) : t.adresPowBrak}</dd>
+        <dd className="zplan-areas__share" />
+      </dl>
+    </div>
+  );
+};
 
 /**
  * The areas a plan prints, as its community's address gives them — shown, never
- * typed: they change in Adresy only. Says where they come from, and what is
- * missing there; with `onPobierz`, offers the address's areas when the plan
- * holds others.
+ * typed: they are the address's. Says where they come from, and what is missing
+ * there; with `onPowierzchnieAdresu`, the address's areas open in a modal right
+ * here; with `onPobierz`, offers the address's areas when the plan holds others.
  */
 export const PowierzchniePlanu: React.FC<{
   t: T;
@@ -652,23 +661,33 @@ export const PowierzchniePlanu: React.FC<{
   adres: Adres | null;
   /** A new plan: without the address it takes the statement's total and no other areas. */
   nowy?: boolean;
-  onOpenAdres?: (adresId: number) => void;
+  /** The address's areas were saved from the modal; absent = no way to edit them here. */
+  onPowierzchnieAdresu?: (adresId: number, powierzchnie: AdresPowierzchnie) => void;
   /** Present when the address now says otherwise than the plan: puts its areas on the plan. */
   onPobierz?: () => void;
-}> = ({ t, powierzchnia, miastoM2, pozytkiM2, adres, nowy = false, onOpenAdres, onPobierz }) => {
+}> = ({ t, powierzchnia, miastoM2, pozytkiM2, adres, nowy = false, onPowierzchnieAdresu, onPobierz }) => {
+  const [edycja, setEdycja] = useState(false);
   const braki = adres
     ? brakujacePowierzchnie(adres).map((k) =>
         k === 'calkowita' ? t.adresMissingPowierzchnia : k === 'miasto' ? t.adresMissingMiasto : t.adresMissingPozytki
       )
     : [];
-  const edytuj = adres && onOpenAdres && (
-    <button type="button" className="button button-small button-secondary" onClick={() => onOpenAdres(adres.id)}>
-      <Icon name="map-pin" size={13} /> {t.zplanAreasEdit}
+  const edytuj = adres && onPowierzchnieAdresu && (
+    <button type="button" className="button button-small button-secondary" onClick={() => setEdycja(true)}>
+      <Icon name="edit" size={13} /> {t.zplanAreasEdit}
     </button>
   );
   return (
     <>
       <PowierzchnieFakty t={t} powierzchnia={powierzchnia} miastoM2={miastoM2} pozytkiM2={pozytkiM2} />
+      {edycja && adres && onPowierzchnieAdresu && (
+        <PowierzchnieModal
+          t={t}
+          adres={adres}
+          onClose={() => setEdycja(false)}
+          onSaved={(p) => onPowierzchnieAdresu(adres.id, p)}
+        />
+      )}
       {!adres ? (
         <div className="callout callout--warning">
           <Icon name="alert-triangle" size={16} />
@@ -709,8 +728,9 @@ export const PowierzchniePlanu: React.FC<{
 };
 
 /**
- * "Nagłówek planu": the property, the resolution, the year and the areas — the
- * last from the community's address (see `PowierzchniePlanu`).
+ * "Nagłówek planu": the property, the resolution and the year — read-only in the
+ * same three columns the fields take — then the areas, from the community's
+ * address (see `PowierzchniePlanu`).
  */
 const PlanNaglowek: React.FC<{
   t: T;
@@ -718,23 +738,28 @@ const PlanNaglowek: React.FC<{
   onChange: (plan: PlanGospodarczy) => void;
   readOnly?: boolean;
   adres: Adres | null;
-  onOpenAdres?: (adresId: number) => void;
-}> = ({ t, plan, onChange, readOnly = false, adres, onOpenAdres }) => {
-  const s = planSumy(plan);
+  onPowierzchnieAdresu?: (adresId: number, powierzchnie: AdresPowierzchnie) => void;
+}> = ({ t, plan, onChange, readOnly = false, adres, onPowierzchnieAdresu }) => {
   const update = (fn: (p: PlanGospodarczy) => PlanGospodarczy) => onChange(fn(plan));
   const nieaktualne = !readOnly && !!adres && powierzchnieNieaktualne(plan, adres.powierzchnie);
   return (
     <FormSection icon="file-text" title={t.zplanHeader}>
       {readOnly ? (
-        <dl className="facts">
-          <dt>{t.zplanProperty}</dt>
-          <dd>
-            <strong>{plan.nieruchomosc || '—'}</strong>
-          </dd>
-          <dt>{t.zplanResolution}</dt>
-          <dd>{plan.uchwalaNr || '—'}</dd>
-          <dt>{t.zplanYear}</dt>
-          <dd>{plan.rok}</dd>
+        <dl className="form-row zplan-ident">
+          <div>
+            <dt>{t.zplanProperty}</dt>
+            <dd>
+              <strong>{plan.nieruchomosc || '—'}</strong>
+            </dd>
+          </div>
+          <div>
+            <dt>{t.zplanResolution}</dt>
+            <dd>{plan.uchwalaNr || '—'}</dd>
+          </div>
+          <div>
+            <dt>{t.zplanYear}</dt>
+            <dd>{plan.rok}</dd>
+          </div>
         </dl>
       ) : (
         <FormRow>
@@ -775,17 +800,20 @@ const PlanNaglowek: React.FC<{
           miastoM2={plan.miastoM2}
           pozytkiM2={plan.pozytkiM2}
           adres={adres}
-          onOpenAdres={onOpenAdres}
+          // Areas put right from this plan are meant for it: it takes them at once
+          // (still to be saved), not after a "Pobierz z adresu".
+          onPowierzchnieAdresu={
+            onPowierzchnieAdresu &&
+            ((adresId, p) => {
+              onPowierzchnieAdresu(adresId, p);
+              onChange(zPowierzchniamiAdresu(plan, p));
+            })
+          }
           onPobierz={
             nieaktualne && adres ? () => onChange(zPowierzchniamiAdresu(plan, adres.powierzchnie)) : undefined
           }
         />
       )}
-      <p className="zeb-muted zplan-private">
-        {t.zplanPrivateArea
-          .replace('{m2}', formatKwota(s.osobyFizyczneM2))
-          .replace('{p}', String(s.udzialOsobFizycznych))}
-      </p>
     </FormSection>
   );
 };
@@ -1418,8 +1446,8 @@ export const PlanWorkspace: React.FC<{
   leaveRef?: React.MutableRefObject<LeaveCheck | null>;
   /** The community's address — where the plan's areas come from. Null = none linked. */
   adres?: Adres | null;
-  /** Opens the address in Adresy, the one place its areas change. */
-  onOpenAdres?: (adresId: number) => void;
+  /** The address's areas were saved from the plan's header — for the caller to keep its copy of the address in step. */
+  onPowierzchnieAdresu?: (adresId: number, powierzchnie: AdresPowierzchnie) => void;
 }> = ({
   language,
   locale,
@@ -1439,7 +1467,7 @@ export const PlanWorkspace: React.FC<{
   onOpenUstawienia,
   leaveRef,
   adres = null,
-  onOpenAdres,
+  onPowierzchnieAdresu,
 }) => {
   const t = translations[language];
   const notify = useNotify();
@@ -1646,7 +1674,7 @@ export const PlanWorkspace: React.FC<{
       {/* The plan itself: what it is drawn from, when it was last saved; the
           rare actions (recompute, the settings, delete) in its header. */}
       <FormSection
-        icon="wallet"
+        icon="coins"
         title={t.zplanTitle.replace('{rok}', String(draft.rok))}
         description={[
           t.zplanSource.replace(
@@ -1730,7 +1758,7 @@ export const PlanWorkspace: React.FC<{
         onChange={setDraft}
         readOnly={readOnly}
         adres={adres}
-        onOpenAdres={onOpenAdres}
+        onPowierzchnieAdresu={onPowierzchnieAdresu}
       />
 
       {!readOnly && (
@@ -1819,8 +1847,8 @@ const ZebraniePlan: React.FC<{
   wersja: ZebranieWersja;
   /** The meeting's community — the plan's areas come from it. Null = none linked. */
   adres: Adres | null;
-  /** Opens the address in Adresy, the one place its areas change. */
-  onOpenAdres?: (adresId: number) => void;
+  /** The address's areas were saved from the plan's header — for the caller to keep its copy of the address in step. */
+  onPowierzchnieAdresu?: (adresId: number, powierzchnie: AdresPowierzchnie) => void;
   ustawienia: ZebraniaUstawienia;
   dataZebrania: string | null;
   onChanged: () => Promise<void>;
@@ -1840,7 +1868,7 @@ const ZebraniePlan: React.FC<{
   locale,
   wersja,
   adres,
-  onOpenAdres,
+  onPowierzchnieAdresu,
   ustawienia,
   dataZebrania,
   onChanged,
@@ -1908,7 +1936,7 @@ const ZebraniePlan: React.FC<{
         bottom={statusBox}
         leaveRef={leaveRef}
         adres={adres}
-        onOpenAdres={onOpenAdres}
+        onPowierzchnieAdresu={onPowierzchnieAdresu}
       />
     );
   }
@@ -1916,15 +1944,15 @@ const ZebraniePlan: React.FC<{
   if (!spr) {
     return (
       <div className="page-form zeb-page">
-        <FormSection icon="wallet" title={t.zebraniaTabPlan}>
+        <FormSection icon="coins" title={t.zebraniaTabPlan}>
           <div className="uch-empty">
             <span className="zeb-tab-empty__icon">
-              <Icon name="wallet" size={22} />
+              <Icon name="coins" size={22} />
             </span>
             <strong>{t.zplanNeedStatement}</strong>
             <p>{t.zplanNeedStatementText}</p>
             <button type="button" className="button button-primary" onClick={onGoToSprawozdania}>
-              <Icon name="bar-chart" size={14} /> {t.zplanGoToStatement}
+              <Icon name="book" size={14} /> {t.zplanGoToStatement}
             </button>
           </div>
         </FormSection>
@@ -1938,7 +1966,7 @@ const ZebraniePlan: React.FC<{
   return (
     <div className="page-form zeb-page">
       <FormSection
-        icon="wallet"
+        icon="coins"
         title={t.zplanCreateTitle.replace('{rok}', String(rok))}
         description={t.zplanCreateHint
           .replace('{okres}', okresSpr)
@@ -1954,7 +1982,7 @@ const ZebraniePlan: React.FC<{
         }
       >
         <PlanZalozeniaFields t={t} value={zalozenia} onChange={setZalozenia} />
-        <PowierzchniePlanu t={t} {...powierzchnieNowegoPlanu(spr, adres)} adres={adres} nowy onOpenAdres={onOpenAdres} />
+        <PowierzchniePlanu t={t} {...powierzchnieNowegoPlanu(spr, adres)} adres={adres} nowy onPowierzchnieAdresu={onPowierzchnieAdresu} />
         {szablon && (
           <p className="zeb-szablon-note">
             <Icon name="copy" size={13} />

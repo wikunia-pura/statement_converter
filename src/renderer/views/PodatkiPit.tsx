@@ -8,7 +8,6 @@ import {
   PodpisWybor,
 } from '../../shared/types';
 import {
-  MIESIACE_SKROT,
   OPIS_ZARZADU,
   PIT_RODZAJE_NR_ID,
   PIT_TYTULY,
@@ -23,6 +22,7 @@ import {
   URZAD_DOMYSLNY,
   dataZPesela,
   dokumentId,
+  rozbijDokumentId,
   dokumentyWiersza,
   kluczOsoby,
   kosztyZlecenia,
@@ -49,6 +49,12 @@ import {
   zaliczkaArt13,
 } from '../../shared/podatki-pit';
 import { urzedyOpcje } from '../../shared/pit-urzedy';
+import {
+  PodatekZusPlatnik,
+  PodatekZusRozliczenie,
+  ZusSkladkiRoczne,
+  skladkiRoczneZus,
+} from '../../shared/podatki-zus';
 import { foldText } from '../../shared/plan-gospodarczy';
 import { formatStamp } from '../../shared/calendar';
 import { tylkoCyfry } from '../../shared/podatki';
@@ -58,15 +64,24 @@ import { plural } from '../plural';
 import { useNotify } from '../components/Notifications';
 import { FormField, FormRow, FormSection } from '../components/FormSection';
 import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
-import { PodpisKartaModal, PodpiszTezPdf } from '../components/PodpisKarta';
+import { PodpisKartaModal, PodpiszTezPdf, bezPrefiksu } from '../components/PodpisKarta';
+import {
+  WyslijOpcja,
+  WysylkiLista,
+  WysylkiTeksty,
+  etapWysylki,
+  potwierdzKorektyDokumentow,
+} from '../components/podatki-cit/Wysylki';
+import { EDeklaracjeWysylka, czekaNaUpo, ostatniaWysylka } from '../../shared/e-deklaracje';
 import ScreenTitle from '../components/ScreenTitle';
 import { useLeaveGuard, useNavItem } from '../navigation';
 import { structuralEqual } from '../structuralEqual';
 import Icon from '../components/Icon';
+import PodatkiPozostale, { PodatkiPozostaleGrupa } from '../components/PodatkiPozostale';
 import Loader, { BusyOverlay } from '../components/Loader';
 import Select from '../components/Select';
 import SearchableSelect from '../components/SearchableSelect';
-import { DomSlot, LiczbaInput, baseName } from './PodatkiNieruchomosci';
+import { DomSlot, LiczbaInput, baseName, etapWysylkiText, klasaEtapu } from './PodatkiNieruchomosci';
 import './podatkiPit.css';
 
 /* ================================== Helpers =================================== */
@@ -103,6 +118,89 @@ function ocenDokumenty(wiersz: PodatekPit): Map<string, Ocena> {
 const nazwaWiersza = (w: PodatekPit) => w.dane.nazwa || w.nip;
 
 const sumaZaliczekWiersza = (w: PodatekPit) => sumyZaliczek(w.dane.osoby).razem;
+
+/** The sends of a document of a row: the person's PIT-11, or the PIT-4R (`klucz` null). */
+const wysylkiDokumentu = (w: PodatekPit, klucz: string | null): EDeklaracjeWysylka[] =>
+  klucz === null ? (w.dane.pit4r?.wysylki ?? []) : (w.dane.osoby.find((o) => o.klucz === klucz)?.wysylki ?? []);
+
+/** The settling texts of a PIT document (the CIT-8's speak of a return). */
+const tekstyWysylek = (t: T): WysylkiTeksty => ({
+  resolveHint: t.pitResolveHint,
+  resolveNotArrivedConfirm: t.pitResolveNotArrivedConfirm,
+  resolveArrivedConfirm: t.pitResolveArrivedConfirm,
+  resolveAbandonConfirm: t.pitResolveAbandonConfirm,
+});
+
+/** "Sprawdź UPO" of PIT documents (the year's, or the rows of `ids`): the result as one toast. */
+async function sprawdzUpoPit(t: T, notify: ReturnType<typeof useNotify>, rok: number, ids?: string[]): Promise<void> {
+  try {
+    const r = await window.electronAPI.sprawdzUpoPit(rok, ids);
+    if (r.wyniki.length === 0 && r.bledy.length === 0) {
+      notify.info(t.citUpoNothing);
+      return;
+    }
+    const upo = r.wyniki.filter((w) => w.status === 200).length;
+    const toku = r.wyniki.filter((w) => w.status !== null && w.status >= 300 && w.status < 400).length;
+    const odrz = r.wyniki.length - upo - toku;
+    const msg = t.citUpoDone
+      .replace('{n}', String(r.wyniki.length))
+      .replace('{upo}', String(upo))
+      .replace('{toku}', String(toku))
+      .replace('{odrz}', String(odrz));
+    const bledy = r.bledy.length > 0 ? ` ${t.citUpoErrors.replace('{list}', r.bledy.map((b) => `${b.nazwa} — ${b.powod}`).join('; '))}` : '';
+    if (odrz > 0 || r.bledy.length > 0) notify.warning(msg + bledy, r.folder ? { file: r.folder } : undefined);
+    else notify.success(msg, r.folder ? { file: r.folder } : undefined);
+  } catch (err: unknown) {
+    notify.error(bezPrefiksu(err), t.citUpoError);
+  }
+}
+
+/** A document's sends to e-Deklaracje inside its card: the list, and "Sprawdź UPO" while one waits. */
+const WysylkiPit: React.FC<{ t: T; locale: string; rok: number; dokument: string; wysylki: EDeklaracjeWysylka[]; onZmiana: () => void }> = ({
+  t,
+  locale,
+  rok,
+  dokument,
+  wysylki,
+  onZmiana,
+}) => {
+  const notify = useNotify();
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="pit-wysylki">
+      <div className="pit-wysylki__head">
+        <Icon name="mail" size={14} /> <strong>{t.pitSendsTitle}</strong>
+        {wysylki.some(czekaNaUpo) && (
+          <button
+            type="button"
+            className="button button-small button-secondary"
+            disabled={busy}
+            onClick={() => {
+              setBusy(true);
+              void sprawdzUpoPit(t, notify, rok, [dokument]).then(() => {
+                setBusy(false);
+                onZmiana();
+              });
+            }}
+          >
+            <Icon name={busy ? 'loader' : 'refresh'} size={13} /> {t.citCheckUpo}
+          </button>
+        )}
+      </div>
+      <WysylkiLista
+        t={t}
+        locale={locale}
+        wysylki={wysylki}
+        onZmiana={onZmiana}
+        teksty={tekstyWysylek(t)}
+        akcje={{
+          pobierzUpo: (refId) => window.electronAPI.pobierzUpoPit(dokument, refId),
+          rozstrzygnij: (at, jak) => window.electronAPI.rozstrzygnijWysylkePit(dokument, at, jak),
+        }}
+      />
+    </div>
+  );
+};
 
 /* ============================== Number / money input ============================== */
 
@@ -153,6 +251,8 @@ const OsobaForm: React.FC<{
   osoba: PitOsoba;
   /** The same person in the nearest earlier year, for the "last year" hints. */
   prev: { rok: number; osoba: PitOsoba } | null;
+  /** What the community's ZUS settlements of the year withheld from the person (by PESEL); null when none. */
+  zus: ZusSkladkiRoczne | null;
   ocena: Ocena | undefined;
   wInnych: number;
   saved: boolean;
@@ -164,7 +264,30 @@ const OsobaForm: React.FC<{
   onFiles: () => void;
   onSign: () => void;
   onFiled: (zlozone: boolean) => void;
-}> = ({ t, locale, osoba: o, prev, ocena, wInnych, saved, zwinieta, onChange, onRemove, onApply, onFiles, onSign, onFiled }) => {
+  /** The saved document's id — its sends to e-Deklaracje; null before the community is saved. */
+  dokument: string | null;
+  /** A send was settled or its UPO came — the row is read again. */
+  onWysylkaZmiana: () => void;
+}> = ({
+  t,
+  locale,
+  rok,
+  osoba: o,
+  prev,
+  zus,
+  ocena,
+  wInnych,
+  saved,
+  zwinieta,
+  onChange,
+  onRemove,
+  onApply,
+  onFiles,
+  onSign,
+  onFiled,
+  dokument,
+  onWysylkaZmiana,
+}) => {
   const id = `pit-${o.klucz}`;
   const k = obliczOsobe(o);
   const kp = prev ? obliczOsobe(prev.osoba) : null;
@@ -232,6 +355,9 @@ const OsobaForm: React.FC<{
       defaultCollapsed={zwinieta}
       collapsedSummary={tytuly.join(' · ') || t.pitNewPerson}
     >
+      {dokument && o.wysylki.length > 0 && (
+        <WysylkiPit t={t} locale={locale} rok={rok} dokument={dokument} wysylki={o.wysylki} onZmiana={onWysylkaZmiana} />
+      )}
       {o.przeglad.length > 0 && (
         <div className="callout callout--danger" role="alert">
           <Icon name="alert-triangle" size={16} />
@@ -242,10 +368,14 @@ const OsobaForm: React.FC<{
                 <li key={i}>{p}</li>
               ))}
             </ul>
-            <button type="button" className="button button-small button-secondary" onClick={() => onChange({ przeglad: [] })}>
-              <Icon name="check" size={13} /> {t.pitReviewDone}
-            </button>
           </div>
+          <button
+            type="button"
+            className="button button-small button-secondary"
+            onClick={() => onChange({ przeglad: [] })}
+          >
+            <Icon name="check" size={13} /> {t.pitReviewDone}
+          </button>
         </div>
       )}
       {bledyBezPrzegladu.length > 0 && (
@@ -555,6 +685,31 @@ const OsobaForm: React.FC<{
               prev={prevHint(kp?.zdrowotna)}
             />
           </FormRow>
+          {zus && (
+            <div className="pit-fill">
+              <span className="pod-note">
+                {sub(t.pitZusLine, {
+                  n: zus.miesiace.length,
+                  rok,
+                  spol: zl2(zus.spoleczne),
+                  zdr: zl2(zus.zdrowotna),
+                })}
+              </span>
+              {o.skladki === zus.spoleczne && o.zdrowotna === zus.zdrowotna ? (
+                <span className="pit-ok">
+                  <Icon name="check-circle" size={13} /> {t.pitZusSame}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="button button-small button-secondary"
+                  onClick={() => onChange({ skladki: zus.spoleczne, zdrowotna: zus.zdrowotna })}
+                >
+                  <Icon name="copy" size={13} /> {t.pitZusApply}
+                </button>
+              )}
+            </div>
+          )}
           <label className="pit-check">
             <input type="checkbox" checked={o.kosztyPodwyzszone} onChange={(e) => onChange({ kosztyPodwyzszone: e.target.checked })} />
             <span>{t.pitPodwyzszone}</span>
@@ -635,17 +790,25 @@ const Pit4RForm: React.FC<{
   onFiles: () => void;
   onSign: () => void;
   onFiled: (zlozone: boolean) => void;
-}> = ({ t, locale, dane, prev, saved, onChange, onFiles, onSign, onFiled }) => {
+  /** The saved PIT-4R's id — its sends to e-Deklaracje; null before the community is saved. */
+  dokument: string | null;
+  onWysylkaZmiana: () => void;
+}> = ({ t, locale, rok, dane, prev, saved, onChange, onFiles, onSign, onFiled, dokument, onWysylkaZmiana }) => {
   const p = dane.pit4r;
   const sumy = sumyZaliczek(dane.osoby);
   const k = p ? obliczPit4R(p) : null;
   const kPrev = prev ? obliczPit4R(prev.pit4r) : null;
-  const wiersze: { key: 'etatLiczba' | 'etatKwota' | 'art41' | 'inne'; label: string; liczba: boolean }[] = [
-    { key: 'etatLiczba', label: t.pitPit4rRowEtatLiczba, liczba: true },
-    { key: 'etatKwota', label: t.pitPit4rRowEtatKwota, liczba: false },
-    { key: 'art41', label: t.pitPit4rRowArt41, liczba: false },
-    { key: 'inne', label: t.pitPit4rRowInne, liczba: false },
+  // The declaration's rows are the grid's columns: `label` heads it, `opis` (the form's own wording) is its tip.
+  const wiersze: { key: 'etatLiczba' | 'etatKwota' | 'art41' | 'inne'; label: string; opis: string; liczba: boolean }[] = [
+    { key: 'etatLiczba', label: t.pitPit4rColEtatLiczba, opis: t.pitPit4rRowEtatLiczba, liczba: true },
+    { key: 'etatKwota', label: t.pitPit4rColEtatKwota, opis: t.pitPit4rRowEtatKwota, liczba: false },
+    { key: 'art41', label: t.pitPit4rColArt41, opis: t.pitPit4rRowArt41, liczba: false },
+    { key: 'inne', label: t.pitPit4rColInne, opis: t.pitPit4rRowInne, liczba: false },
   ];
+  const miesiace = Array.from({ length: 12 }, (_, i) => {
+    const nazwa = new Date(2000, i, 1).toLocaleString(locale, { month: 'long' });
+    return nazwa.charAt(0).toUpperCase() + nazwa.slice(1);
+  });
   const ustaw = (key: 'etatLiczba' | 'etatKwota' | 'art41' | 'inne', mies: number, v: number | null) => {
     if (!p) return;
     const nowe: PitMiesiace = [...p[key]];
@@ -709,6 +872,9 @@ const Pit4RForm: React.FC<{
         <p className="pod-note">{t.pitPit4rNone}</p>
       ) : (
         <>
+          {dokument && p.wysylki.length > 0 && (
+            <WysylkiPit t={t} locale={locale} rok={rok} dokument={dokument} wysylki={p.wysylki} onZmiana={onWysylkaZmiana} />
+          )}
           {p.przeglad.length > 0 && (
             <div className="callout callout--danger" role="alert">
               <Icon name="alert-triangle" size={16} />
@@ -719,48 +885,62 @@ const Pit4RForm: React.FC<{
                     <li key={i}>{x}</li>
                   ))}
                 </ul>
-                <button type="button" className="button button-small button-secondary" onClick={() => onChange({ ...p, przeglad: [] })}>
-                  <Icon name="check" size={13} /> {t.pitReviewDone}
-                </button>
               </div>
+              <button
+                type="button"
+                className="button button-small button-secondary"
+                onClick={() => onChange({ ...p, przeglad: [] })}
+              >
+                <Icon name="check" size={13} /> {t.pitReviewDone}
+              </button>
             </div>
           )}
-          <div className="pit-mies-wrap">
-            <table className="pit-mies">
+          <div className="table-scroll form-table-frame">
+            <table className="form-table form-table--edit pit-mies">
               <thead>
                 <tr>
-                  <th />
-                  {MIESIACE_SKROT.map((m) => (
-                    <th key={m}>{m}</th>
+                  <th>{t.pitPit4rColMonth}</th>
+                  {wiersze.map((w) => (
+                    <th key={w.key} className="form-table__num" data-tip={w.opis}>
+                      {w.label}
+                    </th>
                   ))}
-                  <th>{t.pitPit4rTotal}</th>
+                  <th className="form-table__num" data-tip={t.pitPit4rRowSuma}>
+                    {t.pitPit4rColSuma}
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {wiersze.map((w) => (
-                  <tr key={w.key}>
-                    <th scope="row">{w.label}</th>
-                    {p[w.key].map((v, i) => (
-                      <td key={i}>
+                {miesiace.map((nazwa, i) => (
+                  <tr key={i}>
+                    <td className="cell-title">{nazwa}</td>
+                    {wiersze.map((w) => (
+                      <td key={w.key} className="form-table__num">
                         <LiczbaInput
-                          value={v}
+                          value={p[w.key][i]}
                           onChange={(x) => ustaw(w.key, i, x)}
                           decimals={0}
-                          ariaLabel={`${w.label} ${MIESIACE_SKROT[i]}`}
+                          ariaLabel={`${w.opis}, ${nazwa}`}
                         />
                       </td>
                     ))}
-                    <td className="pit-mies__sum">{w.liczba ? '' : zl0(razem(p[w.key]))}</td>
+                    <td className="form-table__num pit-mies__sum">
+                      {k.suma[i] === 0 ? '—' : k.suma[i].toLocaleString('pl-PL')}
+                    </td>
                   </tr>
                 ))}
-                <tr className="pit-mies__calc">
-                  <th scope="row">{t.pitPit4rRowSuma}</th>
-                  {k.suma.map((v, i) => (
-                    <td key={i}>{v === 0 ? '' : v.toLocaleString('pl-PL')}</td>
-                  ))}
-                  <td className="pit-mies__sum">{zl0(k.rokSuma)}</td>
-                </tr>
               </tbody>
+              <tfoot>
+                <tr>
+                  <td>{t.pitPit4rTotal}</td>
+                  {wiersze.map((w) => (
+                    <td key={w.key} className="form-table__num">
+                      {w.liczba ? '' : zl0(razem(p[w.key]))}
+                    </td>
+                  ))}
+                  <td className="form-table__num pit-mies__sum">{zl0(k.rokSuma)}</td>
+                </tr>
+              </tfoot>
             </table>
           </div>
           {prev && kPrev && <p className="pod-note">{sub(t.pitPit4rPrev, { rok: prev.rok, kwota: zl0(kPrev.rokSuma) })}</p>}
@@ -778,13 +958,15 @@ const Pit4RForm: React.FC<{
               </ul>
             )}
             <div className="pit-fill">
+              <span className="pit-fill__label">{t.pitPit4rFill}</span>
               <Select
                 overlay
                 value={miesiacWstaw}
                 placeholder={t.pitPit4rFillMonth}
-                options={MIESIACE_SKROT.map((m, i) => ({ value: String(i), label: m }))}
+                options={miesiace.map((m, i) => ({ value: String(i), label: m }))}
                 onChange={setMiesiacWstaw}
                 ariaLabel={t.pitPit4rFill}
+                className="pit-fill__select"
               />
               <button
                 type="button"
@@ -798,7 +980,7 @@ const Pit4RForm: React.FC<{
                   onChange(nowe);
                 }}
               >
-                {t.pitPit4rFill}
+                {t.pitPit4rFillDo}
               </button>
             </div>
           </div>
@@ -856,8 +1038,8 @@ const Pit4RForm: React.FC<{
 
 /* ================================= One community ================================= */
 
-/** What "unsaved changes" ignores on a person and on PIT-4R: the filing mark and the downloads, written at once by their own calls. */
-const PIT_NIE_EDYCJA = ['zlozone', 'pobrania'] as const;
+/** What "unsaved changes" ignores on a person and on PIT-4R: the filing mark, the downloads and the sends, written at once by their own calls. */
+const PIT_NIE_EDYCJA = ['zlozone', 'pobrania', 'wysylki'] as const;
 
 /**
  * Whether the form holds what was last loaded or saved. Walks only what an
@@ -899,6 +1081,8 @@ const WspolnotaScreen: React.FC<{
   rejestr: Rejestr[];
   /** A community picked from the list's "no PIT yet" section — the new screen starts with it. */
   wstepnie: Rejestr | null;
+  /** The ZUS module's register and sets (null when ZUS is not set up) — for the poz. 95 / 122 hints. */
+  zus: { platnicy: PodatekZusPlatnik[]; rozliczenia: PodatekZusRozliczenie[] } | null;
   onBack: () => void;
   onSaved: (rek: PodatekPit) => void;
   onDeleted: () => void;
@@ -906,7 +1090,7 @@ const WspolnotaScreen: React.FC<{
   onFiles: (ids: string[]) => void;
   onSign: (ids: string[]) => void;
   onFiled: (ids: string[], zlozone: boolean) => void;
-}> = ({ t, locale, rok, rekord, wszystkie, rejestr, wstepnie, onBack, onSaved, onDeleted, onChangedElsewhere, onFiles, onSign, onFiled }) => {
+}> = ({ t, locale, rok, rekord, wszystkie, rejestr, wstepnie, zus, onBack, onSaved, onDeleted, onChangedElsewhere, onFiles, onSign, onFiled }) => {
   const notify = useNotify();
   const [nip, setNip] = useState(rekord?.nip ?? wstepnie?.nip ?? '');
   const [dane, setDane] = useState<PitDane>(
@@ -923,7 +1107,7 @@ const WspolnotaScreen: React.FC<{
   /** People added on this screen start open — somebody is about to fill them in. */
   const noweKlucze = useRef<Set<string>>(new Set());
 
-  // Filing marks and downloads are written at once by their own calls, into the
+  // Filing marks, downloads and sends are written at once by their own calls, into the
   // record the list holds — carry them into the draft, so the screen shows them
   // without touching what is being edited (`takieSame` ignores both).
   useEffect(() => {
@@ -934,9 +1118,9 @@ const WspolnotaScreen: React.FC<{
       ...d,
       osoby: d.osoby.map((o) => {
         const r = zRekordu.get(o.klucz);
-        return r ? { ...o, zlozone: r.zlozone, pobrania: r.pobrania } : o;
+        return r ? { ...o, zlozone: r.zlozone, pobrania: r.pobrania, wysylki: r.wysylki } : o;
       }),
-      pit4r: d.pit4r && p4r ? { ...d.pit4r, zlozone: p4r.zlozone, pobrania: p4r.pobrania } : d.pit4r,
+      pit4r: d.pit4r && p4r ? { ...d.pit4r, zlozone: p4r.zlozone, pobrania: p4r.pobrania, wysylki: p4r.wysylki } : d.pit4r,
     }));
   }, [rekord]);
 
@@ -955,6 +1139,17 @@ const WspolnotaScreen: React.FC<{
     return innych.filter((o) => !jestWTejWspolnocie.has(kluczOsoby(o)));
   }, [innych, dane.osoby]);
   const wzor = pitWzor(rok);
+  const zusRoku = useMemo(
+    () =>
+      zus
+        ? skladkiRoczneZus(
+            zus.platnicy.find((p) => p.nip === nip),
+            zus.rozliczenia,
+            rok
+          )
+        : new Map<string, ZusSkladkiRoczne>(),
+    [zus, nip, rok]
+  );
 
   const setOsoba = (klucz: string, patch: Partial<PitOsoba>) =>
     setDane((d) => ({ ...d, osoby: d.osoby.map((o) => (o.klucz === klucz ? { ...o, ...patch } : o)) }));
@@ -1246,6 +1441,7 @@ const WspolnotaScreen: React.FC<{
                   rok={rok}
                   osoba={o}
                   prev={wiersz ? poprzedniaOsoba(wszystkie, wiersz, o) : null}
+                  zus={(o.pesel && zusRoku.get(o.pesel)) || null}
                   ocena={oceny.get(id)}
                   wInnych={wInnych(o)}
                   saved={!!rekord && !dirty}
@@ -1260,6 +1456,8 @@ const WspolnotaScreen: React.FC<{
                   onFiles={() => onFiles([id])}
                   onSign={() => onSign([id])}
                   onFiled={(z) => onFiled([id], z)}
+                  dokument={rekord ? id : null}
+                  onWysylkaZmiana={onChangedElsewhere}
                 />
               );
             })}
@@ -1276,6 +1474,8 @@ const WspolnotaScreen: React.FC<{
             onFiles={() => rekord && onFiles([dokumentId(rekord.id, null)])}
             onSign={() => rekord && onSign([dokumentId(rekord.id, null)])}
             onFiled={(z) => rekord && onFiled([dokumentId(rekord.id, null)], z)}
+            dokument={rekord ? dokumentId(rekord.id, null) : null}
+            onWysylkaZmiana={onChangedElsewhere}
           />
 
           <ModalFooter
@@ -1314,7 +1514,7 @@ const Podsumowanie: React.FC<{
   onClose: () => void;
 }> = ({ t, rok, podpisano, wynik, onZaznacz, onClose }) => {
   const notify = useNotify();
-  const { folder, zapisane, pominiete, niepodpisane, przerwano, podpis } = wynik;
+  const { folder, zapisane, pominiete, niepodpisane, przerwano, podpis, wysylki } = wynik;
   const reszta = [...pominiete, ...niepodpisane].map((x) => x.id);
   const otworz = async (sciezka: string) => {
     if (!(await window.electronAPI.openFile(sciezka))) notify.error(t.pitSumFileMissing);
@@ -1370,6 +1570,34 @@ const Podsumowanie: React.FC<{
                   <li key={p.id}>
                     <span className="podpis-sum__name">{p.nazwa}</span>
                     <span className="podpis-sum__reason">{p.powod}</span>
+                  </li>
+                ))}
+              </ul>
+            </FormSection>
+          )}
+          {wysylki && wysylki.length > 0 && (
+            <FormSection
+              icon="mail"
+              title={t.podSumSentTitle
+                .replace('{env}', wysylki[0].srodowisko === 'prod' ? t.citEnvProd : t.citEnvTest)
+                .replace('{n}', String(wysylki.length))}
+              description={t.podSumSentDesc}
+            >
+              {wysylki.some((w) => w.niezapisana) && (
+                <div className="callout callout--danger" role="alert">
+                  <Icon name="alert-circle" size={16} />
+                  <div className="callout__body">{t.pitSendNotRecorded}</div>
+                </div>
+              )}
+              <ul className="podpis-sum__list">
+                {wysylki.map((w) => (
+                  <li key={w.id}>
+                    <span className="podpis-sum__name">{w.nazwa}</span>
+                    <span className={`status-badge ${klasaEtapu(w.status, w.refId, w.niepewna)}`}>
+                      {etapWysylkiText(t, w.status, w.refId, w.niepewna)}
+                    </span>
+                    {w.refId && <span className="podpis-sum__reason">{t.citSendRef.replace('{ref}', w.refId)}</span>}
+                    {w.opis && <span className="podpis-sum__reason">{w.opis}</span>}
                   </li>
                 ))}
               </ul>
@@ -1484,11 +1712,15 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
 
   const [lista, setLista] = useState<PodatekPit[]>([]);
   const [adresy, setAdresy] = useState<Adres[]>([]);
+  const [zus, setZus] = useState<{
+    platnicy: PodatekZusPlatnik[];
+    rozliczenia: PodatekZusRozliczenie[];
+  } | null>(null);
   /** The community picked in the "no PIT yet" section, carried into the new-community screen. */
   const [nowaZ, setNowaZ] = useState<Rejestr | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [busy, setBusy] = useState<null | 'import' | 'carry' | 'files' | 'excel' | 'filed'>(null);
+  const [busy, setBusy] = useState<null | 'import' | 'carry' | 'files' | 'excel' | 'filed' | 'upo'>(null);
   const [rokWybrany, setRokWybrany] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [filtr, setFiltr] = useState<Filtr>('all');
@@ -1501,20 +1733,46 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [podpisIds, setPodpisIds] = useState<string[] | null>(null);
   const [pdfPodpisany, setPdfPodpisany] = useState(false);
+  /** "Wyślij do e-Deklaracji" in the signing window. */
+  const [wyslij, setWyslij] = useState(false);
   const [postep, setPostep] = useState<PodatkiPitPostep | null>(null);
   const [podsumowanie, setPodsumowanie] = useState<{ rok: number; podpisano: boolean; wynik: PodatkiPitPlikiResult } | null>(null);
   const [zlozoneIds, setZlozoneIds] = useState<string[] | null>(null);
   const [zasilOtwarte, setZasilOtwarte] = useState(false);
   const lastTickedRef = useRef<string | null>(null);
   useEffect(() => window.electronAPI.onPodatkiPitPostep(setPostep), []);
+  // UPOs the automat fetched in the background: the rows swapped in, and a word about it.
+  useEffect(
+    () =>
+      window.electronAPI.onPitUpo((wynik) => {
+        const poId = new Map(wynik.rekordy.map((r) => [r.id, r]));
+        setLista((prev) => prev.map((r) => poId.get(r.id) ?? r));
+        const upo = wynik.wyniki.filter((w) => w.status === 200).length;
+        const odrzucone = wynik.wyniki.filter((w) => w.status !== null && w.status >= 400);
+        const msg = sub(t.pitUpoPush, { upo, odrz: odrzucone.length });
+        if (odrzucone.length > 0) {
+          notify.warning(`${msg} ${sub(t.pitUpoPushRejected, { list: odrzucone.map((w) => w.nazwa).join('; ') })}`, wynik.folder ? { file: wynik.folder } : undefined);
+        } else if (upo > 0) {
+          notify.success(msg, wynik.folder ? { file: wynik.folder } : undefined);
+        }
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [language],
+  );
 
   const load = async (silent = false) => {
     if (silent) setIsRefreshing(true);
     else setIsLoading(true);
     try {
-      const [rows, adr] = await Promise.all([window.electronAPI.getPodatkiPit(), window.electronAPI.getAdresy().catch(() => [])]);
+      const [rows, adr, zusDane] = await Promise.all([
+        window.electronAPI.getPodatkiPit(),
+        window.electronAPI.getAdresy().catch(() => []),
+        // Without the ZUS tables (SQL not run yet) PIT simply shows no ZUS hints.
+        window.electronAPI.getPodatkiZus().catch(() => null),
+      ]);
       setLista(rows);
       setAdresy(adr);
+      setZus(zusDane);
     } catch (err: unknown) {
       notify.error(ipcErrorMessage(err, t.errorUnexpected), t.pitLoadError);
     } finally {
@@ -1790,7 +2048,31 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
   const podpiszWiele = async (wybor: PodpisWybor) => {
     if (!podpisIds) return;
     setPostep(null);
-    const wynik = await window.electronAPI.podpiszPit(rok, podpisIds, wybor, { pdfPodpisany });
+    // On production, a correction an earlier send holds back is named and confirmed before anything is signed.
+    const wiersze = new Map(lista.filter((w) => w.rok === rok).map((w) => [w.id, w]));
+    const potwierdzoneKorekty = await potwierdzKorektyDokumentow(
+      t,
+      notify,
+      podpisIds.flatMap((id) => {
+        const r = rozbijDokumentId(id);
+        const w = r ? wiersze.get(r.wierszId) : undefined;
+        if (!r || !w) return [];
+        const osoba = r.klucz === null ? null : w.dane.osoby.find((o) => o.klucz === r.klucz);
+        const doc = r.klucz === null ? w.dane.pit4r : osoba;
+        if (!doc) return [];
+        return [
+          {
+            klucz: id,
+            nazwa: `${nazwaWiersza(w)} — ${osoba ? nazwaOsoby(osoba) : 'PIT-4R'}`,
+            cel: doc.cel,
+            wysylki: doc.wysylki,
+            zlozone: doc.zlozone,
+          },
+        ];
+      }),
+      wyslij,
+    );
+    const wynik = await window.electronAPI.podpiszPit(rok, podpisIds, wybor, { pdfPodpisany, wyslij, potwierdzoneKorekty });
     setPodpisIds(null);
     setPostep(null);
     setPodsumowanie({ rok, podpisano: true, wynik });
@@ -1876,6 +2158,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
                   </div>
                 )}
                 <PodpiszTezPdf checked={pdfPodpisany} onChange={setPdfPodpisany} label={t.pitSignPdfOption} hint={t.pitSignPdfOptionHint} />
+                <WyslijOpcja t={t} checked={wyslij} onChange={setWyslij} hint={t.pitSendOptionHint} />
               </FormSection>
             );
           }}
@@ -1934,6 +2217,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
           wszystkie={lista}
           rejestr={rejestr}
           wstepnie={nowaZ}
+          zus={zus}
           onBack={() => navItem.close()}
           onSaved={(saved) => {
             setLista((prev) => [...prev.filter((r) => r.id !== saved.id), saved]);
@@ -1959,6 +2243,7 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
     const o = oceny.get(dok.id);
     const stan: PitStan = o?.stan ?? 'gotowe';
     const zlozone = dok.osoba ? dok.osoba.zlozone : w.dane.pit4r?.zlozone ?? null;
+    const wyslana = ostatniaWysylka(wysylkiDokumentu(w, dok.osoba?.klucz ?? null));
     const k = dok.osoba ? obliczOsobe(dok.osoba) : null;
     const k4 = !dok.osoba && w.dane.pit4r ? obliczPit4R(w.dane.pit4r) : null;
     const korekta = dok.osoba ? dok.osoba.cel === 2 : w.dane.pit4r?.cel === 2;
@@ -2023,6 +2308,15 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
         >
           {stan === 'blad' ? t.pitStatusError : stan === 'uwagi' ? t.pitStatusWarn : t.pitStatusReady}
         </span>
+        {wyslana && (
+          <span
+            className={`status-badge ${etapWysylki(t, wyslana).klasa}`}
+            data-tip={[wyslana.refId ? t.citSendRef.replace('{ref}', wyslana.refId) : '', wyslana.opis].filter(Boolean).join('\n') || undefined}
+          >
+            {wyslana.srodowisko === 'test' ? `${t.citEnvTest} · ` : ''}
+            {etapWysylki(t, wyslana).text}
+          </span>
+        )}
         <div className="pod-row__dom">
           <DomSlot
             t={t}
@@ -2157,6 +2451,10 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
   const osoby = wRoku.reduce((n, w) => n + w.dane.osoby.length, 0);
   const doPrzegladu = wRoku.filter((w) => stanWiersza(w).doPrzegladu).length;
   const dokZlozone = dokumentyRoku.filter((id) => oceny.get(id)?.stan === 'zlozone').length;
+  /** A send of the year the gateway has not answered for good — "Sprawdź UPO" shows while there is one. */
+  const czekaUpo = wRoku.some(
+    (w) => w.dane.osoby.some((o) => o.wysylki.some(czekaNaUpo)) || (w.dane.pit4r?.wysylki.some(czekaNaUpo) ?? false),
+  );
   const procent = dokumentyRoku.length > 0 ? Math.round((dokZlozone / dokumentyRoku.length) * 100) : 0;
   const fakty =
     wRoku.length === 0
@@ -2213,6 +2511,24 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
             <Icon name={busy === 'files' ? 'loader' : 'download'} size={15} />
             <span>{t.pitDownloadAll}</span>
           </button>
+          {czekaUpo && (
+            <button
+              type="button"
+              className="ksieg-scan-btn"
+              onClick={() => {
+                setBusy('upo');
+                void sprawdzUpoPit(t, notify, rok).then(async () => {
+                  setBusy(null);
+                  await load(true);
+                });
+              }}
+              disabled={busy !== null}
+              data-tip={t.pitUpoCheckHint}
+            >
+              <Icon name={busy === 'upo' ? 'loader' : 'refresh'} size={15} />
+              <span>{t.citCheckUpo}</span>
+            </button>
+          )}
           <button type="button" className="ksieg-nav-arrow" onClick={() => void load(true)} disabled={isRefreshing} data-tip={t.pitRefresh} aria-label={t.pitRefresh}>
             <Icon name="refresh" size={16} />
           </button>
@@ -2367,27 +2683,23 @@ const PodatkiPit: React.FC<{ language: Language }> = ({ language }) => {
               </>
             )}
             {bezPit.length > 0 && (
-              <details className="pit-adresy">
-                <summary>{sub(t.pitAdresyBezPit, { n: bezPit.length, rok })}</summary>
-                <p className="pod-note">{t.pitAdresyBezPitHint}</p>
-                <ul className="pit-adresy__list">
-                  {bezPit.map((r) => (
-                    <li key={r.nazwa}>
-                      <span>{r.nazwa}</span>
-                      <button
-                        type="button"
-                        className="button button-small button-secondary"
-                        onClick={() => {
-                          setNowaZ(r);
-                          navItem.open('nowy', r.nazwa);
-                        }}
-                      >
-                        <Icon name="plus" size={13} /> {t.pitAdresyDodaj}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </details>
+              <PodatkiPozostaleGrupa label={t.podRest}>
+                <PodatkiPozostale
+                  icon="users"
+                  title={sub(t.pitAdresyBezPit, { rok })}
+                  description={t.pitAdresyBezPitHint}
+                  persistKey="podatki-pit-bez-pit"
+                  wpisy={bezPit.map((r) => ({ key: r.nazwa, nazwa: r.nazwa }))}
+                  actionLabel={t.pitAdresyDodaj}
+                  actionIcon="plus"
+                  onAction={(nazwa) => {
+                    const r = bezPit.find((x) => x.nazwa === nazwa);
+                    if (!r) return;
+                    setNowaZ(r);
+                    navItem.open('nowy', r.nazwa);
+                  }}
+                />
+              </PodatkiPozostaleGrupa>
             )}
           </>
         )}

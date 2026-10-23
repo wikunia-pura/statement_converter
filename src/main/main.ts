@@ -156,6 +156,7 @@ import { BramkaNiePrzyjela, FetchLike, pobierzUpo, wyslijDokument } from './poda
 import { analizujPlik, podpiszPliki } from './podpis/podpiszPliki';
 import { parsePodatkiXlsx } from './podatki/importXlsx';
 import { registerPitHandlers } from './podatki/pitHandlers';
+import { registerZusHandlers } from './podatki/zusHandlers';
 import { opisProblemu, problemyDN1, zDataPodpisu } from '../shared/podatki';
 import { opisProblemuCit, przegladPozycjiCit, problemyCIT8Xml } from '../shared/podatki-cit';
 
@@ -4311,6 +4312,22 @@ function setupIpcHandlers() {
     downloads: app.getPath('downloads'),
     uniquePath,
     podpisBiblioteka: () => database.getSettings().podpisBiblioteka ?? '',
+    // Electron's network stack for the e-Deklaracje gateway, as the CIT-8's sends use it.
+    fetch: (url, init) => net.fetch(url, init),
+  });
+
+  // ---- Podatki: ZUS ----
+
+  registerZusHandlers({
+    getMainWindow: () => mainWindow,
+    database,
+    who: zebraniaWho,
+    rokFolder: podatkiRokFolder,
+    downloads: app.getPath('downloads'),
+    uniquePath,
+    wersja: app.getVersion(),
+    // Electron's network stack, so the system proxy applies — as for the e-Deklaracje gateway.
+    fetch: (url, init) => net.fetch(url, init),
   });
 
   // ---- Podatki: CIT-8 ----
@@ -5193,6 +5210,43 @@ function setupIpcHandlers() {
         throw error;
       }
       return result.filePath;
+    },
+  );
+
+  // Every file of a card at once: one folder dialog instead of one save dialog
+  // per file. One after another, so two files of the same name both land (the
+  // second gets a suffix) instead of racing for the same path; a file that fails
+  // is named in the result and the rest still come down.
+  ipcMain.handle(
+    IPC_CHANNELS.ZADANIA_DOWNLOAD_ALL_ATTACHMENTS,
+    async (
+      _,
+      zalaczniki: Pick<ZadanieZalacznik, 'sciezka' | 'nazwa'>[],
+    ): Promise<{ folder: string; saved: number; failed: string[] } | null> => {
+      const list = Array.isArray(zalaczniki) ? zalaczniki : [];
+      if (list.length === 0) return null;
+      const result = await showOpenDialog(mainWindow!, {
+        properties: ['openDirectory', 'createDirectory'],
+      });
+      if (result.canceled || result.filePaths.length === 0) return null;
+      const folder = result.filePaths[0];
+      let saved = 0;
+      const failed: string[] = [];
+      for (const z of list) {
+        const nazwa = path.basename(String(z?.nazwa || 'zalacznik'));
+        try {
+          const bytes = await downloadAttachment(String(z?.sciezka));
+          await fs.promises.writeFile(uniquePath(folder, nazwa), bytes);
+          saved++;
+        } catch (error: unknown) {
+          log.error(
+            `[ZADANIA] attachment download failed (${nazwa}):`,
+            error instanceof Error ? error.message : String(error),
+          );
+          failed.push(nazwa);
+        }
+      }
+      return { folder, saved, failed };
     },
   );
 

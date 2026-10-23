@@ -2,6 +2,8 @@
 
 import type { NotificationPrefs } from './notifications';
 import type { PodatekPit } from './podatki-pit';
+import type { PodatekZusPlatnik, PodatekZusRozliczenie } from './podatki-zus';
+import type { ZusSrodowisko, ZusWysylka } from './zus-ewd';
 import type { EDeklaracjeSrodowisko, EDeklaracjeWysylka } from './e-deklaracje';
 
 export interface Bank {
@@ -345,6 +347,8 @@ export const CLARIFICATION_ACCOUNT = '235-1';
  *    word of the bank text — very likely right, but the text is damaged;
  *  - short-name: the contractor was found only by a two-character name ("FR")
  *    standing as a word — real, but too common a word to book on unseen;
+ *  - foreign-address: the apartment number is the "m."/"lok." of a street
+ *    address that is not the community's — the payer's own home;
  *  - virtual-account-debit: a PKO MT940 debit marked as a virtual-account (SWRK)
  *    movement — money leaving such an account, e.g. a returned payment.
  */
@@ -355,6 +359,7 @@ export type ReviewHoldReason =
   | 'ai-answer-missing'
   | 'glued-name'
   | 'short-name'
+  | 'foreign-address'
   | 'virtual-account-debit';
 
 /**
@@ -2014,6 +2019,36 @@ export interface PodatkiPitPlikiResult {
   przerwano: string | null;
   /** Left unsigned because the run stopped. */
   niepodpisane: { id: string; nazwa: string }[];
+  /** The signing run asked to send: one entry per signed XML, sent or held back. Absent elsewhere. */
+  wysylki?: PodatkiPitWysylkaWynik[];
+}
+
+/** What happened to one PIT document sent to the e-Deklaracje gateway (or held back from it). */
+export interface PodatkiPitWysylkaWynik {
+  /** The document's id (`dokumentId`). */
+  id: string;
+  nazwa: string;
+  srodowisko: EDeklaracjeSrodowisko;
+  /** Null: the gateway did not take it (network, transmission error) or it was not sent at all. */
+  refId: string | null;
+  /** The gateway's status; null when it was never reached or the document was held back. */
+  status: number | null;
+  opis: string;
+  /** No answer after the request went out — the gateway may have taken it; recorded as uncertain. */
+  niepewna?: boolean;
+  /** Sent, but the answer could not be saved on the document — `opis` carries the refId. */
+  niezapisana?: boolean;
+}
+
+/** "Sprawdź UPO" of PIT documents (or the automat): what the gateway said this time. */
+export interface PodatkiPitUpoResult {
+  /** `zmiana`: the status differs from the one stored before this check. */
+  wyniki: (PodatkiPitWysylkaWynik & { upoSciezka: string | null; zmiana: boolean })[];
+  /** Sends that could not be asked about (network) — with the reason. */
+  bledy: { id: string; nazwa: string; powod: string }[];
+  /** The rows as they now are. */
+  rekordy: PodatekPit[];
+  folder: string;
 }
 
 /** Progress of signing PIT documents, sent before each one. */
@@ -2021,6 +2056,93 @@ export interface PodatkiPitPostep {
   zrobione: number;
   wszystkie: number;
   nazwa: string;
+}
+
+/* ================================ Podatki — ZUS ================================ */
+
+/** What "Importuj KEDU z Płatnika" did with the chosen files. */
+export interface PodatkiZusImportResult {
+  plikow: number;
+  dokumentow: number;
+  dodaniPlatnicy: number;
+  /** Payers already in the register that the files added people, titles or family members to. */
+  zmienieniPlatnicy: number;
+  /** People of the new and changed payers. */
+  osoby: number;
+  dodaneRozliczenia: number;
+  /** Months the register already had — left alone. */
+  istniejaceRozliczenia: number;
+  /** People and months that need a look before their documents can be made. */
+  doPrzegladu: number;
+  pominiete: { plik: string; powod: string }[];
+  ostrzezenia: string[];
+}
+
+/** What "Pobierz" makes of the ticked documents. */
+export interface PodatkiZusPlikiOpcje {
+  /** One KEDU per document, one KEDU with all of them (a single import in Płatnik), or none. */
+  kedu: 'osobno' | 'razem' | 'brak';
+  /** The printout of each month's settlement. */
+  pdf: boolean;
+}
+
+/** "Pobierz" of ticked ZUS documents — what was written, what was not and why. */
+export interface PodatkiZusPlikiResult {
+  folder: string;
+  zapisane: { id: string; nazwa: string; sciezka: string }[];
+  pominiete: { id: string; nazwa: string; powod: string }[];
+}
+
+/** What happened to one document sent to ZUS (EWD) — or held back from it after it was signed. */
+export interface PodatkiZusWysylkaWynik {
+  /** The month list's document id. */
+  id: string;
+  nazwa: string;
+  srodowisko: ZusSrodowisko;
+  /** The stored send; null when nothing was recorded (held back before the reservation, or no database). */
+  wysylkaId: number | null;
+  /** ZUS's id of the przesyłka; null when ZUS did not take it (or no answer came). */
+  idPrzesylki: string | null;
+  opis: string;
+  /** No answer after the request went out — ZUS may have taken it; recorded as uncertain. */
+  niepewna?: boolean;
+  /** Sent, but the answer could not be saved — `opis` carries the id, the one trace of it. */
+  niezapisana?: boolean;
+}
+
+/**
+ * "Wyślij do ZUS" — what one PIN signed and sent. Every document ticked is in exactly one of `wysylki`,
+ * `pominiete` (held back before the PIN, or failed on its own) and `niepodpisane` (the run stopped).
+ */
+export interface PodatkiZusWyslijResult {
+  /** Where the KEDU files that went are saved; '' when none. */
+  folder: string;
+  podpis: PodpisSlad | null;
+  wysylki: PodatkiZusWysylkaWynik[];
+  pominiete: { id: string; nazwa: string; powod: string }[];
+  przerwano: string | null;
+  niepodpisane: { id: string; nazwa: string }[];
+}
+
+/** "Sprawdź potwierdzenia" (or the automat): what ZUS answered about the sends asked about. */
+export interface PodatkiZusPotwierdzeniaResult {
+  wyniki: {
+    wysylkaId: number;
+    nazwa: string;
+    srodowisko: ZusSrodowisko;
+    /** Taken, refused, or no confirmation yet. */
+    etap: 'przyjeta' | 'odrzucona' | 'czeka';
+    opis: string;
+    /** The confirmation saved this time, else null. */
+    plik: string | null;
+    /** The confirmation came now (the send's state changed). */
+    zmiana: boolean;
+  }[];
+  bledy: { wysylkaId: number; nazwa: string; powod: string }[];
+  /** The folder a confirmation was saved to this time; '' when none. */
+  folder: string;
+  /** The sends as they now are — the window swaps them in. */
+  wysylki: ZusWysylka[];
 }
 
 /* ============================== Podatki — CIT-8 ============================== */
@@ -2714,6 +2836,12 @@ export interface AppSettings {
    * files nothing) or 'prod'. Settings → Administracja; machine-local, so every computer starts on test.
    */
   eDeklaracjeSrodowisko: EDeklaracjeSrodowisko;
+
+  /**
+   * Which ZUS service (EWD) documents are sent to: 'test' (the default — pt2.zus.pl, files nothing) or 'prod'.
+   * Settings → Administracja; machine-local, and apart from the e-Deklaracje switch.
+   */
+  zusSrodowisko: ZusSrodowisko;
 }
 
 /**
@@ -2905,6 +3033,12 @@ export interface BackupData {
     podatkiCit?: PodatekCit[];
     /** PIT-11 / PIT-4R of the Podatki module, per community and year. Absent in backups written before it existed. */
     podatkiPit?: PodatekPit[];
+    /** The ZUS register of the Podatki module, one entry per payer. Absent in backups written before it existed. */
+    podatkiZus?: PodatekZusPlatnik[];
+    /** The ZUS monthly sets (DRA / RCA / RSA), per payer, month and identifier. Absent in backups written before it existed. */
+    podatkiZusRozliczenia?: PodatekZusRozliczenie[];
+    /** Sends of ZUS documents straight to ZUS (EWD), with their confirmations. Absent in backups written before it existed. */
+    podatkiZusWysylki?: ZusWysylka[];
     /** The CIT dictionary; null when nobody has changed the defaults. */
     podatkiCitUstawienia?: PodatkiCitUstawienia | null;
     /** Runs of the Podpis module (signing any PDF). Absent in backups written before it existed. */
@@ -2967,6 +3101,9 @@ export interface BackupCounts {
   podatkiStawki: number;
   podatkiCit: number;
   podatkiPit: number;
+  podatkiZus: number;
+  podatkiZusRozliczenia: number;
+  podatkiZusWysylki: number;
   podatkiCitUstawienia: number;
   podpisHistoria: number;
 }
@@ -3008,6 +3145,9 @@ export function countBackup(data: BackupData): BackupCounts {
     podatkiStawki: data.data.podatkiStawki?.length ?? 0,
     podatkiCit: data.data.podatkiCit?.length ?? 0,
     podatkiPit: data.data.podatkiPit?.length ?? 0,
+    podatkiZus: data.data.podatkiZus?.length ?? 0,
+    podatkiZusRozliczenia: data.data.podatkiZusRozliczenia?.length ?? 0,
+    podatkiZusWysylki: data.data.podatkiZusWysylki?.length ?? 0,
     podatkiCitUstawienia: data.data.podatkiCitUstawienia ? 1 : 0,
     podpisHistoria: data.data.podpisHistoria?.length ?? 0,
   };
@@ -3284,6 +3424,30 @@ export const IPC_CHANNELS = {
   PODATKI_PIT_SET_ZLOZONE: 'podatki:pit-set-zlozone',
   PODATKI_PIT_PODPISZ_WIELE: 'podatki:pit-podpisz-wiele',
   PODATKI_PIT_PODPISZ_PRZERWIJ: 'podatki:pit-podpisz-przerwij',
+  PODATKI_PIT_UPO: 'podatki:pit-upo',
+  PODATKI_PIT_UPO_POBIERZ: 'podatki:pit-upo-pobierz',
+  PODATKI_PIT_WYSYLKA_ROZSTRZYGNIJ: 'podatki:pit-wysylka-rozstrzygnij',
+
+  // Podatki — ZUS (register, ZUA / ZZA / ZWUA / ZCNA, DRA + RCA + RSA as KEDU for Płatnik)
+  PODATKI_ZUS_LISTA: 'podatki:zus-lista',
+  PODATKI_ZUS_ADD: 'podatki:zus-add',
+  PODATKI_ZUS_SET: 'podatki:zus-set',
+  PODATKI_ZUS_DELETE: 'podatki:zus-delete',
+  PODATKI_ZUS_ROZL_ADD: 'podatki:zus-rozl-add',
+  PODATKI_ZUS_ROZL_SET: 'podatki:zus-rozl-set',
+  PODATKI_ZUS_ROZL_DELETE: 'podatki:zus-rozl-delete',
+  PODATKI_ZUS_PRZYGOTUJ: 'podatki:zus-przygotuj',
+  PODATKI_ZUS_KOREKTA: 'podatki:zus-korekta',
+  PODATKI_ZUS_IMPORT: 'podatki:zus-import',
+  PODATKI_ZUS_PLIKI: 'podatki:zus-pliki',
+  PODATKI_ZUS_SET_WYSLANE: 'podatki:zus-set-wyslane',
+  PODATKI_ZUS_WYSLIJ: 'podatki:zus-wyslij',
+  PODATKI_ZUS_WYSLIJ_PRZERWIJ: 'podatki:zus-wyslij-przerwij',
+  PODATKI_ZUS_POTWIERDZENIA: 'podatki:zus-potwierdzenia',
+  PODATKI_ZUS_POTWIERDZENIE_POBIERZ: 'podatki:zus-potwierdzenie-pobierz',
+  PODATKI_ZUS_WYSYLKA_ROZSTRZYGNIJ: 'podatki:zus-wysylka-rozstrzygnij',
+  PODATKI_ZUS_POLACZENIE: 'podatki:zus-polaczenie',
+  SET_ZUS_SRODOWISKO: 'settings:set-zus-srodowisko',
 
   // Podpis kwalifikowany (karta Szafir przez PKCS#11)
   PODPIS_KARTA_STAN: 'podpis:karta-stan',
@@ -3332,6 +3496,7 @@ export const IPC_CHANNELS = {
   ZADANIA_PICK_ATTACHMENT: 'zadania:pick-attachment',
   ZADANIA_UPLOAD_ATTACHMENT: 'zadania:upload-attachment',
   ZADANIA_DOWNLOAD_ATTACHMENT: 'zadania:download-attachment',
+  ZADANIA_DOWNLOAD_ALL_ATTACHMENTS: 'zadania:download-all-attachments',
   ZADANIA_DISCARD_ATTACHMENTS: 'zadania:discard-attachments',
   GET_ZADANIE_KOMENTARZE: 'zadania:get-komentarze',
   GET_ZADANIA_NOTATKI: 'zadania:get-notatki',

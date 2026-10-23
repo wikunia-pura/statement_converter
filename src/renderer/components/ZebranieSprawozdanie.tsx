@@ -663,7 +663,7 @@ const SprawozdaniePickerModal: React.FC<{
       >
         <ModalDismiss onClose={onClose} ariaLabel={t.close} />
         <ModalHeader
-          icon="bar-chart"
+          icon="book"
           title={t.zfinPickTitle}
           subtitle={adresNazwa ? t.zfinPickHint.replace('{name}', adresNazwa) : t.zfinNoAdres}
         />
@@ -784,7 +784,7 @@ export const SprawozdanieRobocze: React.FC<{
     // statement reads like the printout, not stretched to the window.
     <div className="page-form zeb-page">
       <FormSection
-        icon="bar-chart"
+        icon="book"
         title={`Wspólnota Mieszkaniowa ${nazwaNieruchomosci(spr.nazwa)}`}
         description={t.zfinStatementDesc
           .replace('{okres}', okresLabel(spr.okresOd, spr.okresDo))
@@ -985,10 +985,10 @@ const ZebranieSprawozdanie: React.FC<{
     return (
       <>
         <div className="page-form zeb-page">
-          <FormSection icon="bar-chart" title={t.zebraniaTabReports}>
+          <FormSection icon="book" title={t.zebraniaTabReports}>
             <div className="uch-empty zfin-empty-state">
               <span className="zeb-tab-empty__icon">
-                <Icon name="bar-chart" size={22} />
+                <Icon name="book" size={22} />
               </span>
               <strong>{t.zfinEmptyTitle}</strong>
               <p>{wersja.sprawozdanieOdlaczone ? t.zfinUnlinkedHint : t.zfinUploadHint}</p>

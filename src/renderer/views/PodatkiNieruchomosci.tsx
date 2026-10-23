@@ -51,7 +51,7 @@ import { FormField, FormRow, FormSection } from '../components/FormSection';
 import ModalDismiss, { ModalFooter, ModalHeader } from '../components/Modal';
 import { PodpisKartaModal } from '../components/PodpisKarta';
 import ScreenTitle from '../components/ScreenTitle';
-import { useNavItem } from '../navigation';
+import { useLeaveGuard, useNavItem } from '../navigation';
 import Icon from '../components/Icon';
 import Loader, { BusyOverlay } from '../components/Loader';
 import Select from '../components/Select';
@@ -773,18 +773,23 @@ const DeklaracjaScreen: React.FC<{
     });
   const removeGrunt = (i: number) => setDane((d) => ({ ...d, grunty: d.grunty.filter((_, j) => j !== i) }));
 
+  /** Unsaved edits: save, leave without saving, or stay — resolves false to stay. */
+  const confirmLeave = async (): Promise<boolean> => {
+    if (!dirty) return true;
+    const canSave = !!rekord || canAdd;
+    const choice = await notify.unsaved(canSave ? t.podUnsavedConfirm : t.podUnsavedNoSave, {
+      saveLabel: t.podUnsavedSave,
+      discardLabel: t.podUnsavedDiscard,
+      keepLabel: t.podUnsavedKeep,
+      canSave,
+    });
+    if (choice === 'keep') return false;
+    return choice === 'discard' || (await save());
+  };
+  // The sidebar, Back/Forward and links to other modules ask the same.
+  useLeaveGuard(dirty ? confirmLeave : null);
   const back = async () => {
-    if (dirty) {
-      const canSave = !!rekord || canAdd;
-      const choice = await notify.unsaved(canSave ? t.podUnsavedConfirm : t.podUnsavedNoSave, {
-        saveLabel: t.podUnsavedSave,
-        discardLabel: t.podUnsavedDiscard,
-        keepLabel: t.podUnsavedKeep,
-        canSave,
-      });
-      if (choice === 'keep' || (choice === 'save' && !(await save()))) return;
-    }
-    onBack();
+    if (await confirmLeave()) onBack();
   };
 
   const save = async () => {

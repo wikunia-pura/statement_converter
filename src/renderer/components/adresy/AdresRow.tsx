@@ -113,6 +113,8 @@ export const AdresRow = React.memo(function AdresRow({
       <td>
         {jednostka ? (
           <span className="adres-zgn" data-tip={jednostka.email}>{jednostka.nazwa}</span>
+        ) : adres.bezZgn ? (
+          <span className="cell-empty" data-tip={t.adresBezZgn}>{t.zgnUnitAbsent}</span>
         ) : (
           <span className="cell-empty">—</span>
         )}

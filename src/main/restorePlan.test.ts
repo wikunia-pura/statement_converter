@@ -129,6 +129,25 @@ describe('planRestore', () => {
     expect(rows(withUnits, 'adresy')![0].zgn_jednostka_id).toBe(3);
   });
 
+  it('keeps the "no city unit" mark, and reads an older backup without it as unmarked', () => {
+    const plan = DatabaseService.planRestore(
+      backup({ adresy: [adres(1, 'A', { bezZgn: true }), adres(2, 'B')] }),
+      NO_LOOKUPS,
+    );
+    expect(rows(plan, 'adresy')!.map((r) => r.bez_zgn)).toEqual([true, false]);
+  });
+
+  it('keeps the areas, and reads an older backup without them as not entered', () => {
+    const plan = DatabaseService.planRestore(
+      backup({ adresy: [adres(1, 'A', { powierzchnie: { calkowita: 812.5, miasto: 0, pozytki: 14 } }), adres(2, 'B')] }),
+      NO_LOOKUPS,
+    );
+    expect(rows(plan, 'adresy')!.map((r) => r.powierzchnie)).toEqual([
+      { calkowita: 812.5, miasto: 0, pozytki: 14 },
+      { calkowita: null, miasto: null, pozytki: null },
+    ]);
+  });
+
   it('links a version to its library statement, and brings back one only its copy has', () => {
     const kopia = (s: ReturnType<typeof statement>, sprawozdanieId?: number) => ({ dane: s, plikNazwa: 'p.pdf', sprawozdanieId, dodano: T, dodal: '' });
     const plan = DatabaseService.planRestore(

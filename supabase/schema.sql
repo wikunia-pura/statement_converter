@@ -71,6 +71,13 @@ alter table public.adresy
 alter table public.adresy
   add column if not exists zgn_jednostka_id bigint
     references public.zgn_jednostki(id) on delete set null;
+-- The community deliberately has no city unit (not flagged as missing).
+alter table public.adresy
+  add column if not exists bez_zgn boolean not null default false;
+-- The areas the budget plans print: { calkowita, miasto, pozytki } in m², null =
+-- not entered, 0 for the city's or the leased area = none (adresy-powierzchnie.sql).
+alter table public.adresy
+  add column if not exists powierzchnie jsonb not null default '{}'::jsonb;
 
 -- Global, configurable account types. Each maps a community bank account to the
 -- pair of accounting symbols the exporters emit (bank-account side + apartment

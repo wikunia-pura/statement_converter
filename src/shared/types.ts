@@ -127,13 +127,31 @@ export interface Adres {
   bankId?: number | null;
   /** User-defined rules mapping recurring "weird" payments to apartment numbers. */
   apartmentMappings?: ApartmentMapping[];
-  /** City unit ("jednostka ZGN") notified by the Mailing module when this community's rates change. Null ⇒ the address can't be mailed until one is picked. */
+  /** City unit ("jednostka ZGN") notified by the Mailing module when this community's rates change. Null ⇒ the address can't be mailed to a unit — either none is picked yet, or `bezZgn` says it has none. */
   zgnJednostkaId?: number | null;
+  /** The community deliberately has no city unit: the list does not flag the missing unit. Never true together with `zgnJednostkaId`. */
+  bezZgn?: boolean;
   /** The community's board — added to a meeting when the community is picked there. */
   zarzad?: ZarzadOsoba[];
   /** Who the community is for the tax office — the one place its NIP, full name and seat are kept. */
   identyfikacja?: AdresIdentyfikacja;
+  /**
+   * The areas the budget plan prints — kept here, never typed on the plan. For
+   * each: null = not entered yet (the list flags it), a number = m². For the
+   * city's and the leased areas 0 means the community has none (marked so in the form).
+   */
+  powierzchnie?: AdresPowierzchnie;
   createdAt: string;
+}
+
+/** The community's areas (m²), the source of every budget plan's header. See `Adres.powierzchnie`. */
+export interface AdresPowierzchnie {
+  /** Total usable area ("powierzchnia użytkowa całkowita"). */
+  calkowita: number | null;
+  /** Owned by M.St. Warszawa; 0 = the city owns nothing here. */
+  miasto: number | null;
+  /** Common property let out ("pożytki"); 0 = none let out. */
+  pozytki: number | null;
 }
 
 /**
@@ -171,9 +189,9 @@ export interface AdresyZasilenieResult {
 }
 
 /**
- * Who owns how much of a community — the budget plan's header. Only the city's
- * and the leased ("pożytki") areas are kept: the private part is the rest of
- * the total, which comes from the statement.
+ * Who owns how much of a community, as the budget plans remembered it per
+ * community before the areas moved to the address (`Adres.powierzchnie`).
+ * Legacy: no longer written; kept so backups still carry and restore it.
  */
 export interface AdresUdzialy {
   /** m² owned by M.St. Warszawa. */
@@ -194,7 +212,7 @@ export interface ZebraniaWspolnota {
    * by hand, then used for every later file.
    */
   vdomNr: number | null;
-  /** Ownership split the budget plan needs and the statement does not carry. */
+  /** Legacy ownership split — superseded by `Adres.powierzchnie`, no longer written (see `AdresUdzialy`). */
   udzialy: AdresUdzialy | null;
   updatedAt: string;
   updatedBy: string;
@@ -3022,6 +3040,7 @@ export const IPC_CHANNELS = {
   UPDATE_ADRES: 'db:update-adres',
   SET_ADRES_ZARZAD: 'db:set-adres-zarzad',
   SET_ADRES_IDENTYFIKACJA: 'db:set-adres-identyfikacja',
+  SET_ADRES_POWIERZCHNIE: 'db:set-adres-powierzchnie',
   ADRESY_ZASIL_Z_DN1: 'db:adresy-zasil-z-dn1',
   DELETE_ADRES: 'db:delete-adres',
   DELETE_ALL_ADRESY: 'db:delete-all-adresy',

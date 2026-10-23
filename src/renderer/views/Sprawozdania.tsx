@@ -345,7 +345,7 @@ const SprawozdanieScreen: React.FC<{
               />
             </FormSection>
 
-            <SprawozdaniePodglad key={wpis.id} t={t} spr={spr} />
+            <SprawozdaniePodglad key={wpis.id} t={t} spr={spr} bezZer />
           </div>
         )}
       </div>

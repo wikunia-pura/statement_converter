@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, isAuthRetryableFetchError, SupabaseClient } from '@supabase/supabase-js';
 import Store from 'electron-store';
 import WebSocket from 'ws';
 import log from 'electron-log';
@@ -51,6 +51,27 @@ const electronStorageAdapter = {
   },
 };
 
+/** The key supabase-js keeps the session under — its default, which every install already uses. */
+const SESSION_KEY = `sb-${new URL(SUPABASE_URL).hostname.split('.')[0]}-auth-token`;
+
+/**
+ * The user of the session kept on disk, whatever state its access token is in;
+ * null when there is none. supabase-js answers "no session" also when it only
+ * failed to refresh an expired token (offline, a wake from sleep) — the session
+ * stays on disk then, and this is how to tell the two apart.
+ */
+export function storedSessionUser(): { id: string; email: string } | null {
+  const raw = electronStorageAdapter.getItem(SESSION_KEY);
+  if (!raw) return null;
+  try {
+    const session = JSON.parse(raw) as { refresh_token?: string; user?: { id?: string; email?: string } };
+    if (!session.refresh_token || !session.user?.id) return null;
+    return { id: session.user.id, email: session.user.email ?? '' };
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Dead-session detection
 //
@@ -61,6 +82,13 @@ const electronStorageAdapter = {
 // which the app then reads as "that record does not exist" ("Bank not found"),
 // an empty address list, an empty backup. The single fix is here: refuse any
 // REST request that isn't carrying a user token, and say why.
+//
+// A missing or rejected token is not yet a dead session, though. supabase-js
+// also falls back to the anon key when the refresh of an expired token merely
+// could not reach the server — after a wake from sleep, at a start before the
+// network is up — and it keeps the session on disk then. So the guard first
+// refreshes the session itself and retries the request once; only a refresh
+// token the server refuses logs the user out. Unreachable is reported as such.
 // ---------------------------------------------------------------------------
 
 /**
@@ -177,6 +205,93 @@ function unauthorizedResponse(): Response {
   );
 }
 
+/**
+ * The session is intact but the server could not be reached to refresh it.
+ * 504 is not in postgrest-js's retryable list either: the call fails at once,
+ * auth-js has already spent its own retries on the refresh.
+ */
+function unreachableResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      message: new AppError('cloudUnreachable').message,
+      code: 'cloud_unreachable',
+      details: null,
+      hint: null,
+    }),
+    {
+      status: 504,
+      statusText: 'Gateway Timeout',
+      headers: { 'Content-Type': 'application/json' },
+    },
+  );
+}
+
+type TokenRecovery = { token: string } | { failed: 'offline' | 'lost' };
+
+/** Recoveries in flight, by the token that failed ('' for none): a burst of reads after a wake is one refresh. */
+const recoveries = new Map<string, Promise<TokenRecovery>>();
+
+/**
+ * A usable access token for a request that had none, or whose token PostgREST
+ * rejected. `offline`: the refresh could not reach the server — the session
+ * stays, the user stays logged in. `lost`: there is no session on disk, or the
+ * server refused its refresh token (supabase-js has then dropped it).
+ */
+function recoverAccessToken(rejected: string | null): Promise<TokenRecovery> {
+  const key = rejected ?? '';
+  let recovery = recoveries.get(key);
+  if (!recovery) {
+    recovery = (async (): Promise<TokenRecovery> => {
+      const auth = getSupabase().auth;
+      try {
+        // Refreshes an expired token by itself — and another request may
+        // already have refreshed the one that was rejected.
+        const current = await auth.getSession();
+        const token = current.data.session?.access_token;
+        if (token && token !== rejected) return { token };
+        if (current.error && isAuthRetryableFetchError(current.error)) return { failed: 'offline' };
+        if (!storedSessionUser()) return { failed: 'lost' };
+        const { data, error } = await auth.refreshSession();
+        if (data.session) return { token: data.session.access_token };
+        return { failed: isAuthRetryableFetchError(error) ? 'offline' : 'lost' };
+      } catch (error) {
+        // Not an auth answer at all — no proof the session is dead.
+        log.warn('[AUTH] Odświeżenie sesji rzuciło wyjątek:', error);
+        return { failed: 'offline' };
+      }
+    })().finally(() => recoveries.delete(key));
+    recoveries.set(key, recovery);
+  }
+  return recovery;
+}
+
+/** Retry a REST request once with a recovered token; log out only when there is none to be had. */
+async function retryWithFreshToken(
+  input: Parameters<typeof fetch>[0],
+  init: Parameters<typeof fetch>[1],
+  rejected: string | null,
+): Promise<Response> {
+  const recovered = await recoverAccessToken(rejected);
+  if ('token' in recovered) {
+    sawSession = true;
+    const headers = new Headers(init?.headers);
+    headers.set('Authorization', `Bearer ${recovered.token}`);
+    const response = await fetch(input, { ...init, headers });
+    if (response.status !== 401) return response;
+    reportSessionLost('PostgREST odrzucił także świeżo odświeżony token (HTTP 401)');
+    return unauthorizedResponse();
+  }
+  if (recovered.failed === 'offline') {
+    log.warn('[AUTH] Tokenu nie dało się odświeżyć (brak połączenia) — sesja zostaje, żądanie odrzucone');
+    return unreachableResponse();
+  }
+  // Before anyone has logged in (the startup reads) this is no news to announce.
+  if (sawSession) {
+    reportSessionLost(rejected ? 'PostgREST odrzucił token, a sesji nie da się odświeżyć' : 'brak sesji do odświeżenia (rola anon)');
+  }
+  return unauthorizedResponse();
+}
+
 // ---------------------------------------------------------------------------
 // Table writes
 //
@@ -226,26 +341,22 @@ const reportingFetch: typeof fetch = async (input, init) => {
 
 const guardedFetch: typeof fetch = async (input, init) => {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-  const isRest = url.includes(REST_PATH);
+  if (!url.includes(REST_PATH)) return fetch(input, init);
 
-  if (isRest) {
-    const authorization = headerValue(init?.headers, 'authorization');
-    // No token, or the publishable key standing in for one: this request would
-    // run as `anon` and come back empty instead of failing.
-    if (!authorization || authorization === `Bearer ${SUPABASE_ANON_KEY}`) {
-      if (sawSession) reportSessionLost('żądanie poszłoby bez tokenu użytkownika (rola anon)');
-      return unauthorizedResponse();
-    }
-    sawSession = true;
+  const authorization = headerValue(init?.headers, 'authorization');
+  // No token, or the publishable key standing in for one: this request would
+  // run as `anon` and come back empty instead of failing.
+  if (!authorization || authorization === `Bearer ${SUPABASE_ANON_KEY}`) {
+    return retryWithFreshToken(input, init, null);
   }
+  sawSession = true;
 
   const response = await fetch(input, init);
 
-  // 401 from PostgREST means the token itself was rejected — expired, revoked,
-  // or signed for a user that no longer exists.
-  if (isRest && response.status === 401) {
-    reportSessionLost('PostgREST odrzucił token (HTTP 401)');
-    return unauthorizedResponse();
+  // 401 from PostgREST means the token itself was rejected — expired by the
+  // server's clock, revoked, or signed for a user that no longer exists.
+  if (response.status === 401) {
+    return retryWithFreshToken(input, init, authorization.replace(/^Bearer /i, ''));
   }
 
   return response;

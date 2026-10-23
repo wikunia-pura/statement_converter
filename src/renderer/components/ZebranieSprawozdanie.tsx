@@ -10,6 +10,7 @@ import {
   ZebranieWersja,
 } from '../../shared/types';
 import {
+  bezZerowych,
   formatKwota,
   okresLabel,
   sprawozdaniaDlaWspolnoty,
@@ -360,9 +361,15 @@ export const SprawozdanieWstepSection: React.FC<{
 /**
  * The statement as vDom printed it: its sections, as tables — each one folds
  * away, and the rows can be searched or narrowed to the negative ones.
- * Read-only.
+ * Read-only. With `bezZer` it shows what the documents print: items and
+ * sections with nothing but zeros left out (`bezZerowych`).
  */
-export const SprawozdaniePodglad: React.FC<{ t: T; spr: Sprawozdanie }> = ({ t, spr }) => {
+export const SprawozdaniePodglad: React.FC<{ t: T; spr: Sprawozdanie; bezZer?: boolean }> = ({
+  t,
+  spr: pelne,
+  bezZer = false,
+}) => {
+  const spr = useMemo(() => (bezZer ? bezZerowych(pelne) : pelne), [pelne, bezZer]);
   const [q, setQ] = useState('');
   const [onlyNegative, setOnlyNegative] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
@@ -439,7 +446,7 @@ export const SprawozdaniePodglad: React.FC<{ t: T; spr: Sprawozdanie }> = ({ t, 
     <FormSection
       icon="table"
       title={t.zfinItemsTitle}
-      description={t.zfinItemsDesc}
+      description={bezZer ? t.zfinItemsDescBezZer : t.zfinItemsDesc}
       aside={
         <button
           type="button"
@@ -844,7 +851,7 @@ export const SprawozdanieRobocze: React.FC<{
         </>
       )}
 
-      <SprawozdaniePodglad t={t} spr={spr} />
+      <SprawozdaniePodglad t={t} spr={spr} bezZer />
 
       {statusBox}
     </div>

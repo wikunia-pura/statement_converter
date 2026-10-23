@@ -104,6 +104,7 @@ import { normalizePlan, normalizePobrania, normalizeUstawienia } from '../shared
 import { daneNaKolejnyRok, normalizeDane, normalizeStawki, tylkoCyfry } from '../shared/podatki';
 import { daneCitNaKolejnyRok, normalizeCitUstawienia, normalizeDaneCit, oznaczAutorowRegul } from '../shared/podatki-cit';
 import { normalizeIdentyfikacja, zasilZDn1 } from '../shared/adres-identyfikacja';
+import { normalizePowierzchnie } from '../shared/adres-powierzchnie';
 import {
   PitDane,
   PitOsoba,
@@ -205,7 +206,7 @@ function normalizeTypy(row: { typy?: unknown; typ?: unknown }): KontrahentTyp[] 
   return [((row.typ as KontrahentTyp) || 'Kontrahent')];
 }
 const ADRES_COLS =
-  'id, nazwa, alternativeNames:alternative_names, swrkIdentifiers:swrk_identifiers, accountNumbers:account_numbers, accountTypes:account_types, bankId:bank_id, apartmentMappings:apartment_mappings, zgnJednostkaId:zgn_jednostka_id, zarzad, identyfikacja, createdAt:created_at';
+  'id, nazwa, alternativeNames:alternative_names, swrkIdentifiers:swrk_identifiers, accountNumbers:account_numbers, accountTypes:account_types, bankId:bank_id, apartmentMappings:apartment_mappings, zgnJednostkaId:zgn_jednostka_id, bezZgn:bez_zgn, zarzad, identyfikacja, powierzchnie, createdAt:created_at';
 const ZGN_COLS = 'id, nazwa, email, createdAt:created_at';
 const ZGN_PELNOMOCNIK_COLS =
   'id, jednostkaId:jednostka_id, imieNazwisko:imie_nazwisko, email, createdAt:created_at';
@@ -875,8 +876,10 @@ class DatabaseService {
       bankId: a.bankId ?? null,
       apartmentMappings: a.apartmentMappings ?? [],
       zgnJednostkaId: a.zgnJednostkaId ?? null,
+      bezZgn: a.bezZgn === true,
       zarzad: DatabaseService.zarzadList(a.zarzad),
       identyfikacja: normalizeIdentyfikacja(a.identyfikacja),
+      powierzchnie: normalizePowierzchnie(a.powierzchnie),
     })) as Adres[];
     this.cache.adresy = this.cacheSet(data);
     return data;
@@ -974,6 +977,7 @@ class DatabaseService {
     apartmentMappings?: ApartmentMapping[],
     accountTypes?: Record<string, number>,
     zgnJednostkaId?: number | null,
+    bezZgn?: boolean,
   ): Promise<Adres> {
     const accounts = await this.sanitizeAccountNumbers(accountNumbers);
     const { data, error } = await getSupabase()
@@ -987,6 +991,7 @@ class DatabaseService {
         bank_id: bankId ?? null,
         apartment_mappings: this.sanitizeApartmentMappings(apartmentMappings),
         zgn_jednostka_id: zgnJednostkaId ?? null,
+        bez_zgn: zgnJednostkaId == null && bezZgn === true,
       })
       .select(ADRES_COLS)
       .single();
@@ -1044,6 +1049,16 @@ class DatabaseService {
     this.invalidateCache('adresy');
   }
 
+  /** Replace a community's areas (total, the city's, the leased) — the whole record, as the form holds it. */
+  async setAdresPowierzchnie(id: number, powierzchnie: unknown): Promise<void> {
+    const { error } = await getSupabase()
+      .from('adresy')
+      .update({ powierzchnie: normalizePowierzchnie(powierzchnie) })
+      .eq('id', id);
+    if (error) throw new Error(`setAdresPowierzchnie: ${error.message}`);
+    this.invalidateCache('adresy');
+  }
+
   /**
    * One-time fill of the tax identification from the DN-1 declarations: only
    * empty fields, only for communities the DN-1 names match. Afterwards the
@@ -1068,12 +1083,17 @@ class DatabaseService {
     apartmentMappings?: ApartmentMapping[],
     accountTypes?: Record<string, number>,
     zgnJednostkaId?: number | null,
+    bezZgn?: boolean,
   ): Promise<void> {
     const patch: Record<string, unknown> = { nazwa };
     if (alternativeNames !== undefined) patch.alternative_names = alternativeNames;
     if (swrkIdentifiers !== undefined) patch.swrk_identifiers = swrkIdentifiers;
     if (bankId !== undefined) patch.bank_id = bankId;
     if (zgnJednostkaId !== undefined) patch.zgn_jednostka_id = zgnJednostkaId;
+    if (bezZgn !== undefined) patch.bez_zgn = bezZgn;
+    // A unit and "no unit" never hold together: a picked unit wins.
+    if (zgnJednostkaId != null) patch.bez_zgn = false;
+    else if (bezZgn === true) patch.zgn_jednostka_id = null;
     let sanitizedAccounts: string[] | undefined;
     if (accountNumbers !== undefined) {
       sanitizedAccounts = await this.sanitizeAccountNumbers(accountNumbers, id);
@@ -1660,7 +1680,7 @@ class DatabaseService {
     if (ids.length > 0) {
       const { error } = await getSupabase()
         .from('adresy')
-        .update({ zgn_jednostka_id: jednostkaId })
+        .update({ zgn_jednostka_id: jednostkaId, bez_zgn: false })
         .in('id', ids);
       if (error) throw new Error(`setZgnJednostkaAdresy: ${error.message}`);
     }
@@ -6043,9 +6063,13 @@ class DatabaseService {
           zarzad: DatabaseService.zarzadList(a.zarzad),
           // Absent in backups written before communities had a tax identification.
           identyfikacja: normalizeIdentyfikacja(a.identyfikacja),
+          // Absent in backups written before communities kept their areas.
+          powierzchnie: normalizePowierzchnie(a.powierzchnie),
           created_at: a.createdAt,
           bank_id: bankIdOf(a.bankId),
           account_types: accountTypes,
+          // Absent in backups written before an address could be marked as having no unit.
+          bez_zgn: a.bezZgn === true,
           // Without units in the backup the live link stays (the column is left out).
           ...(zgnIdSet
             ? { zgn_jednostka_id: a.zgnJednostkaId != null && zgnIdSet.has(a.zgnJednostkaId) ? a.zgnJednostkaId : null }

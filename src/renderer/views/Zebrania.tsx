@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Adres,
   SprawozdanieZapisane,
@@ -43,18 +43,13 @@ import { SpotkanieEditModal, SpotkanieKartaModal } from './Kalendarz';
 import ZebranieSprawozdanie from '../components/ZebranieSprawozdanie';
 import ZebranieUchwaly from '../components/ZebranieUchwaly';
 import ZawiadomieniePodglad from '../components/ZawiadomieniePodglad';
-import ZebraniePlan, {
-  PlanSzablonu,
-  planNaStart,
-  udzialyNaStart,
-  zapamietajUdzialy,
-} from '../components/ZebraniePlan';
+import ZebraniePlan, { PlanSzablonu, planNaStart } from '../components/ZebraniePlan';
 import ZebranieStatusBox from '../components/ZebranieStatusBox';
 import ZebraniePodsumowanie from '../components/ZebraniePodsumowanie';
 import ZebraniaUstawieniaModal from '../components/ZebraniaUstawieniaModal';
 import { ZebraniaSzablonModal, ZebraniaSzablonSekcja } from '../components/ZebraniaSzablon';
 import ScreenTitle from '../components/ScreenTitle';
-import { useNavItem } from '../navigation';
+import { LeaveCheck, useNavItem } from '../navigation';
 import { useRequestSeq } from '../hooks/useRequestSeq';
 import { defaultUstawienia, foldText } from '../../shared/plan-gospodarczy';
 import { reloadFromServer } from '../dataCache';
@@ -79,6 +74,8 @@ interface Props {
   onOpenSzablony?: () => void;
   /** The Sprawozdania module — on one statement, or on its list with null. */
   onOpenSprawozdanie?: (sprawozdanieId: number | null) => void;
+  /** Adresy, on one address's form — where a plan's areas are changed. */
+  onOpenAdres?: (adresId: number) => void;
 }
 
 type StatusFilter = 'all' | ZebranieStatus;
@@ -405,8 +402,6 @@ const ZebranieScreen: React.FC<{
   ustawienia: ZebraniaUstawienia;
   /** The template meeting's plan, for a plan not yet drafted; null when there is none to start from. */
   szablonPlan: PlanSzablonu | null;
-  /** Every entry, as this screen already holds them — the plan's previous-plan lookup reads them. */
-  zebrania: Zebranie[];
   onReload: () => Promise<void>;
   onOpenUstawienia: () => void;
   onBack: () => void;
@@ -422,6 +417,7 @@ const ZebranieScreen: React.FC<{
   onOpenNotice: (wersja: ZebranieWersja) => void;
   onOpenSzablony?: () => void;
   onOpenSprawozdanie?: (sprawozdanieId: number | null) => void;
+  onOpenAdres?: (adresId: number) => void;
 }> = ({
   language,
   locale,
@@ -438,7 +434,6 @@ const ZebranieScreen: React.FC<{
   wspolnoty,
   ustawienia,
   szablonPlan,
-  zebrania,
   onReload,
   onOpenUstawienia,
   onBack,
@@ -453,6 +448,7 @@ const ZebranieScreen: React.FC<{
   onOpenNotice,
   onOpenSzablony,
   onOpenSprawozdanie,
+  onOpenAdres,
 }) => {
   const t = translations[language];
   const notify = useNotify();
@@ -476,6 +472,12 @@ const ZebranieScreen: React.FC<{
     if (current) setWersjaId(current.id);
   }, [current?.id]);
   const wersja = wersje.find((w) => w.id === wersjaId) ?? current;
+  // The plan tab's unsaved edits: going back, to another version or tab, or
+  // adding a revision (which becomes the version shown) would drop them.
+  const leaveRef = useRef<LeaveCheck | null>(null);
+  const leave = async (go: () => void) => {
+    if (!leaveRef.current || (await leaveRef.current())) go();
+  };
   const wspolnota = dane.adresNazwa
     ? (wspolnoty.find((w) => foldText(w.adresNazwa) === foldText(dane.adresNazwa)) ?? null)
     : null;
@@ -491,11 +493,9 @@ const ZebranieScreen: React.FC<{
       const s = await window.electronAPI.getSprawozdanie(sprawozdanieId);
       if (!s?.dane) return;
       const rok = Number(s.dane.okresDo.slice(0, 4)) + 1;
-      const udzialy = await udzialyNaStart(s.dane.nrWsp ?? wspolnota?.vdomNr ?? null, rok, wspolnota, zebrania);
-      const plan = planNaStart(s.dane, ustawienia, { wskaznik: szablonPlan.plan.wskaznik, ...udzialy }, null, szablonPlan);
+      const plan = planNaStart(s.dane, ustawienia, { wskaznik: szablonPlan.plan.wskaznik }, null, szablonPlan, adres);
       // Only onto a version still without a plan: one drafted meanwhile is kept.
       await window.electronAPI.setZebranieWersjaPlan(w.id, plan, { zmieniono: null });
-      await zapamietajUdzialy(dane.adresNazwa, wspolnota, plan);
       notify.info(t.zebSzablonPlanAuto.replace('{nazwa}', szablonPlan.nazwa).replace('{rok}', String(rok)));
     } catch (err: unknown) {
       // A plan drafted meanwhile by somebody else is theirs to keep — nothing to say.
@@ -604,7 +604,7 @@ const ZebranieScreen: React.FC<{
           <ScreenTitle
             backLabel={t.zebraniaBack}
             crumb={t.zebrania}
-            onBack={onBack}
+            onBack={() => void leave(onBack)}
             title={dane.nazwa || '—'}
             meta={
               <>
@@ -659,7 +659,9 @@ const ZebranieScreen: React.FC<{
                 aria-selected={wersja?.id === w.id}
                 className={`zeb-vtab${wersja?.id === w.id ? ' is-active' : ''}`}
                 data-tip={`${wersjaTitle(t, w)} — ${zebranieStatusLabel(t, w.status)}`}
-                onClick={() => setWersjaId(w.id)}
+                onClick={() => {
+                  if (w.id !== wersja?.id) void leave(() => setWersjaId(w.id));
+                }}
               >
                 <span className={`zeb-vtab__dot zeb-vtab__dot--${w.status}`} aria-hidden="true" />
                 <span className="zeb-vtab__num">{wersjaLabel(w)}</span>
@@ -673,7 +675,7 @@ const ZebranieScreen: React.FC<{
           <button
             type="button"
             className="button button-small button-secondary"
-            onClick={onAddRevision}
+            onClick={() => void leave(onAddRevision)}
             disabled={busy || !current}
             data-tip={
               current
@@ -699,7 +701,13 @@ const ZebranieScreen: React.FC<{
           )}
         </div>
       </div>
-      <ModuleTabs tabs={tabs} active={activeTab.id} onChange={(id) => onTab(id as ZebranieTab)} />
+      <ModuleTabs
+        tabs={tabs}
+        active={activeTab.id}
+        onChange={(id) => {
+          if (id !== activeTab.id) void leave(() => onTab(id as ZebranieTab));
+        }}
+      />
       <div className="content-body">
         {activeTab.id === 'zawiadomienie' ? (
           notice
@@ -734,8 +742,8 @@ const ZebranieScreen: React.FC<{
             language={language}
             locale={locale}
             wersja={wersja}
-            adresNazwa={dane.adresNazwa}
-            wspolnota={wspolnota}
+            adres={adres}
+            onOpenAdres={onOpenAdres}
             ustawienia={ustawienia}
             dataZebrania={dane.startsAt}
             onChanged={onReload}
@@ -743,7 +751,7 @@ const ZebranieScreen: React.FC<{
             onGoToSprawozdania={() => onTab('sprawozdania')}
             onOpenUstawienia={onOpenUstawienia}
             szablon={szablonPlan}
-            zebrania={zebrania}
+            leaveRef={leaveRef}
           />
         ) : activeTab.id === 'uchwaly' && wersja ? (
           <ZebranieUchwaly
@@ -787,6 +795,7 @@ const Zebrania: React.FC<Props> = ({
   onOpenSpotkanie,
   onOpenSzablony,
   onOpenSprawozdanie,
+  onOpenAdres,
 }) => {
   const t = translations[language];
   const notify = useNotify();
@@ -1400,7 +1409,6 @@ const Zebrania: React.FC<Props> = ({
           wspolnoty={wspolnoty}
           ustawienia={ustawienia}
           szablonPlan={zrodlo?.plan ? { plan: zrodlo.plan, nazwa: zrodlo.dane.adresNazwa } : null}
-          zebrania={zebrania}
           onReload={() => reloadEntry(detail.zebranie.id)}
           onOpenUstawienia={() => setUstawieniaOpen(true)}
           onBack={() => navItem.close()}
@@ -1431,6 +1439,7 @@ const Zebrania: React.FC<Props> = ({
           onOpenNotice={(w) => setNotice({ zebranie: detail.zebranie, wersjaId: w.id })}
           onOpenSzablony={onOpenSzablony}
           onOpenSprawozdanie={onOpenSprawozdanie}
+          onOpenAdres={onOpenAdres}
         />
         {modals}
       </>

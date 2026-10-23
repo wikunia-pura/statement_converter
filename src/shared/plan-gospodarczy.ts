@@ -20,10 +20,13 @@
  *   • Two kinds of rows stay out of the plan, by their printed names: the
  *     year's result ("Wynik roku", "Rozliczenie wyniku") and the advance
  *     income the rate "A" is read from (`rodzajWiersza`).
+ *   • Nothing is planned for what came to zero: such an item is no position,
+ *     and the documents leave out a line planned at zero (`kwotaZerowa`) —
+ *     a community without a loan prints no "Spłata kredytu + odsetki".
  */
 
 import {
-  AdresUdzialy,
+  AdresPowierzchnie,
   PlanGospodarczy,
   PlanKategoria,
   PlanKategoriaKosztu,
@@ -155,6 +158,9 @@ export function miesiaceOkresu(od: string, doDnia: string): number {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/** Under a grosz: an amount the plan treats as none — such a line is left out (no loan, no income of a kind). */
+export const kwotaZerowa = (n: number | null | undefined) => n == null || Math.abs(n) < 0.005;
+
 /** Up to the next multiple of `step` (costs are planned generously). */
 export function roundUp(n: number, step: number): number {
   if (n <= 0) return 0;
@@ -178,8 +184,11 @@ export function nazwaNieruchomosci(nazwa: string): string {
 /* --------------------------------- Drafting --------------------------------- */
 
 export interface PlanKontekst {
-  /** The ownership split remembered on the community, if any. */
-  udzialy: AdresUdzialy | null;
+  /**
+   * The community's areas from its address. An area not entered there falls
+   * back: the total to the statement's, the city's and the leased ones to none.
+   */
+  powierzchnie: AdresPowierzchnie | null;
   /** How the property is named on the plan ("ul. Kolberga 8 w Warszawie"). */
   nieruchomosc: string;
   /** Raise every cost by this many percent. */
@@ -247,7 +256,8 @@ export type PozycjaZeSprawozdania = Omit<PlanPozycja, 'id' | 'kwota'>;
  * The plan's positions copied from the statement, without planned amounts yet:
  * one per item of the grouped "Koszty eksploatacji" and side, in its order — a
  * merge is one position, a subcategory's items keep its name as their group.
- * The year's result and the advance income stay out (`rodzajWiersza`).
+ * The year's result and the advance income stay out (`rodzajWiersza`), and so
+ * does an item that came to zero — a community without a loan plans none.
  */
 export function pozycjePlanu(
   spr: Sprawozdanie,
@@ -275,13 +285,10 @@ export function pozycjePlanu(
         .filter((r): r is WierszPlanu => !!r && !r.pomin && !r.zaliczkaA);
       if (parts.length === 0) continue;
       parts.forEach((r) => used.add(rowKey(strona, r.nazwa)));
-      out.push({
-        strona,
-        nazwa: w.nazwa,
-        wiersze: parts.map((r) => r.nazwa),
-        grupa,
-        kwotaRoczna: round2(parts.reduce((n, r) => n + r.roczna, 0)),
-      });
+      // The whole position or nothing: a merge keeps its zero parts, its rows are what it is known by.
+      const kwotaRoczna = round2(parts.reduce((n, r) => n + r.roczna, 0));
+      if (kwotaZerowa(kwotaRoczna)) continue;
+      out.push({ strona, nazwa: w.nazwa, wiersze: parts.map((r) => r.nazwa), grupa, kwotaRoczna });
     }
   }
   return out;
@@ -355,11 +362,9 @@ export function kosztyPoprawione(plan: PlanGospodarczy, step: number): string[] 
   return plan.pozycje.filter((z, i) => kosztZeSprawozdania(z) && z.kwota !== drafted[i]).map((z) => z.nazwa);
 }
 
-/** What a drafted plan is recomputed with: the index, the ownership split and each position's own growth. */
+/** What a drafted plan is recomputed with: the index and each position's own growth. */
 export interface PlanZalozeniaPrzeliczenia {
   wskaznik: number;
-  miastoM2: number;
-  pozytkiM2: number;
   /** Position id → its own growth (%); a statement cost not listed follows the index. */
   wzrosty: Record<string, number>;
 }
@@ -377,14 +382,14 @@ const sameWzrosty = (a: Record<string, number>, b: Record<string, number>) => {
 };
 
 /**
- * The plan with new assumptions, after it was drafted: the ownership split as
- * given and, when the index or a position's own growth changes, every cost
- * from the statement drafted again from last year's figure. Income and
- * positions typed in by hand keep their amounts.
+ * The plan with new assumptions, after it was drafted: when the index or a
+ * position's own growth changes, every cost from the statement drafted again
+ * from last year's figure. Income and positions typed in by hand keep their
+ * amounts.
  */
 export function przeliczZalozenia(plan: PlanGospodarczy, z: PlanZalozeniaPrzeliczenia, step: number): PlanGospodarczy {
   const wskaznik = z.wskaznik || 0;
-  const out = { ...plan, wskaznik, miastoM2: z.miastoM2, pozytkiM2: z.pozytkiM2 };
+  const out = { ...plan, wskaznik };
   if (wskaznik === plan.wskaznik && sameWzrosty(z.wzrosty, wzrostyPlanu(plan))) return out;
   const pozycje = plan.pozycje.map((p) => {
     if (!kosztZeSprawozdania(p)) return p;
@@ -426,7 +431,7 @@ export function planZeSzablonu(plan: PlanGospodarczy, wzor: PlanGospodarczy, ste
   }
   return przeliczZalozenia(
     plan,
-    { wskaznik: wzor.wskaznik, miastoM2: plan.miastoM2, pozytkiM2: plan.pozytkiM2, wzrosty: naPlanie },
+    { wskaznik: wzor.wskaznik, wzrosty: naPlanie },
     step,
   );
 }
@@ -489,7 +494,8 @@ export function przegenerujPozycje(
       targets.push({ i, waga, n: shared.length });
     });
     if (targets.length === 0) {
-      usuniete.push(old.nazwa);
+      // A position planned at zero (one the statement no longer drafts) loses nothing worth a word.
+      if (!kwotaZerowa(old.kwota)) usuniete.push(old.nazwa);
       continue;
     }
     const total = targets.reduce((s, x) => s + x.waga, 0);
@@ -551,7 +557,7 @@ export function planZeSprawozdania(
   const months = miesiaceOkresu(spr.okresOd, spr.okresDo);
   const toYear = (n: number) => (n * 12) / months;
   const rok = Number((spr.okresDo || spr.okresOd).slice(0, 4)) + 1 || new Date().getFullYear() + 1;
-  const area = spr.powierzchnia ?? 0;
+  const area = ctx.powierzchnie?.calkowita || spr.powierzchnia || 0;
   const step = ust.zaokraglenie;
 
   // Part I — "2. Koszty eksploatacji": positions from the grouped items, the advance from the printed rows.
@@ -596,8 +602,8 @@ export function planZeSprawozdania(
     uchwalaNr: uchwalaNr(ust.uchwalaPlanNr, rok),
     stanNaDzien: spr.okresDo,
     powierzchnia: area,
-    miastoM2: ctx.udzialy?.miastoM2 ?? 0,
-    pozytkiM2: ctx.udzialy?.pozytkiM2 ?? 0,
+    miastoM2: ctx.powierzchnie?.miasto ?? 0,
+    pozytkiM2: ctx.powierzchnie?.pozytki ?? 0,
     saldoA: round2(saldoA),
     zaliczkaA: [{ miesiace: 12, stawka: rate(zaliczkaAWplywy) }],
     pozycje,
@@ -762,6 +768,14 @@ export function zaliczkaBilansujaca(plan: PlanGospodarczy, x: ZaliczkaRodzaj): Z
 export type PlanWierszWidoku =
   | { typ: 'grupa'; nazwa: string; kwota: number }
   | { typ: 'pozycja'; pozycja: PlanPozycja; index: number; wGrupie: boolean };
+
+/**
+ * The plan as its documents print it: positions planned at zero are left out
+ * (the totals stay — they add nothing). The editor keeps showing them.
+ */
+export function planDoDruku(plan: PlanGospodarczy): PlanGospodarczy {
+  return { ...plan, pozycje: plan.pozycje.filter((z) => !kwotaZerowa(z.kwota)) };
+}
 
 /** The positions of one side in order, a subcategory's heading before its first position. */
 export function wierszePlanu(plan: PlanGospodarczy, strona: Strona): PlanWierszWidoku[] {

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AdresUdzialy,
+  Adres,
+  AdresPowierzchnie,
   PlanExpected,
   PlanGospodarczy,
   PlanPozycja,
@@ -8,16 +9,15 @@ import {
   PlanOkresZaliczki,
   PlanZaliczkaAiPropozycja,
   ZebraniaUstawienia,
-  ZebraniaWspolnota,
   ZebranieWersja,
 } from '../../shared/types';
-import type { Zebranie } from '../../shared/types';
 import {
   miesiaceOkresu,
   naM2,
   newPozycja,
   newRemontFR,
   kosztyPoprawione,
+  kwotaZerowa,
   kwotyWyliczone,
   okresyLabels,
   dodajZmianeStawki,
@@ -42,9 +42,11 @@ import {
 } from '../../shared/plan-gospodarczy';
 import { formatData, formatKwota, okresLabel, sprawozdanieWersji } from '../../shared/sprawozdanie';
 import { wersjaLabel } from '../../shared/zebrania';
-import { planyZZebran, udzialyDlaNowegoPlanu } from '../../shared/plany';
+import { powierzchnieNieaktualne, zPowierzchniamiAdresu } from '../../shared/plany';
+import { brakujacePowierzchnie, normalizePowierzchnie } from '../../shared/adres-powierzchnie';
 import { formatStamp } from '../../shared/calendar';
 import { translations, Language } from '../translations';
+import { LeaveCheck, useLeaveGuard } from '../navigation';
 import { useNotify } from './Notifications';
 import { ipcErrorMessage, isIpcError } from '../ipcError';
 import { FormField, FormRow, FormSection } from './FormSection';
@@ -606,18 +608,121 @@ export interface PlanOryginal {
 
 /* ================================ The editor ================================ */
 
+/** The three areas as a plan prints them; the city's and the leased one 0 = "brak". */
+const PowierzchnieFakty: React.FC<{ t: T; powierzchnia: number; miastoM2: number; pozytkiM2: number }> = ({
+  t,
+  powierzchnia,
+  miastoM2,
+  pozytkiM2,
+}) => (
+  <dl className="facts">
+    <dt>{t.zplanArea}</dt>
+    <dd>{formatKwota(powierzchnia)}</dd>
+    <dt>{t.zplanCityArea}</dt>
+    <dd>
+      {miastoM2 > 0 ? (
+        <>
+          {formatKwota(miastoM2)}{' '}
+          <span className="zeb-muted">
+            ({t.zplanShare.replace('{p}', String(powierzchnia > 0 ? Math.round((miastoM2 / powierzchnia) * 100) : 0))})
+          </span>
+        </>
+      ) : (
+        t.adresPowBrak
+      )}
+    </dd>
+    <dt>{t.zplanLeaseArea}</dt>
+    <dd>{pozytkiM2 > 0 ? formatKwota(pozytkiM2) : t.adresPowBrak}</dd>
+  </dl>
+);
+
 /**
- * "Nagłówek planu": the property, the resolution, the year and the areas. Its
- * own section above "Założenia planu", which read the areas it holds.
+ * The areas a plan prints, as its community's address gives them — shown, never
+ * typed: they change in Adresy only. Says where they come from, and what is
+ * missing there; with `onPobierz`, offers the address's areas when the plan
+ * holds others.
+ */
+export const PowierzchniePlanu: React.FC<{
+  t: T;
+  /** The areas shown: the plan's, or what a new plan will get. */
+  powierzchnia: number;
+  miastoM2: number;
+  pozytkiM2: number;
+  /** The community's address; null = none linked. */
+  adres: Adres | null;
+  /** A new plan: without the address it takes the statement's total and no other areas. */
+  nowy?: boolean;
+  onOpenAdres?: (adresId: number) => void;
+  /** Present when the address now says otherwise than the plan: puts its areas on the plan. */
+  onPobierz?: () => void;
+}> = ({ t, powierzchnia, miastoM2, pozytkiM2, adres, nowy = false, onOpenAdres, onPobierz }) => {
+  const braki = adres
+    ? brakujacePowierzchnie(adres).map((k) =>
+        k === 'calkowita' ? t.adresMissingPowierzchnia : k === 'miasto' ? t.adresMissingMiasto : t.adresMissingPozytki
+      )
+    : [];
+  const edytuj = adres && onOpenAdres && (
+    <button type="button" className="button button-small button-secondary" onClick={() => onOpenAdres(adres.id)}>
+      <Icon name="map-pin" size={13} /> {t.zplanAreasEdit}
+    </button>
+  );
+  return (
+    <>
+      <PowierzchnieFakty t={t} powierzchnia={powierzchnia} miastoM2={miastoM2} pozytkiM2={pozytkiM2} />
+      {!adres ? (
+        <div className="callout callout--warning">
+          <Icon name="alert-triangle" size={16} />
+          <div className="callout__body">{nowy ? t.zplanAreasNoAdresNew : t.zplanAreasNoAdres}</div>
+        </div>
+      ) : onPobierz ? (
+        <div className="callout callout--info">
+          <Icon name="info" size={16} />
+          <div className="callout__body">
+            {t.zplanAreasStale.replace('{nazwa}', adres.nazwa)}
+            <div className="callout__actions">
+              <button type="button" className="button button-small button-secondary" onClick={onPobierz}>
+                <Icon name="refresh" size={13} /> {t.zplanAreasPull}
+              </button>
+              {edytuj}
+            </div>
+          </div>
+        </div>
+      ) : braki.length > 0 ? (
+        <div className="callout callout--warning">
+          <Icon name="alert-triangle" size={16} />
+          <div className="callout__body">
+            {t.zplanAreasMissing.replace('{nazwa}', adres.nazwa).replace('{list}', braki.join(', '))}
+            {edytuj && <div className="callout__actions">{edytuj}</div>}
+          </div>
+        </div>
+      ) : (
+        <div className="callout callout--muted">
+          <Icon name="map-pin" size={16} />
+          <div className="callout__body">
+            {t.zplanAreasFromAdres.replace('{nazwa}', adres.nazwa)}
+            {edytuj && <div className="callout__actions">{edytuj}</div>}
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+/**
+ * "Nagłówek planu": the property, the resolution, the year and the areas — the
+ * last from the community's address (see `PowierzchniePlanu`).
  */
 const PlanNaglowek: React.FC<{
   t: T;
   plan: PlanGospodarczy;
   onChange: (plan: PlanGospodarczy) => void;
   readOnly?: boolean;
-}> = ({ t, plan, onChange, readOnly = false }) => {
+  adres: Adres | null;
+  onOpenAdres?: (adresId: number) => void;
+}> = ({ t, plan, onChange, readOnly = false, adres, onOpenAdres }) => {
   const s = planSumy(plan);
   const update = (fn: (p: PlanGospodarczy) => PlanGospodarczy) => onChange(fn(plan));
+  const nieaktualne = !readOnly && !!adres && powierzchnieNieaktualne(plan, adres.powierzchnie);
   return (
     <FormSection icon="file-text" title={t.zplanHeader}>
       {readOnly ? (
@@ -630,62 +735,51 @@ const PlanNaglowek: React.FC<{
           <dd>{plan.uchwalaNr || '—'}</dd>
           <dt>{t.zplanYear}</dt>
           <dd>{plan.rok}</dd>
-          <dt>{t.zplanArea}</dt>
-          <dd>{formatKwota(plan.powierzchnia)}</dd>
-          <dt>{t.zplanCityArea}</dt>
-          <dd>
-            {formatKwota(plan.miastoM2)}{' '}
-            <span className="zeb-muted">({t.zplanShare.replace('{p}', String(s.udzialMiasta))})</span>
-          </dd>
-          <dt>{t.zplanLeaseArea}</dt>
-          <dd>{formatKwota(plan.pozytkiM2)}</dd>
         </dl>
       ) : (
-        <>
-          <FormRow>
-            <FormField label={t.zplanProperty} htmlFor="zplan-nier">
-              <input
-                id="zplan-nier"
-                type="text"
-                value={plan.nieruchomosc}
-                onChange={(e) => update((p) => ({ ...p, nieruchomosc: e.target.value }))}
-              />
-            </FormField>
-            <FormField label={t.zplanResolution} htmlFor="zplan-uchw">
-              <input
-                id="zplan-uchw"
-                type="text"
-                value={plan.uchwalaNr}
-                onChange={(e) => update((p) => ({ ...p, uchwalaNr: e.target.value }))}
-              />
-            </FormField>
-            <FormField label={t.zplanYear}>
-              <KwotaInput
-                integer
-                value={plan.rok}
-                onChange={(n) => update((p) => ({ ...p, rok: n }))}
-                ariaLabel={t.zplanYear}
-              />
-            </FormField>
-            <FormField label={t.zplanArea}>
-              <KwotaInput
-                value={plan.powierzchnia}
-                onChange={(n) => update((p) => ({ ...p, powierzchnia: n }))}
-                ariaLabel={t.zplanArea}
-              />
-            </FormField>
-          </FormRow>
-          {/* The cost rise and the ownership split are edited in "Założenia planu" above. */}
-          <dl className="facts">
-            <dt>{t.zplanCityArea}</dt>
-            <dd>
-              {formatKwota(plan.miastoM2)}{' '}
-              <span className="zeb-muted">({t.zplanShare.replace('{p}', String(s.udzialMiasta))})</span>
-            </dd>
-            <dt>{t.zplanLeaseArea}</dt>
-            <dd>{formatKwota(plan.pozytkiM2)}</dd>
-          </dl>
-        </>
+        <FormRow>
+          <FormField label={t.zplanProperty} htmlFor="zplan-nier">
+            <input
+              id="zplan-nier"
+              type="text"
+              value={plan.nieruchomosc}
+              onChange={(e) => update((p) => ({ ...p, nieruchomosc: e.target.value }))}
+            />
+          </FormField>
+          <FormField label={t.zplanResolution} htmlFor="zplan-uchw">
+            <input
+              id="zplan-uchw"
+              type="text"
+              value={plan.uchwalaNr}
+              onChange={(e) => update((p) => ({ ...p, uchwalaNr: e.target.value }))}
+            />
+          </FormField>
+          <FormField label={t.zplanYear}>
+            <KwotaInput
+              integer
+              value={plan.rok}
+              onChange={(n) => update((p) => ({ ...p, rok: n }))}
+              ariaLabel={t.zplanYear}
+            />
+          </FormField>
+        </FormRow>
+      )}
+      {/* A plan shown elsewhere (read-only) keeps the areas it was made with — no
+          word about the address there. */}
+      {readOnly ? (
+        <PowierzchnieFakty t={t} powierzchnia={plan.powierzchnia} miastoM2={plan.miastoM2} pozytkiM2={plan.pozytkiM2} />
+      ) : (
+        <PowierzchniePlanu
+          t={t}
+          powierzchnia={plan.powierzchnia}
+          miastoM2={plan.miastoM2}
+          pozytkiM2={plan.pozytkiM2}
+          adres={adres}
+          onOpenAdres={onOpenAdres}
+          onPobierz={
+            nieaktualne && adres ? () => onChange(zPowierzchniamiAdresu(plan, adres.powierzchnie)) : undefined
+          }
+        />
       )}
       <p className="zeb-muted zplan-private">
         {t.zplanPrivateArea
@@ -716,6 +810,26 @@ const PlanEditor: React.FC<{
   // What a statement cost without a growth of its own rises by — the others' share of the index.
   const pozostale = useMemo(() => wzrostPozostalych(plan.pozycje, plan.wskaznik), [plan.pozycje, plan.wskaznik]);
   const update = (fn: (p: PlanGospodarczy) => PlanGospodarczy) => onChange(fn(plan));
+  // A line planned at zero is not shown, as the documents leave it out; the optional ones
+  // the user fills in (a loan, other inflows) come back by their "+" until the editor closes.
+  const [odsloniete, setOdsloniete] = useState<Set<'kredyt' | 'inne'>>(() => new Set());
+  const widoczna = (pole: 'kredyt' | 'inne', value: number, oryg?: number) =>
+    !kwotaZerowa(value) || (!readOnly && (odsloniete.has(pole) || !kwotaZerowa(oryg)));
+  const odslon = (pole: 'kredyt' | 'inne', label: string) =>
+    readOnly ? null : (
+      <tr className="zplan-sub">
+        <td />
+        <td colSpan={3}>
+          <button
+            type="button"
+            className="button button-small button-ghost"
+            onClick={() => setOdsloniete((prev) => new Set(prev).add(pole))}
+          >
+            <Icon name="plus" size={12} /> {label}
+          </button>
+        </td>
+      </tr>
+    );
   const setPozycja = (index: number, patch: Partial<PlanPozycja>) =>
     update((p) => ({ ...p, pozycje: p.pozycje.map((z, j) => (j === index ? { ...z, ...patch } : z)) }));
 
@@ -842,6 +956,13 @@ const PlanEditor: React.FC<{
 
   const przychody = pozycjeRows('przychod');
   const koszty = pozycjeRows('koszt');
+  // Part II's numbers go to the lines shown; part I's line 4 likewise.
+  const przeksiegowanie = !kwotaZerowa(s.przeksiegowanie);
+  const pokazKredyt = widoczna('kredyt', plan.kredyt, oryginal?.kredyt);
+  const pokazInne = widoczna('inne', plan.inneWplywyB);
+  const pokazSaldoAKoszt = !kwotaZerowa(s.saldoAKoszt);
+  let lpWplywyB = 2;
+  let lpKosztyB = 0;
 
   return (
     <>
@@ -924,13 +1045,15 @@ const PlanEditor: React.FC<{
               </tr>
               {przychody.rows}
               {dodaj('przychod')}
-              <tr>
-                <td className="zplan-lp">4.</td>
-                <td colSpan={2}>{s.saldoANaFundusz > 0 ? t.zplanTransferOut : t.zplanTransfer}</td>
-                <td className="zfin-num">{formatKwota(s.przeksiegowanie)}</td>
-              </tr>
+              {przeksiegowanie && (
+                <tr>
+                  <td className="zplan-lp">4.</td>
+                  <td colSpan={2}>{s.saldoANaFundusz > 0 ? t.zplanTransferOut : t.zplanTransfer}</td>
+                  <td className="zfin-num">{formatKwota(s.przeksiegowanie)}</td>
+                </tr>
+              )}
               <tr className="is-sum">
-                <td className="zplan-lp">5.</td>
+                <td className="zplan-lp">{przeksiegowanie ? '5.' : '4.'}</td>
                 <td colSpan={2}>{t.zplanTotalIncome}</td>
                 <td className="zfin-num">{formatKwota(s.wplywyA)}</td>
               </tr>
@@ -1028,20 +1151,24 @@ const PlanEditor: React.FC<{
               />
               {s.saldoANaFundusz > 0 && (
                 <tr>
-                  <td className="zplan-lp">3.</td>
+                  <td className="zplan-lp">{++lpWplywyB}.</td>
                   <td colSpan={2}>{t.zplanSaldoAInFund}</td>
                   <td className="zfin-num">{formatKwota(s.saldoANaFundusz)}</td>
                 </tr>
               )}
-              <tr>
-                <td className="zplan-lp">{s.saldoANaFundusz > 0 ? '4.' : '3.'}</td>
-                <td colSpan={2}>{t.zplanOtherIncomeB}</td>
-                <td className="zfin-num">
-                  {kwota(plan.inneWplywyB, (n) => update((p) => ({ ...p, inneWplywyB: n })), t.zplanOtherIncomeB)}
-                </td>
-              </tr>
+              {pokazInne ? (
+                <tr>
+                  <td className="zplan-lp">{++lpWplywyB}.</td>
+                  <td colSpan={2}>{t.zplanOtherIncomeB}</td>
+                  <td className="zfin-num">
+                    {kwota(plan.inneWplywyB, (n) => update((p) => ({ ...p, inneWplywyB: n })), t.zplanOtherIncomeB)}
+                  </td>
+                </tr>
+              ) : (
+                odslon('inne', t.zplanAddOtherIncome)
+              )}
               <tr className="is-sum">
-                <td className="zplan-lp">{s.saldoANaFundusz > 0 ? '5.' : '4.'}</td>
+                <td className="zplan-lp">{lpWplywyB + 1}.</td>
                 <td colSpan={2}>{t.zplanTotalIncome}</td>
                 <td className="zfin-num">{formatKwota(s.wplywyB)}</td>
               </tr>
@@ -1060,24 +1187,30 @@ const PlanEditor: React.FC<{
               </tr>
             </thead>
             <tbody>
+              {pokazKredyt ? (
+                <tr>
+                  <td className="zplan-lp">{++lpKosztyB}.</td>
+                  <td>{t.zplanCredit}</td>
+                  <td />
+                  <td className="zfin-num">
+                    {kwota(plan.kredyt, (n) => update((p) => ({ ...p, kredyt: n })), t.zplanCredit, {
+                      value: oryginal?.kredyt,
+                      hint: t.zplanRestoreStatement,
+                    })}
+                  </td>
+                </tr>
+              ) : (
+                odslon('kredyt', t.zplanAddCredit)
+              )}
+              {pokazSaldoAKoszt && (
+                <tr>
+                  <td className="zplan-lp">{++lpKosztyB}.</td>
+                  <td colSpan={2}>{t.zplanSaldoACost}</td>
+                  <td className="zfin-num">{formatKwota(s.saldoAKoszt)}</td>
+                </tr>
+              )}
               <tr>
-                <td className="zplan-lp">1.</td>
-                <td>{t.zplanCredit}</td>
-                <td />
-                <td className="zfin-num">
-                  {kwota(plan.kredyt, (n) => update((p) => ({ ...p, kredyt: n })), t.zplanCredit, {
-                    value: oryginal?.kredyt,
-                    hint: t.zplanRestoreStatement,
-                  })}
-                </td>
-              </tr>
-              <tr>
-                <td className="zplan-lp">2.</td>
-                <td colSpan={2}>{t.zplanSaldoACost}</td>
-                <td className="zfin-num">{formatKwota(s.saldoAKoszt)}</td>
-              </tr>
-              <tr>
-                <td className="zplan-lp">3.</td>
+                <td className="zplan-lp">{++lpKosztyB}.</td>
                 <td colSpan={2}>{t.zplanRepairs}</td>
                 <td className="zfin-num">{formatKwota(s.remontyFR)}</td>
               </tr>
@@ -1149,7 +1282,7 @@ const PlanEditor: React.FC<{
                 </tr>
               )}
               <tr className="is-sum">
-                <td className="zplan-lp">4.</td>
+                <td className="zplan-lp">{lpKosztyB + 1}.</td>
                 <td colSpan={2}>{t.zplanTotalCosts}</td>
                 <td className="zfin-num">{formatKwota(s.kosztyB)}</td>
               </tr>
@@ -1166,37 +1299,16 @@ const PlanEditor: React.FC<{
 
 /* ============================== Shared pieces ============================== */
 
-/** The ownership split is remembered for the community, as the default of its next plan. */
-export async function zapamietajUdzialy(
-  adresNazwa: string,
-  wspolnota: ZebraniaWspolnota | null,
-  plan: PlanGospodarczy
-): Promise<void> {
-  const u = wspolnota?.udzialy;
-  if (!adresNazwa || (u && u.miastoM2 === plan.miastoM2 && u.pozytkiM2 === plan.pozytkiM2)) return;
-  try {
-    await window.electronAPI.setZebraniaWspolnota(adresNazwa, {
-      udzialy: { miastoM2: plan.miastoM2, pozytkiM2: plan.pozytkiM2 },
-    });
-  } catch {
-    // The plan is saved; only the default for the next plan is missing.
-  }
-}
-
-/** What a new plan is drafted with besides the statement: the cost rise and the ownership split. */
+/** What a new plan is drafted with besides the statement and the community's areas: the cost rise. */
 export interface PlanZalozenia {
   wskaznik: number;
-  miastoM2: number;
-  pozytkiM2: number;
 }
 
 export const PlanZalozeniaFields: React.FC<{
   t: T;
   value: PlanZalozenia;
   onChange: (value: PlanZalozenia) => void;
-  /** The plan's total area — when known, the city's share is shown as a percentage. */
-  powierzchnia?: number;
-}> = ({ t, value, onChange, powierzchnia }) => (
+}> = ({ t, value, onChange }) => (
   <FormRow>
     <FormField label={t.zplanIndex} hint={t.zplanIndexHint}>
       <KwotaInput
@@ -1205,42 +1317,39 @@ export const PlanZalozeniaFields: React.FC<{
         ariaLabel={t.zplanIndex}
       />
     </FormField>
-    <FormField
-      label={t.zplanCityArea}
-      hint={
-        powierzchnia
-          ? t.zplanShare.replace('{p}', String(Math.round(((value.miastoM2 || 0) / powierzchnia) * 100)))
-          : undefined
-      }
-    >
-      <KwotaInput
-        value={value.miastoM2}
-        onChange={(n) => onChange({ ...value, miastoM2: n })}
-        ariaLabel={t.zplanCityArea}
-      />
-    </FormField>
-    <FormField label={t.zplanLeaseArea}>
-      <KwotaInput
-        value={value.pozytkiM2}
-        onChange={(n) => onChange({ ...value, pozytkiM2: n })}
-        ariaLabel={t.zplanLeaseArea}
-      />
-    </FormField>
   </FormRow>
 );
 
 /**
- * A new plan drafted from a statement with the given assumptions; its positions
- * follow `pogrupowane` (the meeting version's merges and subcategories) when given.
+ * The areas a new plan of this statement gets: the address's, else the
+ * statement's total and no city's or leased area (as `planZeSprawozdania`).
+ */
+export const powierzchnieNowegoPlanu = (
+  spr: Pick<Sprawozdanie, 'powierzchnia'>,
+  adres: Adres | null
+): { powierzchnia: number; miastoM2: number; pozytkiM2: number } => {
+  const p = adres ? normalizePowierzchnie(adres.powierzchnie) : null;
+  return {
+    powierzchnia: p?.calkowita || spr.powierzchnia || 0,
+    miastoM2: p?.miasto ?? 0,
+    pozytkiM2: p?.pozytki ?? 0,
+  };
+};
+
+/**
+ * A new plan drafted from a statement with the given assumptions and the
+ * community's areas (its address's); its positions follow `pogrupowane` (the
+ * meeting version's merges and subcategories) when given.
  */
 export const draftPlanu = (
   spr: Sprawozdanie,
   ustawienia: ZebraniaUstawienia,
   z: PlanZalozenia,
-  pogrupowane?: Sprawozdanie | null
+  pogrupowane?: Sprawozdanie | null,
+  powierzchnie: AdresPowierzchnie | null = null
 ): PlanGospodarczy =>
   planZeSprawozdania(spr, ustawienia, {
-    udzialy: { miastoM2: z.miastoM2, pozytkiM2: z.pozytkiM2 },
+    powierzchnie,
     nieruchomosc: '',
     wskaznik: z.wskaznik,
     who: '',
@@ -1253,43 +1362,18 @@ export interface PlanSzablonu {
   nazwa: string;
 }
 
-/** A new plan's first draft: the statement with the assumptions, the template's costs keeping their own growth. */
+/** A new plan's first draft: the statement with the assumptions and the community's areas, the template's costs keeping their own growth. */
 export const planNaStart = (
   spr: Sprawozdanie,
   ustawienia: ZebraniaUstawienia,
   z: PlanZalozenia,
   pogrupowane: Sprawozdanie | null | undefined,
-  szablon: PlanSzablonu | null
+  szablon: PlanSzablonu | null,
+  adres: Adres | null
 ): PlanGospodarczy => {
-  const plan = draftPlanu(spr, ustawienia, z, pogrupowane);
+  const plan = draftPlanu(spr, ustawienia, z, pogrupowane, adres?.powierzchnie ?? null);
   return szablon ? zachowajWzrosty(plan, szablon.plan.pozycje, ustawienia.zaokraglenie) : plan;
 };
-
-/**
- * The ownership split a new plan of the community starts with: its previous
- * plan's (in Zebrania or the Plany module), else the one remembered for it.
- */
-export async function udzialyNaStart(
-  nrWsp: number | null,
-  rok: number,
-  wspolnota: ZebraniaWspolnota | null,
-  /** The entries, when the caller already holds them — otherwise they are read here. */
-  zebraniaHeld?: Zebranie[]
-): Promise<AdresUdzialy> {
-  let plany: { nrWsp: number | null; plan: PlanGospodarczy }[] = [];
-  if (nrWsp != null) {
-    try {
-      const [zebrania, wlasne] = await Promise.all([
-        zebraniaHeld ?? window.electronAPI.getZebrania(),
-        window.electronAPI.getPlanyWlasne(),
-      ]);
-      plany = [...planyZZebran(zebrania, wspolnota ? [wspolnota] : []), ...wlasne];
-    } catch {
-      // The remembered split stays as the default.
-    }
-  }
-  return udzialyDlaNowegoPlanu(plany, nrWsp, rok, wspolnota?.udzialy);
-}
 
 /* ================================ The workspace ================================ */
 
@@ -1327,6 +1411,15 @@ export const PlanWorkspace: React.FC<{
   persist: (plan: PlanGospodarczy | null, expected: PlanExpected) => Promise<void>;
   onChanged: () => Promise<void> | void;
   onOpenUstawienia: () => void;
+  /**
+   * Filled with the check the host runs before it leaves the plan: with unsaved
+   * edits it asks to save, leave without saving or stay. Resolves false to stay.
+   */
+  leaveRef?: React.MutableRefObject<LeaveCheck | null>;
+  /** The community's address — where the plan's areas come from. Null = none linked. */
+  adres?: Adres | null;
+  /** Opens the address in Adresy, the one place its areas change. */
+  onOpenAdres?: (adresId: number) => void;
 }> = ({
   language,
   locale,
@@ -1344,6 +1437,9 @@ export const PlanWorkspace: React.FC<{
   persist,
   onChanged,
   onOpenUstawienia,
+  leaveRef,
+  adres = null,
+  onOpenAdres,
 }) => {
   const t = translations[language];
   const notify = useNotify();
@@ -1398,16 +1494,38 @@ export const PlanWorkspace: React.FC<{
     }
   };
 
+  const confirmLeave = async (): Promise<boolean> => {
+    if (!dirty) return true;
+    const choice = await notify.unsaved(t.zplanUnsavedConfirm, {
+      saveLabel: t.podUnsavedSave,
+      discardLabel: t.podUnsavedDiscard,
+      keepLabel: t.podUnsavedKeep,
+    });
+    if (choice === 'keep') return false;
+    return choice === 'discard' || (await save(draft, t.zplanSaved));
+  };
+  useEffect(() => {
+    if (!leaveRef) return;
+    leaveRef.current = confirmLeave;
+    return () => {
+      leaveRef.current = null;
+    };
+  });
+  // The sidebar, Back/Forward and links to other modules ask the same.
+  useLeaveGuard(dirty ? confirmLeave : null);
+
   const regenerate = async () => {
     if (!spr) return;
     if (!(await notify.confirm(t.zplanRegenerateConfirm, { confirmLabel: t.zplanRegenerate })))
       return;
-    const fresh = draftPlanu(
-      spr,
-      ustawienia,
-      { wskaznik: draft.wskaznik, miastoM2: draft.miastoM2, pozytkiM2: draft.pozytkiM2 },
-      pogrupowane
-    );
+    // The address's areas — the rates are worked out per its m². One it has not got
+    // entered: the total is the statement's, the city's and the leased stay the plan's.
+    const p = adres ? normalizePowierzchnie(adres.powierzchnie) : null;
+    const fresh = draftPlanu(spr, ustawienia, { wskaznik: draft.wskaznik }, pogrupowane, {
+      calkowita: p?.calkowita ?? null,
+      miasto: p?.miasto ?? draft.miastoM2,
+      pozytki: p?.pozytki ?? draft.pozytkiM2,
+    });
     // What the statement cannot know stays as the user typed it; a position's own growth stays with it.
     const regenerated = zachowajWzrosty(fresh, draft.pozycje, ustawienia.zaokraglenie);
     setDraft({
@@ -1440,25 +1558,16 @@ export const PlanWorkspace: React.FC<{
   };
 
   // The assumptions as typed, applied to the plan only by "Przelicz" — a discard or reload brings the plan's own.
-  const zalozeniaPlanu: PlanZalozenia = {
-    wskaznik: draft.wskaznik,
-    miastoM2: draft.miastoM2,
-    pozytkiM2: draft.pozytkiM2,
-  };
-  const [zalozenia, setZalozenia] = useState<PlanZalozenia>(zalozeniaPlanu);
+  const [zalozenia, setZalozenia] = useState<PlanZalozenia>({ wskaznik: draft.wskaznik });
   useEffect(() => {
-    setZalozenia(zalozeniaPlanu);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft.wskaznik, draft.miastoM2, draft.pozytkiM2]);
-  const zalozeniaZmienione =
-    zalozenia.wskaznik !== draft.wskaznik ||
-    zalozenia.miastoM2 !== draft.miastoM2 ||
-    zalozenia.pozytkiM2 !== draft.pozytkiM2;
+    setZalozenia({ wskaznik: draft.wskaznik });
+  }, [draft.wskaznik]);
+  const zalozeniaZmienione = zalozenia.wskaznik !== draft.wskaznik;
   const wzrosty = wzrostyPlanu(draft);
   // What the costs without an own growth rise by with the index as typed — shown while some have their own.
   const pozostaleWpisane = wzrostPozostalych(draft.pozycje, zalozenia.wskaznik);
 
-  /** New cost rise and ownership split on a drafted plan: the statement's costs are drafted again. */
+  /** A new cost rise on a drafted plan: the statement's costs are drafted again. */
   const przelicz = async () => {
     const step = ustawienia.zaokraglenie;
     if (zalozenia.wskaznik !== draft.wskaznik) {
@@ -1488,11 +1597,7 @@ export const PlanWorkspace: React.FC<{
       if (!(await notify.confirm(lines.join('\n\n'), { confirmLabel: t.zplanRecalc }))) return;
     }
     setDraft(
-      przeliczZalozenia(
-        draft,
-        { wskaznik: draft.wskaznik, miastoM2: draft.miastoM2, pozytkiM2: draft.pozytkiM2, wzrosty: nowe },
-        step
-      )
+      przeliczZalozenia(draft, { wskaznik: draft.wskaznik, wzrosty: nowe }, step)
     );
   };
 
@@ -1522,7 +1627,7 @@ export const PlanWorkspace: React.FC<{
   // The balances and repayments as the plan's own statement gives them — none from another period.
   const zeSprawozdania = useMemo(() => {
     if (readOnly || !spr || outOfDate) return null;
-    const fresh = draftPlanu(spr, ustawienia, { wskaznik: 0, miastoM2: 0, pozytkiM2: 0 }, pogrupowane);
+    const fresh = draftPlanu(spr, ustawienia, { wskaznik: 0 }, pogrupowane);
     return { saldoA: fresh.saldoA, saldoB: fresh.saldoB, kredyt: fresh.kredyt };
   }, [readOnly, spr, outOfDate, ustawienia, pogrupowane]);
   const oryginal = useMemo<PlanOryginal | null>(
@@ -1619,16 +1724,18 @@ export const PlanWorkspace: React.FC<{
         )}
       </FormSection>
 
-      <PlanNaglowek t={t} plan={draft} onChange={setDraft} readOnly={readOnly} />
+      <PlanNaglowek
+        t={t}
+        plan={draft}
+        onChange={setDraft}
+        readOnly={readOnly}
+        adres={adres}
+        onOpenAdres={onOpenAdres}
+      />
 
       {!readOnly && (
         <FormSection icon="coins" title={t.zplanAssumptions} description={t.zplanAssumptionsHint}>
-          <PlanZalozeniaFields
-            t={t}
-            value={zalozenia}
-            onChange={setZalozenia}
-            powierzchnia={draft.powierzchnia}
-          />
+          <PlanZalozeniaFields t={t} value={zalozenia} onChange={setZalozenia} />
           {Object.keys(wzrosty).length > 0 && (
             <p className="zeb-muted zplan-own-growth__note">
               {pozostaleWpisane == null
@@ -1710,8 +1817,10 @@ const ZebraniePlan: React.FC<{
   language: Language;
   locale: string;
   wersja: ZebranieWersja;
-  adresNazwa: string;
-  wspolnota: ZebraniaWspolnota | null;
+  /** The meeting's community — the plan's areas come from it. Null = none linked. */
+  adres: Adres | null;
+  /** Opens the address in Adresy, the one place its areas change. */
+  onOpenAdres?: (adresId: number) => void;
   ustawienia: ZebraniaUstawienia;
   dataZebrania: string | null;
   onChanged: () => Promise<void>;
@@ -1724,18 +1833,14 @@ const ZebraniePlan: React.FC<{
    * cost rise and its costs' own growth. Absent = no template, or it has no plan.
    */
   szablon?: PlanSzablonu | null;
-  /**
-   * Every Zebrania entry, when the host already holds them: the previous plan
-   * the areas carry over from is looked up among them instead of reading the
-   * whole module (statements and plans included) once more.
-   */
-  zebrania?: Zebranie[];
+  /** The plan's unsaved-edits question, for the host's own exits (see PlanWorkspace). */
+  leaveRef?: React.MutableRefObject<LeaveCheck | null>;
 }> = ({
   language,
   locale,
   wersja,
-  adresNazwa,
-  wspolnota,
+  adres,
+  onOpenAdres,
   ustawienia,
   dataZebrania,
   onChanged,
@@ -1743,7 +1848,7 @@ const ZebraniePlan: React.FC<{
   onGoToSprawozdania,
   onOpenUstawienia,
   szablon = null,
-  zebrania: zebraniaHeld,
+  leaveRef,
 }) => {
   const t = translations[language];
   const notify = useNotify();
@@ -1758,52 +1863,17 @@ const ZebraniePlan: React.FC<{
   const stored = wersja.plan;
 
   const [busy, setBusy] = useState(false);
-  const [zalozenia, setZalozenia] = useState<PlanZalozenia>({
-    wskaznik: szablon?.plan.wskaznik ?? 0,
-    miastoM2: wspolnota?.udzialy?.miastoM2 ?? 0,
-    pozytkiM2: wspolnota?.udzialy?.pozytkiM2 ?? 0,
-  });
+  const [zalozenia, setZalozenia] = useState<PlanZalozenia>({ wskaznik: szablon?.plan.wskaznik ?? 0 });
 
-  // Before there is a plan, the areas carry over from the community's previous plan (in
-  // Zebrania or the Plany module), else as remembered for it — editable from there.
-  const nrWsp = spr?.nrWsp ?? wspolnota?.vdomNr ?? null;
-  const rokNowego = spr ? Number(spr.okresDo.slice(0, 4)) + 1 : null;
-  useEffect(() => {
-    if (stored || rokNowego == null) return;
-    let cancelled = false;
-    const fill = (plany: { nrWsp: number | null; plan: PlanGospodarczy }[]) => {
-      if (cancelled) return;
-      const u = udzialyDlaNowegoPlanu(plany, nrWsp, rokNowego, wspolnota?.udzialy);
-      setZalozenia((z) => ({ ...z, ...u }));
-    };
-    fill([]);
-    if (nrWsp != null) {
-      Promise.all([zebraniaHeld ?? window.electronAPI.getZebrania(), window.electronAPI.getPlanyWlasne()])
-        .then(([zebrania, wlasne]) =>
-          fill([...planyZZebran(zebrania, wspolnota ? [wspolnota] : []), ...wlasne])
-        )
-        .catch(() => {
-          // The remembered split stays as the default.
-        });
-    }
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stored == null, nrWsp, rokNowego, wspolnota?.udzialy?.miastoM2, wspolnota?.udzialy?.pozytkiM2]);
-
-  /** Store the plan with the version; the ownership split is remembered for the community. */
-  const persist = async (plan: PlanGospodarczy | null, expected: PlanExpected) => {
-    await window.electronAPI.setZebranieWersjaPlan(wersja.id, plan, expected);
-    if (plan) await zapamietajUdzialy(adresNazwa, wspolnota, plan);
-  };
+  const persist = (plan: PlanGospodarczy | null, expected: PlanExpected) =>
+    window.electronAPI.setZebranieWersjaPlan(wersja.id, plan, expected).then(() => undefined);
 
   const create = async () => {
     if (!spr) return;
     setBusy(true);
     try {
       // Only onto a version still without a plan: one drafted meanwhile elsewhere is not replaced.
-      await persist(planNaStart(spr, ustawienia, zalozenia, pogrupowane, szablon), { zmieniono: null });
+      await persist(planNaStart(spr, ustawienia, zalozenia, pogrupowane, szablon, adres), { zmieniono: null });
       await onChanged();
       notify.success(t.zplanCreated);
     } catch (err: unknown) {
@@ -1836,6 +1906,9 @@ const ZebraniePlan: React.FC<{
         onChanged={onChanged}
         onOpenUstawienia={onOpenUstawienia}
         bottom={statusBox}
+        leaveRef={leaveRef}
+        adres={adres}
+        onOpenAdres={onOpenAdres}
       />
     );
   }
@@ -1881,6 +1954,7 @@ const ZebraniePlan: React.FC<{
         }
       >
         <PlanZalozeniaFields t={t} value={zalozenia} onChange={setZalozenia} />
+        <PowierzchniePlanu t={t} {...powierzchnieNowegoPlanu(spr, adres)} adres={adres} nowy onOpenAdres={onOpenAdres} />
         {szablon && (
           <p className="zeb-szablon-note">
             <Icon name="copy" size={13} />

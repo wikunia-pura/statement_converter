@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Adres,
   PlanGospodarczy,
   PlanWlasny,
   Spotkanie,
@@ -16,7 +17,7 @@ import {
   planKey,
   planWZebraniach,
   planyZZebran,
-  udzialyDlaNowegoPlanu,
+  adresPoNazwie,
 } from '../../shared/plany';
 import { defaultUstawienia, foldText, nazwaNieruchomosci } from '../../shared/plan-gospodarczy';
 import { okresLabel, sprawozdanieDlaPlanu, sprawozdanieWersji } from '../../shared/sprawozdanie';
@@ -36,13 +37,14 @@ import ZebraniaUstawieniaModal from '../components/ZebraniaUstawieniaModal';
 import ScreenTitle from '../components/ScreenTitle';
 import ModuleTabs, { ModuleTab } from '../components/ModuleTabs';
 import { SprawozdanieRobocze } from '../components/ZebranieSprawozdanie';
-import { useNavItem } from '../navigation';
+import { LeaveCheck, useNavItem } from '../navigation';
 import {
   PlanWorkspace,
   PlanZalozenia,
   PlanZalozeniaFields,
+  PowierzchniePlanu,
   draftPlanu,
-  zapamietajUdzialy,
+  powierzchnieNowegoPlanu,
 } from '../components/ZebraniePlan';
 import { reloadFromServer } from '../dataCache';
 
@@ -109,17 +111,19 @@ const NowyPlanModal: React.FC<{
   t: T;
   lista: SprawozdanieZapisane[];
   wspolnoty: ZebraniaWspolnota[];
+  adresy: Adres[];
   ustawienia: ZebraniaUstawienia;
   wpisy: Wpis[];
   onOpenWpis: (id: string) => void;
   onOpenUstawienia: () => void;
+  onOpenAdres?: (adresId: number) => void;
   onCreated: (plan: PlanWlasny) => void;
   onClose: () => void;
-}> = ({ t, lista, wspolnoty, ustawienia, wpisy, onOpenWpis, onOpenUstawienia, onCreated, onClose }) => {
+}> = ({ t, lista, wspolnoty, adresy, ustawienia, wpisy, onOpenWpis, onOpenUstawienia, onOpenAdres, onCreated, onClose }) => {
   const notify = useNotify();
   const [nr, setNr] = useState<string | null>(null);
   const [sprId, setSprId] = useState<string | null>(null);
-  const [zalozenia, setZalozenia] = useState<PlanZalozenia>({ wskaznik: 0, miastoM2: 0, pozytkiM2: 0 });
+  const [zalozenia, setZalozenia] = useState<PlanZalozenia>({ wskaznik: 0 });
   const [busy, setBusy] = useState(false);
 
   // Every community once, by its vDom number — under the newest name it was printed with.
@@ -156,14 +160,29 @@ const NowyPlanModal: React.FC<{
     setSprId(newest ? String(newest.id) : null);
   };
 
-  // The areas carry over from the community's previous plan (else as remembered for it),
-  // refilled when the community or the year changes — editable from there.
+  // The areas are the community's address's — linked to the statement through its vDom number.
+  const adres = spr
+    ? adresPoNazwie(adresy, wspolnoty.find((x) => x.vdomNr != null && x.vdomNr === spr.nrWsp)?.adresNazwa)
+    : null;
+  // The statement's total — what the plan falls back to while the address has none.
+  const [sprPowierzchnia, setSprPowierzchnia] = useState<number | null>(null);
+  const sprIdWybrane = spr?.id ?? null;
   useEffect(() => {
-    if (!spr || rok == null) return;
-    const w = wspolnoty.find((x) => x.vdomNr === spr.nrWsp);
-    setZalozenia((z) => ({ ...z, ...udzialyDlaNowegoPlanu(wpisy, spr.nrWsp, rok, w?.udzialy) }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spr?.nrWsp, rok]);
+    setSprPowierzchnia(null);
+    if (sprIdWybrane == null) return;
+    let cancelled = false;
+    window.electronAPI
+      .getSprawozdanie(sprIdWybrane)
+      .then((full) => {
+        if (!cancelled) setSprPowierzchnia(full?.dane?.powierzchnia ?? null);
+      })
+      .catch(() => {
+        // Only the preview's fallback is missing; creating reads the statement again.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sprIdWybrane]);
 
   const create = async () => {
     if (!spr || spr.nrWsp == null || existing) return;
@@ -171,10 +190,8 @@ const NowyPlanModal: React.FC<{
     try {
       const full = await window.electronAPI.getSprawozdanie(spr.id);
       if (!full?.dane) throw new Error(t.sprawLoadOneError);
-      const plan = draftPlanu(full.dane, ustawienia, zalozenia);
+      const plan = draftPlanu(full.dane, ustawienia, zalozenia, undefined, adres?.powierzchnie ?? null);
       const created = await window.electronAPI.addPlanWlasny(spr.nrWsp, spr.nazwa, plan);
-      const w = wspolnoty.find((x) => x.vdomNr === spr.nrWsp) ?? null;
-      if (w) await zapamietajUdzialy(w.adresNazwa, w, created.plan);
       notify.success(t.zplanCreated);
       onCreated(created);
     } catch (err: unknown) {
@@ -272,6 +289,15 @@ const NowyPlanModal: React.FC<{
             }
           >
             <PlanZalozeniaFields t={t} value={zalozenia} onChange={setZalozenia} />
+            {spr && (
+              <PowierzchniePlanu
+                t={t}
+                {...powierzchnieNowegoPlanu({ powierzchnia: sprPowierzchnia }, adres)}
+                adres={adres}
+                nowy
+                onOpenAdres={onOpenAdres}
+              />
+            )}
           </FormSection>
         </div>
         <ModalFooter
@@ -297,12 +323,14 @@ const PlanScreen: React.FC<{
   wpisy: Wpis[];
   lista: SprawozdanieZapisane[];
   wspolnoty: ZebraniaWspolnota[];
+  adresy: Adres[];
   ustawienia: ZebraniaUstawienia;
   onOpen: (id: string) => void;
   onBack: () => void;
   onReload: () => Promise<void>;
   onOpenUstawienia: () => void;
   onOpenZebranie: (zebranieId: number) => void;
+  onOpenAdres?: (adresId: number) => void;
 }> = ({
   language,
   locale,
@@ -310,12 +338,14 @@ const PlanScreen: React.FC<{
   wpisy,
   lista,
   wspolnoty,
+  adresy,
   ustawienia,
   onOpen,
   onBack,
   onReload,
   onOpenUstawienia,
   onOpenZebranie,
+  onOpenAdres,
 }) => {
   const t = translations[language];
   const notify = useNotify();
@@ -324,6 +354,15 @@ const PlanScreen: React.FC<{
   const [sprLoading, setSprLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<PlanTab>('plan');
+  // Every way off the plan — back, another community or year, the statement tab —
+  // drops its edits, so each asks first (see PlanWorkspace's `leaveRef`).
+  const leaveRef = useRef<LeaveCheck | null>(null);
+  const leave = async (go: () => void) => {
+    if (!leaveRef.current || (await leaveRef.current())) go();
+  };
+  const open = (id: string) => {
+    if (id !== wpis.id) void leave(() => onOpen(id));
+  };
 
   // The statement a plan made here was drafted from: its community's, of its period.
   const zrodloSpr =
@@ -384,7 +423,7 @@ const PlanScreen: React.FC<{
   const switchWspolnota = (nr: string) => {
     const hits = wpisy.filter((w) => String(w.nrWsp) === nr).sort((a, b) => b.rok - a.rok);
     const target = hits.find((w) => w.rok === wpis.rok) ?? hits[0];
-    if (target && target.id !== wpis.id) onOpen(target.id);
+    if (target) open(target.id);
   };
 
   const removeReplaced = async () => {
@@ -411,6 +450,7 @@ const PlanScreen: React.FC<{
   };
 
   const wspolnota = wspolnoty.find((w) => w.vdomNr != null && w.vdomNr === wpis.nrWsp) ?? null;
+  const adres = adresPoNazwie(adresy, wspolnota?.adresNazwa);
   const tabs: ModuleTab[] = [
     { id: 'sprawozdanie', label: t.zebraniaTabReports, icon: 'bar-chart' },
     { id: 'plan', label: t.zebraniaTabPlan, icon: 'wallet' },
@@ -423,7 +463,7 @@ const PlanScreen: React.FC<{
           <ScreenTitle
             backLabel={t.planyBack}
             crumb={t.planyGospodarcze}
-            onBack={onBack}
+            onBack={() => void leave(onBack)}
             title={t.planyScreenTitle.replace('{rok}', String(wpis.rok)).replace('{name}', wpis.nazwa)}
             meta={
               <>
@@ -501,7 +541,7 @@ const PlanScreen: React.FC<{
                 value: w.id,
                 label: String(w.rok),
               }))}
-              onChange={onOpen}
+              onChange={open}
               ariaLabel={t.planyYear}
               disabled={busy || lata.length < 2}
             />
@@ -510,7 +550,13 @@ const PlanScreen: React.FC<{
       </div>
 
       {wpis.kind === 'wlasny' && (
-        <ModuleTabs tabs={tabs} active={tab} onChange={(id) => setTab(id as PlanTab)} />
+        <ModuleTabs
+          tabs={tabs}
+          active={tab}
+          onChange={(id) => {
+            if (id !== tab) void leave(() => setTab(id as PlanTab));
+          }}
+        />
       )}
       <div className="content-body">
         {wpis.kind === 'wlasny' && tab === 'sprawozdanie' ? (
@@ -563,6 +609,15 @@ const PlanScreen: React.FC<{
                 <Icon name="info" size={16} />
                 <div className="callout__body">
                   {t.planyZebraniaNotice.replace('{v}', wersjaLabel(wpis.src.wersja))}
+                  <div className="callout__actions">
+                    <button
+                      type="button"
+                      className="button button-small button-secondary"
+                      onClick={() => onOpenZebranie(wpis.src.zebranie.id)}
+                    >
+                      <Icon name="edit" size={13} /> {t.planyEditInZebrania}
+                    </button>
+                  </div>
                 </div>
               </div>
             }
@@ -598,16 +653,18 @@ const PlanScreen: React.FC<{
                 </div>
               ) : undefined
             }
+            leaveRef={leaveRef}
             persist={async (plan, expected) => {
               if (!plan) {
                 await window.electronAPI.deletePlanWlasny(wpis.wlasny.id);
                 return;
               }
               await window.electronAPI.setPlanWlasny(wpis.wlasny.id, plan, expected);
-              if (wspolnota) await zapamietajUdzialy(wspolnota.adresNazwa, wspolnota, plan);
             }}
             onChanged={onReload}
             onOpenUstawienia={onOpenUstawienia}
+            adres={adres}
+            onOpenAdres={onOpenAdres}
           />
         )}
       </div>
@@ -629,7 +686,9 @@ const PlanScreen: React.FC<{
 const PlanyGospodarcze: React.FC<{
   language: Language;
   onOpenZebranie: (zebranieId: number) => void;
-}> = ({ language, onOpenZebranie }) => {
+  /** Adresy, on one address's form — where a plan's areas are changed. */
+  onOpenAdres?: (adresId: number) => void;
+}> = ({ language, onOpenZebranie, onOpenAdres }) => {
   const t = translations[language];
   const notify = useNotify();
   const locale = localeOf(language);
@@ -640,6 +699,7 @@ const PlanyGospodarcze: React.FC<{
   const [wlasne, setWlasne] = useState<PlanWlasny[]>([]);
   const [lista, setLista] = useState<SprawozdanieZapisane[]>([]);
   const [wspolnoty, setWspolnoty] = useState<ZebraniaWspolnota[]>([]);
+  const [adresy, setAdresy] = useState<Adres[]>([]);
   const [ustawienia, setUstawienia] = useState<ZebraniaUstawienia>(() => defaultUstawienia());
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -657,7 +717,7 @@ const PlanyGospodarcze: React.FC<{
     if (silent) setIsRefreshing(true);
     else setIsLoading(true);
     try {
-      const [z, s, l, p, sp, w, u] = await Promise.all([
+      const [z, s, l, p, sp, w, u, a] = await Promise.all([
         window.electronAPI.getZebrania(),
         window.electronAPI.getSpotkania(),
         window.electronAPI.getSpotkaniaLokalizacje(),
@@ -665,6 +725,7 @@ const PlanyGospodarcze: React.FC<{
         window.electronAPI.getSprawozdaniaLista(),
         window.electronAPI.getZebraniaWspolnoty(),
         window.electronAPI.getZebraniaUstawienia(),
+        window.electronAPI.getAdresy(),
       ]);
       setZebrania(z);
       setSpotkania(s);
@@ -673,6 +734,7 @@ const PlanyGospodarcze: React.FC<{
       setLista(sp);
       setWspolnoty(w);
       setUstawienia(u);
+      setAdresy(a);
     } catch {
       notify.error(t.planyLoadError);
     } finally {
@@ -766,6 +828,7 @@ const PlanyGospodarcze: React.FC<{
           t={t}
           lista={lista}
           wspolnoty={wspolnoty}
+          adresy={adresy}
           ustawienia={ustawienia}
           wpisy={wpisy}
           onOpenWpis={(id) => {
@@ -773,6 +836,7 @@ const PlanyGospodarcze: React.FC<{
             navItem.open(id, labelOf(id));
           }}
           onOpenUstawienia={() => setUstawieniaOpen(true)}
+          onOpenAdres={onOpenAdres}
           onCreated={(plan) => {
             setCreating(false);
             void load(true).then(() => navItem.open(`w-${plan.id}`, ''));
@@ -812,6 +876,7 @@ const PlanyGospodarcze: React.FC<{
           wpisy={wpisy}
           lista={lista}
           wspolnoty={wspolnoty}
+          adresy={adresy}
           ustawienia={ustawienia}
           // Another plan, picked in place: the same step, not a new one.
           onOpen={(id) => navItem.replace(id, labelOf(id))}
@@ -819,6 +884,7 @@ const PlanyGospodarcze: React.FC<{
           onReload={() => load(true)}
           onOpenUstawienia={() => setUstawieniaOpen(true)}
           onOpenZebranie={onOpenZebranie}
+          onOpenAdres={onOpenAdres}
         />
         {modals}
       </>

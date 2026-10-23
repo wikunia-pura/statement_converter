@@ -86,10 +86,72 @@ export const RELEASES: Release[] = [
   {
     version: '11.0.2',
     date: '2026-10-23',
-    title: 'Pliki z dysku sieciowego znów się otwierają',
+    title: 'Powierzchnie w Adresach, czytelniejsze plany i pliki z dysku sieciowego',
     tagline:
-      'Na Windowsie wyciąg leżący na zmapowanym dysku sieciowym (np. W:) dawał komunikat „Plik nie istnieje”, choć skan go widział. Teraz otwiera się jak każdy inny.',
+      'Powierzchnie wspólnoty wpisujesz raz, w Adresach — plany gospodarcze biorą je stamtąd i pomijają pozycje z samymi zerami. Wyciągi z dysku sieciowego znów się otwierają, a aplikacja nie wylogowuje po wybudzeniu komputera.',
+    stats: [
+      { value: '1', label: 'nowa funkcja' },
+      { value: '1', label: 'usprawnienie' },
+      { value: '2', label: 'poprawki' },
+    ],
     highlights: [
+      {
+        id: 'adresy-powierzchnie',
+        kind: 'new',
+        icon: 'home',
+        title: 'Powierzchnie wspólnoty w Adresach',
+        summary:
+          'Powierzchnia użytkowa całkowita, powierzchnia M.St. Warszawa i pożytki są teraz częścią adresu wspólnoty. Plany gospodarcze biorą nagłówek stąd — w planie tych wartości się już nie zmienia.',
+        where: ['Adresy', 'Powierzchnie'],
+        steps: [
+          {
+            do: 'Otwórz wspólnotę w Adresach i rozwiń sekcję „Powierzchnie”.',
+            then: 'Widzisz trzy pola; wartości, które plany pamiętały do tej pory, są już przeniesione.',
+          },
+          {
+            do: 'Wpisz brakujące powierzchnie. Gdy miasto nie ma lokali albo wspólnota nie ma pożytków, zaznacz „Miasto nie ma tu lokali” / „Wspólnota nie ma pożytków”.',
+            then: 'Plan pokaże taki udział jako brak (0 m²).',
+          },
+          {
+            do: 'Na liście Adresów przełącz filtr na „Z brakami”.',
+            then: 'Zostają wspólnoty, którym czegoś brakuje — powierzchni albo jednostki ZGN.',
+          },
+        ],
+        expect: [
+          'Wspólnotę bez jednostki miasta oznaczysz w sekcji ZGN polem „Wspólnota nie ma jednostki ZGN” — lista przestaje zgłaszać ten brak.',
+        ],
+      },
+      {
+        id: 'plany-powierzchnie-z-adresu',
+        kind: 'improved',
+        icon: 'file-text',
+        title: 'Plan gospodarczy: powierzchnie z adresu, bez pozycji z samymi zerami',
+        summary:
+          'Nagłówek planu pokazuje powierzchnie z adresu wspólnoty, a kategorie i pozycje z samymi zerami (np. kredyt wspólnoty bez kredytu) są pomijane — w podglądzie, w PDF i w Excelu.',
+        where: ['Zebrania', 'Plan gospodarczy', 'Nagłówek planu'],
+        steps: [
+          {
+            do: 'Otwórz plan wspólnoty, której powierzchnie zmieniły się w Adresach.',
+            then: 'Nagłówek mówi, że adres ma teraz inne powierzchnie niż plan.',
+          },
+          {
+            do: 'Kliknij „Pobierz z adresu”, a potem zapisz plan.',
+            then: 'Plan liczy stawki za m² od nowych powierzchni.',
+          },
+        ],
+        expect: [
+          'Spłatę kredytu i inne wpływy dodajesz przyciskami „Dodaj spłatę kredytu” / „Dodaj inne wpływy”, gdy wspólnota je ma.',
+          'Wyjście z niezapisanego planu, deklaracji DN-1, PIT albo zeznania CIT — także przez menu boczne albo Wstecz — najpierw pyta, czy zapisać zmiany.',
+        ],
+      },
+      {
+        id: 'sesja-po-wybudzeniu',
+        kind: 'fixed',
+        icon: 'shield',
+        title: 'Nie wylogowuje po wybudzeniu komputera',
+        summary:
+          'Gdy komputer wybudzi się ze snu albo aplikacja wystartuje, zanim jest sieć, sesja zostaje i odświeża się przy pierwszym połączeniu — zamiast odsyłać do ekranu logowania.',
+      },
       {
         id: 'otwieranie-z-dysku-sieciowego',
         kind: 'fixed',

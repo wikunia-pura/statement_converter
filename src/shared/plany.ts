@@ -4,7 +4,9 @@
  * process (which refuses a module plan Zebrania already has) and the renderer.
  */
 
-import { AdresUdzialy, PlanGospodarczy, Zebranie, ZebraniaWspolnota, ZebranieWersja } from './types';
+import { Adres, AdresPowierzchnie, PlanGospodarczy, Zebranie, ZebraniaWspolnota, ZebranieWersja } from './types';
+import { normalizePowierzchnie } from './adres-powierzchnie';
+import { foldText } from './text';
 import { sortWersje } from './zebrania';
 
 /** A plan of a Zebrania entry: the newest version that has one. */
@@ -44,24 +46,37 @@ export function planWZebraniach(
   return key ? plany.find((p) => planKey(p.nrWsp, p.plan.rok) === key) : undefined;
 }
 
+/** A community's address by the name a meeting or the Zebrania module keeps for it. */
+export function adresPoNazwie(adresy: Adres[], nazwa: string | null | undefined): Adres | null {
+  if (!nazwa) return null;
+  const key = foldText(nazwa);
+  return adresy.find((a) => foldText(a.nazwa) === key) ?? null;
+}
+
 /**
- * The ownership split a new plan of this community and year starts from: the
- * city's and the leased areas of its newest earlier plan (Zebrania or this
- * module), else what was remembered for the community. Only a default — the
- * new plan's fields stay editable.
+ * The plan with its community's areas, as the address keeps them. An area the
+ * address has not got entered stays as the plan has it — for the total, as the
+ * statement printed it when the plan was drafted.
  */
-export function udzialyDlaNowegoPlanu(
-  plany: { nrWsp: number | null; plan: PlanGospodarczy }[],
-  nrWsp: number | null,
-  rok: number,
-  zapamietane: AdresUdzialy | null | undefined,
-): AdresUdzialy {
-  const poprzedni =
-    nrWsp == null
-      ? undefined
-      : plany
-          .filter((p) => p.nrWsp === nrWsp && p.plan.rok < rok)
-          .sort((a, b) => b.plan.rok - a.plan.rok)[0]?.plan;
-  if (poprzedni) return { miastoM2: poprzedni.miastoM2, pozytkiM2: poprzedni.pozytkiM2 };
-  return { miastoM2: zapamietane?.miastoM2 ?? 0, pozytkiM2: zapamietane?.pozytkiM2 ?? 0 };
+export function zPowierzchniamiAdresu(
+  plan: PlanGospodarczy,
+  powierzchnie: AdresPowierzchnie | null | undefined,
+): PlanGospodarczy {
+  if (!powierzchnie) return plan;
+  const p = normalizePowierzchnie(powierzchnie);
+  return {
+    ...plan,
+    powierzchnia: p.calkowita || plan.powierzchnia,
+    miastoM2: p.miasto ?? plan.miastoM2,
+    pozytkiM2: p.pozytki ?? plan.pozytkiM2,
+  };
+}
+
+/** Whether the address now gives the plan other areas than it holds — offered as "Pobierz z adresu". */
+export function powierzchnieNieaktualne(
+  plan: PlanGospodarczy,
+  powierzchnie: AdresPowierzchnie | null | undefined,
+): boolean {
+  const z = zPowierzchniamiAdresu(plan, powierzchnie);
+  return z.powierzchnia !== plan.powierzchnia || z.miastoM2 !== plan.miastoM2 || z.pozytkiM2 !== plan.pozytkiM2;
 }

@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useCallback, useMemo, useState, useEffect } from 'react';
+import React, { Suspense, lazy, useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import Converter from './views/Converter';
 import Settings from './views/Settings';
 import History from './views/History';
@@ -50,7 +50,7 @@ import { SpotkanieStateFilter, monthOfDayKey, toDayKey } from '../shared/calenda
 import { DEFAULT_ZADANIA_FILTER, ZadaniaFilterSeed } from '../shared/zadania';
 import { releaseForVersion, shouldShowWhatsNew } from '../shared/release-notes';
 import { greetingName } from '../shared/app-users';
-import { NavigationProvider, HeaderNav } from './navigation';
+import { NavigationProvider, HeaderNav, LeaveCheck } from './navigation';
 
 /*
  * Views loaded on first visit. The app opens on the Pulpit, and the Converter
@@ -382,6 +382,8 @@ const App: React.FC = () => {
   // When the Converter asks "+ Add address with this account", we switch to the
   // Adresy view and pass this value through one render so the modal can prefill it.
   const [adresyPrefillAccount, setAdresyPrefillAccount] = useState<string | null>(null);
+  // A budget plan's "Edytuj w Adresach": the address whose edit modal Adresy opens on arrival.
+  const [adresyOpenId, setAdresyOpenId] = useState<number | null>(null);
   const [appVersion, setAppVersion] = useState<string>('1.0.0');
   const [session, setSession] = useState<{ email: string; userId: string } | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
@@ -436,26 +438,71 @@ const App: React.FC = () => {
     // Same reasoning as the effect below: `navigate` is stable enough.
   }, []);
 
-  /** Open the board, on one card when there is one — what a clicked notification asks for. */
-  const openZadaniaCard = (zadanieId?: number) => {
-    setZadaniaSeed(DEFAULT_ZADANIA_FILTER);
-    setZadaniaOpen(zadanieId === undefined ? null : { id: zadanieId, nonce: Date.now() });
-    navigate('zadania');
+  /** The open screen's unsaved-edits question (`useLeaveGuard`); null when it has nothing to lose. */
+  const leaveGuard = useRef<LeaveCheck | null>(null);
+  // The question is on screen: another Back or click waits for its answer instead of asking again.
+  const leaveAsking = useRef(false);
+  // The answer let the user go: whatever `go` navigates through is not asked about again.
+  const leaveGranted = useRef(false);
+
+  /**
+   * Take the user elsewhere once the open screen lets them. Without a question
+   * pending it runs at once, in the same tick, exactly as before there were
+   * questions. Wrap the whole move — state a module is opened with included —
+   * so "Wróć do edycji" leaves nothing half-done behind.
+   */
+  const leaveThen = (go: () => void) => {
+    const check = leaveGuard.current;
+    if (!check || leaveGranted.current) {
+      go();
+      return;
+    }
+    if (leaveAsking.current) return;
+    leaveAsking.current = true;
+    void check()
+      .then((ok) => {
+        if (!ok) return;
+        leaveGranted.current = true;
+        try {
+          go();
+        } finally {
+          leaveGranted.current = false;
+        }
+      })
+      .finally(() => {
+        leaveAsking.current = false;
+      });
   };
+
+  /** Open the board, on one card when there is one — what a clicked notification asks for. */
+  const openZadaniaCard = (zadanieId?: number) =>
+    leaveThen(() => {
+      setZadaniaSeed(DEFAULT_ZADANIA_FILTER);
+      setZadaniaOpen(zadanieId === undefined ? null : { id: zadanieId, nonce: Date.now() });
+      navigate('zadania');
+    });
 
   /** Open Kalendarz on one meeting — it moves to the meeting's month by itself. */
-  const openSpotkanie = (spotkanieId: number, edit = false) => {
-    setKalFocus({ spotkanieId, nonce: Date.now(), edit });
-    navigate('kalendarz', 'calendar');
-  };
+  const openSpotkanie = (spotkanieId: number, edit = false) =>
+    leaveThen(() => {
+      setKalFocus({ spotkanieId, nonce: Date.now(), edit });
+      navigate('kalendarz', 'calendar');
+    });
 
   /** Open Zebrania on one entry — "Otwórz w Zebraniach" on a meeting card. */
-  const openZebranie = (zebranieId: number, tab?: ZebranieTab) => {
-    setZebraniaOpen({ id: zebranieId, nonce: Date.now(), tab });
-    // Straight onto the meeting's screen, one step: Back returns to where the
-    // link was clicked. The view names the entry once the meeting is loaded.
-    navigate('zebrania', undefined, { id: String(zebranieId), label: '' });
-  };
+  const openZebranie = (zebranieId: number, tab?: ZebranieTab) =>
+    leaveThen(() => {
+      setZebraniaOpen({ id: zebranieId, nonce: Date.now(), tab });
+      // Straight onto the meeting's screen, one step: Back returns to where the
+      // link was clicked. The view names the entry once the meeting is loaded.
+      navigate('zebrania', undefined, { id: String(zebranieId), label: '' });
+    });
+
+  const openAdres = (adresId: number) =>
+    leaveThen(() => {
+      setAdresyOpenId(adresId);
+      navigateNow('adresy');
+    });
 
   /** The bell's list sends a click to the same place its desktop toast would. */
   const openNotificationTarget = (target: NotificationTarget) => {
@@ -528,8 +575,13 @@ const App: React.FC = () => {
    * And navigating to the entry directly behind the current one is treated as
    * Back rather than as a new entry — that is what lets a view's own "back to
    * the list" button keep the forward history instead of stacking duplicates.
+   *
+   * A screen with unsaved edits is asked first (`leaveThen`).
    */
-  const navigate = (view: View, tab?: string, item?: { id: string; label: string }) => {
+  const navigate = (view: View, tab?: string, item?: { id: string; label: string }) =>
+    leaveThen(() => navigateNow(view, tab, item));
+
+  const navigateNow = (view: View, tab?: string, item?: { id: string; label: string }) => {
     applyTab(view, tab);
     setNav((prev) => {
       const here = prev.stack[prev.index];
@@ -602,8 +654,9 @@ const App: React.FC = () => {
     });
 
   // Stable, so the navigation context only changes when where the user is does.
-  const goBack = useCallback(() => step(-1), []);
-  const goForward = useCallback(() => step(1), []);
+  // `leaveThen` reads only refs and stable setters, so the first render's is good for good.
+  const goBack = useCallback(() => leaveThen(() => step(-1)), []);
+  const goForward = useCallback(() => leaveThen(() => step(1)), []);
 
   // Whatever moved the history — a button, Alt+←, the mouse — the module ends
   // up on the tab that entry recorded, not on its most recently used one.
@@ -842,10 +895,11 @@ const App: React.FC = () => {
       id: 'zebrania',
       icon: 'file-check',
       label: t.zebrania,
-      onClick: () => {
-        setZebraniaOpen(null);
-        setCurrentView('zebrania');
-      },
+      onClick: () =>
+        leaveThen(() => {
+          setZebraniaOpen(null);
+          setCurrentView('zebrania');
+        }),
     },
     sprawozdania: {
       id: 'sprawozdania',
@@ -875,11 +929,12 @@ const App: React.FC = () => {
       id: 'zadania',
       icon: 'clipboard',
       label: t.zadania,
-      onClick: () => {
-        setZadaniaSeed(DEFAULT_ZADANIA_FILTER);
-        setZadaniaOpen(null);
-        setCurrentView('zadania');
-      },
+      onClick: () =>
+        leaveThen(() => {
+          setZadaniaSeed(DEFAULT_ZADANIA_FILTER);
+          setZadaniaOpen(null);
+          setCurrentView('zadania');
+        }),
     },
     converter: {
       id: 'converter',
@@ -927,10 +982,11 @@ const App: React.FC = () => {
       label: t.whatsNew,
       title: hasUnreadRelease ? t.whatsNewNavDot : t.whatsNew,
       badge: hasUnreadRelease,
-      onClick: () => {
-        setCurrentView('conowego');
-        markReleaseSeen();
-      },
+      onClick: () =>
+        leaveThen(() => {
+          setCurrentView('conowego');
+          markReleaseSeen();
+        }),
     },
     settings: {
       id: 'settings',
@@ -1009,6 +1065,7 @@ const App: React.FC = () => {
       item={nav.stack[nav.index].item ?? null}
       openItem={openItem}
       closeItem={closeItem}
+      leaveGuard={leaveGuard}
     >
     {splash}
     {/* The Converter tab's run of conversions: here, not in the view, so leaving
@@ -1199,6 +1256,8 @@ const App: React.FC = () => {
             language={language}
             prefillAccountNumber={adresyPrefillAccount}
             onPrefillConsumed={() => setAdresyPrefillAccount(null)}
+            openAdresId={adresyOpenId}
+            onOpenAdresConsumed={() => setAdresyOpenId(null)}
           />
         )}
         {currentView === 'banki' && <Banki language={language} />}
@@ -1331,11 +1390,14 @@ const App: React.FC = () => {
             userEmail={session.email}
             openRequest={zebraniaOpen}
             onOpenRequestHandled={() => setZebraniaOpen(null)}
-            onOpenSpotkanie={(s) => {
-              setKalMonth(monthOfDayKey(toDayKey(s.startsAt)));
-              openSpotkanie(s.id);
-            }}
+            onOpenSpotkanie={(s) =>
+              leaveThen(() => {
+                setKalMonth(monthOfDayKey(toDayKey(s.startsAt)));
+                openSpotkanie(s.id);
+              })
+            }
             onOpenSzablony={() => navigate('mailing', 'templates')}
+            onOpenAdres={openAdres}
             onOpenSprawozdanie={(id) =>
               // Straight onto the statement's screen; the view names it once loaded.
               navigate('sprawozdania', undefined, id != null ? { id: String(id), label: '' } : undefined)
@@ -1346,7 +1408,11 @@ const App: React.FC = () => {
           <Sprawozdania language={language} onOpenZebranie={(id) => openZebranie(id, 'sprawozdania')} />
         )}
         {currentView === 'plany' && (
-          <PlanyGospodarcze language={language} onOpenZebranie={(id) => openZebranie(id, 'plan')} />
+          <PlanyGospodarcze
+            language={language}
+            onOpenZebranie={(id) => openZebranie(id, 'plan')}
+            onOpenAdres={openAdres}
+          />
         )}
         {currentView === 'podatki' && (
           <>

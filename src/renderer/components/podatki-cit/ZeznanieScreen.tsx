@@ -25,6 +25,7 @@ import SearchableSelect from '../SearchableSelect';
 import { czekaNaUpo } from '../../../shared/e-deklaracje';
 import Tip from '../Tip';
 import { translations, Language } from '../../translations';
+import { useLeaveGuard } from '../../navigation';
 import { useNotify } from '../Notifications';
 import { FormField, FormRow, FormSection } from '../FormSection';
 import { ModalFooter } from '../Modal';
@@ -201,18 +202,23 @@ export const ZeznanieScreen: React.FC<{
     }));
   };
 
+  /** Unsaved edits: save, leave without saving, or stay — resolves false to stay. */
+  const confirmLeave = async (): Promise<boolean> => {
+    if (!dirty) return true;
+    const canSave = !!rekord || canAdd;
+    const choice = await notify.unsaved(canSave ? t.podUnsavedConfirm : t.podUnsavedNoSave, {
+      saveLabel: t.podUnsavedSave,
+      discardLabel: t.podUnsavedDiscard,
+      keepLabel: t.podUnsavedKeep,
+      canSave,
+    });
+    if (choice === 'keep') return false;
+    return choice === 'discard' || (await save());
+  };
+  // The sidebar, Back/Forward and links to other modules ask the same.
+  useLeaveGuard(dirty ? confirmLeave : null);
   const back = async () => {
-    if (dirty) {
-      const canSave = !!rekord || canAdd;
-      const choice = await notify.unsaved(canSave ? t.podUnsavedConfirm : t.podUnsavedNoSave, {
-        saveLabel: t.podUnsavedSave,
-        discardLabel: t.podUnsavedDiscard,
-        keepLabel: t.podUnsavedKeep,
-        canSave,
-      });
-      if (choice === 'keep' || (choice === 'save' && !(await save()))) return;
-    }
-    onBack();
+    if (await confirmLeave()) onBack();
   };
 
   const save = async () => {

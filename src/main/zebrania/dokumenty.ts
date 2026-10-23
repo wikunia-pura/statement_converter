@@ -34,7 +34,16 @@ import {
   MAIL_PAGE_COLOR,
   MAIL_TEXT_COLOR,
 } from '../../shared/mailing-logo';
-import { naM2, nazwaNieruchomosci, okresyLabels, planSumy, PlanSumy, wierszePlanu } from '../../shared/plan-gospodarczy';
+import {
+  kwotaZerowa,
+  naM2,
+  nazwaNieruchomosci,
+  okresyLabels,
+  planDoDruku,
+  planSumy,
+  PlanSumy,
+  wierszePlanu,
+} from '../../shared/plan-gospodarczy';
 import {
   bezZerowych,
   formatData,
@@ -384,7 +393,22 @@ function przeksiegowanieLabel(s: PlanSumy): string {
     : 'Dyspozycje dot. salda — przeksięgowanie z funduszu remontowego';
 }
 
-export function planHtml(plan: PlanGospodarczy, ctx: DokumentKontekst): string {
+/**
+ * Lp. of a plan table whose optional lines are left out at zero: numbers only
+ * the lines printed, and the total names them — "RAZEM: 1+2+4" never happens.
+ */
+function numeracja() {
+  const nums: number[] = [];
+  return {
+    next: () => `${nums.push(nums.length + 1)}.`,
+    razemLp: () => (nums.length > 0 ? `${nums.length + 1}.` : ''),
+    razem: () => (nums.length > 1 ? `RAZEM: ${nums.join('+')}` : 'RAZEM'),
+  };
+}
+
+export function planHtml(pelny: PlanGospodarczy, ctx: DokumentKontekst): string {
+  // A line planned at zero is left out — a community without a loan prints no loan line.
+  const plan = planDoDruku(pelny);
   const s = planSumy(plan);
   const stan = formatData(plan.stanNaDzien);
   const prevYear = (plan.stanNaDzien || '').slice(0, 4) || String(plan.rok - 1);
@@ -411,15 +435,15 @@ export function planHtml(plan: PlanGospodarczy, ctx: DokumentKontekst): string {
     .join('');
   const razemLp = Array.from({ length: lp }, (_, i) => i + 1).join('+');
 
+  const nI = numeracja();
   const czescI = `
 <h2><span>Część I — wpływy z zaliczki „A” na koszty zarządu nieruchomością wspólną</span></h2>
 <table><thead><tr><th class="l">Lp.</th><th class="l">Rodzaj przychodów</th><th>W przeliczeniu na 1 m²</th><th>Planowane wpływy</th></tr></thead><tbody>
-${row('1.', `Saldo zaliczki „A” na ${stan}`, '', plan.saldoA)}
-${zaliczkaRows('2.', 'Zaliczka „A”:', plan.zaliczkaA, s.zaliczkaA, plan.rok)}
-${row('3.', 'Przychód z nieruchomości wspólnej, w tym:', '', s.przychodyRazem, 'group')}
-${przychody}
-${row('4.', przeksiegowanieLabel(s), '', s.przeksiegowanie)}
-${row('5.', 'RAZEM: 1+2+3+4', '', s.wplywyA, 'sum')}
+${row(nI.next(), `Saldo zaliczki „A” na ${stan}`, '', plan.saldoA)}
+${zaliczkaRows(nI.next(), 'Zaliczka „A”:', plan.zaliczkaA, s.zaliczkaA, plan.rok)}
+${przychody ? row(nI.next(), 'Przychód z nieruchomości wspólnej, w tym:', '', s.przychodyRazem, 'group') + przychody : ''}
+${kwotaZerowa(s.przeksiegowanie) ? '' : row(nI.next(), przeksiegowanieLabel(s), '', s.przeksiegowanie)}
+${row(nI.razemLp(), nI.razem(), '', s.wplywyA, 'sum')}
 </tbody></table>
 
 <h3>Koszty</h3>
@@ -429,26 +453,27 @@ ${row(lp > 0 ? `${lp + 1}.` : '', lp > 1 && lp <= 12 ? `RAZEM: ${razemLp}` : 'RA
 </tbody></table>
 ${Math.abs(s.roznicaA) >= 0.01 ? `<div class="balance${s.roznicaA > 0 ? ' ok' : ''}">${s.roznicaA > 0 ? `Nadwyżka części I: wpływy przewyższają koszty o ${num(s.roznicaA)} zł.` : `Niedobór części I: koszty przewyższają wpływy o ${num(-s.roznicaA)} zł.`}</div>` : ''}`;
 
-  const remonty = plan.remontyFR.filter((r) => r.opis.trim() || r.kwota);
+  const remonty = plan.remontyFR.filter((r) => !kwotaZerowa(r.kwota));
   // A positive balance moved over from part I is the fund's own inflow line.
   const naFundusz = s.saldoANaFundusz > 0;
+  const nIIw = numeracja();
+  const nIIk = numeracja();
   const czescII = `
 <h2><span>Część II — wpływy z zaliczki „B” na fundusz remontowy</span></h2>
 <table><thead><tr><th class="l">Lp.</th><th class="l">Rodzaj przychodów</th><th>W przeliczeniu na 1 m²</th><th>Planowane wpływy</th></tr></thead><tbody>
-${row('1.', `Saldo zaliczki „B” na ${stan}`, '', plan.saldoB)}
-${zaliczkaRows('2.', 'Zaliczka „B”:', plan.zaliczkaB, s.zaliczkaB, plan.rok)}
-${naFundusz ? row('3.', `Saldo zaliczki „A” za ${prevYear} r. — przeksięgowanie nadwyżki`, '', s.saldoANaFundusz) : ''}
-${row(naFundusz ? '4.' : '3.', 'Inne wpływy', '', plan.inneWplywyB)}
-${row(naFundusz ? '5.' : '4.', naFundusz ? 'RAZEM: 1+2+3+4' : 'RAZEM: 1+2+3', '', s.wplywyB, 'sum')}
+${row(nIIw.next(), `Saldo zaliczki „B” na ${stan}`, '', plan.saldoB)}
+${zaliczkaRows(nIIw.next(), 'Zaliczka „B”:', plan.zaliczkaB, s.zaliczkaB, plan.rok)}
+${naFundusz ? row(nIIw.next(), `Saldo zaliczki „A” za ${prevYear} r. — przeksięgowanie nadwyżki`, '', s.saldoANaFundusz) : ''}
+${kwotaZerowa(plan.inneWplywyB) ? '' : row(nIIw.next(), 'Inne wpływy', '', plan.inneWplywyB)}
+${row(nIIw.razemLp(), nIIw.razem(), '', s.wplywyB, 'sum')}
 </tbody></table>
 
 <h3>Koszty pokrywane z funduszu remontowego</h3>
 <table><thead><tr><th class="l">Lp.</th><th class="l">Rodzaj kosztów</th><th></th><th>Planowane koszty</th></tr></thead><tbody>
-${row('1.', 'Spłata kredytu + odsetki', '', plan.kredyt)}
-${row('2.', `Saldo zaliczki „A” za ${prevYear} r.`, '', s.saldoAKoszt)}
-${row('3.', 'Remonty, w tym:', '', s.remontyFR, 'group')}
-${remonty.map((r) => row('', r.opis || '—', '', r.kwota, 'subrow')).join('')}
-${row('4.', 'RAZEM: 1+2+3', '', s.kosztyB, 'sum')}
+${kwotaZerowa(plan.kredyt) ? '' : row(nIIk.next(), 'Spłata kredytu + odsetki', '', plan.kredyt)}
+${kwotaZerowa(s.saldoAKoszt) ? '' : row(nIIk.next(), `Saldo zaliczki „A” za ${prevYear} r.`, '', s.saldoAKoszt)}
+${remonty.length ? row(nIIk.next(), 'Remonty, w tym:', '', s.remontyFR, 'group') + remonty.map((r) => row('', r.opis || '—', '', r.kwota, 'subrow')).join('') : ''}
+${row(nIIk.razemLp(), nIIk.razem(), '', s.kosztyB, 'sum')}
 </tbody></table>`;
 
   const data = ctx.dataZebrania ? formatData(toDayKey(ctx.dataZebrania)) : '……………………';
@@ -697,7 +722,9 @@ export async function sprawozdanieXlsx(pelne: Sprawozdanie, adres: string, outPa
   await wb.xlsx.writeFile(outPath);
 }
 
-export async function planXlsx(plan: PlanGospodarczy, ctx: DokumentKontekst, outPath: string): Promise<void> {
+export async function planXlsx(pelny: PlanGospodarczy, ctx: DokumentKontekst, outPath: string): Promise<void> {
+  // The same lines as the PDF: what is planned at zero is left out.
+  const plan = planDoDruku(pelny);
   const s = planSumy(plan);
   const wb = new ExcelJS.Workbook();
   wb.creator = COMPANY;
@@ -818,19 +845,26 @@ export async function planXlsx(plan: PlanGospodarczy, ctx: DokumentKontekst, out
   // Część I
   sectionTitle(ws, 'Część I — wpływy z zaliczki „A” na koszty zarządu nieruchomością wspólną', COLS);
   headerRow(ws, ['Lp.', 'Rodzaj przychodów', 'W przeliczeniu na 1 m²', 'Planowane wpływy']);
-  const rSaldoA = line('1.', `Saldo zaliczki „A” na ${formatData(plan.stanNaDzien)}`, plan.saldoA).number;
-  const zaRows = zaliczkaBlock('2.', 'Zaliczka „A”:', plan.zaliczkaA, s.zaliczkaA);
-  const r3 = line('3.', 'Przychód z nieruchomości wspólnej, w tym:', null);
-  r3.getCell(4).value = f(sumOf(pozycjeRows('przychod', 2, false)), s.przychodyRazem);
-  r3.getCell(4).numFmt = NUM_FMT;
-  r3.font = { bold: true };
+  const nI = numeracja();
+  const rSaldoA = line(nI.next(), `Saldo zaliczki „A” na ${formatData(plan.stanNaDzien)}`, plan.saldoA).number;
+  const zaRows = zaliczkaBlock(nI.next(), 'Zaliczka „A”:', plan.zaliczkaA, s.zaliczkaA);
+  let r3: number | null = null;
+  if (wierszePlanu(plan, 'przychod').length > 0) {
+    const r = line(nI.next(), 'Przychód z nieruchomości wspólnej, w tym:', null);
+    r.getCell(4).value = f(sumOf(pozycjeRows('przychod', 2, false)), s.przychodyRazem);
+    r.getCell(4).numFmt = NUM_FMT;
+    r.font = { bold: true };
+    r3 = r.number;
+  }
   // A loss is covered by the fund; a positive balance moved over to it leaves part I as a minus.
   const naFundusz = s.saldoANaFundusz > 0;
-  const r4 = line('4.', przeksiegowanieLabel(s), f(naFundusz ? `-D${rSaldoA}` : `MAX(0,-D${rSaldoA})`, s.przeksiegowanie)).number;
+  const r4 = kwotaZerowa(s.przeksiegowanie)
+    ? null
+    : line(nI.next(), przeksiegowanieLabel(s), f(naFundusz ? `-D${rSaldoA}` : `MAX(0,-D${rSaldoA})`, s.przeksiegowanie)).number;
   const razemA = line(
-    '5.',
-    'RAZEM: 1+2+3+4',
-    f(`D${rSaldoA}+${zaRows.map((r) => `D${r}`).join('+')}+D${r3.number}+D${r4}`, s.wplywyA),
+    nI.razemLp(),
+    nI.razem(),
+    f(sumOf([rSaldoA, ...zaRows, r3, r4].filter((r): r is number => r != null)), s.wplywyA),
   );
   sumStyle(razemA, COLS);
 
@@ -844,33 +878,41 @@ export async function planXlsx(plan: PlanGospodarczy, ctx: DokumentKontekst, out
   // Część II
   sectionTitle(ws, 'Część II — wpływy z zaliczki „B” na fundusz remontowy', COLS);
   headerRow(ws, ['Lp.', 'Rodzaj przychodów', 'W przeliczeniu na 1 m²', 'Planowane wpływy']);
-  const rSaldoB = line('1.', `Saldo zaliczki „B” na ${formatData(plan.stanNaDzien)}`, plan.saldoB).number;
-  const zbRows = zaliczkaBlock('2.', 'Zaliczka „B”:', plan.zaliczkaB, s.zaliczkaB);
+  const nIIw = numeracja();
+  const rSaldoB = line(nIIw.next(), `Saldo zaliczki „B” na ${formatData(plan.stanNaDzien)}`, plan.saldoB).number;
+  const zbRows = zaliczkaBlock(nIIw.next(), 'Zaliczka „B”:', plan.zaliczkaB, s.zaliczkaB);
   const prevYear = (plan.stanNaDzien || '').slice(0, 4) || String(plan.rok - 1);
+  // Both read part I's line 4, printed whenever either is not zero.
+  const zLinii4 = (formula: (r4: number) => string, result: number) => (r4 != null ? f(formula(r4), result) : result);
   const rSaldoANaFR = naFundusz
-    ? line('3.', `Saldo zaliczki „A” za ${prevYear} r. — przeksięgowanie nadwyżki`, f(`-D${r4}`, s.saldoANaFundusz)).number
+    ? line(nIIw.next(), `Saldo zaliczki „A” za ${prevYear} r. — przeksięgowanie nadwyżki`, zLinii4((r) => `-D${r}`, s.saldoANaFundusz)).number
     : null;
-  const rInne = line(naFundusz ? '4.' : '3.', 'Inne wpływy', plan.inneWplywyB).number;
+  const rInne = kwotaZerowa(plan.inneWplywyB) ? null : line(nIIw.next(), 'Inne wpływy', plan.inneWplywyB).number;
   const razemB = line(
-    naFundusz ? '5.' : '4.',
-    naFundusz ? 'RAZEM: 1+2+3+4' : 'RAZEM: 1+2+3',
-    f(`D${rSaldoB}+${zbRows.map((r) => `D${r}`).join('+')}${rSaldoANaFR ? `+D${rSaldoANaFR}` : ''}+D${rInne}`, s.wplywyB),
+    nIIw.razemLp(),
+    nIIw.razem(),
+    f(sumOf([rSaldoB, ...zbRows, rSaldoANaFR, rInne].filter((r): r is number => r != null)), s.wplywyB),
   );
   sumStyle(razemB, COLS);
 
   ws.addRow([]);
   headerRow(ws, ['Lp.', 'Koszty pokrywane z funduszu remontowego', '', 'Planowane koszty']);
-  const k1 = line('1.', 'Spłata kredytu + odsetki', plan.kredyt).number;
-  const k2 = line('2.', `Saldo zaliczki „A” za ${prevYear} r.`, f(`MAX(0,D${r4})`, s.saldoAKoszt)).number;
-  const k3 = line('3.', 'Remonty, w tym:', null);
-  const remonty = plan.remontyFR.filter((r) => r.opis.trim() || r.kwota);
-  const remRows = remonty.map((r) => line('', r.opis || '—', r.kwota, undefined, true).number);
-  k3.getCell(4).value = remRows.length
-    ? f(`SUM(D${remRows[0]}:D${remRows[remRows.length - 1]})`, s.remontyFR)
-    : 0;
-  k3.getCell(4).numFmt = NUM_FMT;
-  k3.font = { bold: true };
-  const razemKB = line('4.', 'RAZEM: 1+2+3', f(`D${k1}+D${k2}+D${k3.number}`, s.kosztyB));
+  const nIIk = numeracja();
+  const k1 = kwotaZerowa(plan.kredyt) ? null : line(nIIk.next(), 'Spłata kredytu + odsetki', plan.kredyt).number;
+  const k2 = kwotaZerowa(s.saldoAKoszt)
+    ? null
+    : line(nIIk.next(), `Saldo zaliczki „A” za ${prevYear} r.`, zLinii4((r) => `MAX(0,D${r})`, s.saldoAKoszt)).number;
+  const remonty = plan.remontyFR.filter((r) => !kwotaZerowa(r.kwota));
+  let k3: number | null = null;
+  if (remonty.length > 0) {
+    const r = line(nIIk.next(), 'Remonty, w tym:', null);
+    const remRows = remonty.map((x) => line('', x.opis || '—', x.kwota, undefined, true).number);
+    r.getCell(4).value = f(`SUM(D${remRows[0]}:D${remRows[remRows.length - 1]})`, s.remontyFR);
+    r.getCell(4).numFmt = NUM_FMT;
+    r.font = { bold: true };
+    k3 = r.number;
+  }
+  const razemKB = line(nIIk.razemLp(), nIIk.razem(), f(sumOf([k1, k2, k3].filter((r): r is number => r != null)), s.kosztyB));
   sumStyle(razemKB, COLS);
 
   ws.addRow([]);

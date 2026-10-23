@@ -26,6 +26,7 @@ const IPC_CHANNELS = {
   UPDATE_ADRES: 'db:update-adres',
   SET_ADRES_ZARZAD: 'db:set-adres-zarzad',
   SET_ADRES_IDENTYFIKACJA: 'db:set-adres-identyfikacja',
+  SET_ADRES_POWIERZCHNIE: 'db:set-adres-powierzchnie',
   ADRESY_ZASIL_Z_DN1: 'db:adresy-zasil-z-dn1',
   DELETE_ADRES: 'db:delete-adres',
   DELETE_ALL_ADRESY: 'db:delete-all-adresy',
@@ -358,6 +359,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     apartmentMappings?: import('../shared/types').ApartmentMapping[],
     accountTypes?: Record<string, number>,
     zgnJednostkaId?: number | null,
+    bezZgn?: boolean,
   ) =>
     ipcRenderer.invoke(
       IPC_CHANNELS.ADD_ADRES,
@@ -369,6 +371,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       apartmentMappings,
       accountTypes,
       zgnJednostkaId,
+      bezZgn,
     ),
   updateAdres: (
     id: number,
@@ -380,6 +383,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     apartmentMappings?: import('../shared/types').ApartmentMapping[],
     accountTypes?: Record<string, number>,
     zgnJednostkaId?: number | null,
+    bezZgn?: boolean,
   ) =>
     ipcRenderer.invoke(
       IPC_CHANNELS.UPDATE_ADRES,
@@ -392,6 +396,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       apartmentMappings,
       accountTypes,
       zgnJednostkaId,
+      bezZgn,
     ),
   deleteAdres: (id: number) => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ADRES, id),
   deleteAllAdresy: () => ipcRenderer.invoke(IPC_CHANNELS.DELETE_ALL_ADRESY),
@@ -579,6 +584,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC_CHANNELS.SET_ADRES_ZARZAD, id, zarzad),
   setAdresIdentyfikacja: (id: number, identyfikacja: unknown) =>
     ipcRenderer.invoke(IPC_CHANNELS.SET_ADRES_IDENTYFIKACJA, id, identyfikacja),
+  setAdresPowierzchnie: (id: number, powierzchnie: unknown) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SET_ADRES_POWIERZCHNIE, id, powierzchnie),
   zasilAdresyZDn1: () => ipcRenderer.invoke(IPC_CHANNELS.ADRESY_ZASIL_Z_DN1),
   addZgnPelnomocnik: (jednostkaId: number, imieNazwisko: string, email: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.ADD_ZGN_PELNOMOCNIK, jednostkaId, imieNazwisko, email),

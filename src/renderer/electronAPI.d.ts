@@ -11,7 +11,7 @@ import type {
 } from '../shared/types';
 import type { PlanExpected, ZebranieStatusRow } from '../shared/types';
 import { Bank, Converter, AppSettings, ConversionHistory, ConversionSummary, Kontrahent, Adres, ApartmentMapping, ConversionReviewData, ReviewDecision, TransactionForReview, KontrahentTyp, KontoTyp, BackupCounts, OdczytyHistoryEntry, OdczytySkippedRow, ZgnJednostka, ZgnPelnomocnik, ZarzadOsoba, MailingPole, MailingPoleTyp, MailingSzablon, MailingHistoryEntry, MailingSmtpConfig, MailingSmtpStatus, MailingSendResult, MailingProgressEvent, AppUser, SpotkanieTyp, SpotkanieLokalizacja, Spotkanie, SpotkanieInput, KalendarzPdfRequest, SpotkanieMailing, SpotkanieTerminStatus, SpotkanieMaterialyStatus, SpotkanieMaterialyKrok, KsiegowaniePriorytet,
-  KsiegowaniePrzypisanie, KsiegowanieUwaga, KsiegowaniePlik, ScanDecision, ScanProgress, ScanReport, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik, ZadanieKomentarz, ZadanieKomentarzInput, ZadanieKomentarzPodsumowanie, ZadanieNotatka, MailingAdresaci, MailingTypDef, MailingKalendarzContext, MailingZebranieContext, MailingExportRequest, MailingExportResult, Zebranie, ZebranieInput, ZebranieDokumentKlucz, ZebranieWersja, ZebranieWersjaInput, SprawozdaniaImportResult, SprawozdanieExportRequest, PlanWlasny, PlanWlasnyExportRequest, PodatekNieruchomosci, PodatekNieruchomosciDane, PodatkiImportResult, PodatkiPdfWszystkieResult, PodatkiPodpisPostep, PodatkiPodpisWieleResult, PodatkiStawki, PodatkiStawkiDane, AdresIdentyfikacja, AdresyZasilenieResult, PodatekCit, PodatekCitDane, PodatkiCitPlikiResult, PodatkiCitUpoResult, PodatkiCitUstawienia, CitAiPozycja, CitAiPrzyklad, CitAiWynik, PodpisKartaStan, PodpisSlad, PodpisWybor, PodpisPdfAnaliza, PodpisPdfWynik, PodpisHistoriaEntry, ZebraniePakietRequest, SprawozdanieZapisane, SprawozdanieWstepTekst, SprawozdanieLaczenie, SprawozdanieLaczeniePropozycja, SprawozdanieGrupowanie, SprawozdanieCel, PlanGospodarczy, PlanZaliczkaAiPropozycja, ZebraniaWspolnota, AdresUdzialy, ZebraniaUstawienia, ZebranieDokumentRequest } from '../shared/types';
+  KsiegowaniePrzypisanie, KsiegowanieUwaga, KsiegowaniePlik, ScanDecision, ScanProgress, ScanReport, Zadanie, ZadanieInput, ZadanieStatus, ZadanieZalacznik, ZadanieKomentarz, ZadanieKomentarzInput, ZadanieKomentarzPodsumowanie, ZadanieNotatka, MailingAdresaci, MailingTypDef, MailingKalendarzContext, MailingZebranieContext, MailingExportRequest, MailingExportResult, Zebranie, ZebranieInput, ZebranieDokumentKlucz, ZebranieWersja, ZebranieWersjaInput, SprawozdaniaImportResult, SprawozdanieExportRequest, PlanWlasny, PlanWlasnyExportRequest, PodatekNieruchomosci, PodatekNieruchomosciDane, PodatkiImportResult, PodatkiPdfWszystkieResult, PodatkiPodpisPostep, PodatkiPodpisWieleResult, PodatkiStawki, PodatkiStawkiDane, AdresIdentyfikacja, AdresPowierzchnie, AdresyZasilenieResult, PodatekCit, PodatekCitDane, PodatkiCitPlikiResult, PodatkiCitUpoResult, PodatkiCitUstawienia, CitAiPozycja, CitAiPrzyklad, CitAiWynik, PodpisKartaStan, PodpisSlad, PodpisWybor, PodpisPdfAnaliza, PodpisPdfWynik, PodpisHistoriaEntry, ZebraniePakietRequest, SprawozdanieZapisane, SprawozdanieWstepTekst, SprawozdanieLaczenie, SprawozdanieLaczeniePropozycja, SprawozdanieGrupowanie, SprawozdanieCel, PlanGospodarczy, PlanZaliczkaAiPropozycja, ZebraniaWspolnota, AdresUdzialy, ZebraniaUstawienia, ZebranieDokumentRequest } from '../shared/types';
 import type { BackupSectionKey, ZadaniePatch } from '../shared/types';
 
 // Zaliczki shared types (referenced by the main-process helpers)
@@ -230,6 +230,7 @@ interface ElectronAPI {
     apartmentMappings?: ApartmentMapping[],
     accountTypes?: Record<string, number>,
     zgnJednostkaId?: number | null,
+    bezZgn?: boolean,
   ) => Promise<Adres>;
   updateAdres: (
     id: number,
@@ -241,6 +242,7 @@ interface ElectronAPI {
     apartmentMappings?: ApartmentMapping[],
     accountTypes?: Record<string, number>,
     zgnJednostkaId?: number | null,
+    bezZgn?: boolean,
   ) => Promise<boolean>;
   deleteAdres: (id: number) => Promise<boolean>;
   deleteAllAdresy: () => Promise<boolean>;
@@ -456,6 +458,8 @@ interface ElectronAPI {
   setAdresZarzad: (id: number, zarzad: ZarzadOsoba[]) => Promise<boolean>;
   /** Replace a community's tax identification (NIP, full name, seat, office…) — the whole record. */
   setAdresIdentyfikacja: (id: number, identyfikacja: AdresIdentyfikacja) => Promise<boolean>;
+  /** Replace a community's areas (total, the city's, the leased) — the whole record. */
+  setAdresPowierzchnie: (id: number, powierzchnie: AdresPowierzchnie) => Promise<boolean>;
   /** One-time: fill empty identification fields from the DN-1 declarations; never overwrites. */
   zasilAdresyZDn1: () => Promise<AdresyZasilenieResult>;
   /** Every proxy of every city unit. */

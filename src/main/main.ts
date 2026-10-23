@@ -1050,8 +1050,9 @@ function setupIpcHandlers() {
       apartmentMappings?: import('../shared/types').ApartmentMapping[],
       accountTypes?: Record<string, number>,
       zgnJednostkaId?: number | null,
+      bezZgn?: boolean,
     ) => {
-      return await database.addAdres(nazwa, alternativeNames, swrkIdentifiers, bankId, accountNumbers, apartmentMappings, accountTypes, zgnJednostkaId);
+      return await database.addAdres(nazwa, alternativeNames, swrkIdentifiers, bankId, accountNumbers, apartmentMappings, accountTypes, zgnJednostkaId, bezZgn);
     },
   );
 
@@ -1068,8 +1069,9 @@ function setupIpcHandlers() {
       apartmentMappings?: import('../shared/types').ApartmentMapping[],
       accountTypes?: Record<string, number>,
       zgnJednostkaId?: number | null,
+      bezZgn?: boolean,
     ) => {
-      await database.updateAdres(id, nazwa, alternativeNames, swrkIdentifiers, bankId, accountNumbers, apartmentMappings, accountTypes, zgnJednostkaId);
+      await database.updateAdres(id, nazwa, alternativeNames, swrkIdentifiers, bankId, accountNumbers, apartmentMappings, accountTypes, zgnJednostkaId, bezZgn);
       return true;
     },
   );
@@ -1235,6 +1237,7 @@ function setupIpcHandlers() {
       let accumulatedMappings: import('../shared/types').ApartmentMapping[] = [];
       let accumulatedAccountTypes: Record<string, number> = {};
       let accumulatedZgnId: number | null = null;
+      let accumulatedBezZgn = false;
       // Only overwrite mappings/types/units when the file actually carries them,
       // so pre-MAP/TYP/ZGN exports don't wipe existing data on import.
       let sawMappings = false;
@@ -1263,6 +1266,7 @@ function setupIpcHandlers() {
               sawMappings ? accumulatedMappings : undefined,
               sawAccountTypes ? accumulatedAccountTypes : undefined,
               sawZgn ? accumulatedZgnId : undefined,
+              sawZgn ? accumulatedBezZgn : undefined,
             );
             lastAdres.alternativeNames = accumulatedAltNames;
             lastAdres.swrkIdentifiers = accumulatedSwrk;
@@ -1270,7 +1274,10 @@ function setupIpcHandlers() {
             if (accumulatedBankSet) lastAdres.bankId = accumulatedBankId;
             if (sawMappings) lastAdres.apartmentMappings = accumulatedMappings;
             if (sawAccountTypes) lastAdres.accountTypes = accumulatedAccountTypes;
-            if (sawZgn) lastAdres.zgnJednostkaId = accumulatedZgnId;
+            if (sawZgn) {
+              lastAdres.zgnJednostkaId = accumulatedZgnId;
+              lastAdres.bezZgn = accumulatedBezZgn;
+            }
           } catch (e) {
             errors.push(`${lastAdres.nazwa}: ${getErrorMessage(e)}`);
           }
@@ -1339,10 +1346,16 @@ function setupIpcHandlers() {
           continue;
         }
 
-        // Check if it's a ZGN: <unit name> | <email> line (Mailing recipient).
+        // Check if it's a ZGN: <unit name> | <email> line (Mailing recipient);
+        // `ZGN: -` marks a community that has no unit.
         const zgnMatch = line.match(/^\s*ZGN:\s*([^|]+?)(?:\s*\|\s*(.+))?$/);
         if (zgnMatch && lastAdres) {
           sawZgn = true;
+          accumulatedBezZgn = zgnMatch[1].trim() === '-' && !zgnMatch[2];
+          if (accumulatedBezZgn) {
+            accumulatedZgnId = null;
+            continue;
+          }
           accumulatedZgnId = await resolveZgnId(zgnMatch[1], zgnMatch[2] ?? '');
           if (accumulatedZgnId === null) {
             errors.push(
@@ -1382,6 +1395,7 @@ function setupIpcHandlers() {
           accumulatedMappings = [];
           accumulatedAccountTypes = {};
           accumulatedZgnId = null;
+          accumulatedBezZgn = false;
           sawMappings = false;
           sawAccountTypes = false;
           sawZgn = false;
@@ -1460,12 +1474,15 @@ function setupIpcHandlers() {
         }
 
         // Optional city-unit link (Mailing). Exported by name + mailbox so the
-        // assignment survives a roundtrip between databases, where ids differ.
+        // assignment survives a roundtrip between databases, where ids differ;
+        // `ZGN: -` for a community marked as having no unit.
         if (a.zgnJednostkaId) {
           const jednostka = zgnById.get(a.zgnJednostkaId);
           if (jednostka) {
             lines.push(`  ZGN: ${jednostka.nazwa} | ${jednostka.email}`);
           }
+        } else if (a.bezZgn) {
+          lines.push('  ZGN: -');
         }
 
         // Add SWRK identifiers if present
@@ -3299,6 +3316,12 @@ function setupIpcHandlers() {
   // Identyfikacja podatkowa — NIP, full name, seat of a community, edited in its Adresy modal.
   ipcMain.handle(IPC_CHANNELS.SET_ADRES_IDENTYFIKACJA, async (_, id: number, identyfikacja: unknown) => {
     await database.setAdresIdentyfikacja(id, identyfikacja);
+    return true;
+  });
+
+  // Powierzchnie — total, the city's and the leased areas the budget plans print, edited in the Adresy modal.
+  ipcMain.handle(IPC_CHANNELS.SET_ADRES_POWIERZCHNIE, async (_, id: number, powierzchnie: unknown) => {
+    await database.setAdresPowierzchnie(id, powierzchnie);
     return true;
   });
 

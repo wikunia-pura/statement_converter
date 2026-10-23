@@ -1,9 +1,11 @@
 import log from 'electron-log';
+import { isAuthRetryableFetchError } from '@supabase/supabase-js';
 import {
   getSupabase,
   markSignedIn,
   markSignedOut,
   reportSessionLost,
+  storedSessionUser,
 } from './supabaseClient';
 import { AppError } from '../shared/app-errors';
 
@@ -44,12 +46,25 @@ export async function signOut(): Promise<void> {
 }
 
 export async function getSession(): Promise<SessionInfo | null> {
-  const { data } = await getSupabase().auth.getSession();
-  if (!data.session?.user) return null;
-  return {
-    email: data.session.user.email ?? '',
-    userId: data.session.user.id,
-  };
+  const { data, error } = await getSupabase().auth.getSession();
+  if (data.session?.user) {
+    return {
+      email: data.session.user.email ?? '',
+      userId: data.session.user.id,
+    };
+  }
+  // An expired token whose refresh could not reach the server — the app started
+  // with the system before the network was up, the machine just woke. The
+  // session is still on disk and refreshes on the next request: the user is
+  // logged in, not to be sent to the login screen.
+  if (error && isAuthRetryableFetchError(error)) {
+    const user = storedSessionUser();
+    if (user) {
+      log.warn('[AUTH] Token nieodświeżony (brak połączenia) — sesja z dysku zostaje');
+      return { email: user.email, userId: user.id };
+    }
+  }
+  return null;
 }
 
 /**
@@ -57,11 +72,10 @@ export async function getSession(): Promise<SessionInfo | null> {
  * user-facing expiry message so the failure reads as "log in again" instead of
  * surfacing three layers down as a missing bank or an empty address list.
  *
- * Deliberately does NOT announce a lost session: `getSession()` also answers
- * null when a token refresh hits a network blip, and being wrong there would
- * throw the user out of a session that is in fact still alive. The two
- * definitive signals — an unauthorized REST call and supabase-js dropping the
- * session — do the announcing.
+ * Deliberately does NOT announce a lost session: being wrong there would throw
+ * the user out of a session that is in fact still alive. The two definitive
+ * signals — a REST call whose token cannot be refreshed and supabase-js
+ * dropping the session — do the announcing.
  */
 export async function requireSession(): Promise<SessionInfo> {
   const session = await getSession();

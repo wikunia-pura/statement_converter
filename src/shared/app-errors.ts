@@ -43,6 +43,10 @@ export const APP_ERRORS = {
     pl: 'Sesja wygasła — zaloguj się ponownie. Wspólne dane (banki, adresy, kontrahenci, historia) są widoczne tylko dla zalogowanego użytkownika.',
     en: 'Your session has expired — sign in again. Shared data (banks, addresses, contractors, history) is visible only to a signed-in user.',
   },
+  cloudUnreachable: {
+    pl: 'Brak połączenia z serwerem — sprawdź internet i spróbuj ponownie. Nadal jesteś zalogowany.',
+    en: 'Cannot reach the server — check the internet connection and try again. You are still signed in.',
+  },
   signInNoUser: {
     pl: 'Nie zwrócono użytkownika.',
     en: 'No user came back from the sign-in.',

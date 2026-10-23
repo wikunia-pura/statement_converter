@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useMemo } from 'react';
 import Icon from './components/Icon';
 
 /**
@@ -24,7 +24,12 @@ interface NavigationContextValue {
   openItem: (item: string, label: string, replace: boolean) => void;
   /** Back to the view's list: the entry behind, when that is the list. */
   closeItem: () => void;
+  /** The open screen's question before the shell takes the user elsewhere (see `useLeaveGuard`). */
+  leaveGuard: React.MutableRefObject<LeaveCheck | null>;
 }
+
+/** Asks about unsaved edits; resolves false when the user stays. */
+export type LeaveCheck = () => Promise<boolean>;
 
 const NavigationContext = createContext<NavigationContextValue | null>(null);
 
@@ -42,12 +47,13 @@ export const NavigationProvider: React.FC<
   item,
   openItem,
   closeItem,
+  leaveGuard,
 }) => {
   // One value per actual change: a fresh object on every render of the shell
   // would re-render every view reading it (`useNavItem`), keystroke by keystroke.
   const value = useMemo<NavigationContextValue>(
-    () => ({ canGoBack, canGoForward, goBack, goForward, backLabel, forwardLabel, labels, item, openItem, closeItem }),
-    [canGoBack, canGoForward, goBack, goForward, backLabel, forwardLabel, labels, item, openItem, closeItem],
+    () => ({ canGoBack, canGoForward, goBack, goForward, backLabel, forwardLabel, labels, item, openItem, closeItem, leaveGuard }),
+    [canGoBack, canGoForward, goBack, goForward, backLabel, forwardLabel, labels, item, openItem, closeItem, leaveGuard],
   );
   return <NavigationContext.Provider value={value}>{children}</NavigationContext.Provider>;
 };
@@ -79,6 +85,26 @@ export function useNavItem(): {
     }),
     [ctx],
   );
+}
+
+/**
+ * A screen with unsaved edits, guarding the ways off it the screen does not own:
+ * the sidebar, Back/Forward (buttons, Alt+←/→, the mouse) and links to other
+ * modules. The shell runs `check` first and moves only when it resolves true;
+ * null — nothing to lose — lets it move at once.
+ *
+ * The screen's own exits (its back button, `useNavItem().close()`) are not
+ * guarded here — the screen asks before taking them, so this would ask twice.
+ */
+export function useLeaveGuard(check: LeaveCheck | null): void {
+  const guard = useContext(NavigationContext)?.leaveGuard;
+  useEffect(() => {
+    if (!guard || !check) return;
+    guard.current = check;
+    return () => {
+      if (guard.current === check) guard.current = null;
+    };
+  });
 }
 
 /**

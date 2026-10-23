@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   Adres,
   AdresIdentyfikacja,
+  AdresPowierzchnie,
   Bank,
   ApartmentMapping,
   KontoTyp,
@@ -10,6 +11,7 @@ import {
   ZarzadOsoba,
 } from '../../shared/types';
 import { normalizeIdentyfikacja, pustaIdentyfikacja } from '../../shared/adres-identyfikacja';
+import { brakujacePowierzchnie, normalizePowierzchnie, pustePowierzchnie } from '../../shared/adres-powierzchnie';
 import { translations, Language } from '../translations';
 import { useNotify } from '../components/Notifications';
 import { formatAccount, normalizeAccount } from '../../shared/account-extractor';
@@ -28,6 +30,7 @@ import { ApartmentMappingsEditor, ApartmentMappingsModal } from '../components/a
 import { ZarzadEditor, ZarzadModal } from '../components/adresy/Zarzad';
 import { ZgnUnitsPanel, ZgnUnitsModal } from '../components/adresy/ZgnUnits';
 import { IdentyfikacjaSection } from '../components/adresy/IdentyfikacjaSection';
+import { PowierzchnieSection } from '../components/adresy/PowierzchnieSection';
 import { AdresRow } from '../components/adresy/AdresRow';
 import { ipcErrorMessage } from '../ipcError';
 
@@ -36,6 +39,9 @@ interface AdresyProps {
   /** When set, opens the "add address" modal with this account number pre-filled. The parent should clear it once consumed. */
   prefillAccountNumber?: string | null;
   onPrefillConsumed?: () => void;
+  /** When set, opens this address's edit modal (e.g. from a budget plan, whose areas come from here). The parent should clear it once consumed. */
+  openAdresId?: number | null;
+  onOpenAdresConsumed?: () => void;
 }
 
 /** Whether anything is filled in — an untouched form is not worth a write. */
@@ -44,7 +50,30 @@ const identyfikacjaPusta = (i: AdresIdentyfikacja) =>
 
 type AdresyTab = 'lista' | 'typy' | 'zgn';
 
-const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefillConsumed }) => {
+/** What an address can lack, in the order the row's tooltip and the filter list them. */
+const BRAKI = [
+  'nip',
+  'nazwaPelna',
+  'siedziba',
+  'account',
+  'zgn',
+  'zarzad',
+  'powierzchnia',
+  'miasto',
+  'pozytki',
+] as const;
+type AdresBrak = (typeof BRAKI)[number];
+
+/** The list's filter: every address, any with something missing, or those missing one thing. */
+type BrakFilter = 'all' | 'any' | AdresBrak;
+
+const Adresy: React.FC<AdresyProps> = ({
+  language,
+  prefillAccountNumber,
+  onPrefillConsumed,
+  openAdresId,
+  onOpenAdresConsumed,
+}) => {
   const t = translations[language];
   const notify = useNotify();
   const [tab, setTab] = useState<AdresyTab>('lista');
@@ -54,6 +83,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
   const [zgnJednostki, setZgnJednostki] = useState<ZgnJednostka[]>([]);
   const [showZgnUnitsModal, setShowZgnUnitsModal] = useState(false);
   const [newZgnJednostkaId, setNewZgnJednostkaId] = useState<number | null>(null);
+  const [newBezZgn, setNewBezZgn] = useState(false);
   const [showAddAdres, setShowAddAdres] = useState(false);
   const [editingAdres, setEditingAdres] = useState<Adres | null>(null);
   const [newNazwa, setNewNazwa] = useState('');
@@ -65,6 +95,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
   const [accountNumberError, setAccountNumberError] = useState<string | null>(null);
   const [newBankId, setNewBankId] = useState<number | null>(null);
   const [newIdentyfikacja, setNewIdentyfikacja] = useState<AdresIdentyfikacja>(pustaIdentyfikacja());
+  const [newPowierzchnie, setNewPowierzchnie] = useState<AdresPowierzchnie>(pustePowierzchnie());
   // The board and the apartment rules are also on the list (their own modals);
   // here they are part of the form and saved with it.
   const [newZarzad, setNewZarzad] = useState<ZarzadOsoba[]>([]);
@@ -72,7 +103,7 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
   const [isLoading, setIsLoading] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [onlyIncomplete, setOnlyIncomplete] = useState(false);
+  const [brakFilter, setBrakFilter] = useState<BrakFilter>('all');
   // By id, not the row itself: saving reloads the list (and shows the loader,
   // which remounts the modal), so the modal must pick up the fresh row — a kept
   // copy would reopen showing the list as it was before the save.
@@ -98,14 +129,32 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     loadData();
   }, []);
 
+  // Asked to open one address (a budget plan's "Edytuj w Adresach"): its edit modal, once the list is in.
+  useEffect(() => {
+    if (openAdresId == null || isLoading) return;
+    const adres = adresy.find((a) => a.id === openAdresId);
+    if (adres) {
+      setTab('lista');
+      setShowAddAdres(false);
+      handleEditAdres(adres);
+    }
+    onOpenAdresConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openAdresId, isLoading]);
+
   // The units modal opens over this form, and its unit form can re-assign this
   // very address. Follow such a change, so saving the address does not quietly
   // put the old unit back.
   useEffect(() => {
     if (!editingAdres) return;
     const fresh = adresy.find((a) => a.id === editingAdres.id);
-    if (fresh && (fresh.zgnJednostkaId ?? null) !== (editingAdres.zgnJednostkaId ?? null)) {
+    if (
+      fresh &&
+      ((fresh.zgnJednostkaId ?? null) !== (editingAdres.zgnJednostkaId ?? null) ||
+        !!fresh.bezZgn !== !!editingAdres.bezZgn)
+    ) {
       setNewZgnJednostkaId(fresh.zgnJednostkaId ?? null);
+      setNewBezZgn(!!fresh.bezZgn);
       setEditingAdres(fresh);
     }
   }, [adresy]);
@@ -137,6 +186,15 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
       await window.electronAPI.setAdresIdentyfikacja(id, normalizeIdentyfikacja(value));
     } catch (error: unknown) {
       notify.error(ipcErrorMessage(error, t.errorUnexpected), t.adresIdentSaveError);
+    }
+  };
+
+  /** Like the identification: the address is saved by now, so a failure is reported without keeping the form open. */
+  const savePowierzchnie = async (id: number, value: AdresPowierzchnie) => {
+    try {
+      await window.electronAPI.setAdresPowierzchnie(id, normalizePowierzchnie(value));
+    } catch (error: unknown) {
+      notify.error(ipcErrorMessage(error, t.errorUnexpected), t.adresPowSaveError);
     }
   };
 
@@ -174,9 +232,13 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
         newMappings,
         newAccountTypes,
         newZgnJednostkaId,
+        newBezZgn,
       );
       // A new address has no id until now, so its identification and board are saved right after it exists.
       if (!identyfikacjaPusta(newIdentyfikacja)) await saveIdentyfikacja(created.id, newIdentyfikacja);
+      if (brakujacePowierzchnie({ powierzchnie: newPowierzchnie }).length < 3) {
+        await savePowierzchnie(created.id, newPowierzchnie);
+      }
       if (newZarzad.length > 0) await saveZarzad(created.id, newZarzad);
       resetForm();
       setShowAddAdres(false);
@@ -214,10 +276,15 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
         JSON.stringify(newMappings) !== JSON.stringify(editingAdres.apartmentMappings || []) ? newMappings : undefined,
         newAccountTypes,
         newZgnJednostkaId,
+        newBezZgn,
       );
       const ident = normalizeIdentyfikacja(newIdentyfikacja);
       if (JSON.stringify(ident) !== JSON.stringify(normalizeIdentyfikacja(editingAdres.identyfikacja))) {
         await saveIdentyfikacja(editingAdres.id, ident);
+      }
+      const pow = normalizePowierzchnie(newPowierzchnie);
+      if (JSON.stringify(pow) !== JSON.stringify(normalizePowierzchnie(editingAdres.powierzchnie))) {
+        await savePowierzchnie(editingAdres.id, pow);
       }
       if (JSON.stringify(newZarzad) !== JSON.stringify(editingAdres.zarzad || [])) {
         await saveZarzad(editingAdres.id, newZarzad);
@@ -253,7 +320,9 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     setAccountNumberError(null);
     setNewBankId(null);
     setNewZgnJednostkaId(null);
+    setNewBezZgn(false);
     setNewIdentyfikacja(pustaIdentyfikacja());
+    setNewPowierzchnie(pustePowierzchnie());
     setNewZarzad([]);
     setNewMappings([]);
   };
@@ -269,7 +338,9 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     setAccountNumberError(null);
     setNewBankId(adres.bankId ?? null);
     setNewZgnJednostkaId(adres.zgnJednostkaId ?? null);
+    setNewBezZgn(!!adres.bezZgn);
     setNewIdentyfikacja(normalizeIdentyfikacja(adres.identyfikacja));
+    setNewPowierzchnie(normalizePowierzchnie(adres.powierzchnie));
     setNewZarzad(adres.zarzad || []);
     setNewMappings(adres.apartmentMappings || []);
   };
@@ -366,34 +437,90 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
     }
   };
 
-  // What an address is still missing, as the labels the row's tooltip lists.
-  const missingOf = useCallback((a: Adres): string[] => {
-    const id = a.identyfikacja;
-    const missing: string[] = [];
-    if (!id?.nip) missing.push(t.adresMissingNip);
-    if (!id?.nazwaPelna?.trim()) missing.push(t.adresMissingNazwaPelna);
-    if (!id?.siedziba?.miejscowosc?.trim() || !id.siedziba.ulica?.trim()) missing.push(t.adresMissingSiedziba);
-    if (!(a.accountNumbers?.length)) missing.push(t.adresMissingAccount);
-    if (!zgnJednostki.some((j) => j.id === a.zgnJednostkaId)) missing.push(t.adresMissingZgn);
-    if (!(a.zarzad?.length)) missing.push(t.adresMissingZarzad);
-    return missing;
-  }, [t, zgnJednostki]);
+  // What each address is still missing, worked out once per list.
+  const brakiById = useMemo(() => {
+    const out = new Map<number, AdresBrak[]>();
+    for (const a of adresy) {
+      const id = a.identyfikacja;
+      const braki: AdresBrak[] = [];
+      if (!id?.nip) braki.push('nip');
+      if (!id?.nazwaPelna?.trim()) braki.push('nazwaPelna');
+      if (!id?.siedziba?.miejscowosc?.trim() || !id.siedziba.ulica?.trim()) braki.push('siedziba');
+      if (!(a.accountNumbers?.length)) braki.push('account');
+      if (!a.bezZgn && !zgnJednostki.some((j) => j.id === a.zgnJednostkaId)) braki.push('zgn');
+      if (!(a.zarzad?.length)) braki.push('zarzad');
+      const pow = brakujacePowierzchnie(a);
+      if (pow.includes('calkowita')) braki.push('powierzchnia');
+      if (pow.includes('miasto')) braki.push('miasto');
+      if (pow.includes('pozytki')) braki.push('pozytki');
+      out.set(a.id, braki);
+    }
+    return out;
+  }, [adresy, zgnJednostki]);
 
-  const incompleteCount = useMemo(
-    () => adresy.filter((a) => missingOf(a).length > 0).length,
-    [adresy, missingOf],
+  const brakLabels: Record<AdresBrak, string> = useMemo(() => ({
+    nip: t.adresMissingNip,
+    nazwaPelna: t.adresMissingNazwaPelna,
+    siedziba: t.adresMissingSiedziba,
+    account: t.adresMissingAccount,
+    zgn: t.adresMissingZgn,
+    zarzad: t.adresMissingZarzad,
+    powierzchnia: t.adresMissingPowierzchnia,
+    miasto: t.adresMissingMiasto,
+    pozytki: t.adresMissingPozytki,
+  }), [t]);
+
+  // What an address is still missing, as the labels the row's tooltip lists.
+  const missingOf = useCallback(
+    (a: Adres): string[] => (brakiById.get(a.id) ?? []).map((b) => brakLabels[b]),
+    [brakiById, brakLabels],
   );
 
-  const filteredAdresy = useMemo(() => adresy.filter((a) => {
-    if (onlyIncomplete && missingOf(a).length === 0) return false;
+  const searchedAdresy = useMemo(() => {
     const q = searchTerm.toLowerCase().trim();
-    if (!q) return true;
-    if (a.nazwa.toLowerCase().includes(q)) return true;
-    if (a.alternativeNames?.some((n) => n.toLowerCase().includes(q))) return true;
-    if (a.swrkIdentifiers?.some((s) => s.toLowerCase().includes(q))) return true;
-    if (a.accountNumbers?.some((acc) => acc.includes(q.replace(/\s/g, '')))) return true;
-    return false;
-  }), [adresy, searchTerm, onlyIncomplete, missingOf]);
+    if (!q) return adresy;
+    return adresy.filter((a) =>
+      a.nazwa.toLowerCase().includes(q) ||
+      a.alternativeNames?.some((n) => n.toLowerCase().includes(q)) ||
+      a.swrkIdentifiers?.some((s) => s.toLowerCase().includes(q)) ||
+      a.accountNumbers?.some((acc) => acc.includes(q.replace(/\s/g, ''))),
+    );
+  }, [adresy, searchTerm]);
+
+  // The number on each option: how many addresses it would show under the
+  // current search — so an option says what clicking it yields.
+  const brakCounts = useMemo(() => {
+    const per = Object.fromEntries(BRAKI.map((b) => [b, 0])) as Record<AdresBrak, number>;
+    let any = 0;
+    for (const a of searchedAdresy) {
+      const braki = brakiById.get(a.id) ?? [];
+      if (braki.length > 0) any += 1;
+      for (const b of braki) per[b] += 1;
+    }
+    return { any, per };
+  }, [searchedAdresy, brakiById]);
+
+  const filteredAdresy = useMemo(() => {
+    if (brakFilter === 'all') return searchedAdresy;
+    return searchedAdresy.filter((a) => {
+      const braki = brakiById.get(a.id) ?? [];
+      return brakFilter === 'any' ? braki.length > 0 : braki.includes(brakFilter);
+    });
+  }, [searchedAdresy, brakFilter, brakiById]);
+
+  // Clicking the chosen option again goes back to every address.
+  const brakOption = (key: BrakFilter, label: string, count?: number) => (
+    <button
+      key={key}
+      type="button"
+      className={`zad-seg__btn${brakFilter === key ? ' is-active' : ''}${count === 0 ? ' is-empty' : ''}`}
+      aria-pressed={brakFilter === key}
+      onClick={() => setBrakFilter(brakFilter === key ? 'all' : key)}
+    >
+      {label}
+      {count !== undefined && <span className="zad-seg__count">{count}</span>}
+    </button>
+  );
 
   // Lookups the rows make, built once per list instead of a `find` per row per render.
   const banksById = useMemo(() => new Map(banks.map((b) => [b.id, b])), [banks]);
@@ -673,39 +800,64 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                     </FormSection>
 
                     <FormSection
-                      icon="mail"
-                      title={t.adresSectionMailing}
-                      description={t.adresSectionMailingDesc}
+                      icon="building"
+                      title={t.zgnUnit}
+                      description={t.adresSectionZgnDesc}
                       collapsible={foldEdit}
                       defaultCollapsed
-                      collapsedSummary={zgnWybrana ? `${zgnWybrana.nazwa} — ${zgnWybrana.email}` : t.zgnUnitNone}
+                      collapsedSummary={
+                        newBezZgn
+                          ? t.zgnUnitAbsent
+                          : zgnWybrana
+                            ? `${zgnWybrana.nazwa} — ${zgnWybrana.email}`
+                            : t.zgnUnitNone
+                      }
                     >
-                      <FormField label={t.zgnUnit}>
-                        <div className="form-inline">
-                          <Select
-                            overlay
-                            value={newZgnJednostkaId ?? ''}
-                            onChange={(v) => setNewZgnJednostkaId(v ? Number(v) : null)}
-                            options={[
-                              { value: '', label: t.zgnUnitNone },
-                              ...zgnJednostki.map((j) => ({
-                                value: String(j.id),
-                                label: `${j.nazwa} — ${j.email}`,
-                              })),
-                            ]}
-                            ariaLabel={t.zgnUnit}
-                            style={{ flex: 1, minWidth: 0 }}
+                      <label className="switch-row">
+                        <span className="switch-row__text">
+                          <span className="switch-row__label">{t.adresBezZgn}</span>
+                          <span className="switch-row__hint">{t.adresBezZgnHint}</span>
+                        </span>
+                        <span className="toggle-switch">
+                          <input
+                            type="checkbox"
+                            checked={newBezZgn}
+                            onChange={(e) => {
+                              setNewBezZgn(e.target.checked);
+                              if (e.target.checked) setNewZgnJednostkaId(null);
+                            }}
                           />
-                          <button
-                            type="button"
-                            className="button button-secondary"
-                            onClick={() => setShowZgnUnitsModal(true)}
-                            data-tip={t.zgnUnitsTitle}
-                          >
-                            <Icon name="settings" size={14} />{' '}{t.zgnManageUnits}
-                          </button>
-                        </div>
-                      </FormField>
+                          <span className="toggle-slider"></span>
+                        </span>
+                      </label>
+                      {!newBezZgn && (
+                        <FormField label={t.zgnUnit}>
+                          <div className="form-inline">
+                            <Select
+                              overlay
+                              value={newZgnJednostkaId ?? ''}
+                              onChange={(v) => setNewZgnJednostkaId(v ? Number(v) : null)}
+                              options={[
+                                { value: '', label: t.zgnUnitNone },
+                                ...zgnJednostki.map((j) => ({
+                                  value: String(j.id),
+                                  label: `${j.nazwa} — ${j.email}`,
+                                })),
+                              ]}
+                              ariaLabel={t.zgnUnit}
+                              style={{ flex: 1, minWidth: 0 }}
+                            />
+                            <button
+                              type="button"
+                              className="button button-secondary"
+                              onClick={() => setShowZgnUnitsModal(true)}
+                              data-tip={t.zgnUnitsTitle}
+                            >
+                              <Icon name="settings" size={14} />{' '}{t.zgnManageUnits}
+                            </button>
+                          </div>
+                        </FormField>
+                      )}
                     </FormSection>
 
                     <FormSection
@@ -724,6 +876,14 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                         inForm
                       />
                     </FormSection>
+
+                    <PowierzchnieSection
+                      key={editingAdres?.id ?? 'new'}
+                      t={t}
+                      value={newPowierzchnie}
+                      onChange={setNewPowierzchnie}
+                      editing={foldEdit}
+                    />
 
                     <IdentyfikacjaSection
                       t={t}
@@ -759,18 +919,21 @@ const Adresy: React.FC<AdresyProps> = ({ language, prefillAccountNumber, onPrefi
                       aria-label={t.searchAdresy}
                     />
                   </div>
-                  <button
-                    type="button"
-                    className={`button button-small ${onlyIncomplete ? 'button-secondary' : 'button-ghost'}`}
-                    onClick={() => setOnlyIncomplete((v) => !v)}
-                    aria-pressed={onlyIncomplete}
-                    disabled={incompleteCount === 0 && !onlyIncomplete}
-                  >
-                    <Icon name="alert-triangle" size={13} />{' '}{t.adresMissingFilter} ({incompleteCount})
-                  </button>
                   <span className="list-filter__count">
                     {t.totalAdresy}: <strong>{filteredAdresy.length}</strong> / {adresy.length}
                   </span>
+                </div>
+                <div className="zad-filterbar">
+                  <div className="zad-fgroup">
+                    <span className="zad-fgroup__label">
+                      <Icon name="alert-triangle" size={13} /> {t.adresMissingFilter}
+                    </span>
+                    <div className="zad-seg" role="group" aria-label={t.adresMissingFilter}>
+                      {brakOption('all', t.adresMissingFilterAll)}
+                      {brakOption('any', t.adresMissingFilterAny, brakCounts.any)}
+                      {BRAKI.map((b) => brakOption(b, brakLabels[b], brakCounts.per[b]))}
+                    </div>
+                  </div>
                 </div>
                 <table className="data-table">
                   <thead>

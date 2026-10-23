@@ -114,6 +114,39 @@ export function checkLocalPathString(raw: unknown, options: LocalPathOptions = {
 export interface OpenablePathOptions extends LocalPathOptions {
   /** Revealing in Finder/Explorer runs nothing, so it may point at a program. */
   allowExecutable?: boolean;
+  /** Told which check refused the path (with the fs error code), for the log. */
+  onRefused?: (reason: string) => void;
+}
+
+function errorCode(error: unknown): string {
+  return (error as NodeJS.ErrnoException | null)?.code ?? String(error);
+}
+
+/**
+ * Where the path really leads, for the executable check. The JS `realpathSync`
+ * `lstat`s every ancestor down from the drive root, and on a Windows mapped
+ * network drive (`W:\`) that root can refuse it — the file itself being
+ * perfectly readable. So the system's own resolver goes first, the JS one
+ * second; when both fail, a path that is not a link is its own target (its
+ * name was already checked), and a link we cannot follow is refused.
+ */
+function realTarget(p: string): { target: string } | { error: string } {
+  let nativeError: unknown;
+  try {
+    return { target: fs.realpathSync.native(p) };
+  } catch (error) {
+    nativeError = error;
+  }
+  try {
+    return { target: fs.realpathSync(p) };
+  } catch (error) {
+    try {
+      if (!fs.lstatSync(p).isSymbolicLink()) return { target: p };
+    } catch {
+      // fall through: report what realpath said
+    }
+    return { error: `realpath: ${errorCode(nativeError)} / ${errorCode(error)}` };
+  }
 }
 
 /**
@@ -125,15 +158,24 @@ export interface OpenablePathOptions extends LocalPathOptions {
  * Folders pass on purpose: the UI opens output folders through the same call.
  */
 export function checkOpenablePath(raw: unknown, options: OpenablePathOptions = {}): string | null {
-  const p = checkLocalPathString(raw, options);
-  if (!p) return null;
-  if (!options.allowExecutable && isExecutableName(p)) return null;
-  try {
-    const stat = fs.statSync(p);
-    if (!stat.isFile() && !stat.isDirectory()) return null;
-    if (!options.allowExecutable && isExecutableName(fs.realpathSync(p))) return null;
-  } catch {
+  const refuse = (reason: string): null => {
+    options.onRefused?.(reason);
     return null;
+  };
+  const p = checkLocalPathString(raw, options);
+  if (!p) return refuse('not a local absolute path');
+  if (!options.allowExecutable && isExecutableName(p)) return refuse('executable name');
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(p);
+  } catch (error) {
+    return refuse(`stat: ${errorCode(error)}`);
+  }
+  if (!stat.isFile() && !stat.isDirectory()) return refuse('neither a file nor a folder');
+  if (!options.allowExecutable) {
+    const real = realTarget(p);
+    if ('error' in real) return refuse(real.error);
+    if (isExecutableName(real.target)) return refuse('executable target');
   }
   return p;
 }

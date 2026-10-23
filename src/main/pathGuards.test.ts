@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import nodePath from 'path';
@@ -160,6 +160,35 @@ describe('checkOpenablePath — on a real folder', () => {
     if (!symlinkOk) ctx.skip();
     expect(checkOpenablePath(at('faktura.pdf'))).toBeNull();
     expect(checkOpenablePath(at('faktura.pdf'), { allowExecutable: true })).toBe(at('faktura.pdf'));
+  });
+
+  it('a file whose real path cannot be resolved still opens — unless it is a link', (ctx) => {
+    // A Windows mapped network drive (W:\\) can refuse realpath's walk from the
+    // drive root while the file itself reads fine.
+    const eisdir = () => {
+      throw Object.assign(new Error('EISDIR: illegal operation on a directory'), { code: 'EISDIR' });
+    };
+    const spy = vi.spyOn(fs, 'realpathSync').mockImplementation(eisdir as never);
+    (fs.realpathSync as unknown as { native: () => never }).native = eisdir;
+    try {
+      const reasons: string[] = [];
+      expect(checkOpenablePath(at('wyciag.pdf'), { onRefused: (r) => reasons.push(r) })).toBe(
+        at('wyciag.pdf')
+      );
+      expect(reasons).toEqual([]);
+      if (!symlinkOk) ctx.skip();
+      expect(checkOpenablePath(at('faktura.pdf'), { onRefused: (r) => reasons.push(r) })).toBeNull();
+      expect(reasons).toEqual(['realpath: EISDIR / EISDIR']);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('the refusal says which check failed', () => {
+    const reasons: string[] = [];
+    checkOpenablePath(at('brak.pdf'), { onRefused: (r) => reasons.push(r) });
+    checkOpenablePath(at('run.sh'), { onRefused: (r) => reasons.push(r) });
+    expect(reasons).toEqual(['stat: ENOENT', 'executable name']);
   });
 
   it('".." is refused even when the target exists', () => {

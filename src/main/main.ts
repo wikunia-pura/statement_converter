@@ -2504,9 +2504,13 @@ function setupIpcHandlers() {
     // scan), so before anything touches them: no network host other than a
     // configured folder's, no `..`, and nothing the system would run. Folders
     // pass — the output-folder buttons open them through here.
-    const filePath = checkOpenablePath(requestedPath, { networkRoots: configuredFolders() });
+    let refusal = '';
+    const filePath = checkOpenablePath(requestedPath, {
+      networkRoots: configuredFolders(),
+      onRefused: (reason) => (refusal = reason),
+    });
     if (!filePath) {
-      log.warn('[OPEN] refused or missing:', String(requestedPath).slice(0, 300));
+      log.warn(`[OPEN] refused or missing (${refusal}):`, String(requestedPath).slice(0, 300));
       return false;
     }
     try {

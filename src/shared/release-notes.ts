@@ -84,6 +84,37 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '11.0.2',
+    date: '2026-10-23',
+    title: 'Pliki z dysku sieciowego znów się otwierają',
+    tagline:
+      'Na Windowsie wyciąg leżący na zmapowanym dysku sieciowym (np. W:) dawał komunikat „Plik nie istnieje”, choć skan go widział. Teraz otwiera się jak każdy inny.',
+    highlights: [
+      {
+        id: 'otwieranie-z-dysku-sieciowego',
+        kind: 'fixed',
+        icon: 'folder',
+        title: 'Otwieranie wyciągów z dysku sieciowego',
+        summary:
+          'Kliknięcie pliku źródłowego na Pulpicie, w Historii czy w wynikach skanu otwiera go także wtedy, gdy folder z wyciągami jest na zmapowanym dysku sieciowym.',
+        where: ['Pulpit', 'Księgowania'],
+        steps: [
+          {
+            do: 'Kliknij nazwę pliku źródłowego w wierszu konwersji albo przypięty plik ze skanu.',
+            then: 'Plik otwiera się w programie przypisanym do jego typu; archiwum ZIP pokazuje się w swoim folderze.',
+          },
+        ],
+        expect: [
+          'Plik, który to tylko wygląda na dokument, a w rzeczywistości jest skrótem do programu, dalej nie zostanie otwarty.',
+        ],
+        note: {
+          type: 'warning',
+          text: 'Plik księgowy otwiera się z miejsca, w którym zapisał go komputer robiący konwersję. Jeśli tam w Ustawieniach → Foldery „Folder wyjściowy” jest na dysku C:, ten plik istnieje tylko na tamtym komputerze. Żeby pliki księgowe otwierały się u wszystkich, ustaw „Folder wyjściowy” na dysku wspólnym.',
+        },
+      },
+    ],
+  },
+  {
     // Carries everything new in 11.0.0 (released the same day) plus the scan fix,
     // so users updating from 10.x see the whole of 11 in one entry.
     version: '11.0.1',
